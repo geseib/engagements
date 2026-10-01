@@ -885,7 +885,13 @@ describe('what the host page must now render', () => {
     // control that is not on the stage cannot be sacrificed from it. The floor
     // is lowered by exactly one rather than deleted, so a refactor that stops
     // matching still fails here.
-    expect(groups.length).toBeGreaterThanOrEqual(6);
+    //
+    // AND FROM 6 TO 5, FOR THE SAME REASON. FIELD_NOTES' `.fn-controls` — the
+    // Voice/Approach/Briefing/Redo row, the other data-drop="1" chrome group —
+    // moved to the Session panel's Settings tab (QA drive 2026-09-29, #21:
+    // host-only controls on the room-facing stage). The debug prompt keeps
+    // FIELD_NOTES in the scan.
+    expect(groups.length).toBeGreaterThanOrEqual(5);
 
     const chrome = groups.filter((g) => !g.announced).map((g) => g.order);
     const content = groups.filter((g) => g.announced).map((g) => g.order);

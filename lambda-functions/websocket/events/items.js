@@ -77,7 +77,7 @@ const crypto = require('crypto');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, TransactWriteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('../tenant');
-const { encryptItem } = require('../tenant-crypto');
+const { encryptItem, encryptValue } = require('../tenant-crypto');
 const { getSetMetadata, knownVersions, toVersion } = require('../set-version');
 const rules = require('./agenda-rules');
 const { json, notFound, readBody, trace, methodOf } = require('./event-http');
@@ -386,6 +386,73 @@ async function removeItem(meta, code, itemId) {
 }
 
 // ── PUT /items/{itemId}: edit ───────────────────────────────────────────────
+/*
+  DID THIS EDIT CHANGE WHAT A PREPARED SESSION WAS MADE FROM? The set (id,
+  scope, version) or the session options. `settings` is undefined when the
+  request left them alone; when it carries them, they are compared with the
+  stored ones as settingsFor normalises both, key order aside, so a builder
+  that re-sends unchanged options on every save does not count as a change.
+*/
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((out, k) => { out[k] = canonical(value[k]); return out; }, {});
+  }
+  return value === undefined ? null : value;
+}
+const same = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+function sessionInputsChanged(row, current, setRef, settings) {
+  if (!same(row.SetRef || null, setRef || null)) return true;
+  if (settings === undefined) return false;
+  return !same(rules.settingsFor(row.Type, current.Settings), rules.settingsFor(row.Type, settings));
+}
+
+/*
+  A NEW TITLE ON A PREPARED SESSION. The title is the session's name on the
+  stage, so it is copied on rather than left stale — as ciphertext, on both
+  rows that carry it (METADATA and the org's GAMES index row; see
+  schema-compliant-manager.js and game/update-game.js's MIRROR, which do the
+  same for a session renamed from the console).
+
+  If the prepared session is already gone, the item's pointer to it is removed
+  so the next preview or go-live makes a fresh one instead of reaching for a
+  code that no longer exists. Best effort otherwise: a failed index-row write
+  only leaves a session list showing the old name.
+*/
+async function renamePrepared(row, gameId, title, orgId) {
+  const sealed = orgId ? await encryptValue(orgId, title) : title;
+  try {
+    await db.send(new UpdateCommand({
+      TableName: TABLE(),
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      UpdateExpression: 'SET #t = :t',
+      ConditionExpression: 'attribute_exists(PK)',
+      ExpressionAttributeNames: { '#t': 'Title' },
+      ExpressionAttributeValues: { ':t': sealed },
+    }));
+  } catch (error) {
+    if (!(error && error.name === 'ConditionalCheckFailedException')) throw error;
+    await db.send(new UpdateCommand({
+      TableName: TABLE(),
+      Key: { PK: row.PK, SK: row.SK },
+      UpdateExpression: 'REMOVE GameId, PreparedAt',
+      ConditionExpression: 'GameId = :g',
+      ExpressionAttributeValues: { ':g': gameId },
+    })).catch((e) => console.warn('rename: could not clear a stale prepared pointer', e && e.message));
+    return;
+  }
+  if (!orgId) return;
+  await db.send(new UpdateCommand({
+    TableName: TABLE(),
+    Key: { PK: tenant.gamesIndexPk(orgId), SK: `GAME#${gameId}` },
+    UpdateExpression: 'SET #t = :t',
+    ConditionExpression: 'attribute_exists(PK)',
+    ExpressionAttributeNames: { '#t': 'Title' },
+    ExpressionAttributeValues: { ':t': sealed },
+  })).catch((e) => console.warn('rename: the session list keeps the old title', e && e.message));
+}
+
 async function editItem(request, meta, code, itemId) {
   const body = readBody(request);
   if (!body) return json(400, { error: 'The request body is not valid JSON.' });
@@ -504,11 +571,26 @@ async function editItem(request, meta, code, itemId) {
   const names = { '#t': 'Title', '#d': 'Description', '#m': 'Minutes', '#ua': 'UpdatedAt', '#st': 'State' };
   const values = { ':t': sealed.Title, ':d': sealed.Description, ':m': fields.value.minutes, ':now': now, ':planned': PLANNED };
   let expression = 'SET #t = :t, #d = :d, #m = :m, #ua = :now';
-  // A PREVIEWED ITEM (run.js `prepare`) has an unopened session made from
-  // what it said before this edit. The session is let go (below, after the
-  // write lands) and the pointer removed, so the next preview or go-live
-  // makes one from what the item says now.
+  /*
+    A PREVIEWED ITEM (run.js `prepare`) has an unopened session made from what
+    it said before this edit, and the host may have set things up inside it —
+    above all a running order (Session → Questions → Queue).
+
+    It is let go ONLY when the edit changes what the session was built from:
+    the set or its version, or the session options (childGameData in
+    child-session.js reads nothing else but the title). Then the pointer is
+    removed and the session discarded (below, after the write lands), so the
+    next preview or go-live makes one from what the item says now.
+
+    Until 30 Sep 2026 every saved edit did that — a new description or a
+    longer planned length silently threw away a queued running order (QA drive
+    2026-09-29, found by fix workstream D). Description, length and leader
+    never reach the session, so they now leave it alone; a new title is copied
+    onto it (renamePrepared, below) rather than rebuilding it.
+  */
   const prepared = row.GameId ? String(row.GameId) : '';
+  const rebuild = Boolean(prepared) && sessionInputsChanged(row, current, setRef, settings);
+  const retitle = Boolean(prepared) && !rebuild && fields.value.title !== (current.Title || '');
   /*
     THE ROW AS THIS REQUEST READ IT (fix round 1). Without this, a plain edit
     still writes back the `SetRef` and the `Settings` it read at the top of
@@ -545,7 +627,7 @@ async function editItem(request, meta, code, itemId) {
     names['#sx'] = 'Settings';
     values[':sx'] = sealed.Settings;
   }
-  const removes = prepared ? ['GameId', 'PreparedAt'] : [];
+  const removes = rebuild ? ['GameId', 'PreparedAt'] : [];
   if (deckChange) {
     expression += ', #dk = :dk, #dn = :dn, #dp = :dp';
     Object.assign(names, { '#dk': 'Deck', '#dn': 'DeckName', '#dp': 'DeckPage' });
@@ -569,7 +651,17 @@ async function editItem(request, meta, code, itemId) {
     }
     throw error;
   }
-  if (prepared) await discardChildSession(db, TABLE(), prepared, meta.orgId);
+  if (rebuild) await discardChildSession(db, TABLE(), prepared, meta.orgId);
+  // After the write has landed, so a failure here is logged, never returned:
+  // the edit is saved, and a 500 would tell the host it was not. The cost of
+  // a failed rename is a preview that still shows the old title.
+  if (retitle) {
+    try {
+      await renamePrepared(row, prepared, fields.value.title, meta.orgId);
+    } catch (e) {
+      console.warn('rename: the prepared session keeps its old title', e && e.message);
+    }
+  }
   if (deckChange !== undefined && row.Deck && row.Deck.key) await D.removeObject(row.Deck.key);
   // Projected from the DECRYPTED row, so nothing sealed reaches the response.
   return json(200, {

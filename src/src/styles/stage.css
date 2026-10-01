@@ -189,6 +189,13 @@ body, .stage-ladder-table{
   letter-spacing:.09em;text-transform:uppercase}
 .rail-ctx b{color:var(--text);font-weight:700}
 .rail-ctx i{opacity:.35;font-style:normal}
+/* THE SESSION'S GOAL, beside the round (config/goalStage.js, QA drive #3):
+   "ROUND 1 OF 5 · GOAL 2". Plain until met; then the .chip idiom in amber —
+   "GOAL 2 REACHED", "PAST GOAL 2" — so a skip past the goal round shows at
+   once. The rail-ctx never drops (flex:none); the title is what gives. */
+.rail-ctx .rail-goal{color:var(--text);font-weight:700}
+.rail-ctx .rail-goal.met{color:var(--primary);font-weight:800;
+  border:var(--hair) solid currentColor;border-radius:999px;padding:.08em .6em}
 /* Optional round timer. OFF by default and armed from the setup panel — see
    the ruling in spec section 5.1. It is a real countdown the host set, not the
    answer-progress ring dressed as a clock that this redesign removed. */
@@ -557,6 +564,17 @@ body, .stage-ladder-table{
 @keyframes cue{0%,100%{opacity:1}50%{opacity:.45}}
 .dock .status.go{animation:cue 1.5s ease-in-out 3}
 @media (prefers-reduced-motion:reduce){.dock .status.go{animation:none}}
+/* THE GOAL'S NOTICE (Dock.jsx `notice`, QA drive #22). It shared the grey
+   status line above and was missed from across a room: "That's your 2. Keep
+   going if there's time, or end the session." Now an amber chip at body size,
+   pulsed three times like .go and then still. Words only — it blocks nothing.
+   Amber #F6A94C over its own 10% tint on the dusk dock is well past AA. */
+.dock .status.notice{color:var(--primary);font-weight:800;
+  font-size:max(var(--floor),var(--t-body));max-width:46ch;
+  border:var(--hair) solid currentColor;border-radius:calc(var(--radius) * .6);
+  padding:.4em .85em;background:rgba(246,169,76,.10);
+  animation:cue 1.5s ease-in-out 3}
+@media (prefers-reduced-motion:reduce){.dock .status.notice{animation:none}}
 .dock .spacer{margin-left:auto}
 .btn{display:inline-flex;align-items:center;gap:.5em;
   font-family:var(--font-display);font-weight:800;
@@ -1059,14 +1077,62 @@ body, .stage-ladder-table{
    the profile ladder, so all four profiles drew an identical button; the dock
    button and the rail chip are the two chrome elements that read the profile
    DIRECTLY and are never re-scaled by the fitter, which makes them the honest
-   answer to "did changing the profile change anything". Positioning and size
-   only; the component is untouched. */
+   answer to "did changing the profile change anything". The component is
+   untouched; everything below is the dock's own paint. */
 .dock .host-action-bar__primary,
-.dock .host-action-bar__secondary{
+.dock .host-action-bar__secondary,
+.dock .host-action-bar__tertiary{
+  display:inline-flex;align-items:center;gap:.5em;
   font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-secondary) * .84));
   padding:calc(1.2vh + 8px) calc(1.6vw + 18px);
-  border-radius:calc(var(--radius) * .85);white-space:nowrap}
+  border-radius:calc(var(--radius) * .85);white-space:nowrap;
+  opacity:1;transform:none;box-shadow:none}
+
+/* WHICH BUTTON LEADS — the primary, always, and a disabled one says so.
+   QA drive 2026-09-29, finding #6 (shots/combo-trivia.png,
+   d2-hl-ca-what-we-heard.png): with no answers in, "Skip Question" was the
+   emphasised button — a white fill, an amber outline, amber type — while the
+   DISABLED "Show Results" was a solid blue that read as live. Neither colour
+   was ever a decision. The buttons carry the global `.btn-primary` /
+   `.btn-secondary` classes, and those are painted by whichever bare rule wins
+   the bundle order: styles.css's white `.btn-secondary` (a PAPER button, on
+   the dusk stage), and the Bootstrap blue that components/IssueReportForm.css
+   and FileUploadPrompt.css declare on a bare `.btn-primary` — the same leak
+   QuestionSetEditor.css already restates around. So the dock states every
+   state itself, at a specificity the leaks cannot reach: the bare base rules
+   are (0,1,0), `.btn-primary:disabled` (0,2,0), `.btn-primary:hover:not
+   (:disabled)` (0,3,0); the rules here are (0,2,0) / (0,3,0) / (0,4,0).
+
+   The vocabulary is the mockup's own `.btn` / `.btn.ghost` / `.btn[disabled]`
+   above, not a new one:
+     primary    the amber fill with #14203A ink — the ONE filled button.
+     disabled   the 18% grey wash with --muted type and a not-allowed cursor —
+                no solid fill, nothing that reads as pressable. The native
+                `disabled` attribute stays, so it is still announced as such.
+     secondary  a ghost in --muted on the --rule hairline, exactly the dock's
+     tertiary   other quiet buttons (.dock-more: AGENDA, SESSION). Clearly a
+                button, never louder than the primary: no fill, no amber.
+   Measured in __tests__/dockButtonsPalette.test.js, on the dusk field and
+   the projector-lifted one. */
+.dock .host-action-bar__primary{
+  background:var(--primary);color:#14203A;
+  border:var(--hair) solid var(--primary);cursor:pointer}
+.dock .host-action-bar__primary:hover:not(:disabled){
+  background:var(--primary);color:#14203A;filter:brightness(1.06);
+  transform:none;box-shadow:none}
+.dock .host-action-bar__primary:disabled{
+  background:rgba(155,168,190,.18);color:var(--muted);
+  border:var(--hair) solid transparent;cursor:not-allowed;
+  opacity:1;filter:none;transform:none;box-shadow:none}
+.dock .host-action-bar__secondary,
+.dock .host-action-bar__tertiary{
+  background:transparent;color:var(--muted);
+  border:var(--hair) solid var(--rule);cursor:pointer}
+.dock .host-action-bar__secondary:hover,
+.dock .host-action-bar__tertiary:hover{
+  background:transparent;color:var(--text);border-color:var(--muted);
+  transform:none;box-shadow:none}
 
 /* Field Notes rendered from markdown: MarkdownRenderer emits its own headings
    and lists, so the measure and the body size are set on the container. */
@@ -1110,14 +1176,20 @@ body, .stage-ladder-table{
 .notes .lead strong,.notes .lead em{color:inherit}
 .notes .notes-md ul,.notes .notes-md ol{margin:0 0 .4em;padding-left:1.2em}
 
-/* Host controls that happen to sit inside a room-facing state. They are chrome
-   (data-drop), they stay at the label tier, and they never compete with the
-   content for size. Their permanent home is the Console — spec §5.4, plan 3. */
+/* Host-only controls that sit inside a room-facing state: chrome (data-drop),
+   label tier, never competing with the content for size. What We Heard's
+   Voice/Approach/Briefing/Redo row used to be the main user; it moved to the
+   Session panel's Settings tab (components/stage/WorkieSettings.jsx) after the
+   2026-09-29 QA drive found host-only controls projected to the room (#21).
+   The preview lobby's "Set the running order" (#4) still uses the class. */
 .fn-controls{display:flex;align-items:center;flex-wrap:wrap;gap:.6em;
   font-size:var(--t-meta);color:var(--muted)}
 .fn-controls select,.fn-controls button{font:inherit;font-size:var(--t-meta);
   color:var(--text);background:transparent;
   border:var(--hair) solid var(--rule);border-radius:8px;padding:.3em .6em;cursor:pointer}
+/* A preview lobby's "Set the running order" (QA drive finding #4): below the
+   join block, a beat of space from it. */
+.fn-controls.preview-order{margin-top:.8em}
 
 /* THE ANONYMITY CONTROLS USED TO BE SIZED HERE, and the rule that put them
    here is worth keeping even though the elements are gone: anything inside

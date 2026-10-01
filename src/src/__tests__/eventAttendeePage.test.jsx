@@ -158,6 +158,27 @@ describe('following the day', () => {
     expect(global.__playerMounts).toBe(1);
   });
 
+  // rejects (QA drive 29 Sep 2026, finding #2): phones listing every item the
+  // host had moved on from — a closed survey included — as Paused. Moving on
+  // now ends them (run.js stepAside), and the agenda says Done.
+  test('items the host moved on from read Done on the agenda — a closed survey too — never Paused', async () => {
+    joined();
+    api.whoAmI.mockResolvedValue({ attendee: { name: 'Priya Raman' } });
+    const closedSurvey = { ...DAY[0], state: 'done', gameId: '3310' };
+    const talk = { ...DAY[1], state: 'done' };
+    api.getAgenda.mockResolvedValue(agenda({ state: 'LIVE', liveItemId: liveTrivia.itemId }, [closedSurvey, talk, liveTrivia, DAY[3]]));
+    render(<EventAttendeePage code={CODE} />);
+    await screen.findByTestId('player');
+
+    act(() => { global.__playerEvent.onAgenda(); });
+    expect(screen.getAllByText('Done')).toHaveLength(2);
+    expect(screen.getByText('Now')).toBeInTheDocument();
+    expect(screen.queryByText('Paused')).toBeNull();
+    const surveyRow = screen.getByText('Before we start').closest('li');
+    expect(surveyRow).toHaveTextContent('Done');
+    expect(surveyRow.className).toMatch(/evp-it--done/);
+  });
+
   test('the host pauses the item: the paused screen, answers kept, the agenda one tap away', async () => {
     joined();
     api.whoAmI.mockResolvedValue({ attendee: { name: 'Priya Raman' } });

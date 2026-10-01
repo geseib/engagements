@@ -7,6 +7,16 @@
  * while live; a code retired twice; a bare partition literal.
  */
 const suiteFinished = require('./helpers/finish-guard');
+
+// A month N away from the current UTC month, as 'YYYY-MM'. These assertions
+// were written in September 2026 with October hard-coded as "next month"; on
+// 1 Oct 2026 that month arrived and the suites went red.
+const monthFromNow = (n) => {
+  const d = new Date();
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -336,11 +346,11 @@ const ORG_B = 'org_2222222222222222222222';
     assert.strictEqual(adjustment.createdBy, 'u_staff');
   });
 
-  await check('an offer of "2 months at 50%" from October gets its window', async () => {
-    const res = await grant({ kind: 'OFFER', percentOff: 50, months: 2, validFrom: '2026-10', note: 'education pilot' });
+  await check('an offer of "2 months at 50%" from next month gets its window', async () => {
+    const res = await grant({ kind: 'OFFER', percentOff: 50, months: 2, validFrom: monthFromNow(1), note: 'education pilot' });
     assert.strictEqual(res.statusCode, 201, res.body);
     const a = bodyOf(res).adjustment;
-    assert.deepStrictEqual([a.validFrom, a.validTo], ['2026-10', '2026-11']);
+    assert.deepStrictEqual([a.validFrom, a.validTo], [monthFromNow(1), monthFromNow(2)]);
     assert.strictEqual(a.status, 'upcoming');
   });
 

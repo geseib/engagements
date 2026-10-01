@@ -7,7 +7,9 @@
  * rejects: an engagement that starts without a session, or with one that is
  * not stamped with the event, not started, or not pinned to the item's set
  * version; two items live at once; a start that loses a race leaving its
- * session behind; a paused item still taking answers, votes or survey
+ * session behind; going live on the next item PAUSING the one that was live
+ * instead of finishing it (an open survey excepted: it pauses, since it
+ * cannot end); a paused item still taking answers, votes or survey
  * answers; a resume that does not clear the pause; a break that pauses
  * instead of ending; an item ended while its survey still collects; an event
  * whose sessions are each billed; an attendee asked for a name again, or
@@ -262,42 +264,67 @@ async function makeEvent() {
     assert.strictEqual(res.statusCode, 401, res.body);
   });
 
-  console.log('\n4. starting another item pauses the live one, in one step');
+  console.log('\n4. going live on another item FINISHES the live one, in one step');
+  // rejects (QA drive 29 Sep 2026, finding #2): moving on PAUSING the item
+  // that was live, so a day run straight through ended "0 OF 5 DONE" with
+  // every item Paused and every phone's agenda saying so.
   connect(trivia);
   const talk = await run(code, { action: 'start', itemId: ids.talk });
-  await check('the talk is live, the trivia paused, one item live', () => {
+  await check('the talk is live, the trivia DONE (not paused), one item live', () => {
     assert.strictEqual(talk.statusCode, 200, talk.body);
     assert.strictEqual(itemRow(code, ids.talk).State, 'live');
-    assert.strictEqual(itemRow(code, ids.trivia).State, 'paused');
+    assert.strictEqual(itemRow(code, ids.trivia).State, 'done');
+    assert.ok(itemRow(code, ids.trivia).EndedAt);
     assert.strictEqual(meta(code).LiveItem, ids.talk);
     assert.ok(!itemRow(code, ids.talk).GameId, 'a talk has no session');
+    assert.strictEqual(bodyOf(talk).items.find((i) => i.itemId === ids.trivia).state, 'done');
   });
-  await check('the trivia\'s session is paused, its round untouched, and its room told what started', () => {
-    assert.strictEqual(gameState(trivia).EventPaused, true);
-    assert.strictEqual(gameState(trivia).State, 'STARTED');
-    assert.strictEqual(framesTo(trivia, 'eventItemPaused').length, 1);
-    const started = framesTo(trivia, 'eventItemStarted');
-    assert.strictEqual(started.length, 1);
-    assert.strictEqual(JSON.parse(started[0].Data).itemId, ids.talk);
+  await check('the trivia\'s session is ENDED with the END the room knows, and its room told what started', () => {
+    assert.strictEqual(gameState(trivia).State, 'ENDED');
+    assert.strictEqual(gameState(trivia).EventPaused, undefined);
+    const end = sent.filter((m) => String(m.ConnectionId).startsWith(`c_${trivia}_`) && JSON.parse(m.Data).messageType === 'END');
+    assert.strictEqual(end.length, 1);
+    assert.strictEqual(framesTo(trivia, 'eventItemEnded').length, 1);
+    assert.strictEqual(framesTo(trivia, 'eventItemPaused').length, 0);
+    const startedFrames = framesTo(trivia, 'eventItemStarted');
+    assert.strictEqual(startedFrames.length, 1);
+    assert.strictEqual(JSON.parse(startedFrames[0].Data).itemId, ids.talk);
+  });
+  await check('each item that goes live carries when (liveAt), for the board\'s next step', () => {
+    const body = bodyOf(talk);
+    const t = body.items.find((i) => i.itemId === ids.talk);
+    assert.ok(t.liveAt);
+    assert.ok(Date.parse(t.liveAt) >= Date.parse(body.items.find((i) => i.itemId === ids.trivia).liveAt));
+  });
+
+  console.log('\n5. pause, resume, and a break');
+  const moveOn = await run(code, { action: 'start', itemId: ids.friction });
+  const friction = bodyOf(moveOn).gameId;
+  await check('a live talk ends when the next item goes live', () => {
+    assert.strictEqual(moveOn.statusCode, 200, moveOn.body);
+    assert.strictEqual(itemRow(code, ids.talk).State, 'done');
+    assert.strictEqual(itemRow(code, ids.friction).State, 'live');
+  });
+  await check('Pause is still a pause: the item is paused, nothing is live, its session holds', async () => {
+    connect(friction);
+    const res = await run(code, { action: 'pause', itemId: ids.friction });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(itemRow(code, ids.friction).State, 'paused');
+    assert.strictEqual(meta(code).LiveItem, undefined);
+    assert.strictEqual(bodyOf(res).event.liveItemId, '');
+    assert.strictEqual(gameState(friction).EventPaused, true);
+    assert.strictEqual(gameState(friction).State, 'STARTED');
+    assert.strictEqual(framesTo(friction, 'eventItemPaused').length, 1);
   });
   await check('a paused session refuses a vote with PAUSED', async () => {
-    table.put({ ...gameState(trivia), State: 'VOTE#001' });
+    table.put({ ...gameState(friction), State: 'VOTE#001' });
     const res = await submitVote(request({
-      method: 'POST', path: `/games/${trivia}/votes`, pathParameters: { gameId: trivia },
+      method: 'POST', path: `/games/${friction}/votes`, pathParameters: { gameId: friction },
       body: { playerName: 'Priya Raman', questionNumber: 1, votes: ['Sam'] },
     }));
     assert.strictEqual(res.statusCode, 409, res.body);
     assert.strictEqual(bodyOf(res).code, 'PAUSED');
-    table.put({ ...gameState(trivia), State: 'STARTED' });
-  });
-
-  console.log('\n5. pause, resume, and a break');
-  await check('pause takes the talk off the air: paused, and nothing live', async () => {
-    const res = await run(code, { action: 'pause', itemId: ids.talk });
-    assert.strictEqual(res.statusCode, 200, res.body);
-    assert.strictEqual(itemRow(code, ids.talk).State, 'paused');
-    assert.strictEqual(meta(code).LiveItem, undefined);
-    assert.strictEqual(bodyOf(res).event.liveItemId, '');
+    table.put({ ...gameState(friction), State: 'STARTED' });
   });
   await check('a break starts with its return time and +5 min moves it', async () => {
     const before = Date.now();
@@ -314,45 +341,53 @@ async function makeEvent() {
     const res = await run(code, { action: 'extend', itemId: ids.talk });
     assert.strictEqual(res.statusCode, 409, res.body);
   });
-  await check('resuming the trivia ENDS the break (never paused) and clears the session\'s pause', async () => {
-    const res = await run(code, { action: 'resume', itemId: ids.trivia });
+  await check('resuming the paused item ENDS the break (never paused) and clears the session\'s pause', async () => {
+    const before = sessionReservations().length;
+    const res = await run(code, { action: 'resume', itemId: ids.friction });
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual(itemRow(code, ids.coffee).State, 'done');
-    assert.strictEqual(itemRow(code, ids.trivia).State, 'live');
-    assert.strictEqual(gameState(trivia).EventPaused, undefined);
-    assert.strictEqual(framesTo(trivia, 'eventItemResumed').length, 1);
-    assert.strictEqual(sessionReservations().length, 1, 'a resume makes no new session');
+    assert.strictEqual(itemRow(code, ids.friction).State, 'live');
+    assert.strictEqual(gameState(friction).EventPaused, undefined);
+    assert.strictEqual(gameState(friction).State, 'STARTED');
+    assert.strictEqual(framesTo(friction, 'eventItemResumed').length, 1);
+    assert.strictEqual(sessionReservations().length, before, 'a resume makes no new session');
+    assert.ok(Date.parse(itemRow(code, ids.friction).LiveAt) >= Date.parse(itemRow(code, ids.coffee).LiveAt), 'a resume moves LiveAt');
   });
   await check('resuming something that never started is refused', async () => {
-    const res = await run(code, { action: 'resume', itemId: ids.friction });
+    const res = await run(code, { action: 'resume', itemId: ids.pulse });
     assert.strictEqual(res.statusCode, 409, res.body);
   });
 
-  console.log('\n6. two screens press Start at the same moment');
-  await check('exactly one item goes live, the other is told, and no session is left behind', async () => {
-    await run(code, { action: 'pause', itemId: ids.trivia });
+  console.log('\n6. two screens press Go live at the same moment');
+  ids.trivia2 = bodyOf(await add(code, { type: 'trivia', title: 'Space night II', minutes: 10, setRef: { scope: 'platform', setId: 'space', version: 1 } })).item.itemId;
+  await check('exactly one item goes live, the live one is finished once, and no session is left behind', async () => {
     const before = sessionReservations().length;
     const [a, b] = await Promise.all([
-      run(code, { action: 'start', itemId: ids.friction }),
+      run(code, { action: 'start', itemId: ids.trivia2 }),
       run(code, { action: 'start', itemId: ids.pulse }),
     ]);
     const statuses = [a.statusCode, b.statusCode].sort();
     assert.deepStrictEqual(statuses, [200, 409], `${a.body} / ${b.body}`);
     const loser = a.statusCode === 409 ? a : b;
     assert.strictEqual(bodyOf(loser).code, 'run_changed');
-    const live = [ids.friction, ids.pulse].filter((id) => itemRow(code, id).State === 'live');
+    const live = [ids.trivia2, ids.pulse].filter((id) => itemRow(code, id).State === 'live');
     assert.strictEqual(live.length, 1);
     assert.strictEqual(meta(code).LiveItem, live[0]);
     assert.strictEqual(sessionReservations().length, before + 1, 'the loser\'s session was not discarded');
-    const other = [ids.friction, ids.pulse].find((id) => id !== live[0]);
+    const other = [ids.trivia2, ids.pulse].find((id) => id !== live[0]);
     assert.strictEqual(itemRow(code, other).State, 'planned');
     assert.ok(!itemRow(code, other).GameId);
+    // The item that was live: done, its session ended by the winner alone.
+    assert.strictEqual(itemRow(code, ids.friction).State, 'done');
+    assert.strictEqual(gameState(friction).State, 'ENDED');
+    const end = sent.filter((m) => String(m.ConnectionId).startsWith(`c_${friction}_`) && JSON.parse(m.Data).messageType === 'END');
+    assert.strictEqual(end.length, 1, 'the losing start touched the live item\'s session');
   });
 
-  console.log('\n7. ending');
-  const livingId = meta(code).LiveItem;
-  const pulseRow = itemRow(code, ids.pulse);
-  if (pulseRow.State !== 'live') {
+  console.log('\n7. a survey, open and closed, and ending');
+  ids.talk2 = bodyOf(await add(code, { type: 'presentation', title: 'Where we go next', minutes: 10 })).item.itemId;
+  ids.trivia3 = bodyOf(await add(code, { type: 'trivia', title: 'Space night III', minutes: 10, setRef: { scope: 'platform', setId: 'space', version: 1 } })).item.itemId;
+  if (itemRow(code, ids.pulse).State !== 'live') {
     // Make the survey the live one for this part.
     await run(code, { action: 'start', itemId: ids.pulse });
   }
@@ -367,21 +402,61 @@ async function makeEvent() {
     assert.strictEqual(bodyOf(res).code, 'survey_open');
     assert.strictEqual(itemRow(code, ids.pulse).State, 'live');
   });
-  await check('a closed survey ends, and the item is done', async () => {
-    table.put({ ...gameState(pulse), State: 'SURVEY#CLOSED' });
+  await check('moving on from an OPEN survey pauses it: it cannot end until it is closed', async () => {
     connect(pulse);
-    const res = await run(code, { action: 'end', itemId: ids.pulse });
+    const res = await run(code, { action: 'start', itemId: ids.talk2 });
     assert.strictEqual(res.statusCode, 200, res.body);
-    assert.strictEqual(gameState(pulse).State, 'ENDED');
-    assert.strictEqual(itemRow(code, ids.pulse).State, 'done');
-    assert.ok(framesTo(pulse, 'eventItemEnded').length === 1);
+    assert.strictEqual(itemRow(code, ids.pulse).State, 'paused');
+    assert.strictEqual(itemRow(code, ids.talk2).State, 'live');
+    assert.strictEqual(gameState(pulse).State, 'SURVEY#OPEN');
+    assert.strictEqual(gameState(pulse).EventPaused, true);
+    assert.strictEqual(framesTo(pulse, 'eventItemPaused').length, 1);
+    assert.strictEqual(framesTo(pulse, 'eventItemEnded').length, 0);
+    assert.strictEqual(framesTo(pulse, 'eventItemStarted').length, 1);
   });
-  await check('ending the paused trivia ends its session with the END the room already knows', async () => {
-    const res = await run(code, { action: 'end', itemId: ids.trivia });
+  await check('resumed and closed on its stage, moving on from it ENDS it: done, and the phones say so', async () => {
+    const back = await run(code, { action: 'resume', itemId: ids.pulse });
+    assert.strictEqual(back.statusCode, 200, back.body);
+    assert.strictEqual(itemRow(code, ids.talk2).State, 'done');
+    assert.strictEqual(gameState(pulse).EventPaused, undefined);
+    table.put({ ...gameState(pulse), State: 'SURVEY#CLOSED' });
+    const res = await run(code, { action: 'start', itemId: ids.trivia3 });
     assert.strictEqual(res.statusCode, 200, res.body);
-    assert.strictEqual(gameState(trivia).State, 'ENDED');
-    assert.strictEqual(itemRow(code, ids.trivia).State, 'done');
-    const end = sent.filter((m) => String(m.ConnectionId).startsWith(`c_${trivia}_`) && JSON.parse(m.Data).messageType === 'END');
+    assert.strictEqual(itemRow(code, ids.pulse).State, 'done');
+    assert.strictEqual(gameState(pulse).State, 'ENDED');
+    assert.strictEqual(framesTo(pulse, 'eventItemEnded').length, 1);
+    assert.strictEqual(framesTo(pulse, 'gameEnded').length, 1);
+    const pub = bodyOf(await agenda(code));
+    assert.strictEqual(pub.items.find((i) => i.itemId === ids.pulse).state, 'done');
+  });
+  const trivia3 = itemRow(code, ids.trivia3).GameId;
+  await check('a closed survey ends from its row too, and the item is done', async () => {
+    // The same endChild, through `end`: a second survey goes live (trivia3
+    // finishes), closes, and is ended from its row.
+    ids.pulse2 = bodyOf(await add(code, { type: 'survey', title: 'After lunch', minutes: 5, setRef: { scope: 'platform', setId: 'kickoff' } })).item.itemId;
+    const started = await run(code, { action: 'start', itemId: ids.pulse2 });
+    assert.strictEqual(started.statusCode, 200, started.body);
+    const pulse2 = bodyOf(started).gameId;
+    assert.strictEqual(itemRow(code, ids.trivia3).State, 'done');
+    assert.strictEqual(gameState(trivia3).State, 'ENDED');
+    table.put({ ...gameState(pulse2), State: 'SURVEY#CLOSED' });
+    const res = await run(code, { action: 'end', itemId: ids.pulse2 });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(gameState(pulse2).State, 'ENDED');
+    assert.strictEqual(itemRow(code, ids.pulse2).State, 'done');
+    assert.strictEqual(meta(code).LiveItem, undefined);
+  });
+  await check('End on a PAUSED item ends its session with the END the room already knows', async () => {
+    ids.trivia4 = bodyOf(await add(code, { type: 'trivia', title: 'Space night IV', minutes: 5, setRef: { scope: 'platform', setId: 'space', version: 1 } })).item.itemId;
+    const t4 = bodyOf(await run(code, { action: 'start', itemId: ids.trivia4 })).gameId;
+    connect(t4);
+    await run(code, { action: 'pause', itemId: ids.trivia4 });
+    const res = await run(code, { action: 'end', itemId: ids.trivia4 });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(gameState(t4).State, 'ENDED');
+    assert.strictEqual(gameState(t4).EventPaused, undefined);
+    assert.strictEqual(itemRow(code, ids.trivia4).State, 'done');
+    const end = sent.filter((m) => String(m.ConnectionId).startsWith(`c_${t4}_`) && JSON.parse(m.Data).messageType === 'END');
     assert.strictEqual(end.length, 1);
   });
   await check('a done item does not start again', async () => {
@@ -389,7 +464,6 @@ async function makeEvent() {
     assert.strictEqual(res.statusCode, 409, res.body);
     assert.strictEqual(bodyOf(res).code, 'item_done');
   });
-  void livingId;
 
   console.log('\n8. an event is billed once, as an event');
   // rejects: an event's sessions charged on top of the event's $2.00.
@@ -410,12 +484,18 @@ async function makeEvent() {
 
   console.log('\n9. the end of the day');
   await check('end-event ends what is live or paused, keeps planned items planned, and says ENDED', async () => {
-    await run(code, { action: 'start', itemId: ids.talk });
+    ids.talk3 = bodyOf(await add(code, { type: 'presentation', title: 'Close', minutes: 5 })).item.itemId;
+    ids.talk4 = bodyOf(await add(code, { type: 'presentation', title: 'Thanks', minutes: 5 })).item.itemId;
+    await run(code, { action: 'start', itemId: ids.talk3 });
+    await run(code, { action: 'pause', itemId: ids.talk3 });
+    await run(code, { action: 'start', itemId: ids.talk4 });
+    assert.strictEqual(itemRow(code, ids.talk3).State, 'paused');
     const res = await run(code, { action: 'end-event' });
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual(meta(code).State, 'ENDED');
     assert.strictEqual(meta(code).LiveItem, undefined);
-    assert.strictEqual(itemRow(code, ids.talk).State, 'done');
+    assert.strictEqual(itemRow(code, ids.talk3).State, 'done');
+    assert.strictEqual(itemRow(code, ids.talk4).State, 'done');
     const body = bodyOf(res);
     assert.strictEqual(body.event.state, 'ENDED');
     assert.ok(body.event.endedAt);
@@ -519,19 +599,60 @@ async function makeEvent() {
       assert.strictEqual(framesTo(previewId, 'eventItemEnded').length, 1);
       assert.strictEqual(framesTo(previewId, 'eventItemPaused').length, 0);
     });
-    await check('editing a previewed item lets its session go, and the next preview is made from the edit', async () => {
-      const again = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+    // THE RUNNING ORDER SURVIVES A HARMLESS EDIT (30 Sep 2026). Every saved
+    // edit used to discard the prepared session, so a new description or a
+    // longer planned length threw away the order a host had queued in it.
+    const editItem = (body) => items(request({
+      method: 'PUT', path: `/events/${p}/items/${fresh.ids.trivia}`, pathParameters: { code: p, itemId: fresh.ids.trivia },
+      requestContext: host(), body,
+    }));
+    const TC = h.load('lambda-functions/websocket/tenant-crypto.js');
+    await check('editing a previewed item\'s title, description or length keeps its session, and the new title reaches it', async () => {
+      const kept = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      assert.ok(gameMeta(kept));
+      const edit = await editItem({ title: 'Space night, again', description: 'Now with moons', minutes: 25 });
+      assert.strictEqual(edit.statusCode, 200, edit.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, kept, 'the preview was let go');
+      assert.ok(gameMeta(kept), 'the prepared session was discarded');
+      assert.strictEqual(await TC.decryptValue(NW, gameMeta(kept).Title), 'Space night, again');
+      const index = [...table.store.values()].find((r) => r.SK === `GAME#${kept}` && r.PK !== 'GAMES');
+      if (index) assert.strictEqual(await TC.decryptValue(NW, index.Title), 'Space night, again');
+      // Re-sending the options unchanged is not a change either.
+      const same = await editItem({ settings: { target: 5, randomizeQuestions: false } });
+      assert.strictEqual(same.statusCode, 200, same.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, kept);
+      assert.strictEqual(bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId, kept);
+    });
+    await check('changing a previewed item\'s session options lets its session go, and the next preview is made from the edit', async () => {
+      const again = itemRow(p, fresh.ids.trivia).GameId;
       assert.ok(gameMeta(again));
-      const edit = await items(request({
-        method: 'PUT', path: `/events/${p}/items/${fresh.ids.trivia}`, pathParameters: { code: p, itemId: fresh.ids.trivia },
-        requestContext: host(), body: { title: 'Space night, again', minutes: 15 },
-      }));
+      const edit = await editItem({ settings: { target: 3, randomizeQuestions: false } });
       assert.strictEqual(edit.statusCode, 200, edit.body);
       assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, undefined);
       assert.strictEqual(gameMeta(again), undefined, 'the old preview was not discarded');
       assert.ok(!table.get('GAMES', `GAME#${again}`), 'its code is still held');
       const next = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
       assert.notStrictEqual(next, again);
+    });
+    await check('a failed rename of the preview never fails the edit that already saved', async () => {
+      const kept = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      const fault = table.inject(
+        (c) => c.type === 'update' && c.input && c.input.Key && c.input.Key.PK === `GAME#${kept}` && c.input.Key.SK === 'METADATA',
+        () => Object.assign(new Error('Throughput exceeded'), { name: 'ProvisionedThroughputExceededException' }),
+      );
+      const edit = await editItem({ title: 'Space night, renamed under load' });
+      assert.strictEqual(fault.thrown, 1, 'the fault never fired');
+      assert.strictEqual(edit.statusCode, 200, edit.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, kept);
+    });
+    await check('a new title on a preview whose session has vanished clears the stale pointer', async () => {
+      const gid = itemRow(p, fresh.ids.trivia).GameId;
+      table.store.delete(table.keyOf(`GAME#${gid}`, 'METADATA'));
+      const edit = await editItem({ title: 'Space night, last call' });
+      assert.strictEqual(edit.statusCode, 200, edit.body);
+      assert.strictEqual(itemRow(p, fresh.ids.trivia).GameId, undefined);
+      const next = bodyOf(await run(p, { action: 'prepare', itemId: fresh.ids.trivia })).gameId;
+      assert.ok(gameMeta(next));
     });
     await check('removing a previewed item lets its session go', async () => {
       const gid = itemRow(p, fresh.ids.trivia).GameId;
@@ -574,6 +695,34 @@ async function makeEvent() {
       assert.strictEqual(framesTo(previewed, 'eventEnded').length, 0);
     });
   }
+
+  console.log('\n12. a day run straight through (QA drive 29 Sep 2026, finding #2)');
+  // rejects: "0 OF 5 DONE" after every item was taken live in turn, four of
+  // them Paused, and phones listing a closed survey as Paused.
+  await check('Go live on each item in turn leaves every one before it DONE, and the phones say Done', async () => {
+    table.clear();
+    seedOrg(table, NW);
+    seedSets();
+    const day = await makeEvent();
+    const order = ['trivia', 'talk', 'coffee', 'pulse', 'friction'];
+    for (const key of order) {
+      if (key === 'friction') {
+        // The survey before it is closed on its stage, as a host does.
+        table.put({ ...gameState(itemRow(day.code, day.ids.pulse).GameId), State: 'SURVEY#CLOSED' });
+      }
+      const res = await run(day.code, { action: 'start', itemId: day.ids[key] });
+      assert.strictEqual(res.statusCode, 200, `${key}: ${res.body}`);
+    }
+    const res = await run(day.code, { action: 'end', itemId: day.ids.friction });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const view = bodyOf(res);
+    assert.deepStrictEqual(view.items.map((i) => i.state), ['done', 'done', 'done', 'done', 'done']);
+    const pub = bodyOf(await agenda(day.code));
+    assert.ok(pub.items.every((i) => i.state === 'done'), JSON.stringify(pub.items.map((i) => i.state)));
+    for (const key of ['trivia', 'pulse', 'friction']) {
+      assert.strictEqual(gameState(itemRow(day.code, day.ids[key]).GameId).State, 'ENDED', key);
+    }
+  });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();

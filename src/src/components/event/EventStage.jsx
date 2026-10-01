@@ -7,13 +7,16 @@ import { getEvent, runEvent, readDeck, turnPage } from '../../utils/eventsApi';
 import { navigateTo } from '../../auth/navigate';
 import { loadProfile } from '../../config/displayProfile';
 import {
-  TYPE_ICONS, typeLabel, typeLine, positionOf, wallClock, nextAfter, firstPlanned,
+  TYPE_ICONS, typeLabel, typeLine, positionOf, wallClock, nextAfter, upNext,
   isEngagement, isBreak, rules,
 } from './eventDisplay';
 import SlideCanvas from './SlideCanvas';
 import useSlides from './useSlides';
 import useFullscreenKey, { useFullscreenElement } from '../../hooks/useFullscreenKey';
 import { canFullscreen, toggleFullscreen } from '../../utils/fullscreen';
+import {
+  sessionStagePath, readOrderParam, dropParam, offersRunningOrder, ORDER_PARAM, QUESTIONS_PANEL,
+} from '../../config/runningOrder';
 import './EventStage.css';
 
 /** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
@@ -37,7 +40,14 @@ const agendaPath = (code) => `/host/event/${encodeURIComponent(code)}/agenda`;
  * The same two are on every item's own screen, at the bottom: AGENDA (back
  * here, the host only) and "Bring everyone here" while the item is not live.
  * Going back to the agenda never pauses anything; Pause and End are their own
- * buttons, on the item's row.
+ * buttons, on the item's row, and End asks first (QA drive finding #25).
+ *
+ * GOING LIVE ON THE NEXT ITEM FINISHES THE ONE THAT WAS LIVE (run.js
+ * stepAside, 30 Sep 2026): it reads Done, not Paused. Only an open survey
+ * pauses, because it cannot end until it is closed on its stage. So the
+ * dock's step walks the day forward — the next planned item after the one
+ * the room saw last (eventDisplay upNext), then End the event — and never
+ * offers to Resume an earlier item.
  *
  * IT NEVER SCROLLS, on a laptop, a tablet or the room's screen (the owner,
  * same day). The rows are one line each and flow into as many columns as the
@@ -92,7 +102,7 @@ const SLIDE_KEYS = Object.freeze({ ArrowRight: 1, PageDown: 1, ArrowLeft: -1, Pa
 
 const playUrl = (code) => `${window.location.origin}/play?event=${code}`;
 const joinDisplayUrl = () => `${window.location.host}/play`;
-const sessionStage = (gameId, code) => `/host?gameId=${encodeURIComponent(gameId)}&event=${encodeURIComponent(code)}`;
+const sessionStage = (gameId, code, opts) => sessionStagePath(gameId, code, opts);
 
 function TypeIcon({ type, size = 22 }) {
   return <Icon name={TYPE_ICONS[type] || 'Circle'} weight="bold" size={size} color="currentColor" />;
@@ -261,6 +271,8 @@ export default function EventStage({ code }) {
     return /^it_[0-9a-f]{8}$/.test(f) ? f : 'agenda';
   });
   const [confirmEndEvent, setConfirmEndEvent] = useState(false);
+  /** The board row whose End is waiting for the host to say yes (finding #25). */
+  const [confirmEnd, setConfirmEnd] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [wipe, setWipe] = useState(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -355,7 +367,7 @@ export default function EventStage({ code }) {
   const fullEl = useFullscreenElement();
   const presenting = Boolean(deckItem) && fullEl !== null && fullEl === deckFrame.current;
   const [fullscreenOk] = useState(() => canFullscreen());
-  useFullscreenKey({ enabled: !confirmEndEvent && !qrOpen, target: () => deckFrame.current });
+  useFullscreenKey({ enabled: !confirmEndEvent && !confirmEnd && !qrOpen, target: () => deckFrame.current });
   const [cue, setCue] = useState(false);
   const cueTimer = useRef(null);
   const wake = useCallback(() => {
@@ -432,21 +444,43 @@ export default function EventStage({ code }) {
     }
   }, [code, load]);
 
-  /** OPEN: the host's screen only. The phones stay where the event is. */
-  const openItem = useCallback(async (item) => {
+  /** OPEN: the host's screen only. The phones stay where the event is.
+      `panel` lands the item's stage on a Session panel tab (config/
+      runningOrder.js) — "Set the running order" is Open plus that. */
+  const openItem = useCallback(async (item, { panel = '' } = {}) => {
     if (!item) return;
     if (!isEngagement(item.type)) {
       setFocus(item.itemId);
       return;
     }
     if (item.gameId) {
-      navigateTo(sessionStage(item.gameId, code));
+      navigateTo(sessionStage(item.gameId, code, { panel }));
       return;
     }
     const fresh = await act('prepare', item);
     const ready = fresh && fresh.gameId;
-    if (ready) navigateTo(sessionStage(fresh.gameId, code));
+    if (ready) navigateTo(sessionStage(fresh.gameId, code, { panel }));
   }, [act, code, setFocus]);
+
+  /*
+    "SET THE RUNNING ORDER" FROM THE BUILDER (QA drive finding #4). The
+    builder's door for an item with no session yet is this board with
+    ?order=<itemId>: once the agenda is here, the item is opened exactly as
+    its Open would — prepared first when it has no session — and its stage
+    lands on the Session panel's Questions tab. Read once; the parameter
+    leaves the address, so a reload is the board and not a second trip. An
+    item that is not there, has no running order or has finished leaves the
+    host on the board, which is where the explanation would be.
+  */
+  const orderWanted = useRef(readOrderParam(window.location.search));
+  useEffect(() => {
+    if (!orderWanted.current || !view) return;
+    const itemId = orderWanted.current;
+    orderWanted.current = '';
+    dropParam(ORDER_PARAM);
+    const item = items.find((i) => i.itemId === itemId);
+    if (offersRunningOrder(item, event)) openItem(item, { panel: QUESTIONS_PANEL });
+  }, [view, items, event, openItem]);
 
   /** GO LIVE: the host's screen, and everyone's, to this item. */
   const goLive = useCallback(async (item) => {
@@ -465,16 +499,7 @@ export default function EventStage({ code }) {
     if (live) setFocus(live.itemId);
   }, [act, code, setFocus]);
 
-  /** A live talk or activity ends, and the next item goes live. */
-  const endThenGoLive = useCallback(async (current, next) => {
-    const ended = await act('end', current);
-    if (ended && next) {
-      const fresh = (ended.items || []).find((i) => i.itemId === next.itemId) || next;
-      await goLive(fresh);
-    }
-  }, [act, goLive]);
-
-  const next = firstPlanned(items);
+  const next = upNext(items, event && event.liveItemId);
 
   // ── The one obvious next step, for the dock ──────────────────────────────
   const plan = useMemo(() => {
@@ -485,30 +510,29 @@ export default function EventStage({ code }) {
         return { label: focused.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here', run: () => goLive(focused) };
       }
       if (focused.state === 'live') {
+        // Going live on the next item ends this one on the server, in the
+        // same step (run.js stepAside) — a talk, a break or an activity alike.
         const after = nextAfter(items, focused.itemId);
-        if (isBreak(focused.type)) {
-          return after
-            ? { label: `Go live: ${startWords(after)}`, run: () => goLive(after) }
-            : { label: 'End the break', run: () => act('end', focused) };
-        }
-        return after
-          ? { label: `Go live: ${startWords(after)}`, run: () => endThenGoLive(focused, after) }
+        if (after) return { label: `Go live: ${startWords(after)}`, run: () => goLive(after) };
+        return isBreak(focused.type)
+          ? { label: 'End the break', run: () => act('end', focused) }
           : { label: `End ${focused.title || typeLabel(focused.type)}`, run: () => act('end', focused) };
       }
       return { label: 'Agenda', run: () => setFocus('agenda') };
     }
+    // The next planned item after the one the room saw last; with nothing
+    // left planned, the day is done. Never "Resume <an earlier item>": a
+    // paused item keeps its own Resume on its row.
     if (next) return { label: `Go live: ${startWords(next)}`, run: () => goLive(next) };
-    const paused = items.find((i) => i.state === 'paused');
-    if (paused) return { label: `Resume ${startWords(paused)}`, run: () => goLive(paused) };
     return { label: 'End the event', run: () => setConfirmEndEvent(true) };
-  }, [event, focused, items, next, act, goLive, endThenGoLive, setFocus, code]);
+  }, [event, focused, items, next, act, goLive, setFocus, code]);
 
   // SPACE (and the clicker's arrow) takes the dock's step, as on every stage.
   // With slides up, the arrows and PageUp/PageDown turn the slide instead —
   // from a focused ‹ › too, since a clicker's key lands wherever focus is.
   useEffect(() => {
     const onKey = (e) => {
-      if (confirmEndEvent || qrOpen) return;
+      if (confirmEndEvent || confirmEnd || qrOpen) return;
       const tag = (e.target && e.target.tagName) || '';
       if (presenting && e.key === ' ') {
         e.preventDefault();
@@ -529,7 +553,7 @@ export default function EventStage({ code }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [plan, confirmEndEvent, qrOpen, busy, deckItem, turn, presenting]);
+  }, [plan, confirmEndEvent, confirmEnd, qrOpen, busy, deckItem, turn, presenting]);
 
   if (loadError) {
     return (
@@ -717,7 +741,15 @@ export default function EventStage({ code }) {
           ref={setBoardGrid}
         >
           {items.map((item) => (
-            <BoardRow key={item.itemId} item={item} busy={busy || ended} onOpen={openItem} onLive={goLive} onAct={act} />
+            <BoardRow
+              key={item.itemId}
+              item={item}
+              busy={busy || ended}
+              onOpen={openItem}
+              onLive={goLive}
+              onAct={act}
+              onEnd={setConfirmEnd}
+            />
           ))}
         </ol>
       </div>
@@ -793,6 +825,40 @@ export default function EventStage({ code }) {
         </Modal>
       )}
 
+      {confirmEnd && (
+        <Modal
+          overlayClassName="ag-scrim"
+          contentClassName="ag-confirm"
+          onClose={() => setConfirmEnd(null)}
+          closeOnEscape={() => !busy}
+          label={`End ${confirmEnd.title || typeLabel(confirmEnd.type)}`}
+          theme="dark"
+        >
+          <h2>{`End ${confirmEnd.title || typeLabel(confirmEnd.type)}?`}</h2>
+          <p>
+            {isEngagement(confirmEnd.type)
+              ? 'Its session ends for everyone now, and its report is kept in the session history. '
+              : ''}
+            Everyone’s agenda shows it as done, and it cannot be taken live again.
+          </p>
+          <div className="ag-confirm-foot">
+            <button type="button" className="ag-close" onClick={() => setConfirmEnd(null)}>Keep it</button>
+            <button
+              type="button"
+              className="ag-end"
+              disabled={busy}
+              onClick={async () => {
+                const target = confirmEnd;
+                setConfirmEnd(null);
+                await act('end', target);
+              }}
+            >
+              End it
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {confirmEndEvent && (
         <Modal
           overlayClassName="ag-scrim"
@@ -827,9 +893,11 @@ export default function EventStage({ code }) {
 /**
  * ONE ROW OF THE BOARD, ON ONE LINE: when, what, its state in a word, and the
  * buttons that fit it. Open is always there (looking is always allowed); Go
- * live, Resume, Pause and End only where they mean something.
+ * live, Resume, Pause and End only where they mean something. End asks first
+ * (the stage's dialog): it cannot be undone, and it was one stray tap away
+ * (QA drive 29 Sep 2026, finding #25).
  */
-function BoardRow({ item, busy, onOpen, onLive, onAct }) {
+function BoardRow({ item, busy, onOpen, onLive, onAct, onEnd }) {
   const state = item.state || 'planned';
   const words = { planned: '', live: 'Live', paused: 'Paused', done: 'Done' };
   const name = item.title || typeLabel(item.type);
@@ -863,7 +931,7 @@ function BoardRow({ item, busy, onOpen, onLive, onAct }) {
           </button>
         )}
         {(state === 'live' || state === 'paused') && (
-          <button type="button" className="ag-b" disabled={busy} onClick={() => onAct('end', item)} aria-label={`End ${name}`}>
+          <button type="button" className="ag-b" disabled={busy} onClick={() => onEnd(item)} aria-label={`End ${name}`}>
             End
           </button>
         )}

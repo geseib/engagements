@@ -66,6 +66,7 @@ import {
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
 import goalRules from '../../lambda-functions/websocket/session-goal';
+import { goalOnStage } from './config/goalStage';
 import { fetchComments, featureComment } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
@@ -93,6 +94,9 @@ import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 import { getEvent, runEvent } from './utils/eventsApi';
 import { navigateTo } from './auth/navigate';
+import {
+  hasRunningOrder, readPanelParam, dropParam, PANEL_PARAM, QUESTIONS_PANEL, RUNNING_ORDER_LABEL,
+} from './config/runningOrder';
 
 const API_BASE = window.API_BASE;
 
@@ -303,6 +307,29 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  /*
+    WHERE THE PANEL LANDS when something asked for a place in it rather than
+    the host pressing SESSION: 'running-order' opens it on Questions with the
+    running order in view (QA drive finding #4). Cleared whenever the panel
+    closes, so SESSION afterwards opens it as it always has.
+  */
+  const [setupPanelLanding, setSetupPanelLanding] = useState(null);
+  useEffect(() => {
+    if (!setupPanelOpen) setSetupPanelLanding(null);
+  }, [setupPanelOpen]);
+  /** "Set the running order": the panel, on Questions, at the running order. */
+  const openRunningOrder = useCallback(() => {
+    setSetupPanelLanding('running-order');
+    setSetupPanelOpen(true);
+  }, []);
+  /*
+    ?panel=questions — the deep link the event's agenda uses
+    (config/runningOrder.js). Read once at load; anything else, or nothing,
+    leaves the page exactly as it was. Acted on once the session's stage is
+    up (below, after the welcome screen's state), then taken out of the
+    address so a reload is the plain stage.
+  */
+  const panelLinkRef = useRef(readPanelParam(window.location.search));
   /*
     THE SCOREBOARD (docs/superpowers/specs/2026-09-25-scoreboard-design.md):
     a session fact on the server's STATE row — { open, style, openedAt, page }
@@ -702,6 +729,13 @@ function GameHostPage() {
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
   const [continueGameId, setContinueGameId] = useState('');
+  useEffect(() => {
+    if (!panelLinkRef.current || !gameId || showWelcomeScreen) return;
+    const panel = panelLinkRef.current;
+    panelLinkRef.current = '';
+    dropParam(PANEL_PARAM);
+    if (panel === QUESTIONS_PANEL) openRunningOrder();
+  }, [gameId, showWelcomeScreen, openRunningOrder]);
   
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
@@ -767,7 +801,7 @@ function GameHostPage() {
   const [gamePromptId, setGamePromptId] = useState('');
   const [promptSwitchStatus, setPromptSwitchStatus] = useState('');
   // Whether the live session carries a Call & Answer briefing. Shown as
-  // "Briefing on" beside the voice and the approach — never its text.
+  // "Briefing on" in the Session panel's Workie section (WorkieSettings) — never its text.
   const [sessionBriefed, setSessionBriefed] = useState(false);
   // The live session's goal (events M1b, session-goal.js): how many questions
   // the host plans to ask, or null. The host's alone — the rail never shows it.
@@ -1595,6 +1629,10 @@ function GameHostPage() {
       discussionTopics: summary.discussionQuestions || [],
       nextSteps: summary.nextSteps || [],
       markdownResponse: summary.markdownResponse || null,
+      // The template, not Workie's read (get-ai-summary.js buildFallback) —
+      // AISummaryStatus says so instead of presenting it as the read.
+      fallback: summary.fallback === true,
+      fallbackReason: summary.fallbackReason || null,
       prompt: gameDebugMode ? summary.debugPrompt : undefined,
       debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
     });
@@ -6012,13 +6050,19 @@ Focus on actionable business strategy insights.`;
 
   /*
     THE GOAL (events M1b, session-goal.js): "Question 3 of 5" for the host's
-    SESSION panel and, on the goal's own round once its results are up, the
-    dock's line — "That's your 5. Keep going if there's time, or end the
-    session." Never the rail: the room sees the round, not the plan.
+    SESSION panel. On the stage (config/goalStage.js, QA drive #3 and #22):
+    the rail's "Goal 2" beside the round, amber once reached or passed by any
+    route, and the dock's notice chip on the goal round's results — "That's
+    your 5. Keep going if there's time, or end the session." — and on the
+    first round past it. M1b kept the goal off the rail ("the room sees the
+    round, not the plan"); the drive found it invisible there, so it moved.
   */
   const goal = isSurvey
     ? { progress: '', reached: false, line: '' }
     : goalRules.goalProgress({ target: sessionTarget, round: lessonNumber, phase: hostPhase });
+  const stageGoal = goalOnStage({
+    target: sessionTarget, round: lessonNumber, phase: hostPhase, gameType: currentGameType,
+  });
 
   // This round's poll tally, or none: never the last round's bars.
   const pollTallyNow = pollTally && pollTally.round === String(lessonNumber).padStart(3, '0') ? pollTally.tally : null;
@@ -6033,7 +6077,7 @@ Focus on actionable business strategy insights.`;
     answerCount: answers.length,
     hasQuestionSet: Boolean(selectedSetId),
     survey: surveyCounts,
-    goalLine: goal.line,
+    goalLine: stageGoal.notice,
     notesPage,
     notesPages,
   });
@@ -6044,6 +6088,14 @@ Focus on actionable business strategy insights.`;
     where the phones are.
   */
   const eventWaiting = Boolean(eventCode && eventItem && (eventItem.state === 'planned' || eventItem.state === 'paused'));
+  /*
+    A PREVIEW'S DOOR TO ITS RUNNING ORDER (QA drive finding #4). While an
+    item is only being previewed — nobody has joined, the phones are on the
+    agenda — its lobby says where the order is chosen, and opens it. Not on
+    a paused item, whose lobby the room may be looking at.
+  */
+  const previewRunningOrder = Boolean(eventCode && eventItem && eventItem.state === 'planned'
+    && hasRunningOrder(eventItem.type));
   /*
     AND NO SECOND WAY BACK. In an event, Back to Menu is the agenda
     (requestLeave → goToAgenda), and the dock already has AGENDA — two doors
@@ -6799,6 +6851,7 @@ Focus on actionable business strategy insights.`;
       noun: getHostRoundNoun(),
       round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
       of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
+      goal: stageGoal.rail || undefined,
     };
   const surveyFitKey = isSurvey && survey.progress
     ? `${surveyQuestionCount}:${survey.progress.finished}:${survey.people ? survey.people.length : -1}`
@@ -6882,6 +6935,7 @@ Focus on actionable business strategy insights.`;
         dock={(
           <Dock
             status={dockStatus}
+            notice={Boolean(dockStatus) && hostControls.status.tone === 'notice' && dockStatus === hostControls.status.text}
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
@@ -7038,6 +7092,15 @@ Focus on actionable business strategy insights.`;
                       <div className="lbl">{eventCode ? 'Event code' : 'Session code'}</div>
                       <div className="code">{eventCode || gameId}</div>
                     </div>
+                  </div>
+                )}
+                {/* HOST CHROME (data-drop 1), and only in a preview: the
+                    room is not here yet. The order is chosen in SESSION →
+                    Questions; this opens it there, at the running order. */}
+                {previewRunningOrder && (
+                  <div className="fn-controls preview-order" data-drop="1" data-testid="preview-running-order">
+                    <button type="button" onClick={openRunningOrder}>{RUNNING_ORDER_LABEL}</button>
+                    <span>Choose which questions come first, before anyone joins.</span>
                   </div>
                 )}
                 {/* NO ANONYMITY LINE IN THE LOBBY. The owner, 2026-09-23: "leave
@@ -7469,83 +7532,24 @@ Focus on actionable business strategy insights.`;
                   failure={aiSummaryFailure}
                   retrying={aiRetrying}
                   onRetry={handleRetryAISummary}
+                  onRedo={handleRegenerateAISummary}
                   profile={profile}
                   page={stagePageIndex}
                   onPage={setStagePageIndex}
                   enabled={!anyOverlayOpen}
                 />
 
-                {/* Host controls, so they are chrome and they are droppable —
-                    but with NO data-drop-note. The note is the room-facing
-                    announcement ("… — in the session report"), and a host
-                    control that the fitter hid is not something the room lost;
-                    saying so would print a sentence about a picker nobody in
-                    the room can see. Notes belong on content.
-                    Two different things, deliberately adjacent: the picker
-                    changes the voice from the NEXT round on, Redo rewrites the
-                    one on screen. */}
-                <div className="fn-controls" data-drop="1">
-                  <label className="ai-persona-switch-label" htmlFor="game-persona">
-                    {`Voice (next ${getHostRoundNoun().toLowerCase()})`}
-                  </label>
-                  <select
-                    id="game-persona"
-                    className="ai-persona-select"
-                    value={gamePersonaId}
-                    onChange={(e) => handleChangeGamePersona(e.target.value)}
-                    title="Changes Workie's voice from the next question onwards"
-                  >
-                    <option value="">Adapt to the session</option>
-                    {gamePersonas.map((persona) => (
-                      <option key={persona.personaId} value={persona.personaId}>
-                        {persona.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="regenerate-ai-btn"
-                    onClick={handleRegenerateAISummary}
-                    title="Redo: rewrite the summary on screen now, in the current voice"
-                    disabled={loadingAIInsights}
-                  >
-                    Redo
-                  </button>
-                  {personaSwitchStatus && (
-                    <span className="ai-persona-switch-status">{personaSwitchStatus}</span>
-                  )}
-                  {/* The approach: the prompt template, where the voice is only
-                      the register. Same next-round rule, same Redo. */}
-                  <label className="ai-persona-switch-label" htmlFor="game-prompt">
-                    {`Approach (next ${getHostRoundNoun().toLowerCase()})`}
-                  </label>
-                  <select
-                    id="game-prompt"
-                    className="ai-persona-select"
-                    value={gamePromptId}
-                    onChange={(e) => handleChangeGamePrompt(e.target.value)}
-                    title="Changes how Workie sums up each round from the next question onwards"
-                  >
-                    <option value="">What the set says</option>
-                    {gamePrompts.map((prompt) => (
-                      <option key={prompt.promptId} value={prompt.promptId}>
-                        {prompt.name}
-                      </option>
-                    ))}
-                  </select>
-                  {promptSwitchStatus && (
-                    <span className="ai-persona-switch-status">{promptSwitchStatus}</span>
-                  )}
-                  {/* THAT Workie has the host's briefing — never the file
-                      name or the text (session-setup-redesign page 30). */}
-                  {sessionBriefed && (
-                    <span
-                      className="ai-persona-switch-status"
-                      title="Workie has the host's briefing for this session, and uses it where the answers touch it"
-                    >
-                      Briefing on
-                    </span>
-                  )}
-                </div>
+                {/* NO HOST CONTROLS ON THIS BEAT. The Voice and Approach
+                    selects, "Briefing on" and Redo were drawn here, on the
+                    room-facing stage, as `.fn-controls` — and the stage is a
+                    shared surface in every display profile (QA drive
+                    2026-09-29, #21). They live in the Session panel's Settings
+                    tab now (components/stage/WorkieSettings.jsx), passed as
+                    `workie` below. The one Redo left on the stage is the
+                    fallback state's, inside AISummaryStatus: when Workie's read
+                    did not run, saying so and offering the retry is the honest
+                    thing to put in front of the room, as the failure state
+                    already does. */}
 
                 {gameDebugMode && currentAIInsights
                   && (currentAIInsights.debugPrompt || currentAIInsights.prompt) && (
@@ -7695,6 +7699,8 @@ Focus on actionable business strategy insights.`;
           dock is a no-overlay zone (audit A6). */}
       {setupPanelOpen && (
         <SessionSetupPanel
+          initialTab={setupPanelLanding === 'running-order' ? 'questions' : 'players'}
+          focusRunningOrder={setupPanelLanding === 'running-order'}
           rounds={rounds}
           historyLoading={historyLoading}
           onOpenRound={setPastRoundIndex}
@@ -7810,6 +7816,22 @@ Focus on actionable business strategy insights.`;
           // The group AdminPage's own ProtectedRoute requires. Offering the
           // link to a plain host would open a tab onto Access Denied.
           isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
+          /* WORKIE'S HOST OPTIONS, off the stage (QA drive #21). Redo only
+             while a read is on screen: anywhere else it rewrites nothing. */
+          workie={{
+            roundNoun: getHostRoundNoun(),
+            personaId: gamePersonaId,
+            personas: gamePersonas,
+            onPersona: handleChangeGamePersona,
+            personaStatus: personaSwitchStatus,
+            promptId: gamePromptId,
+            prompts: gamePrompts,
+            onPrompt: handleChangeGamePrompt,
+            promptStatus: promptSwitchStatus,
+            briefed: sessionBriefed,
+            onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
+            redoBusy: loadingAIInsights,
+          }}
         />
       )}
 

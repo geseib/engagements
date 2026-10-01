@@ -10,6 +10,9 @@ import {
 } from '../utils/eventsApi';
 import { countPages } from '../utils/pdfDeck';
 import { listPersonas, listSetCategories } from '../utils/sessionSetupApi';
+import {
+  hasRunningOrder, offersRunningOrder, runningOrderHref, RUNNING_ORDER_LABEL,
+} from '../config/runningOrder';
 import './EventBuilder.css';
 
 /**
@@ -72,6 +75,14 @@ import './EventBuilder.css';
  * format has (agenda-rules.settingsFor); an edit seeds from the item's own. The
  * goal is bounded by the pinned version's size, and Add waits while Workie is
  * still drafting a briefing.
+ *
+ * THE RUNNING ORDER (QA drive 2026-09-29, finding #4). The options offer
+ * only the shuffle switch; choosing the order itself happens on the
+ * item's stage (Session → Questions). An edit of a trivia, Call & Answer,
+ * poll or wavelength item says so and links there, in a new tab
+ * (config/runningOrder.js) — and says the one catch: saving an edit starts
+ * the item's preview afresh (items.js lets a prepared session go), so the
+ * order goes with it. An add says where the door will be once it is added.
  *
  * @param {string}   code      the event
  * @param {'add'|'edit'} mode
@@ -691,6 +702,30 @@ export default function EventItemDialog({
                 questionCount={questionCount}
               />
             </div>
+          )}
+          {editing && offersRunningOrder(item) && (
+            <div className="evb-field evb-order" data-testid="item-running-order">
+              <span className="evb-label" id="evb-order-label">Running order</span>
+              <p className="evb-hint" id="evb-order-hint">
+                Choose which questions come first, and in what order, on its stage: Session → Questions.
+                {' '}Changing the question set or its session options afterwards starts its preview afresh and clears that order. The title, description and length can change any time.
+              </p>
+              <a
+                className="evb-btn evb-btn--sm"
+                href={runningOrderHref(code, item)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-describedby="evb-order-hint"
+                title="Opens its stage in a new tab, on the running order"
+              >
+                <Icon name="ListNumbers" weight="bold" size={13} color="currentColor" /> {RUNNING_ORDER_LABEL}
+              </a>
+            </div>
+          )}
+          {!editing && hasRunningOrder(type) && (
+            <p className="evb-hint" data-testid="item-running-order-later">
+              To choose which questions come first, use <b>Order</b> on its row once it is on the agenda.
+            </p>
           )}
           </>)}
           {error && <p className="evb-error" role="alert">{error}</p>}

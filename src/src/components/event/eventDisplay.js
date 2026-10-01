@@ -72,6 +72,39 @@ export function nextAfter(items, itemId) {
 export const firstPlanned = (items) => (items || []).find((i) => (i.state || 'planned') === 'planned') || null;
 
 /**
+ * The item the room saw most recently: the live one, else the one that went
+ * live last (`liveAt`, which a resume moves too; `startedAt` for a row from
+ * before it was kept), else the last started one in agenda order. Null before
+ * anything has started.
+ */
+export function mostRecentlyLive(items, liveItemId) {
+  const list = items || [];
+  const live = liveItemId ? list.find((i) => i.itemId === liveItemId) : null;
+  if (live) return live;
+  let best = null;
+  let bestAt = -Infinity;
+  list.forEach((i) => {
+    if ((i.state || 'planned') === 'planned') return;
+    const at = Date.parse(i.liveAt || i.startedAt || '') || 0;
+    if (at >= bestAt) { best = i; bestAt = at; }
+  });
+  return best;
+}
+
+/**
+ * WHAT TO TAKE LIVE NEXT (QA drive 29 Sep 2026, finding #2): the first
+ * planned item after the one the room saw most recently — never the first
+ * unplayed row of the day, and never a paused item behind it. Only when
+ * nothing follows it does an earlier planned item (one the host skipped)
+ * come back. Null when nothing is left planned: the day's next step is to
+ * end it.
+ */
+export function upNext(items, liveItemId) {
+  const recent = mostRecentlyLive(items, liveItemId);
+  return (recent && nextAfter(items, recent.itemId)) || firstPlanned(items);
+}
+
+/**
  * The word an agenda row carries for its state — said in a WORD, never by
  * tint alone (agenda-phone.css). `null` when the row says nothing.
  *   done → Done · live → Now · paused → Paused

@@ -1,12 +1,14 @@
 import React from 'react';
 import MarkdownRenderer from './MarkdownRenderer';
 import Pager from './stage/Pager';
+import { fallbackDetail } from '../config/workieOptions';
 import {
   pageSizeFor, pageSlice, proseBudgetFor, prosePageSlice,
 } from '../config/stagePaging';
 
 /**
- * The Field Notes body: whichever of Workie's four states is true right now.
+ * The Field Notes body: whichever of Workie's four states is true right now —
+ * five, since a template read (`insights.fallback`) says what it is.
  *
  * WHY THIS IS A COMPONENT. It was inline in GameHostPage's FIELD_NOTES branch,
  * where it had exactly three states — writing, written, and a placeholder. The
@@ -64,6 +66,7 @@ export default function AISummaryStatus({
   failure = null,
   retrying = false,
   onRetry = null,
+  onRedo = null,
   profile = 'room',
   page = 0,
   onPage = null,
@@ -90,6 +93,35 @@ export default function AISummaryStatus({
 
   if (loading) {
     return <p className="qdetail">Workie is reading the responses…</p>;
+  }
+
+  /*
+    THE TEMPLATE IS NOT THE READ. When get-ai-summary.js could not run Workie —
+    no usable prompt (a closed survey on a tier whose survey default was never
+    seeded), or the model threw — it stores a data-driven template and now
+    marks it `fallback`. It used to be drawn exactly like a read: a closed
+    survey's What We Heard said "5 responses were submitted… The group shared a
+    range of perspectives" with stock discussion prompts, and nothing told the
+    host Workie had not run (QA drive 2026-09-29, #5).
+
+    So it gets its own state, shaped like the failure state above: say so, keep
+    the one honest line (the count), drop the stock prompts — they read as
+    Workie's advice and are nobody's — and offer Redo, the same action the
+    host would otherwise have to go looking for in the Session panel.
+  */
+  if (insights && insights.fallback) {
+    return (
+      <div className="ai-summary-failure ai-summary-fallback" role="status" data-testid="ai-summary-fallback">
+        <p className="qdetail ai-summary-failure-headline"><b>Workie&apos;s read didn&apos;t run</b></p>
+        {insights.summary && <MarkdownRenderer content={insights.summary} className="qdetail" />}
+        <p className="qdetail ai-summary-failure-detail">{fallbackDetail(insights.fallbackReason)}</p>
+        {typeof onRedo === 'function' && (
+          <button type="button" className="btn ghost ai-summary-retry-btn" onClick={onRedo}>
+            Redo
+          </button>
+        )}
+      </div>
+    );
   }
 
   const paged = typeof onPage === 'function';

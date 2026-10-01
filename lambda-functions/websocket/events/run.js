@@ -5,7 +5,10 @@
  *                                    opened, so the host can preview its
  *                                    stage; the item stays planned and the
  *                                    phones stay where they are
- *   { action: 'start',     itemId }  planned → live ("Go live"); paused → live
+ *   { action: 'start',     itemId }  planned → live ("Go live"); paused → live.
+ *                                    The item that WAS live is finished
+ *                                    (done), unless it is an open survey,
+ *                                    which pauses (30 Sep 2026, below)
  *   { action: 'resume',    itemId }  paused → live (the same as start)
  *   { action: 'pause',     itemId }  live → paused. A break is never paused;
  *                                    it ends. Going back to the agenda is the
@@ -31,8 +34,9 @@
  *                       └──────end─────────┴──▶ done
  * One item is live at a time; any number may be paused. METADATA.LiveItem
  * names the live one, or is absent while the agenda is up. Starting an item
- * while another is live pauses that one (a break: ends it) IN THE SAME
- * TRANSACTION, every row conditioned on the state this request read — so two
+ * while another is live FINISHES that one IN THE SAME TRANSACTION (an open
+ * survey, which cannot end, pauses instead — stepAside), every row
+ * conditioned on the state this request read — so two
  * host screens pressing Start at the same second leave exactly one item live,
  * and the loser is told, with nothing of its start kept: a session it made is
  * discarded (child-session.js).
@@ -94,14 +98,26 @@ async function readSessionState(db, tableName, gameId) {
 const breakEndsAt = (row, nowMs) => new Date(nowMs + (Number(row.Minutes) || 0) * MINUTE_MS).toISOString();
 
 /**
- * The update that takes the item that WAS live out of the way of a new one:
- * a break ends (it is never paused, decision 7), and so does an engagement
- * whose session has already ENDED (all its rounds played, or the host ended
- * it on its stage) — there is nothing left in it to resume. Anything else
- * pauses.
+ * The update that takes the item that WAS live out of the way of a new one.
+ *
+ * MOVING ON FINISHES IT (the owner, 30 Sep 2026, QA drive finding #2). Until
+ * then Go live on the next item PAUSED the current one, so a day run straight
+ * through ended "0 OF 5 DONE" with every item Paused, the dock offering to
+ * Resume the opening talk, and every phone's agenda — a closed survey
+ * included — reading Paused. Hosts move on; they do not go back and End each
+ * row. So a talk, a break, an activity and an engagement all END when the
+ * next item goes live, and the explicit Pause button is the only way to leave
+ * one resumable.
+ *
+ * THE EXCEPTION IS AN OPEN SURVEY: only the stage's close step freezes its
+ * results (game/survey-host.js), so `end` refuses it (endChild), and moving on
+ * from it pauses it as before. It reads Paused, and Resume brings everyone
+ * back to finish it. A CLOSED survey ends like anything else.
+ *
+ * `holds` is that exception, decided by the caller from the session's state.
  */
-function stepAside(code, prev, now, { finished = false } = {}) {
-  const ends = prev.Type === rules.BREAK || finished;
+function stepAside(code, prev, now, { holds = false } = {}) {
+  const ends = !holds;
   return {
     Update: {
       Key: itemKey(code, S.itemIdOf(prev)),
@@ -198,14 +214,20 @@ async function start(db, tableName, { meta, code, row, itemId }) {
       created = true;
     }
   }
-  // Is the item that was live an engagement whose session has finished? Then
-  // it ends rather than pauses (stepAside).
-  const prevFinished = Boolean(prev && prev.GameId
-    && ((await readSessionState(db, tableName, String(prev.GameId))) || {}).State === 'ENDED');
+  // What becomes of the item that was live (stepAside): it finishes, unless
+  // its session is a survey still collecting, which pauses. A session that
+  // has already ENDED (its rounds all played, or ended on its own stage)
+  // needs nothing more than the item marked done.
+  const prevSession = prev && prev.GameId ? String(prev.GameId) : null;
+  const prevState = prevSession ? ((await readSessionState(db, tableName, prevSession)) || {}).State : null;
+  const prevHolds = prevState === C.SURVEY_OPEN;
 
-  const itemSets = ['#s = :live'];
-  const values = { ':live': 'live', ':was': was };
-  if (was === 'planned') { itemSets.push('StartedAt = :now'); values[':now'] = now; }
+  // LiveAt: when this item last went live — a first start or a resume — so
+  // the board can suggest what follows the item the room saw most recently
+  // (EventStage `plan`), not the first unplayed row of the day.
+  const itemSets = ['#s = :live', 'LiveAt = :now'];
+  const values = { ':live': 'live', ':was': was, ':now': now };
+  if (was === 'planned') itemSets.push('StartedAt = :now');
   if (created) { itemSets.push('GameId = :gid'); values[':gid'] = gameId; }
   if (row.Type === rules.BREAK) { itemSets.push('EndsAt = :ends'); values[':ends'] = breakEndsAt(row, nowMs); }
   const tx = [{
@@ -227,7 +249,7 @@ async function start(db, tableName, { meta, code, row, itemId }) {
       },
     },
   }];
-  if (prev) tx.push(stepAside(code, prev, now, { finished: prevFinished }));
+  if (prev) tx.push(stepAside(code, prev, now, { holds: prevHolds }));
 
   try {
     await db.send(new TransactWriteCommand({ TransactItems: tx.map((t) => ({ Update: { TableName: tableName, ...t.Update } })) }));
@@ -246,16 +268,27 @@ async function start(db, tableName, { meta, code, row, itemId }) {
     await recordBillableEvent(meta.orgId, code, { db, tableName });
   }
 
-  // The rows are written; now the rooms. The item that was live hears that
-  // it paused AND what started, so its phones can follow at once.
-  if (prev && prev.GameId) {
-    if (prevFinished) {
-      await C.toSession(db, tableName, prev.GameId, { type: 'eventItemEnded', event: code, itemId: prevId });
+  // The rows are written; now the rooms. The item that was live is ended —
+  // its session with the same helper `end` uses — or, an open survey, paused;
+  // either way its room hears that AND what started, so phones follow at once.
+  // After the transaction, not before: a start that loses a race must leave
+  // the live item's session exactly as it was. A failure here leaves the
+  // session running under an item that reads done; it is logged, and the
+  // room still moves on with the frames below.
+  if (prevSession) {
+    if (prevHolds) {
+      await C.setPaused(db, tableName, prevSession, true);
+      await C.toSession(db, tableName, prevSession, { type: 'eventItemPaused', event: code, itemId: prevId });
     } else {
-      await C.setPaused(db, tableName, prev.GameId, true);
-      await C.toSession(db, tableName, prev.GameId, { type: 'eventItemPaused', event: code, itemId: prevId });
+      try {
+        const refusal = prevState === 'ENDED' ? null : await endChild(db, tableName, prevSession);
+        if (refusal) console.warn(`⚠️ run: EVENT#${code} ${prevId} is done but its session ${prevSession} did not end: ${refusal.body}`);
+      } catch (error) {
+        console.warn(`⚠️ run: EVENT#${code} ${prevId} is done but its session ${prevSession} did not end: ${error && (error.name || error.message)}`);
+      }
+      await C.toSession(db, tableName, prevSession, { type: 'eventItemEnded', event: code, itemId: prevId });
     }
-    await C.toSession(db, tableName, prev.GameId, {
+    await C.toSession(db, tableName, prevSession, {
       type: 'eventItemStarted', event: code, itemId, itemType: row.Type || '', ...(gameId ? { gameId } : {}),
     });
   }
@@ -263,7 +296,7 @@ async function start(db, tableName, { meta, code, row, itemId }) {
     await C.setPaused(db, tableName, gameId, false);
     await C.toSession(db, tableName, gameId, { type: 'eventItemResumed', event: code, itemId, gameId });
   }
-  console.log(`▶️ run: EVENT#${code} ${itemId} ${was} → live${gameId ? ` (${gameId}${created ? ', new' : ''})` : ''}${prevId ? `; ${prevId} stepped aside` : ''}`);
+  console.log(`▶️ run: EVENT#${code} ${itemId} ${was} → live${gameId ? ` (${gameId}${created ? ', new' : ''})` : ''}${prev ? `; ${prevId} ${prevHolds ? 'paused (open survey)' : 'done'}` : ''}`);
   return { gameId };
 }
 

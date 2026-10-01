@@ -708,8 +708,10 @@ export function hostControlsFor({
   // A collecting survey's room, { finished, partway, notStarted }, or null
   // before the first /progress read. Only the survey phases read it.
   survey = null,
-  // The goal's notice (session-goal.js goalReachedLine), '' when there is
-  // nothing to say. It takes the status line on the goal round's results.
+  // The goal's notice (config/goalStage.js: session-goal.js goalReachedLine
+  // on the goal round, goalPassedLine on the first round past it), '' when
+  // there is nothing to say. It takes the status line on those results, with
+  // the 'notice' tone.
   goalLine = '',
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
@@ -867,12 +869,20 @@ export function hostControlsFor({
     isSurvey, survey, playerCount, answeredCount, votedCount, hasQuestionSet, notesPage, notesPages, goalLine,
   });
 
+  // THE GOAL'S NOTICE IS A NOTICE, NOT A STATUS (QA drive finding #22). As
+  // plain status text it rendered as the dock's small grey line and was
+  // missed; the 'notice' tone is what the dock draws as a chip instead
+  // (Dock.jsx `notice`, styles/stage.css `.dock .status.notice`). Only when
+  // the goal actually took the line — a long read-back keeps its page
+  // position, and that is not a notice.
+  const tone = goalLine && text === goalLine ? 'notice' : statusTone(text);
+
   return {
     phase: resolvedPhase,
     primary,
     secondary,
     tertiary,
-    status: { text, tone: statusTone(text) },
+    status: { text, tone },
   };
 }
 

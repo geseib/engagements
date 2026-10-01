@@ -137,6 +137,9 @@ exports.handler = async (event) => {
       skipped: 0,
       overwritten: 0,
       errors: 0,
+      // A shipped default that was written as NOT default because the tier
+      // already has its own (see ONE DEFAULT PER GAME TYPE, below).
+      defaultsKept: [],
       prompts: []
     };
 
@@ -171,6 +174,44 @@ exports.handler = async (event) => {
     console.log(`📊 Found ${existingPrompts.Items?.length || 0} existing prompts`);
 
     // Process each game type and category
+    /*
+      ONE DEFAULT PER GAME TYPE — and the tier's own default wins.
+
+      The JSON marks one prompt per game type isDefault. A tier whose prompts
+      have been curated since (engagedev's "Call & Answer — Advisor Read",
+      "Trivia - Round Call", …) already has a default under a DIFFERENT name,
+      so seeding used to add a second one per type. get-ai-summary.js then
+      resolved the tie by category and oldest createdAt — the curated prompt
+      usually won, but the library showed two defaults and the outcome rested
+      on a tie-break nobody chose (2026-10-01, after the button was pressed on
+      engagetest).
+
+      So the incumbent is found first, and a shipped default is written as
+      NOT default when the tier already has an active default of that type
+      under another name. A row that IS the incumbent stays default when it is
+      overwritten, whatever the JSON says, so a reseed can never leave a type
+      with none. A type with no default at all still gets the JSON's.
+    */
+    const isDefaultRow = (item) => item && (item.isDefault === true || item.isDefault === 'true')
+      && item.status !== 'archived' && item.promptType !== 'generation';
+    // When a tier ALREADY has two (engagetest after the 2026-10-01 press), the
+    // incumbent is the one get-ai-summary.js would pick on a tie — oldest
+    // createdAt, then promptId — so pressing the button again demotes the
+    // duplicates instead of keeping whichever row DynamoDB returned first.
+    const age = (item) => [String(item.createdAt || '9999'), String(item.promptId || '')];
+    const older = (a, b) => {
+      const [ca, ia] = age(a);
+      const [cb, ib] = age(b);
+      return ca < cb || (ca === cb && ia < ib);
+    };
+    const incumbentByType = {};
+    for (const item of existingPrompts.Items || []) {
+      if (!isDefaultRow(item)) continue;
+      const type = normalizeGameType(item.gameType);
+      if (!type) continue;
+      if (!incumbentByType[type] || older(item, incumbentByType[type])) incumbentByType[type] = item;
+    }
+
     for (const [rawGameType, categories] of Object.entries(defaultPrompts)) {
       // The JSON already uses canonical ids; normalize anyway so a hand-edit
       // that reintroduces `polls` cannot re-split the vocabulary.
@@ -203,6 +244,18 @@ exports.handler = async (event) => {
           // Use existing promptId when overwriting, generate new one when creating
           const promptId = promptExists && overwrite ? existingPrompt.promptId : generatePromptId();
           const timestamp = new Date().toISOString();
+          // Overwriting keeps the row's birth date: get-ai-summary.js breaks a
+          // tie between defaults by oldest createdAt, and a reseed must not
+          // move a prompt to the back of that queue.
+          const createdAt = (promptExists && overwrite && existingPrompt.createdAt) || timestamp;
+          // ONE DEFAULT PER GAME TYPE (above).
+          const incumbent = incumbentByType[gameType];
+          const isIncumbent = Boolean(incumbent) && incumbent.name === promptData.name;
+          const isDefault = isIncumbent || (promptData.isDefault === true && !incumbent);
+          if (promptData.isDefault === true && !isDefault) {
+            results.defaultsKept.push({ gameType, kept: incumbent.name, notDefault: promptData.name });
+            console.log(`🛡️ ${gameType}: keeping "${incumbent.name}" as the default; "${promptData.name}" is seeded as not default`);
+          }
 
           // Validate the declared shape at seed time so a typo in the JSON is
           // caught here rather than silently ignored at runtime.
@@ -257,11 +310,11 @@ exports.handler = async (event) => {
             // Absent means "use the system default triad".
             ...(outputSections && { outputSections }),
             promptType: 'analysis',
-            isDefault: promptData.isDefault === true,
+            isDefault,
             status: 'active',
             questionSetIds: [],
             tags: promptData.tags || [],
-            createdAt: timestamp,
+            createdAt,
             updatedAt: timestamp,
             metadata: {
               author: 'system',
@@ -291,8 +344,9 @@ exports.handler = async (event) => {
             category: promptData.category,
             scenario: categoryKey,
             status: promptData.status,
-            // Exactly one prompt per game type carries isDefault in the JSON.
-            isDefault: promptData.isDefault === true,
+            // One per game type — the tier's own if it has one (ONE DEFAULT PER
+            // GAME TYPE, above).
+            isDefault,
             tags: promptData.tags,
             // Mirrored onto the metadata row so the admin prompt picker can show
             // a prompt's output shape from the list response, without an S3 read
@@ -300,7 +354,7 @@ exports.handler = async (event) => {
             ...(outputSections && { outputSections }),
             s3Key: s3Key,
             s3Bucket: aiPromptsBucket,
-            createdAt: timestamp,
+            createdAt,
             updatedAt: timestamp,
             createdBy: 'system',
             version: '1.0',
@@ -318,6 +372,7 @@ exports.handler = async (event) => {
           }
 
           await dynamodb.send(new PutCommand(putCommand));
+          if (isDefault && !incumbentByType[gameType]) incumbentByType[gameType] = metadataRecord;
 
           if (promptExists && overwrite) {
             console.log(`✅ Overwritten default prompt: ${promptData.name}`);

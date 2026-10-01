@@ -1639,13 +1639,16 @@ function AIPromptManager({ readOnly = false }) {
       const result = await response.json();
       
       if (result.success) {
-        const { created, skipped, overwritten, errors } = result.results;
+        const { created, skipped, overwritten, errors, defaultsKept = [] } = result.results;
         let message = 'Success! ';
         
         if (created > 0) message += `Created ${created} new prompts. `;
         if (overwritten > 0) message += `Overwritten ${overwritten} existing prompts. `;
         if (skipped > 0) message += `${skipped} prompts were skipped. `;
         if (errors > 0) message += `${errors} errors occurred. `;
+        if (defaultsKept.length > 0) {
+          message += `Kept your default for ${defaultsKept.map((k) => `${k.gameType} (${k.kept})`).join(', ')}. `;
+        }
         
         await fetchPrompts(); // Refresh the list, which clears `notice`…
         setNotice(message.trim()); // …so the outcome is set after it.
@@ -1934,7 +1937,9 @@ function AIPromptManager({ readOnly = false }) {
         and this call sends `overwrite: true` — so the consequence is precise
         and was worth writing down: same name, same id, different text. The old
         one-liner said "Existing prompts will be overwritten", which reads as
-        "the ones I did not write".
+        "the ones I did not write". Defaults: the lambda keeps each type's
+        current default and only fills a type that has none (2026-10-01, ONE
+        DEFAULT PER GAME TYPE in populate-defaults.js).
       */}
       {confirmPopulate && (
         <Modal
@@ -1952,8 +1957,8 @@ function AIPromptManager({ readOnly = false }) {
             no undo.
           </p>
           <p>
-            One built-in per engagement type is flagged default, so whatever is default now is
-            demoted in the same run. Prompts you named anything else are untouched.
+            Each engagement type keeps the default it has now: a built-in becomes the default
+            only for a type that has none. Prompts you named anything else are untouched.
           </p>
           <p>
             {prompts.length === 0

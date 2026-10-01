@@ -289,8 +289,9 @@ describe('the two destructive paths ask a question worth reading', () => {
       rejects: the old line, "Existing prompts will be overwritten", which reads
       as "the ones I did not write". `populate-defaults.js:102` matches on
       `item.name === promptData.name` and this call sends `overwrite: true`, so
-      the consequence is same name, same id, different text — and one built-in
-      per engagement type carries isDefault, so the current default is demoted.
+      the consequence is same name, same id, different text. Each type keeps its
+      current default; a built-in becomes default only where a type has none
+      (populate-defaults.js, ONE DEFAULT PER GAME TYPE).
     */
     render(<AIPromptManager />);
     // Wait for the fetch to settle: the control is `disabled={loading}`, and a
@@ -300,7 +301,8 @@ describe('the two destructive paths ask a question worth reading', () => {
     const dialog = dialogNamed('Rewrite the built-in prompts');
     expect(dialog.textContent).toMatch(/matches on/i);
     expect(dialog.textContent).toMatch(/keeping its id/);
-    expect(dialog.textContent).toMatch(/demoted/);
+    expect(dialog.textContent).toMatch(/keeps the default it has now/);
+    expect(dialog.textContent).not.toMatch(/demoted/);
     expect(authFetch.mock.calls.some((c) => c[1] && c[1].method === 'POST')).toBe(false);
 
     fireEvent.click(within(dialog).getByTestId('pmgr-populate-confirm'));

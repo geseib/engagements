@@ -6,7 +6,7 @@
  *
  * rejects: the goal surviving a switch to another session; a reload that
  * forgets it; a new session that does not carry the goal just set; the dock
- * or the panel not told; the rail printing it to the room.
+ * or the panel not told; the rail's goal derived anywhere but goalStage.
  */
 import fs from 'fs';
 import path from 'path';
@@ -35,12 +35,26 @@ test('a new session carries the goal the host just set, and an edit of the live 
 
 test('the dock hears it through hostControlsFor, and the panel gets the progress', () => {
   expect(source).toMatch(/goalRules\.goalProgress\(\{ target: sessionTarget, round: lessonNumber, phase: hostPhase \}\)/);
-  expect(source).toMatch(/hostControlsFor\(\{[\s\S]*?goalLine: goal\.line,[\s\S]*?\}\);/);
+  // The dock's notice is goalStage's: the goal round's results AND the first
+  // round past it (QA drive #3), not goalProgress's reached-only line.
+  expect(source).toMatch(/goalOnStage\(\{\s*target: sessionTarget, round: lessonNumber, phase: hostPhase, gameType: currentGameType,\s*\}\)/);
+  expect(source).toMatch(/hostControlsFor\(\{[\s\S]*?goalLine: stageGoal\.notice,[\s\S]*?\}\);/);
   expect(source).toMatch(/<SessionSetupPanel[\s\S]*?remoteUrl=\{remoteUrl\}\s+goal=\{goal\}/);
 });
 
-test('the rail never prints the goal', () => {
+// RETIRED: "the rail never prints the goal". M1b kept the plan off the room's
+// screen; the 2026-09-29 QA drive found the goal invisible there (finding #3)
+// and the fix plan puts it on the header. What stays true: the rail's goal is
+// goalStage's, not a second derivation, and a survey's rail carries none.
+test('the rail prints the goal from goalStage, and only on a counted round', () => {
   const at = source.indexOf('const railContext = ');
   const block = source.slice(at, source.indexOf(';\n', at));
-  expect(block).not.toMatch(/sessionTarget|goal/);
+  expect(block).toMatch(/goal: stageGoal\.rail \|\| undefined/);
+  expect(block).not.toMatch(/sessionTarget/);
+  const surveyArm = block.slice(0, block.indexOf(': {', block.indexOf('surveyStage')));
+  expect(surveyArm).not.toMatch(/goal/);
+});
+
+test('the dock is told when its status is the goal\'s notice', () => {
+  expect(source).toMatch(/notice=\{Boolean\(dockStatus\) && hostControls\.status\.tone === 'notice' && dockStatus === hostControls\.status\.text\}/);
 });
