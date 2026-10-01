@@ -11,6 +11,16 @@
  * literal anywhere in the handler.
  */
 const suiteFinished = require('./helpers/finish-guard');
+
+// A month N away from the current UTC month, as 'YYYY-MM'. These assertions
+// were written in September 2026 with October hard-coded as "next month"; on
+// 1 Oct 2026 that month arrived and the suites went red.
+const monthFromNow = (n) => {
+  const d = new Date();
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -410,7 +420,7 @@ const ORG_B = 'org_2222222222222222222222';
   await check('approval REDEEMS the code in the same transaction: an ADJ row, a CODEUSE row, the counter up one', async () => {
     const adj = adjRows();
     assert.strictEqual(adj.length, 1, 'one CODE_REDEMPTION row');
-    assert.deepStrictEqual([adj[0].kind, adj[0].code, adj[0].percentOff, adj[0].validTo], ['CODE_REDEMPTION', 'WELCOME30', 30, '2026-11']);
+    assert.deepStrictEqual([adj[0].kind, adj[0].code, adj[0].percentOff, adj[0].validTo], ['CODE_REDEMPTION', 'WELCOME30', 30, monthFromNow(2)]);
     assert.ok(store.get(key(`ORG#${ORG}`, 'CODEUSE#WELCOME30')), 'no CODEUSE row');
     assert.strictEqual(store.get(key('ORGS', 'CODE#WELCOME30')).uses, 13);
     assert.strictEqual(bodyOf(await mine(OWNER)).requests[0].codeApplied, 'WELCOME30');
