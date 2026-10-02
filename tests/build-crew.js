@@ -343,6 +343,14 @@ const PATCH = 'From 1234567 Mon Sep 17 00:00:00 2001\nSubject: [PATCH] Parking m
     }
     assert.strictEqual((await claude('POST', `crew/shares/${shareId}`, { action: 'feature' })).status, 403, 'putting things on the wall is the host\'s');
   });
+  await check('a builder may post a milestone; after the session ends a builder can read but not write', async () => {
+    assert.strictEqual((await sam('POST', 'log', { kind: 'milestone', text: 'List view done' })).status, 201);
+    store.get(key(`GAME#${GAME}`, 'STATE')).State = 'ENDED';
+    assert.strictEqual((await sam('POST', 'crew/me', { status: 'idle' })).status, 409);
+    assert.strictEqual((await sam('POST', 'crew/shares', { title: 'Late', summary: 'late' })).status, 409);
+    assert.strictEqual((await sam('GET', 'state')).status, 200);
+    store.get(key(`GAME#${GAME}`, 'STATE')).State = 'STARTED';
+  });
   await check('eight builders at most', async () => {
     for (let i = 0; i < 6; i++) put({ PK: `GAME#${GAME}`, SK: `BUILD#BLD#X${i}`, PlayerName: `X${i}`, Status: 'building' });
     put({ PK: `GAME#${GAME}`, SK: 'PLAYER#Ninth', PlayerName: 'Ninth', ClientId: 'c-Ninth' });

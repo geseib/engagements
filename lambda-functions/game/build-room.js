@@ -1043,12 +1043,14 @@ async function routeBuilder(ctx, method, parts, body, query) {
   const [a, b] = parts;
   if (method === 'GET' && a === 'state' && !b) return reply(200, await builderState(ctx));
   if (method === 'GET' && a === 'inbox' && !b) return reply(200, {});
-  if (a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
+  if (method === 'GET' && a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
+  // After the session ends a builder can still read, never write.
   if ((await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
+  if (a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
   if (method === 'POST' && a === 'images' && !b) return postImage(ctx, 'builder', body);
   if (method === 'POST' && a === 'log' && !b) {
     const kind = String((body || {}).kind || 'progress');
-    if (!['progress', 'showing', 'checkpoint'].includes(kind)) return fail(400, 'kind must be progress, showing or checkpoint');
+    if (!['progress', 'milestone', 'showing', 'checkpoint'].includes(kind)) return fail(400, 'kind must be progress, milestone, showing or checkpoint');
     const text = S.cleanText((body || {}).text, S.LIMITS.logText);
     if (!text) return fail(400, 'Write the update');
     const row = await logEntry(ctx, { kind, text, detail: S.cleanText(body.detail, S.LIMITS.logDetail), link: S.safeUrl(body.link), by: 'builder', name: ctx.builder });
