@@ -496,6 +496,26 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  `orgId` and `ttl` are a time, an owner and an expiry, and stay
    *  plaintext. */
   attendee: Object.freeze(['AttendeeName']),
+
+  /** BUILD ROOM (2026-10-02, docs/design/build-room/PLAN.md §5) — the room
+   *  building something with the host's Claude Code. Every row lives in the
+   *  session's own partition (PK=GAME#<code>, SK=BUILD#…) and is sealed under
+   *  the session's org, as its answers are. What Claude and the room WROTE is
+   *  prose and is sealed; statuses, labels, counts, timestamps, `PlayerName`
+   *  (plaintext on every other player row) and the agent key's sha256 are
+   *  structure and stay readable.
+   *   buildState    — SK=BUILD#STATE: the wrap-up Claude or the host wrote.
+   *   buildAsk      — SK=BUILD#ASK#nnn: the question, its options (titles,
+   *                   descriptions, preview URLs) and the host's decision.
+   *   buildResponse — SK=BUILD#RESP#… a suggestion, and BUILD#ANS#… the "why"
+   *                   a phone gave with its pick.
+   *   buildLog      — SK=BUILD#LOG#…: the timeline.
+   *   buildIdea     — SK=BUILD#IDEA#…: an idea sent from a phone. */
+  buildState: Object.freeze(['Outcome']),
+  buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision']),
+  buildResponse: Object.freeze(['Text', 'Why']),
+  buildLog: Object.freeze(['Text', 'Detail', 'Link']),
+  buildIdea: Object.freeze(['Text']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

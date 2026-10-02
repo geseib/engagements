@@ -1,0 +1,526 @@
+/**
+ * BUILD ROOM — the pure half (docs/design/build-room/PLAN.md).
+ *
+ * A Build Room is a session in which the room and the host's own Claude Code
+ * build something together. Claude asks the room (Ideas / Choose / Rate), the
+ * host shapes the answer and sends it back as a direction, and everything that
+ * happens lands on one timeline that becomes the report.
+ *
+ * Everything here is a pure function of rows: validation, the ask lifecycle,
+ * the tallies and the three views (host, agent, phone). build-room.js does the
+ * I/O. A whole room is one `begins_with(SK,'BUILD#')` query — hundreds of rows,
+ * not millions — so every view is computed in memory from the full set.
+ *
+ * Nothing here trusts what Claude or a phone sent: every string is trimmed and
+ * capped, every URL must be http(s), and the views never carry markup.
+ */
+const crypto = require('crypto');
+
+const GAME_TYPE_BUILD = 'build';
+
+const KINDS = Object.freeze(['suggest', 'choice', 'rating']);
+const STATUSES = Object.freeze(['proposed', 'live', 'voting', 'results', 'decided', 'discarded']);
+/** Statuses in which the room is answering right now. */
+const OPEN_STATUSES = Object.freeze(['live', 'voting']);
+
+const LOG_KINDS = Object.freeze([
+  'progress', 'milestone', 'showing', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome',
+]);
+/** What Claude may post. Decisions and directions are the host's to write. */
+const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing']);
+/** What the host may post by hand. */
+const HOST_LOG_KINDS = Object.freeze(['verbal', 'note', 'milestone', 'progress']);
+/** Never shown to the room, and never to Claude. */
+const PRIVATE_LOG_KINDS = Object.freeze(['note']);
+
+const LIMITS = Object.freeze({
+  prompt: 300,
+  detail: 2000,
+  optionTitle: 120,
+  optionDetail: 500,
+  url: 500,
+  response: 280,
+  why: 280,
+  logText: 500,
+  logDetail: 2000,
+  idea: 280,
+  direction: 2000,
+  note: 1000,
+  scaleLabel: 40,
+  summary: 4000,
+  listItem: 300,
+  listItems: 20,
+  links: 10,
+  label: 60,
+  agentName: 40,
+});
+const MIN_OPTIONS = 2;
+const MAX_OPTIONS = 6;
+const MAX_SUGGESTIONS_PER_PLAYER = 3;
+const DEFAULT_MAX_PICKS = 3;
+/** "Claude Code connected" means a call in the last two minutes. */
+const AGENT_ACTIVE_MS = 2 * 60 * 1000;
+const KEY_PREFIX = 'eng_';
+
+// ── Small helpers ────────────────────────────────────────────────────────────
+
+/** Trim, drop control characters (keeping newlines), cap. Never throws. */
+function cleanText(value, max) {
+  if (value === undefined || value === null) return '';
+  const s = String(value)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+  return s.length > max ? s.slice(0, max).trim() : s;
+}
+
+/** An http(s) URL or ''. Anything else (javascript:, data:, relative) is dropped. */
+function safeUrl(value) {
+  const s = cleanText(value, LIMITS.url);
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+const pad3 = (n) => String(n).padStart(3, '0');
+const labelFor = (i) => String.fromCharCode(65 + i); // 0 → 'A'
+const newId = () => crypto.randomBytes(6).toString('hex');
+/** Sortable by time, then unique. */
+const timeKey = (iso) => `${String(Date.parse(iso) || Date.now()).padStart(13, '0')}#${newId()}`;
+
+const SK = Object.freeze({
+  state: 'BUILD#STATE',
+  ask: (askId) => `BUILD#ASK#${askId}`,
+  resp: (askId, respId) => `BUILD#RESP#${askId}#${respId}`,
+  ans: (askId, player) => `BUILD#ANS#${askId}#${player}`,
+  vote: (askId, player) => `BUILD#VOTE#${askId}#${player}`,
+  log: (iso) => `BUILD#LOG#${timeKey(iso)}`,
+  idea: (iso) => `BUILD#IDEA#${timeKey(iso)}`,
+  key: (hash) => `BUILD#KEY#${hash}`,
+});
+
+/** Which tenant-crypto entity a BUILD# row belongs to (null = nothing sealed). */
+function entityForSk(sk) {
+  if (sk === SK.state) return 'buildState';
+  if (sk.startsWith('BUILD#ASK#')) return 'buildAsk';
+  if (sk.startsWith('BUILD#RESP#') || sk.startsWith('BUILD#ANS#')) return 'buildResponse';
+  if (sk.startsWith('BUILD#LOG#')) return 'buildLog';
+  if (sk.startsWith('BUILD#IDEA#')) return 'buildIdea';
+  return null;
+}
+
+// ── Agent keys ───────────────────────────────────────────────────────────────
+
+/** `eng_<gameId>_<secret>` — the game is in the key so the authorizer can find the row. */
+function mintKey(gameId) {
+  const key = `${KEY_PREFIX}${gameId}_${crypto.randomBytes(32).toString('base64url')}`;
+  return { key, hash: hashKey(key) };
+}
+const hashKey = (key) => crypto.createHash('sha256').update(String(key)).digest('hex');
+function parseKey(key) {
+  const m = /^eng_(\d{4})_([A-Za-z0-9_-]{43})$/.exec(String(key || ''));
+  return m ? { gameId: m[1] } : null;
+}
+
+// ── Validation ───────────────────────────────────────────────────────────────
+
+function cleanList(list, maxItems, maxLen) {
+  if (!Array.isArray(list)) return [];
+  return list.map((x) => cleanText(x, maxLen)).filter(Boolean).slice(0, maxItems);
+}
+
+function cleanOptions(options) {
+  if (!Array.isArray(options)) return { error: 'options must be a list' };
+  const out = options
+    .map((o) => (typeof o === 'string' ? { title: o } : (o || {})))
+    .map((o) => ({
+      title: cleanText(o.title, LIMITS.optionTitle),
+      detail: cleanText(o.detail !== undefined ? o.detail : o.description, LIMITS.optionDetail),
+      url: safeUrl(o.url),
+    }))
+    .filter((o) => o.title);
+  if (out.length < MIN_OPTIONS) return { error: `A choice needs at least ${MIN_OPTIONS} options` };
+  if (out.length > MAX_OPTIONS) return { error: `A choice takes at most ${MAX_OPTIONS} options` };
+  return { value: out.map((o, i) => ({ label: labelFor(i), ...o })) };
+}
+
+/**
+ * A new ask from Claude or the host. Returns `{value}` or `{error}`; the error
+ * is written for whoever sent it — Claude reads these and corrects itself.
+ */
+function normalizeAsk(body) {
+  const b = body || {};
+  const kind = String(b.kind || '').trim().toLowerCase();
+  if (!KINDS.includes(kind)) return { error: `kind must be one of ${KINDS.join(', ')}` };
+  const prompt = cleanText(b.prompt !== undefined ? b.prompt : b.question, LIMITS.prompt);
+  if (!prompt) return { error: 'The question (prompt) is required' };
+  const value = {
+    kind,
+    prompt,
+    detail: cleanText(b.detail !== undefined ? b.detail : b.context, LIMITS.detail),
+    options: [],
+    scale: null,
+    maxPicks: null,
+  };
+  if (kind === 'choice') {
+    const opts = cleanOptions(b.options);
+    if (opts.error) return opts;
+    value.options = opts.value;
+    const mp = Number(b.maxPicks);
+    value.maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, value.options.length) : 1;
+  }
+  if (kind === 'rating') {
+    value.scale = {
+      min: 1,
+      max: 5,
+      lowLabel: cleanText(b.lowLabel, LIMITS.scaleLabel),
+      highLabel: cleanText(b.highLabel, LIMITS.scaleLabel),
+    };
+  }
+  if (kind === 'suggest') {
+    const mp = Number(b.maxPicks);
+    value.maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, 5) : DEFAULT_MAX_PICKS;
+  }
+  return { value };
+}
+
+/** A host edit. Options are frozen once anybody has answered (the letters would lie). */
+function applyEdit(ask, body, { answered }) {
+  const b = body || {};
+  const next = { ...ask };
+  if (b.prompt !== undefined) {
+    const p = cleanText(b.prompt, LIMITS.prompt);
+    if (!p) return { error: 'The question cannot be empty' };
+    next.Prompt = p;
+  }
+  if (b.detail !== undefined) next.Detail = cleanText(b.detail, LIMITS.detail);
+  if (b.options !== undefined && ask.Kind === 'choice') {
+    if (answered) return { error: 'People have already answered, so the options can no longer change' };
+    const opts = cleanOptions(b.options);
+    if (opts.error) return opts;
+    next.Options = opts.value;
+    next.MaxPicks = Math.min(next.MaxPicks || 1, opts.value.length);
+  }
+  if (ask.Kind === 'rating' && (b.lowLabel !== undefined || b.highLabel !== undefined)) {
+    next.Scale = {
+      ...(ask.Scale || { min: 1, max: 5 }),
+      ...(b.lowLabel !== undefined ? { lowLabel: cleanText(b.lowLabel, LIMITS.scaleLabel) } : {}),
+      ...(b.highLabel !== undefined ? { highLabel: cleanText(b.highLabel, LIMITS.scaleLabel) } : {}),
+    };
+  }
+  return { value: next };
+}
+
+/**
+ * The lifecycle. `from` → the statuses each action may start from, and where
+ * it lands. `vote` is Ideas-only: a pick or a rating needs no second phase.
+ */
+const TRANSITIONS = Object.freeze({
+  open: { from: ['proposed'], to: 'live' },
+  vote: { from: ['live'], to: 'voting', kinds: ['suggest'] },
+  close: { from: ['live', 'voting'], to: 'results' },
+  decide: { from: ['live', 'voting', 'results', 'decided'], to: 'decided' },
+  reopen: { from: ['results', 'decided'], to: 'live' },
+  discard: { from: ['proposed', 'live', 'voting', 'results'], to: 'discarded' },
+});
+
+function transition(ask, action) {
+  const t = TRANSITIONS[action];
+  if (!t) return { error: `Unknown action "${action}"` };
+  if (t.kinds && !t.kinds.includes(ask.Kind)) return { error: `"${action}" applies to Ideas asks only` };
+  if (!t.from.includes(ask.Status)) {
+    return { error: `This ask is ${ask.Status}; "${action}" needs it to be ${t.from.join(' or ')}`, conflict: true };
+  }
+  return { to: t.to };
+}
+
+// ── Rows → room ──────────────────────────────────────────────────────────────
+
+/** Sort every BUILD# row into its kind. Rows must already be decrypted. */
+function roomFromRows(rows) {
+  const room = { state: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [] };
+  for (const r of rows || []) {
+    const sk = String(r.SK || '');
+    if (sk === SK.state) room.state = r;
+    else if (sk.startsWith('BUILD#ASK#')) room.asks.push(r);
+    else if (sk.startsWith('BUILD#RESP#')) room.resps.push(r);
+    else if (sk.startsWith('BUILD#ANS#')) room.answers.push(r);
+    else if (sk.startsWith('BUILD#VOTE#')) room.votes.push(r);
+    else if (sk.startsWith('BUILD#LOG#')) room.logs.push(r);
+    else if (sk.startsWith('BUILD#IDEA#')) room.ideas.push(r);
+    else if (sk.startsWith('BUILD#KEY#')) room.keys.push(r);
+  }
+  const bySk = (a, b) => String(a.SK).localeCompare(String(b.SK));
+  room.asks.sort(bySk);
+  room.logs.sort(bySk);
+  room.ideas.sort(bySk);
+  room.resps.sort((a, b) => String(a.CreatedAt || '').localeCompare(String(b.CreatedAt || '')));
+  return room;
+}
+
+const forAsk = (rows, askId) => rows.filter((r) => r.AskId === askId);
+const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0);
+
+/** The tally of one ask, with names. Views strip what an audience may not see. */
+function tally(ask, room) {
+  const kind = ask.Kind;
+  const askId = ask.AskId;
+  if (kind === 'suggest') {
+    const resps = forAsk(room.resps, askId);
+    const votes = forAsk(room.votes, askId);
+    const count = new Map();
+    for (const v of votes) for (const id of v.RespIds || []) count.set(id, (count.get(id) || 0) + 1);
+    const visible = resps.filter((r) => !r.Hidden);
+    const ranked = visible
+      .map((r) => ({ respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player', votes: count.get(r.RespId) || 0 }))
+      .sort((a, b) => b.votes - a.votes || 0);
+    return { total: votes.length, responses: resps.length, ranked, count };
+  }
+  const answers = forAsk(room.answers, askId);
+  const whys = answers
+    .filter((a) => a.Why)
+    .map((a) => ({ label: kind === 'choice' ? (a.Choice || []).join(', ') : String(a.Rating || ''), text: a.Why, playerName: a.PlayerName || '' }));
+  if (kind === 'choice') {
+    const options = (ask.Options || []).map((o) => {
+      const voters = answers.filter((a) => (a.Choice || []).includes(o.label)).map((a) => a.PlayerName || '');
+      return { label: o.label, title: o.title, count: voters.length, pct: pct(voters.length, answers.length), voters };
+    });
+    return { total: answers.length, options, whys };
+  }
+  // rating
+  const dist = [0, 0, 0, 0, 0];
+  let sum = 0;
+  let n = 0;
+  for (const a of answers) {
+    const r = Number(a.Rating);
+    if (Number.isInteger(r) && r >= 1 && r <= 5) { dist[r - 1] += 1; sum += r; n += 1; }
+  }
+  return { total: n, rating: { avg: n ? Math.round((sum / n) * 10) / 10 : null, count: n, dist }, whys };
+}
+
+/** One ask, as `audience` may see it. `me` = {playerName} for a phone. */
+function askView(ask, room, audience, me) {
+  const t = tally(ask, room);
+  const isHost = audience === 'host' || audience === 'agent';
+  const showResults = isHost || ['results', 'decided'].includes(ask.Status);
+  const out = {
+    askId: ask.AskId,
+    kind: ask.Kind,
+    prompt: ask.Prompt || '',
+    detail: ask.Detail || '',
+    status: ask.Status,
+    source: ask.Source || 'host',
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '' })),
+    scale: ask.Scale || null,
+    maxPicks: ask.MaxPicks || null,
+    createdAt: ask.CreatedAt || null,
+    openedAt: ask.OpenedAt || null,
+    votingAt: ask.VotingAt || null,
+    closedAt: ask.ClosedAt || null,
+    decidedAt: ask.DecidedAt || null,
+    answerCount: ask.Kind === 'suggest' ? t.responses : t.total,
+    voteCount: ask.Kind === 'suggest' ? t.total : null,
+    responses: [],
+    results: null,
+    decision: null,
+  };
+  if (ask.Kind === 'suggest') {
+    const resps = forAsk(room.resps, ask.AskId);
+    if (isHost) {
+      out.responses = resps.map((r) => ({
+        respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player',
+        hidden: Boolean(r.Hidden), createdAt: r.CreatedAt || null, votes: t.count.get(r.RespId) || 0,
+      }));
+    } else if (['voting', 'results', 'decided'].includes(ask.Status)) {
+      // Anonymous on phones. A phone's own suggestions are flagged so it
+      // cannot vote for itself.
+      out.responses = resps.filter((r) => !r.Hidden).map((r) => ({
+        respId: r.RespId, text: r.Text, mine: Boolean(me && r.PlayerName === me.playerName),
+        ...(showResults ? { votes: t.count.get(r.RespId) || 0 } : {}),
+      }));
+    }
+  }
+  if (showResults) {
+    if (ask.Kind === 'suggest') {
+      out.results = { total: t.total, ranked: t.ranked.map((r) => (isHost ? r : { respId: r.respId, text: r.text, votes: r.votes })) };
+    } else if (ask.Kind === 'choice') {
+      out.results = {
+        total: t.total,
+        options: t.options.map((o) => (isHost ? o : { label: o.label, title: o.title, count: o.count, pct: o.pct })),
+        whys: t.whys.map((w) => (isHost ? w : { label: w.label, text: w.text })),
+      };
+    } else {
+      out.results = { total: t.total, rating: t.rating, whys: t.whys.map((w) => (isHost ? w : { label: w.label, text: w.text })) };
+    }
+  }
+  if (ask.Decision) {
+    out.decision = {
+      direction: ask.Decision.direction || '',
+      chosen: ask.Decision.chosen || [],
+      ...(isHost ? { note: ask.Decision.note || '' } : {}),
+      decidedAt: ask.DecidedAt || null,
+      deliveredAt: ask.Decision.deliveredAt || null,
+    };
+  }
+  return out;
+}
+
+function logView(r) {
+  return {
+    logId: r.LogId,
+    kind: r.Kind,
+    text: r.Text || '',
+    detail: r.Detail || '',
+    link: r.Link || '',
+    by: r.By || 'host',
+    askId: r.AskId || null,
+    forAgent: Boolean(r.ForAgent),
+    deliveredAt: r.DeliveredAt || null,
+    createdAt: r.CreatedAt || null,
+    editedAt: r.EditedAt || null,
+  };
+}
+
+function ideaView(r) {
+  return { ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null };
+}
+
+function outcomeView(o) {
+  if (!o || typeof o !== 'object') return null;
+  return {
+    summary: o.summary || '',
+    built: Array.isArray(o.built) ? o.built : [],
+    links: Array.isArray(o.links) ? o.links : [],
+    nextSteps: Array.isArray(o.nextSteps) ? o.nextSteps : [],
+    by: o.by || 'host',
+    updatedAt: o.updatedAt || null,
+  };
+}
+
+function normalizeOutcome(body, by, now) {
+  const b = body || {};
+  const summary = cleanText(b.summary, LIMITS.summary);
+  if (!summary) return { error: 'A wrap-up needs a summary' };
+  const links = (Array.isArray(b.links) ? b.links : [])
+    .map((l) => (typeof l === 'string' ? { label: '', url: l } : (l || {})))
+    .map((l) => ({ label: cleanText(l.label, LIMITS.label), url: safeUrl(l.url) }))
+    .filter((l) => l.url)
+    .slice(0, LIMITS.links);
+  return {
+    value: {
+      summary,
+      built: cleanList(b.built, LIMITS.listItems, LIMITS.listItem),
+      links,
+      nextSteps: cleanList(b.nextSteps, LIMITS.listItems, LIMITS.listItem),
+      by,
+      updatedAt: now,
+    },
+  };
+}
+
+function agentStatus(stateRow, keys, now) {
+  const s = stateRow || {};
+  const seen = s.AgentSeenAt ? Date.parse(s.AgentSeenAt) : NaN;
+  const live = (keys || []).filter((k) => !k.RevokedAt).sort((a, b) => String(b.CreatedAt).localeCompare(String(a.CreatedAt)))[0];
+  return {
+    connected: Number.isFinite(seen) && Date.parse(now) - seen < AGENT_ACTIVE_MS,
+    lastSeenAt: s.AgentSeenAt || null,
+    name: s.AgentName || 'Claude Code',
+    key: live ? { keyId: live.KeyId, label: live.Label || '', createdAt: live.CreatedAt || null, lastUsedAt: live.LastUsedAt || null } : null,
+  };
+}
+
+const settingsOf = (stateRow) => ({
+  reviewAgentAsks: !(stateRow && stateRow.Settings && stateRow.Settings.reviewAgentAsks === false),
+});
+
+/** What the host (and Claude) sees: everything. */
+function hostView({ gameId, meta, sessionState, room, players, now, audience = 'host' }) {
+  const isAgent = audience === 'agent';
+  return {
+    gameId,
+    title: meta.Title || '',
+    goal: meta.Details || meta.EngagementInfo || '',
+    state: sessionState || null,
+    players,
+    playerCount: players.length,
+    settings: settingsOf(room.state),
+    agent: agentStatus(room.state, room.keys, now),
+    currentAskId: (room.state && room.state.CurrentAskId) || null,
+    asks: room.asks.map((a) => askView(a, room, audience)),
+    // Host notes are the host's own; Claude never sees them.
+    log: room.logs.filter((l) => !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
+    ideas: isAgent ? [] : room.ideas.map(ideaView),
+    outcome: outcomeView(room.state && room.state.Outcome),
+    rev: (room.state && room.state.Rev) || 0,
+  };
+}
+
+/** What a phone sees. */
+function publicView({ gameId, meta, sessionState, room, players, me, now }) {
+  const currentAskId = (room.state && room.state.CurrentAskId) || null;
+  const visibleAsks = room.asks.filter((a) => !['proposed', 'discarded'].includes(a.Status));
+  const current = currentAskId ? room.asks.find((a) => a.AskId === currentAskId && OPEN_STATUSES.concat(['results', 'decided']).includes(a.Status)) : null;
+  const mine = { responses: [], vote: [], answer: null };
+  if (current && me) {
+    mine.responses = forAsk(room.resps, current.AskId)
+      .filter((r) => r.PlayerName === me.playerName && r.Source !== 'host')
+      .map((r) => ({ respId: r.RespId, text: r.Text }));
+    const v = forAsk(room.votes, current.AskId).find((r) => r.PlayerName === me.playerName);
+    mine.vote = v ? v.RespIds || [] : [];
+    const a = forAsk(room.answers, current.AskId).find((r) => r.PlayerName === me.playerName);
+    mine.answer = a ? { choice: a.Choice || [], rating: a.Rating || null, why: a.Why || '' } : null;
+  }
+  return {
+    gameId,
+    title: meta.Title || '',
+    goal: meta.Details || meta.EngagementInfo || '',
+    state: sessionState || null,
+    playerCount: players.length,
+    currentAskId: current ? current.AskId : null,
+    current: current ? askView(current, room, 'public', me) : null,
+    decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision).map((a) => ({
+      askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.direction || '', decidedAt: a.DecidedAt || null,
+    })),
+    log: room.logs.filter((l) => !PRIVATE_LOG_KINDS.includes(l.Kind)).map(logView)
+      .map(({ forAgent, deliveredAt, ...rest }) => rest),
+    myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName).map(ideaView) : [],
+    outcome: outcomeView(room.state && room.state.Outcome),
+    agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
+    mine,
+    rev: (room.state && room.state.Rev) || 0,
+  };
+}
+
+/** Directions Claude has not yet been handed, oldest first. */
+function pendingDirections(room) {
+  return room.logs.filter((l) => l.Kind === 'direction' && l.ForAgent && !l.DeliveredAt);
+}
+
+/** The text a decision hands Claude when the host did not write one. */
+function defaultDirection(ask, room) {
+  const t = tally(ask, room);
+  if (ask.Kind === 'choice') {
+    const top = [...t.options].sort((a, b) => b.count - a.count)[0];
+    return top ? `The room chose ${top.label}: ${top.title}` : '';
+  }
+  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : `The room rated this ${t.rating.avg} out of 5`;
+  const top = t.ranked[0];
+  return top ? `The room's top idea: ${top.text}` : '';
+}
+
+module.exports = {
+  GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS,
+  LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, KEY_PREFIX,
+  SK, TRANSITIONS,
+  cleanText, safeUrl, pad3, labelFor, newId, entityForSk,
+  mintKey, hashKey, parseKey,
+  normalizeAsk, applyEdit, transition, normalizeOutcome,
+  roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
+  hostView, publicView, pendingDirections, defaultDirection,
+};

@@ -3851,6 +3851,79 @@ Resources:
         Environment: !Ref Environment
         StackName: !Ref StackName
 
+  # BUILD ROOM (docs/design/build-room/PLAN.md) — the room building something
+  # with the host's own Claude Code. One function, the four routes below; the
+  # rules are in lambda-functions/game/build-store.js.
+  #
+  #   /build/{proxy+}       the HOST (Cognito, callerMayDriveSession) or the
+  #                         host's CLAUDE CODE presenting the session key
+  #                         `eng_<gameId>_…` — auth/authorizer.js agentKeyContext
+  #                         admits a key on THESE two routes of ITS OWN session
+  #                         and nowhere else.
+  #   /build-play/{proxy+}  the PHONES. Public; build-room.js checks the
+  #                         player's PLAYER# row and clientId on every call.
+  BuildRoomFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${StackName}-build-room'
+      CodeUri: lambda-functions/game/
+      Handler: build-room.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref GameTable
+          WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Policies:
+        # Everything Claude and the room write is sealed under the session's org
+        # (ENCRYPTED_FIELDS.buildAsk/buildResponse/buildLog/buildIdea/buildState).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameTable
+        # Every write announces `buildChanged` so the wall, the phones and the
+        # host page refetch. Without this the broadcast is a silent AccessDenied.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+      Events:
+        BuildHostGetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/build/{proxy+}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        BuildHostPostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/build/{proxy+}
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        BuildPlayGetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/build-play/{proxy+}
+            Method: GET
+        BuildPlayPostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/build-play/{proxy+}
+            Method: POST
+      Tags:
+        Environment: !Ref Environment
+        StackName: !Ref StackName
+
   # A PHONE ANSWERING A SURVEY (game/survey-answers.js). Public, like
   # /comments and /votes: participants hold no token. The gate is the room's
   # state (SURVEY#OPEN), re-checked inside every answer's own write.

@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room storyboard</title>
+<style>
+/* Build Room prototype. Static storyboard, no JS.
+   Tokens: Warm Summit as shipped (src/src/styles.css:9-76). Dusk is the default;
+   the report frame re-enters paper with data-theme="light" on its own root.
+   Host-control ladder: 12 / 13 / 15 / 19 / 24 / 30px. Nothing below 12px.
+   The wall uses a larger stage ladder (.stage scope), drawn at frame scale. */
+:root{
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#9BA8BE;
+  --primary:#F6A94C; --primary-deep:#C77B4A; --secondary:#7CA7E6;
+  --success:#4FB286; --danger:#E5645E; --danger-text:#EF8C86; --danger-deep:#B03A34;
+  --br-success-text:#6FD0A4;
+  --br-rule:rgba(155,168,190,.22);
+  --br-term:#0A0F18; --br-term-text:#D9DEE7; --br-term-dim:#8C97A8;
+  --br-t-floor:12px; --br-t-label:13px; --br-t-body:15px; --br-t-head:19px; --br-t-title:24px; --br-t-num:30px;
+  --br-font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --br-display:"Archivo Expanded","Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --br-mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+}
+[data-theme="light"]{
+  --bg:#FBF7F1; --surface:#FFFFFF; --surface-2:#F1EDE4; --text:#1B2942; --muted:#5E6167;
+  --br-rule:rgba(27,41,66,.16); --br-amber-text:#9A5B18; --br-success-text:#23774F;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:400 var(--br-t-body)/1.5 var(--br-font);
+  padding:48px 16px 96px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-family:var(--br-display);font-weight:800;font-size:clamp(28px,4.4vw,44px);line-height:1.05;margin:0 0 12px;letter-spacing:-.01em}
+h2.sec{font-size:15px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin:64px 0 6px;font-weight:700}
+h2.sec b{color:var(--primary);margin-right:8px}
+.sub{color:var(--muted);max-width:78ch;margin:0 0 8px}
+.hint{color:var(--muted);font-size:14px;border-left:3px solid var(--primary);padding:11px 15px;
+  background:rgba(246,169,76,.07);border-radius:0 8px 8px 0;margin:18px 0;max-width:80ch}
+.hint b{color:var(--text)}
+code{font-family:var(--br-mono);color:var(--primary);font-size:.9em}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0;padding:0;list-style:none}
+.toc a{display:block;background:var(--surface);border:1px solid var(--br-rule);border-radius:999px;padding:6px 13px;
+  font-size:13px;color:var(--text);text-decoration:none}
+.toc a:hover{border-color:var(--primary)}
+
+/* ---- frame + annotation ---- */
+figure.frame{margin:22px 0 0}
+figure.frame figcaption{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin:0 0 10px}
+.cap{font-weight:700;font-size:var(--br-t-head)}
+.cap i{font-style:normal;font-family:var(--br-display);color:var(--primary);font-size:13px;letter-spacing:.07em;margin-right:8px}
+.why{flex-basis:100%;color:var(--muted);font-size:14px;max-width:90ch}
+.why b{color:var(--text);font-weight:600}
+.screen{border:1px solid var(--br-rule);border-radius:12px;overflow:hidden;background:var(--bg);
+  box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.chrome{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#0A1222;border-bottom:1px solid var(--br-rule)}
+.chrome .dots{display:flex;gap:6px}.chrome .dots span{width:10px;height:10px;border-radius:50%;background:#2E3D5A}
+.chrome .url{flex:1;min-width:0;background:var(--surface);border-radius:6px;padding:3px 10px;font-size:12px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chrome .tag{font-size:12px;color:var(--muted)}
+
+/* ---- shared host controls ---- */
+.btn{display:inline-flex;align-items:center;gap:6px;font:600 var(--br-t-body)/1 var(--br-font);border-radius:8px;
+  padding:9px 14px;border:1px solid var(--br-rule);background:var(--surface-2);color:var(--text);white-space:nowrap}
+.btn.pri{background:var(--primary);color:#0F1A2E;border-color:var(--primary)}
+.btn.ghost{background:transparent}
+.btn.danger{background:transparent;color:var(--danger-text);border-color:rgba(229,100,94,.45)}
+.btn.sm{font-size:var(--br-t-label);padding:6px 10px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:var(--br-t-floor);font-weight:600;border-radius:999px;
+  padding:4px 10px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.chip.live{color:var(--br-success-text);background:rgba(79,178,134,.14)}
+.chip.live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.chip.amber{color:var(--primary);background:rgba(246,169,76,.13)}
+.chip.blue{color:var(--secondary);background:rgba(124,167,230,.14)}
+.lbl{display:block;font-size:var(--br-t-label);color:var(--muted);font-weight:600;margin:0 0 5px}
+.field{width:100%;font:400 var(--br-t-body)/1.4 var(--br-font);color:var(--text);background:var(--bg);
+  border:1px solid var(--br-rule);border-radius:8px;padding:9px 11px}
+.field.ta{min-height:76px}
+.panel{background:var(--surface);border:1px solid var(--br-rule);border-radius:12px;padding:16px}
+.panel h3{margin:0 0 4px;font-size:var(--br-t-head);font-weight:700}
+.panel .p-sub{margin:0 0 12px;color:var(--muted);font-size:var(--br-t-label)}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.row .push{margin-left:auto}
+.ico{width:16px;height:16px;flex:none;vertical-align:-3px}
+.muted{color:var(--muted)}
+.small{font-size:var(--br-t-label)}
+.floor{font-size:var(--br-t-floor)}
+
+/* ---- host header bar ---- */
+.hbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 18px;border-bottom:1px solid var(--br-rule);background:var(--surface)}
+.hbar .t{font-weight:700;font-size:var(--br-t-head);min-width:0}
+.hbar .code{font-family:var(--br-display);font-weight:800;font-size:var(--br-t-head);color:var(--primary);letter-spacing:.06em}
+
+/* ---- frame 1 ---- */
+.f1a{display:grid;place-items:start center;padding:36px 16px;background:
+  radial-gradient(ellipse at top, rgba(124,167,230,.08), transparent 60%), var(--bg)}
+.dialog{width:min(560px,100%);background:var(--surface);border:1px solid var(--br-rule);border-radius:14px;padding:22px}
+.dialog .dh{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.dialog .dh h3{margin:0;font-size:var(--br-t-title)}
+.dialog .x{margin-left:auto;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--br-rule)}
+.dialog .f{margin-bottom:14px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:var(--br-t-body)}
+.check .box{width:18px;height:18px;border-radius:4px;background:var(--primary);flex:none;margin-top:2px;position:relative}
+.check .box::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #0F1A2E;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.check .box.off{background:transparent;border:1.5px solid var(--muted)}.check .box.off::after{display:none}
+
+.room{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;padding:16px}
+.keywarn{display:flex;gap:10px;align-items:flex-start;background:rgba(246,169,76,.09);border:1px solid rgba(246,169,76,.35);
+  border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:var(--br-t-label)}
+.keywarn b{color:var(--primary)}
+.cmd{position:relative;background:var(--br-term);border:1px solid var(--br-rule);border-radius:10px;padding:12px 14px;
+  font:13px/1.6 var(--br-mono);color:var(--br-term-text);overflow-wrap:anywhere;white-space:pre-wrap}
+.cmd .k{color:var(--primary)}
+.cmd .c{color:var(--br-term-dim)}
+.copybar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 0}
+.steps{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.steps li{display:flex;gap:10px;align-items:center;font-size:var(--br-t-label);color:var(--muted)}
+.steps li .n{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--surface-2);color:var(--text);flex:none}
+.steps li.done .n{background:var(--success);color:#0F1A2E}
+.steps li.wait .n{background:transparent;border:1.5px dashed var(--primary);color:var(--primary)}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px}
+.pcard{background:var(--surface-2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.pcard .pt{font-weight:700;font-size:var(--br-t-body);display:flex;align-items:center;gap:8px}
+.pcard .pt .slash{font:12px var(--br-mono);color:var(--secondary);font-weight:400}
+.pcard q{quotes:none;color:var(--muted);font-size:var(--br-t-label);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.pcard .btn{align-self:flex-start;margin-top:auto}
+.askbtns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.askbtns .btn{justify-content:center;flex-direction:column;gap:4px;padding:12px 6px;height:auto}
+.askbtns .btn span{font-size:var(--br-t-floor);color:var(--muted);font-weight:500}
+.empty{border:1px dashed var(--br-rule);border-radius:10px;padding:16px;color:var(--muted);font-size:var(--br-t-label);text-align:center}
+
+/* ---- timeline ---- */
+.tl{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.tl li{display:grid;grid-template-columns:44px 18px minmax(0,1fr);gap:0 8px;padding:7px 0;font-size:var(--br-t-label);position:relative}
+.tl li .tm{color:var(--muted);font-size:var(--br-t-floor);padding-top:1px;font-variant-numeric:tabular-nums}
+.tl li .dot{width:10px;height:10px;border-radius:50%;margin:4px auto 0;background:var(--muted)}
+.tl li.k-claude .dot{background:var(--secondary)}
+.tl li.k-decision .dot{background:var(--primary)}
+.tl li.k-verbal .dot{background:var(--success)}
+.tl li.k-ask .dot{background:transparent;border:1.5px solid var(--muted)}
+.tl li .by{font-size:var(--br-t-floor);font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.tl li.k-claude .by{color:var(--secondary)}
+.tl li.k-decision .by{color:var(--primary)}
+.tl li.k-verbal .by{color:var(--br-success-text)}
+
+/* ---- frame 2: terminal + review ---- */
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.term{background:var(--br-term);border:1px solid #1E2A3F;border-radius:12px;overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.term .tbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#121A28;font:12px var(--br-mono);color:var(--br-term-dim)}
+.term pre{margin:0;padding:14px 16px 18px;font:13px/1.6 var(--br-mono);color:var(--br-term-text);white-space:pre-wrap;overflow-wrap:anywhere}
+.term .u{color:#F4EDE4;font-weight:700}
+.term .b{color:#E7E0D6}
+.term .tool{color:var(--secondary)}
+.term .d{color:var(--br-term-dim)}
+.term .ok{color:#6FD0A4}
+.term .a{color:var(--primary)}
+.term .spin{color:var(--primary)}
+.term .prompt{border-top:1px solid #1E2A3F;margin-top:10px;padding-top:10px;color:var(--br-term-dim)}
+.review{padding:16px}
+.proposed{border:1.5px dashed var(--primary);border-radius:12px;padding:16px;background:var(--surface)}
+.optedit{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:8px;align-items:center;margin-bottom:8px}
+.letter{width:36px;height:36px;border-radius:8px;display:grid;place-items:center;font:800 19px var(--br-display);background:var(--primary);color:#0F1A2E}
+.letter.b{background:var(--secondary)}
+.letter.c{background:var(--success)}
+.optedit .url{font:12px var(--br-mono);color:var(--muted)}
+.lock{font-size:var(--br-t-floor);color:var(--muted)}
+.notice{font-size:var(--br-t-label);color:var(--muted);background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:12px 0}
+.notice b{color:var(--text)}
+
+/* ---- the wall (stage scope: larger ladder) ---- */
+.stage{--st-hero:84px;--st-q:38px;--st-body:24px;--st-meta:20px;display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:600px}
+.stage .main{padding:26px 30px 22px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.stage .top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.stage .eyebrow{font-size:var(--st-meta);color:var(--muted);font-weight:600}
+.stage .eyebrow b{color:var(--primary)}
+.stage h4{margin:0;font-family:var(--br-display);font-weight:800;font-size:var(--st-q);line-height:1.12;letter-spacing:-.005em;max-width:24ch}
+.agentchip{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 14px;background:rgba(124,167,230,.13);
+  color:var(--secondary);font-size:16px;font-weight:600;margin-left:auto;white-space:nowrap}
+.agentchip::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px rgba(79,178,134,.22)}
+.choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.choice{background:var(--surface);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;border:2px solid transparent}
+.choice.lead{border-color:rgba(246,169,76,.55)}
+.choice .head{display:flex;gap:14px;align-items:center}
+.choice .big{font:800 var(--st-hero)/0.9 var(--br-display);color:var(--primary);width:84px;text-align:center}
+.choice.b .big{color:var(--secondary)}
+.choice .ct{font-size:var(--st-body);font-weight:700;line-height:1.2}
+.choice .cd{font-size:16px;color:var(--muted)}
+.thumb{position:relative;border-radius:10px;overflow:hidden;background:#FBF7F1;height:150px;border:1px solid var(--br-rule)}
+.thumb .bad{position:absolute;top:8px;right:8px;background:#0F1A2E;color:#F6A94C;font:800 12px var(--br-font);letter-spacing:.04em;
+  padding:4px 9px;border-radius:999px;border:2px solid #F6A94C}
+.thumb.tb .bad{color:#7CA7E6;border-color:#7CA7E6}
+.thumb .loc{position:absolute;left:8px;bottom:6px;font:12px var(--br-mono);color:#5E6167}
+/* mini mockup A: bold banner */
+.mA .ban{background:#C2410C;height:62px;display:flex;align-items:center;padding:0 12px;gap:8px}
+.mA .ban i{display:block;height:10px;width:110px;background:#fff;border-radius:2px}
+.mA .ban s{display:block;margin-left:auto;background:#FDE68A;width:74px;height:24px;border-radius:5px}
+.mA .ln{height:7px;background:#D6D3D1;border-radius:2px;margin:10px 12px 0}
+.mA .ln.s{width:55%}
+/* mini mockup B: calm photo + calendar */
+.mB{display:grid;grid-template-columns:1fr 1fr;height:100%}
+.mB .ph{background:linear-gradient(135deg,#9CC5A1,#5B8C6A)}
+.mB .cal{padding:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;align-content:start}
+.mB .cal i{height:16px;background:#E7E5E4;border-radius:3px}
+.mB .cal i.on{background:#3B82F6}
+.bar{height:16px;border-radius:8px;background:var(--surface-2);overflow:hidden}
+.bar span{display:block;height:100%;background:var(--primary);border-radius:8px}
+.choice.b .bar span{background:var(--secondary)}
+.count{display:flex;align-items:baseline;gap:10px;font-size:var(--st-meta);color:var(--muted)}
+.count b{font:800 34px var(--br-display);color:var(--text)}
+.stage .foot{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;margin-top:auto;padding-top:14px;border-top:1px solid var(--br-rule)}
+.join{display:flex;align-items:center;gap:14px}
+.qr{width:84px;height:84px;border-radius:8px;background:#fff;padding:6px;position:relative;flex:none}
+.qr i{position:absolute;inset:6px;background:
+  repeating-conic-gradient(#0F1A2E 0 25%,transparent 0 50%) 0 0/12px 12px;opacity:.85}
+.qr b{position:absolute;width:24px;height:24px;border:5px solid #0F1A2E;background:#fff;box-shadow:inset 0 0 0 4px #fff, inset 0 0 0 10px #0F1A2E}
+.qr b:nth-child(2){top:6px;left:6px}.qr b:nth-child(3){top:6px;right:6px}.qr b:nth-child(4){bottom:6px;left:6px}
+.join .jt{font-size:var(--st-meta);color:var(--muted);line-height:1.3}
+.join .jt b{display:block;color:var(--text);font-size:22px}
+.join .jc{font:800 44px/1 var(--br-display);color:var(--primary);letter-spacing:.08em}
+.resp{font-size:var(--st-body);font-weight:700}
+.resp span{color:var(--muted);font-weight:500;font-size:var(--st-meta)}
+.hostkit{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.side{background:var(--surface);border-left:1px solid var(--br-rule);padding:18px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.side h5{margin:0;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.side .tl li{font-size:14px}
+.side .tl li .tm{font-size:12px}
+
+/* ---- frame 4: phones ---- */
+.phones{display:grid;grid-template-columns:repeat(3,minmax(0,300px));gap:28px;justify-content:center}
+.phone{background:#05080F;border-radius:36px;padding:10px;box-shadow:0 18px 40px rgba(0,0,0,.4);border:1px solid #26324A}
+.phone .scr{background:var(--bg);border-radius:28px;overflow:hidden;min-height:600px;display:flex;flex-direction:column}
+.phone .notch{height:24px;display:flex;justify-content:center;align-items:center}
+.phone .notch i{width:90px;height:18px;border-radius:10px;background:#05080F}
+.pbar{display:flex;align-items:center;gap:8px;padding:6px 16px 10px;border-bottom:1px solid var(--br-rule);font-size:13px;color:var(--muted)}
+.pbar b{color:var(--text)}
+.pbar .strip{height:4px}
+.pbody{padding:16px;display:flex;flex-direction:column;gap:12px;flex:1}
+.pbody .eyebrow{font-size:13px;color:var(--muted);font-weight:600}
+.pbody .eyebrow b{color:var(--primary)}
+.pbody h6{margin:0;font-size:22px;line-height:1.2;font-weight:700}
+.popt{display:flex;gap:12px;align-items:center;background:var(--surface);border:2px solid var(--br-rule);border-radius:12px;padding:10px 12px;min-height:56px}
+.popt .letter{width:34px;height:34px;font-size:18px}
+.popt.sel{border-color:var(--primary);background:rgba(246,169,76,.08)}
+.popt .pt{font-size:16px;font-weight:600;line-height:1.25}
+.popt .pl{font-size:13px;color:var(--secondary);text-decoration:underline}
+.pfield{width:100%;background:var(--surface);border:1px solid var(--br-rule);border-radius:10px;padding:10px 12px;color:var(--text);font:16px/1.4 var(--br-font);min-height:48px}
+.pfield.tall{min-height:84px}
+.pfield .ph{color:var(--muted)}
+.dock{padding:12px 16px 18px;border-top:1px solid var(--br-rule)}
+.dock .btn{width:100%;justify-content:center;padding:14px;font-size:17px;border-radius:12px}
+.dock .note{display:block;text-align:center;font-size:13px;color:var(--muted);margin-top:8px}
+.mine{font-size:13px;color:var(--muted);background:var(--surface);border-radius:10px;padding:8px 12px}
+.mine b{color:var(--text)}
+.vrow{display:flex;gap:10px;align-items:center;background:var(--surface);border:2px solid var(--br-rule);border-radius:12px;padding:10px 12px}
+.vrow .n{font:800 14px var(--br-display);color:var(--muted);width:20px}
+.vrow .vt{flex:1;font-size:15px;line-height:1.3}
+.vrow .tick{width:28px;height:28px;border-radius:8px;border:2px solid var(--muted);flex:none}
+.vrow.on{border-color:var(--primary)}
+.vrow.on .tick{background:var(--primary);border-color:var(--primary);position:relative}
+.vrow.on .tick::after{content:"";position:absolute;left:8px;top:3px;width:7px;height:13px;border:solid #0F1A2E;border-width:0 3px 3px 0;transform:rotate(45deg)}
+.vrow.own{opacity:.75}
+.vrow.own .tick{border-style:dashed}
+.slots{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.slots i{width:22px;height:8px;border-radius:4px;background:var(--surface-2)}
+.slots i.f{background:var(--primary)}
+.ideabtn{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--secondary);border:1px dashed rgba(124,167,230,.5);border-radius:10px;padding:9px 12px}
+
+/* ---- frame 5: decide ---- */
+.decide{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px;padding:16px}
+.res .rrow{display:grid;grid-template-columns:36px minmax(0,1fr) 64px;gap:10px;align-items:center;margin:0 0 10px}
+.res .rrow .rt{font-size:var(--br-t-body);font-weight:600}
+.res .rrow .rn{text-align:right;font-variant-numeric:tabular-nums;font-size:var(--br-t-body)}
+.res .rrow .rn b{font-size:var(--br-t-head)}
+.res .bar{height:10px;margin-top:6px}
+.res .win{font-size:var(--br-t-floor);font-weight:700;color:var(--primary);margin-left:6px;letter-spacing:.04em}
+.whys{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.whys li{background:var(--surface-2);border-radius:8px;padding:8px 10px;font-size:var(--br-t-label);display:flex;gap:8px}
+.whys li .letter{width:22px;height:22px;font-size:12px;border-radius:5px;flex:none}
+.whys li .w{flex:1}
+.whys li .who{color:var(--muted);font-size:var(--br-t-floor);white-space:nowrap}
+.dirbox{width:100%;min-height:118px;font:400 var(--br-t-body)/1.5 var(--br-font);color:var(--text);background:var(--bg);
+  border:1.5px solid var(--primary);border-radius:10px;padding:11px 12px}
+.dirbox .caret{display:inline-block;width:2px;height:18px;background:var(--primary);vertical-align:-3px}
+.foldchips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+.fold{display:inline-flex;align-items:center;gap:6px;font-size:var(--br-t-label);border-radius:999px;padding:5px 11px;
+  border:1px dashed rgba(124,167,230,.55);color:var(--secondary)}
+.fold.in{border-style:solid;background:rgba(124,167,230,.14)}
+.toggle{display:inline-flex;align-items:center;gap:10px;font-size:var(--br-t-body)}
+.toggle .sw{width:38px;height:22px;border-radius:11px;background:var(--success);position:relative;flex:none}
+.toggle .sw::after{content:"";position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+.verbal{display:flex;gap:8px;align-items:center;margin-top:10px}
+.verbal .field{flex:1}
+
+/* ---- frame 6: idle wall ---- */
+.idle .main{gap:16px}
+.building{display:flex;align-items:center;gap:16px}
+.building .pulse{width:22px;height:22px;border-radius:50%;background:var(--secondary);box-shadow:0 0 0 8px rgba(124,167,230,.18),0 0 0 18px rgba(124,167,230,.07);flex:none}
+.building h4{max-width:none}
+.building .mins{font-size:var(--st-meta);color:var(--muted);margin-left:auto;white-space:nowrap}
+.ticker{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.ticker li{background:var(--surface);border-radius:14px;padding:14px 18px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 14px;align-items:baseline}
+.ticker li .kind{font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--secondary)}
+.ticker li .tx{font-size:var(--st-body);line-height:1.3}
+.ticker li .ago{font-size:16px;color:var(--muted)}
+.ticker li .lnk{grid-column:2/4;font:15px var(--br-mono);color:var(--secondary)}
+.ticker li.newest{border-left:4px solid var(--secondary)}
+.latest{background:rgba(246,169,76,.08);border:1px solid rgba(246,169,76,.35);border-radius:14px;padding:14px 18px}
+.latest .kind{font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--primary)}
+.latest .tx{font-size:22px;line-height:1.3;margin-top:4px}
+.inbox{border:1.5px dashed rgba(246,169,76,.5);border-radius:12px;padding:12px;background:var(--bg)}
+.inbox h5{display:flex;align-items:center;gap:8px}
+.inbox .host{font-size:12px;letter-spacing:0;text-transform:none;color:var(--primary);font-weight:600}
+.idea{background:var(--surface-2);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:var(--br-t-label)}
+.idea .who{color:var(--muted);font-size:var(--br-t-floor)}
+.idea .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.idea .acts span{font-size:12px;border-radius:6px;padding:3px 8px;background:var(--surface);color:var(--text);border:1px solid var(--br-rule)}
+.idea .acts span.dis{color:var(--danger-text)}
+
+/* ---- frame 7: report (paper) ---- */
+.paper{background:#E9E4DB;padding:28px 16px}
+.sheet{background:var(--surface);color:var(--text);max-width:820px;margin:0 auto;padding:40px 44px;border-radius:4px;box-shadow:0 10px 30px rgba(27,41,66,.18)}
+.sheet .kick{font-size:var(--br-t-floor);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.sheet h3{font-family:var(--br-display);font-weight:800;font-size:var(--br-t-num);line-height:1.1;margin:6px 0 6px}
+.sheet .meta{font-size:var(--br-t-label);color:var(--muted)}
+.sheet h4{font-size:var(--br-t-head);margin:28px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--text)}
+.sheet p,.sheet li{font-size:var(--br-t-body)}
+.goal{border-left:3px solid var(--br-amber-text);padding:4px 0 4px 14px;margin:16px 0 0}
+.goal .lbl{color:var(--br-amber-text)}
+.twocol{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 28px}
+.sheet ul{margin:6px 0 0;padding-left:20px}
+.sheet a{color:#2F5E9E}
+.dec{border:1px solid var(--br-rule);border-radius:8px;padding:12px 14px;margin:0 0 12px;break-inside:avoid}
+.dec .dh{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.dec .dh b{font-size:var(--br-t-body)}
+.dec .dh span{font-size:var(--br-t-floor);color:var(--muted)}
+.pres{display:grid;grid-template-columns:28px minmax(0,1fr) 92px;gap:8px;align-items:center;font-size:var(--br-t-label);margin-top:6px}
+.pres .pb{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.pres .pb i{display:block;height:100%;background:#1B2942}
+.pres .pl2{font-weight:800}
+.pres .pn{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.direction{margin-top:10px;background:var(--surface-2);border-radius:6px;padding:8px 10px;font-size:var(--br-t-label)}
+.direction b{color:var(--br-amber-text)}
+.rtl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:var(--br-t-label)}
+.rtl td{padding:6px 8px;border-bottom:1px solid var(--br-rule);vertical-align:top}
+.rtl td:first-child{width:56px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rtl td:nth-child(2){width:96px;font-weight:700;font-size:var(--br-t-floor);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:8px}
+.ppl{display:flex;flex-wrap:wrap;gap:6px}
+.ppl span{font-size:var(--br-t-label);background:var(--surface-2);border-radius:999px;padding:3px 10px}
+.printbar{max-width:820px;margin:0 auto 12px;display:flex;gap:8px;justify-content:flex-end}
+.printbar .btn{background:#1B2942;color:#F4EDE4;border-color:#1B2942}
+.printbar .btn.ghost{background:transparent;color:#1B2942;border-color:rgba(27,41,66,.3)}
+
+/* ---- present mode table ---- */
+.ptable{width:100%;border-collapse:collapse;table-layout:fixed;font-size:var(--br-t-body);background:var(--surface);border-radius:12px;overflow:hidden}
+.ptable th,.ptable td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--br-rule);vertical-align:top}
+.ptable th{font-size:var(--br-t-label);color:var(--muted);font-weight:600;background:var(--surface-2)}
+.ptable td:first-child{font-weight:600}
+.hide{color:var(--danger-text);font-weight:700;font-size:var(--br-t-label)}
+.keep{color:var(--br-success-text);font-weight:700;font-size:var(--br-t-label)}
+
+footer{margin-top:56px;color:var(--muted);font-size:14px;max-width:80ch}
+
+@media (max-width:900px){
+  .room,.split,.decide,.twocol{grid-template-columns:minmax(0,1fr)}
+  .stage{grid-template-columns:minmax(0,1fr);--st-hero:60px;--st-q:28px;--st-body:19px;--st-meta:16px}
+  .side{border-left:0;border-top:1px solid var(--br-rule)}
+  .phones{grid-template-columns:minmax(0,300px)}
+  .sheet{padding:24px 18px}
+}
+@media (max-width:560px){
+  .choices,.cards,.askbtns{grid-template-columns:minmax(0,1fr)}
+  .stage .main{padding:18px 16px}
+  .join .jc{font-size:32px}
+}
+@media print{body{background:#fff}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-copy" viewBox="0 0 256 256"><path fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" d="M168 168h48V40H88v48M40 88h128v128H40z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 256 256"><path fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" d="M200 56 56 200M56 56l144 144"/></symbol>
+  <symbol id="i-key" viewBox="0 0 256 256"><circle cx="92" cy="164" r="44" fill="none" stroke="currentColor" stroke-width="20"/><path fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" d="m124 132 84-84m-28 28 28 28m-56 0 20 20"/></symbol>
+  <symbol id="i-send" viewBox="0 0 256 256"><path fill="none" stroke="currentColor" stroke-width="20" stroke-linejoin="round" d="M224 32 32 104l80 32 32 80z"/><path fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" d="m112 136 56-56"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 256 256"><path fill="none" stroke="currentColor" stroke-width="22" stroke-linecap="round" d="M128 40v176M40 128h176"/></symbol>
+  <symbol id="i-pres" viewBox="0 0 256 256"><rect x="32" y="48" width="192" height="128" rx="10" fill="none" stroke="currentColor" stroke-width="20"/><path fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" d="m96 224 32-48 32 48"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 256 256"><path fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" d="M96 224h64M128 32a72 72 0 0 0-40 132v20h80v-20a72 72 0 0 0-40-132z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 256 256"><rect x="88" y="24" width="80" height="136" rx="40" fill="none" stroke="currentColor" stroke-width="20"/><path fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" d="M56 128a72 72 0 0 0 144 0M128 200v32"/></symbol>
+</svg>
+
+<div class="wrap">
+  <h1>Build Room: building with Claude Code, together</h1>
+  <p class="sub">Storyboard prototype for <code>PLAN.md</code> in this folder. The room is building
+    <b>a volunteer sign-up site for the Eastside Food Bank</b>. The host's laptop is on the projector, the host's own
+    Claude Code runs in a terminal, and about eighteen people in the room hold phones.</p>
+  <div class="hint"><b>How to read this.</b> Each frame has a caption and one line on <i>why</i> it is drawn that way.
+    Host controls use the laptop ladder (12 / 13 / 15 / 19 / 24 / 30px). The wall frames use a larger stage ladder,
+    drawn here at frame scale, so judge them full-width. Content is static; nothing here talks to an API.</div>
+  <ul class="toc">
+    <li><a href="#f1">1 · Create and connect</a></li>
+    <li><a href="#f2">2 · Claude proposes</a></li>
+    <li><a href="#f3">3 · Live choice on the wall</a></li>
+    <li><a href="#f4">4 · Phones</a></li>
+    <li><a href="#f5">5 · Decide and send</a></li>
+    <li><a href="#f6">6 · Claude is building</a></li>
+    <li><a href="#f7">7 · The report</a></li>
+    <li><a href="#present">Present mode</a></li>
+  </ul>
+
+  <!-- ===================================================== 1 -->
+  <h2 class="sec" id="f1"><b>1</b>Host: create a Build Room, then connect Claude Code</h2>
+
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>1A</i>New Build Room</span>
+      <span class="why"><b>Why:</b> there are only two inputs, a title and a goal. The goal is what Claude reads first through
+        <code>room_status</code>, so the hint asks for an outcome, not a task list. Review-first is on by default and sits here so the host knows it exists.</span>
+    </figcaption>
+    <div class="screen">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url">engage.seibtribe.us/host</div></div>
+      <div class="f1a">
+        <div class="dialog" role="dialog" aria-label="New Build Room">
+          <div class="dh"><h3>New Build Room</h3><span class="x" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></span></div>
+          <div class="f"><label class="lbl">Title</label><div class="field">Volunteer sign-up for the Eastside Food Bank</div></div>
+          <div class="f"><label class="lbl">Goal: what should exist when we're done?</label>
+            <div class="field ta">A one-page site where a volunteer can pick a Saturday shift in under a minute, on a phone, and get a reminder the day before.</div>
+            <span class="floor muted">Claude reads this first. It shows on the wall and at the top of the report.</span></div>
+          <div class="f"><div class="check"><span class="box"></span><div>Review Claude's questions before the room sees them<br><span class="small muted">Recommended. You can switch this off in the room.</span></div></div></div>
+          <div class="row" style="margin-top:18px"><span class="btn ghost">Cancel</span><span class="btn pri push">Create room</span></div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>1B</i>The room, before Claude connects</span>
+      <span class="why"><b>Why:</b> connecting is the only thing to do, so it owns the left two-thirds. The key appears <b>once</b>, inside the
+        command the host pastes; the prompt cards are ready-made openers so nobody composes a prompt live in front of the room.</span>
+    </figcaption>
+    <div class="screen">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url">engage.seibtribe.us/build?gameId=4821</div></div>
+      <div class="hbar">
+        <span class="t">Volunteer sign-up for the Eastside Food Bank</span>
+        <span class="chip">Build Room</span>
+        <span class="row push"><span class="small muted">Join code</span> <span class="code">4821</span>
+          <span class="chip">0 joined</span>
+          <span class="btn sm ghost"><svg class="ico"><use href="#i-pres"/></svg>Present</span>
+          <span class="btn sm ghost">Wrap up</span></span>
+      </div>
+      <div class="room">
+        <div class="panel">
+          <h3>Connect Claude Code</h3>
+          <p class="p-sub">Run this once in the terminal where Claude Code is working on the site. Needs Node 18 or later.</p>
+          <div class="keywarn"><svg class="ico" style="color:var(--primary)"><use href="#i-key"/></svg>
+            <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends.
+              Lost it? Mint a new one; the old key stops working immediately.</div></div>
+<div class="cmd"><span class="c"># 1. fetch the Engage MCP server (one file, no dependencies)</span>
+curl -fsSL https://engage.seibtribe.us/engage-mcp.mjs -o ~/.engage-mcp.mjs \
+  &amp;&amp; claude mcp add engage \
+  --env ENGAGE_API=https://tlx3bee2sa.execute-api.us-east-1.amazonaws.com/prod \
+  --env ENGAGE_KEY=<span class="k">eng_4821_q7Vd2mXkP9aLr3Tz8YbN5cWe1HsJ0uGf</span> \
+  -- node ~/.engage-mcp.mjs</div>
+          <div class="copybar"><span class="btn pri sm"><svg class="ico"><use href="#i-copy"/></svg>Copy command</span>
+            <span class="floor muted">Key <code>…0uGf</code> · minted 19:02 by you</span>
+            <span class="btn sm danger push">Revoke key</span></div>
+          <ol class="steps">
+            <li class="done"><span class="n">1</span>Key minted</li>
+            <li class="wait"><span class="n">2</span>Waiting for Claude Code's first call… paste the command, then start Claude Code</li>
+            <li><span class="n">3</span>Paste a prompt card below to begin</li>
+          </ol>
+          <h3 style="margin-top:20px;font-size:var(--br-t-body)">Prompt cards: paste into Claude Code</h3>
+          <div class="cards">
+            <div class="pcard"><div class="pt">Kick off <span class="slash">/engage:kickoff</span></div>
+              <q>Read the room with room_status. Tell the room your plan in three short steps with post_update, then start building.</q>
+              <span class="btn sm"><svg class="ico"><use href="#i-copy"/></svg>Copy</span></div>
+            <div class="pcard"><div class="pt">Ask the room for ideas <span class="slash">/engage:ideas</span></div>
+              <q>Ask the room for ideas about what volunteers need to see first. Wait for the room, then build from the host's direction.</q>
+              <span class="btn sm"><svg class="ico"><use href="#i-copy"/></svg>Copy</span></div>
+            <div class="pcard"><div class="pt">Show A/B mockups <span class="slash">/engage:ab-mockups</span></div>
+              <q>Build two header variants on localhost, stamp each with the letter Engage returns, and ask the room to choose.</q>
+              <span class="btn sm"><svg class="ico"><use href="#i-copy"/></svg>Copy</span></div>
+            <div class="pcard"><div class="pt">Wrap up <span class="slash">/engage:wrap-up</span></div>
+              <q>Write the outcome with wrap_up: a summary, what you built, links, and next steps.</q>
+              <span class="btn sm"><svg class="ico"><use href="#i-copy"/></svg>Copy</span></div>
+          </div>
+        </div>
+        <div style="display:grid;gap:16px;align-content:start">
+          <div class="panel">
+            <h3>Ask the room yourself</h3>
+            <p class="p-sub">You don't have to wait for Claude.</p>
+            <div class="askbtns">
+              <span class="btn">Ideas<span>everyone suggests</span></span>
+              <span class="btn">Choose<span>A / B / C</span></span>
+              <span class="btn">Rate<span>1–5 pulse</span></span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Timeline</h3>
+            <ul class="tl" style="margin-top:6px">
+              <li class="k-ask"><span class="tm">19:01</span><span class="dot"></span><span><span class="by">System</span>Room created</span></li>
+            </ul>
+            <div class="empty" style="margin-top:10px">Claude's progress, the room's decisions and what people say out loud collect here.</div>
+          </div>
+          <div class="panel">
+            <h3>Settings</h3>
+            <div class="check" style="margin-top:8px"><span class="box"></span><span class="small">Review Claude's questions first</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================================================== 2 -->
+  <h2 class="sec" id="f2"><b>2</b>Claude proposes an ask; the host reviews it</h2>
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>2</i>Terminal beside the wall: a proposed Choose ask</span>
+      <span class="why"><b>Why:</b> the room never sees Claude's wording unreviewed. The proposed ask is dashed amber (not yet real), every field is editable,
+        and Claude's <code>wait_for_room</code> simply keeps polling until the host acts, so a slow review costs nothing.</span>
+    </figcaption>
+    <div class="split">
+      <div class="term">
+        <div class="tbar">~/foodbank-signup · claude</div>
+<pre><span class="u">&gt; /engage:ab-mockups the header</span>
+
+<span class="b">● I built two header variants and they're running locally:</span>
+<span class="d">  A  localhost:5173/a   Bold banner, big "Volunteer" button
+  B  localhost:5173/b   Calm photo, shift calendar first</span>
+
+<span class="tool">● engage - ask_room_to_choose</span> <span class="d">(MCP)</span>
+<span class="d">  ⎿ question: "Which header should volunteers see first?"
+    options: [ "Bold banner", "Calm photo + calendar" ]</span>
+<span class="ok">  ⎿ Ask #3 created · status: proposed (host reviews first)
+    labels: A, B · badge snippet returned</span>
+
+<span class="b">● Stamping the badges onto both pages…</span>
+<span class="tool">● Update</span><span class="d">(src/routes/a.tsx)</span>  <span class="ok">+3</span>
+<span class="tool">● Update</span><span class="d">(src/routes/b.tsx)</span>  <span class="ok">+3</span>
+<span class="b">● Both mockups now carry <span class="a">"Choice A"</span> / <span class="a">"Choice B"</span> badges.</span>
+
+<span class="tool">● engage - wait_for_room</span> <span class="d">(MCP)(askId: "003")</span>
+<span class="spin">  ✻ Waiting for the room… polling every 3s (0:42)</span>
+<div class="prompt">&gt; <span class="d">esc to interrupt</span></div></pre>
+      </div>
+      <div class="screen">
+        <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url">engage.seibtribe.us/build?gameId=4821</div></div>
+        <div class="review">
+          <div class="row" style="margin-bottom:12px"><span class="chip amber">Proposed by Claude · not shown to the room</span><span class="chip blue push">Claude Code connected · active 2s ago</span></div>
+          <div class="proposed">
+            <div class="row" style="margin-bottom:10px"><b style="font-size:var(--br-t-head)">Ask #3 · Choose</b><span class="lock push">Options can change until someone answers</span></div>
+            <label class="lbl">Question (shown big on the wall)</label>
+            <div class="field" style="margin-bottom:10px">Which header should volunteers see first?</div>
+            <label class="lbl">Context (optional)</label>
+            <div class="field" style="margin-bottom:12px;color:var(--muted)">Both are running on the laptop. I'll flip between them now.</div>
+            <label class="lbl">Options</label>
+            <div class="optedit"><span class="letter">A</span><div class="field">Bold banner<br><span class="url">localhost:5173/a</span></div><span class="btn sm ghost" aria-label="Remove A"><svg class="ico"><use href="#i-x"/></svg></span></div>
+            <div class="optedit"><span class="letter b">B</span><div class="field">Calm photo + shift calendar<br><span class="url">localhost:5173/b</span></div><span class="btn sm ghost" aria-label="Remove B"><svg class="ico"><use href="#i-x"/></svg></span></div>
+            <span class="btn sm ghost"><svg class="ico"><use href="#i-plus"/></svg>Add option</span>
+            <div class="notice"><b>Letters are fixed.</b> Claude has already stamped "Choice A" and "Choice B" on the mockups, so renaming an option keeps its letter.</div>
+            <div class="row"><span class="btn danger">Discard</span><span class="small muted push">Claude is waiting</span><span class="btn pri">Open to the room</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================================================== 3 -->
+  <h2 class="sec" id="f3"><b>3</b>The wall: a live Choose ask</h2>
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>3</i>Live choice, Present mode off</span>
+      <span class="why"><b>Why:</b> the big letter is the link between three surfaces. It matches the badge on Claude's mockup, the thumbnail here,
+        and the button on every phone, so "go with B" means one thing to everyone. The connected chip tells the room Claude is still listening.</span>
+    </figcaption>
+    <div class="screen">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url">engage.seibtribe.us/build?gameId=4821</div><span class="tag">projector · 1920×1080</span></div>
+      <div class="stage">
+        <div class="main">
+          <div class="top">
+            <span class="eyebrow"><b>Choose</b> · Ask 3 · Claude asks</span>
+            <span class="agentchip">Claude Code connected · active 6s ago</span>
+          </div>
+          <h4>Which header should volunteers see first?</h4>
+          <div class="choices">
+            <div class="choice">
+              <div class="head"><span class="big">A</span><div><div class="ct">Bold banner</div><div class="cd">Big "Volunteer" button up top</div></div></div>
+              <div class="thumb mA"><div class="ban"><i></i><s></s></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div>
+                <span class="bad">Choice A</span><span class="loc">localhost:5173/a</span></div>
+              <div class="bar"><span style="width:36%"></span></div>
+              <div class="count"><b>5</b> 36%</div>
+            </div>
+            <div class="choice b lead">
+              <div class="head"><span class="big">B</span><div><div class="ct">Calm photo + calendar</div><div class="cd">Shifts visible without scrolling</div></div></div>
+              <div class="thumb tb"><div class="mB"><div class="ph"></div><div class="cal"><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div></div>
+                <span class="bad">Choice B</span><span class="loc">localhost:5173/b</span></div>
+              <div class="bar"><span style="width:64%"></span></div>
+              <div class="count"><b>9</b> 64%</div>
+            </div>
+          </div>
+          <div class="foot">
+            <div class="join"><span class="qr" aria-label="QR code to join"><i></i><b></b><b></b><b></b></span>
+              <div class="jt"><b>engage.seibtribe.us</b>code</div><span class="jc">4821</span></div>
+            <div class="resp">14 of 18 <span>have picked</span></div>
+            <div class="hostkit"><span class="btn">Close</span><span class="btn ghost"><svg class="ico"><use href="#i-pres"/></svg>Present</span></div>
+          </div>
+        </div>
+        <aside class="side">
+          <h5>Timeline</h5>
+          <ul class="tl">
+            <li class="k-claude"><span class="tm">19:06</span><span class="dot"></span><span><span class="by">Claude</span>Plan: shift list, sign-up form, reminder email</span></li>
+            <li class="k-decision"><span class="tm">19:14</span><span class="dot"></span><span><span class="by">Decided</span>Ask 1: lead with "Saturday mornings"</span></li>
+            <li class="k-verbal"><span class="tm">19:15</span><span class="dot"></span><span><span class="by">Room said</span>"Most of us sign up on our phones"</span></li>
+            <li class="k-claude"><span class="tm">19:21</span><span class="dot"></span><span><span class="by">Claude</span>Shift list renders from shifts.json</span></li>
+            <li class="k-decision"><span class="tm">19:27</span><span class="dot"></span><span><span class="by">Decided</span>Ask 2: rated 3.4, "needs warmer colours"</span></li>
+            <li class="k-claude"><span class="tm">19:33</span><span class="dot"></span><span><span class="by">Claude</span>Showing two header variants</span></li>
+            <li class="k-ask"><span class="tm">19:34</span><span class="dot"></span><span><span class="by">System</span>Ask 3 opened</span></li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================================================== 4 -->
+  <h2 class="sec" id="f4"><b>4</b>Phones: pick, suggest, vote</h2>
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>4</i>Three asks on the phone</span>
+      <span class="why"><b>Why:</b> one task per screen, one button in the dock. The "why" is optional and short, because a reason helps the host
+        shape the direction but must never block a pick. "Send an idea" is always there, so a good thought never waits for the right ask.</span>
+    </figcaption>
+    <div class="phones">
+      <div class="phone"><div class="scr">
+        <div class="notch"><i></i></div>
+        <div class="pbar"><b>Food bank sign-up</b><span style="margin-left:auto">Priya</span></div>
+        <div class="pbody">
+          <span class="eyebrow"><b>Choose</b> · Ask 3</span>
+          <h6>Which header should volunteers see first?</h6>
+          <div class="popt"><span class="letter">A</span><div><div class="pt">Bold banner</div><span class="pl">Look on the big screen</span></div></div>
+          <div class="popt sel"><span class="letter b">B</span><div><div class="pt">Calm photo + calendar</div><span class="pl">Look on the big screen</span></div></div>
+          <label class="lbl" style="margin:4px 0 -6px">Why? <span style="font-weight:400">(optional)</span></label>
+          <div class="pfield">Seeing the dates first is what I'd want</div>
+          <span class="ideabtn"><svg class="ico"><use href="#i-bulb"/></svg>Send an idea to the host</span>
+        </div>
+        <div class="dock"><span class="btn pri">Pick B</span><span class="note">You can change it until the host closes</span></div>
+      </div></div>
+
+      <div class="phone"><div class="scr">
+        <div class="notch"><i></i></div>
+        <div class="pbar"><b>Food bank sign-up</b><span style="margin-left:auto">Marcus</span></div>
+        <div class="pbody">
+          <span class="eyebrow"><b>Ideas</b> · Ask 4</span>
+          <h6>What would stop someone from signing up?</h6>
+          <span class="small muted">Claude: "I'll build around the top answers."</span>
+          <div class="mine"><b>Yours so far (1 of 3)</b><br>Having to make an account first</div>
+          <label class="lbl" style="margin:4px 0 -6px">Your suggestion</label>
+          <div class="pfield tall">Not knowing if it's okay to bring my teenager<span style="color:var(--primary)">|</span></div>
+          <span class="floor muted">Anonymous on the wall. Up to 3.</span>
+        </div>
+        <div class="dock"><span class="btn pri">Suggest</span><span class="note">Voting opens when the host is ready</span></div>
+      </div></div>
+
+      <div class="phone"><div class="scr">
+        <div class="notch"><i></i></div>
+        <div class="pbar"><b>Food bank sign-up</b><span style="margin-left:auto">Marcus</span></div>
+        <div class="pbody">
+          <span class="eyebrow"><b>Vote</b> · Ask 4 · pick up to 3</span>
+          <h6>What would stop someone from signing up?</h6>
+          <div class="slots"><i class="f"></i><i class="f"></i><i></i> 2 of 3 picked</div>
+          <div class="vrow on"><span class="n">1</span><span class="vt">Not seeing which shifts still need people</span><span class="tick"></span></div>
+          <div class="vrow"><span class="n">2</span><span class="vt">The form asks for too much</span><span class="tick"></span></div>
+          <div class="vrow own"><span class="n">3</span><span class="vt">Having to make an account first <span class="floor muted">· yours</span></span><span class="tick"></span></div>
+          <div class="vrow on"><span class="n">4</span><span class="vt">No idea where to park</span><span class="tick"></span></div>
+          <div class="vrow"><span class="n">5</span><span class="vt">Not sure if teens can come</span><span class="tick"></span></div>
+        </div>
+        <div class="dock"><span class="btn pri">Submit 2 votes</span><span class="note">You can't vote for your own</span></div>
+      </div></div>
+    </div>
+  </figure>
+
+  <!-- ===================================================== 5 -->
+  <h2 class="sec" id="f5"><b>5</b>After Close: the host decides what Claude hears</h2>
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>5</i>Decide panel</span>
+      <span class="why"><b>Why:</b> the vote is advice and the direction is the decision. It is prefilled with the winner so one click is enough,
+        but it is an editable sentence because "B, but keep A's logo" is the usual answer. Folding a suggestion in appends it as text the host can still edit.</span>
+    </figcaption>
+    <div class="screen">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url">engage.seibtribe.us/build?gameId=4821</div></div>
+      <div class="hbar"><span class="t">Ask 3 · Which header should volunteers see first?</span><span class="chip">Closed · 16 of 18 picked</span>
+        <span class="row push"><span class="btn sm ghost">Reopen</span></span></div>
+      <div class="decide">
+        <div class="panel res">
+          <h3>Results</h3>
+          <p class="p-sub">16 picked · 11 gave a reason</p>
+          <div class="rrow"><span class="letter b">B</span><div><span class="rt">Calm photo + calendar</span><span class="win">WINNER</span><div class="bar"><span style="width:69%;background:var(--secondary)"></span></div></div><span class="rn"><b>11</b> 69%</span></div>
+          <div class="rrow"><span class="letter">A</span><div><span class="rt">Bold banner</span><div class="bar"><span style="width:31%"></span></div></div><span class="rn"><b>5</b> 31%</span></div>
+          <label class="lbl" style="margin-top:14px">Reasons</label>
+          <ul class="whys">
+            <li><span class="letter b">B</span><span class="w">Seeing the dates first is what I'd want</span><span class="who">Priya</span></li>
+            <li><span class="letter b">B</span><span class="w">Feels like a food bank, not a sale</span><span class="who">Dee</span></li>
+            <li><span class="letter">A</span><span class="w">The big button is easier on a phone</span><span class="who">Sam</span></li>
+            <li><span class="letter">A</span><span class="w">Keep A's logo, it's bolder</span><span class="who">Ana</span></li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Direction for Claude</h3>
+          <p class="p-sub">Claude builds from this sentence, not from the counts. Edit it freely.</p>
+          <div class="dirbox">Go with B (calm photo + shift calendar). Keep A's logo, and make the "Volunteer" button as big as A's on phones.<span class="caret"></span></div>
+          <label class="lbl" style="margin-top:12px">Fold in from the room</label>
+          <div class="foldchips">
+            <span class="fold in"><svg class="ico"><use href="#i-plus"/></svg>Keep A's logo</span>
+            <span class="fold in"><svg class="ico"><use href="#i-plus"/></svg>Big button on phones</span>
+            <span class="fold"><svg class="ico"><use href="#i-plus"/></svg>Feels like a food bank</span>
+          </div>
+          <div class="verbal">
+            <svg class="ico" style="color:var(--success)"><use href="#i-mic"/></svg>
+            <div class="field" style="color:var(--muted)">+ what the room said… e.g. "show how many spots are left"</div>
+            <span class="btn sm">Add</span>
+          </div>
+          <div class="row" style="margin-top:18px">
+            <span class="toggle"><span class="sw"></span>Send to Claude</span>
+            <span class="small muted">Delivered on Claude's next call</span>
+            <span class="btn pri push"><svg class="ico"><use href="#i-send"/></svg>Send to Claude</span>
+          </div>
+          <div class="notice" style="margin-bottom:0">Toggle off to record the decision in the timeline without telling Claude, e.g. for a choice you'll make by hand.</div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================================================== 6 -->
+  <h2 class="sec" id="f6"><b>6</b>Between asks: Claude is building</h2>
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>6</i>Idle wall with the ticker</span>
+      <span class="why"><b>Why:</b> the room's attention is the scarce thing between asks. The ticker shows Claude acting on what they just decided,
+        which is the payoff for voting. The ideas inbox is dashed amber because it is host-only: Present mode removes it.</span>
+    </figcaption>
+    <div class="screen">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url">engage.seibtribe.us/build?gameId=4821</div><span class="tag">projector · 1920×1080</span></div>
+      <div class="stage idle">
+        <div class="main">
+          <div class="building"><span class="pulse"></span><h4>Claude is building…</h4><span class="mins">working for 4 min</span></div>
+          <div class="latest"><div class="kind">Latest decision · Ask 3</div>
+            <div class="tx">Go with B. Keep A's logo, and make the "Volunteer" button as big as A's on phones.</div></div>
+          <ul class="ticker">
+            <li class="newest"><span class="kind">Showing</span><span class="tx">Header B is live with the bigger button. Have a look.</span><span class="ago">20s ago</span><span class="lnk">localhost:5173/</span></li>
+            <li><span class="kind">Progress</span><span class="tx">Moved A's logo into header B and kept the photo</span><span class="ago">1 min ago</span></li>
+            <li><span class="kind">Progress</span><span class="tx">Picked up the direction from Ask 3</span><span class="ago">3 min ago</span></li>
+          </ul>
+          <div class="foot">
+            <div class="join"><span class="qr" aria-label="QR code to join"><i></i><b></b><b></b><b></b></span>
+              <div class="jt"><b>engage.seibtribe.us</b>code</div><span class="jc">4821</span></div>
+            <div class="resp">Got an idea? <span>Send it from your phone any time</span></div>
+            <span class="agentchip">Claude Code connected · active 6s ago</span>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="inbox">
+            <h5>Ideas inbox · 2 new <span class="host">host only</span></h5>
+            <div class="idea">A map link for parking<div class="who">Jordan · 19:41</div>
+              <div class="acts"><span>Send to Claude</span><span>Add to Ideas ask</span><span class="dis">Dismiss</span></div></div>
+            <div class="idea">Say "teens 14+ welcome with an adult"<div class="who">Marcus · 19:43</div>
+              <div class="acts"><span>Send to Claude</span><span>Add to Ideas ask</span><span class="dis">Dismiss</span></div></div>
+          </div>
+          <h5 style="margin-top:6px">Timeline</h5>
+          <ul class="tl">
+            <li class="k-decision"><span class="tm">19:37</span><span class="dot"></span><span><span class="by">Decided</span>Ask 3: B, keep A's logo</span></li>
+            <li class="k-verbal"><span class="tm">19:38</span><span class="dot"></span><span><span class="by">Room said</span>"Show how many spots are left"</span></li>
+            <li class="k-claude"><span class="tm">19:39</span><span class="dot"></span><span><span class="by">Claude</span>Picked up the direction</span></li>
+            <li class="k-claude"><span class="tm">19:41</span><span class="dot"></span><span><span class="by">Claude</span>Logo moved into header B</span></li>
+            <li class="k-claude"><span class="tm">19:42</span><span class="dot"></span><span><span class="by">Claude</span>Showing: header B live</span></li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================================================== 7 -->
+  <h2 class="sec" id="f7"><b>7</b>The report</h2>
+  <figure class="frame">
+    <figcaption>
+      <span class="cap"><i>7</i>Report, paper theme, print-ready</span>
+      <span class="why"><b>Why:</b> the report tells a story in the order a reader needs it: what we wanted, what we got, how we decided, then the
+        full record. Each decision shows the room's numbers <i>and</i> the host's direction, because the two often differ and that difference is the useful part.</span>
+    </figcaption>
+    <div class="screen">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="url">engage.seibtribe.us/build?gameId=4821&amp;view=report</div></div>
+      <div class="paper" data-theme="light">
+        <div class="printbar"><span class="btn ghost sm">Back to room</span><span class="btn sm">Print / Save as PDF</span></div>
+        <article class="sheet">
+          <div class="kick">Build Room report · 2 October 2026 · 19:01–20:12</div>
+          <h3>Volunteer sign-up for the Eastside Food Bank</h3>
+          <div class="meta">Hosted by George · 18 people · Claude Code · 5 asks · 27 timeline entries</div>
+          <div class="goal"><span class="lbl">Goal</span>A one-page site where a volunteer can pick a Saturday shift in under a minute, on a phone, and get a reminder the day before.</div>
+
+          <h4>What we built</h4>
+          <p style="margin:0 0 10px">A single-page sign-up site with a calm photo header, the shift calendar first, and a one-step form with no account. Reminder emails go out the evening before each shift. <span class="floor muted">Written by Claude at wrap-up · edited by the host</span></p>
+          <div class="twocol">
+            <div><b class="small">Built</b><ul>
+              <li>Shift calendar showing spots left</li>
+              <li>Three-field sign-up form, no account</li>
+              <li>Reminder email the day before</li>
+              <li>Parking map and "teens 14+ with an adult" note</li></ul></div>
+            <div><b class="small">Next steps</b><ul>
+              <li>Hook the form to the food bank's Google Sheet</li>
+              <li>Ask the coordinator to test on Saturday</li>
+              <li>Add Spanish copy</li></ul>
+              <b class="small" style="display:block;margin-top:10px">Links</b><ul>
+              <li><a href="#f7">github.com/eastside-fb/signup</a></li>
+              <li><a href="#f7">Preview deploy</a></li></ul></div>
+          </div>
+
+          <h4>Decisions</h4>
+          <div class="dec">
+            <div class="dh"><b>Ask 3 · Which header should volunteers see first?</b><span>Choose · Claude asked · 16 of 18 · decided 19:37</span></div>
+            <div class="pres"><span class="pl2">B</span><span>Calm photo + calendar<div class="pb"><i style="width:69%"></i></div></span><span class="pn">11 · 69%</span></div>
+            <div class="pres"><span class="pl2">A</span><span>Bold banner<div class="pb"><i style="width:31%"></i></div></span><span class="pn">5 · 31%</span></div>
+            <div class="direction"><b>Direction:</b> Go with B. Keep A's logo, and make the "Volunteer" button as big as A's on phones.</div>
+          </div>
+          <div class="dec">
+            <div class="dh"><b>Ask 4 · What would stop someone from signing up?</b><span>Ideas · Claude asked · 9 suggestions · 15 voted</span></div>
+            <div class="pres"><span class="pl2">1</span><span>Not seeing which shifts still need people<div class="pb"><i style="width:80%"></i></div></span><span class="pn">12 votes</span></div>
+            <div class="pres"><span class="pl2">2</span><span>Having to make an account first<div class="pb"><i style="width:66%"></i></div></span><span class="pn">10 votes</span></div>
+            <div class="pres"><span class="pl2">3</span><span>The form asks for too much<div class="pb"><i style="width:47%"></i></div></span><span class="pn">7 votes</span></div>
+            <div class="direction"><b>Direction:</b> Show spots left on every shift, no account, three fields only.</div>
+          </div>
+          <div class="dec">
+            <div class="dh"><b>Ask 2 · How close is this to what we want?</b><span>Rate 1–5 · host asked · 17 rated</span></div>
+            <div class="pres"><span class="pl2">3.4</span><span>average · 1 · 2 · 6 · 6 · 2<div class="pb"><i style="width:68%"></i></div></span><span class="pn">17 rated</span></div>
+            <div class="direction"><b>Direction:</b> Warmer colours; the room said it felt "like a bank".</div>
+          </div>
+
+          <h4>Timeline</h4>
+          <table class="rtl"><tbody>
+            <tr><td>19:06</td><td>Claude</td><td>Plan: shift list, sign-up form, reminder email</td></tr>
+            <tr><td>19:15</td><td>Room said</td><td>"Most of us sign up on our phones"</td></tr>
+            <tr><td>19:33</td><td>Showing</td><td>Two header variants, Choice A and Choice B</td></tr>
+            <tr><td>19:37</td><td>Decision</td><td>Ask 3: B, keep A's logo, bigger button</td></tr>
+            <tr><td>19:42</td><td>Showing</td><td>Header B live with the bigger button</td></tr>
+            <tr><td>…</td><td></td><td class="muted">22 more entries</td></tr>
+          </tbody></table>
+
+          <h4>Ideas from the room</h4>
+          <table class="rtl"><tbody>
+            <tr><td>19:41</td><td>Sent</td><td>A map link for parking · Jordan</td></tr>
+            <tr><td>19:43</td><td>Sent</td><td>Say "teens 14+ welcome with an adult" · Marcus</td></tr>
+            <tr><td>19:50</td><td>Dismissed</td><td>Dark mode · Sam</td></tr>
+          </tbody></table>
+
+          <h4>Who took part</h4>
+          <div class="ppl"><span>Priya</span><span>Marcus</span><span>Dee</span><span>Sam</span><span>Ana</span><span>Jordan</span><span>Lee</span><span>Tomás</span><span>Bea</span><span>Kofi</span><span>+ 8 more</span></div>
+        </article>
+      </div>
+    </div>
+  </figure>
+
+  <!-- ===================================================== present -->
+  <h2 class="sec" id="present"><b>P</b>Present mode: what hides</h2>
+  <p class="sub">The laptop stays on the projector all session. Present (a toggle in the host bar, also <b>P</b> on the keyboard) removes
+    everything the room should not see or cannot use. The host works on a phone at <code>/build</code> meanwhile.</p>
+  <table class="ptable">
+    <thead><tr><th style="width:42%">Element</th><th style="width:16%">Present</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Close / Open voting / Reopen / Discard buttons</td><td><span class="hide">Hidden</span></td><td>Controls the room cannot press are noise on the wall.</td></tr>
+      <tr><td>Proposed (unreviewed) asks</td><td><span class="hide">Hidden</span></td><td>The review gate is the point; the wall keeps showing the ticker.</td></tr>
+      <tr><td>Ideas inbox, with names</td><td><span class="hide">Hidden</span></td><td>Untriaged and attributed; may hold something not for the room.</td></tr>
+      <tr><td>Host notes (<code>note</code> log kind)</td><td><span class="hide">Hidden</span></td><td>Never shown to the room or Claude.</td></tr>
+      <tr><td>Names on reasons and suggestions</td><td><span class="hide">Hidden</span></td><td>The wall is anonymous; names live in the host view and report.</td></tr>
+      <tr><td>Connect panel, key, prompt cards, settings</td><td><span class="hide">Hidden</span></td><td>The key must never be projected.</td></tr>
+      <tr><td>Question, letters, bars, counts, join code, QR</td><td><span class="keep">Shown</span></td><td>This is the wall.</td></tr>
+      <tr><td>"Claude Code connected" chip, ticker, timeline</td><td><span class="keep">Shown</span></td><td>Keeps the room engaged between asks.</td></tr>
+    </tbody>
+  </table>
+
+  <footer>Prototype only. Frames are static HTML and CSS with no script. Spec: <code>PLAN.md</code>.
+    Tokens from <code>src/src/styles.css</code> (Warm Summit, dusk default; report in paper).</footer>
+</div>
+</body>
+</html>
