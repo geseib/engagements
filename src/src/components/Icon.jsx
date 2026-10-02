@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowSquareOut,
   ArrowUp,
   ArrowsClockwise,
   Books,
@@ -98,6 +99,8 @@ import {
   Wrench,
   X,
   XCircle,
+  Ear,
+  PaperPlaneTilt,
 } from "@phosphor-icons/react";
 
 /**
@@ -113,12 +116,15 @@ import {
  * add any new icon to the map below. Unknown names fall back to Circle so a typo never crashes.
  */
 export const ICONS = {
+  Ear,
+  PaperPlaneTilt,
   Airplane,
   Archive,
   ArrowCounterClockwise,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowSquareOut,
   ArrowUp,
   ArrowsClockwise,
   Books,

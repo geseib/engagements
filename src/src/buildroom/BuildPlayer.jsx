@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import BuildImage, { ImageLoader } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
@@ -228,11 +229,12 @@ function OptionCard({ option, index, checked, disabled, role, onToggle }) {
           {option.detail ? <span className="bpl-odetail bpl-text">{option.detail}</span> : null}
         </span>
       </button>
+      <BuildImage imageId={option.imageId} alt={`Choice ${option.label}: ${option.title}`} className="bpl-shot" />
       {isHttpUrl(option.url) ? (
         <a className="bpl-preview" href={option.url} target="_blank" rel="noopener noreferrer">
           Open preview<span className="bpl-sr"> of choice {option.label}</span>
         </a>
-      ) : (
+      ) : option.imageId ? null : (
         <span className="bpl-look">Look at the big screen</span>
       )}
     </div>
@@ -551,8 +553,9 @@ function Decided({ decision }) {
 
 /* ---------------------------------------------------------- watch feed -- */
 
-function Outcome({ outcome }) {
+function Outcome({ outcome, images = [] }) {
   if (!outcome) return null;
+  const finals = images.filter((i) => i && i.kind === 'final');
   const built = (outcome.built || []).filter(Boolean);
   const links = (outcome.links || []).filter((l) => l && isHttpUrl(l.url));
   const next = (outcome.nextSteps || []).filter(Boolean);
@@ -560,6 +563,7 @@ function Outcome({ outcome }) {
     <section className="bpl-outcome" aria-label="What we built">
       <h3 className="bpl-h">What we built</h3>
       {outcome.summary ? <p className="bpl-text bpl-summary">{outcome.summary}</p> : null}
+      {finals.map((im) => <BuildImage key={im.imageId} imageId={im.imageId} caption={im.caption} className="bpl-shot" />)}
       {built.length > 0 && (
         <>
           <h4 className="plr-lab">Built</h4>
@@ -742,7 +746,15 @@ export default function BuildPlayer({
     load();
   };
 
+  // A screenshot is read through this phone's own seat, like everything else
+  // it reads (build-room.js routePlay); an <img> cannot send headers, so the
+  // seat rides in the query string.
+  const loadImage = useCallback((imageId) => (
+    `${apiBase}games/${encodeURIComponent(gameId)}/build-play/images/${encodeURIComponent(imageId)}`
+    + `?playerName=${encodeURIComponent(playerName || '')}&clientId=${encodeURIComponent(clientId || '')}`
+  ), [apiBase, gameId, playerName, clientId]);
   const shell = ({ phase = 'quiet', volume = 'watch', dock = null, body, centre = false }) => (
+    <ImageLoader.Provider value={loadImage}>
     <PlayerShell
       phase={phase}
       volume={volume}
@@ -755,6 +767,7 @@ export default function BuildPlayer({
     >
       <div className="bpl">{body}</div>
     </PlayerShell>
+    </ImageLoader.Provider>
   );
 
   if (!view) {
@@ -786,7 +799,7 @@ export default function BuildPlayer({
       body: (
         <>
           <h1 className="plr-h1 plr-h1--primary">That's a wrap</h1>
-          {view.outcome ? <Outcome outcome={view.outcome} /> : <p className="plr-lede">The session has ended. Thanks for building.</p>}
+          {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : <p className="plr-lede">The session has ended. Thanks for building.</p>}
           <Feed view={view} />
         </>
       ),
@@ -850,7 +863,7 @@ export default function BuildPlayer({
         {intro}
         <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
         <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
-        {view.outcome ? <Outcome outcome={view.outcome} /> : null}
+        {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}
         <Feed view={view} />
         {ideas}
       </>

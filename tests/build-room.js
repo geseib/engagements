@@ -54,7 +54,7 @@ function applyUpdate(inp) {
     item[n(l)] = (Number(item[n(l)]) || 0) + Number(vals[r]);
   }
   store.set(k, item);
-  return { Attributes: item };
+  return { Attributes: inp.ReturnValues === 'UPDATED_OLD' ? (cur || {}) : item };
 }
 
 const fakeDoc = {
@@ -103,6 +103,24 @@ stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => fakeDoc },
   PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand,
 });
+// S3, for the room's screenshots.
+const bucket = new Map();
+class S3PutObjectCommand { constructor(i) { this.input = i; this.op = 'put'; } }
+class S3GetObjectCommand { constructor(i) { this.input = i; this.op = 'get'; } }
+class S3DeleteObjectCommand { constructor(i) { this.input = i; this.op = 'delete'; } }
+class FakeS3 {
+  async send(cmd) {
+    const { Key, Body, Metadata, ContentType } = cmd.input;
+    if (cmd.op === 'put') { bucket.set(Key, { Body: Buffer.from(Body), Metadata, ContentType }); return {}; }
+    if (cmd.op === 'delete') { bucket.delete(Key); return {}; }
+    const o = bucket.get(Key);
+    if (!o) { const e = new Error('NoSuchKey'); e.name = 'NoSuchKey'; throw e; }
+    return { Metadata: o.Metadata, Body: { transformToByteArray: async () => new Uint8Array(o.Body) } };
+  }
+}
+stub('@aws-sdk/client-s3', { S3Client: FakeS3, PutObjectCommand: S3PutObjectCommand, GetObjectCommand: S3GetObjectCommand, DeleteObjectCommand: S3DeleteObjectCommand });
+process.env.MEDIA_BUCKET = 'test-media';
+
 stub('@aws-sdk/client-apigatewaymanagementapi', { ApiGatewayManagementApiClient: FakeApiGatewayClient, PostToConnectionCommand });
 
 process.env.TABLE_NAME = 'test-table';
@@ -319,7 +337,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.deepStrictEqual(a.body.ideas, []);
     const p = await playCall('GET', 'state', priya);
     assert.ok(!p.body.log.some((l) => l.kind === 'note'));
-    assert.ok(p.body.log.some((l) => l.kind === 'showing' && l.link === 'http://localhost:5173/'));
+    assert.ok(p.body.log.some((l) => l.kind === 'showing' && l.link === ''), 'a phone cannot open the laptop\'s localhost');
   });
   await check('a verbal note sent to Claude rides along on Claude\'s next call', async () => {
     await agentCall('GET', 'state'); // drain the Ideas decision
@@ -360,6 +378,86 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await hostCall('POST', 'outcome', { summary: 'A sign-up site, edited' });
     const p = await playCall('GET', 'state', priya);
     assert.strictEqual(p.body.outcome.summary, 'A sign-up site, edited');
+  });
+
+  await check('local links reach the host (who can open them) but never a phone (which cannot)', async () => {
+    const ask = (await agentCall('POST', 'asks', { kind: 'choice', prompt: 'Which footer?', options: [{ title: 'Plain', url: 'http://localhost:5173/a' }, { title: 'Map', url: 'https://preview.example.com/b' }] })).body.ask;
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'open' });
+    await agentCall('POST', 'log', { kind: 'showing', text: 'Demo is up', link: 'http://127.0.0.1:3000/' });
+    await agentCall('POST', 'outcome', { summary: 'Done', links: [{ label: 'Demo', url: 'http://localhost:5173/' }, { label: 'Repo', url: 'https://github.com/x/y' }] });
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.asks.find((a) => a.askId === ask.askId).options[0].url, 'http://localhost:5173/a');
+    assert.deepStrictEqual(h.body.outcome.links.map((l) => l.label), ['Demo', 'Repo']);
+    const p = await playCall('GET', 'state', priya);
+    assert.deepStrictEqual(p.body.current.options.map((o) => o.url), ['', 'https://preview.example.com/b']);
+    assert.ok(!JSON.stringify(p.body).includes('127.0.0.1'));
+    assert.deepStrictEqual(p.body.outcome.links.map((l) => l.label), ['Repo']);
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'discard' });
+  });
+  await check('Claude waiting on its inbox shows as listening, and only the start of listening is announced', async () => {
+    sent = [];
+    const r = await agentCall('GET', 'inbox?listening=1'.split('?')[0], null);
+    assert.strictEqual(r.status, 200);
+    const listen = () => handler({
+      routeKey: 'GET /games/{gameId}/build/{proxy+}',
+      requestContext: { http: { method: 'GET' }, authorizer: { lambda: agentCtx() } },
+      pathParameters: { gameId: GAME, proxy: 'inbox' },
+      queryStringParameters: { listening: '1' },
+    });
+    await listen();
+    const announced = sent.length;
+    assert.ok(announced > 0, 'the start of listening is announced');
+    await listen();
+    assert.strictEqual(sent.length, announced, 'a second poll inside the window announces nothing');
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.agent.listening, true);
+    assert.strictEqual((await hostCall('GET', 'inbox')).status, 403);
+  });
+
+  console.log('\nscreenshots');
+  const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('a tiny but real-enough png body')]);
+  await check('Claude sends a screenshot of Choice A: the host and the phones both see it on the option', async () => {
+    const ask = (await agentCall('POST', 'asks', { kind: 'choice', prompt: 'Which hero?', options: ['Bold', 'Calm'] })).body.ask;
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'open' });
+    const up = await agentCall('POST', 'images', { data: PNG.toString('base64'), caption: 'Choice A, the bold hero', kind: 'mockup', askId: ask.askId, label: 'a' });
+    assert.strictEqual(up.status, 201);
+    assert.strictEqual(up.body.image.contentType, 'image/png');
+    const id = up.body.image.imageId;
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.asks.find((a) => a.askId === ask.askId).options[0].imageId, id);
+    assert.strictEqual(h.body.asks.find((a) => a.askId === ask.askId).options[1].imageId, null);
+    assert.ok(h.body.log.some((l) => l.kind === 'image' && l.text === 'Choice A, the bold hero'));
+    const p = await playCall('GET', 'state', priya);
+    assert.strictEqual(p.body.current.options[0].imageId, id);
+    const img = await handler({
+      routeKey: 'GET /games/{gameId}/build-play/{proxy+}', requestContext: { http: { method: 'GET' } },
+      pathParameters: { gameId: GAME, proxy: `images/${id}` }, queryStringParameters: priya,
+    });
+    assert.strictEqual(img.statusCode, 200);
+    assert.strictEqual(img.isBase64Encoded, true);
+    assert.strictEqual(img.headers['Content-Type'], 'image/png');
+    assert.ok(Buffer.from(img.body, 'base64').equals(PNG));
+    assert.strictEqual((await handler({
+      routeKey: 'GET /games/{gameId}/build-play/{proxy+}', requestContext: { http: { method: 'GET' } },
+      pathParameters: { gameId: GAME, proxy: `images/${id}` }, queryStringParameters: { playerName: 'Nobody', clientId: 'x' },
+    })).statusCode, 403);
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'discard' });
+  });
+  await check('an image is checked by its bytes, its size and its ask', async () => {
+    assert.strictEqual((await agentCall('POST', 'images', { data: Buffer.from('<svg onload=alert(1)>').toString('base64') })).status, 415);
+    assert.strictEqual((await agentCall('POST', 'images', { data: Buffer.concat([PNG, Buffer.alloc(3 * 1024 * 1024)]).toString('base64') })).status, 413);
+    assert.strictEqual((await agentCall('POST', 'images', { data: PNG.toString('base64'), askId: '999' })).status, 404);
+    assert.strictEqual((await agentCall('POST', 'images', { data: '' })).status, 400);
+  });
+  await check('the host can delete a screenshot; it leaves the bucket and the timeline', async () => {
+    const id = (await agentCall('POST', 'images', { data: PNG.toString('base64'), kind: 'final', caption: 'Final' })).body.image.imageId;
+    assert.ok([...bucket.keys()].some((k) => k.endsWith(id)));
+    assert.strictEqual((await agentCall('POST', `images/${id}`, { action: 'delete' })).status, 403);
+    await hostCall('POST', `images/${id}`, { action: 'delete' });
+    assert.ok(![...bucket.keys()].some((k) => k.endsWith(id)));
+    const h = await hostCall('GET', 'state');
+    assert.ok(!h.body.images.some((i) => i.imageId === id));
+    assert.ok(!h.body.log.some((l) => l.kind === 'image' && l.detail === id));
   });
 
   console.log('\nwho may do what');
@@ -409,6 +507,18 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await hostCall('POST', 'outcome', { summary: 'Secret outcome' }, HOST_ORG);
     const raw = JSON.stringify([...store.values()].filter((x) => String(x.SK).startsWith('BUILD#')));
     for (const s of ['Secret question', 'Secret answer', 'Secret verbal', 'Secret outcome']) assert.ok(!raw.includes(s), `${s} is plaintext at rest`);
+    // and a screenshot is ciphertext in the bucket, plaintext through the API
+    const PNG2 = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('secret mockup pixels')]);
+    const up = await hostCall('POST', 'images', { data: PNG2.toString('base64'), caption: 'Secret caption' }, HOST_ORG);
+    assert.strictEqual(up.status, 201);
+    const obj = [...bucket.entries()].find(([k]) => k.endsWith(up.body.image.imageId))[1];
+    assert.ok(!obj.Body.includes(Buffer.from('secret mockup pixels')), 'image bytes are plaintext at rest');
+    assert.ok(!JSON.stringify([...store.values()]).includes('Secret caption'));
+    const img = await handler({
+      routeKey: 'GET /games/{gameId}/build/{proxy+}', requestContext: { http: { method: 'GET' }, authorizer: { lambda: HOST_ORG } },
+      pathParameters: { gameId: GAME, proxy: `images/${up.body.image.imageId}` },
+    });
+    assert.ok(Buffer.from(img.body, 'base64').equals(PNG2));
     const h = await hostCall('GET', 'state', null, HOST_ORG);
     assert.strictEqual(h.body.asks[0].prompt, 'Secret question');
     assert.strictEqual(h.body.asks[0].responses[0].text, 'Secret answer');

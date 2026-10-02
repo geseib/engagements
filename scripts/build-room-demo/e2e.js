@@ -25,7 +25,18 @@ const pick = async (p, title, why) => { await p.getByText(title).first().click()
   const claude = mcp(key); await claude.init();
   say('Claude: room_status', await claude.call('room_status', {}));
   say('Claude: post_update', await claude.call('post_update', { text: 'Plan: a shift calendar, a short sign-up form, then a confirmation text. Starting with the header.' }));
-  say('Claude: ask_room_to_choose', await claude.call('ask_room_to_choose', { question: 'Which header should volunteers see first?', context: 'Both are running on the laptop. I will flip between them.', options: [{ title: 'Bold banner', description: 'Big Volunteer button over a photo' }, { title: 'Calm photo + calendar', description: 'Shifts visible straight away' }] }));
+  say('Claude: ask_room_to_choose', await claude.call('ask_room_to_choose', { question: 'Which header should volunteers see first?', context: 'Both are running on the laptop. I will flip between them.', options: [{ title: 'Bold banner', description: 'Big Volunteer button over a photo', url: 'http://localhost:5173/a' }, { title: 'Calm photo + calendar', description: 'Shifts visible straight away', url: 'http://localhost:5173/b' }] }));
+  // Claude builds two quick mockups, screenshots them, and shares each onto its option.
+  const shots = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'brm-shots-'));
+  const mock = async (file, bg, fg, headline, sub) => {
+    const pg = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await pg.setContent(`<body style="margin:0;font-family:system-ui;background:${bg};color:${fg};height:800px;display:flex;flex-direction:column;justify-content:center;padding:0 90px"><div style="font-size:22px;letter-spacing:.2em;opacity:.8">EASTSIDE FOOD BANK</div><h1 style="font-size:84px;margin:.2em 0">${headline}</h1><p style="font-size:30px;max-width:900px">${sub}</p><a style="display:inline-block;margin-top:30px;background:${fg};color:${bg};font-size:30px;padding:22px 40px;border-radius:14px;width:max-content">Pick a shift</a></body>`);
+    await pg.screenshot({ path: require('path').join(shots, file) }); await pg.close();
+  };
+  await mock('a.png', '#E8452C', '#FFF7E8', 'Volunteer this week', 'Big, bold, one button. Shifts on the next page.');
+  await mock('b.png', '#F4EFE6', '#1F3B2D', 'Saturday 9-12 · 4 spots left', 'The calendar first: see a shift, tap it, done.');
+  say('Claude: share_image A', await claude.call('share_image', { path: require('path').join(shots, 'a.png'), caption: 'Choice A: bold banner', kind: 'mockup', askId: '001', label: 'A' }));
+  say('Claude: share_image B', await claude.call('share_image', { path: require('path').join(shots, 'b.png'), caption: 'Choice B: calm photo and calendar', kind: 'mockup', askId: '001', label: 'B' }));
   await host.waitForTimeout(9000); // the 8s poll brings Claude's ask in
   await shot(host, '01-host-proposed');
   await host.getByRole('button', { name: /open to the room/i }).click(); await host.waitForTimeout(800);
@@ -44,7 +55,7 @@ const pick = async (p, title, why) => { await p.getByText(title).first().click()
   await host.locator('section.brm-decide').getByRole('button', { name: /Send to Claude/ }).click();
   say('Claude: wait_for_room 001', await waiting);
   await rejoin(priya); await shot(priya, '04-phone-decided', false);
-  say('Claude: post_update showing', await claude.call('post_update', { kind: 'showing', text: 'Header B is on screen: calm photo, calendar first, a bigger Sign up button.' }));
+  say('Claude: post_update showing', await claude.call('post_update', { kind: 'showing', text: 'Header B is on screen: calm photo, calendar first, a bigger Sign up button.', link: 'http://localhost:5173/' }));
   await host.getByRole('checkbox', { name: /Review Claude/ }).count().then(() => {});
   say('Claude: ask_room_to_rate', await claude.call('ask_room_to_rate', { question: 'How close is this header to what we want?', lowLabel: 'Far off', highLabel: 'Ship it' }));
   await host.reload(); await host.waitForTimeout(1500);
@@ -70,7 +81,18 @@ const pick = async (p, title, why) => { await p.getByText(title).first().click()
   await host.reload(); await host.waitForTimeout(1500);
   await shot(host, '07-host-idle');
   await host.keyboard.press('p'); await host.waitForTimeout(500); await shot(host, '08-wall-present-idle'); await host.keyboard.press('p');
-  say('Claude: wrap_up', await claude.call('wrap_up', { summary: 'The room chose a calm header with the shift calendar first, asked for no account and clear bus times, and rated the header 4 out of 5. The site lets a volunteer pick a shift in under a minute.', built: ['Header B with the food bank logo', 'Shift calendar with end times and the last bus', 'Sign-up form with no account', 'Parking map'], links: [{ label: 'Repository', url: 'https://github.com/example/foodbank-signup' }], nextSteps: ['Send a confirmation text', 'Test with five volunteers'] }));
+  await mock('final.png', '#F4EFE6', '#1F3B2D', 'Saturday 9-12 · 4 spots left', 'No account needed. Last bus 12:40. Parking map below.');
+  say('Claude: share_image final', await claude.call('share_image', { path: require('path').join(shots, 'final.png'), caption: 'The finished sign-up page', kind: 'final' }));
+  say('Claude: wrap_up', await claude.call('wrap_up', { summary: 'The room chose a calm header with the shift calendar first, asked for no account and clear bus times, and rated the header 4 out of 5. The site lets a volunteer pick a shift in under a minute.', built: ['Header B with the food bank logo', 'Shift calendar with end times and the last bus', 'Sign-up form with no account', 'Parking map'], links: [{ label: 'Open the demo', url: 'http://localhost:5173/' }, { label: 'Repository', url: 'https://github.com/example/foodbank-signup' }], nextSteps: ['Send a confirmation text', 'Test with five volunteers'] }));
+  // After the wrap-up Claude keeps listening; the host steers from the screen.
+  const listening = claude.call('wait_for_direction', { maxWaitSeconds: 120 });
+  await host.waitForTimeout(1500);
+  await host.reload(); await host.waitForTimeout(1500);
+  await shot(host, '08b-host-wrapped');
+  await host.getByLabel('Tell Claude').fill('Add a one-line note on parking under the form.');
+  await host.locator('.brm-next').getByRole('button', { name: 'Send to Claude' }).click();
+  say('Claude: wait_for_direction (after wrap-up)', await listening);
+  await host.keyboard.press('p'); await host.waitForTimeout(400); await shot(host, '08c-wall-wrapped'); await host.keyboard.press('p');
   await host.reload(); await host.waitForTimeout(1500);
   await host.getByRole('button', { name: 'End session' }).first().click(); await host.waitForTimeout(500);
   const confirm = host.getByRole('button', { name: /^End/ }); if (await confirm.count() > 1) await confirm.last().click();

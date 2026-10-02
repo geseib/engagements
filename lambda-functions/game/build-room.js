@@ -22,10 +22,16 @@ const {
   DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand,
 } = require('@aws-sdk/lib-dynamodb');
 const { callerMayDriveSession } = require('./tenant');
-const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
+const { encryptItem, decryptItem, encryptValue, decryptValue } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { toAll } = require('./survey-broadcast');
 const S = require('./build-store');
+
+// S3 is loaded lazily: most calls never touch an image, and tests stub it.
+let s3client = null;
+const s3sdk = () => require('@aws-sdk/client-s3');
+const s3 = () => { if (!s3client) s3client = new (s3sdk().S3Client)({}); return s3client; };
+const MEDIA_BUCKET = () => process.env.MEDIA_BUCKET;
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -495,6 +501,27 @@ async function agentTouch(ctx, event) {
   }
 }
 
+/**
+ * Stamp "Claude is listening" without bumping the room's Rev: Claude polls
+ * every few seconds while it waits, and a broadcast per poll would have every
+ * page refetching constantly. Only the moment it STARTS listening is announced.
+ */
+async function markListening(ctx) {
+  const now = new Date().toISOString();
+  const res = await db.send(new UpdateCommand({
+    TableName: TABLE(),
+    Key: { PK: ctx.pk, SK: S.SK.state },
+    UpdateExpression: 'SET AgentListeningAt = :now',
+    ExpressionAttributeValues: { ':now': now },
+    ReturnValues: 'UPDATED_OLD',
+  }));
+  const before = res && res.Attributes && res.Attributes.AgentListeningAt;
+  if (!before || Date.parse(now) - Date.parse(before) > S.AGENT_LISTENING_MS) {
+    const st = await touchState(ctx);
+    await announce(ctx, st.Rev);
+  }
+}
+
 async function takeInbox(ctx) {
   const room = await loadRoom(ctx);
   const out = [];
@@ -523,7 +550,102 @@ async function takeInbox(ctx) {
   return out;
 }
 
-async function routeHost(ctx, role, method, parts, body, event) {
+// ── Images ───────────────────────────────────────────────────────────────────
+//
+// A screenshot of a mockup, or of what was built, sent by Claude's MCP server
+// (or the host) as base64. Checked by its first bytes, stored privately under
+// builds/<game>/<id> in the media bucket — sealed under the session's org like
+// everything else the room makes — and read back only through this handler,
+// behind the same host / phone checks as the rest of the room.
+
+async function postImage(ctx, role, body) {
+  const b = body || {};
+  let buf;
+  try { buf = Buffer.from(String(b.data || ''), 'base64'); } catch (e) { buf = Buffer.alloc(0); }
+  if (!buf.length) return fail(400, 'Send the image as base64 in "data"');
+  if (buf.length > S.IMAGE_MAX_BYTES) return fail(413, `That image is ${(buf.length / 1048576).toFixed(1)} MB; the limit is 3 MB. Take a smaller screenshot (the viewport, or JPEG) and send it again.`);
+  const type = S.sniffImage(buf);
+  if (!type) return fail(415, 'Only PNG, JPEG or WebP images');
+  const room = await loadRoom(ctx);
+  if (room.images.length >= S.MAX_IMAGES) return fail(409, `This room already holds ${S.MAX_IMAGES} images`);
+  const kind = S.IMAGE_KINDS.includes(b.kind) ? b.kind : 'progress';
+  const askId = b.askId ? String(b.askId).padStart(3, '0').slice(-3) : null;
+  const ask = askId ? room.asks.find((a) => a.AskId === askId) : null;
+  if (askId && !ask) return fail(404, `No ask ${askId}`);
+  const label = b.label ? String(b.label).toUpperCase().slice(0, 1) : null;
+  if (label && (!ask || !(ask.Options || []).some((o) => o.label === label))) return fail(400, `Ask ${askId || '?'} has no option ${label}`);
+  const now = new Date().toISOString();
+  const sk = S.SK.img(now);
+  const imageId = S.newId() + S.newId();
+  // An org's image is sealed like its words: an AES-GCM envelope under the
+  // session's org (tenant-crypto), stored as JSON; an orgless one as itself.
+  const payload = ctx.orgId
+    ? Buffer.from(JSON.stringify(await encryptValue(ctx.orgId, buf.toString('base64'))), 'utf8')
+    : buf;
+  await s3().send(new (s3sdk().PutObjectCommand)({
+    Bucket: MEDIA_BUCKET(),
+    Key: S.imageKey(ctx.gameId, imageId),
+    Body: payload,
+    ContentType: ctx.orgId ? 'application/json' : type,
+    Metadata: { sealed: ctx.orgId ? '1' : '0' },
+  }));
+  const caption = S.cleanText(b.caption, S.LIMITS.logText);
+  await put(ctx, {
+    SK: sk, ImageId: imageId, ContentType: type, Bytes: buf.length, Caption: caption, Kind: kind,
+    ...(askId ? { AskId: askId } : {}), ...(label ? { Label: label } : {}),
+    By: role === 'agent' ? 'agent' : 'host', CreatedAt: now,
+  });
+  await logEntry(ctx, {
+    kind: 'image',
+    text: caption || (label ? `Choice ${label}` : kind === 'final' ? 'The finished product' : 'A screenshot'),
+    detail: imageId,
+    by: role === 'agent' ? 'agent' : 'host',
+    askId,
+  });
+  const st = await touchState(ctx);
+  await announce(ctx, st.Rev);
+  return reply(201, { image: { imageId, contentType: type, bytes: buf.length, kind, askId, label, caption } });
+}
+
+/** One image's bytes, as the browser wants them. */
+async function getImage(ctx, imageId) {
+  const room = await loadRoom(ctx);
+  const img = room.images.find((i) => i.ImageId === imageId);
+  if (!img) return fail(404, 'No such image');
+  const res = await s3().send(new (s3sdk().GetObjectCommand)({ Bucket: MEDIA_BUCKET(), Key: S.imageKey(ctx.gameId, imageId) }));
+  const raw = Buffer.from(await res.Body.transformToByteArray());
+  let bytes = raw;
+  if (res.Metadata && res.Metadata.sealed === '1') {
+    bytes = Buffer.from(await decryptValue(ctx.orgId, JSON.parse(raw.toString('utf8'))), 'base64');
+  }
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': img.ContentType, 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'private, max-age=86400, immutable' },
+    isBase64Encoded: true,
+    body: bytes.toString('base64'),
+  };
+}
+
+async function imageAction(ctx, imageId, body) {
+  const room = await loadRoom(ctx);
+  const img = room.images.find((i) => i.ImageId === imageId);
+  if (!img) return fail(404, 'No such image');
+  const action = String((body || {}).action || '');
+  if (action === 'delete') {
+    await s3().send(new (s3sdk().DeleteObjectCommand)({ Bucket: MEDIA_BUCKET(), Key: S.imageKey(ctx.gameId, imageId) })).catch(() => {});
+    await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: img.SK } }));
+    for (const l of room.logs.filter((x) => x.Kind === 'image' && x.Detail === imageId)) {
+      await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: l.SK } }));
+    }
+  } else if (action === 'caption') {
+    await put(ctx, { ...img, Caption: S.cleanText(body.caption, S.LIMITS.logText) });
+  } else return fail(400, 'action must be delete or caption');
+  const st = await touchState(ctx);
+  await announce(ctx, st.Rev);
+  return reply(200, { ok: true });
+}
+
+async function routeHost(ctx, role, method, parts, body, event, query) {
   const [a, b, c, d] = parts;
   const hostOnly = () => (role === 'host' ? null : fail(403, 'Only the host can do that'));
 
@@ -531,6 +653,15 @@ async function routeHost(ctx, role, method, parts, body, event) {
     const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
     return reply(200, view);
   }
+  // Claude's cheapest call: nothing but its inbox (the wrapper below attaches
+  // it). With ?listening=1 it is wait_for_direction polling, and the host's
+  // chip reads "Claude is listening".
+  if (method === 'GET' && a === 'inbox' && !b) {
+    if (role !== 'agent') return fail(403, 'This is Claude\'s inbox');
+    if (query && query.listening === '1') await markListening(ctx);
+    return reply(200, {});
+  }
+  if (method === 'GET' && a === 'images' && b && !c) return getImage(ctx, b);
   if (method === 'GET' && a === 'asks' && b && !c) {
     const room = await loadRoom(ctx);
     const ask = findAsk(room, b);
@@ -550,6 +681,8 @@ async function routeHost(ctx, role, method, parts, body, event) {
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
+  if (a === 'images' && !b) return postImage(ctx, role, body);
+  if (a === 'images' && b) return hostOnly() || imageAction(ctx, b, body);
   if (a === 'settings' && !b) return hostOnly() || postSettings(ctx, body);
   if (a === 'keys' && !b) return hostOnly() || mintAgentKey(ctx, event, body);
   if (a === 'keys' && b && c === 'revoke') return hostOnly() || revokeAgentKey(ctx, b);
@@ -564,6 +697,7 @@ async function routePlay(ctx, method, parts, body, query) {
   const me = await playerFrom(ctx, input);
   if (!me) return fail(403, 'Join the session first');
 
+  if (method === 'GET' && a === 'images' && parts[1]) return getImage(ctx, parts[1]);
   if (method === 'GET' && a === 'state') {
     const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
     return reply(200, S.publicView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, me, now: new Date().toISOString() }));
@@ -678,10 +812,10 @@ exports.handler = async (event) => {
     if (!role) return fail(404, 'Session not found');
     if (role === 'agent') {
       await agentTouch(ctx, event);
-      const res = await routeHost(ctx, role, method, parts, body, event);
+      const res = await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
       // Directions ride along on every call Claude makes, so it hears the
       // room on its very next tool call without having to ask.
-      if (res.statusCode < 500) {
+      if (res.statusCode < 500 && !res.isBase64Encoded) {
         const inbox = await takeInbox(ctx);
         const parsed = JSON.parse(res.body || '{}');
         res.body = JSON.stringify({ ...parsed, inbox });
@@ -692,7 +826,7 @@ exports.handler = async (event) => {
       }
       return res;
     }
-    return await routeHost(ctx, role, method, parts, body, event);
+    return await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
   } catch (err) {
     console.error('BUILD ROOM: request failed', err);
     return fail(500, 'Something went wrong in the Build Room');

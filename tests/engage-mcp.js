@@ -51,6 +51,7 @@ const choiceAsk = (status) => ({
     : null,
 });
 
+let inboxPolls = 0;
 const server = http.createServer((req, res) => {
   let raw = '';
   req.on('data', c => { raw += c; });
@@ -79,6 +80,13 @@ const server = http.createServer((req, res) => {
     if (req.method === 'GET' && p === 'asks/003') {
       askPolls++;
       return send(200, { ask: choiceAsk(askPolls >= 3 ? 'decided' : 'live'), inbox: [] });
+    }
+    if (req.method === 'POST' && p === 'images') {
+      return send(201, { image: { imageId: 'img1', contentType: 'image/png', bytes: 20, kind: rec.body.kind, askId: rec.body.askId, label: rec.body.label }, inbox: [] });
+    }
+    if (req.method === 'GET' && p === 'inbox?listening=1') {
+      inboxPolls++;
+      return send(200, { inbox: inboxPolls >= 3 ? [{ id: 'd7', text: 'Make the button green', from: 'host', askId: null, createdAt: 'now' }] : [] });
     }
     if (req.method === 'POST' && p === 'log') {
       return send(200, {
@@ -169,11 +177,11 @@ const hardStop = setTimeout(() => {
   });
 
   console.log('\n2. listings');
-  await check('tools/list has all nine tools with object schemas', async () => {
+  await check('tools/list has all thirteen tools with object schemas', async () => {
     const r = await mcp.request('tools/list', {});
     const names = r.result.tools.map(t => t.name).sort();
-    assert.deepStrictEqual(names, ['ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions',
-      'get_results', 'post_update', 'room_status', 'wait_for_room', 'wrap_up']);
+    assert.deepStrictEqual(names, ['ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions', 'checkpoint', 'connect',
+      'get_results', 'post_update', 'room_status', 'share_image', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
     for (const t of r.result.tools) {
       assert.strictEqual(t.inputSchema.type, 'object', t.name);
       assert.ok(t.description && t.description.length > 40, t.name);
@@ -181,7 +189,7 @@ const hardStop = setTimeout(() => {
   });
   await check('prompts/list and prompts/get kickoff', async () => {
     const l = await mcp.request('prompts/list', {});
-    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up']);
+    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue']);
     const g = await mcp.request('prompts/get', { name: 'kickoff' });
     const m = g.result.messages[0];
     assert.strictEqual(m.role, 'user');
@@ -250,6 +258,36 @@ const hardStop = setTimeout(() => {
     const t = textOf(r);
     assert.ok(/DIRECTION FROM THE ROOM \(via the host\)/.test(t) && /colours are too dark/.test(t), t);
   });
+  await check('wait_for_direction listens until the host sends something, then hands it over', async () => {
+    const before = requests.length;
+    const r = await mcp.request('tools/call', { name: 'wait_for_direction', arguments: { maxWaitSeconds: 30 } });
+    const t = r.result.content[0].text;
+    assert.ok(!r.result.isError, t);
+    assert.ok(/Make the button green/.test(t) && /DIRECTION FROM THE ROOM/.test(t), t);
+    const polls = requests.slice(before).filter(q => q.url.endsWith('/build/inbox?listening=1'));
+    assert.strictEqual(polls.length, 3);
+  });
+  await check('prompts/get continue tells Claude to pick up directions and keep listening', async () => {
+    const r = await mcp.request('prompts/get', { name: 'continue', arguments: {} });
+    const t = r.result.messages[0].content.text;
+    assert.ok(/check_directions/.test(t) && /wait_for_direction/.test(t), t);
+  });
+  await check('share_image reads the file, checks it is an image, and ties it to its option', async () => {
+    const fs = require('fs'); const os = require('os'); const pth = require('path');
+    const dir = fs.mkdtempSync(pth.join(os.tmpdir(), 'engage-mcp-'));
+    const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('pixels')]);
+    fs.writeFileSync(pth.join(dir, 'a.png'), png);
+    fs.writeFileSync(pth.join(dir, 'not.png'), '<svg/>');
+    const r = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'a.png'), caption: 'Choice A', kind: 'mockup', askId: '3', label: 'A' } });
+    assert.ok(!r.result.isError, r.result.content[0].text);
+    const sent = requests.filter(q => q.method === 'POST' && q.url.endsWith('/build/images')).pop();
+    assert.deepStrictEqual({ ...sent.body, data: Buffer.from(sent.body.data, 'base64').equals(png) }, { data: true, caption: 'Choice A', kind: 'mockup', askId: '003', label: 'A' });
+    assert.ok(/Choice A of ask 003/.test(r.result.content[0].text), r.result.content[0].text);
+    const bad = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'not.png') } });
+    assert.ok(bad.result.isError && /not a PNG, JPEG or WebP/.test(bad.result.content[0].text));
+    const missing = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'nope.png') } });
+    assert.ok(missing.result.isError && /Take the screenshot first/.test(missing.result.content[0].text));
+  });
   await check('a 401 becomes an isError result that explains the key', async () => {
     failNext401 = true;
     const r = await mcp.request('tools/call', { name: 'check_directions', arguments: {} });
@@ -280,7 +318,7 @@ const hardStop = setTimeout(() => {
       });
       assert.strictEqual(out[0].result.protocolVersion, '2024-11-05');
       assert.strictEqual(out[1].result.isError, true);
-      assert.ok(/ENGAGE_KEY is not set/.test(out[1].result.content[0].text) && /claude mcp add engage/.test(out[1].result.content[0].text));
+      assert.ok(/No session key yet/.test(out[1].result.content[0].text) && /\/engage:connect/.test(out[1].result.content[0].text) && /claude mcp add/.test(out[1].result.content[0].text), out[1].result.content[0].text);
     } finally { child.kill('SIGKILL'); }
   });
 

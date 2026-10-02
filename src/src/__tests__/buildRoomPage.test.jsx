@@ -222,7 +222,7 @@ describe('each ask status', () => {
     fireEvent.click(screen.getByRole('button', { name: /Big button/ }));
     expect(box.value).toBe('Go with B: Calm photo + calendar. Big button');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send to Claude' }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Direction for Claude' })).getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide' }));
     expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`);
     expect(lastPost().body).toEqual({
@@ -264,7 +264,10 @@ describe('each ask status', () => {
     expect(within(stage).getByText('Claude is building…')).toBeInTheDocument();
     expect(within(stage).getByText('Go with B, keep A\'s logo')).toBeInTheDocument();
     expect(within(stage).getByText('Header B is live')).toBeInTheDocument();
-    expect(within(stage).getByRole('link', { name: 'http://localhost:5173/' })).toHaveAttribute('href', 'http://localhost:5173/');
+    // Claude's local link is a button the host opens on this laptop.
+    const open = within(stage).getByRole('link', { name: 'Open' });
+    expect(open).toHaveAttribute('href', 'http://localhost:5173/');
+    expect(open).toHaveAttribute('target', '_blank');
   });
 
   test('an empty room shows how a Build Room works', async () => {
@@ -360,23 +363,31 @@ describe('Connect Claude Code', () => {
     expect(command.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
     expect(command.textContent).toContain('claude mcp add engage');
     expect(within(dialog).getByText(/This key is shown once/)).toBeInTheDocument();
+    // The plugin route: install once (no key in it), then one line per session.
+    const install = within(dialog).getByTestId('brm-install');
+    expect(install.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
+    expect(install.textContent).toContain(`node ~/.engage-mcp.mjs --install-plugin --api ${API}`);
+    expect(install.textContent).not.toContain(key);
+    expect(within(dialog).getByTestId('brm-connect').textContent).toBe(`/engage:connect ${key}`);
 
     // Close, reopen: gone.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const again = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     expect(within(again).queryByTestId('brm-command')).toBeNull();
+    expect(within(again).queryByTestId('brm-connect')).toBeNull();
+    expect(within(again).getByTestId('brm-install')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(key);
   });
 
-  test('revoke, the review setting, and the four prompt cards with their slash commands', async () => {
+  test('revoke, the review setting, and the five prompt cards with their slash commands', async () => {
     await openRoom(hostState({ keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
     fireEvent.click(screen.getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    ['/mcp__engage__kickoff', '/mcp__engage__ideas', '/mcp__engage__ab-mockups', '/mcp__engage__wrap-up'].forEach((slash) => {
+    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:wrap-up', '/mcp__engage__kickoff'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
     });
-    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(4);
+    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(5);
 
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Review Claude's questions/ }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/settings`));
@@ -386,6 +397,52 @@ describe('Connect Claude Code', () => {
     await waitFor(() => expect(revoke).not.toBeDisabled());
     fireEvent.click(revoke);
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/keys/abc123def456/revoke`));
+  });
+});
+
+describe('after Claude wraps up, and what next', () => {
+  const OUTCOME = {
+    summary: 'A one-page sign-up site with live open spots.',
+    built: ['Five sample events', 'Sign-up form'],
+    links: [{ label: 'Demo', url: 'http://localhost:5173/' }, { label: 'Repository', url: 'https://github.com/x/y' }],
+    nextSteps: ['Send a confirmation text'],
+    by: 'agent',
+    updatedAt: NOW,
+  };
+
+  test('the stage says what we built, with the demo one click away', async () => {
+    await openRoom(hostState({ st: { Outcome: OUTCOME } }));
+    const stage = screen.getByRole('region', { name: 'What we built' });
+    expect(screen.queryByText('Claude is building…')).toBeNull();
+    expect(within(stage).getByText('A one-page sign-up site with live open spots.')).toBeInTheDocument();
+    expect(within(stage).getByRole('link', { name: 'Demo' })).toHaveAttribute('href', 'http://localhost:5173/');
+    expect(within(stage).getByRole('link', { name: 'Repository' })).toHaveAttribute('href', 'https://github.com/x/y');
+    expect(within(stage).getByText('Five sample events')).toBeInTheDocument();
+    expect(within(stage).getByText('Send a confirmation text')).toBeInTheDocument();
+  });
+
+  test('a choice offers Open A / Open B for each running variant', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }] }));
+    expect(screen.getByRole('link', { name: 'Open A' })).toHaveAttribute('href', 'http://localhost:5173/a');
+  });
+
+  test('Tell Claude posts a direction and says honestly when Claude will read it', async () => {
+    await openRoom(hostState({ st: { AgentListeningAt: ago(3) } }));
+    expect(screen.getByTestId('brm-agentchip').textContent).toBe('Claude Code is listening for you');
+    const panel = screen.getByRole('region', { name: 'What next?' });
+    expect(within(panel).getByText('Claude is listening. It will act on this straight away.')).toBeInTheDocument();
+    fireEvent.change(within(panel).getByLabelText('Tell Claude'), { target: { value: 'Make the button green' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body).toEqual({ text: 'Make the button green' });
+    ['Ideas', 'Choose', 'Rate'].forEach((k) => expect(within(panel).getByRole('button', { name: new RegExp(`^${k}`) })).toBeInTheDocument());
+  });
+
+  test('when Claude has gone quiet, the panel offers the Continue prompt', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: ago(3600) } }));
+    const panel = screen.getByRole('region', { name: 'What next?' });
+    expect(within(panel).getByText(/If it has stopped, paste the Continue prompt/)).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Copy the Continue prompt/ })).toBeInTheDocument();
   });
 });
 

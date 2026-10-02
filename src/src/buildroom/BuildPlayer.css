@@ -636,3 +636,9 @@
 }
 
 .bpl .bpl-status.bpl-status--promoted { color: var(--bpl-success-text); }
+
+/* Screenshots: a mockup on its option card, the finished product under What we built. */
+.bpl .bimg { margin: 10px 0 0; }
+.bpl .bimg img, .bpl .bimg .bimg-wait { display: block; width: 100%; border-radius: 10px; border: 1px solid var(--bpl-rule); }
+.bpl .bimg .bimg-wait { aspect-ratio: 16 / 10; }
+.bpl .bimg figcaption { font-size: var(--plr-t-meta); color: var(--muted); margin-top: 6px; }

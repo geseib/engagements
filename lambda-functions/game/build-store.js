@@ -24,10 +24,10 @@ const STATUSES = Object.freeze(['proposed', 'live', 'voting', 'results', 'decide
 const OPEN_STATUSES = Object.freeze(['live', 'voting']);
 
 const LOG_KINDS = Object.freeze([
-  'progress', 'milestone', 'showing', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome',
+  'progress', 'milestone', 'showing', 'image', 'checkpoint', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome',
 ]);
 /** What Claude may post. Decisions and directions are the host's to write. */
-const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing']);
+const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint']);
 /** What the host may post by hand. */
 const HOST_LOG_KINDS = Object.freeze(['verbal', 'note', 'milestone', 'progress']);
 /** Never shown to the room, and never to Claude. */
@@ -64,6 +64,8 @@ const MAX_SUGGESTIONS_PER_PLAYER = 3;
 const DEFAULT_MAX_PICKS = 3;
 /** "Claude Code connected" means a call in the last two minutes. */
 const AGENT_ACTIVE_MS = 2 * 60 * 1000;
+/** "Claude is listening": wait_for_direction polled in the last 20 seconds. */
+const AGENT_LISTENING_MS = 20 * 1000;
 const KEY_PREFIX = 'eng_';
 
 // ── Small helpers ────────────────────────────────────────────────────────────
@@ -91,6 +93,23 @@ function safeUrl(value) {
   }
 }
 
+/**
+ * A link only the laptop can open: localhost, a loopback or private address,
+ * or a `.local` name. Claude runs on the host's laptop, so its mockups and its
+ * demo are usually here — the HOST can click them, a phone cannot, so phones
+ * never see them.
+ */
+function isLocalUrl(value) {
+  try {
+    const h = new URL(String(value)).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h === '0.0.0.0' || h === '::1'
+      || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+  } catch (e) {
+    return false;
+  }
+}
+const publicUrl = (u) => (u && !isLocalUrl(u) ? u : '');
+
 const pad3 = (n) => String(n).padStart(3, '0');
 const labelFor = (i) => String.fromCharCode(65 + i); // 0 → 'A'
 const newId = () => crypto.randomBytes(6).toString('hex');
@@ -106,7 +125,29 @@ const SK = Object.freeze({
   log: (iso) => `BUILD#LOG#${timeKey(iso)}`,
   idea: (iso) => `BUILD#IDEA#${timeKey(iso)}`,
   key: (hash) => `BUILD#KEY#${hash}`,
+  img: (iso) => `BUILD#IMG#${timeKey(iso)}`,
 });
+
+// ── Images (a mockup, the finished product) ──────────────────────────────────
+
+/** What a picture may be, by its first bytes — never by what the sender says. */
+const IMAGE_MAGIC = Object.freeze([
+  { type: 'image/png', test: (b) => b.length > 8 && b[0] === 0x89 && b.toString('latin1', 1, 4) === 'PNG' },
+  { type: 'image/jpeg', test: (b) => b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF },
+  { type: 'image/webp', test: (b) => b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP' },
+]);
+/** 3 MB: base64 in and base64 out both stay under Lambda's 6 MB payload. */
+const IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+const IMAGE_KINDS = Object.freeze(['mockup', 'final', 'progress']);
+const MAX_IMAGES = 60;
+
+function sniffImage(buf) {
+  const hit = IMAGE_MAGIC.find((m) => m.test(buf));
+  return hit ? hit.type : null;
+}
+
+/** The S3 key of a room's image. Random, and under a prefix nothing makes public. */
+const imageKey = (gameId, imageId) => `builds/${gameId}/${imageId}`;
 
 /** Which tenant-crypto entity a BUILD# row belongs to (null = nothing sealed). */
 function entityForSk(sk) {
@@ -115,6 +156,7 @@ function entityForSk(sk) {
   if (sk.startsWith('BUILD#RESP#') || sk.startsWith('BUILD#ANS#')) return 'buildResponse';
   if (sk.startsWith('BUILD#LOG#')) return 'buildLog';
   if (sk.startsWith('BUILD#IDEA#')) return 'buildIdea';
+  if (sk.startsWith('BUILD#IMG#')) return 'buildImage';
   return null;
 }
 
@@ -247,7 +289,7 @@ function transition(ask, action) {
 
 /** Sort every BUILD# row into its kind. Rows must already be decrypted. */
 function roomFromRows(rows) {
-  const room = { state: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [] };
+  const room = { state: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [] };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
     if (sk === SK.state) room.state = r;
@@ -258,11 +300,13 @@ function roomFromRows(rows) {
     else if (sk.startsWith('BUILD#LOG#')) room.logs.push(r);
     else if (sk.startsWith('BUILD#IDEA#')) room.ideas.push(r);
     else if (sk.startsWith('BUILD#KEY#')) room.keys.push(r);
+    else if (sk.startsWith('BUILD#IMG#')) room.images.push(r);
   }
   const bySk = (a, b) => String(a.SK).localeCompare(String(b.SK));
   room.asks.sort(bySk);
   room.logs.sort(bySk);
   room.ideas.sort(bySk);
+  room.images.sort(bySk);
   room.resps.sort((a, b) => String(a.CreatedAt || '').localeCompare(String(b.CreatedAt || '')));
   return room;
 }
@@ -319,7 +363,7 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '' })),
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: optionImages(room, ask.AskId)[o.label] || null })),
     scale: ask.Scale || null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
@@ -391,6 +435,27 @@ function logView(r) {
   };
 }
 
+function imageView(r) {
+  return {
+    imageId: r.ImageId,
+    caption: r.Caption || '',
+    kind: r.Kind || 'progress',
+    askId: r.AskId || null,
+    label: r.Label || null,
+    contentType: r.ContentType,
+    bytes: r.Bytes || 0,
+    by: r.By || 'agent',
+    createdAt: r.CreatedAt || null,
+  };
+}
+
+/** The newest picture of each option of an ask: { A: imageId, … }. */
+function optionImages(room, askId) {
+  const out = {};
+  for (const img of room.images) if (img.AskId === askId && img.Label) out[img.Label] = img.ImageId;
+  return out;
+}
+
 function ideaView(r) {
   return { ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null };
 }
@@ -432,8 +497,10 @@ function agentStatus(stateRow, keys, now) {
   const s = stateRow || {};
   const seen = s.AgentSeenAt ? Date.parse(s.AgentSeenAt) : NaN;
   const live = (keys || []).filter((k) => !k.RevokedAt).sort((a, b) => String(b.CreatedAt).localeCompare(String(a.CreatedAt)))[0];
+  const heard = s.AgentListeningAt ? Date.parse(s.AgentListeningAt) : NaN;
   return {
     connected: Number.isFinite(seen) && Date.parse(now) - seen < AGENT_ACTIVE_MS,
+    listening: Number.isFinite(heard) && Date.parse(now) - heard < AGENT_LISTENING_MS,
     lastSeenAt: s.AgentSeenAt || null,
     name: s.AgentName || 'Claude Code',
     key: live ? { keyId: live.KeyId, label: live.Label || '', createdAt: live.CreatedAt || null, lastUsedAt: live.LastUsedAt || null } : null,
@@ -461,6 +528,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // Host notes are the host's own; Claude never sees them.
     log: room.logs.filter((l) => !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
     ideas: isAgent ? [] : room.ideas.map(ideaView),
+    images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
   };
@@ -488,7 +556,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     state: sessionState || null,
     playerCount: players.length,
     currentAskId: current ? current.AskId : null,
-    current: current ? askView(current, room, 'public', me) : null,
+    current: current ? publicAsk(askView(current, room, 'public', me)) : null,
     decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision).map((a) => ({
       askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.direction || '', decidedAt: a.DecidedAt || null,
     })),
@@ -497,13 +565,23 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest)),
+      .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
+      .map((l) => ({ ...l, link: publicUrl(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName).map(ideaView) : [],
-    outcome: outcomeView(room.state && room.state.Outcome),
+    images: room.images.map(imageView),
+    outcome: publicOutcome(outcomeView(room.state && room.state.Outcome)),
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
     mine,
     rev: (room.state && room.state.Rev) || 0,
   };
+}
+
+/** A phone's copy of an ask: a preview it cannot open is not offered. */
+function publicAsk(ask) {
+  return { ...ask, options: ask.options.map((o) => ({ ...o, url: publicUrl(o.url) })) };
+}
+function publicOutcome(o) {
+  return o ? { ...o, links: o.links.filter((l) => !isLocalUrl(l.url)) } : o;
 }
 
 /**
@@ -538,9 +616,10 @@ function defaultDirection(ask, room) {
 
 module.exports = {
   GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
-  LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, KEY_PREFIX,
+  LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, AGENT_LISTENING_MS, KEY_PREFIX,
   SK, TRANSITIONS,
-  cleanText, safeUrl, pad3, labelFor, newId, entityForSk,
+  cleanText, safeUrl, isLocalUrl, publicUrl, pad3,
+  IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
