@@ -10,6 +10,11 @@
  * the host's direction, because the two often differ and the difference is the
  * useful part.
  *
+ * CREW MODE adds "Who built what" (docs/design/build-room-crew/FLOWS.md F10,
+ * storyboard frame 10): builders are named, because their work is theirs; the
+ * room stays a count. It reads `state.crew`, which GET build/state carries as
+ * `crewView(room, 'host')` (lambda-functions/game/build-crew.js).
+ *
  * A pure function of HostState (build-store.js `hostView`). Host notes are
  * left out: a `note` is never shown to the room, and a report gets handed
  * round. Everything Claude or a phone wrote renders as text; links only when
@@ -78,6 +83,86 @@ function Results({ ask }) {
       <span className="brr-pn">{x.votes || 0} votes</span>
     </div>
   ));
+}
+
+const LANE_WORD = { shared: 'Early look', reviewed: 'Reviewed', pr: 'Pull request open', merged: 'Merged', 'not-now': 'Not now' };
+const RECOMMENDATION_WORD = { merge: 'ready to merge', 'merge-after-changes': 'merge after changes', 'not-yet': 'not yet' };
+const short = (c) => String(c || '').slice(0, 7);
+const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+/** A repo as people say it: github.com/george/foodbank. */
+const repoLabel = (url) => String(url || '').replace(/^https?:\/\//, '').replace(/\.git$/, '');
+
+function EarlyLookRow({ share, builderBranch }) {
+  const versions = share.versions || [];
+  const last = versions[versions.length - 1] || { imageIds: [] };
+  const branch = last.branch && last.branch !== builderBranch ? last.branch : '';
+  const review = (share.reviews || []).length ? share.reviews[share.reviews.length - 1] : null;
+  const rx = share.reactions || {};
+  return (
+    <li className="brr-look">
+      <div className="brr-look-h">
+        <b>{share.title}</b>
+        <span className="brr-dim">
+          {' · '}{n(versions.length, 'version', 'versions')}
+          {' · '}{LANE_WORD[share.lane] || share.lane}
+          {share.lane === 'merged' && share.mergedCommit ? <> at <span className="brr-mono">{short(share.mergedCommit)}</span></> : null}
+        </span>
+        {branch ? <span className="brr-dim"> · branch <span className="brr-mono">{branch}</span></span> : null}
+        {share.prUrl ? <span className="brr-block brr-small"><Link href={share.prUrl}>Pull request</Link></span> : null}
+      </div>
+      {(last.imageIds || []).length > 0 && (
+        <div className="brr-shots">
+          {last.imageIds.map((id) => <BuildImage key={id} imageId={id} caption={`${share.title}, v${last.v}`} className="brr-shot" linked={false} />)}
+        </div>
+      )}
+      <p className="brr-small brr-rx">
+        Room: Looks right {rx['looks-right'] || 0} · Question {rx.question || 0} · Concern {rx.concern || 0}
+        {review ? <> · Claude&apos;s review: <b>{RECOMMENDATION_WORD[review.recommendation] || review.recommendation}</b></> : null}
+      </p>
+    </li>
+  );
+}
+
+function WhoBuiltWhat({ crew }) {
+  const builders = crew.builders || [];
+  const tasks = crew.tasks || [];
+  const shares = crew.shares || [];
+  return (
+    <section aria-labelledby="brr-crew">
+      <h2 id="brr-crew">Who built what</h2>
+      <p className="brr-small">
+        <b>The base branch:</b> {crew.baseBranch || 'not named'}
+        {crew.repoUrl ? <> on <Link href={crew.repoUrl}>{repoLabel(crew.repoUrl)}</Link></> : null}
+        {crew.baseCommit ? <> · final commit <span className="brr-mono">{short(crew.baseCommit)}</span></> : null}
+      </p>
+      {builders.map((b) => {
+        const theirs = shares.filter((s) => s.builder === b.name);
+        const took = tasks.filter((t) => (t.claimedBy || []).includes(b.name));
+        const merged = theirs.filter((s) => s.lane === 'merged').length;
+        return (
+          <div className="brr-builder" key={b.name}>
+            <div className="brr-dh">
+              <b>{b.name}</b>
+              <span>
+                {b.branch ? <>branch <span className="brr-mono">{b.branch}</span></> : 'no branch reported'}
+              </span>
+            </div>
+            <p className="brr-small brr-dim">
+              {n(theirs.length, 'early look', 'early looks')} · {merged} merged
+            </p>
+            <p className="brr-small">
+              <b>Tasks:</b> {took.length ? took.map((t) => t.text).join(', ') : 'none taken'}
+            </p>
+            {theirs.length ? (
+              <ul className="brr-looks">{theirs.map((s) => <EarlyLookRow key={s.shareId} share={s} builderBranch={b.branch} />)}</ul>
+            ) : <p className="brr-dim brr-small">Shared nothing yet.</p>}
+          </div>
+        );
+      })}
+      <p className="brr-dim brr-small">Commits are pointers. Engage holds no source code; the code lives in git.</p>
+    </section>
+  );
 }
 
 function Decision({ ask }) {
@@ -192,6 +277,8 @@ export default function BuildReport({ state, onBack }) {
             <p className="brr-dim">No wrap-up yet. Ask Claude to wrap up, or write one from the room.</p>
           )}
         </section>
+
+        {s.crew && s.crew.enabled && (s.crew.builders || []).length > 0 && <WhoBuiltWhat crew={s.crew} />}
 
         <section aria-labelledby="brr-decisions">
           <h2 id="brr-decisions">Decisions</h2>

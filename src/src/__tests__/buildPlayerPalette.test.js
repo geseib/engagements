@@ -22,6 +22,7 @@ const CSS = strip(RAW);
 const GLOBAL_CSS = read('styles.css');
 const PLR_CSS = read('components', 'PlayerSurface.css');
 const JSX = read('buildroom', 'BuildPlayer.jsx');
+const CREW_JSX = read('buildroom', 'BuildPlayerCrew.jsx');
 
 /* ---- colour ---- */
 const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -91,6 +92,20 @@ describe('every pairing clears AA on what it is really drawn on', () => {
     ['the Send idea button, text on the blue tint', T.text, blueField],
     ['result numbers, muted on the field', T.muted, T.bg],
   ];
+  // Crew mode (BuildPlayerCrew.jsx): the same tokens and tints, new places.
+  const blueCard = over(tint('--bpl-blue-tint'), T.surface);
+  pairs.push(
+    ['crew: the review card, text on the blue tint over --surface', T.text, blueCard],
+    ['crew: needs a rebase / the race / private notice, amber on a card', T.primary, T.surface],
+    ['crew: up to date / merged, green on a card', T.successText, T.surface],
+    ['crew: the key line and reaction buttons, text on --bg', T.text, T.bg],
+    ['crew: a pressed reaction (amber tint over --bg)', T.text, amberField],
+    ['crew: the join card lines, muted on a card', T.muted, T.surface],
+    ['crew: question kind and "new key" link, blue on a card', T.secondary, T.surface],
+    ['crew: the base-moved notice, text on the amber tint', T.text, amberField],
+    ['crew: Take this task, text on the blue tint over --surface', T.text, blueCard],
+  );
+
   test.each(pairs)('%s', (_, fg, bg) => {
     expect(ratio(fg, bg)).toBeGreaterThanOrEqual(AA);
   });
@@ -105,6 +120,13 @@ describe('every pairing clears AA on what it is really drawn on', () => {
     expect(block('.bpl .bpl-sent')).toMatch(/color:\s*var\(--bpl-success-text\)/);
     expect(block('.bpl .bpl-latest')).toMatch(/background:\s*var\(--bpl-amber-tint\)/);
     expect(block('.bpl .bpl-send')).toMatch(/background:\s*var\(--bpl-blue-tint\)/);
+    expect(block('.bpl .bpl-review')).toMatch(/background:\s*var\(--bpl-blue-tint\)/);
+    expect(block('.bpl .bpl-el')).toMatch(/background:\s*var\(--surface\)/);
+    expect(block('.bpl .bpl-keyline')).toMatch(/background:\s*var\(--bg\)/);
+    expect(block('.bpl .bpl-rxbtn')).toMatch(/background:\s*var\(--bg\)/);
+    expect(block('.bpl .bpl-rxbtn[aria-pressed="true"]')).toMatch(/background:\s*var\(--bpl-amber-tint\)/);
+    expect(block('.bpl .bpl-base')).toMatch(/background:\s*var\(--bpl-amber-tint\)/);
+    expect(block('.bpl .bpl-take')).toMatch(/background:\s*var\(--bpl-blue-tint\)/);
   });
 
   test('the local greys are the player surface\'s own, not a third grey', () => {
@@ -164,6 +186,8 @@ describe('type and targets', () => {
   test('every input renders at the player\'s input size or larger (no iOS zoom)', () => {
     // The inputs reuse `.plr-inp` (19px on a phone) and this sheet never resizes one.
     expect(JSX).not.toMatch(/<(input|textarea)(?![^>]*plr-inp)[^>]*>/);
+    expect(CREW_JSX).not.toMatch(/<(input|textarea)(?![^>]*plr-inp)[^>]*>/);
+    expect(CREW_JSX).toMatch(/<textarea[\s\S]*?className="plr-inp/);
     expect(CSS).not.toMatch(/\.bpl-area[^{]*\{[^}]*font-size/);
   });
 
@@ -172,6 +196,10 @@ describe('type and targets', () => {
     expect(block('.bpl .bpl-vrow')).toMatch(/min-height:\s*56px/);
     expect(block('.bpl .bpl-ideabtn')).toMatch(/min-height:\s*var\(--bpl-tap\)/);
     expect(block('.bpl .bpl-send')).toMatch(/min-height:\s*var\(--bpl-tap\)/);
+    expect(block('.bpl .bpl-copy')).toMatch(/min-height:\s*var\(--bpl-tap\)/);
+    expect(block('.bpl .bpl-take')).toMatch(/min-height:\s*var\(--bpl-tap\)/);
+    expect(block('.bpl .bpl-textbtn')).toMatch(/min-height:\s*var\(--bpl-tap\)/);
+    expect(block('.bpl .bpl-rxbtn')).toMatch(/min-height:\s*56px/);
     expect(CSS).toMatch(/--bpl-tap:\s*44px/);
   });
 
