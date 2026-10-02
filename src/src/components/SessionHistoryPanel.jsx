@@ -4,6 +4,9 @@ import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
 import { formatWhen, countOrDash } from '../config/tableCells';
 import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameTypes';
+import {
+  BUILD_LABEL, isBuildSession, buildRoomPath, buildReportPath,
+} from '../buildroom/buildHostApi';
 
 /**
  * THE HOST'S OWN SESSION LIST, AS A TABLE.
@@ -101,6 +104,13 @@ import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameType
  * unchanged, the same as any other session of its `started` state.
  */
 export function rowActions(session) {
+  // A Build Room opens on its own page (/build), which starts nothing and
+  // edits nothing here: Continue and Report, always.
+  if (isBuildSession(session)) {
+    return {
+      start: false, continue: true, report: true, edit: false, results: false,
+    };
+  }
   if (session.gameType === 'survey' && session.surveyClosed) {
     return {
       start: false, continue: true, report: true, edit: false, results: true,
@@ -147,6 +157,8 @@ export default function SessionHistoryPanel({
   onResults = () => {},
   onOpen = () => {},
   onStart = () => {},
+  /** Where a Build Room row goes: /build is a page of its own. Injectable for tests. */
+  navigate = (url) => window.location.assign(url),
   onEdit = () => {},
   onClose = () => {},
   /**
@@ -291,7 +303,13 @@ export default function SessionHistoryPanel({
                   </td>
                   <td className="shist__mono">{session.gameId}</td>
                   <td>
-                    {type ? (
+                    {isBuildSession(session) ? (
+                      /* Not a config/gameTypes.js type on purpose (Build Room PLAN §4). */
+                      <span className="shist__chip shist__chip--type">
+                        <Icon name="Wrench" weight="bold" size={13} color="currentColor" />
+                        {` ${BUILD_LABEL}`}
+                      </span>
+                    ) : type ? (
                       <span className="shist__chip shist__chip--type">
                         <Icon
                           name={gameTypeMeta(type).icon}
@@ -344,7 +362,7 @@ export default function SessionHistoryPanel({
                         <button
                           type="button"
                           className="shist__btn shist__btn--sm"
-                          onClick={() => onReport(session.gameId, title)}
+                          onClick={() => (isBuildSession(session) ? navigate(buildReportPath(session.gameId)) : onReport(session.gameId, title))}
                           title={`Read the report for "${title}"`}
                         >
                           <Icon name="ChartBar" weight="bold" size={14} /> Report
@@ -400,7 +418,7 @@ export default function SessionHistoryPanel({
                         <button
                           type="button"
                           className="shist__btn shist__btn--sm shist__btn--primary"
-                          onClick={() => onOpen(session.gameId, title)}
+                          onClick={() => (isBuildSession(session) ? navigate(buildRoomPath(session.gameId)) : onOpen(session.gameId, title))}
                           title={`Continue "${title}"`}
                         >
                           <Icon name="Play" weight="fill" size={14} /> Continue

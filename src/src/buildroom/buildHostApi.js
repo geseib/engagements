@@ -1,0 +1,163 @@
+/**
+ * BUILD ROOM — the host's client (docs/design/build-room/PLAN.md §6.1).
+ *
+ * One small function per host route on `/games/{gameId}/build/{proxy+}`, all
+ * over `authFetch` so the Cognito token and the active org ride along exactly
+ * as they do for every other host call. The handler is
+ * lambda-functions/game/build-room.js; the shapes it answers with are
+ * build-store.js's `hostView` / `askView`.
+ *
+ * EVERY CALL THROWS ON FAILURE, with the server's own sentence when it sent
+ * one (`{error}`), so the page can show it as it is. build-room.js writes those
+ * sentences for a person ("This ask is live; \"open\" needs it to be proposed").
+ *
+ * The API base is read at call time, never cached: config.js sets
+ * `window.API_BASE` before the bundle runs, and tests set it per case.
+ */
+import { authFetch } from '../auth/authFetch';
+import { requestEndSession } from '../utils/endSession';
+import { requestHostTicket } from '../utils/hostTicketClient';
+
+/** `window.API_BASE`, always ending in exactly one slash. */
+export function apiBase() {
+  const base = String((typeof window !== 'undefined' && window.API_BASE) || '');
+  return base ? base.replace(/\/+$/, '') + '/' : '';
+}
+
+const seg = (value) => encodeURIComponent(String(value));
+
+async function readError(response) {
+  try {
+    const body = await response.json();
+    if (body && typeof body.error === 'string' && body.error.trim()) return body.error;
+    if (body && typeof body.message === 'string' && body.message.trim()) return body.message;
+  } catch (e) {
+    /* an unreadable body says nothing; fall through to the status */
+  }
+  return `The server said no (${response.status}).`;
+}
+
+async function call(path, { method = 'GET', body } = {}) {
+  let response;
+  try {
+    response = await authFetch(`${apiBase()}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch (e) {
+    throw new Error('That did not reach the server. Check the connection and try again.');
+  }
+  if (!response.ok) {
+    const err = new Error(await readError(response));
+    err.status = response.status;
+    throw err;
+  }
+  try {
+    return await response.json();
+  } catch (e) {
+    return {};
+  }
+}
+
+/** The host routes of one Build Room. */
+export function buildApi(gameId) {
+  const root = `games/${seg(gameId)}/build/`;
+  const post = (path, body = {}) => call(root + path, { method: 'POST', body });
+  return {
+    /** HostState. */
+    state: () => call(`${root}state`),
+    /** `{kind, prompt, detail?, options?, lowLabel?, highLabel?, maxPicks?, draft?}` → `{ask}` */
+    createAsk: (body) => post('asks', body),
+    getAsk: (askId) => call(`${root}asks/${seg(askId)}`),
+    /** `{action:'edit'|'open'|'vote'|'close'|'decide'|'reopen'|'discard', …}` → `{ask}` */
+    askAction: (askId, body) => post(`asks/${seg(askId)}`, body),
+    /** Add what the room said out loud as a suggestion. */
+    addResponse: (askId, text) => post(`asks/${seg(askId)}/responses`, { text }),
+    /** `{action:'hide'|'show'|'edit', text?}` */
+    responseAction: (askId, respId, body) => post(`asks/${seg(askId)}/responses/${seg(respId)}`, body),
+    /** `{kind, text, detail?, link?, forAgent?}` → `{entry}` */
+    postLog: (body) => post('log', body),
+    /** `{action:'edit'|'delete', text?, detail?}` → `{entry}` */
+    logAction: (logId, body) => post(`log/${seg(logId)}`, body),
+    postDirection: (text) => post('directions', { text }),
+    /** 'direct' | 'suggest' | 'dismiss' | 'restore' */
+    ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
+    /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */
+    saveOutcome: (body) => post('outcome', body),
+    /** `{reviewAgentAsks?, agentName?}` → `{settings}` */
+    saveSettings: (body) => post('settings', body),
+    /** → `{key, keyId}`. The key is shown once. */
+    mintKey: (label) => post('keys', label ? { label } : {}),
+    revokeKey: (keyId) => post(`keys/${seg(keyId)}/revoke`),
+    /** POST games/{id}/end — the same call GameHostPage's End makes. */
+    endSession: async () => {
+      const result = await requestEndSession({ fetchFn: authFetch, apiBase: apiBase(), gameId });
+      if (!result.ended) throw new Error(result.error || 'The session did not end.');
+      return result.data;
+    },
+    /** The single-use ticket that makes this page's socket a HOST socket. */
+    hostTicket: async () => (await requestHostTicket({ fetchFn: authFetch, apiBase: apiBase(), gameId })).ticket,
+  };
+}
+
+/**
+ * Create and start a Build Room. Resolves the new gameId.
+ *
+ * `POST /games` is create-game.js, a whitelist: `eventTitle`, `engagementInfo`
+ * (stored as METADATA `Details`, which build-store reads as the goal),
+ * `gameType`, `visibility`, `accessCode`. Then `POST games/{id}/start`, because
+ * a Build Room has no lobby: the room joins while Claude builds.
+ */
+export async function createBuildSession({ title, goal, visibility = 'public', accessCode = '' }) {
+  const body = {
+    eventTitle: String(title || '').trim(),
+    engagementInfo: String(goal || '').trim(),
+    gameType: 'build',
+    visibility: visibility === 'private' ? 'private' : 'public',
+    ...(visibility === 'private' ? { accessCode: String(accessCode || '').trim() } : {}),
+  };
+  const created = await call('games', { method: 'POST', body });
+  const gameId = created && created.gameId;
+  if (!gameId) throw new Error('The session was created without a code. Try again.');
+  await call(`games/${seg(gameId)}/start`, { method: 'POST', body: {} });
+  return String(gameId);
+}
+
+// ── Where a Build Room lives ────────────────────────────────────────────────
+
+/** `build` is deliberately not in config/gameTypes.js (PLAN §4), so it is named here. */
+export const BUILD_GAME_TYPE = 'build';
+export const BUILD_LABEL = 'Build Room';
+export const isBuildSession = (session) => Boolean(session) && session.gameType === BUILD_GAME_TYPE;
+export const buildRoomPath = (gameId) => `/build?gameId=${encodeURIComponent(gameId)}`;
+export const buildReportPath = (gameId) => `${buildRoomPath(gameId)}&view=report`;
+
+// ── Untrusted text ──────────────────────────────────────────────────────────
+
+/** An http(s) URL as a string, or '' — anything Claude or a phone sent is untrusted. */
+export function safeHref(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * The one command the host pastes (PLAN §7): fetch the MCP server from this
+ * site and register it with the real API base and the freshly minted key.
+ */
+export function connectCommand({ origin, api, key }) {
+  const site = String(origin || '').replace(/\/+$/, '');
+  return [
+    `curl -fsSL ${site}/engage-mcp.mjs -o ~/.engage-mcp.mjs \\`,
+    '  && claude mcp add engage \\',
+    `  --env ENGAGE_API=${api} \\`,
+    `  --env ENGAGE_KEY=${key} \\`,
+    '  -- node ~/.engage-mcp.mjs',
+  ].join('\n');
+}

@@ -82,6 +82,7 @@ import useSurveyProgress, {
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
 import { requestHostTicket } from './utils/hostTicketClient';
+import { BUILD_GAME_TYPE, buildRoomPath } from './buildroom/buildHostApi';
 import { readStartRefusal } from './utils/startRefusal';
 import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
@@ -1151,7 +1152,8 @@ function GameHostPage() {
         const gameData = await response.json();
         return {
           exists: true,
-          started: gameData.started === true
+          started: gameData.started === true,
+          gameType: gameData.gameType || null
         };
       } else if (response.status === 404) {
         return { exists: false, started: false };
@@ -1943,6 +1945,11 @@ Focus on actionable business strategy insights.`;
       
       // Check if this game exists and is started before proceeding
       checkGameStatus(gameIdFromUrl).then(gameStatus => {
+        // A Build Room has its own page (buildroom/BuildRoomPage.jsx).
+        if (gameStatus.gameType === BUILD_GAME_TYPE) {
+          window.location.replace(buildRoomPath(gameIdFromUrl));
+          return;
+        }
         if (gameStatus.exists) {
           if (gameStatus.started || eventItemStage) {
             // Game exists and is started - go to game screen
@@ -4787,6 +4794,10 @@ Focus on actionable business strategy insights.`;
     // (started, or the status check itself failing) goes straight to the
     // stage as before.
     checkGameStatus(gameIdToUse).then((gameStatus) => {
+      if (gameStatus.gameType === BUILD_GAME_TYPE) {
+        window.location.assign(buildRoomPath(gameIdToUse));
+        return;
+      }
       if (gameStatus.exists && !gameStatus.started) {
         console.log(`⚠️ HOST: Game ${gameIdToUse} exists but not started — showing game history`);
         setShowWelcomeScreen(true);

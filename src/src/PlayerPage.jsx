@@ -21,6 +21,7 @@ import FeedbackRoundPanel from './components/FeedbackRoundPanel';
 import { postComment, fetchFeedbackRound, fetchComments } from './utils/commentsClient';
 import { PlayerShell } from './components/PlayerShell';
 import SurveyRunner from './components/survey/SurveyRunner';
+import BuildPlayer from './buildroom/BuildPlayer';
 import RatingInput from './components/survey/RatingInput';
 import ChoiceInput from './components/survey/ChoiceInput';
 import YesNoInput from './components/survey/YesNoInput';
@@ -502,6 +503,9 @@ function PlayerPage({ event = null } = {}) {
   // `surveyClosingSoon` frame. A phone that loads after it was given reads it
   // from GET /survey instead (SurveyRunner).
   const [surveyWarning, setSurveyWarning] = useState(null);
+  // A Build Room's refresh counter: bumped by every `buildChanged` frame, and
+  // BuildPlayer refetches its own PublicState when it moves (notify → refresh).
+  const [buildRev, setBuildRev] = useState(0);
 
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
@@ -1053,6 +1057,16 @@ function PlayerPage({ event = null } = {}) {
     });
 
     /*
+      A BUILD ROOM'S ONE FRAME (docs/design/build-room/PLAN.md §6.1): every
+      write in the room broadcasts `buildChanged`, and the phone refetches.
+      Held here for the reason the survey frames are: one handler per type,
+      and this effect owns them all.
+    */
+    webSocketClient.onMessage('buildChanged', () => {
+      setBuildRev((n) => n + 1);
+    });
+
+    /*
       THE EVENT'S FRAMES (events M3/M4, websocket/events/run.js). They arrive
       on this session's socket, and the event's own page decides what the
       attendee sees next — the paused screen, the agenda, the next item — so
@@ -1099,6 +1113,7 @@ function PlayerPage({ event = null } = {}) {
       webSocketClient.offMessage('gameEnded');
       webSocketClient.offMessage('surveyClosingSoon');
       webSocketClient.offMessage('surveyClosed');
+      webSocketClient.offMessage('buildChanged');
       for (const type of EVENT_FRAMES) webSocketClient.offMessage(type);
     };
   }, [gameId, playerName, joined, useWebSocket]);
@@ -3174,6 +3189,28 @@ function PlayerPage({ event = null } = {}) {
           namesShown={false}
         />
       </PlayerShell>
+    );
+  }
+
+  /* ----------------------------------------------------------- BUILD ROOM --
+     A Build Room (docs/design/build-room/PLAN.md) has no rounds either: the
+     whole joined surface is BuildPlayer, which reads its own PublicState from
+     /build-play/state. Read off the RAW type — 'build' is deliberately not in
+     config/gameTypes.js, so normalizing it would make it call-and-answer and
+     put the phone in that lobby. Before the ENDED branch: its ended screen is
+     "What we built", not a score. */
+  if (gameType === 'build') {
+    return (
+      <BuildPlayer
+        gameId={gameId}
+        playerName={playerName}
+        clientId={getClientId(gameId)}
+        apiBase={API_BASE}
+        rev={buildRev}
+        ended={gameState === 'ENDED'}
+        online={wsConnected}
+        banner={offlineBanner}
+      />
     );
   }
 

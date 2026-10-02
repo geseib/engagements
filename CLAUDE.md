@@ -144,6 +144,18 @@ Create → Start (players join) → Questions (ASK/VOTE/RESULTS) → End
   counted by the survey's own aggregate (`game/poll-round.js`).
 - **Call & Answer**: ASK → VOTE → RESULTS
 
+- **Build Room** (`GameType: 'build'`, since 2026-10-02): the room and the host's
+  own Claude Code build something together. Claude asks through a local MCP
+  server (`src/public/engage-mcp.mjs`, served at `/engage-mcp.mjs`) holding a
+  session key `eng_<gameId>_…` that the authorizer admits on that session's
+  `/build/{proxy+}` routes only. Asks are Ideas (suggest → vote), Choose (A/B/C)
+  and Rate; the host shapes each result into a direction Claude receives on its
+  next call. Its own handler, rows (`BUILD#…`) and pages; NOT in `GAME_TYPES`.
+  Plan, contract and storyboard: `docs/design/build-room/`. Local end-to-end
+  demo with no AWS: `scripts/build-room-demo/`. Frontend lives in
+  `src/src/buildroom/` — never a folder named `build/`, which `.gitignore`
+  swallows whole.
+
 ### Real-time Features
 - WebSocket connections for live updates
 - Host/player synchronization

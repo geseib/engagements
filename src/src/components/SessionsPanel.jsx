@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { resolveGameType, gameTypeLabel } from '../config/gameTypes';
+import {
+  BUILD_LABEL, isBuildSession, buildRoomPath, buildReportPath,
+} from '../buildroom/buildHostApi';
 import Icon from './Icon';
 import ListControls from './ListControls';
 import useListControls from '../hooks/useListControls';
@@ -361,7 +364,11 @@ export default function SessionsPanel({
                     </td>
                     <td className="sp-mono">{session.gameId}</td>
                     <td>
-                      {type ? <span className="sp-chip sp-chip--type">{gameTypeLabel(type)}</span> : '—'}
+                      {/* A Build Room is deliberately not a config/gameTypes.js type
+                          (resolveGameType answers null), so it is named here. */}
+                      {isBuildSession(session)
+                        ? <span className="sp-chip sp-chip--type">{BUILD_LABEL}</span>
+                        : type ? <span className="sp-chip sp-chip--type">{gameTypeLabel(type)}</span> : '—'}
                     </td>
                     <td>
                       <span className={`sp-chip ${session.started ? 'sp-chip--on' : 'sp-chip--off'}`}>
@@ -377,6 +384,12 @@ export default function SessionsPanel({
                     <td className="sp-when">{formatWhen(session.lastPlayedAt)}</td>
                     <td>
                       <div className="sp-rowact">
+                        {isBuildSession(session) && (
+                          <>
+                            <a className="sp-btn sp-btn--sm" href={buildRoomPath(session.gameId)}>Open</a>
+                            <a className="sp-btn sp-btn--sm" href={buildReportPath(session.gameId)}>Report</a>
+                          </>
+                        )}
                         <button
                           type="button"
                           className="sp-btn sp-btn--sm sp-btn--ghostdanger"

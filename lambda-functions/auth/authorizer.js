@@ -623,6 +623,18 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && path === 'games') {
     return ['hosts', 'admins'];
   }
+  // ── A BUILD ROOM'S HOST ROUTES ───────────────────────────────────────────
+  //
+  // `GET /games/{gameId}/build/{proxy+}` returns the whole room — every
+  // suggestion with its author, the ideas inbox, the host's private notes and
+  // the session key's status. A signed-in human reaches it only as a host;
+  // without this line the generic "GET + games is public" rule below would
+  // admit any pool account, `pending` included. (Claude's session key never
+  // reaches this function's group check — see agentKeyContext.) The phones
+  // use the separate, unauthorized `/build-play/` routes.
+  if (path === 'games/{gameId}/build/{proxy+}') {
+    return ['hosts', 'admins'];
+  }
   // ── A SURVEY'S HOST READS ────────────────────────────────────────────────
   //
   // `GET /games/{gameId}/survey/progress` and `/survey/people` say who has and
@@ -740,6 +752,59 @@ function requiredGroupsForRoute(method, path) {
   return ['hosts', 'admins'];
 }
 
+// ── BUILD ROOM: the host's Claude Code (docs/design/build-room/PLAN.md §6.1) ──
+//
+// A Build Room session lets the host register their own Claude Code with an
+// MCP server that calls this API with a SESSION KEY, `eng_<gameId>_<secret>`,
+// minted on the session page (game/build-room.js) and stored only as its
+// sha256 under GAME#<gameId>/BUILD#KEY#<hash>.
+//
+// The key is NOT a user. It opens exactly one session's `build/*` routes and
+// nothing else: the route must be the build proxy, the path's gameId must be
+// the key's, the row must exist and must not be revoked. Anything else is a
+// plain deny — never a fall-through to the JWT branch. The context carries no
+// groups, an org taken from the SESSION (not from any caller), and the game it
+// is pinned to, which build-room.js checks again.
+const crypto = require('crypto');
+const AGENT_KEY_RE = /^eng_(\d{4})_([A-Za-z0-9_-]{43})$/;
+const AGENT_ROUTE = 'games/{gameId}/build/{proxy+}';
+
+async function agentKeyContext(event, token) {
+  const m = AGENT_KEY_RE.exec(token);
+  if (!m) return null;
+  const keyGameId = m[1];
+  const [, routePath] = (event.routeKey || '').split(' ');
+  const route = (routePath || '').replace(/^\//, '');
+  const pathGameId = (event.pathParameters && event.pathParameters.gameId) || '';
+  if (route !== AGENT_ROUTE || pathGameId !== keyGameId) {
+    console.log(`Authorization denied: session key for ${keyGameId} used on ${event.routeKey}`);
+    return null;
+  }
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  const [keyRow, metaRow] = await Promise.all([
+    dynamodb.send(new GetCommand({ TableName: process.env.TABLE_NAME, Key: { PK: `GAME#${keyGameId}`, SK: `BUILD#KEY#${hash}` } })),
+    dynamodb.send(new GetCommand({ TableName: process.env.TABLE_NAME, Key: { PK: `GAME#${keyGameId}`, SK: 'METADATA' }, ProjectionExpression: 'orgId, GameType' })),
+  ]);
+  const key = keyRow && keyRow.Item;
+  const meta = (metaRow && metaRow.Item) || {};
+  if (!key || key.RevokedAt || meta.GameType !== 'build') {
+    console.log(`Authorization denied: unknown or revoked session key for ${keyGameId}`);
+    return null;
+  }
+  if (key.ttl && Number(key.ttl) * 1000 < Date.now()) return null;
+  const orgId = meta.orgId || '';
+  return {
+    agent: 'build',
+    agentGameId: keyGameId,
+    agentKeyHash: hash,
+    agentKeyId: key.KeyId || '',
+    userId: `agent:${key.MintedBy || keyGameId}`,
+    groups: '',
+    orgId,
+    orgIds: orgId,
+  };
+}
+
 // Main handler — HTTP API payload 2.0 simple response
 exports.handler = async (event) => {
   try {
@@ -750,6 +815,11 @@ exports.handler = async (event) => {
     if (!token) {
       console.log('Authorization denied: no token');
       return { isAuthorized: false };
+    }
+
+    if (token.startsWith('eng_')) {
+      const agent = await agentKeyContext(event, token);
+      return agent ? { isAuthorized: true, context: agent } : { isAuthorized: false };
     }
 
     // Verify token
@@ -813,6 +883,7 @@ exports.handler = async (event) => {
 module.exports.HOST_ADMIN_ROUTES = HOST_ADMIN_ROUTES;
 module.exports.verifyToken = verifyToken;
 module.exports.getUserGroups = getUserGroups;
+module.exports.agentKeyContext = agentKeyContext;
 module.exports.hasPermission = hasPermission;
 module.exports.requiredGroupsForRoute = requiredGroupsForRoute;
 module.exports.getUserMemberships = getUserMemberships;
