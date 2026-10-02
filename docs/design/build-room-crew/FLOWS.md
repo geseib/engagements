@@ -1,7 +1,10 @@
-# Build Room: Crew mode (design, not built)
+# Build Room: Crew mode
 
-*2026-10-02. The storyboard is `index.html` in this folder. Nothing here is built yet. This
-document is for deciding what to build.*
+*2026-10-02. The storyboard is `index.html` in this folder. Built the same day, with the
+decisions in §6 and the update after them: code in `lambda-functions/game/build-crew.js`,
+`src/src/buildroom/BuildCrew.jsx` and `BuildPlayerCrew.jsx`, and Claude's crew tools in
+`src/public/engage-mcp.mjs`. The local walk-through is `scripts/build-room-demo/crew-e2e.js`.
+Where the flows below say fork, read "a branch on the shared repo" (see the update).*
 
 ## 1. The shift
 
