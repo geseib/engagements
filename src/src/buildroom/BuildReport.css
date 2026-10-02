@@ -116,3 +116,13 @@
   .brr .brr-tbl tr { break-inside: avoid; }
   .brr .brr-pb, .brr .brr-direction, .brr .brr-ppl li { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
+
+/* Screenshots: mockups on their decision, the finished product, the journey. */
+.brr .brr-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 10px 0 12px; }
+.brr .brr-shots--final { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.brr .bimg { margin: 0; break-inside: avoid; }
+.brr .bimg img, .brr .bimg .bimg-wait { display: block; width: 100%; border: 1px solid var(--brr-rule); border-radius: 6px; }
+.brr .bimg .bimg-wait { aspect-ratio: 16 / 10; }
+.brr .bimg figcaption { font-size: var(--brr-t-floor); color: var(--muted); margin-top: 4px; }
+
+.brr .brr-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--brr-t-label); }

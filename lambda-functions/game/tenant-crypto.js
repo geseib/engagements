@@ -510,12 +510,15 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *   buildResponse — SK=BUILD#RESP#… a suggestion, and BUILD#ANS#… the "why"
    *                   a phone gave with its pick.
    *   buildLog      — SK=BUILD#LOG#…: the timeline.
-   *   buildIdea     — SK=BUILD#IDEA#…: an idea sent from a phone. */
+   *   buildIdea     — SK=BUILD#IDEA#…: an idea sent from a phone.
+   *   buildImage    — SK=BUILD#IMG#…: a screenshot's caption. (The image's
+   *                   bytes live in S3, sealed with encryptValue.) */
   buildState: Object.freeze(['Outcome']),
   buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision']),
   buildResponse: Object.freeze(['Text', 'Why']),
   buildLog: Object.freeze(['Text', 'Detail', 'Link']),
   buildIdea: Object.freeze(['Text']),
+  buildImage: Object.freeze(['Caption']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

@@ -3874,7 +3874,16 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
           WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+          # Screenshots of mockups and of what was built (build-room.js postImage).
+          MEDIA_BUCKET: !Ref MediaBucket
       Policies:
+        # The room's screenshots, under builds/ only — a private prefix (the
+        # bucket's public read is sets/* alone), read back through this
+        # function behind the host / phone checks, never by a public URL.
+        - Statement:
+          - Effect: Allow
+            Action: [ s3:PutObject, s3:GetObject, s3:DeleteObject ]
+            Resource: !Sub '${MediaBucket.Arn}/builds/*'
         # Everything Claude and the room write is sealed under the session's org
         # (ENCRYPTED_FIELDS.buildAsk/buildResponse/buildLog/buildIdea/buildState).
         - Version: '2012-10-17'
@@ -5841,6 +5850,12 @@ Resources:
             Status: Enabled
             Prefix: staging/decks/
             ExpirationInDays: 1
+          # A Build Room's screenshots outlive its rows (7 days from start) long
+          # enough to print the report, and no longer.
+          - Id: ExpireBuildRoomImages
+            Status: Enabled
+            Prefix: builds/
+            ExpirationInDays: 30
       Tags:
         - Key: Environment
           Value: !Ref Environment

@@ -302,3 +302,44 @@ plan out loud, post the plan), `ideas` (ask the room for ideas about a topic), `
   `build/`.
 - Local end-to-end demo with no AWS: `scripts/build-room-demo/`. It runs the real
   handler, the real MCP server and a real browser.
+
+## 13. Screenshots, the plugin and version control (2026-10-02, second round)
+
+- **When Claude is done, the room knows it.**
+  - The stage turns into **What we built**: the summary, the build list, next steps and an
+    **Open the demo** button.
+  - **What next?** sits under the stage at all times. **Tell Claude** sends a direction, and
+    **Ask the room** offers Ideas, Choose and Rate.
+  - Claude keeps listening with `wait_for_direction`, and the chip reads "Claude is listening
+    for you".
+- **Local links are buttons for the host.** Each running mockup gets **Open A** / **Open B**,
+  and Claude's "showing" posts and wrap-up links work the same way. Local addresses work
+  because Claude runs on the host's laptop. Phones never see them, because a phone cannot
+  open them.
+- **Screenshots.** `share_image` sends a PNG, JPEG or WebP (up to 3 MB).
+  - The handler checks the image by its bytes and stores it privately under `builds/<game>/`
+    in the media bucket. An org session's image is sealed with the org's key. The bucket
+    expires these objects after 30 days.
+  - Images are read only through `/build/images/{id}` (host) or `/build-play/images/{id}`
+    (a phone, through its seat). They are never public URLs.
+  - A mockup tied to an option (`askId` + `label`) shows on that option on the wall and on
+    every phone. A `final` image shows on What we built and in the report. Everything else
+    appears under "Screenshots along the way".
+- **The plugin.** `node engage-mcp.mjs --install-plugin --api <api>` writes a local marketplace
+  to `~/.engage/claude-plugin` and installs it with the `claude` CLI. The plugin bundles:
+  - this server;
+  - the `/engage:connect <key>` command, plus kickoff, ideas, ab-mockups, continue and
+    wrap-up as `/engage:*` commands;
+  - a **Stop hook** that commits at the end of every turn.
+
+  `connect` saves the key in the project's `.engage/session.json`, which is git-ignored and
+  readable only by its owner. A new session therefore needs only `/engage:connect`. Validated
+  against Claude Code 2.1.287 with `claude plugin validate`, and its MCP server reports
+  Connected.
+- **Version control.**
+  - The `checkpoint` tool and the Stop hook commit in the project. They first make it a git
+    repository if it is not one, with a default `.gitignore`, and they never push.
+  - The hook acts **only** in a project connected to a Build Room. It never touches any other
+    folder, and it never fails the turn.
+  - Each commit lands on the timeline as a `checkpoint`, and the report has a **Version
+    history** listing each commit and what changed.

@@ -1,0 +1,187 @@
+/**
+ * THE ENGAGE PLUGIN PATH — connect once per project, keep every step in git.
+ *
+ * Drives the real src/public/engage-mcp.mjs against a fake Engage API in
+ * throwaway folders (never this repository):
+ *   - `connect` saves the key in the project's .engage/ (git-ignored) and
+ *     every tool works from then on with no environment variables;
+ *   - `checkpoint` makes a plain folder a git repository, commits, and puts
+ *     the commit on the room's timeline;
+ *   - `--checkpoint` (the plugin's Stop hook) commits in a CONNECTED project
+ *     and does nothing at all in any other folder;
+ *   - `--install-plugin` writes a local marketplace with the plugin, its
+ *     commands and its hook, and says what to run when `claude` is absent.
+ */
+const suiteFinished = require('./helpers/finish-guard');
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const http = require('http');
+const { spawn, spawnSync, execFileSync } = require('child_process');
+
+const SCRIPT = path.join(__dirname, '..', 'src', 'public', 'engage-mcp.mjs');
+const KEY = `eng_4321_${'k'.repeat(43)}`;
+const requests = [];
+
+const server = http.createServer((req, res) => {
+  let raw = '';
+  req.on('data', (c) => { raw += c; });
+  req.on('end', () => {
+    requests.push({ method: req.method, url: req.url, auth: req.headers.authorization, body: raw ? JSON.parse(raw) : undefined });
+    const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+    if (req.headers.authorization !== `Bearer ${KEY}`) return send(403, { message: 'Forbidden' });
+    const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '');
+    if (req.method === 'GET' && p === 'state') {
+      return send(200, { gameId: '4321', title: 'Sign-up site', goal: 'Pick a shift fast', state: 'STARTED', players: [], playerCount: 0, asks: [], log: [], inbox: [] });
+    }
+    if (req.method === 'POST' && p === 'log') return send(201, { entry: { logId: 'l1', ...JSON.parse(raw) }, inbox: [] });
+    return send(404, { error: `no route ${p}` });
+  });
+});
+
+const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `engage-${name}-`));
+const gitIn = (dir, ...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+
+function mcpChild(env) {
+  const child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH, HOME: env.HOME || process.env.HOME, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const pending = new Map();
+  let buf = '';
+  let id = 0;
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (d) => {
+    buf += d;
+    let nl;
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+      const m = JSON.parse(line);
+      if (pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+    }
+  });
+  const request = (method, params) => new Promise((resolve) => { id += 1; pending.set(id, resolve); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
+  const call = async (name, args) => { const r = await request('tools/call', { name, arguments: args }); return { text: r.result.content[0].text, isError: Boolean(r.result.isError) }; };
+  return { child, request, call };
+}
+
+let pass = 0; let fail = 0;
+async function check(name, fn) {
+  try { await fn(); console.log(`  PASS  ${name}`); pass += 1; } catch (e) { console.log(`  FAIL  ${name}\n        ${e.stack.split('\n').slice(0, 3).join('\n        ')}`); fail += 1; }
+}
+
+(async () => {
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const API = `http://127.0.0.1:${server.address().port}/dev/`;
+  const home = tmp('home');
+  const project = tmp('project');
+  fs.writeFileSync(path.join(project, 'index.html'), '<h1>Volunteer</h1>\n');
+  const mcp = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: project });
+  await mcp.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+
+  console.log('\nconnect once per project');
+  await check('before connecting, tools say how to connect', async () => {
+    const r = await mcp.call('room_status', {});
+    assert.ok(r.isError && /\/engage:connect/.test(r.text), r.text);
+  });
+  await check('connect saves the key in .engage/ (git-ignored) and the room answers', async () => {
+    const r = await mcp.call('connect', { key: KEY, api: API });
+    assert.ok(!r.isError, r.text);
+    assert.ok(/Connected this project/.test(r.text) && /Sign-up site/.test(r.text), r.text);
+    const saved = JSON.parse(fs.readFileSync(path.join(project, '.engage', 'session.json'), 'utf8'));
+    assert.deepStrictEqual([saved.key, saved.api], [KEY, API]);
+    assert.strictEqual(fs.readFileSync(path.join(project, '.engage', '.gitignore'), 'utf8'), '*\n');
+    assert.strictEqual(fs.statSync(path.join(project, '.engage', 'session.json')).mode & 0o077, 0, 'the key file is private to its owner');
+  });
+  await check('a bad key is refused without saving anything', async () => {
+    const r = await mcp.call('connect', { key: 'not-a-key' });
+    assert.ok(r.isError && /does not look like a session key/.test(r.text), r.text);
+  });
+
+  console.log('\ncheckpoints');
+  await check('checkpoint makes a plain folder a repository, commits, and tells the room', async () => {
+    assert.ok(!fs.existsSync(path.join(project, '.git')));
+    const r = await mcp.call('checkpoint', { message: 'Header B, as the room chose' });
+    assert.ok(!r.isError, r.text);
+    assert.ok(/Made this folder a git repository/.test(r.text), r.text);
+    assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s'), 'Header B, as the room chose');
+    // The key never enters git.
+    assert.ok(!gitIn(project, 'ls-files').split('\n').some((f) => f.startsWith('.engage')));
+    const posted = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).pop();
+    assert.strictEqual(posted.body.kind, 'checkpoint');
+    assert.ok(/^commit [0-9a-f]{7,} · 2 files$/.test(posted.body.detail), posted.body.detail);
+  });
+  await check('nothing changed, nothing committed', async () => {
+    const before = gitIn(project, 'rev-list', '--count', 'HEAD');
+    const r = await mcp.call('checkpoint', { message: 'again' });
+    assert.ok(/Nothing to commit/.test(r.text), r.text);
+    assert.strictEqual(gitIn(project, 'rev-list', '--count', 'HEAD'), before);
+  });
+  mcp.child.kill();
+
+  console.log('\nthe Stop hook');
+  // Async on purpose: the fake API lives in THIS process, and spawnSync would
+  // block it from answering the hook's request.
+  const hook = (dir, input) => new Promise((resolve) => {
+    const c = spawn(process.execPath, [SCRIPT, '--checkpoint'], { env: { PATH: process.env.PATH, HOME: home }, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = ''; let stderr = '';
+    c.stdout.on('data', (d) => { stdout += d; });
+    c.stderr.on('data', (d) => { stderr += d; });
+    c.on('close', (status) => resolve({ status, stdout, stderr }));
+    c.stdin.end(input !== undefined ? input : JSON.stringify({ cwd: dir, session_id: 's1', hook_event_name: 'Stop' }));
+  });
+  await check('in a connected project it commits the turn, named after Claude\'s last update', async () => {
+    fs.writeFileSync(path.join(project, 'form.html'), '<form></form>\n');
+    fs.writeFileSync(path.join(project, '.engage', 'last-update.txt'), 'Sign-up form done');
+    const r = await hook(project);
+    assert.strictEqual(r.status, 0, r.stderr);
+    assert.strictEqual(r.stdout, '', 'a Stop hook prints nothing');
+    assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s'), 'Build Room 4321: Sign-up form done');
+    const posted = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).pop();
+    assert.deepStrictEqual([posted.body.kind, posted.body.text], ['checkpoint', 'Sign-up form done']);
+  });
+  await check('in any other folder it touches nothing', async () => {
+    const other = tmp('other');
+    fs.writeFileSync(path.join(other, 'notes.txt'), 'private\n');
+    const r = await hook(other);
+    assert.strictEqual(r.status, 0);
+    assert.ok(!fs.existsSync(path.join(other, '.git')), 'never git init outside a Build Room project');
+  });
+  await check('it never fails the turn, even with a broken stdin', async () => {
+    const r = await hook(null, 'not json');
+    assert.strictEqual(r.status, 0);
+  });
+
+  console.log('\ninstalling the plugin');
+  await check('writes a local marketplace with the plugin, its commands and its hook', async () => {
+    const r = spawnSync(process.execPath, [SCRIPT, '--install-plugin', '--api', API], { env: { PATH: '/nonexistent', HOME: home }, encoding: 'utf8', timeout: 20000 });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const root = path.join(home, '.engage', 'claude-plugin');
+    const market = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'marketplace.json'), 'utf8'));
+    assert.deepStrictEqual(market.plugins.map((p) => [p.name, p.source]), [['engage', './engage']]);
+    const plug = path.join(root, 'engage');
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(plug, '.claude-plugin', 'plugin.json'), 'utf8')).name, 'engage');
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(plug, '.mcp.json'), 'utf8')).mcpServers.engage.args, ['${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs']);
+    const hooks = JSON.parse(fs.readFileSync(path.join(plug, 'hooks', 'hooks.json'), 'utf8'));
+    assert.ok(/--checkpoint/.test(hooks.hooks.Stop[0].hooks[0].command));
+    assert.ok(fs.readFileSync(path.join(plug, 'engage-mcp.mjs')).equals(fs.readFileSync(SCRIPT)), 'the plugin carries this exact server');
+    for (const c of ['connect', 'kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue']) {
+      assert.ok(fs.existsSync(path.join(plug, 'commands', `${c}.md`)), `${c} command`);
+    }
+    assert.ok(/\$ARGUMENTS/.test(fs.readFileSync(path.join(plug, 'commands', 'connect.md'), 'utf8')));
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.engage', 'config.json'), 'utf8')), { api: API });
+    // With no claude on PATH it says exactly what to type instead.
+    assert.ok(/\/plugin marketplace add/.test(r.stdout) && /\/engage:connect/.test(r.stdout), r.stdout);
+  });
+  await check('after install, connect needs only the key', async () => {
+    const fresh = tmp('fresh');
+    const m2 = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: fresh });
+    await m2.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+    const r = await m2.call('connect', { key: KEY });
+    m2.child.kill();
+    assert.ok(!r.isError, r.text);
+  });
+
+  server.close();
+  console.log(`\n${pass} passed, ${fail} failed`);
+  suiteFinished();
+  process.exit(fail ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

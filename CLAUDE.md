@@ -151,7 +151,9 @@ Create → Start (players join) → Questions (ASK/VOTE/RESULTS) → End
   `/build/{proxy+}` routes only. Asks are Ideas (suggest → vote), Choose (A/B/C)
   and Rate; the host shapes each result into a direction Claude receives on its
   next call. Its own handler, rows (`BUILD#…`) and pages; NOT in `GAME_TYPES`.
-  Plan, contract and storyboard: `docs/design/build-room/`. Local end-to-end
+  Plan, contract and storyboard: `docs/design/build-room/`. A Claude Code plugin
+  (`engage-mcp.mjs --install-plugin`) adds `/engage:connect` and a Stop hook that
+  commits each turn in git, only in a project connected to a Build Room. Local end-to-end
   demo with no AWS: `scripts/build-room-demo/`. Frontend lives in
   `src/src/buildroom/` — never a folder named `build/`, which `.gitignore`
   swallows whole.

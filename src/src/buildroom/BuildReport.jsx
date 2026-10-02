@@ -16,6 +16,7 @@
  * http(s).
  */
 import React from 'react';
+import BuildImage from './BuildImage';
 import Icon from '../components/Icon';
 import { safeHref } from './buildHostApi';
 import './BuildReport.css';
@@ -95,6 +96,13 @@ function Decision({ ask }) {
         </span>
       </div>
       {ask.detail && <p className="brr-detail">{ask.detail}</p>}
+      {ask.kind === 'choice' && (ask.options || []).some((o) => o.imageId) && (
+        <div className="brr-shots">
+          {ask.options.filter((o) => o.imageId).map((o) => (
+            <BuildImage key={o.label} imageId={o.imageId} caption={`Choice ${o.label}: ${o.title}`} className="brr-shot" linked={false} />
+          ))}
+        </div>
+      )}
       <Results ask={ask} />
       {whys.length > 0 && (
         <ul className="brr-whys">
@@ -123,6 +131,11 @@ export default function BuildReport({ state, onBack }) {
   const ideas = s.ideas || [];
   const players = s.players || [];
   const outcome = s.outcome;
+  const checkpoints = log.filter((l) => l.kind === 'checkpoint');
+  const images = s.images || [];
+  const finals = images.filter((i) => i.kind === 'final');
+  // Mockups already show on their decision; everything else is the journey.
+  const others = images.filter((i) => i.kind !== 'final' && !(i.askId && i.label));
   const times = (s.log || []).map((l) => Date.parse(l.createdAt || '')).filter(Number.isFinite).sort((a, b) => a - b);
   const first = times.length ? new Date(times[0]).toISOString() : null;
   const last = times.length ? new Date(times[times.length - 1]).toISOString() : null;
@@ -153,6 +166,11 @@ export default function BuildReport({ state, onBack }) {
           {outcome ? (
             <>
               <p className="brr-summary">{outcome.summary}</p>
+              {finals.length > 0 && (
+                <div className="brr-shots brr-shots--final">
+                  {finals.map((im) => <BuildImage key={im.imageId} imageId={im.imageId} caption={im.caption} className="brr-shot" linked={false} />)}
+                </div>
+              )}
               <p className="brr-dim brr-small">{outcome.by === 'agent' ? 'Written by Claude at wrap-up' : 'Written by the host'}{outcome.updatedAt ? ` · ${hhmm(outcome.updatedAt)}` : ''}</p>
               <div className="brr-twocol">
                 {outcome.built.length > 0 && (
@@ -180,6 +198,34 @@ export default function BuildReport({ state, onBack }) {
           {asks.length ? asks.map((a) => <Decision key={a.askId} ask={a} />) : <p className="brr-dim">The room was not asked anything.</p>}
         </section>
 
+        {others.length > 0 && (
+          <section aria-labelledby="brr-shots">
+            <h2 id="brr-shots">Screenshots along the way</h2>
+            <div className="brr-shots">
+              {others.map((im) => <BuildImage key={im.imageId} imageId={im.imageId} caption={`${hhmm(im.createdAt)} · ${im.caption || 'Screenshot'}`} className="brr-shot" linked={false} />)}
+            </div>
+          </section>
+        )}
+
+        {checkpoints.length > 0 && (
+          <section aria-labelledby="brr-versions">
+            <h2 id="brr-versions">Version history</h2>
+            <p className="brr-dim brr-small">Each step was saved in git on the host&apos;s laptop. To go back to one, check out its commit.</p>
+            <table className="brr-tbl">
+              <thead><tr><th className="brr-col-t">Time</th><th className="brr-col-kind">Commit</th><th>What changed</th></tr></thead>
+              <tbody>
+                {checkpoints.map((c) => (
+                  <tr key={c.logId}>
+                    <td>{hhmm(c.createdAt)}</td>
+                    <td className="brr-mono">{(/commit ([0-9a-f]+)/.exec(c.detail || '') || [])[1] || ''}</td>
+                    <td>{c.text}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
         <section aria-labelledby="brr-timeline">
           <h2 id="brr-timeline">Timeline</h2>
           {log.length ? (
@@ -193,7 +239,7 @@ export default function BuildReport({ state, onBack }) {
                     <td>{l.kind}</td>
                     <td>
                       {l.text}
-                      {l.detail && <span className="brr-block brr-dim">{l.detail}</span>}
+                      {l.detail && l.kind !== 'image' && <span className="brr-block brr-dim">{l.detail}</span>}
                       {safeHref(l.link) && <span className="brr-block"><Link href={l.link} /></span>}
                     </td>
                   </tr>

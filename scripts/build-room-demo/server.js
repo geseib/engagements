@@ -52,6 +52,19 @@ function stub(name, exports) {
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', { DynamoDBDocumentClient: { from: () => doc }, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand });
 stub('@aws-sdk/client-apigatewaymanagementapi', { ApiGatewayManagementApiClient: class { async send() { return {}; } }, PostToConnectionCommand: C });
+const bucket = new Map();
+class S3Cmd { constructor(i) { this.input = i; } }
+class S3Put extends S3Cmd { get op() { return 'put'; } }
+class S3Get extends S3Cmd { get op() { return 'get'; } }
+class S3Del extends S3Cmd { get op() { return 'delete'; } }
+stub('@aws-sdk/client-s3', { S3Client: class { async send(c) {
+  const { Key, Body, Metadata } = c.input;
+  if (c.op === 'put') { bucket.set(Key, { Body: Buffer.from(Body), Metadata }); return {}; }
+  if (c.op === 'delete') { bucket.delete(Key); return {}; }
+  const o = bucket.get(Key); if (!o) { const e = new Error('NoSuchKey'); e.name = 'NoSuchKey'; throw e; }
+  return { Metadata: o.Metadata, Body: { transformToByteArray: async () => new Uint8Array(o.Body) } };
+} }, PutObjectCommand: S3Put, GetObjectCommand: S3Get, DeleteObjectCommand: S3Del });
+process.env.MEDIA_BUCKET = 'demo-media';
 process.env.TABLE_NAME = 't';
 const { handler } = require(path.join(REPO, 'lambda-functions/game/build-room.js'));
 
@@ -81,6 +94,7 @@ async function api(req, res, url, body) {
       lambda = { agent: 'build', agentGameId: m[1], agentKeyHash: hash, groups: '' };
     }
     const r = await handler({ routeKey: `${req.method} /games/{gameId}/${m[2]}/{proxy+}`, requestContext: { http: { method: req.method }, authorizer: m[2] === 'build' ? { lambda } : undefined }, pathParameters: { gameId: m[1], proxy: m[3] }, queryStringParameters: Object.fromEntries(url.searchParams), body });
+    if (r.isBase64Encoded) { res.writeHead(r.statusCode, r.headers); return res.end(Buffer.from(r.body, 'base64')); }
     res.writeHead(r.statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); return res.end(r.body);
   }
   if ((m = /^games\/(\d{4})$/.exec(p)) && req.method === 'GET') {

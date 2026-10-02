@@ -60,6 +60,23 @@ async function call(path, { method = 'GET', body } = {}) {
   }
 }
 
+/**
+ * A screenshot's bytes are private, so the host fetches them with its sign-in
+ * and shows a blob URL. One fetch per image per page load: an image never
+ * changes once sent (a new one gets a new id).
+ */
+const imageCache = new Map();
+export function hostImageUrl(gameId, imageId) {
+  const key = `${gameId}/${imageId}`;
+  if (!imageCache.has(key)) {
+    imageCache.set(key, authFetch(`${apiBase()}games/${seg(gameId)}/build/images/${seg(imageId)}`)
+      .then((r) => { if (!r.ok) throw new Error(`image ${r.status}`); return r.blob(); })
+      .then((b) => URL.createObjectURL(b))
+      .catch((e) => { imageCache.delete(key); throw e; }));
+  }
+  return imageCache.get(key);
+}
+
 /** The host routes of one Build Room. */
 export function buildApi(gameId) {
   const root = `games/${seg(gameId)}/build/`;
@@ -81,6 +98,8 @@ export function buildApi(gameId) {
     /** `{action:'edit'|'delete', text?, detail?}` → `{entry}` */
     logAction: (logId, body) => post(`log/${seg(logId)}`, body),
     postDirection: (text) => post('directions', { text }),
+    /** The host removes a screenshot. */
+    deleteImage: (imageId) => post(`images/${seg(imageId)}`, { action: 'delete' }),
     /** 'direct' | 'suggest' | 'dismiss' | 'restore' */
     ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
     /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */
@@ -151,6 +170,23 @@ export function safeHref(value) {
  * The one command the host pastes (PLAN §7): fetch the MCP server from this
  * site and register it with the real API base and the freshly minted key.
  */
+/**
+ * THE PLUGIN ROUTE (recommended). Once per laptop: fetch the server and let it
+ * install the Engage plugin for Claude Code — the server, the slash commands
+ * and the hook that checkpoints every turn in git. No key in it, so it can be
+ * shown before one is minted.
+ */
+export function pluginInstallCommand({ origin, api }) {
+  const site = String(origin || '').replace(/\/+$/, '');
+  return [
+    `curl -fsSL ${site}/engage-mcp.mjs -o ~/.engage-mcp.mjs \\`,
+    `  && node ~/.engage-mcp.mjs --install-plugin --api ${api}`,
+  ].join('\n');
+}
+
+/** Each session, with the plugin: one line typed into Claude Code. */
+export const pluginConnectCommand = (key) => `/engage:connect ${key}`;
+
 export function connectCommand({ origin, api, key }) {
   const site = String(origin || '').replace(/\/+$/, '');
   return [

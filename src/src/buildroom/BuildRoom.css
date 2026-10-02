@@ -475,6 +475,24 @@
 .brm .brm-next-tell .brm-hint { margin: 6px 0 10px; }
 .brm .brm-askbtns--stack { grid-template-columns: minmax(0, 1fr); }
 
+/* ── Screenshots ── */
+.brm .bimg { margin: 0; }
+.brm .bimg img, .brm .bimg .bimg-wait { display: block; width: 100%; border-radius: 10px; border: 1px solid var(--brm-rule); background: var(--surface-2); }
+.brm .bimg .bimg-wait { aspect-ratio: 16 / 10; }
+.brm .bimg figcaption { font-size: var(--brm-t-label); color: var(--muted); margin-top: 6px; }
+.brm .brm-shot--opt { margin-top: 12px; }
+.brm .brm-shot--opt img { max-height: 360px; object-fit: cover; object-position: top; }
+.brm .brm-shot--thumb { margin-top: 6px; max-width: 220px; }
+.brm .brm-shot--latest { margin: 14px 0; }
+.brm .brm-shot--latest img { max-height: 420px; object-fit: contain; }
+.brm .brm-shot--tl { margin-top: 6px; max-width: 220px; }
+.brm .brm-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 0 0 18px; }
+.brm .brm-shotgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.brm .brm-shotcell { min-width: 0; }
+
+.brm .brm-alt { margin: 12px 0 4px; }
+.brm .brm-alt summary { cursor: pointer; font-size: var(--brm-t-label); color: var(--muted); font-weight: 700; }
+
 @media (max-width: 900px) {
   .brm .brm-grid, .brm.brm--present .brm-grid { grid-template-columns: minmax(0, 1fr); padding: 12px; }
   .brm { --brm-st-hero: 52px; --brm-st-q: 26px; --brm-st-body: 18px; --brm-st-meta: 15px; }

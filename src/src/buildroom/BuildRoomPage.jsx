@@ -25,7 +25,11 @@ import Icon from '../components/Icon';
 import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import BuildReport from './BuildReport';
+import BuildImage, { ImageLoader } from './BuildImage';
 import {
+  pluginInstallCommand,
+  pluginConnectCommand,
+  hostImageUrl,
   apiBase, buildApi, createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
 import './BuildRoom.css';
@@ -95,6 +99,8 @@ export const PROMPT_CARDS = [
   },
 ];
 export const slashCommand = (name) => `/mcp__engage__${name}`;
+/** With the Engage plugin the same prompts are the plugin's own commands. */
+export const pluginCommand = (name) => `/engage:${name}`;
 
 const askNumber = (askId) => Number(askId) || askId;
 
@@ -305,6 +311,8 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url) })
 
 export function BuildRoom({ gameId, initialView = 'room' }) {
   const api = useMemo(() => buildApi(gameId), [gameId]);
+  // Screenshots are private: fetched with the host's sign-in (buildHostApi).
+  const loadImage = useCallback((imageId) => hostImageUrl(gameId, imageId), [gameId]);
   const [room, setRoom] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
@@ -397,7 +405,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     );
   }
 
-  if (view === 'report') return <BuildReport state={room} onBack={() => goView('room')} />;
+  if (view === 'report') return <ImageLoader.Provider value={loadImage}><BuildReport state={room} onBack={() => goView('room')} /></ImageLoader.Provider>;
 
   const host = !present;
   const ended = room.state === 'ENDED';
@@ -407,6 +415,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const firstRun = !asks.length && !(room.log || []).some((l) => l.by === 'agent');
 
   return (
+    <ImageLoader.Provider value={loadImage}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}`} data-theme="dark">
       <RoomHeader
         room={room}
@@ -464,6 +473,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           )}
 
           <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
+          {host && <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} />}
         </main>
 
         <aside className="brm-side">
@@ -485,6 +495,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <AskComposer kind={dialog.compose} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
     </div>
+    </ImageLoader.Provider>
   );
 }
 
@@ -628,6 +639,7 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
               <div className="brm-optfields">
                 <input className="brm-input" aria-label={`Option ${letter(i)} title`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
                 <input className="brm-input brm-input--sm" aria-label={`Option ${letter(i)} preview URL`} placeholder="Preview URL (optional, http or https)" value={o.url || ''} onChange={(e) => setOpt(i, 'url', e.target.value)} />
+                <BuildImage imageId={(ask.options[i] || {}).imageId} alt={`Choice ${letter(i)}`} className="brm-shot brm-shot--thumb" />
               </div>
               {/* Only the LAST option can go: the server letters options by
                   position, and Claude has already stamped "Choice A" and "B". */}
@@ -745,6 +757,7 @@ function ChoiceBoard({ ask }) {
                 <OpenLink href={o.url} label={`Open ${o.label}`} />
               </div>
             </div>
+            <BuildImage imageId={o.imageId} alt={`Choice ${o.label}: ${o.title}`} className="brm-shot brm-shot--opt" />
             <div className="brm-bar" aria-hidden="true"><span style={{ width: `${r.pct}%` }} /></div>
             <div className="brm-count"><b>{r.count}</b> {r.pct}%</div>
           </div>
@@ -928,8 +941,9 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
 const TICKER_KINDS = ['progress', 'showing', 'milestone'];
 
 /** Claude has wrapped up: the stage says so, and the demo is one click away. */
-function WrappedStage({ outcome, agent }) {
+function WrappedStage({ outcome, agent, images = [] }) {
   const links = outcome.links || [];
+  const finals = images.filter((i) => i.kind === 'final');
   return (
     <section className="brm-stage brm-stage--wrapped" aria-label="What we built">
       <div className="brm-building">
@@ -938,6 +952,11 @@ function WrappedStage({ outcome, agent }) {
         {agent && agent.listening && <span className="brm-mins">Claude is listening</span>}
       </div>
       <p className="brm-wrapsum">{outcome.summary}</p>
+      {finals.length > 0 && (
+        <div className="brm-gallery">
+          {finals.map((im) => <BuildImage key={im.imageId} imageId={im.imageId} caption={im.caption} className="brm-shot brm-shot--final" />)}
+        </div>
+      )}
       {links.length > 0 && (
         <div className="brm-openrow">
           {links.map((l, i) => (
@@ -964,7 +983,9 @@ function WrappedStage({ outcome, agent }) {
 }
 
 function IdleStage({ room, now, host }) {
-  if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} />;
+  if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
+  const shots = (room.images || []).filter((i) => i.kind !== 'mockup');
+  const latestShot = shots[shots.length - 1] || null;
   const log = room.log || [];
   const agentPosts = log.filter((l) => l.by === 'agent' && TICKER_KINDS.includes(l.kind));
   const ticker = agentPosts.slice(-3).reverse();
@@ -988,6 +1009,7 @@ function IdleStage({ room, now, host }) {
           <div className="brm-tx">{latest.decision.direction}</div>
         </div>
       )}
+      {latestShot && <BuildImage imageId={latestShot.imageId} caption={latestShot.caption} className="brm-shot brm-shot--latest" />}
       {ticker.length > 0 ? (
         <ul className="brm-ticker">
           {ticker.map((t, i) => (
@@ -1001,6 +1023,42 @@ function IdleStage({ room, now, host }) {
         </ul>
       ) : (
         <div className="brm-empty">Claude&apos;s progress posts appear here while it builds.</div>
+      )}
+    </section>
+  );
+}
+
+// ── Screenshots ─────────────────────────────────────────────────────────────
+
+const SHOT_KIND = { mockup: 'Mockup', final: 'Final', progress: 'Progress' };
+
+/** Every screenshot Claude sent, for the host to check or remove. */
+function ShotsPanel({ images, busy, run, api }) {
+  const [confirm, setConfirm] = useState(null);
+  return (
+    <section className="brm-panel" aria-labelledby="brm-shots-h">
+      <h2 className="brm-h" id="brm-shots-h">Screenshots</h2>
+      {!images.length ? (
+        <p className="brm-hint">Claude&apos;s screenshots of mockups and of the finished product collect here, and go into the report.</p>
+      ) : (
+        <div className="brm-shotgrid">
+          {images.slice().reverse().map((im) => (
+            <div className="brm-shotcell" key={im.imageId}>
+              <BuildImage imageId={im.imageId} caption={im.caption} className="brm-shot brm-shot--grid" />
+              <div className="brm-row brm-gap brm-small">
+                <span className="brm-chip">{im.label ? `Choice ${im.label}` : SHOT_KIND[im.kind] || im.kind}</span>
+                {confirm === im.imageId ? (
+                  <>
+                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirm(null)}>Keep</button>
+                    <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy} onClick={() => run(() => api.deleteImage(im.imageId))}>Remove</button>
+                  </>
+                ) : (
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger brm-push" aria-label={`Remove ${im.caption || 'screenshot'}`} onClick={() => setConfirm(im.imageId)}>Remove</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </section>
   );
@@ -1142,7 +1200,8 @@ function TimelineEntry({ entry, host, busy, ended, run, api }) {
           <>
             <span className="brm-by">{byLabel(entry)}</span>
             <span className="brm-tl-text">{entry.text}</span>
-            {entry.detail && entry.kind !== 'direction' && <span className="brm-tl-detail">{entry.detail}</span>}
+            {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
+            {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
             {host && entry.forAgent && <span className="brm-tl-flag">{entry.deliveredAt ? 'Claude has it' : 'Waiting for Claude'}</span>}
           </>
@@ -1299,6 +1358,8 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   const agent = room.agent || {};
   const liveKey = agent.key;
   const command = minted ? connectCommand({ origin: window.location.origin, api: apiBase(), key: minted.key }) : '';
+  const install = pluginInstallCommand({ origin: window.location.origin, api: apiBase() });
+  const connectLine = minted ? pluginConnectCommand(minted.key) : '';
 
   const mint = async () => {
     setConfirmMint(false);
@@ -1316,18 +1377,32 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
       <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} />
-      <p className="brm-sub">Run this once in the terminal where Claude Code is working. Needs Node 18 or later.</p>
+      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and saves every step in git. Needs Node 18 or later.</p>
 
+      <h3 className="brm-h5">Once per laptop: install the Engage plugin</h3>
+      <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
+      <div className="brm-row brm-gap">
+        <CopyButton text={install} label="Copy install command" />
+        <span className="brm-hint">Run it in a terminal. It adds the plugin to Claude Code: the Engage tools, the /engage commands, and a checkpoint in git at the end of every turn (in this project only; never pushed).</span>
+      </div>
+
+      <h3 className="brm-h5">Each session: connect with this room&apos;s key</h3>
       {minted ? (
         <>
           <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
             <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</div>
           </div>
-          <pre className="brm-cmd" data-testid="brm-command">{command}</pre>
+          <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
           <div className="brm-row brm-gap">
-            <CopyButton text={command} label="Copy command" className="brm-btn brm-btn--sm brm-btn--primary" />
-            <span className="brm-hint">Key …{minted.key.slice(-4)} · minted just now</span>
+            <CopyButton text={connectLine} label="Copy" className="brm-btn brm-btn--sm brm-btn--primary" />
+            <span className="brm-hint">Type it into Claude Code, in your project folder. Key …{minted.key.slice(-4)} · minted just now</span>
           </div>
+          <details className="brm-alt">
+            <summary>Without the plugin</summary>
+            <p className="brm-hint">One command in the terminal instead, then restart Claude Code. No automatic checkpoints; Claude can still call checkpoint.</p>
+            <pre className="brm-cmd" data-testid="brm-command">{command}</pre>
+            <CopyButton text={command} label="Copy command" />
+          </details>
         </>
       ) : liveKey ? (
         <div className="brm-notice">
@@ -1356,17 +1431,17 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
       <ol className="brm-steps">
         <li className={step(Boolean(liveKey || minted), !(liveKey || minted))}>
           <span className="brm-n">1</span>
-          <span>Mint a key. It appears once, inside the command.</span>
+          <span>Install the plugin (once), then mint a key. It appears once.</span>
         </li>
         <li className={step(Boolean(agent.lastSeenAt), Boolean(liveKey || minted) && !agent.lastSeenAt)}>
           <span className="brm-n">2</span>
           <span>{agent.lastSeenAt
             ? 'Claude Code has called in.'
-            : 'Paste the command into the terminal where Claude Code runs, then start Claude Code.'}</span>
+            : 'In Claude Code, type the /engage:connect line above.'}</span>
         </li>
         <li className={step(false, Boolean(agent.lastSeenAt))}>
           <span className="brm-n">3</span>
-          <span>Paste the Kick off card below, or type {slashCommand('kickoff')}.</span>
+          <span>Type {pluginCommand('kickoff')}, or paste the Kick off card below.</span>
         </li>
       </ol>
 
@@ -1381,11 +1456,11 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
       </label>
 
       <h3 className="brm-h5">Prompt cards: paste into Claude Code</h3>
-      <p className="brm-hint">Each is also a slash command in Claude Code once connected: {PROMPT_CARDS.map((p) => slashCommand(p.name)).join(', ')}.</p>
+      <p className="brm-hint">Each is also a command in Claude Code: {PROMPT_CARDS.map((p) => pluginCommand(p.name)).join(', ')} with the plugin, or {slashCommand('kickoff')} and so on without it.</p>
       <div className="brm-cards">
         {PROMPT_CARDS.map((p) => (
           <div className="brm-pcard" key={p.name}>
-            <div className="brm-pt">{p.title} <span className="brm-slash">{slashCommand(p.name)}</span></div>
+            <div className="brm-pt">{p.title} <span className="brm-slash">{pluginCommand(p.name)}</span></div>
             <p className="brm-pq">{p.text}</p>
             <CopyButton text={p.text} />
           </div>

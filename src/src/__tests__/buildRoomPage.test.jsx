@@ -363,12 +363,20 @@ describe('Connect Claude Code', () => {
     expect(command.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
     expect(command.textContent).toContain('claude mcp add engage');
     expect(within(dialog).getByText(/This key is shown once/)).toBeInTheDocument();
+    // The plugin route: install once (no key in it), then one line per session.
+    const install = within(dialog).getByTestId('brm-install');
+    expect(install.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
+    expect(install.textContent).toContain(`node ~/.engage-mcp.mjs --install-plugin --api ${API}`);
+    expect(install.textContent).not.toContain(key);
+    expect(within(dialog).getByTestId('brm-connect').textContent).toBe(`/engage:connect ${key}`);
 
     // Close, reopen: gone.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const again = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     expect(within(again).queryByTestId('brm-command')).toBeNull();
+    expect(within(again).queryByTestId('brm-connect')).toBeNull();
+    expect(within(again).getByTestId('brm-install')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(key);
   });
 
@@ -376,7 +384,7 @@ describe('Connect Claude Code', () => {
     await openRoom(hostState({ keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
     fireEvent.click(screen.getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    ['/mcp__engage__kickoff', '/mcp__engage__ideas', '/mcp__engage__ab-mockups', '/mcp__engage__continue', '/mcp__engage__wrap-up'].forEach((slash) => {
+    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:wrap-up', '/mcp__engage__kickoff'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
     });
     expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(5);
