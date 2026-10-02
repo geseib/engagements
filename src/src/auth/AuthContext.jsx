@@ -5,6 +5,8 @@ import {
   AuthenticationDetails,
   CognitoUserAttribute 
 } from 'amazon-cognito-identity-js';
+import { hostedLogoutUrl, isGoogleUsername } from './googleSignIn';
+import { navigateTo } from './navigate';
 
 // Configure Cognito User Pool - Lazy load to ensure config.js has loaded  
 const getUserPool = () => {
@@ -290,6 +292,11 @@ export const AuthProvider = ({ children }) => {
   const signOut = () => {
     const userPool = getUserPool();
     const cognitoUser = userPool.getCurrentUser();
+    // A Google sign-in also has a session on Cognito's hosted domain, which
+    // the local signOut below does not end — and while it lives, "Continue
+    // with Google" comes straight back as the same account (googleSignIn.js,
+    // hostedLogoutUrl). Read before the local session is forgotten.
+    const leaveHostedSession = Boolean(cognitoUser) && isGoogleUsername(cognitoUser.getUsername());
     if (cognitoUser) {
       cognitoUser.signOut();
     }
@@ -297,6 +304,10 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     setNewPasswordRequired(null);
     setTempUser(null);
+    if (leaveHostedSession) {
+      const url = hostedLogoutUrl();
+      if (url) navigateTo(url);
+    }
   };
 
   // Resend verification code

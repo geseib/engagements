@@ -44,3 +44,31 @@ export function startGoogleSignIn(mode = 'login') {
     window.location.href = url;
   }, 100);
 }
+
+/**
+ * SIGNING OUT OF GOOGLE PROPERLY (2026-10-02, reported by the owner: "there is
+ * no way to change the google account that they login with").
+ *
+ * `cognitoUser.signOut()` only forgets this tab's tokens. Cognito's hosted
+ * sign-in domain keeps a session cookie of its own, so the next "Continue with
+ * Google" was answered from that session without Google ever being asked —
+ * `prompt=select_account` above never reached an account chooser, and the same
+ * account came straight back. Cognito's /logout ends that session.
+ *
+ * `logout_uri` must match one of the app client's LogoutURLs exactly
+ * (template-clean.yaml: `https://${DomainName}`, no path), which
+ * `window.location.origin` is. Returns null when there is no hosted domain to
+ * leave (local dev without one, or tests), so the caller simply stays put.
+ */
+export const isGoogleUsername = (username) => /^google_/i.test(String(username || ''));
+
+export function hostedLogoutUrl() {
+  const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
+  const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
+  const cognitoDomain = window.COGNITO_DOMAIN;
+  if (!cognitoDomain || !clientId || !userPoolId) return null;
+  const region = String(userPoolId).split('_')[0];
+  return `https://${cognitoDomain}.auth.${region}.amazoncognito.com/logout?`
+    + `client_id=${encodeURIComponent(clientId)}&`
+    + `logout_uri=${encodeURIComponent(window.location.origin)}`;
+}
