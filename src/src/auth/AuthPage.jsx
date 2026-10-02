@@ -60,11 +60,19 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
   const statusParam = urlParams.get('status');
   const errorParam = urlParams.get('error');
   const modeParam = urlParams.get('mode');
+  // mode=verify is the email's own link: the code step with no sign-up in
+  // hand, so it asks for the address (VerificationForm `askEmail`).
   const initialMode =
-    statusParam === 'pending' ? 'pending' : modeParam === 'register' ? 'register' : 'login';
+    statusParam === 'pending' ? 'pending'
+      : modeParam === 'register' ? 'register'
+        : modeParam === 'verify' ? 'verify'
+          : 'login';
 
   const [currentMode, setCurrentMode] = useState(initialMode);
   const [registrationData, setRegistrationData] = useState(null);
+  // Confirmed through the email's door: sign-in opens with the address filled
+  // in and says so. No password was ever typed on that path to sign in with.
+  const [confirmedEmail, setConfirmedEmail] = useState('');
   const [urlError] = useState(errorParam);
   const { currentUser, loading, newPasswordRequired, signIn, setError } = useAuth();
 
@@ -177,11 +185,26 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
           onSuccess={handleLoginSuccess}
           onNeedsConfirmation={handleNeedsConfirmation}
           initialError={urlError}
+          initialEmail={confirmedEmail}
+          notice={confirmedEmail ? 'Email confirmed. Sign in to finish.' : ''}
         />
       )}
 
       {currentMode === 'register' && (
         <RegisterForm onToggleMode={handleToggleMode} onSuccess={handleRegistrationSuccess} />
+      )}
+
+      {currentMode === 'verify' && !registrationData && (
+        <VerificationForm
+          askEmail
+          email={urlParams.get('email') || ''}
+          onToggleMode={handleToggleMode}
+          onSuccess={(data) => {
+            if (setError) setError(null);
+            setConfirmedEmail(data.email);
+            setCurrentMode('login');
+          }}
+        />
       )}
 
       {currentMode === 'verify' && registrationData && (

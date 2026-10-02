@@ -31,7 +31,19 @@ const maskEmail = (address) => {
   return `${local.substring(0, 2)}${'*'.repeat(local.length - 2)}@${domain}`;
 };
 
-const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = false }) => {
+/*
+  `askEmail`: THE DOOR FROM THE EMAIL (2026-10-02). The code arrives by email,
+  but this screen used to be reachable only straight after registering or by
+  signing in with the right password — the email said "enter it on the
+  sign-in screen", where there was no box for it. /auth?mode=verify (linked
+  from the email) and "Have a code from an email?" on the sign-in form open it
+  with no sign-up in hand, so it asks for the address too.
+*/
+const looksLikeEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+
+const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = false, askEmail = false }) => {
+  const [typedEmail, setTypedEmail] = useState(email || '');
+  const address = askEmail ? typedEmail.trim() : email;
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -56,6 +68,10 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = f
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (askEmail && !looksLikeEmail(address)) {
+      setFieldError('Type the email address you signed up with.');
+      return;
+    }
     if (code.length !== CODE_LENGTH) {
       setFieldError('The code from the email is 6 digits.');
       return;
@@ -63,8 +79,8 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = f
 
     setIsSubmitting(true);
     try {
-      await confirmSignUp(email, code);
-      if (onSuccess) onSuccess({ email, name, verified: true, nextStep: 'pending' });
+      await confirmSignUp(address, code);
+      if (onSuccess) onSuccess({ email: address, name, verified: true, nextStep: 'pending' });
     } catch (_) {
       /* surfaced through AuthContext's `error` */
     } finally {
@@ -74,10 +90,14 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = f
 
   const handleResend = async () => {
     if (resendTimer > 0 || isResending) return;
+    if (askEmail && !looksLikeEmail(address)) {
+      setFieldError('Type the email address you signed up with, then send a new code to it.');
+      return;
+    }
     setIsResending(true);
     setError(null);
     try {
-      await resendConfirmationCode(email);
+      await resendConfirmationCode(address);
       setResendTimer(60);
     } catch (_) {
       /* surfaced through AuthContext's `error` */
@@ -90,6 +110,14 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = f
 
   return (
     <div className="au-col au-stack au-s24" style={{ paddingBlock: '8px 40px' }}>
+      {askEmail ? (
+        <div>
+          <h1>Enter your code</h1>
+          <p className="au-muted" style={{ marginTop: '12px' }}>
+            Type the email you signed up with and the 6&#8209;digit code we sent to it.
+          </p>
+        </div>
+      ) : (
       <div>
         {/* From sign-in, this is someone who came back later (LoginForm's
             UserNotConfirmed): the code went out when they created the account,
@@ -104,6 +132,7 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = f
           {fromSignIn ? '. Enter it here, or send a new one below if it has expired or gone missing.' : '.'}
         </p>
       </div>
+      )}
 
       {error && (
         <div className="au-notice is-attn" role="alert">
@@ -115,6 +144,22 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = f
       )}
 
       <form onSubmit={handleSubmit} noValidate>
+        {askEmail && (
+          <>
+            <label className="au-label" htmlFor="verify-email">Email</label>
+            <input
+              id="verify-email"
+              className="au-input"
+              type="email"
+              autoComplete="email"
+              placeholder="you@work.com"
+              value={typedEmail}
+              onChange={(event) => { setTypedEmail(event.target.value); if (fieldError) setFieldError(''); if (error) setError(null); }}
+              disabled={isSubmitting}
+              style={{ marginBottom: '14px' }}
+            />
+          </>
+        )}
         <label className="au-label" htmlFor="verify-code">Code from the email</label>
         <div className="au-codewrap">
           <div className="au-cells au-cells6" aria-hidden="true">
@@ -172,10 +217,10 @@ const VerificationForm = ({ email, name, onToggleMode, onSuccess, fromSignIn = f
       <button
         type="button"
         className="au-btn au-btn-quiet"
-        onClick={() => onToggleMode('register')}
+        onClick={() => onToggleMode(askEmail ? 'login' : 'register')}
         disabled={isSubmitting}
       >
-        Use a different email
+        {askEmail ? 'Back to sign in' : 'Use a different email'}
       </button>
     </div>
   );
