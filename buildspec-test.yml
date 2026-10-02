@@ -61,9 +61,6 @@ phases:
   build:
     commands:
       - echo "Building and deploying backend..."
-      - echo "Building SAM application..."
-      - sam build -t template-clean.yaml
-      - echo "Deploying to AWS..."
       # Same conditional-append pattern as buildspec-dev.yml. Each of these
       # parameters has a previous value in the stack, so omitting one keeps it;
       # passing it EMPTY is an explicit override to "" and would tear down the
@@ -74,7 +71,22 @@ phases:
       - '[ -n "$GOOGLE_CLIENT_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientId=$GOOGLE_CLIENT_ID" || echo "skipping GoogleClientId (empty)"'
       - '[ -n "$GOOGLE_CLIENT_SECRET" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientSecret=$GOOGLE_CLIENT_SECRET" || echo "skipping GoogleClientSecret (empty)"'
       - echo "Parameter overrides:" $(echo "$PARAM_OVERRIDES" | sed -E 's/(GitHubToken|GoogleClientSecret)=[^ ]*/\1=***/g')
-      - sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides $PARAM_OVERRIDES --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
+      # ── THE BACKEND GATE ─────────────────────────────────────────────
+      # `sam deploy` spent ~18 of a ~27-minute deploy zipping the same four
+      # CodeUri folders 119 times, then found 115-118 of the zips already in S3
+      # (dev builds 4c71a3ad, 9bea635e, 2026-10-01/02). When every input the
+      # backend is built from is byte-identical to the last successful deploy
+      # of THIS stack, and the stack has not changed since, the result is an
+      # empty changeset — so both steps are skipped. Any doubt runs them.
+      # Only sam build and sam deploy are gated: lint, jest, webpack, the S3
+      # sync and the invalidation below run on every deploy. The rules and the
+      # escape hatch (FORCE_FULL_DEPLOY=true) are in scripts/ci/backend-gate.sh.
+      - 'export BACKEND_FP=$(PARAM_OVERRIDES="$PARAM_OVERRIDES" bash scripts/ci/backend-gate.sh fingerprint)'
+      - 'export BACKEND_ACTION=$(bash scripts/ci/backend-gate.sh check)'
+      - 'echo "Backend gate: ${BACKEND_ACTION:-run}"'
+      - 'if [ "$BACKEND_ACTION" = "skip" ]; then echo "Backend unchanged since the last deploy - skipping sam build and sam deploy"; else echo "Building SAM application..." && sam build -t template-clean.yaml; fi'
+      - 'if [ "$BACKEND_ACTION" != "skip" ]; then echo "Deploying to AWS..." && sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides $PARAM_OVERRIDES --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset; fi'
+      - 'if [ "$BACKEND_ACTION" != "skip" ]; then bash scripts/ci/backend-gate.sh record; fi'
 
       - echo "Building frontend..."
       - cd src
