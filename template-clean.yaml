@@ -6063,6 +6063,13 @@ Resources:
       # fails to deploy, which is the guardrail that stops a well-meaning
       # rewrite from shipping an email with no code in it.
       #
+      # WHERE TO TYPE IT (2026-10-02). It used to say "enter it on the sign-in
+      # screen", which had no box for it: a person who had left the code step
+      # could only get there by signing in with the right password, which
+      # nothing told them. It now links to /auth?mode=verify, the code step
+      # that asks for the address (auth/VerificationForm.jsx `askEmail`), and
+      # tells a password reset where its code goes.
+      #
       # The domain is interpolated rather than hardcoded so dev, test and prod
       # each name themselves. `DomainName` defaults to "" — the !If keeps the
       # sentence grammatical when it is unset rather than printing "at .".
@@ -6075,16 +6082,22 @@ Resources:
               <p>Someone asked to verify an email address or reset a password for
               <strong>Engage</strong> at <a href="https://${DomainName}">${DomainName}</a>.</p>
               <p>Your code is <strong>{####}</strong></p>
-              <p>Enter it on the sign-in screen to finish. The code expires shortly.</p>
-              <p>If this wasn't you, no action is needed — the code is useless on its own
-              and nothing has changed on your account.</p>
+              <p><strong>Finishing your sign-up?</strong> Enter it with your email address at
+              <a href="https://${DomainName}/auth?mode=verify">https://${DomainName}/auth?mode=verify</a>.</p>
+              <p><strong>Resetting your password?</strong> Enter it on the reset screen you came
+              from ("Forgotten it?" on the sign-in page).</p>
+              <p>The code expires shortly. If this wasn't you, no action is needed — the code is
+              useless on its own and nothing has changed on your account.</p>
           - !Sub |
               <p>Someone asked to verify an email address or reset a password for
               <strong>Engage</strong> (${StackName}).</p>
               <p>Your code is <strong>{####}</strong></p>
-              <p>Enter it on the sign-in screen to finish. The code expires shortly.</p>
-              <p>If this wasn't you, no action is needed — the code is useless on its own
-              and nothing has changed on your account.</p>
+              <p><strong>Finishing your sign-up?</strong> On the Engage sign-in page choose
+              "Enter the code from your email" and type it with your email address.</p>
+              <p><strong>Resetting your password?</strong> Enter it on the reset screen you came
+              from ("Forgotten it?" on the sign-in page).</p>
+              <p>The code expires shortly. If this wasn't you, no action is needed — the code is
+              useless on its own and nothing has changed on your account.</p>
       # THE ACCOUNT THE EMAIL LEAVES THROUGH.
       #
       # Without this block the pool sends via COGNITO_DEFAULT: a shared Cognito

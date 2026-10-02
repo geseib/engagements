@@ -25,8 +25,8 @@ import './auth.css';
  * `initialError` carries a message in from the URL, which is how OAuthCallback
  * reports a failure it could not handle itself.
  */
-const LoginForm = ({ onToggleMode, onSuccess, initialError, onNeedsConfirmation }) => {
-  const [form, setForm] = useState({ email: '', password: '' });
+const LoginForm = ({ onToggleMode, onSuccess, initialError, onNeedsConfirmation, initialEmail = '', notice = '' }) => {
+  const [form, setForm] = useState({ email: initialEmail, password: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
@@ -89,6 +89,14 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError, onNeedsConfirmation 
         <p className="au-kicker">Running a session</p>
         <h1 style={{ marginTop: '10px' }}>Host sign in</h1>
       </div>
+
+      {notice && !displayError && (
+        <div className="au-notice is-good" role="status">
+          <div className="au-notice-body">
+            <h3>{notice}</h3>
+          </div>
+        </div>
+      )}
 
       {displayError && (
         <div className="au-notice is-attn" role="alert">
@@ -183,6 +191,22 @@ const LoginForm = ({ onToggleMode, onSuccess, initialError, onNeedsConfirmation 
           Create a host account
         </button>
         . It has to be approved by an admin before you can run a session.
+      </p>
+
+      <p className="au-meta">
+        Signed up but never entered the code?{' '}
+        <button
+          type="button"
+          onClick={() => onToggleMode('verify')}
+          disabled={isSubmitting}
+          style={{
+            background: 'none', border: 0, padding: 0, font: 'inherit',
+            color: 'var(--secondary)', cursor: 'pointer', textDecoration: 'underline',
+          }}
+        >
+          Enter the code from your email
+        </button>
+        .
       </p>
     </div>
   );
