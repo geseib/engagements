@@ -36,6 +36,10 @@ const server = http.createServer((req, res) => {
       return send(200, { gameId: '4321', title: 'Sign-up site', goal: 'Pick a shift fast', state: 'STARTED', players: [], playerCount: 0, asks: [], log: [], inbox: [] });
     }
     if (req.method === 'POST' && p === 'log') return send(201, { entry: { logId: 'l1', ...JSON.parse(raw) }, inbox: [] });
+    if (req.method === 'POST' && p === 'asks') {
+      const b = JSON.parse(raw);
+      return send(201, { ask: { askId: '001', kind: b.kind, prompt: b.prompt, status: 'proposed', options: (b.options || []).map((o, i) => ({ ...o, label: 'AB'[i] })) }, inbox: [] });
+    }
     return send(404, { error: `no route ${p}` });
   });
 });
@@ -114,6 +118,37 @@ async function check(name, fn) {
     const r = await mcp.call('checkpoint', { message: 'again' });
     assert.ok(/Nothing to commit/.test(r.text), r.text);
     assert.strictEqual(gitIn(project, 'rev-list', '--count', 'HEAD'), before);
+  });
+  console.log('\na link is checked before the room sees it (2026-10-02: a second session pointed at the first one\'s server)');
+  // A dev server left running by ANOTHER project, from another folder.
+  const serve = (cwd) => new Promise((resolve) => {
+    const c = spawn(process.execPath, ['-e', "const s=require('http').createServer((q,r)=>r.end('hi')).listen(0,'127.0.0.1',()=>console.log(s.address().port))"], { cwd, stdio: ['ignore', 'pipe', 'ignore'] });
+    c.stdout.once('data', (d) => resolve({ child: c, port: Number(String(d).trim()) }));
+  });
+  const foodbank = tmp('foodbank');
+  const old = await serve(foodbank);
+  await check('a link served from another folder is refused, and nothing is posted', async () => {
+    const before = requests.length;
+    const r = await mcp.call('post_update', { kind: 'showing', text: 'The site is up', link: `http://localhost:${old.port}/` });
+    assert.ok(r.isError, r.text);
+    assert.ok(/Nothing was posted/.test(r.text) && r.text.includes(fs.realpathSync(foodbank)) && /not in this project/.test(r.text), r.text);
+    assert.strictEqual(requests.length, before, 'no request reached Engage');
+    const c = await mcp.call('ask_room_to_choose', { question: 'Which?', options: [{ title: 'A', url: `http://localhost:${old.port}/a` }, { title: 'B' }] });
+    assert.ok(c.isError && /Nothing was posted/.test(c.text), c.text);
+    assert.strictEqual(requests.length, before);
+  });
+  const mine = await serve(project);
+  await check('this project\'s own server is fine', async () => {
+    const r = await mcp.call('post_update', { kind: 'showing', text: 'The site is up', link: `http://localhost:${mine.port}/` });
+    assert.ok(!r.isError && !/CHECK THESE LINKS/.test(r.text), r.text);
+    const c = await mcp.call('ask_room_to_choose', { question: 'Which?', options: [{ title: 'A', url: `http://localhost:${mine.port}/a` }, { title: 'B' }] });
+    assert.ok(!c.isError, c.text);
+  });
+  await check('a link nothing answers is posted with a warning to start the server', async () => {
+    old.child.kill(); mine.child.kill();
+    await new Promise((r) => setTimeout(r, 200));
+    const r = await mcp.call('post_update', { kind: 'showing', text: 'Up', link: `http://localhost:${old.port}/` });
+    assert.ok(!r.isError && /Nothing answers at/.test(r.text) && /address already in use/.test(r.text), r.text);
   });
   mcp.child.kill();
 

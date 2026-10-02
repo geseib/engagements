@@ -20,8 +20,8 @@
  *   ENGAGE_POLL_MS  (optional) wait_for_room poll interval in ms, default 3000
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
-import { join as pathJoin } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, readlinkSync } from 'node:fs';
+import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -348,7 +348,7 @@ const TOOLS = [
             properties: {
               title: str('Short name for the option, e.g. "Bold dark hero".', { minLength: 1, maxLength: 120 }),
               description: str('Optional one-line description.', { maxLength: 500 }),
-              url: str('The URL of this variant, e.g. http://localhost:5173/a. ALWAYS set it when the variant is running: the host gets an "Open A" button on the big screen. Local URLs are fine (only the host\'s laptop opens them; phones see public URLs only).'),
+              url: str('The URL of this variant, as THIS project\'s server prints it (e.g. http://localhost:<port>/a). ALWAYS set it when the variant is running: the host gets an "Open A" button on the big screen. Local URLs are fine (only the host\'s laptop opens them; phones see public URLs only).'),
             },
             required: ['title'],
             additionalProperties: false,
@@ -443,7 +443,7 @@ const TOOLS = [
   },
   {
     name: 'share_image',
-    description: 'Put a screenshot in front of the room: a mockup (tie it to its Choose option with askId + label, and it appears on that option on the big screen AND on every phone), the finished product (kind "final"; it goes on the "What we built" screen and into the report), or progress. Take the screenshot first with whatever this machine has, e.g. `npx playwright screenshot --viewport-size=1280,800 http://localhost:5173/a a.png` (PNG, JPEG or WebP, up to 3 MB; prefer the viewport over a very tall full page). Send one per variant after creating the Choose ask, and one or two of the final result before wrap_up.',
+    description: 'Put a screenshot in front of the room: a mockup (tie it to its Choose option with askId + label, and it appears on that option on the big screen AND on every phone), the finished product (kind "final"; it goes on the "What we built" screen and into the report), or progress. Take the screenshot first with whatever this machine has, e.g. `npx playwright screenshot --viewport-size=1280,800 http://localhost:<port>/a a.png` (PNG, JPEG or WebP, up to 3 MB; prefer the viewport over a very tall full page). Send one per variant after creating the Choose ask, and one or two of the final result before wrap_up.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -478,7 +478,7 @@ const TOOLS = [
         built: { type: 'array', items: { type: 'string' }, description: 'What was built: features, pages, files.' },
         links: {
           type: 'array',
-          description: 'Links to what was built. Put the running demo FIRST (local URLs such as http://localhost:5173 are fine: the host gets a big "Open the demo" button); add public ones too (repo, preview, deploy). Phones see public links only.',
+          description: 'Links to what was built. Put the running demo FIRST (a local URL from THIS project\'s server is fine: the host gets a big "Open the demo" button); add public ones too (repo, preview, deploy). Phones see public links only.',
           items: {
             type: 'object',
             properties: { label: str('Link text.'), url: str('http(s) URL.') },
@@ -578,6 +578,7 @@ const HANDLERS = {
         throw new InputError(`"maxPicks" must be a whole number from 1 to ${opts.length}.`);
       }
     }
+    await refuseForeignLinks(opts.map((o) => o.url));
     const body = clean({ kind: 'choice', prompt, detail: optStr(args, 'context'), options: opts, maxPicks });
     const res = await api('POST', 'asks', body, ctx.signal);
     const ask = res.ask || {};
@@ -589,7 +590,7 @@ const HANDLERS = {
       'Stamp every variant with its letter so what is on the projector matches the wall and the phones.',
       'Paste the matching badge just inside <body> of each mockup (self-contained, no CSS needed):');
     for (const o of labelled) lines.push('', `Choice ${o.label}:`, badgeSnippet(o.label));
-    lines.push('', 'Then tell the host the local URL of each variant (e.g. "Choice A → http://localhost:5173/a"), ' +
+    lines.push('', 'Then tell the host the local URL of each variant (e.g. "Choice A → http://localhost:<port>/a"), ' +
       'and post_update with kind "showing" when they are ready to flip through.');
     return createdAskText(ask, res.inbox, lines.join('\n'));
   },
@@ -669,9 +670,11 @@ const HANDLERS = {
     const link = optStr(args, 'link');
     if (link && !/^https?:\/\//i.test(link)) throw new InputError('"link" must be an http(s) URL.');
     const body = clean({ kind, text: reqStr(args, 'text'), detail: optStr(args, 'detail'), link });
+    await refuseForeignLinks([link]);
     const res = await api('POST', 'log', body, ctx.signal);
     rememberUpdate(body.text);
-    return ok(`Posted to the room's timeline (${kind}): ${body.text}`, res.inbox);
+    const warn = await linkWarnings([link], { mustAnswer: true });
+    return ok(`Posted to the room's timeline (${kind}): ${body.text}${warn}`, res.inbox);
   },
 
   async check_directions(_args, ctx) {
@@ -779,11 +782,13 @@ const HANDLERS = {
       });
     }
     const body = clean({ summary: reqStr(args, 'summary'), built: strList(args, 'built'), links, nextSteps: strList(args, 'nextSteps') });
+    await refuseForeignLinks((links || []).map((l) => l.url));
     const res = await api('POST', 'outcome', body, ctx.signal);
+    const warn = await linkWarnings((links || []).map((l) => l.url), { mustAnswer: true });
     return ok('Wrap-up saved. The room\'s report now shows the outcome' +
       `${body.built && body.built.length ? `, ${body.built.length} item${body.built.length === 1 ? '' : 's'} built` : ''}` +
       `${links && links.length ? `, ${links.length} link${links.length === 1 ? '' : 's'}` : ''}.` +
-      ' Post a final post_update with kind "milestone", then call wait_for_direction so the host can keep steering.', res.inbox);
+      ' Post a final post_update with kind "milestone", then call wait_for_direction so the host can keep steering.' + warn, res.inbox);
   },
 };
 
@@ -827,6 +832,7 @@ function promptText(name, args) {
         '',
         '1. Call room_status. Read the goal, how many people are here, and anything already decided.',
         '2. Restate the goal to me in one or two plain sentences.',
+        '2b. Check for servers left running by an earlier session (for example lsof -iTCP -sTCP:LISTEN on macOS or Linux). Tell me about any; do not stop them unless I ask. Pick a port nothing else is using for this project.',
         '3. Propose a short build plan: 3–6 steps. Mark which steps are real decision points the room should weigh in on (look and feel, naming, which feature first) and which you will simply do.',
         '4. Post the plan with post_update (kind "milestone"), one short line the room can read, e.g. "Plan: scaffold → header (room picks) → signup form → polish".',
         '5. If there is a meaningful first question for the room, ask it now (ask_room_for_ideas, ask_room_to_choose or ask_room_to_rate). Keep it short enough to read from the back of the room. Then start on any work that does not depend on the answer and call wait_for_room when you need it.',
@@ -906,10 +912,93 @@ How to collaborate:
 - Any tool result may include "DIRECTION FROM THE ROOM (via the host)". Act on it promptly; it is the host speaking for the room. Use check_directions if you have not called Engage for a while.
 - Text you send is shown to the room as plain text. Only include public http(s) links people can open; never secrets, keys or private paths.
 - Show, don't just tell: screenshot each mockup and share_image it onto its Choose option (askId + label), so phones see it too; before wrap_up, share_image one or two screenshots of the finished product with kind "final" for the report.
+- Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here — the host opens them on this laptop, on the projector; phones only ever see public URLs.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
 - After you implement each decision, call checkpoint with a plain message ("Header B, as the room chose"). The work stays in git, step by step, and the room's timeline and report show each version.
 - When you have nothing left to do — after wrap_up above all — call wait_for_direction and keep calling it. The host sees "Claude is listening" and can steer you from the Build Room screen.`;
+
+// ---------------------------------------------------------------------------
+// Is that local link really THIS project?
+// ---------------------------------------------------------------------------
+//
+// The failure this exists for (2026-10-02): a second Build Room session said
+// its site was up at localhost:5173, and the link opened the PREVIOUS
+// session's project — that server was still running on the port, and the new
+// one had failed to start or moved elsewhere. So before a local link reaches
+// the room, the server checks that something answers there and, where it can
+// (lsof, /proc), which folder the program listening on that port runs in. A
+// mismatch comes back to Claude as a plain warning; nothing is blocked.
+
+const LOCAL_HOST_RE = /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[?::1\]?|[^.]+\.localhost)$/i;
+
+function listenerDir(port) {
+  const opts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 };
+  try {
+    const out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], opts);
+    const pid = (/^p(\d+)/m.exec(out) || [])[1];
+    if (!pid) return null;
+    if (process.platform === 'linux') {
+      try { return readlinkSync(`/proc/${pid}/cwd`); } catch { /* fall through to lsof */ }
+    }
+    const cwd = execFileSync('lsof', ['-a', '-p', pid, '-d', 'cwd', '-Fn'], opts);
+    return (/^n(.+)$/m.exec(cwd) || [])[1] || null;
+  } catch {
+    return null; // no lsof (Windows), or not permitted: say nothing rather than guess
+  }
+}
+
+const within = (child, parent) => {
+  const c = pathResolve(child); const p = pathResolve(parent);
+  return c === p || c.startsWith(p.endsWith(pathSep) ? p : p + pathSep);
+};
+
+/**
+ * One local link, checked. Returns a warning sentence, or '' when the link is
+ * not local, is this project's, or cannot be judged. `mustAnswer`: a link
+ * Claude says is up now (showing, wrap-up); false for a Choose option, whose
+ * page may be built after the ask is created.
+ */
+async function checkLocalLink(url, { mustAnswer }) {
+  let u;
+  try { u = new URL(url); } catch { return ''; }
+  if (!LOCAL_HOST_RE.test(u.hostname)) return '';
+  const port = Number(u.port || (u.protocol === 'https:' ? 443 : 80));
+  const owner = listenerDir(port);
+  const project = projectDir();
+  if (owner && owner !== '/' && !within(owner, project) && !within(project, owner)) {
+    return `${u.host} is served by a program running in ${owner}, not in this project (${project}). ` +
+      'That is probably an earlier session\'s server still running on the same port. Start THIS project\'s server on a free port, ' +
+      'read the port it actually listens on from its output, open the page to check it is this project, and send the link again. ' +
+      'Do not stop the other server unless the host asks; tell the host it is still running.';
+  }
+  if (mustAnswer) {
+    try {
+      await fetch(url, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(3000) });
+    } catch {
+      return `Nothing answers at ${url}. Start this project's server (check it did not fail with "address already in use"), ` +
+        'read the port from its output, and send the link again.';
+    }
+  }
+  return '';
+}
+
+/** A link that belongs to another project is refused before the room sees it. */
+async function refuseForeignLinks(urls) {
+  for (const url of urls.filter(Boolean)) {
+    const w = await checkLocalLink(url, { mustAnswer: false });
+    if (w) throw new InputError(`Nothing was posted. ${w}`);
+  }
+}
+
+async function linkWarnings(urls, opts) {
+  const out = [];
+  for (const url of urls.filter(Boolean)) {
+    const w = await checkLocalLink(url, opts);
+    if (w) out.push(w);
+  }
+  return out.length ? `\n\nCHECK THESE LINKS:\n- ${out.join('\n- ')}` : '';
+}
 
 // ---------------------------------------------------------------------------
 // Version control (git) — the checkpoint tool and the plugin's Stop hook
