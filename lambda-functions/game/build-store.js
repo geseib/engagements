@@ -24,7 +24,7 @@ const STATUSES = Object.freeze(['proposed', 'live', 'voting', 'results', 'decide
 const OPEN_STATUSES = Object.freeze(['live', 'voting']);
 
 const LOG_KINDS = Object.freeze([
-  'progress', 'milestone', 'showing', 'image', 'checkpoint', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome',
+  'progress', 'milestone', 'showing', 'image', 'checkpoint', 'crew', 'base', 'help', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome',
 ]);
 /** What Claude may post. Decisions and directions are the host's to write. */
 const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint']);
@@ -157,6 +157,12 @@ function entityForSk(sk) {
   if (sk.startsWith('BUILD#LOG#')) return 'buildLog';
   if (sk.startsWith('BUILD#IDEA#')) return 'buildIdea';
   if (sk.startsWith('BUILD#IMG#')) return 'buildImage';
+  // Crew mode (build-crew.js), named here so the store needs no import of it.
+  if (sk.startsWith('BUILD#BLD#')) return 'buildBuilder';
+  if (sk.startsWith('BUILD#TASK#')) return 'buildTask';
+  if (sk.startsWith('BUILD#SHR#')) return 'buildShare';
+  if (sk.startsWith('BUILD#CMT#')) return 'buildComment';
+  if (sk.startsWith('BUILD#REV#')) return 'buildReview';
   return null;
 }
 
@@ -289,7 +295,10 @@ function transition(ask, action) {
 
 /** Sort every BUILD# row into its kind. Rows must already be decrypted. */
 function roomFromRows(rows) {
-  const room = { state: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [] };
+  const room = {
+    state: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
+    builders: [], tasks: [], shares: [], comments: [], reviews: [],
+  };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
     if (sk === SK.state) room.state = r;
@@ -301,12 +310,21 @@ function roomFromRows(rows) {
     else if (sk.startsWith('BUILD#IDEA#')) room.ideas.push(r);
     else if (sk.startsWith('BUILD#KEY#')) room.keys.push(r);
     else if (sk.startsWith('BUILD#IMG#')) room.images.push(r);
+    else if (sk.startsWith('BUILD#BLD#')) room.builders.push(r);
+    else if (sk.startsWith('BUILD#TASK#')) room.tasks.push(r);
+    else if (sk.startsWith('BUILD#SHR#')) room.shares.push(r);
+    else if (sk.startsWith('BUILD#CMT#')) room.comments.push(r);
+    else if (sk.startsWith('BUILD#REV#')) room.reviews.push(r);
   }
   const bySk = (a, b) => String(a.SK).localeCompare(String(b.SK));
   room.asks.sort(bySk);
   room.logs.sort(bySk);
   room.ideas.sort(bySk);
   room.images.sort(bySk);
+  room.builders.sort(bySk);
+  room.tasks.sort(bySk);
+  room.comments.sort(bySk);
+  room.reviews.sort(bySk);
   room.resps.sort((a, b) => String(a.CreatedAt || '').localeCompare(String(b.CreatedAt || '')));
   return room;
 }
@@ -429,6 +447,8 @@ function logView(r) {
     by: r.By || 'host',
     askId: r.AskId || null,
     forAgent: Boolean(r.ForAgent),
+    name: r.Name || null,
+    shareId: r.ShareId || null,
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
@@ -496,7 +516,7 @@ function normalizeOutcome(body, by, now) {
 function agentStatus(stateRow, keys, now) {
   const s = stateRow || {};
   const seen = s.AgentSeenAt ? Date.parse(s.AgentSeenAt) : NaN;
-  const live = (keys || []).filter((k) => !k.RevokedAt).sort((a, b) => String(b.CreatedAt).localeCompare(String(a.CreatedAt)))[0];
+  const live = (keys || []).filter((k) => !k.RevokedAt && (k.Role || 'host') === 'host').sort((a, b) => String(b.CreatedAt).localeCompare(String(a.CreatedAt)))[0];
   const heard = s.AgentListeningAt ? Date.parse(s.AgentListeningAt) : NaN;
   return {
     connected: Number.isFinite(seen) && Date.parse(now) - seen < AGENT_ACTIVE_MS,
@@ -526,7 +546,9 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
     // Host notes are the host's own; Claude never sees them.
-    log: room.logs.filter((l) => !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
+    // A builder's own deliveries (feedback, the base moving) are plumbing; the
+    // crew entries beside them say what happened.
+    log: room.logs.filter((l) => !l.ForBuilder && !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
     ideas: isAgent ? [] : room.ideas.map(ideaView),
     images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
@@ -564,7 +586,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // directions are Claude's copy of a decision the phone already sees (and
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
-    log: room.logs.filter((l) => !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
+    log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
       .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
       .map((l) => ({ ...l, link: publicUrl(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName).map(ideaView) : [],
@@ -590,7 +612,12 @@ function publicOutcome(o) {
  * the host passed on, or a plain direction — whichever carries ForAgent.
  */
 function pendingDirections(room) {
-  return room.logs.filter((l) => l.ForAgent && !l.DeliveredAt && l.Kind !== 'note');
+  return room.logs.filter((l) => l.ForAgent && !l.ForBuilder && !l.DeliveredAt && l.Kind !== 'note');
+}
+
+/** Entries for one builder's Claude (crew mode): feedback, the base moving. */
+function pendingForBuilder(room, name) {
+  return room.logs.filter((l) => l.ForBuilder === name && !l.DeliveredAt);
 }
 
 /** The words Claude receives for one entry. */
@@ -623,5 +650,5 @@ module.exports = {
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
-  hostView, publicView, pendingDirections, inboxText, inboxFrom, defaultDirection,
+  hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };
