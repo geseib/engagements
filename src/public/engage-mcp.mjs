@@ -20,7 +20,7 @@
  *   ENGAGE_POLL_MS  (optional) wait_for_room poll interval in ms, default 3000
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, readlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -1643,8 +1643,13 @@ function listenerDir(port) {
   }
 }
 
+// Compared through realpath: on macOS /var is a symlink to /private/var, so
+// lsof reports the listener's cwd as /private/var/... while the project dir
+// may arrive as /var/... — the same folder under two names.
+const realDir = (d) => { try { return realpathSync(d); } catch { return pathResolve(d); } };
+
 const within = (child, parent) => {
-  const c = pathResolve(child); const p = pathResolve(parent);
+  const c = realDir(child); const p = realDir(parent);
   return c === p || c.startsWith(p.endsWith(pathSep) ? p : p + pathSep);
 };
 
