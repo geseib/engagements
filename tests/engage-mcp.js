@@ -177,11 +177,12 @@ const hardStop = setTimeout(() => {
   });
 
   console.log('\n2. listings');
-  await check('tools/list has all thirteen tools with object schemas', async () => {
+  await check('tools/list has all twenty-four tools (thirteen room, eleven crew) with object schemas', async () => {
     const r = await mcp.request('tools/list', {});
     const names = r.result.tools.map(t => t.name).sort();
-    assert.deepStrictEqual(names, ['ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions', 'checkpoint', 'connect',
-      'get_results', 'post_update', 'room_status', 'share_image', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
+    assert.deepStrictEqual(names, ['announce_merge', 'ask_for_help', 'ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions', 'checkpoint',
+      'claim_task', 'comment_share', 'connect', 'crew_status', 'get_results', 'get_share', 'post_update', 'propose_task', 'review_share', 'room_status',
+      'share_image', 'share_pr', 'share_repo', 'share_work', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
     for (const t of r.result.tools) {
       assert.strictEqual(t.inputSchema.type, 'object', t.name);
       assert.ok(t.description && t.description.length > 40, t.name);
@@ -189,7 +190,7 @@ const hardStop = setTimeout(() => {
   });
   await check('prompts/list and prompts/get kickoff', async () => {
     const l = await mcp.request('prompts/list', {});
-    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue']);
+    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'join', 'early-look', 'review', 'share-repo']);
     const g = await mcp.request('prompts/get', { name: 'kickoff' });
     const m = g.result.messages[0];
     assert.strictEqual(m.role, 'user');

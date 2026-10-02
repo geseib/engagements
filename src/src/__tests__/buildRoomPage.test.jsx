@@ -380,14 +380,14 @@ describe('Connect Claude Code', () => {
     expect(document.body.textContent).not.toContain(key);
   });
 
-  test('revoke, the review setting, and the five prompt cards with their slash commands', async () => {
+  test('revoke, the review setting, and the six prompt cards with their slash commands', async () => {
     await openRoom(hostState({ keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
     fireEvent.click(screen.getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:wrap-up', '/mcp__engage__kickoff'].forEach((slash) => {
+    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:wrap-up', '/engage:share-repo', '/mcp__engage__kickoff'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
     });
-    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(5);
+    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(6);
 
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Review Claude's questions/ }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/settings`));

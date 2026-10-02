@@ -91,7 +91,8 @@ async function api(req, res, url, body) {
       const hash = crypto.createHash('sha256').update(auth).digest('hex');
       const row = store.get(k(`GAME#${m[1]}`, `BUILD#KEY#${hash}`));
       if (!row || row.RevokedAt) return json(res, 403, { message: 'Forbidden' });
-      lambda = { agent: 'build', agentGameId: m[1], agentKeyHash: hash, groups: '' };
+      // As auth/authorizer.js does: a builder's key names its builder.
+      lambda = { agent: 'build', agentGameId: m[1], agentKeyHash: hash, groups: '', agentRole: row.Role === 'builder' ? 'builder' : 'host', builderName: row.Role === 'builder' ? row.PlayerName : '' };
     }
     const r = await handler({ routeKey: `${req.method} /games/{gameId}/${m[2]}/{proxy+}`, requestContext: { http: { method: req.method }, authorizer: m[2] === 'build' ? { lambda } : undefined }, pathParameters: { gameId: m[1], proxy: m[3] }, queryStringParameters: Object.fromEntries(url.searchParams), body });
     if (r.isBase64Encoded) { res.writeHead(r.statusCode, r.headers); return res.end(Buffer.from(r.body, 'base64')); }

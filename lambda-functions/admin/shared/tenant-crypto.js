@@ -512,13 +512,23 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *   buildLog      — SK=BUILD#LOG#…: the timeline.
    *   buildIdea     — SK=BUILD#IDEA#…: an idea sent from a phone.
    *   buildImage    — SK=BUILD#IMG#…: a screenshot's caption. (The image's
-   *                   bytes live in S3, sealed with encryptValue.) */
-  buildState: Object.freeze(['Outcome']),
+   *                   bytes live in S3, sealed with encryptValue.)
+   *   Crew mode (build-crew.js): buildBuilder (a builder's status note),
+   *   buildTask, buildShare (an early look: its title, every version's
+   *   summary, files and commit, and the PR link), buildComment (reactions
+   *   and replies), buildReview (the host's Claude's review). The repo and
+   *   base branch ride in buildState.Crew. */
+  buildState: Object.freeze(['Outcome', 'Crew']),
   buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision']),
   buildResponse: Object.freeze(['Text', 'Why']),
   buildLog: Object.freeze(['Text', 'Detail', 'Link']),
   buildIdea: Object.freeze(['Text']),
   buildImage: Object.freeze(['Caption']),
+  buildBuilder: Object.freeze(['Note']),
+  buildTask: Object.freeze(['Text', 'Detail']),
+  buildShare: Object.freeze(['Title', 'Versions', 'PrUrl']),
+  buildComment: Object.freeze(['Text']),
+  buildReview: Object.freeze(['Does', 'Fits', 'Risk', 'Suggestions', 'TestsSummary']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

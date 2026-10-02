@@ -4,6 +4,7 @@ import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
 import { fetchBuildState, sendResponse, sendVote, sendIdea } from './buildPlayApi';
+import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import './BuildPlayer.css';
 
 /**
@@ -32,6 +33,12 @@ import './BuildPlayer.css';
  * rendered as React text — never as markup — and a link renders only when it
  * is http(s).
  *
+ * CREW MODE (view.crew.enabled; docs/design/build-room-crew/FLOWS.md) adds
+ * BuildPlayerCrew.jsx's section under every screen: the pipeline line, "Your
+ * lane" for a builder, the early looks on the wall, and "I have Claude Code"
+ * for everyone else. It sits BELOW the ask and the idea composer, so it is
+ * never in the way of answering. The base-moved notice rides in the feed.
+ *
  * It draws in PlayerShell, so it sits in the `.plr` scope and reuses the
  * player's own controls (`.plr-opt`, `.plr-inp`, `.plr-btn`, RatingInput's
  * `.plr-scale`); what is particular to a Build Room is under `.bpl`
@@ -54,6 +61,9 @@ export const FEED_KINDS = Object.freeze({
   verbal: 'Room said',
   idea: 'Idea',
   outcome: 'Wrapped up',
+  crew: 'Crew',
+  base: 'Base moved',
+  help: 'Help',
 });
 /** Only Claude's own posts carry a detail worth a phone's room. */
 const DETAIL_KINDS = ['progress', 'showing', 'milestone'];
@@ -593,7 +603,10 @@ function Outcome({ outcome, images = [] }) {
 }
 
 function Feed({ view, showGoal = true, skipAskId = null }) {
-  const entries = (view.log || []).filter((e) => e && Object.prototype.hasOwnProperty.call(FEED_KINDS, e.kind));
+  const crew = view.crew && view.crew.enabled ? view.crew : null;
+  // The newest base move is the notice above the ticker; said once, not twice.
+  const baseShown = crew && crew.baseMovedAt && crew.baseCommit ? lastBaseEntry(view.log) : null;
+  const entries = (view.log || []).filter((e) => e && e !== baseShown && Object.prototype.hasOwnProperty.call(FEED_KINDS, e.kind));
   const recent = entries.slice(-FEED_LENGTH).reverse();
   const decisions = view.decisions || [];
   const last = decisions.length ? decisions[decisions.length - 1] : null;
@@ -618,6 +631,7 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
           <p className="bpl-text bpl-latest-tx">{latest.direction}</p>
         </div>
       ) : null}
+      <BaseNotice crew={crew} log={view.log} />
       <h3 className="plr-lab bpl-feed-h">Watch the build</h3>
       {recent.length === 0 ? (
         <p className="plr-help">Nothing yet. Claude's progress shows up here.</p>
@@ -713,6 +727,8 @@ export default function BuildPlayer({
   const [loadError, setLoadError] = useState(null);
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [ideaDraft, setIdeaDraft] = useState('');
+  // A builder key, held only until "Done" (shown once; never stored).
+  const [builderKey, setBuilderKey] = useState(null);
   const seq = useRef(0);
   const firstScreen = useRef(null);
   const alive = useRef(true);
@@ -792,6 +808,14 @@ export default function BuildPlayer({
     />
   );
 
+  const crewOn = Boolean(view.crew && view.crew.enabled);
+  const crew = crewOn ? (
+    <>
+      <hr className="plr-sep" />
+      <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} />
+    </>
+  ) : null;
+
   /* ENDED: the wrap-up, and nothing to send — the server refuses every write. */
   if (ended || view.state === 'ENDED') {
     return shell({
@@ -822,7 +846,7 @@ export default function BuildPlayer({
   /* The ask screens draw their own shell (they own the dock); the idea
      composer rides under every one of them. Keyed by ask AND status, so a
      refetch keeps a draft and a new ask or phase starts clean. */
-  const askShell = (props) => shell({ ...props, body: <>{intro}{props.body}{ideas}</> });
+  const askShell = (props) => shell({ ...props, body: <>{intro}{props.body}{ideas}{crew}</> });
   const kids = { ask, mine, api, onResult, shell: askShell };
 
   if (ask && ask.status === 'live') {
@@ -848,6 +872,7 @@ export default function BuildPlayer({
           <Whys whys={ask.results && ask.results.whys} />
           {!decided ? <p className="plr-help">The host shapes this into Claude's next step.</p> : null}
           {ideas}
+          {crew}
           <hr className="plr-sep" />
           <Feed view={view} showGoal={false} skipAskId={ask.askId} />
         </>
@@ -864,6 +889,7 @@ export default function BuildPlayer({
         <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
         <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
         {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}
+        {crewOn ? <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} /> : null}
         <Feed view={view} />
         {ideas}
       </>

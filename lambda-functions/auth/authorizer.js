@@ -798,6 +798,10 @@ async function agentKeyContext(event, token) {
     agentGameId: keyGameId,
     agentKeyHash: hash,
     agentKeyId: key.KeyId || '',
+    // Crew mode: a builder's key names its builder. The handler lets a builder
+    // do builder things only (game/build-room.js routeBuilder).
+    agentRole: key.Role === 'builder' ? 'builder' : 'host',
+    builderName: key.Role === 'builder' ? (key.PlayerName || '') : '',
     userId: `agent:${key.MintedBy || keyGameId}`,
     groups: '',
     orgId,

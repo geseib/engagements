@@ -146,3 +146,72 @@ test('an empty room still renders every section with an honest empty state', () 
   expect(screen.getByText('No ideas were sent.')).toBeInTheDocument();
   expect(screen.getByText('Nobody joined from a phone.')).toBeInTheDocument();
 });
+
+describe('Who built what (crew mode)', () => {
+  const C = require('../../../lambda-functions/game/build-crew');
+  function crewState({ enabled = true } = {}) {
+    const rows = [
+      {
+        SK: 'BUILD#STATE', Rev: 30,
+        Crew: { enabled, repoUrl: 'https://github.com/george/foodbank', baseBranch: 'build-room/4821', baseCommit: '7f3c2a1aa', runCrewCode: false },
+      },
+      { SK: C.SK.builder('Priya'), PlayerName: 'Priya', Branch: 'crew/priya/parking-map', Status: 'synced', TaskId: '001' },
+      { SK: C.SK.builder('Ana'), PlayerName: 'Ana', Branch: 'crew/ana/confirmation', Status: 'building' },
+      { SK: 'BUILD#TASK#001', TaskId: '001', Text: 'Parking map', ClaimedBy: ['Priya'], State: 'done' },
+      { SK: 'BUILD#TASK#002', TaskId: '002', Text: 'Confirmation text', ClaimedBy: ['Ana'], State: 'open' },
+      {
+        SK: 'BUILD#SHR#s1', ShareId: 's1', Builder: 'Priya', TaskId: '001', Title: 'Parking map', Lane: 'merged', Featured: true,
+        PrUrl: 'https://github.com/george/foodbank/pull/7', MergedCommit: '7f3c2a1aa',
+        Versions: [{ v: 1, summary: 'Map', imageIds: ['aaa111'] }, { v: 2, summary: 'Lit lots', imageIds: ['bbb222'] }],
+        CreatedAt: T(30), UpdatedAt: T(40),
+      },
+      { SK: 'BUILD#SHR#s2', ShareId: 's2', Builder: 'Ana', Title: 'Confirmation text', Lane: 'shared', Versions: [{ v: 1, summary: 'SMS', imageIds: [], branch: 'crew/ana/confirmation-v2' }], CreatedAt: T(35), UpdatedAt: T(35) },
+      { SK: C.SK.comment('s1', T(31)), ShareId: 's1', Kind: 'looks-right', By: 'room', Name: 'Sam', Text: '', Version: 1, CreatedAt: T(31) },
+      { SK: C.SK.comment('s1', T(32)), ShareId: 's1', Kind: 'question', By: 'room', Name: 'Jordan', Text: 'At night?', Version: 1, CreatedAt: T(32) },
+      { SK: C.SK.comment('s1', T(33)), ShareId: 's1', Kind: 'looks-right', By: 'room', Name: 'Jordan', Text: '', Version: 1, CreatedAt: T(33) },
+      { SK: C.SK.review('s1', T(36)), ShareId: 's1', Version: 2, Does: 'Adds a map.', Recommendation: 'merge-after-changes', CreatedAt: T(36) },
+    ];
+    const room = S.roomFromRows(rows);
+    const view = S.hostView({ gameId: '4821', meta: { Title: 'Volunteer sign-up' }, sessionState: 'ENDED', room, players: ['Priya', 'Ana', 'Sam', 'Jordan'], now: T(59) });
+    view.crew = C.crewView(room, 'host');
+    return view;
+  }
+
+  test('each builder: branch, tasks, early looks with versions, lane, merged commit, reactions, review, PR', () => {
+    render(<BuildReport state={crewState()} />);
+    const s = section('Who built what');
+    expect(s.textContent).toMatch(/The base branch: build-room\/4821 on github\.com\/george\/foodbank · final commit 7f3c2a1/);
+    expect(within(s).getByRole('link', { name: 'github.com/george/foodbank' })).toHaveAttribute('href', 'https://github.com/george/foodbank');
+
+    const priya = within(s).getByText('Priya', { selector: 'b' }).closest('.brr-builder');
+    expect(priya.textContent).toMatch(/branch crew\/priya\/parking-map/);
+    expect(priya.textContent).toMatch(/Tasks: Parking map/);
+    expect(priya.textContent).toMatch(/Parking map · 2 versions · Merged at 7f3c2a1/);
+    // Latest wins per person: Jordan's question became Looks right.
+    expect(priya.textContent).toMatch(/Room: Looks right 2 · Question 0 · Concern 0 · Claude's review: merge after changes/);
+    expect(within(priya).getByRole('link', { name: 'Pull request' })).toHaveAttribute('href', 'https://github.com/george/foodbank/pull/7');
+    // The room stays a count: no reacting names.
+    expect(s.textContent).not.toMatch(/Jordan|Sam/);
+    // One shared repo, a branch each: no forks, no patches.
+    expect(s.textContent).not.toMatch(/fork|patch/i);
+
+    const ana = within(s).getByText('Ana', { selector: 'b' }).closest('.brr-builder');
+    expect(ana.textContent).toMatch(/branch crew\/ana\/confirmation/);
+    // An early look on a branch other than the builder's own says which.
+    expect(ana.textContent).toMatch(/Confirmation text · 1 version · Early look · branch crew\/ana\/confirmation-v2/);
+    expect(within(ana).queryByRole('link')).toBeNull();
+  });
+
+  test('section order: What we built, then Who built what, then Decisions', () => {
+    render(<BuildReport state={crewState()} />);
+    const names = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(names.slice(0, 3)).toEqual(['What we built', 'Who built what', 'Decisions']);
+  });
+
+  test('no crew, no section', () => {
+    render(<BuildReport state={crewState({ enabled: false })} />);
+    expect(screen.queryByRole('heading', { name: 'Who built what' })).toBeNull();
+    render(<BuildReport state={state()} />);
+    expect(screen.queryByRole('heading', { name: 'Who built what' })).toBeNull();
+  });
+});

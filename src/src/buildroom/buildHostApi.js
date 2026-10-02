@@ -117,6 +117,26 @@ export function buildApi(gameId) {
     },
     /** The single-use ticket that makes this page's socket a HOST socket. */
     hostTicket: async () => (await requestHostTicket({ fetchFn: authFetch, apiBase: apiBase(), gameId })).ticket,
+
+    // ── Crew mode (docs/design/build-room-crew/FLOWS.md; build-crew.js) ──
+    /** `{enabled?, modes?, runCrewCode?}` → `{crew}`. The repo and base come from the host's Claude (share_repo). */
+    crewSettings: (body) => post('crew/settings', body),
+    /** `{text, detail?}` → `{task}` */
+    crewAddTask: (body) => post('crew/tasks', body),
+    /** `{action:'edit'|'done'|'reopen'|'delete', text?, detail?}` → `{task}` */
+    crewTaskAction: (taskId, body) => post(`crew/tasks/${seg(taskId)}`, body),
+    /** 'feature' | 'unfeature' | 'not-now' | 'reopen' → `{share}` */
+    crewShareAction: (shareId, action) => post(`crew/shares/${seg(shareId)}`, { action }),
+    /** The room's reactions, shaped by the host, to the builder's Claude. */
+    crewFeedback: (shareId, text) => post(`crew/shares/${seg(shareId)}/feedback`, { text }),
+    /** Ask the host's own Claude to review an early look. */
+    crewReviewRequest: (shareId) => post(`crew/shares/${seg(shareId)}/review-request`),
+    /** The host replies on an early look. */
+    crewComment: (shareId, text) => post(`crew/shares/${seg(shareId)}/comments`, { text }),
+    /** 'send-claude' | 'resolve' for a builder who asked for help. */
+    crewHelpAction: (name, action) => post(`crew/help/${seg(name)}`, { action }),
+    /** `{commit, note?, shareId?}`: the base branch moved. Usually the host's Claude says so. */
+    crewBase: (body) => post('crew/base', body),
   };
 }
 

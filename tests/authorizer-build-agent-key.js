@@ -69,6 +69,14 @@ const call = (token, routeKey, gameId = '4821') => handler({
       );
     }
   });
+  await check('a builder\'s key carries its role and name; the host\'s says host', async () => {
+    const r = await call(KEY, 'GET /games/{gameId}/build/{proxy+}');
+    assert.deepStrictEqual([r.context.agentRole, r.context.builderName], ['host', '']);
+    rows.set(`GAME#4821|BUILD#KEY#${HASH}`, { KeyId: 'k', Role: 'builder', PlayerName: 'Priya' });
+    const b = await call(KEY, 'POST /games/{gameId}/build/{proxy+}');
+    assert.deepStrictEqual([b.isAuthorized, b.context.agentRole, b.context.builderName], [true, 'builder', 'Priya']);
+    seed();
+  });
   await check('another session\'s build routes: denied without a table read', async () => {
     reads = 0;
     const r = await call(KEY, 'GET /games/{gameId}/build/{proxy+}', '1234');

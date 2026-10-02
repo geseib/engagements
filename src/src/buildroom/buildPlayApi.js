@@ -9,6 +9,12 @@
  *   POST games/{id}/build-play/vote      {playerName, clientId, askId, respIds[]}
  *   POST games/{id}/build-play/idea      {playerName, clientId, text}
  *
+ * Crew mode (docs/design/build-room-crew/FLOWS.md; `routePlayCrew`):
+ *
+ *   POST games/{id}/build-play/crew/builder-key  {playerName, clientId}            → {key, gameId}
+ *   POST games/{id}/build-play/crew/claim        {playerName, clientId, taskId}
+ *   POST games/{id}/build-play/crew/react        {playerName, clientId, shareId, kind, text?}
+ *
  * PLAIN `fetch`, NO AUTH. A phone holds no Cognito identity; the server checks
  * `{playerName, clientId}` against the PLAYER# row the join wrote, and the
  * clientId is the one the join flow minted (components/joinResult.js
@@ -85,4 +91,28 @@ export function sendVote({ apiBase, gameId, playerName, clientId }, askId, respI
 /** POST idea — a thought for the host, at any time. */
 export function sendIdea({ apiBase, gameId, playerName, clientId }, text) {
   return post(apiBase, gameId, 'idea', { playerName, clientId }, { text });
+}
+
+/**
+ * POST crew/builder-key — this phone becomes a builder, and gets the key its
+ * own Claude Code connects with. Shown once: the server keeps only its hash,
+ * and a second call retires the first key.
+ */
+export function mintBuilderKey({ apiBase, gameId, playerName, clientId }) {
+  return post(apiBase, gameId, 'crew/builder-key', { playerName, clientId }, {});
+}
+
+/** POST crew/claim — a builder takes a task. Two builders on one task is a race, and allowed. */
+export function claimTask({ apiBase, gameId, playerName, clientId }, taskId) {
+  return post(apiBase, gameId, 'crew/claim', { playerName, clientId }, { taskId });
+}
+
+/**
+ * POST crew/react — one reaction to an early look on the wall: `looks-right`,
+ * or `question` / `concern` with the words (the server refuses those without).
+ * One per person; the latest wins.
+ */
+export function react({ apiBase, gameId, playerName, clientId }, shareId, kind, text) {
+  const words = String(text || '').trim();
+  return post(apiBase, gameId, 'crew/react', { playerName, clientId }, { shareId, kind, ...(words ? { text: words } : {}) });
 }

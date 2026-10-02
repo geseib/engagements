@@ -126,3 +126,11 @@
 .brr .bimg figcaption { font-size: var(--brr-t-floor); color: var(--muted); margin-top: 4px; }
 
 .brr .brr-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--brr-t-label); }
+
+/* Who built what (crew mode): one block per builder, named; the room is a count. */
+.brr .brr-builder { border: 1px solid var(--brr-rule); border-radius: 8px; padding: 12px 14px; margin: 0 0 12px; break-inside: avoid; }
+.brr .brr-builder p { margin: 4px 0 0; }
+.brr .brr-looks { list-style: none; padding: 0; margin: 8px 0 0; }
+.brr .brr-look { padding: 8px 0 0; margin-top: 8px; border-top: 1px solid var(--brr-rule); }
+.brr .brr-look-h b { overflow-wrap: anywhere; }
+.brr .brr-rx b { color: var(--brr-amber); }

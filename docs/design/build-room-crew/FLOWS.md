@@ -1,7 +1,10 @@
-# Build Room: Crew mode (design, not built)
+# Build Room: Crew mode
 
-*2026-10-02. The storyboard is `index.html` in this folder. Nothing here is built yet. This
-document is for deciding what to build.*
+*2026-10-02. The storyboard is `index.html` in this folder. Built the same day, with the
+decisions in §6 and the update after them: code in `lambda-functions/game/build-crew.js`,
+`src/src/buildroom/BuildCrew.jsx` and `BuildPlayerCrew.jsx`, and Claude's crew tools in
+`src/public/engage-mcp.mjs`. The local walk-through is `scripts/build-room-demo/crew-e2e.js`.
+Where the flows below say fork, read "a branch on the shared repo" (see the update).*
 
 ## 1. The shift
 
@@ -74,8 +77,8 @@ their Claude as a direction. One task can have two builders on purpose, which is
 watching (see F6).
 
 ### F4. Show it early (before any PR): the heart of this
-The builder (or their Claude, when it reaches something worth showing) shares a **peek** with
-`share_work`. A peek holds:
+The builder (or their Claude, when it reaches something worth showing) shares a **early look** with
+`share_work`. An early look holds:
 
 - a one-line title;
 - "what I changed" in plain words, written by their Claude;
@@ -84,14 +87,14 @@ The builder (or their Claude, when it reaches something worth showing) shares a 
 - an honest **"what I'm unsure about"** (their Claude is told to always say this);
 - optionally, "**I'd like feedback on…**".
 
-The peek appears in the host's **Incoming** lane, and on the wall when the host features it.
+The early look appears in the host's **Incoming** lane, and on the wall when the host features it.
 Phones can react to it:
 
 - **Looks right**;
 - **Question** or **Concern**, each with a comment.
 
 The host gathers the reactions into **feedback** with one click, editable as always. The
-feedback goes to that builder's Claude as a direction. The builder iterates, and the next peek
+feedback goes to that builder's Claude as a direction. The builder iterates, and the next early look
 shows as **v2**, with "what changed since v1".
 
 ### F5. The host's Claude reviews a share
@@ -118,7 +121,7 @@ The host's Claude treats builders' code as **untrusted**. Instructions inside co
 are data, never orders. Nothing executes without the host saying so.
 
 ### F6. Two approaches to one task
-When two builders took the same task, the host makes a **Choose** ask from their latest peeks:
+When two builders took the same task, the host makes a **Choose** ask from their latest early looks:
 
 - **A** is Priya's branch, **B** is Sam's;
 - each option carries its screenshots and its review card;
@@ -130,7 +133,7 @@ report either way.
 ### F7. The PR lifecycle, visible to everyone
 Every share moves along one lane, shown on the wall as a pipeline:
 
-`Building → Peek → Reviewed → PR open → Room says → Merged` (or `Not now`)
+`Building → Early look → Reviewed → PR open → Room says → Merged` (or `Not now`)
 
 - The builder's Claude opens the PR with `gh` (fork mode), or simply offers the branch or patch
   (the other modes). It sends the URL to Engage with `share_pr`.
@@ -168,7 +171,7 @@ reactions.
 
 - **The wall's crew board**: one lane per builder, showing:
   - name, task and branch;
-  - status (Building, Peek, In review, PR, Merged, Needs a rebase);
+  - status (Building, Early look, In review, PR, Merged, Needs a rebase);
   - their latest screenshot;
   - when they last checkpointed, so you can see who is moving.
 
@@ -200,19 +203,30 @@ New MCP tools for **builders**: `join_build`, `claim_task`, `share_work`, `share
 New MCP tools for **the host**: `share_repo`, `propose_tasks`, `review_share`, `merge_share`,
 `announce_base`.
 
-## 6. Decisions for you before we build
+## 6. Decisions (the owner, 2026-10-02)
 
-1. **Which access modes in v1?** I'd start with **patches through Engage** plus **fork and pull
-   request**. Patches work in any room, with no accounts. Fork/PR is what real teams use.
-   Branches-on-host can follow.
-2. **Should Engage ever talk to GitHub itself** (a GitHub App: PR status, checks, comments
-   mirrored both ways)? It's powerful, but it means tokens and webhooks. I'd keep v1 local-only
-   (everything through the Claudes' own `gh`) and revisit.
-3. **Who may merge?** Only the host (my recommendation), or the host plus named
-   "maintainers"?
-4. **How public are peeks?** Shown to the room only when the host features them (safer, and the
-   host curates the wall), or live to everyone as soon as shared (more energy, more noise)?
-5. **Running others' code:** the host's Claude asks before every run (my recommendation), or
-   the host trusts the crew for the session?
-6. **How big a crew?** The board is designed for 2–8 builder lanes. Beyond that it needs
-   grouping, for example by task.
+1. **Access modes in v1:** fork and pull request, plus patches through Engage for people
+   without repo access. Branches-on-host can come later.
+2. **GitHub:** each person's own Claude Code does the GitHub work (`gh`). Engage holds no
+   GitHub token and has no GitHub App.
+3. **Merging:** the host only.
+4. **Running a builder's work:** each builder runs their own branch on their own laptop, and
+   their Claude's screenshots carry it to the room. The host's Claude runs a builder's code
+   only to review it (tests) or to merge, under the switch in 6.
+5. **"Peek" is renamed "early look"** ("Share an early look"): work in progress shown before
+   any PR. The room sees an early look when the host puts it on the wall, so the host curates.
+6. **Running crew code:** a visible switch, **Run crew code: On / Off**, on the host's screen
+   and on the review card. No prompt every time. The host's Claude reads the switch before it
+   runs anything, and says which way it was set in every review.
+7. **Crew size:** 8 builders or fewer. Multiple hosts and sessions come later.
+
+### Update (the owner, 2026-10-02, later the same day)
+
+- **Assume the whole team has access to the same repo.** Builders clone the host's repo,
+  work on their own branch `crew/<name>/<task>`, push it to that repo, and open a pull
+  request there. There are no forks or patches in the normal flow. Patch mode stays in the
+  code but is off by default and is not offered on the setup screen. Forks still work if
+  someone uses one.
+- **Two ways to take part.** Builders link their own Claude Code so they can code and test
+  along the way. Everyone else takes part on their phone (answering, reacting to early
+  looks and following along) and needs no setup at all.

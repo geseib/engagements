@@ -15,7 +15,7 @@ code 4821, host George, builders Priya, Sam and Ana, base branch `build-room/482
 | 2 | F2 | Priya's phone ("I have Claude Code", builder key) beside her terminal forking, branching, running, posting "ready" |
 | 3 | F3 | Task board ranked by the room, claimed by builders; Parking map is a race; Sam's claim phone |
 | 4 | §4 | The wall's crew board: pipeline strip with counts, one lane per builder, host-only Incoming |
-| 5A, 5B | F4 | A featured peek on the wall; a room phone reacting; Priya's phone with feedback and v1/v2 tabs; her Claude taking the feedback |
+| 5A, 5B | F4 | A featured early look on the wall; a room phone reacting; Priya's phone with feedback and v1/v2 tabs; her Claude taking the feedback |
 | 6 | F5 | George's terminal running the review (untrusted code, asks before running); the review card and its comments |
 | 7 | F6 | Choose ask: A = Priya's branch, B = Sam's, each with screenshots and a one-line review |
 | 8A, 8B | F7, F8 | Share lifecycle and the host-only Merge; wall toast "Base moved", Sam's lane "Needs a rebase", his Claude's explanation |
@@ -28,7 +28,7 @@ code 4821, host George, builders Priya, Sam and Ana, base branch `build-room/482
 - **Builders are named; the room stays anonymous.** Lanes, reviews and the report credit people; reactions and comments on the wall do not.
 - **A builder key lives on the builder's phone** and can share and read feedback, never merge. Keys never appear on the wall.
 - **Two builders on one task is a race, not an error.** It ends as a normal Choose ask with branches as options.
-- **Peeks reach the room only when the host features them**; they land in the host's Incoming lane first.
+- **Early looks reach the room only when the host features them**; they land in the host's Incoming lane first.
 - **Feedback is a direction.** The host gathers reactions into one editable sentence that goes to the builder's Claude.
 - **Builder code is untrusted.** The host's Claude reads freely, runs nothing without the host's yes, skips install scripts, and reports instructions found in code as data.
 - **Suggestions are numbered** so the room and the builder's Claude can answer "3: done in v3".
