@@ -33,6 +33,9 @@ import {
   apiBase, buildApi, createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
 import './BuildRoom.css';
+import {
+  CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLook, EarlyLookDialog, RunCrewCodeSwitch, StageTabs, featuredShare,
+} from './BuildCrew';
 
 export const POLL_MS = 8000;
 
@@ -93,6 +96,11 @@ export const PROMPT_CARDS = [
     text: 'Pick up my latest direction from the Build Room with check_directions and room_status, do it, post what changed, then call wait_for_direction and keep listening for the next one.',
   },
   {
+    name: 'share-repo',
+    title: 'Share the repo with the crew',
+    text: 'Open this project to the crew. Cut a base branch for this session from main (build-room/ and the join code), push it, then call share_repo with the remote URL, the base branch and its commit. Builders branch from it; only I merge into it.',
+  },
+  {
     name: 'wrap-up',
     title: 'Wrap up',
     text: 'We are wrapping up. Call room_status, then write the outcome with wrap_up: a short summary for the room, what you built, the running demo link first, and next steps. Post a final milestone thanking the room, then call wait_for_direction.',
@@ -122,6 +130,8 @@ export function agoText(iso, now) {
 
 /** Who wrote a timeline entry, in the wall's words. */
 export function byLabel(entry) {
+  if (entry.kind === 'base') return 'Base moved';
+  if (entry.by === 'builder') return entry.kind === 'help' ? 'Help' : 'Crew';
   if (entry.by === 'agent') return entry.kind === 'showing' ? 'Showing' : 'Claude';
   if (entry.by === 'system') return 'System';
   if (entry.by === 'room' || entry.kind === 'idea') return 'Idea';
@@ -319,7 +329,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [busy, setBusy] = useState(false);
   const [present, setPresent] = useState(false);
   const [view, setView] = useState(initialView);
-  const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | {compose: kind}
+  const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
+  // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
+  const [stage, setStage] = useState('room');
+  const [openShareId, setOpenShareId] = useState(null);
   const now = useNow(5000);
 
   const inFlight = useRef(false);
@@ -413,6 +426,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const proposed = asks.filter((a) => a.status === 'proposed');
   const current = asks.find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status)) || null;
   const firstRun = !asks.length && !(room.log || []).some((l) => l.by === 'agent');
+  const crew = room.crew && room.crew.enabled ? room.crew : null;
+  const onCrew = Boolean(crew) && stage === 'crew';
+  const openShare = crew && openShareId ? (crew.shares || []).find((x) => x.shareId === openShareId) || null : null;
+  const onWall = onCrew && present ? featuredShare(crew) : null;
 
   return (
     <ImageLoader.Provider value={loadImage}>
@@ -427,6 +444,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onWrap={() => setDialog('wrap')}
         onReport={() => goView('report')}
         onEnd={() => setDialog('end')}
+        onCrew={() => setDialog('crew')}
+        crew={crew}
+        busy={busy}
+        run={run}
+        api={api}
         ended={ended}
       />
       {host && error && (
@@ -456,28 +478,42 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </section>
           )}
 
+          {crew && <StageTabs stage={stage} onStage={setStage} crew={crew} host={host} />}
+
           {host && proposed.map((ask) => (
             <ReviewCard key={`${ask.askId}:${ask.status}`} ask={ask} busy={busy} ended={ended} run={run} api={api} connected={room.agent?.connected} />
           ))}
 
-          {current ? (
-            <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={host} busy={busy} ended={ended} run={run} api={api} />
+          {onCrew ? (
+            <>
+              {onWall && <EarlyLook key={onWall.shareId} share={onWall} crew={crew} host={false} stage />}
+              <CrewBoard crew={crew} host={host} now={now} busy={busy} run={run} api={api} onOpen={setOpenShareId} playerCount={room.playerCount} />
+              <JoinFoot gameId={gameId} room={room} current={null} crew />
+              <CrewTasks crew={crew} host={host && !ended} busy={busy} run={run} api={api} />
+            </>
           ) : (
-            <IdleStage room={room} now={now} host={host && !ended} />
+            <>
+              {current ? (
+                <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={host} busy={busy} ended={ended} run={run} api={api} />
+              ) : (
+                <IdleStage room={room} now={now} host={host && !ended} />
+              )}
+
+              <JoinFoot gameId={gameId} room={room} current={current} />
+
+              {host && !ended && (
+                <NextPanel agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} />
+              )}
+
+              <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
+              {host && <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} />}
+            </>
           )}
-
-          <JoinFoot gameId={gameId} room={room} current={current} />
-
-          {host && !ended && (
-            <NextPanel agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} />
-          )}
-
-          <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
-          {host && <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} />}
         </main>
 
         <aside className="brm-side">
-          {host && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
+          {host && onCrew && <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />}
+          {host && !onCrew && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
           <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} />
         </aside>
       </div>
@@ -487,6 +523,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {host && dialog === 'wrap' && (
         <WrapUpPanel outcome={room.outcome} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+      )}
+      {host && dialog === 'crew' && (
+        <CrewDialog crew={room.crew} gameId={gameId} busy={busy} run={run} api={api} shareCard={SHARE_REPO_CARD} onClose={() => setDialog(null)} />
+      )}
+      {host && openShare && (
+        <EarlyLookDialog key={openShare.shareId} share={openShare} crew={crew} busy={busy} run={run} api={api} onClose={() => setOpenShareId(null)} />
       )}
       {host && dialog === 'end' && (
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
@@ -518,7 +560,7 @@ function AgentChip({ agent, now }) {
   );
 }
 
-function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, onReport, onEnd, ended }) {
+function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended }) {
   return (
     <header className="brm-hbar">
       <div className="brm-hbar-title">
@@ -534,6 +576,12 @@ function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, on
             <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onConnect}>
               <Icon name="Lock" size={14} /> Connect Claude Code
             </button>
+            {crew && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
+            {!ended && (
+              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onCrew}>
+                <Icon name="UsersThree" size={14} /> {crew ? 'Crew' : 'Open to a crew'}
+              </button>
+            )}
             <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onWrap}>Wrap up</button>
             <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onReport}>
               <Icon name="FileText" size={14} /> Report
@@ -555,7 +603,7 @@ function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, on
   );
 }
 
-function JoinFoot({ gameId, room, current }) {
+function JoinFoot({ gameId, room, current, crew = false }) {
   const origin = window.location.origin;
   const playUrl = `${origin}/play?gameId=${gameId}`;
   const answered = current ? (current.kind === 'suggest' && current.status === 'voting' ? current.voteCount : current.answerCount) : null;
@@ -568,7 +616,9 @@ function JoinFoot({ gameId, room, current }) {
         <div className="brm-jt"><b>{window.location.host}/play</b>code</div>
         <span className="brm-jc">{gameId}</span>
       </div>
-      {current && current.status !== 'results' ? (
+      {crew && !current ? (
+        <div className="brm-resp">Join as a builder <span>tap I have Claude Code on your phone</span></div>
+      ) : current && current.status !== 'results' ? (
         <div className="brm-resp">
           {answered || 0} of {room.playerCount || 0}{' '}
           <span>{current.status === 'voting' ? 'have voted' : current.kind === 'suggest' ? 'suggestions so far' : 'have answered'}</span>
@@ -1074,6 +1124,7 @@ export function deliveryLine(agent) {
 }
 
 const CONTINUE_PROMPT = PROMPT_CARDS.find((c) => c.name === 'continue');
+const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
 
 /**
  * The two things a host does between asks, in one place: tell Claude what to
@@ -1241,7 +1292,8 @@ function Timeline({ log, host, busy, ended, run, api }) {
   // decision or an idea — that is the host's note or the idea's author.
   const shown = (host ? log : log
     .filter((l) => !WALL_HIDDEN_KINDS.includes(l.kind))
-    .map((l) => (WALL_DETAIL_HIDDEN_KINDS.includes(l.kind) ? { ...l, detail: '' } : l)))
+    .map((l) => (WALL_DETAIL_HIDDEN_KINDS.includes(l.kind) ? { ...l, detail: '' } : l))
+    .map((l) => (l.kind === 'help' ? { ...l, text: `${l.name || 'A builder'} asked for help`, detail: '' } : l)))
     .slice().reverse();
   const submit = async (e) => {
     e.preventDefault();

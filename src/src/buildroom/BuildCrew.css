@@ -1,0 +1,256 @@
+/* ==========================================================================
+   BUILD ROOM CREW MODE — the host's crew board, early looks, tasks, the
+   Run crew code switch and the Open to a crew dialog (buildroom/BuildCrew.jsx).
+
+   DERIVED FROM docs/design/build-room-crew/index.html (frames 1, 3, 4, 5, 6,
+   8, 9), on the shipped Warm Summit tokens (styles.css). Dusk.
+
+   SCOPE `.brc`. Every crew root carries `brc` and is always mounted inside the
+   Build Room root `.brm` (data-theme="dark"), so it reuses that sheet's
+   buttons, chips, fields and dialogs (`.brm .brm-btn` …) and its wall ladder
+   (--brm-st-*). Everything crew-only is declared here, rooted at `.brc`.
+
+   TYPE. The laptop ladder 12 / 13 / 15 / 19 / 24 / 30px (--brc-t-*), nothing
+   under 12px; a featured early look on the wall rides --brm-st-*.
+
+   CONTRAST, MEASURED (__tests__/buildCrewPalette.test.js composites every
+   pairing up its real ancestor stack; AA is 4.5:1):
+     --text on a lane (--surface) 12.5 · --muted on a lane 6.1
+     amber / blue / green / red chip text on their tints over a lane, all AA
+     --primary on the switch's amber tint over the header bar
+     --brc-success-text (+ lines) and --danger-text (− lines) on the field
+   ========================================================================== */
+
+.brc {
+  /* Local tokens. Hex lives here and nowhere else. */
+  --brc-success-text: #6FD0A4;   /* styles.css has no success-text token */
+  --brc-rule: rgba(155, 168, 190, 0.22);
+  --brc-tint-amber: rgba(246, 169, 76, 0.13);
+  --brc-tint-blue: rgba(124, 167, 230, 0.14);
+  --brc-tint-green: rgba(79, 178, 134, 0.14);
+  --brc-tint-red: rgba(229, 100, 94, 0.12);
+  --brc-line-amber: rgba(246, 169, 76, 0.45);
+  --brc-line-red: rgba(229, 100, 94, 0.45);
+  --brc-line-green: rgba(79, 178, 134, 0.5);
+
+  --brc-t-floor: 12px;
+  --brc-t-label: 13px;
+  --brc-t-body: 15px;
+  --brc-t-head: 19px;
+  --brc-t-title: 24px;
+  --brc-t-num: 30px;
+  --brc-row-h: 36px;
+}
+
+/* ---- tones (chips, reactions) ------------------------------------------- */
+/* Three classes deep, so the tone wins over `.brm .brm-chip` whatever order
+   the two sheets load in. */
+.brc .brc-chip.brc-tone-amber, .brc .brc-react.brc-tone-amber { color: var(--primary); background: var(--brc-tint-amber); border-color: transparent; }
+.brc .brc-chip.brc-tone-blue, .brc .brc-react.brc-tone-blue { color: var(--secondary); background: var(--brc-tint-blue); border-color: transparent; }
+.brc .brc-chip.brc-tone-green, .brc .brc-react.brc-tone-green { color: var(--brc-success-text); background: var(--brc-tint-green); border-color: transparent; }
+.brc .brc-chip.brc-tone-red, .brc .brc-react.brc-tone-red { color: var(--danger-text); background: var(--brc-tint-red); border-color: transparent; }
+.brc .brc-amber { color: var(--primary); }
+.brc .brc-red { color: var(--danger-text); font-weight: 600; }
+
+/* ---- the header switch -------------------------------------------------- */
+.brc.brc-switch {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer;
+  min-height: 30px; border-radius: 999px; padding: 4px 12px;
+  font: 600 var(--brc-t-label)/1.1 var(--font-ui);
+  color: var(--text); background: transparent; border: 1px solid var(--brc-rule);
+}
+.brc.brc-switch b { font-weight: 800; }
+.brc.brc-switch.is-on { color: var(--primary); background: var(--brc-tint-amber); border-color: var(--brc-line-amber); }
+.brc.brc-switch:disabled { opacity: .55; cursor: not-allowed; }
+.brc.brc-switch:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
+/* ---- the stage tabs ----------------------------------------------------- */
+.brc.brc-tabs { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.brc .brc-tab {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  flex-wrap: wrap; min-width: 0; text-align: left;
+  min-height: var(--brc-row-h); padding: 6px 14px; border-radius: 8px;
+  font: 600 var(--brc-t-body)/1.1 var(--font-ui);
+  color: var(--muted); background: transparent; border: 1px solid var(--brc-rule);
+}
+.brc .brc-tab.is-on { color: var(--text); background: var(--surface); border-color: var(--primary); }
+.brc .brc-tab:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brc .brc-tabn { font-size: var(--brc-t-floor); font-weight: 500; color: var(--muted); }
+.brc .brc-tabnew {
+  font-size: var(--brc-t-floor); font-weight: 700; border-radius: 999px; padding: 2px 8px;
+  color: var(--primary); background: var(--brc-tint-amber);
+}
+
+/* ---- the board ---------------------------------------------------------- */
+.brc.brc-board { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.brc .brc-board-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.brc .brc-board-head .brm-h { margin: 0; }
+
+.brc .brc-pipe { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.brc .brc-pipe li {
+  background: var(--surface); border-radius: 10px; padding: 10px 14px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%);
+  min-width: 0;
+}
+.brc .brc-pipe li:first-child { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); }
+.brc .brc-pipe-l { display: block; font-size: var(--brc-t-label); font-weight: 600; color: var(--muted); padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.brc .brc-pipe-n { display: block; font: 800 var(--brc-t-num)/1 var(--font-display); color: var(--muted); padding-left: 6px; }
+.brc .brc-pipe li.has .brc-pipe-n { color: var(--primary); }
+.brc .brc-pipe li.brc-pipe-merged.has .brc-pipe-n { color: var(--brc-success-text); }
+
+.brc .brc-lanes { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.brc .brc-lane {
+  display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) minmax(0, 15rem); gap: 12px 16px; align-items: center;
+  background: var(--surface); border-radius: 12px; padding: 14px 16px;
+  border-left: 4px solid var(--primary);
+}
+.brc .brc-lane--1 { border-left-color: var(--secondary); }
+.brc .brc-lane--2 { border-left-color: var(--success); }
+.brc .brc-lane--3 { border-left-color: var(--muted); }
+.brc .brc-lane.is-needs-rebase { box-shadow: inset 0 0 0 1px var(--brc-line-red); }
+.brc .brc-lane.is-needs-help { box-shadow: inset 0 0 0 1px var(--brc-line-amber); }
+.brc .brc-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brc .brc-who-t { display: flex; flex-direction: column; min-width: 0; }
+.brc .brc-name { font-weight: 700; font-size: var(--brc-t-head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.brc .brc-av {
+  width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font: 800 var(--brc-t-body) var(--font-display); color: var(--bg); background: var(--primary);
+}
+.brc .brc-av--1 { background: var(--secondary); }
+.brc .brc-av--2 { background: var(--success); }
+.brc .brc-av--3 { background: var(--muted); }
+.brc .brc-lane-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.brc .brc-task { font-weight: 700; font-size: var(--brc-t-head); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.brc .brc-branch { color: var(--secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.brc .brc-lane-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.brc .brc-stale { color: var(--danger-text); }
+.brc .brc-note { font-size: var(--brc-t-label); color: var(--text); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; overflow-wrap: anywhere; }
+.brc .brc-openlook { align-self: flex-start; margin-top: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.brc .brc-lane-shot { min-width: 0; }
+.brc .brc-shot img, .brc .brc-shot .bimg-wait { max-height: 130px; object-fit: cover; object-position: top; }
+.brc .brc-noshot {
+  display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 10px;
+  border: 1px dashed var(--brc-rule); color: var(--muted); font-size: var(--brc-t-label);
+}
+
+/* ---- base moved --------------------------------------------------------- */
+.brc .brc-base {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  background: var(--surface); border-radius: 12px; padding: 12px 16px;
+  border-left: 4px solid var(--success);
+}
+.brc .brc-base-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; color: var(--brc-success-text); background: var(--brc-tint-green); }
+.brc .brc-base-text { flex: 1 1 18rem; min-width: 0; }
+.brc .brc-base-t { font-weight: 700; font-size: var(--brc-t-head); overflow-wrap: anywhere; }
+.brc .brc-commit { font-size: inherit; color: var(--brc-success-text); }
+.brc .brc-base-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---- help --------------------------------------------------------------- */
+.brc .brc-help { background: var(--surface); border: 1px solid var(--brc-line-amber); border-radius: 12px; padding: 12px 16px; }
+.brc .brc-quote { margin: 8px 0 0; font-size: var(--brc-t-head); font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* ---- Incoming (host only) ----------------------------------------------- */
+.brc.brc-incoming { border: 1.5px dashed var(--brc-line-amber); border-radius: 12px; padding: 12px; background: var(--bg); }
+.brc .brc-in { background: var(--surface); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+.brc .brc-in .brc-av { width: 26px; height: 26px; font-size: var(--brc-t-floor); }
+.brc .brc-in-who { font-size: var(--brc-t-label); }
+.brc .brc-in-t { margin: 6px 0 2px; font-size: var(--brc-t-body); overflow-wrap: anywhere; }
+.brc .brc-in-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ---- an early look ------------------------------------------------------ */
+.brc.brc-look { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.brc .brc-look-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.brc .brc-eyebrow { font-size: var(--brc-t-body); color: var(--muted); font-weight: 600; }
+.brc .brc-eyebrow b { color: var(--primary); }
+.brc .brc-look-title { margin: 0; font: 800 var(--brc-t-title)/1.15 var(--font-display); overflow-wrap: anywhere; }
+.brc .brc-vtabs { display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-2); align-self: flex-start; }
+.brc .brc-vtab {
+  min-height: 30px; min-width: 44px; padding: 4px 10px; border-radius: 7px; cursor: pointer;
+  font: 700 var(--brc-t-label) var(--font-ui); color: var(--text); background: transparent; border: 0;
+}
+.brc .brc-vtab.is-on { background: var(--bg); color: var(--text); box-shadow: inset 0 0 0 1px var(--primary); }
+.brc .brc-vtab:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brc .brc-look-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.brc .brc-look-shots { display: grid; gap: 10px; min-width: 0; }
+.brc .brc-lookshot img { max-height: 420px; object-fit: contain; }
+.brc .brc-nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; font-size: var(--brc-t-body); color: var(--muted); }
+.brc .brc-nums b { color: var(--text); font-size: var(--brc-t-head); }
+.brc .brc-add { color: var(--brc-success-text); font-weight: 700; }
+.brc .brc-del { color: var(--danger-text); font-weight: 700; }
+.brc .brc-files { font-size: var(--brc-t-label); color: var(--muted); }
+.brc .brc-files summary { cursor: pointer; font-weight: 700; }
+.brc .brc-files ul { margin: 6px 0 0; padding-left: 18px; color: var(--text); }
+.brc .brc-look-words { min-width: 0; }
+.brc .brc-k { margin: 0 0 4px; font-size: var(--brc-t-label); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.brc .brc-p { margin: 0 0 14px; font-size: var(--brc-t-body); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.brc .brc-unsure { border-left: 3px solid var(--primary); padding-left: 12px; margin-bottom: 14px; }
+.brc .brc-unsure .brc-p { margin-bottom: 0; }
+.brc .brc-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0 0 12px; font-size: var(--brc-t-label); }
+.brc .brc-facts dt { color: var(--muted); font-weight: 600; }
+.brc .brc-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.brc .brc-where { border-top: 1px solid var(--brc-rule); padding-top: 10px; }
+.brc .brc-ask .brm-mono { color: var(--secondary); }
+
+.brc .brc-reacts { display: flex; flex-wrap: wrap; gap: 8px; }
+.brc .brc-react { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 12px; font-size: var(--brc-t-body); font-weight: 600; }
+.brc .brc-react b { font-weight: 800; }
+
+.brc .brc-comments { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brc .brc-c { background: var(--surface-2); border-radius: 8px; padding: 8px 12px; font-size: var(--brc-t-body); overflow-wrap: anywhere; }
+.brc .brc-ck { font-size: var(--brc-t-floor); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary); margin-right: 8px; }
+.brc .brc-c--concern .brc-ck, .brc .brc-c--feedback .brc-ck { color: var(--primary); }
+.brc .brc-cn { font-weight: 700; margin-right: 8px; }
+.brc .brc-ct { white-space: pre-wrap; }
+.brc .brc-c .brm-hint { margin-right: 8px; }
+
+.brc .brc-review { background: var(--bg); border: 1px solid var(--brc-rule); border-radius: 12px; padding: 14px 16px; }
+.brc .brc-rev { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 16px; margin: 12px 0; font-size: var(--brc-t-body); }
+.brc .brc-rev dt { font-size: var(--brc-t-floor); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+.brc .brc-rev dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.brc .brc-rev ul { margin: 0; padding-left: 18px; }
+.brc .brc-sugs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brc .brc-sugs li { display: flex; gap: 10px; align-items: flex-start; }
+.brc .brc-sn {
+  min-width: 22px; height: 22px; border-radius: 5px; flex: none; display: grid; place-items: center;
+  font-size: var(--brc-t-floor); font-weight: 800; color: var(--secondary); background: var(--brc-tint-blue);
+}
+.brc .brc-tests { display: flex; gap: 8px; align-items: flex-start; font-size: var(--brc-t-label); color: var(--text); background: var(--surface-2); border-radius: 8px; padding: 8px 12px; }
+.brc .brc-tests.is-run { color: var(--brc-success-text); background: var(--brc-tint-green); }
+.brc .brc-tests.is-run span { color: var(--text); }
+
+.brc .brc-compose { border-top: 1px solid var(--brc-rule); padding-top: 12px; }
+.brc .brc-compose .brm-ta { border: 1.5px solid var(--primary); }
+.brc .brc-look-acts { margin-top: 0; }
+.brc .brc-reply { display: flex; gap: 8px; align-items: center; }
+
+/* The early look as the wall's stage (Present, featured). */
+.brc.brc-look--stage { padding: 20px; border-radius: 14px; background: var(--bg); border: 1px solid var(--brc-line-amber); }
+.brc.brc-look--stage .brc-eyebrow { font-size: var(--brm-st-meta); }
+.brc.brc-look--stage .brc-look-title { font-size: var(--brm-st-q); }
+.brc.brc-look--stage .brc-p, .brc.brc-look--stage .brc-c { font-size: var(--brm-st-body); line-height: 1.35; }
+.brc.brc-look--stage .brc-react { font-size: var(--brm-st-meta); }
+
+/* ---- the Open to a crew dialog ------------------------------------------ */
+.brc .brc-kinds { margin: 0 0 14px; padding-left: 18px; font-size: var(--brc-t-body); }
+.brc .brc-kinds li { margin-bottom: 4px; }
+.brc .brc-access { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 16px; font-size: var(--brc-t-body); overflow-wrap: anywhere; }
+.brc .brc-access .ws-icon { color: var(--secondary); margin-top: 3px; flex: none; }
+.brc .brc-switchrow { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px; font-size: var(--brc-t-body); }
+.brc .brc-switchrow input { margin-top: 4px; accent-color: var(--primary); width: 16px; height: 16px; flex: none; }
+
+/* ---- tasks -------------------------------------------------------------- */
+.brc .brc-col-n { width: 9%; }
+.brc .brc-col-who { width: 34%; }
+.brc .brc-col-acts { width: 26%; }
+.brc .brc-claims { display: flex; flex-wrap: wrap; gap: 4px; }
+.brc .brc-tbl tr.is-done .brm-nm { color: var(--muted); text-decoration: line-through; }
+
+@media (max-width: 900px) {
+  .brc .brc-lane { grid-template-columns: minmax(0, 1fr); }
+  .brc .brc-look-grid { grid-template-columns: minmax(0, 1fr); }
+  .brc .brc-pipe { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .brc .brc-pipe { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brc .brc-pipe li, .brc .brc-pipe li:first-child { clip-path: none; }
+}

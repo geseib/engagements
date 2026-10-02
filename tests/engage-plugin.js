@@ -198,13 +198,13 @@ async function check(name, fn) {
     const hooks = JSON.parse(fs.readFileSync(path.join(plug, 'hooks', 'hooks.json'), 'utf8'));
     assert.ok(/--checkpoint/.test(hooks.hooks.Stop[0].hooks[0].command));
     assert.ok(fs.readFileSync(path.join(plug, 'engage-mcp.mjs')).equals(fs.readFileSync(SCRIPT)), 'the plugin carries this exact server');
-    for (const c of ['connect', 'kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'join', 'early-look', 'review']) {
+    for (const c of ['connect', 'kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'join', 'early-look', 'review', 'share-repo']) {
       assert.ok(fs.existsSync(path.join(plug, 'commands', `${c}.md`)), `${c} command`);
     }
     assert.ok(/\$ARGUMENTS/.test(fs.readFileSync(path.join(plug, 'commands', 'connect.md'), 'utf8')));
     // The crew commands: /engage:join <key>, /engage:early-look, /engage:review.
     assert.deepStrictEqual(fs.readdirSync(path.join(plug, 'commands')).sort(),
-      ['ab-mockups.md', 'connect.md', 'continue.md', 'early-look.md', 'ideas.md', 'join.md', 'kickoff.md', 'review.md', 'wrap-up.md']);
+      ['ab-mockups.md', 'connect.md', 'continue.md', 'early-look.md', 'ideas.md', 'join.md', 'kickoff.md', 'review.md', 'share-repo.md', 'wrap-up.md']);
     const join = fs.readFileSync(path.join(plug, 'commands', 'join.md'), 'utf8');
     assert.ok(/argument-hint: <key>/.test(join) && /connect with key "\$ARGUMENTS"/.test(join) && /crew_status/.test(join) && /claim_task/.test(join), join);
     const review = fs.readFileSync(path.join(plug, 'commands', 'review.md'), 'utf8');

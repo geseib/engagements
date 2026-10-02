@@ -1447,6 +1447,7 @@ const PROMPTS = [
     arguments: [{ name: 'focus', description: 'Optional: what to show or ask about', required: false }] },
   { name: 'review', description: 'Host\'s Claude: review the next early look waiting, obeying the Run crew code switch, and post the review card.',
     arguments: [{ name: 'shareId', description: 'Optional: which early look (default the next one waiting)', required: false }] },
+  { name: 'share-repo', description: 'Host\'s Claude: open this project to the crew: make the base branch, share the repo and base with the room, and propose the first tasks.', arguments: [] },
 ];
 
 function promptText(name, args) {
@@ -1549,6 +1550,16 @@ function promptText(name, args) {
         '6. Tell me in one line what was shared, then carry on building. Feedback arrives as directions on later calls; act on it, then share the next version.',
       ].filter((l, i) => l || i !== 1).join('\n');
     }
+    case 'share-repo':
+      return [
+        'Open this project to the Build Room crew. The whole team has access to this repo.',
+        '',
+        '1. Check the project is committed (git status). If not, commit it with a plain message.',
+        '2. Make the base branch for this session, build-room/<the room code> (room_status gives the code), from the current HEAD, and push it to origin so builders can fetch it. Never work on main directly.',
+        '3. Call share_repo with that base branch.',
+        '4. Propose 3 to 6 tasks from the goal and the decisions so far with propose_task: each one a piece a builder can finish and show in about half an hour.',
+        '5. Tell me in one line what you shared and which tasks are open, then call wait_for_direction.',
+      ].join('\n');
     case 'review': {
       const id = s(args.shareId).trim();
       return [
