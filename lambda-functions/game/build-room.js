@@ -880,7 +880,7 @@ async function crewReviewRequest(ctx, shareId) {
   if (!share) return fail(404, 'No such early look');
   const crew = C.crewOf(room.state);
   const v = C.latest(share) || {};
-  const where = v.hasPatch ? `the patch (get_share ${shareId} gives it)` : `${v.forkUrl || 'their fork'} branch ${v.branch || '?'} at ${v.commit || '?'}`;
+  const where = v.hasPatch ? `the patch (get_share ${shareId} gives it)` : `their branch ${v.branch || '?'} at ${v.commit || '?'}${v.forkUrl ? ` (on ${v.forkUrl})` : ''}`;
   await logEntry(ctx, {
     kind: 'direction',
     text: `Review ${share.Builder}'s early look "${share.Title}" (v${v.v || 1}, share ${shareId}): ${where}, against ${crew.baseBranch || 'the base branch'}. `

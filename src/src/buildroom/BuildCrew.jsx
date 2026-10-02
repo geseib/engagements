@@ -381,9 +381,13 @@ function Lane({ b, i, crew, host, now, onOpen }) {
   const race = task && (task.claimedBy || []).length > 1;
   const rivals = race ? task.claimedBy.filter((n) => n !== b.name) : [];
   const flagged = ['needs-rebase', 'needs-help'].includes(b.status);
-  const chip = flagged || !share
-    ? <Chip tone={STATUS_TONE[b.status]}>{BUILDER_STATUS[b.status] || b.status}</Chip>
-    : <Chip tone={LANE_TONE[share.lane]}>{LANE_LABEL[share.lane]} · v{share.versions.length}</Chip>;
+  // Nothing open and something merged: say so, not "Building" on old news.
+  const taskMerged = (crew.shares || []).some((s) => s.builder === b.name && s.lane === 'merged' && s.taskId === b.taskId);
+  const chip = !flagged && !share && taskMerged && b.status !== 'setting-up'
+    ? <Chip tone="green">Merged</Chip>
+    : flagged || !share
+      ? <Chip tone={STATUS_TONE[b.status]}>{BUILDER_STATUS[b.status] || b.status}</Chip>
+      : <Chip tone={LANE_TONE[share.lane]}>{LANE_LABEL[share.lane]} · v{share.versions.length}</Chip>;
   const checkpoint = minutesAgo(b.checkpointAt, now);
   return (
     <li className={`brc-lane brc-lane--${i % 4}${flagged ? ` is-${b.status}` : ''}`} aria-label={`${b.name}'s lane`}>

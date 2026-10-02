@@ -333,6 +333,11 @@ function reactionLine(r) {
 }
 
 /** The host's switch, said so nobody can miss it. */
+/** How a builder's work reaches the host, in words. */
+function modeWords(m) {
+  return m === 'patch' ? 'a patch through Engage' : 'a branch and a pull request';
+}
+
 function switchLines(on) {
   return on
     ? ['RUN CREW CODE: ON. The host allows you to install and run a builder\'s project and tests to review or merge it.',
@@ -367,7 +372,7 @@ function renderCrew(crew, you = {}) {
     const mine = you.role === 'builder' && b.name === you.name;
     lines.push(`  ${s(b.name)}${mine ? ' (you)' : ''}: ${s(b.status)}` +
       `${b.taskId ? ` · task ${taskText(b.taskId)}` : ' · no task yet'}` +
-      ` · ${b.mode === 'patch' ? 'patch' : 'fork'}${b.branch ? ` · branch ${b.branch}` : ''}${b.commit ? ` at ${b.commit}` : ''}` +
+      `${b.mode === 'patch' ? ' · patch' : ''}${b.branch ? ` · branch ${b.branch}` : ''}${b.commit ? ` at ${b.commit}` : ''}` +
       `${b.note ? ` · note: ${trunc(b.note, 120)}` : ''}`);
   }
   const open = tasks.filter(t => t.state === 'open');
@@ -1162,7 +1167,7 @@ const HANDLERS = {
       : b.status === 'synced' ? 'The board shows you are up to date with the base.'
         : b.taskId ? 'Carry on with your task; share_work an early look as soon as there is something to see.'
           : 'Next: pick a task from room_status and claim_task it (ask the builder which one first).';
-    return ok(`The crew board shows ${s(b.name) || 'you'}: ${s(b.status)} · ${s(b.mode)}${b.branch ? ` · branch ${b.branch}` : ''}${b.commit ? ` at ${b.commit}` : ''}${b.note ? ` · ${b.note}` : ''}.\n${next}`, res.inbox);
+    return ok(`The crew board shows ${s(b.name) || 'you'}: ${s(b.status)}${b.mode === 'patch' ? ' · patch' : ''}${b.branch ? ` · branch ${b.branch}` : ''}${b.commit ? ` at ${b.commit}` : ''}${b.note ? ` · ${b.note}` : ''}.\n${next}`, res.inbox);
   },
 
   async claim_task(args, ctx) {
@@ -1304,7 +1309,7 @@ const HANDLERS = {
     if (!repo && !baseCommit) notes.push('This folder is not a git repository, so no base commit was shared.');
     const res = await api('POST', 'crew/settings', clean({ repoUrl, baseBranch, baseCommit }), ctx.signal);
     const c = res.crew || {};
-    const lines = [`Shared the project with the crew: ${c.repoUrl || '(no repo address)'} · base branch ${c.baseBranch} at ${c.baseCommit || '?'} · builders may use ${(c.modes || []).join(' or ')}.`,
+    const lines = [`Shared the project with the crew: ${c.repoUrl || '(no repo address)'} · base branch ${c.baseBranch} at ${c.baseCommit || '?'} · builders send work as ${(c.modes || []).map(modeWords).join(' or ')}.`,
       ...switchLines(Boolean(c.runCrewCode))];
     if (notes.length) lines.push('', ...notes);
     if (repo && c.repoUrl) lines.push('', pushAdvice(dir, baseBranch, 'Builders cannot fetch the base until it is pushed.'));

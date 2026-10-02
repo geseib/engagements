@@ -748,7 +748,8 @@
 .bpl .bpl-lstatus.bpl-lstatus--needs-rebase,
 .bpl .bpl-lstatus.bpl-lstatus--needs-help { color: var(--primary); }
 
-.bpl .bpl-lstatus.bpl-lstatus--synced { color: var(--bpl-success-text); }
+.bpl .bpl-lstatus.bpl-lstatus--synced,
+.bpl .bpl-lstatus.bpl-lstatus--merged { color: var(--bpl-success-text); }
 
 .bpl .bpl-lnote { margin: 0 0 8px; font-size: var(--plr-t-body); }
 

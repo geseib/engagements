@@ -301,7 +301,11 @@ function pipeline(room) {
   const lanes = { building: 0, shared: 0, reviewed: 0, pr: 0, merged: 0, 'not-now': 0 };
   for (const s of room.shares) lanes[s.Lane || 'shared'] += 1;
   const sharing = new Set(room.shares.filter((s) => !['merged', 'not-now'].includes(s.Lane)).map((s) => s.Builder));
-  lanes.building = room.builders.filter((b) => !sharing.has(b.PlayerName)).length;
+  // A builder whose current task was merged, and who has nothing open, is
+  // done with it — not building — until they take another task.
+  const done = (b) => !['needs-rebase', 'needs-help'].includes(b.Status)
+    && room.shares.some((s) => s.Builder === b.PlayerName && s.Lane === 'merged' && s.TaskId === b.TaskId);
+  lanes.building = room.builders.filter((b) => !sharing.has(b.PlayerName) && !done(b)).length;
   return lanes;
 }
 

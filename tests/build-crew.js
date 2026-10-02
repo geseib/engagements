@@ -359,6 +359,19 @@ const PATCH = 'From 1234567 Mon Sep 17 00:00:00 2001\nSubject: [PATCH] Parking m
     assert.ok(/full/.test(r.body.error));
   });
 
+  await check('the pipeline counts a builder whose task merged as done, until they take another', async () => {
+    const C = require(path.join(REPO, 'lambda-functions/game/build-crew.js'));
+    const room = {
+      builders: [{ PlayerName: 'P', Status: 'building', TaskId: '1' }, { PlayerName: 'S', Status: 'building', TaskId: '1' }],
+      shares: [{ Builder: 'P', TaskId: '1', Lane: 'merged' }],
+    };
+    assert.strictEqual(C.pipeline(room).building, 1);
+    room.builders[0].TaskId = '2';
+    assert.strictEqual(C.pipeline(room).building, 2);
+    room.builders[0].TaskId = '1'; room.builders[0].Status = 'needs-rebase';
+    assert.strictEqual(C.pipeline(room).building, 2);
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

@@ -377,6 +377,13 @@ describe('an early look', () => {
     expect(within(screen.getByRole('region', { name: /Incoming/ })).queryByText('Parking map')).toBeNull();
   });
 
+  test('a builder whose work merged, with nothing open, reads Merged, not Building', async () => {
+    const board = await openCrew(hostState({ shares: [{ ...PRIYA_SHARE, Lane: 'merged' }, SAM_SHARE] }));
+    const lane = within(board).getByRole('listitem', { name: "Priya's lane" });
+    expect(within(lane).getByText('Merged')).toBeTruthy();
+    expect(within(lane).queryByText('Building')).toBeNull();
+  });
+
   test('closing with written feedback asks first', async () => {
     const d = await openLook();
     fireEvent.click(within(d).getByRole('button', { name: /Write feedback/ }));

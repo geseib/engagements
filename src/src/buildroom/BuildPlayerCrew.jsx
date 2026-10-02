@@ -37,6 +37,7 @@ export const BUILDER_STATUS = Object.freeze({
   'needs-rebase': 'Needs a rebase',
   'needs-help': 'Needs help',
   idle: 'Idle',
+  merged: 'Merged',
 });
 
 export const LANE_WORD = Object.freeze({
@@ -241,10 +242,13 @@ function YourLane({ crew, api, setBuilderKey, onResult }) {
   const b = (crew.builders || []).find((x) => x.name === me) || { status: 'setting-up' };
   const task = (crew.tasks || []).find((t) => t.taskId === b.taskId) || null;
   const open = (crew.tasks || []).filter((t) => t.state === 'open');
-  const status = b.status || 'setting-up';
-  const flagged = status === 'needs-rebase' || status === 'needs-help';
+  const flagged = b.status === 'needs-rebase' || b.status === 'needs-help';
   const mineShares = (crew.shares || []).filter((s) => s.builder === me);
-  const feedback = mineShares
+  const open_ = mineShares.filter((s) => !['merged', 'not-now'].includes(s.lane));
+  // Nothing open and something merged: the lane says Merged, not "Building".
+  const merged = !flagged && b.status && b.status !== 'setting-up' && !open_.length && mineShares.some((s) => s.lane === 'merged' && s.taskId === b.taskId);
+  const status = merged ? 'merged' : b.status || 'setting-up';
+  const feedback = open_
     .flatMap((s) => (s.comments || []).filter((c) => c.kind === 'feedback').map((c) => ({ ...c, title: s.title })))
     .sort((x, y) => String(x.createdAt).localeCompare(String(y.createdAt)))
     .pop();

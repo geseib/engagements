@@ -40,6 +40,7 @@ function whoLabel(entry) {
   if (entry.by === 'agent') return 'Claude';
   if (entry.by === 'system') return 'System';
   if (entry.by === 'room') return 'Room';
+  if (entry.by === 'builder') return entry.name || 'Builder';
   return 'Host';
 }
 

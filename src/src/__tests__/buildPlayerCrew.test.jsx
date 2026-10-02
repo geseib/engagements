@@ -26,7 +26,7 @@ const T = (m) => `2026-10-02T20:${String(m).padStart(2, '0')}:00.000Z`;
 
 const KEY = 'eng_4821_7Hq2vX9mK3sLabcdef';
 
-function rows({ builders = ['Priya', 'Sam'], featured = true, base = false } = {}) {
+function rows({ builders = ['Priya', 'Sam'], featured = true, base = false, lane = 'reviewed' } = {}) {
   const out = [
     {
       SK: 'BUILD#STATE',
@@ -45,7 +45,7 @@ function rows({ builders = ['Priya', 'Sam'], featured = true, base = false } = {
     { SK: 'BUILD#TASK#002', TaskId: '002', Text: 'Confirmation text', ClaimedBy: [], State: 'open', CreatedAt: T(2) },
     { SK: 'BUILD#TASK#003', TaskId: '003', Text: 'Dark mode', ClaimedBy: [], State: 'deleted', CreatedAt: T(3) },
     {
-      SK: 'BUILD#SHR#s1', ShareId: 's1', Builder: 'Priya', TaskId: '001', Title: 'Parking map', Lane: 'reviewed', Featured: featured,
+      SK: 'BUILD#SHR#s1', ShareId: 's1', Builder: 'Priya', TaskId: '001', Title: 'Parking map', Lane: lane, Featured: featured,
       PrUrl: 'https://github.com/george/foodbank/pull/7',
       Versions: [
         { v: 1, summary: 'A map of the three lots.', imageIds: ['aaa111'], commit: '3b9e1f0', createdAt: T(5) },
@@ -264,6 +264,15 @@ describe('a builder\'s phone', () => {
     expect(within(look).getByText(/Yours · v2/)).toBeInTheDocument();
     expect(within(look).queryByRole('button', { name: 'Looks right' })).toBeNull();
     expect(look.className).toMatch(/bpl-el--private/);
+  });
+
+  test('once their work is merged, the lane says Merged and the old feedback goes', async () => {
+    serve(phoneView('Priya', { lane: 'merged' }));
+    await mount('Priya');
+    const lane = screen.getByRole('region', { name: 'Your lane' });
+    expect(within(lane).getByText('Merged')).toBeInTheDocument();
+    expect(within(lane).queryByText('Building')).toBeNull();
+    expect(within(lane).queryByText('Show which lots are lit at night.')).toBeNull();
   });
 
   test('on the wall, the notice goes', async () => {
