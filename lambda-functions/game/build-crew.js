@@ -90,7 +90,9 @@ function crewOf(stateRow) {
     baseCommit: c.baseCommit || '',
     baseNote: c.baseNote || '',
     baseMovedAt: c.baseMovedAt || null,
-    modes: Array.isArray(c.modes) && c.modes.length ? c.modes.filter((m) => MODES.includes(m)) : [...MODES],
+    // The team works in the host's repo (branch + PR) unless the host turns
+    // patch mode on for someone without access (owner, 2026-10-02).
+    modes: Array.isArray(c.modes) && c.modes.length ? c.modes.filter((m) => MODES.includes(m)) : ['fork'],
     runCrewCode: Boolean(c.runCrewCode),
   };
 }

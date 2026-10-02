@@ -216,3 +216,14 @@ New MCP tools for **the host**: `share_repo`, `propose_tasks`, `review_share`, `
    and on the review card. No prompt every time. The host's Claude reads the switch before it
    runs anything, and says which way it was set in every review.
 7. **Crew size:** 8 builders or fewer. Multiple hosts and sessions come later.
+
+### Update (the owner, 2026-10-02, later the same day)
+
+- **Assume the whole team has access to the same repo.** Builders clone the host's repo,
+  work on their own branch `crew/<name>/<task>`, push it to that repo, and open a pull
+  request there. There are no forks or patches in the normal flow. Patch mode stays in the
+  code but is off by default and is not offered on the setup screen. Forks still work if
+  someone uses one.
+- **Two ways to take part.** Builders link their own Claude Code so they can code and test
+  along the way. Everyone else takes part on their phone (answering, reacting to early
+  looks and following along) and needs no setup at all.
