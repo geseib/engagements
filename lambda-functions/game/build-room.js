@@ -281,10 +281,8 @@ async function askAction(ctx, role, askId, body) {
       next.Decision = { direction, chosen, note, sendToAgent };
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: false });
-      if (sendToAgent) {
-        await logEntry(ctx, { kind: 'direction', text: direction + (note ? `\n\nAlso from the room: ${note}` : ''), by: 'host', askId, forAgent: true });
-      }
+      // One entry: the decision IS what Claude receives (inboxText adds the note).
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent });
     }
     await put(ctx, next);
     if (action === 'open' || action === 'reopen') await makeCurrent(ctx, room, askId, role);
@@ -344,10 +342,9 @@ async function postLog(ctx, role, body) {
     detail: S.cleanText(b.detail, S.LIMITS.logDetail),
     link: S.safeUrl(b.link),
     by: role === 'agent' ? 'agent' : 'host',
+    // What the room said can go straight to Claude; a host note never does.
+    forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
   });
-  if (role === 'host' && b.forAgent && kind !== 'note') {
-    await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true });
-  }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -394,7 +391,6 @@ async function ideaAction(ctx, ideaId, body) {
   const now = new Date().toISOString();
   let status = idea.Status || 'new';
   if (action === 'direct') {
-    await logEntry(ctx, { kind: 'direction', text: idea.Text, detail: `Idea from ${idea.PlayerName}`, by: 'host', forAgent: true });
     status = 'promoted';
   } else if (action === 'suggest') {
     const current = room.state && room.state.CurrentAskId ? findAsk(room, room.state.CurrentAskId) : null;
@@ -410,7 +406,7 @@ async function ideaAction(ctx, ideaId, body) {
   const next = { ...idea, Status: status, UpdatedAt: now };
   await put(ctx, next);
   if (action === 'direct' || action === 'suggest') {
-    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room' });
+    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct' });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -512,7 +508,7 @@ async function takeInbox(ctx) {
         ConditionExpression: 'attribute_not_exists(DeliveredAt)',
         ExpressionAttributeValues: { ':now': now },
       }));
-      out.push({ id: d.LogId, text: d.Text, from: d.AskId ? 'decision' : 'host', askId: d.AskId || null, createdAt: d.CreatedAt });
+      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), askId: d.AskId || null, createdAt: d.CreatedAt });
     } catch (e) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
     }

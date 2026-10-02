@@ -560,7 +560,9 @@ const HANDLERS = {
     if (ask.status === 'decided') {
       return ok(`The host has decided ask ${ask.askId}.\n\n${renderAsk(ask)}\n\n` +
         'Build what the direction says — it is final, even where it departs from the raw vote. ' +
-        'Then post_update to tell the room it is in place.', inbox);
+        'Then post_update to tell the room it is in place.',
+        // This decision is already printed in full above; repeat only the rest.
+        inbox.filter((d) => d.askId !== ask.askId));
     }
     if (ask.status === 'discarded') {
       return ok(`The host discarded ask ${ask.askId} ("${s(ask.prompt)}"). ` +
@@ -578,7 +580,8 @@ const HANDLERS = {
     const tail = ask.status === 'decided' ? '' :
       ask.status === 'discarded' ? '\n\nThis ask was discarded by the host.' :
       '\n\nNot decided yet — the host\'s direction is what counts. Call wait_for_room to wait for it.';
-    return ok(renderAsk(ask) + tail, res.inbox);
+    return ok(renderAsk(ask) + tail,
+      ask.status === 'decided' ? (res.inbox || []).filter((d) => d.askId !== ask.askId) : res.inbox);
   },
 
   async post_update(args, ctx) {

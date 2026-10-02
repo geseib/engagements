@@ -13,6 +13,7 @@ import HostEventAgenda from './components/event/HostEventAgenda';
 import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
+import BuildRoomPage from './buildroom/BuildRoomPage';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
 import SharedReportPage from './components/SharedReportPage';
@@ -380,6 +381,17 @@ function AppRouter() {
     return (
       <ProtectedRoute>
         <AdminPage />
+      </ProtectedRoute>
+    );
+  }
+
+  // THE BUILD ROOM (docs/design/build-room/PLAN.md): a room and the host's own
+  // Claude Code build something together. An exact match, never
+  // startsWith('/build') — that would also claim /builder below.
+  if (/^\/build\/?$/.test(path)) {
+    return (
+      <ProtectedRoute>
+        <BuildRoomPage />
       </ProtectedRoute>
     );
   }

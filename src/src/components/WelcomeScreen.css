@@ -273,6 +273,8 @@
 }
 
 .wel-action:hover { border-color: var(--muted); background: var(--surface-2); }
+/* The Build Room entry is a link, styled as its button neighbours. */
+.wel-action--link { text-decoration: none; }
 
 .wel-action-name {
   display: block;

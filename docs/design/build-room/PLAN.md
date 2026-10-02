@@ -288,3 +288,17 @@ plan out loud, post the plan), `ideas` (ask the room for ideas about a topic), `
 - The phone remote (`/remote`) getting a Build panel. In v1 the host opens `/build` on the
   phone, since the page is responsive.
 - Folding the build timeline into the standard `GameReport` and saved-report index.
+
+## 12. As built (2026-10-02)
+
+- One timeline entry is both the record and the message. A decision, something the room
+  said, or an idea the host passes on carries `ForAgent`. Claude receives it once through
+  `inbox` (`build-store.js` `inboxText`), and the host sees "Waiting for Claude" or "Claude
+  has it" on the entry. A plain host direction is a `direction` entry.
+- Phones and the wall (Present mode) see the room's timeline. That excludes host notes,
+  system bookkeeping and direction entries, and it strips the detail from decisions and
+  ideas (the host's note, the idea's author).
+- The frontend is in `src/src/buildroom/`, because `.gitignore` swallows any folder named
+  `build/`.
+- Local end-to-end demo with no AWS: `scripts/build-room-demo/`. It runs the real
+  handler, the real MCP server and a real browser.

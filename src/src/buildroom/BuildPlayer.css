@@ -1,0 +1,638 @@
+/* BuildPlayer.css — a Build Room on the participant's phone.
+ *
+ * WHAT THIS IS. The `.bpl` scope: what a Build Room adds to the player surface
+ * (docs/design/build-room/PLAN.md §8, frame 4 "Phones" of
+ * docs/design/build-room/index.html). Lettered option cards that match the
+ * "Choice A/B" badges Claude stamps on its mockups, the approval ballot, the
+ * result bars, the "Watch the build" feed, the "What we built" card and the
+ * idea composer.
+ *
+ * WHERE IT SITS. `.bpl` is only ever rendered INSIDE PlayerShell's `.plr`
+ * (BuildPlayer.jsx draws every screen through PlayerShell, and
+ * __tests__/buildPlayer.test.jsx asserts the nesting). So it reuses the
+ * player's controls as they are — `.plr-btn`, `.plr-inp`, `.plr-q`,
+ * `.plr-scale` — and the player's responsive type ladder (`--plr-t-*`,
+ * declared on `.plr` by components/PlayerSurface.css, which PlayerShell
+ * imports). It does not redeclare either: a second copy of the ladder is how
+ * two surfaces drift apart. Colour is styles.css's tokens plus the local tints
+ * declared on `.bpl` below.
+ *
+ * DUSK, always: PlayerShell carries data-theme="dark".
+ *
+ * MEASURED CONTRAST (composited by __tests__/buildPlayerPalette.test.js, never
+ * eyeballed here):
+ *   --text on --surface                                  12.53:1
+ *   --bpl-muted #B6C2D4 on --surface                      8.08:1
+ *   --bg on the A / B / C letter badges        8.86 / 7.06 / 6.66:1
+ *   --secondary on --bg (feed kinds, links, idea button)  7.06:1
+ *   --bpl-success-text #6FD0A4 on the decided tint        7.72:1
+ *   --primary on the latest-decision tint                 7.48:1
+ *
+ * TWO HEX LITERALS, both the player surface's own values (PlayerSurface.css
+ * names the reasons): --bpl-muted #B6C2D4 and --bpl-success-text #6FD0A4.
+ *
+ * NO RED. Nothing here is destructive; an error is amber (`.plr-err`).
+ */
+
+.bpl {
+  --bpl-muted: #B6C2D4;
+  --bpl-success-text: #6FD0A4;
+  --bpl-rule: rgba(182, 194, 212, .20);
+  --bpl-rule-strong: rgba(182, 194, 212, .34);
+  --bpl-amber-tint: rgba(246, 169, 76, .10);
+  --bpl-amber-edge: rgba(246, 169, 76, .40);
+  --bpl-blue-tint: rgba(124, 167, 230, .12);
+  --bpl-blue-edge: rgba(124, 167, 230, .50);
+  --bpl-good-tint: rgba(79, 178, 134, .12);
+  --bpl-good-edge: rgba(111, 208, 164, .45);
+  --bpl-tap: 44px;
+}
+
+/* Untrusted prose from Claude, the host and the room: keep its line breaks,
+   and let one long unbroken token wrap rather than widen the phone. */
+.bpl .bpl-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bpl .bpl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.bpl .bpl-center { text-align: center; }
+
+/* The one-line "what is this". Muted, above the screen's own heading: it
+   orients, it is not the task. */
+.bpl .bpl-intro {
+  margin: 0 0 14px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--bpl-rule);
+  font-size: var(--plr-t-meta);
+  line-height: 1.45;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-hint { margin: -4px 0 16px; }
+
+.bpl .bpl-eyebrow {
+  margin: 0 0 8px;
+  font-size: var(--plr-t-meta);
+  font-weight: 600;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-eyebrow b { color: var(--primary); font-weight: 700; }
+
+.bpl .bpl-askdetail { margin: -4px 0 14px; }
+
+.bpl .bpl-label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: var(--plr-t-meta);
+  font-weight: 600;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-opt-word { font-weight: 400; }
+
+.bpl .bpl-why { margin: 0 0 6px; }
+
+.bpl .bpl-area { min-height: 112px; resize: vertical; }
+
+.bpl .bpl-area.bpl-area--short { min-height: 84px; }
+
+.bpl .bpl-h {
+  margin: 0 0 8px;
+  font-size: var(--plr-t-secondary);
+  font-weight: 800;
+}
+
+.bpl .bpl-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  font-size: var(--plr-t-body);
+  line-height: 1.45;
+}
+
+.bpl .bpl-list li + li { margin-top: 4px; }
+
+.bpl .bpl-links { list-style: none; padding-left: 0; }
+
+.bpl .bpl-link {
+  color: var(--secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+/* ---- "Yours so far" ------------------------------------------------------ */
+
+.bpl .bpl-mine {
+  margin: 0 0 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: var(--plr-t-body);
+}
+
+.bpl .bpl-mine-h {
+  margin: 0 0 4px;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.bpl .bpl-mine .bpl-list { margin: 0; color: var(--bpl-muted); }
+
+/* ---- Choose: lettered cards ---------------------------------------------
+   The letter is the shared handle (README "Letters are the shared handle"):
+   the wall, the mockup's badge and this card all say the same A / B / C, in
+   the same three colours. */
+
+.bpl .bpl-cards { margin: 0 0 4px; }
+
+.bpl .bpl-card {
+  margin: 0 0 10px;
+  border: 2px solid var(--bpl-rule-strong);
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.bpl .bpl-card.bpl-card--on {
+  border-color: var(--primary);
+  background: var(--bpl-amber-tint);
+}
+
+.bpl .bpl-pick {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bpl .bpl-pick[aria-disabled="true"] { cursor: default; opacity: .7; }
+
+.bpl .bpl-pick:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; border-radius: 11px; }
+
+.bpl .bpl-letter {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--bg);
+  font-size: var(--plr-t-secondary);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.bpl .bpl-letter.bpl-letter--1 { background: var(--secondary); }
+
+.bpl .bpl-letter.bpl-letter--2 { background: var(--success); }
+
+.bpl .bpl-letter.bpl-letter--sm { width: 32px; height: 32px; font-size: var(--plr-t-body); }
+
+.bpl .bpl-otext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.bpl .bpl-otitle {
+  font-size: var(--plr-t-secondary);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.bpl .bpl-odetail {
+  font-size: var(--plr-t-body);
+  line-height: 1.35;
+  color: var(--bpl-muted);
+}
+
+/* The preview link lives OUTSIDE the pick button: a link inside a button is
+   two controls in one, and a tap meant for one fires the other. */
+.bpl .bpl-preview,
+.bpl .bpl-look {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--bpl-tap);
+  margin: 0 12px 4px 64px;
+  font-size: var(--plr-t-meta);
+}
+
+.bpl .bpl-preview {
+  color: var(--secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+
+.bpl .bpl-look { color: var(--bpl-muted); }
+
+/* ---- Vote: the approval ballot ------------------------------------------ */
+
+.bpl .bpl-ballot { margin: 0 0 4px; }
+
+.bpl .bpl-vrow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--bpl-rule-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bpl .bpl-vrow[aria-checked="true"] {
+  border-color: var(--primary);
+  background: var(--bpl-amber-tint);
+}
+
+.bpl .bpl-vrow.bpl-vrow--own { cursor: default; }
+
+.bpl .bpl-vrow:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.bpl .bpl-vn {
+  flex: none;
+  width: 22px;
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-vt {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--plr-t-body);
+  line-height: 1.35;
+}
+
+.bpl .bpl-yours { font-size: var(--plr-t-meta); color: var(--bpl-muted); }
+
+.bpl .bpl-tick {
+  flex: none;
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--bpl-muted);
+  border-radius: 8px;
+}
+
+.bpl .bpl-vrow--own .bpl-tick { border-style: dashed; }
+
+.bpl .bpl-vrow[aria-checked="true"] .bpl-tick {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.bpl .bpl-vrow[aria-checked="true"] .bpl-tick::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 3px;
+  width: 7px;
+  height: 13px;
+  border: solid var(--bg);
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
+
+/* The slots sit in the dock (wrapped in its own `.bpl`), above the button they fill. */
+.bpl .bpl-slots {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.bpl .bpl-slots i {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.bpl .bpl-slots i.bpl-slot--on { background: var(--primary); }
+
+/* ---- Results ------------------------------------------------------------- */
+
+.bpl .bpl-res,
+.bpl .bpl-ranked,
+.bpl .bpl-dist,
+.bpl .bpl-whys,
+.bpl .bpl-ticker,
+.bpl .bpl-myideas {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.bpl .bpl-res li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.bpl .bpl-rbody { flex: 1; min-width: 0; }
+
+.bpl .bpl-rline {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 0 6px;
+}
+
+.bpl .bpl-rtitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--plr-t-body);
+  font-weight: 600;
+}
+
+.bpl .bpl-rnum {
+  flex: none;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-res--top .bpl-rtitle { color: var(--text); }
+
+.bpl .bpl-bar {
+  display: block;
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.bpl .bpl-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--secondary);
+}
+
+.bpl .bpl-res--top .bpl-bar span { background: var(--primary); }
+
+.bpl .bpl-ranked li { padding: 8px 0; }
+
+.bpl .bpl-ranked li:first-child .bpl-bar span { background: var(--primary); }
+
+.bpl .bpl-avg { margin: 4px 0 10px; color: var(--bpl-muted); font-size: var(--plr-t-body); }
+
+.bpl .bpl-avg b {
+  margin-right: 4px;
+  color: var(--text);
+  font-size: var(--plr-t-hero);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.bpl .bpl-dist li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.bpl .bpl-dist .bpl-rnum { width: 2ch; text-align: center; }
+
+.bpl .bpl-sec { margin: 14px 0 0; }
+
+.bpl .bpl-whys li {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--bpl-rule-strong);
+  font-size: var(--plr-t-body);
+  line-height: 1.4;
+}
+
+.bpl .bpl-wl {
+  margin-right: 8px;
+  font-size: var(--plr-t-meta);
+  font-weight: 800;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-decided {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--bpl-good-edge);
+  border-radius: 13px;
+  background: var(--bpl-good-tint);
+}
+
+.bpl .bpl-sent {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 6px;
+  font-size: var(--plr-t-body);
+  font-weight: 700;
+  color: var(--bpl-success-text);
+}
+
+/* ---- Watch the build ----------------------------------------------------- */
+
+.bpl .bpl-feed { margin: 0 0 18px; }
+
+.bpl .bpl-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: var(--plr-t-meta);
+  font-weight: 600;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-agent::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bpl-muted);
+}
+
+.bpl .bpl-agent.bpl-agent--on { color: var(--text); background: var(--bpl-blue-tint); }
+
+.bpl .bpl-agent.bpl-agent--on::before { background: var(--success); }
+
+.bpl .bpl-goal {
+  margin: 0 0 14px;
+  padding: 2px 0 2px 13px;
+  border-left: 3px solid var(--primary);
+  font-size: var(--plr-t-body);
+}
+
+.bpl .bpl-goal p { margin: 0; }
+
+.bpl .bpl-latest {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--bpl-amber-edge);
+  border-radius: 13px;
+  background: var(--bpl-amber-tint);
+}
+
+.bpl .bpl-latest-tx { margin: 4px 0 0; font-size: var(--plr-t-secondary); line-height: 1.3; }
+
+.bpl .bpl-feed-h { margin-top: 6px; }
+
+.bpl .bpl-kind {
+  margin: 0;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.bpl .bpl-kind.bpl-kind--amber { color: var(--primary); }
+
+.bpl .bpl-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.bpl .bpl-entry.bpl-entry--newest { border-left: 4px solid var(--secondary); }
+
+.bpl .bpl-entry.bpl-entry--decision .bpl-kind,
+.bpl .bpl-entry.bpl-entry--direction .bpl-kind { color: var(--primary); }
+
+.bpl .bpl-entry.bpl-entry--verbal .bpl-kind,
+.bpl .bpl-entry.bpl-entry--idea .bpl-kind { color: var(--bpl-success-text); }
+
+.bpl .bpl-ago { font-size: var(--plr-t-meta); color: var(--bpl-muted); }
+
+.bpl .bpl-tx,
+.bpl .bpl-dt,
+.bpl .bpl-lnk { grid-column: 1 / -1; }
+
+.bpl .bpl-tx { font-size: var(--plr-t-body); line-height: 1.35; }
+
+.bpl .bpl-dt { font-size: var(--plr-t-meta); color: var(--bpl-muted); }
+
+.bpl .bpl-lnk { font-size: var(--plr-t-meta); }
+
+/* ---- What we built -------------------------------------------------------- */
+
+.bpl .bpl-outcome {
+  margin: 0 0 18px;
+  padding: 15px;
+  border: 1px solid var(--bpl-good-edge);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.bpl .bpl-summary { margin: 0 0 12px; font-size: var(--plr-t-body); line-height: 1.45; }
+
+/* ---- Send an idea --------------------------------------------------------- */
+
+.bpl .bpl-ideas { margin: 18px 0 0; }
+
+.bpl .bpl-ideabtn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: var(--bpl-tap);
+  padding: 9px 12px;
+  border: 1px dashed var(--bpl-blue-edge);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--secondary);
+  font-family: inherit;
+  font-size: var(--plr-t-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bpl .bpl-ideabtn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.bpl .bpl-ideacount {
+  margin-left: auto;
+  font-size: var(--plr-t-meta);
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-ideabox { margin: 4px 0 0; }
+
+/* Not amber: the one amber idea on an ask screen is the ask's own button. */
+.bpl .bpl-send {
+  display: block;
+  width: 100%;
+  min-height: var(--bpl-tap);
+  margin: 10px 0 0;
+  border: 1px solid var(--bpl-blue-edge);
+  border-radius: 12px;
+  background: var(--bpl-blue-tint);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--plr-t-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bpl .bpl-send[disabled] {
+  border-color: var(--bpl-rule-strong);
+  background: transparent;
+  color: var(--bpl-muted);
+  cursor: default;
+}
+
+.bpl .bpl-send:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.bpl .bpl-ok { margin: 8px 0 0; font-size: var(--plr-t-meta); color: var(--bpl-success-text); }
+
+.bpl .bpl-myideas { margin: 12px 0 0; }
+
+.bpl .bpl-myideas li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--bpl-rule);
+  font-size: var(--plr-t-body);
+}
+
+.bpl .bpl-myideas li > .bpl-text { flex: 1 1 12ch; min-width: 0; }
+
+.bpl .bpl-status {
+  margin-left: auto;
+  font-size: var(--plr-t-meta);
+  font-weight: 600;
+  color: var(--bpl-muted);
+}
+
+.bpl .bpl-status.bpl-status--promoted { color: var(--bpl-success-text); }

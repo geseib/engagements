@@ -259,8 +259,11 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
 
   await check('a phone never sees the host\'s decision note: no direction entries, no decision detail', async () => {
     const p = await playCall('GET', 'state', priya);
-    assert.ok(!p.body.log.some((l) => l.kind === 'direction'));
     assert.ok(!JSON.stringify(p.body).includes('bigger button'));
+    // one entry per decision on the host's timeline, flagged for Claude and delivered
+    const h = await hostCall('GET', 'state');
+    const decisions = h.body.log.filter((l) => l.askId === askId && ['decision', 'direction'].includes(l.kind));
+    assert.deepStrictEqual(decisions.map((l) => [l.kind, l.forAgent, Boolean(l.deliveredAt)]), [['decision', true, true]]);
     assert.strictEqual(p.body.current.decision.sentToAgent, true);
   });
 
@@ -322,7 +325,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await agentCall('GET', 'state'); // drain the Ideas decision
     await hostCall('POST', 'log', { kind: 'verbal', text: 'The room says the colours are too dark', forAgent: true });
     const a = await agentCall('POST', 'log', { text: 'Footer done' });
-    assert.deepStrictEqual(a.body.inbox.map((i) => i.text), ['The room says the colours are too dark']);
+    assert.deepStrictEqual(a.body.inbox.map((i) => i.text), ['The room said: The room says the colours are too dark']);
   });
   await check('a phone\'s idea lands in the host\'s inbox and can be sent to Claude', async () => {
     assert.strictEqual((await playCall('POST', 'idea', { ...marcus, text: 'Add a map of the parking' })).status, 201);
@@ -332,7 +335,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const r = await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'direct' });
     assert.strictEqual(r.body.idea.status, 'promoted');
     const a = await agentCall('GET', 'state');
-    assert.deepStrictEqual(a.body.inbox.map((i) => i.text), ['Add a map of the parking']);
+    assert.deepStrictEqual(a.body.inbox.map((i) => i.text), ['An idea from the room: Add a map of the parking']);
     const p = await playCall('GET', 'state', marcus);
     assert.deepStrictEqual(p.body.myIdeas.map((i) => i.status), ['promoted']);
   });

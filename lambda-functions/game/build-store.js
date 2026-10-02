@@ -506,10 +506,23 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
   };
 }
 
-/** Directions Claude has not yet been handed, oldest first. */
+/**
+ * Entries Claude has not yet been handed, oldest first. One timeline entry is
+ * both the record and the message: a decision, what the room said, an idea
+ * the host passed on, or a plain direction — whichever carries ForAgent.
+ */
 function pendingDirections(room) {
-  return room.logs.filter((l) => l.Kind === 'direction' && l.ForAgent && !l.DeliveredAt);
+  return room.logs.filter((l) => l.ForAgent && !l.DeliveredAt && l.Kind !== 'note');
 }
+
+/** The words Claude receives for one entry. */
+function inboxText(entry) {
+  if (entry.Kind === 'decision') return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '');
+  if (entry.Kind === 'idea') return `An idea from the room: ${entry.Text}`;
+  if (entry.Kind === 'verbal') return `The room said: ${entry.Text}`;
+  return entry.Text;
+}
+const inboxFrom = (entry) => (entry.Kind === 'decision' ? 'decision' : entry.Kind === 'idea' ? 'idea' : 'host');
 
 /** The text a decision hands Claude when the host did not write one. */
 function defaultDirection(ask, room) {
@@ -531,5 +544,5 @@ module.exports = {
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
-  hostView, publicView, pendingDirections, defaultDirection,
+  hostView, publicView, pendingDirections, inboxText, inboxFrom, defaultDirection,
 };

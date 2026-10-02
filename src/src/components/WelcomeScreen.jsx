@@ -212,6 +212,15 @@ export default function WelcomeScreen({
                   Launch a ready-made set straight into a live room. No decisions to make.
                 </span>
               </button>
+
+              {/* THE BUILD ROOM (docs/design/build-room/PLAN.md). Its own page,
+                  so a real link: App.jsx routes on pathname. */}
+              <a className="wel-action wel-action--link" href="/build">
+                <span className="wel-action-name">Build Room</span>
+                <span className="wel-action-note">
+                  Build something with your Claude Code. The room suggests and votes; you decide.
+                </span>
+              </a>
             </div>
 
             {/* An organisation's events, each one door to its agenda and stage

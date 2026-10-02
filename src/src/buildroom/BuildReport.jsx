@@ -1,0 +1,234 @@
+/**
+ * BUILD ROOM — the report (PLAN §8, storyboard frame 7).
+ *
+ * Paper, like components/GameReport.jsx: `data-theme="light"` on its own root,
+ * because a report is read and printed, not projected. Its own scope, `.brr`,
+ * in BuildReport.css.
+ *
+ * The order is the order a reader needs: what we wanted, what we got, how we
+ * decided, then the full record. Each decision shows the room's numbers AND
+ * the host's direction, because the two often differ and the difference is the
+ * useful part.
+ *
+ * A pure function of HostState (build-store.js `hostView`). Host notes are
+ * left out: a `note` is never shown to the room, and a report gets handed
+ * round. Everything Claude or a phone wrote renders as text; links only when
+ * http(s).
+ */
+import React from 'react';
+import Icon from '../components/Icon';
+import { safeHref } from './buildHostApi';
+import './BuildReport.css';
+
+const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate 1–5' };
+const IDEA_STATUS = { new: 'New', promoted: 'Used', dismissed: 'Dismissed' };
+
+function when(iso, opts) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return '';
+  return new Date(t).toLocaleString([], opts);
+}
+const hhmm = (iso) => when(iso, { hour: '2-digit', minute: '2-digit' });
+
+function whoLabel(entry) {
+  if (entry.by === 'agent') return 'Claude';
+  if (entry.by === 'system') return 'System';
+  if (entry.by === 'room') return 'Room';
+  return 'Host';
+}
+
+function Link({ href, children }) {
+  const url = safeHref(href);
+  if (!url) return children || null;
+  return <a href={url} target="_blank" rel="noopener noreferrer">{children || url}</a>;
+}
+
+function Results({ ask }) {
+  const r = ask.results || {};
+  if (ask.kind === 'choice') {
+    const opts = [...(r.options || [])].sort((a, b) => b.count - a.count);
+    return opts.map((o) => (
+      <div className="brr-pres" key={o.label}>
+        <span className="brr-pl">{o.label}</span>
+        <span>{o.title}<span className="brr-pb" aria-hidden="true"><i style={{ width: `${o.pct}%` }} /></span></span>
+        <span className="brr-pn">{o.count} · {o.pct}%</span>
+      </div>
+    ));
+  }
+  if (ask.kind === 'rating') {
+    const rating = r.rating || { avg: null, count: 0, dist: [] };
+    return (
+      <div className="brr-pres">
+        <span className="brr-pl">{rating.avg === null || rating.avg === undefined ? '–' : rating.avg}</span>
+        <span>
+          average · {(rating.dist || []).map((n, i) => `${i + 1}: ${n}`).join(' · ')}
+          <span className="brr-pb" aria-hidden="true"><i style={{ width: `${((rating.avg || 0) / 5) * 100}%` }} /></span>
+        </span>
+        <span className="brr-pn">{rating.count || 0} rated</span>
+      </div>
+    );
+  }
+  const ranked = r.ranked || [];
+  const max = Math.max(1, ...ranked.map((x) => x.votes || 0));
+  return ranked.slice(0, 8).map((x, i) => (
+    <div className="brr-pres" key={x.respId}>
+      <span className="brr-pl">{i + 1}</span>
+      <span>{x.text}<span className="brr-pb" aria-hidden="true"><i style={{ width: `${((x.votes || 0) / max) * 100}%` }} /></span></span>
+      <span className="brr-pn">{x.votes || 0} votes</span>
+    </div>
+  ));
+}
+
+function Decision({ ask }) {
+  const r = ask.results || {};
+  const counted = ask.kind === 'suggest'
+    ? `${(ask.responses || []).length} suggestions · ${r.total || 0} voted`
+    : `${r.total || 0} answered`;
+  const whys = r.whys || [];
+  return (
+    <div className="brr-dec">
+      <div className="brr-dh">
+        <b>Ask {Number(ask.askId) || ask.askId} · {ask.prompt}</b>
+        <span>
+          {KIND_LABEL[ask.kind]} · {ask.source === 'agent' ? 'Claude asked' : 'host asked'} · {counted}
+          {ask.decidedAt ? ` · decided ${hhmm(ask.decidedAt)}` : ` · ${ask.status === 'results' ? 'closed, not decided' : ask.status}`}
+        </span>
+      </div>
+      {ask.detail && <p className="brr-detail">{ask.detail}</p>}
+      <Results ask={ask} />
+      {whys.length > 0 && (
+        <ul className="brr-whys">
+          {whys.map((w, i) => (
+            <li key={i}><b>{w.label}</b> {w.text}{w.playerName ? <span className="brr-dim"> · {w.playerName}</span> : null}</li>
+          ))}
+        </ul>
+      )}
+      {ask.decision && (
+        <div className="brr-direction">
+          <b>Direction:</b> {ask.decision.direction}
+          {ask.decision.chosen && ask.decision.chosen.length > 0 && ask.kind === 'choice' && (
+            <span className="brr-dim"> · chosen {ask.decision.chosen.join(', ')}</span>
+          )}
+          {ask.decision.note && <div className="brr-note"><b>The room also said:</b> {ask.decision.note}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function BuildReport({ state, onBack }) {
+  const s = state || {};
+  const log = (s.log || []).filter((l) => l.kind !== 'note');
+  const asks = (s.asks || []).filter((a) => !['proposed', 'discarded'].includes(a.status));
+  const ideas = s.ideas || [];
+  const players = s.players || [];
+  const outcome = s.outcome;
+  const times = (s.log || []).map((l) => Date.parse(l.createdAt || '')).filter(Number.isFinite).sort((a, b) => a - b);
+  const first = times.length ? new Date(times[0]).toISOString() : null;
+  const last = times.length ? new Date(times[times.length - 1]).toISOString() : null;
+  const date = first ? when(first, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+
+  return (
+    <div className="brr" data-theme="light">
+      <div className="brr-printbar">
+        {onBack && (
+          <button type="button" className="brr-btn brr-btn--ghost" onClick={onBack}>
+            <Icon name="ArrowLeft" size={14} /> Back to room
+          </button>
+        )}
+        <button type="button" className="brr-btn" onClick={() => window.print()}>
+          <Icon name="FilePdf" size={14} /> Print / Save as PDF
+        </button>
+      </div>
+      <article className="brr-sheet">
+        <div className="brr-kick">Build Room report{date ? ` · ${date}` : ''}{first ? ` · ${hhmm(first)}–${hhmm(last)}` : ''}</div>
+        <h1>{s.title || 'Build Room'}</h1>
+        <div className="brr-meta">
+          {s.playerCount || players.length} people · {s.agent?.name || 'Claude Code'} · {asks.length} asks · {log.length} timeline entries · code {s.gameId}
+        </div>
+        {s.goal && <div className="brr-goal"><span className="brr-lbl">Goal</span>{s.goal}</div>}
+
+        <section aria-labelledby="brr-built">
+          <h2 id="brr-built">What we built</h2>
+          {outcome ? (
+            <>
+              <p className="brr-summary">{outcome.summary}</p>
+              <p className="brr-dim brr-small">{outcome.by === 'agent' ? 'Written by Claude at wrap-up' : 'Written by the host'}{outcome.updatedAt ? ` · ${hhmm(outcome.updatedAt)}` : ''}</p>
+              <div className="brr-twocol">
+                {outcome.built.length > 0 && (
+                  <div><b className="brr-small">Built</b><ul>{outcome.built.map((b) => <li key={b}>{b}</li>)}</ul></div>
+                )}
+                <div>
+                  {outcome.nextSteps.length > 0 && (
+                    <><b className="brr-small">Next steps</b><ul>{outcome.nextSteps.map((b) => <li key={b}>{b}</li>)}</ul></>
+                  )}
+                  {outcome.links.length > 0 && (
+                    <><b className="brr-small brr-block">Links</b><ul>{outcome.links.map((l) => (
+                      <li key={l.url}><Link href={l.url}>{l.label || l.url}</Link></li>
+                    ))}</ul></>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="brr-dim">No wrap-up yet. Ask Claude to wrap up, or write one from the room.</p>
+          )}
+        </section>
+
+        <section aria-labelledby="brr-decisions">
+          <h2 id="brr-decisions">Decisions</h2>
+          {asks.length ? asks.map((a) => <Decision key={a.askId} ask={a} />) : <p className="brr-dim">The room was not asked anything.</p>}
+        </section>
+
+        <section aria-labelledby="brr-timeline">
+          <h2 id="brr-timeline">Timeline</h2>
+          {log.length ? (
+            <table className="brr-tbl">
+              <thead><tr><th className="brr-col-t">Time</th><th className="brr-col-who">Who</th><th className="brr-col-kind">Kind</th><th>What happened</th></tr></thead>
+              <tbody>
+                {log.map((l) => (
+                  <tr key={l.logId}>
+                    <td>{hhmm(l.createdAt)}</td>
+                    <td>{whoLabel(l)}</td>
+                    <td>{l.kind}</td>
+                    <td>
+                      {l.text}
+                      {l.detail && <span className="brr-block brr-dim">{l.detail}</span>}
+                      {safeHref(l.link) && <span className="brr-block"><Link href={l.link} /></span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p className="brr-dim">Nothing on the timeline yet.</p>}
+          <p className="brr-dim brr-small">Host notes are left out of the report.</p>
+        </section>
+
+        <section aria-labelledby="brr-ideas">
+          <h2 id="brr-ideas">Ideas from the room</h2>
+          {ideas.length ? (
+            <table className="brr-tbl">
+              <thead><tr><th className="brr-col-t">Time</th><th className="brr-col-who">Status</th><th>Idea</th></tr></thead>
+              <tbody>
+                {ideas.map((i) => (
+                  <tr key={i.ideaId}>
+                    <td>{hhmm(i.createdAt)}</td>
+                    <td>{IDEA_STATUS[i.status] || i.status}</td>
+                    <td>{i.text}<span className="brr-dim"> · {i.playerName}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p className="brr-dim">No ideas were sent.</p>}
+        </section>
+
+        <section aria-labelledby="brr-people">
+          <h2 id="brr-people">Who took part</h2>
+          {players.length ? (
+            <ul className="brr-ppl">{players.map((p) => <li key={p}>{p}</li>)}</ul>
+          ) : <p className="brr-dim">Nobody joined from a phone.</p>}
+        </section>
+      </article>
+    </div>
+  );
+}
