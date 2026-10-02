@@ -256,10 +256,12 @@ const PATCH = 'From 1234567 Mon Sep 17 00:00:00 2001\nSubject: [PATCH] Parking m
     await phone('Marcus')('POST', 'crew/react', { shareId, kind: 'looks-right' });
     const p = (await phone('Marcus')('GET', 'state')).body.crew.shares[0];
     assert.deepStrictEqual(p.reactions, { 'looks-right': 1, question: 1, concern: 0 });
-    assert.deepStrictEqual(p.comments.map((c) => [c.kind, c.text, c.name]), [['question', 'Does it work at night?', ''], ['looks-right', '', 'You']]);
+    // Two reactions in the same millisecond have no order to promise; compare as a set.
+    const byKind = (list) => list.slice().sort((a, b) => a[0].localeCompare(b[0]));
+    assert.deepStrictEqual(byKind(p.comments.map((c) => [c.kind, c.text, c.name])), [['looks-right', '', 'You'], ['question', 'Does it work at night?', '']]);
     assert.strictEqual(p.prUrl, '');
     const h = (await host('GET', 'state')).body.crew.shares[0];
-    assert.deepStrictEqual(h.comments.map((c) => c.name), ['Ana', 'Marcus']);
+    assert.deepStrictEqual(h.comments.map((c) => c.name).sort(), ['Ana', 'Marcus']);
   });
   await check('the host shapes it into feedback; it reaches Priya\'s Claude, and she shares v2', async () => {
     await host('POST', `crew/shares/${shareId}/feedback`, { text: 'Keep the map. Show which lots are lit at night.' });
