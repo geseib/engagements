@@ -32,6 +32,10 @@ const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing']);
 const HOST_LOG_KINDS = Object.freeze(['verbal', 'note', 'milestone', 'progress']);
 /** Never shown to the room, and never to Claude. */
 const PRIVATE_LOG_KINDS = Object.freeze(['note']);
+/** Never shown on a phone. */
+const PHONE_HIDDEN_LOG_KINDS = Object.freeze(['direction']);
+/** Shown on a phone without their detail (the host's note, an idea's author). */
+const DETAIL_PRIVATE_LOG_KINDS = Object.freeze(['decision', 'idea']);
 
 const LIMITS = Object.freeze({
   prompt: 300,
@@ -340,7 +344,7 @@ function askView(ask, room, audience, me) {
       // Anonymous on phones. A phone's own suggestions are flagged so it
       // cannot vote for itself.
       out.responses = resps.filter((r) => !r.Hidden).map((r) => ({
-        respId: r.RespId, text: r.Text, mine: Boolean(me && r.PlayerName === me.playerName),
+        respId: r.RespId, text: r.Text, mine: Boolean(me && r.PlayerName === me.playerName && (r.Source || 'player') === 'player'),
         ...(showResults ? { votes: t.count.get(r.RespId) || 0 } : {}),
       }));
     }
@@ -363,6 +367,7 @@ function askView(ask, room, audience, me) {
       direction: ask.Decision.direction || '',
       chosen: ask.Decision.chosen || [],
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
+      sentToAgent: ask.Decision.sendToAgent !== false,
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -469,7 +474,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
   const mine = { responses: [], vote: [], answer: null };
   if (current && me) {
     mine.responses = forAsk(room.resps, current.AskId)
-      .filter((r) => r.PlayerName === me.playerName && r.Source !== 'host')
+      .filter((r) => r.PlayerName === me.playerName && (r.Source || 'player') === 'player')
       .map((r) => ({ respId: r.RespId, text: r.Text }));
     const v = forAsk(room.votes, current.AskId).find((r) => r.PlayerName === me.playerName);
     mine.vote = v ? v.RespIds || [] : [];
@@ -487,8 +492,12 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision).map((a) => ({
       askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.direction || '', decidedAt: a.DecidedAt || null,
     })),
-    log: room.logs.filter((l) => !PRIVATE_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, ...rest }) => rest),
+    // A phone sees the timeline the room made, not the host's working:
+    // directions are Claude's copy of a decision the phone already sees (and
+    // carry the host's note), and a decision's or idea's detail is the host's
+    // note or the idea's author.
+    log: room.logs.filter((l) => !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
+      .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest)),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName).map(ideaView) : [],
     outcome: outcomeView(room.state && room.state.Outcome),
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
@@ -515,7 +524,7 @@ function defaultDirection(ask, room) {
 }
 
 module.exports = {
-  GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS,
+  GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
   LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, KEY_PREFIX,
   SK, TRANSITIONS,
   cleanText, safeUrl, pad3, labelFor, newId, entityForSk,

@@ -255,7 +255,7 @@ async function askAction(ctx, role, askId, body) {
   if (!ask) return fail(404, `No ask ${askId}`);
   const action = String(b.action || '').toLowerCase();
   const now = new Date().toISOString();
-  const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && r.Source !== 'host');
+  const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
 
   if (action === 'edit') {
     const edited = S.applyEdit(ask, b, { answered });
@@ -402,7 +402,7 @@ async function ideaAction(ctx, ideaId, body) {
       return fail(409, 'There is no Ideas ask open to add it to');
     }
     const id = S.newId();
-    await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'player', CreatedAt: now });
+    await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'idea', CreatedAt: now });
     status = 'promoted';
   } else if (action === 'dismiss') status = 'dismissed';
   else if (action === 'restore') status = 'new';
@@ -597,7 +597,7 @@ async function routePlay(ctx, method, parts, body, query) {
     if (ask.Kind === 'suggest') {
       const text = S.cleanText(input.text, S.LIMITS.response);
       if (!text) return fail(400, 'Write your suggestion');
-      const mine = room.resps.filter((r) => r.AskId === askId && r.PlayerName === me.playerName && r.Source !== 'host');
+      const mine = room.resps.filter((r) => r.AskId === askId && r.PlayerName === me.playerName && (r.Source || 'player') === 'player');
       if (mine.length >= S.MAX_SUGGESTIONS_PER_PLAYER) return fail(409, `Up to ${S.MAX_SUGGESTIONS_PER_PLAYER} suggestions each`);
       const id = S.newId();
       await put(ctx, { SK: S.SK.resp(askId, id), AskId: askId, RespId: id, Text: text, PlayerName: me.playerName, Source: 'player', CreatedAt: now });
@@ -618,7 +618,7 @@ async function routePlay(ctx, method, parts, body, query) {
     const valid = new Map(room.resps.filter((r) => r.AskId === askId && !r.Hidden).map((r) => [r.RespId, r]));
     const ids = [...new Set((Array.isArray(input.respIds) ? input.respIds : []).map(String))];
     if (ids.some((id) => !valid.has(id))) return fail(400, 'That suggestion is not on the ballot');
-    if (ids.some((id) => valid.get(id).PlayerName === me.playerName && valid.get(id).Source !== 'host')) return fail(400, 'Vote for other people\'s ideas');
+    if (ids.some((id) => valid.get(id).PlayerName === me.playerName && (valid.get(id).Source || 'player') === 'player')) return fail(400, 'Vote for other people\'s ideas');
     const max = ask.MaxPicks || S.DEFAULT_MAX_PICKS;
     if (ids.length > max) return fail(400, `Pick up to ${max}`);
     await put(ctx, { SK: S.SK.vote(askId, me.playerName), AskId: askId, PlayerName: me.playerName, RespIds: ids, CreatedAt: now });

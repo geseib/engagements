@@ -257,6 +257,13 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(h.body.agent.connected, true);
   });
 
+  await check('a phone never sees the host\'s decision note: no direction entries, no decision detail', async () => {
+    const p = await playCall('GET', 'state', priya);
+    assert.ok(!p.body.log.some((l) => l.kind === 'direction'));
+    assert.ok(!JSON.stringify(p.body).includes('bigger button'));
+    assert.strictEqual(p.body.current.decision.sentToAgent, true);
+  });
+
   console.log('\nIdeas: suggest, vote, rank');
   let ideasId;
   await check('with review off, Claude\'s Ideas ask goes straight to the room', async () => {
@@ -328,6 +335,21 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.deepStrictEqual(a.body.inbox.map((i) => i.text), ['Add a map of the parking']);
     const p = await playCall('GET', 'state', marcus);
     assert.deepStrictEqual(p.body.myIdeas.map((i) => i.status), ['promoted']);
+  });
+  await check('an idea added to an Ideas ask is not its author\'s own suggestion, and its author stays anonymous on phones', async () => {
+    const ask = (await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Anything else?' })).body.ask;
+    await playCall('POST', 'idea', { ...priya, text: 'A big friendly map' });
+    const idea = (await hostCall('GET', 'state')).body.ideas.find((i) => i.text === 'A big friendly map');
+    assert.strictEqual((await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'suggest' })).status, 200);
+    for (const t of ['one', 'two', 'three']) assert.strictEqual((await playCall('POST', 'respond', { ...priya, askId: ask.askId, text: t })).status, 200);
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'vote' });
+    const p = await playCall('GET', 'state', priya);
+    const promoted = p.body.current.responses.find((r) => r.text === 'A big friendly map');
+    assert.strictEqual(promoted.mine, false);
+    assert.strictEqual((await playCall('POST', 'vote', { ...priya, askId: ask.askId, respIds: [promoted.respId] })).status, 200);
+    const ideaEntry = p.body.log.find((l) => l.kind === 'idea');
+    assert.strictEqual(ideaEntry.detail, '');
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'discard' });
   });
   await check('Claude wraps up; links are http(s) only; the host can rewrite it', async () => {
     const r = await agentCall('POST', 'outcome', { summary: 'A sign-up site with shifts', built: ['Shift calendar'], links: [{ label: 'Repo', url: 'https://github.com/x/y' }, { label: 'bad', url: 'ftp://x' }] });
