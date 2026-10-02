@@ -51,6 +51,7 @@ const choiceAsk = (status) => ({
     : null,
 });
 
+let inboxPolls = 0;
 const server = http.createServer((req, res) => {
   let raw = '';
   req.on('data', c => { raw += c; });
@@ -79,6 +80,10 @@ const server = http.createServer((req, res) => {
     if (req.method === 'GET' && p === 'asks/003') {
       askPolls++;
       return send(200, { ask: choiceAsk(askPolls >= 3 ? 'decided' : 'live'), inbox: [] });
+    }
+    if (req.method === 'GET' && p === 'inbox?listening=1') {
+      inboxPolls++;
+      return send(200, { inbox: inboxPolls >= 3 ? [{ id: 'd7', text: 'Make the button green', from: 'host', askId: null, createdAt: 'now' }] : [] });
     }
     if (req.method === 'POST' && p === 'log') {
       return send(200, {
@@ -169,11 +174,11 @@ const hardStop = setTimeout(() => {
   });
 
   console.log('\n2. listings');
-  await check('tools/list has all nine tools with object schemas', async () => {
+  await check('tools/list has all ten tools with object schemas', async () => {
     const r = await mcp.request('tools/list', {});
     const names = r.result.tools.map(t => t.name).sort();
     assert.deepStrictEqual(names, ['ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions',
-      'get_results', 'post_update', 'room_status', 'wait_for_room', 'wrap_up']);
+      'get_results', 'post_update', 'room_status', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
     for (const t of r.result.tools) {
       assert.strictEqual(t.inputSchema.type, 'object', t.name);
       assert.ok(t.description && t.description.length > 40, t.name);
@@ -181,7 +186,7 @@ const hardStop = setTimeout(() => {
   });
   await check('prompts/list and prompts/get kickoff', async () => {
     const l = await mcp.request('prompts/list', {});
-    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up']);
+    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue']);
     const g = await mcp.request('prompts/get', { name: 'kickoff' });
     const m = g.result.messages[0];
     assert.strictEqual(m.role, 'user');
@@ -249,6 +254,20 @@ const hardStop = setTimeout(() => {
     assert.strictEqual(requests[0].url, '/dev/games/4321/build/log');
     const t = textOf(r);
     assert.ok(/DIRECTION FROM THE ROOM \(via the host\)/.test(t) && /colours are too dark/.test(t), t);
+  });
+  await check('wait_for_direction listens until the host sends something, then hands it over', async () => {
+    const before = requests.length;
+    const r = await mcp.request('tools/call', { name: 'wait_for_direction', arguments: { maxWaitSeconds: 30 } });
+    const t = r.result.content[0].text;
+    assert.ok(!r.result.isError, t);
+    assert.ok(/Make the button green/.test(t) && /DIRECTION FROM THE ROOM/.test(t), t);
+    const polls = requests.slice(before).filter(q => q.url.endsWith('/build/inbox?listening=1'));
+    assert.strictEqual(polls.length, 3);
+  });
+  await check('prompts/get continue tells Claude to pick up directions and keep listening', async () => {
+    const r = await mcp.request('prompts/get', { name: 'continue', arguments: {} });
+    const t = r.result.messages[0].content.text;
+    assert.ok(/check_directions/.test(t) && /wait_for_direction/.test(t), t);
   });
   await check('a 401 becomes an isError result that explains the key', async () => {
     failNext401 = true;

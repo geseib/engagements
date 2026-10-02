@@ -64,6 +64,8 @@ const MAX_SUGGESTIONS_PER_PLAYER = 3;
 const DEFAULT_MAX_PICKS = 3;
 /** "Claude Code connected" means a call in the last two minutes. */
 const AGENT_ACTIVE_MS = 2 * 60 * 1000;
+/** "Claude is listening": wait_for_direction polled in the last 20 seconds. */
+const AGENT_LISTENING_MS = 20 * 1000;
 const KEY_PREFIX = 'eng_';
 
 // ── Small helpers ────────────────────────────────────────────────────────────
@@ -90,6 +92,23 @@ function safeUrl(value) {
     return '';
   }
 }
+
+/**
+ * A link only the laptop can open: localhost, a loopback or private address,
+ * or a `.local` name. Claude runs on the host's laptop, so its mockups and its
+ * demo are usually here — the HOST can click them, a phone cannot, so phones
+ * never see them.
+ */
+function isLocalUrl(value) {
+  try {
+    const h = new URL(String(value)).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h === '0.0.0.0' || h === '::1'
+      || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+  } catch (e) {
+    return false;
+  }
+}
+const publicUrl = (u) => (u && !isLocalUrl(u) ? u : '');
 
 const pad3 = (n) => String(n).padStart(3, '0');
 const labelFor = (i) => String.fromCharCode(65 + i); // 0 → 'A'
@@ -432,8 +451,10 @@ function agentStatus(stateRow, keys, now) {
   const s = stateRow || {};
   const seen = s.AgentSeenAt ? Date.parse(s.AgentSeenAt) : NaN;
   const live = (keys || []).filter((k) => !k.RevokedAt).sort((a, b) => String(b.CreatedAt).localeCompare(String(a.CreatedAt)))[0];
+  const heard = s.AgentListeningAt ? Date.parse(s.AgentListeningAt) : NaN;
   return {
     connected: Number.isFinite(seen) && Date.parse(now) - seen < AGENT_ACTIVE_MS,
+    listening: Number.isFinite(heard) && Date.parse(now) - heard < AGENT_LISTENING_MS,
     lastSeenAt: s.AgentSeenAt || null,
     name: s.AgentName || 'Claude Code',
     key: live ? { keyId: live.KeyId, label: live.Label || '', createdAt: live.CreatedAt || null, lastUsedAt: live.LastUsedAt || null } : null,
@@ -488,7 +509,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     state: sessionState || null,
     playerCount: players.length,
     currentAskId: current ? current.AskId : null,
-    current: current ? askView(current, room, 'public', me) : null,
+    current: current ? publicAsk(askView(current, room, 'public', me)) : null,
     decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision).map((a) => ({
       askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.direction || '', decidedAt: a.DecidedAt || null,
     })),
@@ -497,13 +518,22 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest)),
+      .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
+      .map((l) => ({ ...l, link: publicUrl(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName).map(ideaView) : [],
-    outcome: outcomeView(room.state && room.state.Outcome),
+    outcome: publicOutcome(outcomeView(room.state && room.state.Outcome)),
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
     mine,
     rev: (room.state && room.state.Rev) || 0,
   };
+}
+
+/** A phone's copy of an ask: a preview it cannot open is not offered. */
+function publicAsk(ask) {
+  return { ...ask, options: ask.options.map((o) => ({ ...o, url: publicUrl(o.url) })) };
+}
+function publicOutcome(o) {
+  return o ? { ...o, links: o.links.filter((l) => !isLocalUrl(l.url)) } : o;
 }
 
 /**
@@ -538,9 +568,9 @@ function defaultDirection(ask, room) {
 
 module.exports = {
   GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
-  LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, KEY_PREFIX,
+  LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, AGENT_LISTENING_MS, KEY_PREFIX,
   SK, TRANSITIONS,
-  cleanText, safeUrl, pad3, labelFor, newId, entityForSk,
+  cleanText, safeUrl, isLocalUrl, publicUrl, pad3, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,

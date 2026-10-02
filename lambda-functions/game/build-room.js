@@ -495,6 +495,27 @@ async function agentTouch(ctx, event) {
   }
 }
 
+/**
+ * Stamp "Claude is listening" without bumping the room's Rev: Claude polls
+ * every few seconds while it waits, and a broadcast per poll would have every
+ * page refetching constantly. Only the moment it STARTS listening is announced.
+ */
+async function markListening(ctx) {
+  const now = new Date().toISOString();
+  const res = await db.send(new UpdateCommand({
+    TableName: TABLE(),
+    Key: { PK: ctx.pk, SK: S.SK.state },
+    UpdateExpression: 'SET AgentListeningAt = :now',
+    ExpressionAttributeValues: { ':now': now },
+    ReturnValues: 'UPDATED_OLD',
+  }));
+  const before = res && res.Attributes && res.Attributes.AgentListeningAt;
+  if (!before || Date.parse(now) - Date.parse(before) > S.AGENT_LISTENING_MS) {
+    const st = await touchState(ctx);
+    await announce(ctx, st.Rev);
+  }
+}
+
 async function takeInbox(ctx) {
   const room = await loadRoom(ctx);
   const out = [];
@@ -523,13 +544,21 @@ async function takeInbox(ctx) {
   return out;
 }
 
-async function routeHost(ctx, role, method, parts, body, event) {
+async function routeHost(ctx, role, method, parts, body, event, query) {
   const [a, b, c, d] = parts;
   const hostOnly = () => (role === 'host' ? null : fail(403, 'Only the host can do that'));
 
   if (method === 'GET' && a === 'state' && !b) {
     const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
     return reply(200, view);
+  }
+  // Claude's cheapest call: nothing but its inbox (the wrapper below attaches
+  // it). With ?listening=1 it is wait_for_direction polling, and the host's
+  // chip reads "Claude is listening".
+  if (method === 'GET' && a === 'inbox' && !b) {
+    if (role !== 'agent') return fail(403, 'This is Claude\'s inbox');
+    if (query && query.listening === '1') await markListening(ctx);
+    return reply(200, {});
   }
   if (method === 'GET' && a === 'asks' && b && !c) {
     const room = await loadRoom(ctx);
@@ -678,7 +707,7 @@ exports.handler = async (event) => {
     if (!role) return fail(404, 'Session not found');
     if (role === 'agent') {
       await agentTouch(ctx, event);
-      const res = await routeHost(ctx, role, method, parts, body, event);
+      const res = await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
       // Directions ride along on every call Claude makes, so it hears the
       // room on its very next tool call without having to ask.
       if (res.statusCode < 500) {
@@ -692,7 +721,7 @@ exports.handler = async (event) => {
       }
       return res;
     }
-    return await routeHost(ctx, role, method, parts, body, event);
+    return await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
   } catch (err) {
     console.error('BUILD ROOM: request failed', err);
     return fail(500, 'Something went wrong in the Build Room');

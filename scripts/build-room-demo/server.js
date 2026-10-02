@@ -28,7 +28,7 @@ function applyUpdate(inp) {
   const setP = (/SET (.*?)(?: ADD |$)/.exec(e) || [])[1]; const addP = (/ADD (.*)$/.exec(e) || [])[1];
   if (setP) for (const c of setP.split(',')) { const [l, r] = c.split('=').map((s) => s.trim()); item[n(l)] = vals[r]; }
   if (addP) for (const c of addP.split(',')) { const [l, r] = c.trim().split(/\s+/); item[n(l)] = (Number(item[n(l)]) || 0) + Number(vals[r]); }
-  store.set(key, item); return { Attributes: item };
+  store.set(key, item); return { Attributes: inp.ReturnValues === 'UPDATED_OLD' ? (cur || {}) : item };
 }
 const doc = { send: async (cmd) => {
   const i = cmd.input || {};

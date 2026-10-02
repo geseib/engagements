@@ -54,7 +54,7 @@ function applyUpdate(inp) {
     item[n(l)] = (Number(item[n(l)]) || 0) + Number(vals[r]);
   }
   store.set(k, item);
-  return { Attributes: item };
+  return { Attributes: inp.ReturnValues === 'UPDATED_OLD' ? (cur || {}) : item };
 }
 
 const fakeDoc = {
@@ -319,7 +319,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.deepStrictEqual(a.body.ideas, []);
     const p = await playCall('GET', 'state', priya);
     assert.ok(!p.body.log.some((l) => l.kind === 'note'));
-    assert.ok(p.body.log.some((l) => l.kind === 'showing' && l.link === 'http://localhost:5173/'));
+    assert.ok(p.body.log.some((l) => l.kind === 'showing' && l.link === ''), 'a phone cannot open the laptop\'s localhost');
   });
   await check('a verbal note sent to Claude rides along on Claude\'s next call', async () => {
     await agentCall('GET', 'state'); // drain the Ideas decision
@@ -360,6 +360,40 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await hostCall('POST', 'outcome', { summary: 'A sign-up site, edited' });
     const p = await playCall('GET', 'state', priya);
     assert.strictEqual(p.body.outcome.summary, 'A sign-up site, edited');
+  });
+
+  await check('local links reach the host (who can open them) but never a phone (which cannot)', async () => {
+    const ask = (await agentCall('POST', 'asks', { kind: 'choice', prompt: 'Which footer?', options: [{ title: 'Plain', url: 'http://localhost:5173/a' }, { title: 'Map', url: 'https://preview.example.com/b' }] })).body.ask;
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'open' });
+    await agentCall('POST', 'log', { kind: 'showing', text: 'Demo is up', link: 'http://127.0.0.1:3000/' });
+    await agentCall('POST', 'outcome', { summary: 'Done', links: [{ label: 'Demo', url: 'http://localhost:5173/' }, { label: 'Repo', url: 'https://github.com/x/y' }] });
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.asks.find((a) => a.askId === ask.askId).options[0].url, 'http://localhost:5173/a');
+    assert.deepStrictEqual(h.body.outcome.links.map((l) => l.label), ['Demo', 'Repo']);
+    const p = await playCall('GET', 'state', priya);
+    assert.deepStrictEqual(p.body.current.options.map((o) => o.url), ['', 'https://preview.example.com/b']);
+    assert.ok(!JSON.stringify(p.body).includes('127.0.0.1'));
+    assert.deepStrictEqual(p.body.outcome.links.map((l) => l.label), ['Repo']);
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'discard' });
+  });
+  await check('Claude waiting on its inbox shows as listening, and only the start of listening is announced', async () => {
+    sent = [];
+    const r = await agentCall('GET', 'inbox?listening=1'.split('?')[0], null);
+    assert.strictEqual(r.status, 200);
+    const listen = () => handler({
+      routeKey: 'GET /games/{gameId}/build/{proxy+}',
+      requestContext: { http: { method: 'GET' }, authorizer: { lambda: agentCtx() } },
+      pathParameters: { gameId: GAME, proxy: 'inbox' },
+      queryStringParameters: { listening: '1' },
+    });
+    await listen();
+    const announced = sent.length;
+    assert.ok(announced > 0, 'the start of listening is announced');
+    await listen();
+    assert.strictEqual(sent.length, announced, 'a second poll inside the window announces nothing');
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.agent.listening, true);
+    assert.strictEqual((await hostCall('GET', 'inbox')).status, 403);
   });
 
   console.log('\nwho may do what');

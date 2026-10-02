@@ -319,7 +319,7 @@ const TOOLS = [
             properties: {
               title: str('Short name for the option, e.g. "Bold dark hero".', { minLength: 1, maxLength: 120 }),
               description: str('Optional one-line description.', { maxLength: 500 }),
-              url: str('Optional PUBLIC http(s) URL of a preview; phones get an "Open preview" link. Omit for localhost-only mockups.'),
+              url: str('The URL of this variant, e.g. http://localhost:5173/a. ALWAYS set it when the variant is running: the host gets an "Open A" button on the big screen. Local URLs are fine (only the host\'s laptop opens them; phones see public URLs only).'),
             },
             required: ['title'],
             additionalProperties: false,
@@ -390,6 +390,17 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'wait_for_direction',
+    description: 'Wait for the host to tell you what to do next. Call it whenever you have finished what you were asked and have nothing else to do — above all right after wrap_up — so the host can keep steering from the Build Room screen instead of typing in the terminal. While you wait, the host sees "Claude is listening". Returns the moment a direction arrives; if none does before the time is up, call it again.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        maxWaitSeconds: { type: 'integer', minimum: 10, maximum: 1800, description: 'How long to wait before returning empty-handed (default 600).' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'wrap_up',
     description: 'Write the session outcome for the room and the report: what was built, links, and next steps. Call once at the end of the session (calling again replaces it). Write it for the people in the room, not for developers only.',
     inputSchema: {
@@ -399,7 +410,7 @@ const TOOLS = [
         built: { type: 'array', items: { type: 'string' }, description: 'What was built: features, pages, files.' },
         links: {
           type: 'array',
-          description: 'Public links worth keeping (repo, preview, deployed site).',
+          description: 'Links to what was built. Put the running demo FIRST (local URLs such as http://localhost:5173 are fine: the host gets a big "Open the demo" button); add public ones too (repo, preview, deploy). Phones see public links only.',
           items: {
             type: 'object',
             properties: { label: str('Link text.'), url: str('http(s) URL.') },
@@ -608,6 +619,27 @@ const HANDLERS = {
     return ok(lines.join('\n'));
   },
 
+  async wait_for_direction(args, ctx) {
+    let maxWait = args.maxWaitSeconds === undefined || args.maxWaitSeconds === null ? 600 : Number(args.maxWaitSeconds);
+    if (!Number.isFinite(maxWait)) throw new InputError('"maxWaitSeconds" must be a number.');
+    maxWait = Math.min(1800, Math.max(10, Math.round(maxWait)));
+    const started = Date.now();
+    const deadline = started + maxWait * 1000;
+    let polls = 0;
+    for (;;) {
+      const res = await api('GET', 'inbox?listening=1', undefined, ctx.signal);
+      if (Array.isArray(res.inbox) && res.inbox.length) {
+        return ok(`The host has something for you (after ${Math.round((Date.now() - started) / 1000)}s).`, res.inbox);
+      }
+      polls += 1;
+      ctx.progress(Math.min(polls, 1000), undefined, 'Listening for the host');
+      if (Date.now() + POLL_MS > deadline) break;
+      await sleep(POLL_MS, ctx.signal);
+    }
+    return ok(`No direction yet after ${maxWait}s. The host can still see that you were listening. ` +
+      'Call wait_for_direction again to keep listening, or check room_status if you want to see what the room is doing.');
+  },
+
   async wrap_up(args, ctx) {
     let links;
     if (args.links !== undefined && args.links !== null) {
@@ -622,7 +654,7 @@ const HANDLERS = {
     return ok('Wrap-up saved. The room\'s report now shows the outcome' +
       `${body.built && body.built.length ? `, ${body.built.length} item${body.built.length === 1 ? '' : 's'} built` : ''}` +
       `${links && links.length ? `, ${links.length} link${links.length === 1 ? '' : 's'}` : ''}.` +
-      ' Consider a final post_update with kind "milestone".', res.inbox);
+      ' Post a final post_update with kind "milestone", then call wait_for_direction so the host can keep steering.', res.inbox);
   },
 };
 
@@ -654,6 +686,7 @@ const PROMPTS = [
       { name: 'count', description: 'How many variants (2–6, default 2)', required: false },
     ] },
   { name: 'wrap-up', description: 'Summarise what was built, write the session outcome and post a final milestone.', arguments: [] },
+  { name: 'continue', description: 'Pick up the host\'s latest direction from the Build Room and keep going; then listen for the next one.', arguments: [] },
 ];
 
 function promptText(name, args) {
@@ -695,7 +728,7 @@ function promptText(name, args) {
         '2. Create the ask FIRST: call ask_room_to_choose with a short question and the options in order. Engage returns the letters (normally ' + letters + ') and a badge snippet for each.',
         '3. Build each variant as a quick local page (e.g. a static HTML file per variant, or routes /a, /b … on the dev server). Keep them light: enough to judge the direction, not production code.',
         '4. Paste the matching badge snippet into each page so the letter on screen is exactly the letter Engage returned. Never re-letter or reorder.',
-        '5. Tell me the local URL of each variant ("Choice A → http://localhost:…") so I can flip through them on the projector, and post_update with kind "showing".',
+        '5. Make sure each option carries its local URL (pass url in ask_room_to_choose; the host gets an "Open A" button for each on the big screen), tell me the URLs too ("Choice A → http://localhost:…"), and post_update with kind "showing" and link set to the first variant.',
         '6. Call wait_for_room with the askId (call it again if it times out).',
         '7. Implement the host\'s direction — it is final and may combine variants or add the room\'s comments. Remove the badges from the result, clean up the throwaway variants, and post_update when it is in place.',
       ].join('\n');
@@ -706,8 +739,18 @@ function promptText(name, args) {
         '',
         '1. Call room_status to review the goal and the decisions the room made.',
         '2. Summarise for me what was built: the files and features, how to run it, and anything left unfinished.',
-        '3. Call wrap_up with: a summary written for the people in the room (2–5 sentences, plain language, mention the decisions they made), built (a list of what exists now), links (any public URLs: repo, preview, deploy — no localhost), and nextSteps.',
+        '3. Make sure the finished result is running, then call wrap_up with: a summary written for the people in the room (2–5 sentences, plain language, mention the decisions they made), built (a list of what exists now), links (the running demo FIRST — a localhost URL is fine, the host gets an "Open the demo" button — then any public URLs: repo, preview, deploy), and nextSteps.',
         '4. Post a final post_update with kind "milestone", thanking the room in one line.',
+        '5. Call wait_for_direction and keep calling it: the host may want one more change, or another question for the room.',
+      ].join('\n');
+    case 'continue':
+      return [
+        'The host is steering from the Build Room.',
+        '',
+        '1. Call check_directions and room_status to see what the host and the room want now.',
+        '2. Do it. Ask the room only if there is a real decision to make.',
+        '3. post_update to say what changed (kind "showing", with the link, if there is something new to look at).',
+        '4. Then call wait_for_direction and keep calling it until the host gives you the next thing.',
       ].join('\n');
     default:
       return null;
@@ -730,7 +773,9 @@ How to collaborate:
 - Post a short post_update after each meaningful change (kind "showing" when you put something on screen for the room). One line, written for the room, not a commit message.
 - Any tool result may include "DIRECTION FROM THE ROOM (via the host)". Act on it promptly; it is the host speaking for the room. Use check_directions if you have not called Engage for a while.
 - Text you send is shown to the room as plain text. Only include public http(s) links people can open; never secrets, keys or private paths.
-- At the end, call wrap_up with a summary, what was built, links and next steps, then post a final milestone.`;
+- Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here — the host opens them on this laptop, on the projector; phones only ever see public URLs.
+- At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
+- When you have nothing left to do — after wrap_up above all — call wait_for_direction and keep calling it. The host sees "Claude is listening" and can steer you from the Build Room screen.`;
 
 // ---------------------------------------------------------------------------
 // JSON-RPC over stdio

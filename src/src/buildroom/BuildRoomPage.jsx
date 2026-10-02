@@ -84,9 +84,14 @@ export const PROMPT_CARDS = [
     text: 'Build two quick variants of the next screen. Create the ask first with ask_room_to_choose, stamp each variant with the exact letter Engage returns, tell me their local URLs, then wait_for_room and build the decision.',
   },
   {
+    name: 'continue',
+    title: 'Continue',
+    text: 'Pick up my latest direction from the Build Room with check_directions and room_status, do it, post what changed, then call wait_for_direction and keep listening for the next one.',
+  },
+  {
     name: 'wrap-up',
     title: 'Wrap up',
-    text: 'We are wrapping up. Call room_status, then write the outcome with wrap_up: a short summary for the room, what you built, any public links and next steps. Post a final milestone thanking the room.',
+    text: 'We are wrapping up. Call room_status, then write the outcome with wrap_up: a short summary for the room, what you built, the running demo link first, and next steps. Post a final milestone thanking the room, then call wait_for_direction.',
   },
 ];
 export const slashCommand = (name) => `/mcp__engage__${name}`;
@@ -204,6 +209,20 @@ function SafeLink({ href, children, className }) {
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
+
+/**
+ * A link the HOST opens on this laptop — a mockup, the demo, something Claude
+ * is showing. Local addresses work here because Claude runs on this laptop;
+ * that is the point, so the button says where it goes.
+ */
+export function OpenLink({ href, label, primary = false }) {
+  if (!safeHref(href)) return null;
+  return (
+    <a className={`brm-btn brm-openbtn${primary ? ' brm-btn--primary' : ''}`} href={href} target="_blank" rel="noopener noreferrer" title={href}>
+      <Icon name="ArrowSquareOut" size={16} /> {label}
+    </a>
+  );
+}
 
 export default function BuildRoomPage() {
   const params = new URLSearchParams(window.location.search);
@@ -441,15 +460,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <JoinFoot gameId={gameId} room={room} current={current} />
 
           {host && !ended && (
-            <section className="brm-panel" aria-labelledby="brm-askyourself">
-              <h2 className="brm-h" id="brm-askyourself">Ask the room yourself</h2>
-              <p className="brm-sub">You don&apos;t have to wait for Claude.</p>
-              <div className="brm-askbtns">
-                <button type="button" className="brm-btn brm-askbtn" onClick={() => setDialog({ compose: 'suggest' })}>Ideas<span>everyone suggests</span></button>
-                <button type="button" className="brm-btn brm-askbtn" onClick={() => setDialog({ compose: 'choice' })}>Choose<span>A / B / C</span></button>
-                <button type="button" className="brm-btn brm-askbtn" onClick={() => setDialog({ compose: 'rating' })}>Rate<span>1–5 pulse</span></button>
-              </div>
-            </section>
+            <NextPanel agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} />
           )}
 
           <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
@@ -482,6 +493,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 export function agentChipText(agent, now) {
   if (!agent) return 'Claude Code not connected';
   const name = agent.name || 'Claude Code';
+  if (agent.listening) return `${name} is listening for you`;
   if (agent.connected) return `${name} connected · active ${agoText(agent.lastSeenAt, now) || 'just now'}`;
   if (agent.lastSeenAt) return `${name} last seen ${agoText(agent.lastSeenAt, now)}`;
   return `${name} not connected`;
@@ -730,7 +742,7 @@ function ChoiceBoard({ ask }) {
               <div className="brm-choice-text">
                 <div className="brm-ct"><span className="brm-sr">Choice {o.label}: </span>{o.title}</div>
                 {o.detail && <div className="brm-cd">{o.detail}</div>}
-                {safeHref(o.url) && <SafeLink className="brm-link brm-mono" href={o.url}>{o.url}</SafeLink>}
+                <OpenLink href={o.url} label={`Open ${o.label}`} />
               </div>
             </div>
             <div className="brm-bar" aria-hidden="true"><span style={{ width: `${r.pct}%` }} /></div>
@@ -915,7 +927,44 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
 
 const TICKER_KINDS = ['progress', 'showing', 'milestone'];
 
+/** Claude has wrapped up: the stage says so, and the demo is one click away. */
+function WrappedStage({ outcome, agent }) {
+  const links = outcome.links || [];
+  return (
+    <section className="brm-stage brm-stage--wrapped" aria-label="What we built">
+      <div className="brm-building">
+        <span className="brm-donemark" aria-hidden="true"><Icon name="CheckCircle" size={30} weight="fill" /></span>
+        <h2 className="brm-q">What we built</h2>
+        {agent && agent.listening && <span className="brm-mins">Claude is listening</span>}
+      </div>
+      <p className="brm-wrapsum">{outcome.summary}</p>
+      {links.length > 0 && (
+        <div className="brm-openrow">
+          {links.map((l, i) => (
+            <OpenLink key={`${l.url}:${i}`} href={l.url} label={l.label || (i === 0 ? 'Open the demo' : l.url)} primary={i === 0} />
+          ))}
+        </div>
+      )}
+      <div className="brm-two">
+        {outcome.built && outcome.built.length > 0 && (
+          <div>
+            <h3 className="brm-h5">Built</h3>
+            <ul className="brm-list">{outcome.built.map((b) => <li key={b}>{b}</li>)}</ul>
+          </div>
+        )}
+        {outcome.nextSteps && outcome.nextSteps.length > 0 && (
+          <div>
+            <h3 className="brm-h5">Next steps</h3>
+            <ul className="brm-list">{outcome.nextSteps.map((b) => <li key={b}>{b}</li>)}</ul>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function IdleStage({ room, now, host }) {
+  if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} />;
   const log = room.log || [];
   const agentPosts = log.filter((l) => l.by === 'agent' && TICKER_KINDS.includes(l.kind));
   const ticker = agentPosts.slice(-3).reverse();
@@ -929,7 +978,7 @@ function IdleStage({ room, now, host }) {
     <section className="brm-stage brm-stage--idle" aria-label="Claude is building">
       <div className="brm-building">
         <span className="brm-pulse" aria-hidden="true" />
-        <h2 className="brm-q">{waiting ? 'Waiting for Claude Code…' : 'Claude is building…'}</h2>
+        <h2 className="brm-q">{waiting ? 'Waiting for Claude Code…' : room.agent && room.agent.listening ? 'Claude is listening…' : 'Claude is building…'}</h2>
         {!waiting && mins !== null && <span className="brm-mins">working for {mins} min</span>}
       </div>
       {host && <p className="brm-stagehint">{waiting ? 'Connect Claude Code, then paste the Kick off prompt.' : stageHint(null)}</p>}
@@ -946,13 +995,77 @@ function IdleStage({ room, now, host }) {
               <span className="brm-kind">{t.kind}</span>
               <span className="brm-tx">{t.text}</span>
               <span className="brm-ago">{agoText(t.createdAt, now)}</span>
-              {safeHref(t.link) && <SafeLink className="brm-lnk" href={t.link}>{t.link}</SafeLink>}
+              {safeHref(t.link) && <span className="brm-tickopen"><OpenLink href={t.link} label="Open" /></span>}
             </li>
           ))}
         </ul>
       ) : (
         <div className="brm-empty">Claude&apos;s progress posts appear here while it builds.</div>
       )}
+    </section>
+  );
+}
+
+// ── What next ───────────────────────────────────────────────────────────────
+
+/** What a direction will do, said honestly: Claude only hears it on a call. */
+export function deliveryLine(agent) {
+  if (agent && agent.listening) return 'Claude is listening. It will act on this straight away.';
+  if (agent && agent.connected) return 'Claude reads this on its next step.';
+  return 'Claude reads this when it next calls Engage. If it has stopped, paste the Continue prompt into Claude Code.';
+}
+
+const CONTINUE_PROMPT = PROMPT_CARDS.find((c) => c.name === 'continue');
+
+/**
+ * The two things a host does between asks, in one place: tell Claude what to
+ * do next, or ask the room something. Always here, while Claude builds and
+ * after it wraps up, so steering never means hunting for the control.
+ */
+function NextPanel({ agent, busy, run, api, onCompose }) {
+  const [text, setText] = useState('');
+  const [sent, setSent] = useState('');
+  const send = async (e) => {
+    e.preventDefault();
+    const words = text.trim();
+    if (!words) return;
+    const ok = await run(() => api.postDirection(words));
+    if (ok !== undefined) { setText(''); setSent(words); }
+  };
+  const quiet = !(agent && (agent.listening || agent.connected));
+  return (
+    <section className="brm-panel brm-next" aria-labelledby="brm-next-h">
+      <h2 className="brm-h" id="brm-next-h">What next?</h2>
+      <div className="brm-next-grid">
+        <form className="brm-next-tell" onSubmit={send}>
+          <label className="brm-label" htmlFor="brm-tell">Tell Claude</label>
+          <textarea
+            id="brm-tell"
+            className="brm-input brm-ta"
+            placeholder="e.g. Make the sign-up button bigger, and add the parking map the room asked for."
+            value={text}
+            maxLength={2000}
+            onChange={(e) => { setText(e.target.value); setSent(''); }}
+          />
+          <p className="brm-hint">{deliveryLine(agent)}</p>
+          <div className="brm-row brm-gap">
+            <button type="submit" className="brm-btn brm-btn--primary" disabled={busy || !text.trim()}>
+              <Icon name="PaperPlaneTilt" size={16} /> Send to Claude
+            </button>
+            {quiet && CONTINUE_PROMPT && <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" />}
+          </div>
+          {sent && <p className="brm-hint" role="status">Sent: {sent}</p>}
+        </form>
+        <div className="brm-next-ask">
+          <div className="brm-label">Ask the room</div>
+          <div className="brm-askbtns brm-askbtns--stack">
+            <button type="button" className="brm-btn brm-askbtn" onClick={() => onCompose('suggest')}>Ideas<span>everyone suggests, then votes</span></button>
+            <button type="button" className="brm-btn brm-askbtn" onClick={() => onCompose('choice')}>Choose<span>A / B / C</span></button>
+            <button type="button" className="brm-btn brm-askbtn" onClick={() => onCompose('rating')}>Rate<span>1–5 pulse</span></button>
+          </div>
+          <p className="brm-hint">When you decide, the answer goes to Claude too.</p>
+        </div>
+      </div>
     </section>
   );
 }
