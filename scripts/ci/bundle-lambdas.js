@@ -19,9 +19,16 @@
  *  - Each folder is copied to .aws-sam/bundled/src/ (node_modules excluded) and
  *    its production dependencies installed there from its lockfile, as sam build
  *    did. The source tree is never written to.
- *  - admin, websocket and auth bundle the AWS SDK they pin, as their zips do
- *    today. game has no package.json and today runs on the SDK built into the
- *    Lambda runtime, so @aws-sdk/* stays external for game — unchanged.
+ *  - A bare import resolves ONLY inside the function's staged folder — exactly
+ *    what its zip holds today. An @aws-sdk/* package the folder installs is
+ *    bundled at the version it pins. One it does NOT install stays external and
+ *    the Lambda runtime supplies it, as it does today: all of game (no
+ *    package.json), and e.g. @aws-sdk/client-s3, which 17 admin files require
+ *    but admin's package.json never declared. Any other import not installed in
+ *    the folder fails the build. Without this rule esbuild walks up past the
+ *    folder and, in a worktree, bundles whatever the main checkout's root
+ *    node_modules holds — which is how the first CI run (1ce362bf) failed on a
+ *    client-s3 that passed locally.
  *  - Handlers keep their paths ("orgs/foo.handler" -> orgs/foo.js in the bundle).
  *  - Not minified, so CloudWatch stack traces stay readable.
  *  - UNBUNDLED functions ship their staged folder whole, as before. A bundle of
@@ -40,8 +47,8 @@ const REPO = path.resolve(__dirname, '..', '..');
 const TEMPLATE = path.join(REPO, 'template-clean.yaml');
 const OUT = path.join(REPO, '.aws-sam', 'bundled');
 
-/** Folders whose functions run on the SDK in the Lambda runtime (no package.json). */
-const RUNTIME_SDK_FOLDERS = new Set(['lambda-functions/game/']);
+/** Packages the nodejs22.x runtime provides when a zip does not carry them. */
+const RUNTIME_PROVIDED = /^@aws-sdk\//;
 /** Functions shipped as their whole folder: pdf-parse/mammoth are not bundled. */
 const UNBUNDLED = new Set(['AdminParseDocumentFunction']);
 /** Packages that may only appear in an UNBUNDLED function. */
@@ -125,6 +132,64 @@ function stage(codeUri) {
   return to;
 }
 
+/**
+ * esbuild plugin: a bare import must resolve inside `root` (the staged folder).
+ * Outside it, a runtime-provided package goes external and anything else fails.
+ */
+function confineTo(folder) {
+  // Real paths on both sides: no trailing slash, and no symlink (macOS /var is
+  // /private/var; esbuild reports the real one), or nothing reads as "inside".
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+  const root = real(path.resolve(folder));
+  const inside = (p) => { const r = real(p); return r === root || r.startsWith(root + path.sep); };
+  const builtin = new Set(require('module').builtinModules);
+  return {
+    name: 'confine-to-staged-folder',
+    setup(build) {
+      build.onResolve({ filter: /^[^./]/ }, async (args) => {
+        if (args.pluginData === 'confined') return undefined;
+        const bare = args.path.replace(/^node:/, '');
+        if (args.path.startsWith('node:') || builtin.has(bare.split('/')[0])) return undefined;
+        const r = await build.resolve(args.path, {
+          kind: args.kind, resolveDir: args.resolveDir, importer: args.importer, pluginData: 'confined',
+        });
+        if (!r.errors.length && inside(r.path)) return r;
+        if (RUNTIME_PROVIDED.test(args.path)) return { path: args.path, external: true };
+        // A library's own optional require (follow-redirects' try { require('debug') })
+        // of a package the folder does not install: left as a runtime require, which
+        // fails and is caught exactly as it is in today's zip, where it is absent too.
+        if (args.importer.split(path.sep).includes('node_modules')) return { path: args.path, external: true };
+        return {
+          errors: [{ text: `"${args.path}" is not installed in ${path.relative(REPO, root) || root}`
+            + (r.errors.length ? '' : ` (it resolved to ${r.path}, outside the folder)`) }],
+        };
+      });
+    },
+  };
+}
+
+/** Bundle one handler; returns esbuild's metafile and the packages left to the runtime. */
+async function bundleOne(esbuild, { entry, root, outfile }) {
+  const result = await esbuild.build({
+    entryPoints: [entry],
+    outfile,
+    bundle: true,
+    platform: 'node',
+    target: 'node22',
+    format: 'cjs',
+    metafile: true,
+    logLevel: 'silent',
+    plugins: [confineTo(root)],
+  });
+  const external = new Set();
+  for (const out of Object.values(result.metafile.outputs)) {
+    for (const imp of out.imports || []) if (imp.external) external.add(imp.path);
+  }
+  return { metafile: result.metafile, external: [...external].sort() };
+  // `external` holds both kinds: runtime-provided @aws-sdk/* and a library's
+  // optional requires. main() reports them separately.
+}
+
 async function main() {
   const esbuild = require('esbuild');
   const t0 = Date.now();
@@ -140,6 +205,7 @@ async function main() {
   const tStaged = Date.now();
 
   const newCodeUri = {};
+  const runtimeProvided = new Set();
   await Promise.all(fns.map(async (fn) => {
     const src = staged[fn.codeUri];
     const file = handlerFile(fn.handler);
@@ -149,17 +215,8 @@ async function main() {
       return;
     }
     const outDir = path.join(OUT, 'fn', fn.name);
-    const result = await esbuild.build({
-      entryPoints: [path.join(src, file)],
-      outfile: path.join(outDir, file),
-      bundle: true,
-      platform: 'node',
-      target: 'node22',
-      format: 'cjs',
-      external: RUNTIME_SDK_FOLDERS.has(fn.codeUri) ? ['@aws-sdk/*'] : [],
-      metafile: true,
-      logLevel: 'warning',
-    });
+    const result = await bundleOne(esbuild, { entry: path.join(src, file), root: src, outfile: path.join(outDir, file) });
+    for (const pkg of result.external) runtimeProvided.add(pkg);
     const heavy = Object.keys(result.metafile.inputs)
       .filter((p) => HEAVY.some((pkg) => p.includes(`node_modules/${pkg}/`)));
     if (heavy.length) {
@@ -176,9 +233,15 @@ async function main() {
   console.log(`bundle-lambdas: ${fns.length - UNBUNDLED.size} bundled + ${UNBUNDLED.size} whole-folder; `
     + `staged ${((tStaged - t0) / 1000).toFixed(0)}s, bundled ${((Date.now() - tStaged) / 1000).toFixed(0)}s; `
     + `bundles total ${(fnBytes / 1e6).toFixed(1)} MB -> ${path.relative(REPO, path.join(OUT, 'template.yaml'))}`);
+  const sdk = [...runtimeProvided].filter((p) => RUNTIME_PROVIDED.test(p)).sort();
+  const builtin = new Set(require('module').builtinModules);
+  const optional = [...runtimeProvided]
+    .filter((p) => !RUNTIME_PROVIDED.test(p) && !p.startsWith('node:') && !builtin.has(p.split('/')[0])).sort();
+  console.log(`bundle-lambdas: from the Lambda runtime's SDK (not installed in their folder, as today): ${sdk.join(', ') || 'none'}`);
+  console.log(`bundle-lambdas: libraries' optional requires left unresolved (absent from today's zips too): ${optional.join(', ') || 'none'}`);
 }
 
-module.exports = { readFunctions, rewriteTemplate, handlerFile, UNBUNDLED, RUNTIME_SDK_FOLDERS, HEAVY };
+module.exports = { readFunctions, rewriteTemplate, handlerFile, bundleOne, UNBUNDLED, RUNTIME_PROVIDED, HEAVY };
 
 if (require.main === module) {
   main().catch((err) => {
