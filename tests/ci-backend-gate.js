@@ -1,14 +1,14 @@
 /**
  * THE BACKEND GATE SKIPS ONLY WHEN IT IS SURE — scripts/ci/backend-gate.sh
  *
- * The gate lets a deploy skip `sam build` and `sam deploy` (~22 of ~27 minutes)
+ * The gate lets a deploy skip the Lambda bundle and `sam deploy` (~22 of ~27 minutes)
  * when nothing the backend is built from changed since the last successful
  * deploy of that stack. A wrong "skip" ships a frontend against a backend that
  * is missing its change, silently. So every doubt must come out as "run", and
  * this file proves each one against the real script with a fake `aws` on PATH.
  *
- * It also pins the buildspecs: all three call the gate, only sam build and sam
- * deploy sit behind it, and lint / jest / webpack / the S3 sync never do.
+ * It also pins the buildspecs: all three call the gate, only the Lambda bundle
+ * and sam deploy sit behind it, and lint / jest / webpack / the S3 sync never do.
  *
  * // rejects: a skip with no marker, a changed lambda file / template /
  * //          buildspec / parameter, a stack touched since the recorded deploy,
@@ -53,6 +53,8 @@ function makeWorld() {
   w('buildspec-dev.yml', 'version: 0.2\n');
   w('src/src/App.jsx', 'export default 1;\n');
   w('scripts/ci/backend-gate.sh', fs.readFileSync(SCRIPT, 'utf8'));
+  w('scripts/ci/bundle-lambdas.js', '// bundler\n');
+  w('scripts/ci/package-lock.json', '{"esbuild":"0.24.2"}\n');
 
   const state = path.join(dir, '.fake');
   fs.mkdirSync(state);
@@ -171,6 +173,21 @@ check('the buildspec changed -> run', () => withRecorded((w) => {
   eq(w.gate(), 'run', 'decision');
 }));
 
+check('the bundler changed -> run', () => withRecorded((w) => {
+  w.w('scripts/ci/bundle-lambdas.js', '// bundler, changed\n');
+  eq(w.gate(), 'run', 'decision');
+}));
+
+check('the esbuild pin changed -> run', () => withRecorded((w) => {
+  w.w('scripts/ci/package-lock.json', '{"esbuild":"0.25.0"}\n');
+  eq(w.gate(), 'run', 'decision');
+}));
+
+check('scripts/ci/node_modules is ignored', () => withRecorded((w) => {
+  w.w('scripts/ci/node_modules/esbuild/index.js', 'junk\n');
+  eq(w.gate(), 'skip', 'decision');
+}));
+
 check('a deploy parameter changed (e.g. a rotated secret) -> run', () => withRecorded((w) => {
   eq(w.gate({ PARAM_OVERRIDES: 'Environment=dev GitHubToken=rotated' }), 'run', 'decision');
 }));
@@ -240,20 +257,30 @@ for (const tier of ['dev', 'test', 'prod']) {
     .split('\n')
     .filter((l) => /^\s*- /.test(l)); // commands only, comments dropped
 
-  check(`${tier}: computes the fingerprint and asks the gate before any sam command`, () => {
+  check(`${tier}: computes the fingerprint and asks the gate before bundling or deploying`, () => {
     const fpAt = lines.findIndex((l) => l.includes('backend-gate.sh fingerprint'));
     const checkAt = lines.findIndex((l) => l.includes('backend-gate.sh check'));
-    const firstSam = lines.findIndex((l) => /\bsam (build|deploy)\b/.test(l));
+    const bundleAt = lines.findIndex((l) => l.includes('bundle-lambdas.js'));
+    const deployAt = lines.findIndex((l) => /\bsam deploy --/.test(l));
     const paramsAt = lines.findIndex((l) => l.includes('PARAM_OVERRIDES="Environment='));
     eq(fpAt > paramsAt && paramsAt >= 0, true, 'fingerprint after the parameter list');
     eq(checkAt > fpAt, true, 'check after fingerprint');
-    eq(firstSam > checkAt, true, 'sam after check');
+    eq(bundleAt > checkAt, true, 'bundle after check');
+    eq(deployAt > bundleAt, true, 'deploy after bundle');
   });
 
-  check(`${tier}: every sam build / sam deploy sits behind BACKEND_ACTION`, () => {
-    const sam = lines.filter((l) => /\bsam (build|deploy)\b/.test(l));
-    eq(sam.length, 2, 'sam command lines');
-    for (const l of sam) eq(l.includes('BACKEND_ACTION'), true, `ungated: ${l.trim().slice(0, 80)}`);
+  check(`${tier}: sam build is gone; the bundle and sam deploy sit behind BACKEND_ACTION`, () => {
+    eq(lines.some((l) => /\bsam build\b/.test(l)), false, 'sam build still present');
+    const gated = lines.filter((l) => /\bsam deploy --|bundle-lambdas\.js/.test(l));
+    eq(gated.length, 2, 'bundle + deploy command lines');
+    for (const l of gated) eq(l.includes('BACKEND_ACTION'), true, `ungated: ${l.trim().slice(0, 80)}`);
+  });
+
+  check(`${tier}: sam deploy packages the bundled template, after a pinned esbuild install`, () => {
+    const deploy = lines.find((l) => /\bsam deploy --/.test(l));
+    eq(deploy.includes('--template-file .aws-sam/bundled/template.yaml'), true, 'deploy template');
+    const bundle = lines.find((l) => l.includes('bundle-lambdas.js'));
+    eq(/npm ci --prefix scripts\/ci .*&& node scripts\/ci\/bundle-lambdas\.js/.test(bundle), true, 'npm ci then bundle, chained');
   });
 
   check(`${tier}: records the marker only on the path that deployed`, () => {

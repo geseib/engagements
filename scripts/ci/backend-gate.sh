@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ── THE BACKEND GATE: SKIP `sam build` + `sam deploy` WHEN NOTHING THEY READ CHANGED ──
+# ── THE BACKEND GATE: SKIP THE LAMBDA BUNDLE + `sam deploy` WHEN NOTHING THEY READ CHANGED ──
 #
 # Measured on dev builds 4c71a3ad and 9bea635e (2026-10-01/02, CodeBuild MEDIUM):
 # a deploy took ~27 min, of which `sam deploy` spent ~18 min zipping the same four
@@ -8,17 +8,18 @@
 # that work ends in an empty changeset (`--no-fail-on-empty-changeset`). This gate
 # reaches the same outcome without the 22 minutes.
 #
-# WHAT IS SKIPPED: `sam build` and `sam deploy`. Nothing else. Lint, jest, webpack,
+# WHAT IS SKIPPED: the Lambda bundle (scripts/ci/bundle-lambdas.js, which
+# replaced `sam build`) and `sam deploy`. Nothing else. Lint, jest, webpack,
 # the S3 sync and the CloudFront invalidation run on every deploy, because the
 # frontend tests read lambda-functions/, template-clean.yaml and sets/ — a
 # frontend skip cannot be made safe by path, so there is none.
 #
 # THE FINGERPRINT is a sha256 over:
 #   - every file under lambda-functions/ (node_modules excluded; it is not in the
-#     source artifact and sam build installs its own)
+#     source artifact and the bundler installs its own)
 #   - template-clean.yaml
 #   - buildspec-$ENVIRONMENT.yml   (the SAM CLI pin, the sam command lines)
-#   - this script
+#   - every file under scripts/ci/ (this script, the bundler, the esbuild pin)
 #   - a sha256 of $PARAM_OVERRIDES (secrets enter the hash, never the log or SSM)
 #
 # SKIP ONLY WHEN ALL OF THESE HOLD — anything else, including any error, RUNS:
@@ -57,7 +58,7 @@ stack_state() {
 fingerprint() {
   local env="${ENVIRONMENT:-}" files
   [ -n "$env" ] || return 1
-  for f in template-clean.yaml "buildspec-${env}.yml" scripts/ci/backend-gate.sh; do
+  for f in template-clean.yaml "buildspec-${env}.yml" scripts/ci/backend-gate.sh scripts/ci/bundle-lambdas.js; do
     [ -f "$f" ] || return 1
   done
   [ -d lambda-functions ] || return 1
@@ -66,7 +67,7 @@ fingerprint() {
     printf '%s' "${PARAM_OVERRIDES:-}" | sha
     # One "<sha256>  <path>" line per file, in a fixed order: a byte moved
     # between files, a rename, an added or a deleted file all change it.
-    find lambda-functions template-clean.yaml "buildspec-${env}.yml" scripts/ci/backend-gate.sh \
+    find lambda-functions template-clean.yaml "buildspec-${env}.yml" scripts/ci \
       -type f ! -path '*/node_modules/*' -print0 \
       | LC_ALL=C sort -z | xargs -0 "${SHA_FILES[@]}"
   } | sha | cut -d' ' -f1

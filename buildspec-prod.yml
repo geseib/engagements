@@ -29,7 +29,7 @@ phases:
       - pip3 install 'aws-sam-cli==1.166.2'
       # The pip-installed sam first on PATH, ahead of any older one the image
       # ships. Build phase 0.2 commands share this shell, so it holds for
-      # `sam build` and `sam deploy` below.
+      # `sam deploy` below.
       - export PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_path("scripts"))'):$PATH"
       - echo "Using $(command -v sam)"
       - sam --version
@@ -85,14 +85,22 @@ phases:
       # backend is built from is byte-identical to the last successful deploy
       # of THIS stack, and the stack has not changed since, the result is an
       # empty changeset — so both steps are skipped. Any doubt runs them.
-      # Only sam build and sam deploy are gated: lint, jest, webpack, the S3
-      # sync and the invalidation below run on every deploy. The rules and the
-      # escape hatch (FORCE_FULL_DEPLOY=true) are in scripts/ci/backend-gate.sh.
+      # Only the backend (bundle + sam deploy) is gated: lint, jest, webpack,
+      # the S3 sync and the invalidation below run on every deploy. The rules
+      # and the escape hatch (FORCE_FULL_DEPLOY=true) are in
+      # scripts/ci/backend-gate.sh.
+      #
+      # `sam build` is gone. It copied each of the four CodeUri folders, with
+      # its node_modules, into every one of the 119 functions (9.4 GB), and
+      # that is what sam deploy spent its 18 minutes zipping.
+      # scripts/ci/bundle-lambdas.js bundles each function on its own with a
+      # pinned esbuild (~175 MB in all) and writes .aws-sam/bundled/template.yaml,
+      # which is template-clean.yaml with only the CodeUri lines changed.
       - 'export BACKEND_FP=$(PARAM_OVERRIDES="$PARAM_OVERRIDES" bash scripts/ci/backend-gate.sh fingerprint)'
       - 'export BACKEND_ACTION=$(bash scripts/ci/backend-gate.sh check)'
       - 'echo "Backend gate: ${BACKEND_ACTION:-run}"'
-      - 'if [ "$BACKEND_ACTION" = "skip" ]; then echo "Backend unchanged since the last deploy - skipping sam build and sam deploy"; else echo "Building SAM application..." && sam build -t template-clean.yaml; fi'
-      - 'if [ "$BACKEND_ACTION" != "skip" ]; then echo "Deploying to AWS..." && sam deploy --template-file .aws-sam/build/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides $PARAM_OVERRIDES --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset; fi'
+      - 'if [ "$BACKEND_ACTION" = "skip" ]; then echo "Backend unchanged since the last deploy - skipping the Lambda bundle and sam deploy"; else echo "Bundling Lambda functions..." && npm ci --prefix scripts/ci --no-audit --no-fund && node scripts/ci/bundle-lambdas.js; fi'
+      - 'if [ "$BACKEND_ACTION" != "skip" ]; then echo "Deploying to AWS..." && sam deploy --template-file .aws-sam/bundled/template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --parameter-overrides $PARAM_OVERRIDES --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset; fi'
       - 'if [ "$BACKEND_ACTION" != "skip" ]; then bash scripts/ci/backend-gate.sh record; fi'
 
       - echo "Building frontend..."
