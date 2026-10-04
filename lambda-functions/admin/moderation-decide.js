@@ -400,7 +400,10 @@ exports.handler = async (event) => {
         orgId,
         action,
         actor: actorFromEvent(event, 'platform-admin'),
-        target: { type: 'set', id: setId, title },
+        // A report can outlive its listing (tests/moderation-decide.js "a row
+        // whose listing has gone is still cleared"); the entry still needs an
+        // id, so it says so rather than refusing the clean-up.
+        target: { type: 'set', id: setId || pub || 'listing-removed', title },
         reason: note,
         detail: {
           setId, version: v, ...(pub ? { publicSetId: pub } : {}), ...(resumed ? { resumed: true } : {}),

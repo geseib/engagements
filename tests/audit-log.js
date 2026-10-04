@@ -239,6 +239,8 @@ async function withAuditWritesFailing(fn) {
     await assert.rejects(A.recordAudit(db, { ...ok, actor: { ...STAFF, role: 'god' } }), /role/);
     await assert.rejects(A.recordAudit(db, { ...ok, actor: { role: 'platform-admin' } }), /sub/);
     await assert.rejects(A.recordAudit(db, { ...ok, target: { id: 'x' } }), /type/);
+    // Every entry says WHICH thing it touched (merge of the delete branch).
+    await assert.rejects(A.recordAudit(db, { ...ok, target: { type: 'session', id: '' } }), /target needs an id/);
     assert.strictEqual(H.rowsWhere((r) => /AUDIT/.test(r.PK)).length, 0);
   });
 
@@ -246,9 +248,15 @@ async function withAuditWritesFailing(fn) {
     H.reset();
     await A.recordAudit(db, {
       orgId: TEAM, action: 'org.suspend', actor: { ...STAFF, role: 'platform-admin' }, target: { type: 'org', id: TEAM },
-      detail: { count: 3, ok: true, id: 'abc', note: 'x'.repeat(500), nested: { a: 1 }, ids: ['a', 'b', { c: 1 }] },
+      detail: {
+        count: 3, ok: true, id: 'abc', at: '2026-10-04T12:00:00.000Z', code: 'SPRING-25',
+        note: 'x'.repeat(500), prose: 'free text is dropped', nested: { a: 1 }, ids: ['a', 'b', { c: 1 }, 'two words'],
+      },
     });
-    assert.deepStrictEqual(rows(`ORG#${TEAM}#AUDIT`)[0].Detail, { count: 3, ok: true, id: 'abc', ids: ['a', 'b'] });
+    // Prose is dropped even when short: Detail is stored unsealed, so words a
+    // person typed belong in Title or Reason, which are sealed.
+    assert.deepStrictEqual(rows(`ORG#${TEAM}#AUDIT`)[0].Detail,
+      { count: 3, ok: true, id: 'abc', at: '2026-10-04T12:00:00.000Z', code: 'SPRING-25', ids: ['a', 'b'] });
   });
 
   await H.test('a failed write throws, and a failed index write takes the org row back', async () => {
