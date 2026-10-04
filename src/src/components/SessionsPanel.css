@@ -290,6 +290,16 @@
 .sp-subrow td { font-size: var(--sp-t-label); }
 .sp-subrow td:first-child { padding-left: 30px; }
 .sp-subrow .sp-nm { font-weight: 500; }
+
+/* STAFF'S INLINE DELETE CONFIRM (2026-10-04, the owner's delete rule): under
+   the row it is about, asking Engage staff for the reason that goes into the
+   team's audit log. Nobody else ever sees it. */
+.sp-reasonrow td { height: auto; padding: 10px 12px 14px; background: var(--sp-row-hover); }
+.sp-reason { display: grid; gap: 10px; max-width: 640px; }
+.sp-reason-q { margin: 0; line-height: 1.5; }
+.sp-reason .sp-input { width: 100%; height: auto; padding: 8px 9px; resize: vertical; font: inherit; }
+.sp-reason-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.sp-reason-acts > :first-child { margin-left: auto; }
 .sp-when { font-size: var(--sp-t-label); color: var(--muted); white-space: nowrap; }
 .sp-mono { font-family: var(--sp-font-mono); font-size: 14px; }
 .sp-danger-text { color: var(--danger-text); }
@@ -361,6 +371,7 @@
 .sp-field { display: flex; flex-direction: column; gap: 5px; }
 .sp-field label { font-size: var(--sp-t-label); font-weight: 600; color: var(--muted); }
 .sp-field .sp-input { padding-left: 9px; }
+.sp-field textarea.sp-input { height: auto; padding: 8px 9px; resize: vertical; font: inherit; }
 
 .sp-modal footer {
   display: flex;

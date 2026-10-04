@@ -99,7 +99,8 @@ export function buildApi(gameId) {
     logAction: (logId, body) => post(`log/${seg(logId)}`, body),
     postDirection: (text) => post('directions', { text }),
     /** The host removes a screenshot. */
-    deleteImage: (imageId) => post(`images/${seg(imageId)}`, { action: 'delete' }),
+    /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
+    deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
     /** 'direct' | 'suggest' | 'dismiss' | 'restore' */
     ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
     /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */
