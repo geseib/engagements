@@ -179,7 +179,10 @@ function WhoBuiltWhat({ crew }) {
 
 function Decision({ ask }) {
   const r = ask.results || {};
-  const counted = ask.kind === 'suggest'
+  // Answered FOR the room (people talked instead of tapping): say so, rather
+  // than "0 answered", which reads as a room with no view.
+  const spokenOnly = Boolean(ask.decision && ask.decision.spoken) && !(r.total || (ask.responses || []).length);
+  const counted = spokenOnly ? 'answered out loud' : ask.kind === 'suggest'
     ? `${(ask.responses || []).length} suggestions · ${r.total || 0} voted`
     : `${r.total || 0} answered`;
   const whys = r.whys || [];

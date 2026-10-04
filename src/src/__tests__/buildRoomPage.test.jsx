@@ -177,6 +177,38 @@ describe('each ask status', () => {
     expect(within(screen.getByTestId('brm-previews-missing')).queryByRole('button')).toBeNull();
   });
 
+  test('proposed: answer for the room — pick what they said, Claude gets it as said out loud', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Answer for the room' }));
+    const panel = screen.getByRole('region', { name: 'Answer for the room' });
+    const send = within(panel).getByRole('button', { name: /Send to Claude/ });
+    expect(send).toBeDisabled(); // nothing picked, nothing written yet
+    fireEvent.click(within(panel).getByRole('button', { name: 'B · Calm photo + calendar' }));
+    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('The room chose B: Calm photo + calendar (said out loud).');
+    fireEvent.click(send);
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`));
+    expect(lastPost().body).toEqual({
+      action: 'decide', direction: 'The room chose B: Calm photo + calendar (said out loud).', chosen: ['B'], note: '', sendToAgent: true, spoken: true,
+    });
+  });
+
+  test('live: answer for the room on a rating, without closing it first', async () => {
+    await openRoom(hostState({
+      st: { CurrentAskId: '005' },
+      asks: [{ AskId: '005', Kind: 'rating', Prompt: 'How close is this?', Options: [], Scale: { min: 1, max: 5, lowLabel: 'Far', highLabel: 'There' }, Status: 'live' }],
+    }));
+    fireEvent.click(screen.getByRole('button', { name: 'Answer for the room' }));
+    const panel = screen.getByRole('region', { name: 'Answer for the room' });
+    fireEvent.click(within(panel).getByRole('button', { name: '4' }));
+    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('The room rated this 4 out of 5 (said out loud).');
+    // Typing in the sentence stops it following the picks.
+    fireEvent.change(within(panel).getByLabelText('Direction for Claude'), { target: { value: 'Four out of five: keep going, bigger dates.' } });
+    fireEvent.click(within(panel).getByRole('button', { name: '5 · There' }));
+    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('Four out of five: keep going, bigger dates.');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('region', { name: 'Answer for the room' })).toBeNull();
+  });
+
   test('proposed: every option previewed, no notice', async () => {
     const withPreviews = { ...CHOICE, Options: CHOICE.Options.map((o) => ({ ...o, url: `http://localhost:5173/${o.label.toLowerCase()}` })) };
     await openRoom(hostState({ asks: [{ ...withPreviews, Status: 'proposed' }] }));

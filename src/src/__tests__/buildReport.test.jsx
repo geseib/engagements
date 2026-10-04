@@ -215,3 +215,21 @@ describe('Who built what (crew mode)', () => {
     expect(screen.queryByRole('heading', { name: 'Who built what' })).toBeNull();
   });
 });
+
+test('an ask the host answered for the room says "answered out loud", not "0 answered"', () => {
+  // Owner, 2026-10-04: a room that talks instead of tapping still decided.
+  const rows = [
+    { SK: 'BUILD#STATE', Rev: 3 },
+    {
+      SK: 'BUILD#ASK#001', AskId: '001', Kind: 'rating', Prompt: 'How close is this?', Status: 'decided', Source: 'agent',
+      Scale: { min: 1, max: 5, lowLabel: 'Far', highLabel: 'There' },
+      DecidedAt: T(20), Decision: { direction: 'The room rated this 4 out of 5 (said out loud).', chosen: ['4'], note: '', spoken: true },
+    },
+  ];
+  const st = S.hostView({ gameId: '4821', meta: { Title: 'Spoken room' }, sessionState: 'ENDED', room: S.roomFromRows(rows), players: [], now: T(59) });
+  render(<BuildReport state={st} />);
+  const s = section('Decisions');
+  expect(within(s).getByText(/answered out loud/)).toBeInTheDocument();
+  expect(within(s).queryByText(/0 answered/)).toBeNull();
+  expect(within(s).getByText('The room rated this 4 out of 5 (said out loud).', { exact: false })).toBeInTheDocument();
+});

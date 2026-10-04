@@ -275,6 +275,27 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(h.body.agent.connected, true);
   });
 
+  await check('the host answers FOR the room: a proposed ask decided out loud, never opened to phones', async () => {
+    const c = await agentCall('POST', 'asks', { kind: 'rating', prompt: 'How close is this?', lowLabel: 'Far', highLabel: 'There' });
+    const id = c.body.ask.askId;
+    assert.strictEqual(c.body.ask.status, 'proposed');
+    // With nobody answering, a direction is still required.
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'decide', chosen: ['4'], spoken: true })).status, 400);
+    const d = await hostCall('POST', `asks/${id}`, {
+      action: 'decide', direction: 'The room rated this 4 out of 5 (said out loud).', chosen: ['4'], note: 'Wants the dates bigger', spoken: true,
+    });
+    assert.strictEqual(d.status, 200, JSON.stringify(d.body));
+    assert.strictEqual(d.body.ask.status, 'decided');
+    assert.strictEqual(d.body.ask.decision.spoken, true);
+    assert.ok(!d.body.ask.openedAt, 'it never opened to the phones');
+    const r = await agentCall('GET', `asks/${id}`);
+    assert.strictEqual(r.body.ask.decision.spoken, true);
+    const mine = r.body.inbox.filter((x) => x.askId === id);
+    assert.strictEqual(mine.length, 1);
+    assert.strictEqual(mine[0].text, 'The room rated this 4 out of 5 (said out loud).\n\nAlso from the room: Wants the dates bigger'
+      + '\n\nThe room answered out loud; the host recorded it. There are no phone votes behind it.');
+  });
+
   await check('a phone never sees the host\'s decision note: no direction entries, no decision detail', async () => {
     const p = await playCall('GET', 'state', priya);
     assert.ok(!JSON.stringify(p.body).includes('bigger button'));
@@ -317,7 +338,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await playCall('POST', 'vote', { ...marcus, askId: ideasId, respIds: [verbal] })).status, 200);
   });
   await check('the host hides one; results rank by votes; the default direction names the winner', async () => {
-    const two = (await hostCall('GET', 'state')).body.asks[1].responses.find((r) => r.text === 'two').respId;
+    const two = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === ideasId).responses.find((r) => r.text === 'two').respId;
     await hostCall('POST', `asks/${ideasId}/responses/${two}`, { action: 'hide' });
     await hostCall('POST', `asks/${ideasId}`, { action: 'close' });
     const p = await playCall('GET', 'state', marcus);

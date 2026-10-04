@@ -145,7 +145,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   const row = {
@@ -161,6 +161,7 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(forBuilder ? { ForBuilder: forBuilder } : {}),
     ...(shareId ? { ShareId: shareId } : {}),
     ...(name ? { Name: name } : {}),
+    ...(spoken ? { Spoken: true } : {}),
     CreatedAt: now,
   };
   return put(ctx, row);
@@ -304,11 +305,15 @@ async function askAction(ctx, role, askId, body) {
       const chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
       const note = S.cleanText(b.note, S.LIMITS.note);
       const sendToAgent = b.sendToAgent !== false;
-      next.Decision = { direction, chosen, note, sendToAgent };
+      // Answered FOR the room: people said it out loud and the host recorded
+      // it. Claude and the report are told, so nobody reads "0 answered" as
+      // the room having no view.
+      const spoken = b.spoken === true;
+      next.Decision = { direction, chosen, note, sendToAgent, ...(spoken ? { spoken: true } : {}) };
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent });
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken });
     }
     await put(ctx, next);
     if (action === 'open' || action === 'reopen') await makeCurrent(ctx, room, askId, role);

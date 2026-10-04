@@ -38,6 +38,14 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && p === 'log') return send(201, { entry: { logId: 'l1', ...JSON.parse(raw) }, inbox: [] });
     // A proposed choice the host has not opened, and a direction the host sent
     // meanwhile ("make mockups"): wait_for_room must hand it over at once.
+    if (req.method === 'GET' && p === 'asks/008') {
+      return send(200, {
+        ask: { askId: '008', kind: 'choice', prompt: 'Which header?', status: 'decided', options: [{ label: 'A', title: 'Bold' }, { label: 'B', title: 'Calm' }],
+          results: { total: 0, options: [{ label: 'A', title: 'Bold', count: 0, pct: 0 }, { label: 'B', title: 'Calm', count: 0, pct: 0 }], whys: [] },
+          decision: { direction: 'The room chose B: Calm (said out loud).', chosen: ['B'], spoken: true } },
+        inbox: [],
+      });
+    }
     if (req.method === 'GET' && p === 'asks/007') {
       return send(200, {
         ask: { askId: '007', kind: 'choice', prompt: 'Which header?', status: 'proposed', options: [{ label: 'A', title: 'Bold' }, { label: 'B', title: 'Calm' }] },
@@ -153,6 +161,12 @@ async function check(name, fn) {
     assert.ok(!c.isError, c.text);
     // The pictures come before the wait (owner, 2026-10-04).
     assert.ok(/PREVIEWS BEFORE YOU WAIT/.test(c.text) && /share_image it onto its option/.test(c.text) && /label A, B/.test(c.text), c.text);
+  });
+  await check('an ask the host answered for the room says so, instead of showing empty votes', async () => {
+    const r = await mcp.call('get_results', { askId: '008' });
+    assert.ok(/The room chose B: Calm \(said out loud\)/.test(r.text) && /Chosen: Choice B — Calm/.test(r.text), r.text);
+    assert.ok(/The room answered out loud; the host recorded it/.test(r.text), r.text);
+    assert.ok(!/0 \(0%\)/.test(r.text), `empty phone results were printed:\n${r.text}`);
   });
   await check('a direction sent while Claude waits on an ask reaches it at once, not after the wait', async () => {
     const t0 = Date.now();

@@ -276,7 +276,9 @@ const TRANSITIONS = Object.freeze({
   open: { from: ['proposed'], to: 'live' },
   vote: { from: ['live'], to: 'voting', kinds: ['suggest'] },
   close: { from: ['live', 'voting'], to: 'results' },
-  decide: { from: ['live', 'voting', 'results', 'decided'], to: 'decided' },
+  // `proposed` too: the host may answer FOR the room without opening the ask
+  // to phones, when people are talking instead of tapping (owner, 2026-10-04).
+  decide: { from: ['proposed', 'live', 'voting', 'results', 'decided'], to: 'decided' },
   reopen: { from: ['results', 'decided'], to: 'live' },
   discard: { from: ['proposed', 'live', 'voting', 'results'], to: 'discarded' },
 });
@@ -430,6 +432,7 @@ function askView(ask, room, audience, me) {
       chosen: ask.Decision.chosen || [],
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
       sentToAgent: ask.Decision.sendToAgent !== false,
+      spoken: Boolean(ask.Decision.spoken),
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -622,7 +625,10 @@ function pendingForBuilder(room, name) {
 
 /** The words Claude receives for one entry. */
 function inboxText(entry) {
-  if (entry.Kind === 'decision') return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '');
+  if (entry.Kind === 'decision') {
+    return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '')
+      + (entry.Spoken ? '\n\nThe room answered out loud; the host recorded it. There are no phone votes behind it.' : '');
+  }
   if (entry.Kind === 'idea') return `An idea from the room: ${entry.Text}`;
   if (entry.Kind === 'verbal') return `The room said: ${entry.Text}`;
   return entry.Text;

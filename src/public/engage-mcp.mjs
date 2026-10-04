@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -268,8 +268,11 @@ function renderAsk(ask, { heading = true } = {}) {
       lines.push(`  Chosen: ${names.join('; ')}`);
     }
     if (d.note) lines.push(`  Host's note: ${s(d.note)}`);
+    // The host answered FOR the room (people talked instead of tapping):
+    // empty phone results below are not the room having no view.
+    if (d.spoken) lines.push('  The room answered out loud; the host recorded it. There are no phone votes behind it.');
   }
-  if (ask.status !== 'proposed') { lines.push(''); lines.push(renderResults(ask)); }
+  if (ask.status !== 'proposed' && !(d && d.spoken && !((ask.results || {}).total))) { lines.push(''); lines.push(renderResults(ask)); }
   return lines.join('\n');
 }
 

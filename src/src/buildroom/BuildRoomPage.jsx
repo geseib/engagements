@@ -669,6 +669,7 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
   // them here, and Claude gets the direction at once (wait_for_room returns on
   // a direction, engage-mcp.mjs).
   const [askedMockups, setAskedMockups] = useState(false);
+  const [answering, setAnswering] = useState(false);
   const missing = ask.kind === 'choice'
     ? (ask.options || []).map((o, i) => (o.imageId || o.url ? null : (o.label || letter(i)))).filter(Boolean)
     : [];
@@ -756,8 +757,18 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} onClick={discard}>Discard</button>
           {dirty && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy} onClick={save}>Save edits</button>}
-          <button type="button" className={`brm-btn brm-btn--primary${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={open}>Open to the room</button>
+          {!answering && (
+            <button type="button" className={`brm-btn brm-btn--ghost${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={() => setAnswering(true)}>Answer for the room</button>
+          )}
+          <button type="button" className={`brm-btn brm-btn--primary${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>Open to the room</button>
         </div>
+      )}
+      {answering && !ended && (
+        <DecidePanel
+          ask={ask} busy={busy} run={run} api={api} spoken
+          onCancel={() => setAnswering(false)}
+          beforeDecide={dirty ? () => api.askAction(ask.askId, editBody()) : null}
+        />
       )}
     </section>
   );
@@ -767,6 +778,7 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
 
 function AskStage({ ask, room, host, busy, ended, run, api }) {
   const [editing, setEditing] = useState(false);
+  const [answering, setAnswering] = useState(false);
   const [prompt, setPrompt] = useState(ask.prompt);
   const [detail, setDetail] = useState(ask.detail || '');
   const act = (action) => run(() => api.askAction(ask.askId, { action }));
@@ -788,6 +800,9 @@ function AskStage({ ask, room, host, busy, ended, run, api }) {
               {!editing && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setEditing(true)}>Edit wording</button>}
               {ask.status === 'live' && ask.kind === 'suggest' && (
                 <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act('vote')}>Open voting</button>
+              )}
+              {['live', 'voting'].includes(ask.status) && !answering && (
+                <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
               )}
               {['live', 'voting'].includes(ask.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => act('close')}>Close</button>
@@ -823,6 +838,9 @@ function AskStage({ ask, room, host, busy, ended, run, api }) {
       </section>
       {host && !ended && ask.status === 'results' && (
         <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} />
+      )}
+      {host && !ended && answering && ['live', 'voting'].includes(ask.status) && (
+        <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} />
       )}
     </>
   );
@@ -942,20 +960,40 @@ function Whys({ ask, host }) {
   );
 }
 
-function DecidePanel({ ask, busy, run, api, playerCount }) {
-  const [direction, setDirection] = useState(() => defaultDirection(ask));
+/**
+ * The sentence Claude gets when the host answers FOR the room (people talked
+ * instead of tapping): built from what the host picked, edited freely after.
+ */
+export function spokenDirection(ask, chosen) {
+  if (ask.kind === 'choice') {
+    const picked = (ask.options || []).filter((o) => chosen.includes(o.label)).map((o) => `${o.label}: ${o.title}`);
+    return picked.length ? `The room chose ${picked.join(' and ')} (said out loud).` : '';
+  }
+  if (ask.kind === 'rating') return chosen[0] ? `The room rated this ${chosen[0]} out of 5 (said out loud).` : '';
+  return '';
+}
+
+function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide }) {
+  const [direction, setDirection] = useState(() => (spoken ? '' : defaultDirection(ask)));
+  const [edited, setEdited] = useState(false);
   const [note, setNote] = useState('');
   const [send, setSend] = useState(true);
   const [folded, setFolded] = useState(() => new Set());
   const sources = foldSources(ask);
-  const topChoice = ask.kind === 'choice'
+  const topChoice = !spoken && ask.kind === 'choice'
     ? [...((ask.results && ask.results.options) || [])].sort((a, b) => b.count - a.count).filter((o) => o.count)[0]
     : null;
   const [chosen, setChosen] = useState(() => {
+    if (spoken) return [];
     if (topChoice) return [topChoice.label];
     if (ask.kind === 'suggest' && ask.results?.ranked?.[0]) return [ask.results.ranked[0].respId];
     return [];
   });
+  // In spoken mode the sentence follows the picks until the host types in it.
+  const pick = (next) => {
+    setChosen(next);
+    if (spoken && !edited) setDirection(spokenDirection(ask, next));
+  };
 
   const toggleFold = (s) => {
     const next = new Set(folded);
@@ -970,21 +1008,38 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
     }
     setFolded(next);
   };
-  const toggleChosen = (label) => setChosen((c) => (c.includes(label) ? c.filter((x) => x !== label) : [...c, label]));
+  const toggleChosen = (label) => pick(chosen.includes(label) ? chosen.filter((x) => x !== label) : [...chosen, label]);
 
-  const decide = () => run(() => api.askAction(ask.askId, {
-    action: 'decide', direction: direction.trim(), chosen, note: note.trim(), sendToAgent: send,
-  }));
+  const decide = () => run(async () => {
+    if (beforeDecide) await beforeDecide();
+    return api.askAction(ask.askId, {
+      action: 'decide', direction: direction.trim(), chosen, note: note.trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
+    });
+  });
   const total = ask.results?.total || 0;
 
   return (
     <section className="brm-panel brm-decide" aria-labelledby={`brm-decide-${ask.askId}`}>
-      <h2 className="brm-h" id={`brm-decide-${ask.askId}`}>Direction for Claude</h2>
-      <p className="brm-sub">Claude builds from this sentence, not from the counts. Edit it freely. {total} of {playerCount || 0} answered.</p>
-      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => setDirection(e.target.value)} placeholder="What should Claude do now?" />
+      <h2 className="brm-h" id={`brm-decide-${ask.askId}`}>{spoken ? 'Answer for the room' : 'Direction for Claude'}</h2>
+      <p className="brm-sub">{spoken
+        ? 'For when people talk instead of tapping. Pick what the room said; Claude builds from the sentence below and is told it was said out loud.'
+        : `Claude builds from this sentence, not from the counts. Edit it freely. ${total} of ${playerCount || 0} answered.`}</p>
+      {spoken && ask.kind === 'rating' && (
+        <div className="brm-field">
+          <span className="brm-lbl">The room&apos;s rating</span>
+          <div className="brm-foldchips">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" className={`brm-fold${chosen[0] === String(n) ? ' is-in' : ''}`} aria-pressed={chosen[0] === String(n)} onClick={() => pick([String(n)])}>
+                {n}{n === 1 && ask.scale?.lowLabel ? ` · ${ask.scale.lowLabel}` : ''}{n === 5 && ask.scale?.highLabel ? ` · ${ask.scale.highLabel}` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => { setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
       {ask.kind === 'choice' && (
         <div className="brm-field">
-          <span className="brm-lbl">Chosen</span>
+          <span className="brm-lbl">{spoken ? 'What the room chose' : 'Chosen'}</span>
           <div className="brm-foldchips">
             {(ask.options || []).map((o) => (
               <button key={o.label} type="button" className={`brm-fold${chosen.includes(o.label) ? ' is-in' : ''}`} aria-pressed={chosen.includes(o.label)} onClick={() => toggleChosen(o.label)}>
@@ -1007,7 +1062,7 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
         </div>
       )}
       <label className="brm-field">
-        <span className="brm-lbl">What the room said (optional; goes to Claude with the direction)</span>
+        <span className="brm-lbl">{spoken ? 'What people said (optional; goes to Claude with the answer)' : 'What the room said (optional; goes to Claude with the direction)'}</span>
         <input className="brm-input" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder='e.g. "show how many spots are left"' />
       </label>
       <div className="brm-row brm-gap">
@@ -1016,7 +1071,8 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
           <span>Send to Claude</span>
         </label>
         <span className="brm-hint">{send ? "Delivered on Claude's next call" : 'Recorded in the timeline only'}</span>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || (!direction.trim() && !total)} onClick={decide}>
+        {onCancel && <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onCancel}>Cancel</button>}
+        <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} disabled={busy || (!direction.trim() && (spoken || !total))} onClick={decide}>
           <Icon name="ArrowRight" size={16} /> {send ? 'Send to Claude' : 'Record decision'}
         </button>
       </div>
