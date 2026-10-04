@@ -507,6 +507,13 @@ function requiredGroupsForRoute(method, path) {
   if (path === 'platform/observability') {
     return ['admins'];
   }
+  // The audit log as Engage reads it — one organisation's (`?orgId=`) or every
+  // staff action across the platform. orgs/platform-orgs.js re-asks
+  // isPlatformAdmin. An organisation's own admins read theirs at
+  // `orgs/{orgId}/audit`, which ORG_ROUTE above already admits.
+  if (path === 'platform/audit') {
+    return ['admins'];
+  }
 
   // ── COPYING A SHARED SET INTO YOUR OWN ORGANISATION ──────────────────────
   //
@@ -868,6 +875,9 @@ exports.handler = async (event) => {
         userId: decoded.sub,
         username,
         email,
+        // The person's own name, when the token carries one — who did it, in
+        // the audit log (admin/shared/audit-log.js actorFromEvent).
+        name: decoded.name || '',
         groups: groups.join(','),
         status: userStatus,
         role: decoded['custom:role'] || 'host',

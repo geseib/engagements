@@ -14,7 +14,8 @@
  *   pageSize   rows READ per call (stands in for the 1 MB cap). A page holds
  *              up to pageSize rows before the filter, so it can hold none after.
  *   Scan       walks the whole table in one fixed order (PK, then SK).
- *   Query      `PK = :pk` or `PK = :pk AND begins_with(SK, :sk)`, SK order.
+ *   Query      `PK = :pk` or `PK = :pk AND begins_with(SK, :sk)`, SK order
+ *              (reversed under `ScanIndexForward: false`).
  *   Filter     `a = :v` clauses joined by AND, `#name` aliases allowed.
  *   Put        stores the item; `attribute_not_exists(PK|SK)` is the one condition.
  *   Update     `SET a = :v, #b = :w` and `REMOVE c` on an existing item.
@@ -70,11 +71,15 @@ function createPagedTable({ pageSize = 3 } = {}) {
   const log = [];
 
   const page = (rows, input, kind) => {
+    // `ScanIndexForward: false` (a Query, newest first) walks the same order
+    // backwards, and its ExclusiveStartKey means "after this one, going down".
+    const backwards = kind === 'query' && input.ScanIndexForward === false;
     const sorted = rows.slice().sort(bySortKey);
+    if (backwards) sorted.reverse();
     let start = 0;
     if (input.ExclusiveStartKey) {
       const after = keyOf(input.ExclusiveStartKey);
-      start = sorted.findIndex((row) => keyOf(row) > after);
+      start = sorted.findIndex((row) => (backwards ? keyOf(row) < after : keyOf(row) > after));
       if (start === -1) start = sorted.length;
     }
     const cap = Number(input.Limit) > 0 ? Math.min(Number(input.Limit), table.pageSize) : table.pageSize;

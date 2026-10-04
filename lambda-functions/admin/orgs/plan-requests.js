@@ -47,6 +47,7 @@ const tenant = require('../shared/tenant');
 const { periodOf } = require('../shared/usage');
 const { redeemCodeItems } = require('./adjustments');
 const leavePlan = require('./leave-plan');
+const { recordAudit, markAuditOutcome, actorFromEvent } = require('../shared/audit-log');
 
 const STATUSES = ['requested', 'approved', 'declined', 'withdrawn'];
 /*
@@ -64,6 +65,8 @@ const crossedPlan = (org, toPlan) => (org && org.type === 'team'
   ? 'A team moves to the Organisation plan. The Standard plan is for a person\'s own space.'
   : `A person's own space moves to the Standard plan. The Organisation plan is for a team — create an organisation to ask for it.`);
 const NOTE_MAX = 600;
+/** How a plan reads in the audit log's "what it touched" column. */
+const PLAN_TITLES = { free: 'Free plan', standard: 'Standard plan', team: 'Organisation plan' };
 const CODE_RE = /^[A-Z0-9][A-Z0-9-]{2,31}$/;
 
 const reqSk = (ts, reqId) => `PLANREQ#${ts}#${reqId}`;
@@ -340,9 +343,29 @@ async function decide(event, orgId, reqId) {
       },
     });
   }
+  /* THE AUDIT ENTRY (shared/audit-log.js), the last thing before the one
+     transaction that decides. The decision note is the reason. */
+  let auditRef;
+  try {
+    auditRef = await recordAudit(G.db, {
+      orgId,
+      action: decision === 'approved' ? 'plan.approve' : 'plan.decline',
+      actor: actorFromEvent(event, 'platform-admin'),
+      target: { type: 'plan-request', id: reqId, title: PLAN_TITLES[row.toPlan] || row.toPlan || '' },
+      reason: decisionNote,
+      detail: {
+        fromPlan: row.fromPlan || '', toPlan: row.toPlan || '', kind: row.kind || 'upgrade',
+        ...(patch.codeApplied ? { code: patch.codeApplied } : {}),
+      },
+    });
+  } catch (e) {
+    console.error('plan-requests: decision refused, the audit entry could not be written:', e);
+    return G.fail(503, 'Nothing was changed: the decision could not be recorded in the audit log. Try again.');
+  }
   try {
     await moveRequest(row, patch, extra);
   } catch (e) {
+    await markAuditOutcome(G.db, auditRef, 'failed');
     if (e && e.name === 'TransactionCanceledException') return G.fail(409, 'Somebody decided this request a moment ago.');
     throw e;
   }

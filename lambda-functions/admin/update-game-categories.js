@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./shared/set-version');
+const { recordAudit, markAuditOutcome, actorFromEvent } = require('./shared/audit-log');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -120,6 +121,32 @@ exports.handler = async (event) => {
       name: cat.SK.replace('CATEGORY#', '')
     })));
 
+    /*
+      THE AUDIT ENTRY (shared/audit-log.js). This route is `admins` only (the
+      authorizer's `admin` prefix) and checks no membership, so every call is
+      Engage staff changing a session's categories — in the owning
+      organisation's log, before the mask moves. `Title` is the session's own
+      sealed title, carried as it is (it is already sealed under that org).
+    */
+    const gameOrg = String(gameMetadata.Item.orgId || gameMetadata.Item.OrgId || '').trim();
+    let auditRef;
+    try {
+      auditRef = await recordAudit(db, {
+        orgId: gameOrg,
+        action: 'session.categories',
+        actor: actorFromEvent(event, 'platform-admin'),
+        target: { type: 'session', id: gameId, title: gameMetadata.Item.Title || '' },
+        detail: { selected: Array.isArray(selectedCategories) ? selectedCategories.length : 0, available: allCategories.length },
+      });
+    } catch (auditError) {
+      console.error('Refused: the audit entry could not be written:', auditError);
+      return {
+        statusCode: 503,
+        body: JSON.stringify({ error: 'Nothing was changed: the change could not be recorded in the audit log. Try again.' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Update the category state in DynamoDB
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
@@ -137,7 +164,10 @@ exports.handler = async (event) => {
         ':hostMask17_24': bitmasks['HostMask17-24'],
         ':updatedAt': new Date().toISOString()
       }
-    }));
+    })).catch(async (writeError) => {
+      await markAuditOutcome(db, auditRef, 'failed');
+      throw writeError;
+    });
 
     console.log(`✅ Updated category selection for game ${gameId}`);
 
