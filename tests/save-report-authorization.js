@@ -189,13 +189,24 @@ const nothingWritten = () => {
   });
 
   console.log('\n5. the report screen sends the token');
-  await check('GameReport.jsx posts save-report through authFetch, never bare fetch', () => {
-    const src = fs.readFileSync(path.join(REPO, 'src/src/components/GameReport.jsx'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-    const calls = [...src.matchAll(/(\w*[Ff]etch)\s*\(\s*`[^`]*save-report`/g)].map((m) => m[1]);
-    assert.deepStrictEqual(calls, ['authFetch'],
-      `save-report is called via ${JSON.stringify(calls)} — a bare fetch sends no Authorization header and now 401s`);
+  // The post moved to utils/saveReport.js (2026-10-04), which both the
+  // session report and a Build Room's report use. The guard follows it: the
+  // helper's fetch defaults to authFetch, and no caller hands it another.
+  const strip = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  await check('save-report is posted through authFetch, never bare fetch (utils/saveReport.js and its callers)', () => {
+    const helper = strip('src/src/utils/saveReport.js');
+    assert.match(helper, /fetchFn = authFetch/, 'the helper must default to authFetch');
+    assert.match(helper, /import \{ authFetch \} from '\.\.\/auth\/authFetch'/);
+    const calls = [...helper.matchAll(/(\w*[Ff]etch\w*)\s*\(\s*`[^`]*save-report`/g)].map((m) => m[1]);
+    assert.deepStrictEqual(calls, ['fetchFn']);
+    for (const rel of ['src/src/components/GameReport.jsx', 'src/src/buildroom/BuildReport.jsx']) {
+      const src = strip(rel);
+      assert.match(src, /saveReportPdf\(\{/, `${rel} saves through the helper`);
+      assert.ok(!/fetchFn\s*:/.test(src), `${rel} must not hand the helper another fetch`);
+      assert.ok(!/fetch\s*\(\s*`[^`]*save-report`/.test(src), `${rel} posts save-report itself`);
+    }
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
