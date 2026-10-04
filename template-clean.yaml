@@ -5187,6 +5187,13 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # The audit entry a delete writes first seals its title and reason
+        # with the organisation's key (audit-log.js, 2026-10-04).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Environment:
@@ -5249,6 +5256,13 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 300
       Policies:
+        # The audit entry a delete writes first seals its title and reason
+        # with the organisation's key (audit-log.js, 2026-10-04).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Environment:

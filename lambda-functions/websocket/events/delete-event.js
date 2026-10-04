@@ -26,9 +26,14 @@
  *
  * Refused, in this order:
  *   - while EVENTS_ENABLED is off on this tier (404, as create-event.js);
- *   - by the host door (event-store.openEvent): no identity, another
- *     organisation's event, an unknown code and a malformed one are the one
- *     404;
+ *   - by the delete door (delete-auth.openForDelete): no identity, an unknown
+ *     or malformed code, and another organisation's event (unless the caller
+ *     is Engage staff) are the one 404;
+ *   - WHO (the owner, 2026-10-04): only the host who created it, an owner or
+ *     admin of its organisation, or Engage staff giving a reason
+ *     (tenant.deleteRole). A member in none of those roles: 403. Staff with no
+ *     reason: 400 `reason_required`. Whoever deletes, an audit entry is
+ *     written first (audit-log.js) and a failure there deletes nothing;
  *   - when any item is `live` or `paused` (409, a plain sentence): a live
  *     item must never be deleted out from under a room.
  *
@@ -78,6 +83,9 @@ const S = require('./event-store');
 const { deleteAttendees } = require('./attendee-store');
 const { discardEventSession } = require('./child-session');
 const { removeObject } = require('./deck-store');
+const {
+  openForDelete, deleteGate, auditDelete, AUDIT_FAILED,
+} = require('./delete-auth');
 
 const PLANNED = 'planned';
 const DONE = 'done';
@@ -98,8 +106,10 @@ async function deleteEvent(db, tableName, request) {
   }
   const code = String((request.pathParameters || {}).code || '');
   try {
-    const meta = await S.openEvent(db, tableName, request, code);
+    const meta = await openForDelete(db, tableName, request, code);
     if (!meta) return notFound();
+    const gate = deleteGate(request, meta);
+    if (gate.refused) return json(gate.refused.status, { error: gate.refused.error, code: gate.refused.code });
 
     const rows = (await S.queryAll(db, tableName, tenant.eventPk(code), '', { consistent: true }))
       .filter((row) => row.SK !== S.META_SK && !String(row.SK).startsWith(S.ATTENDEE_PREFIX));
@@ -110,6 +120,27 @@ async function deleteEvent(db, tableName, request) {
     if (rows.length + 3 > TRANSACTION_LIMIT) {
       console.error(`❌ delete-event: EVENT#${code} holds ${rows.length} rows, more than one transaction can delete`);
       return json(500, { error: 'This event is too large to delete in one step. Nothing was deleted.' });
+    }
+
+    // THE AUDIT ENTRY, BEFORE ANYTHING IS DELETED. No entry, no delete. (A
+    // delete that then loses a race leaves an entry for a delete that did not
+    // happen; the entry records the attempt, and the agenda says the rest.)
+    let title = '';
+    try {
+      title = (await S.decryptEvent(meta.orgId, { Title: meta.Title })).Title || '';
+    } catch (error) {
+      console.warn(`⚠️ delete-event: could not read EVENT#${code}'s title for the audit entry`);
+    }
+    try {
+      await auditDelete(db, request, gate, {
+        orgId: meta.orgId,
+        action: 'event.delete',
+        target: { type: 'event', id: code, title: typeof title === 'string' ? title : '' },
+        detail: { items: items.length, sessions: items.filter((row) => row.GameId).length },
+      });
+    } catch (error) {
+      console.error(`❌ delete-event: the audit entry for EVENT#${code} could not be written; nothing was deleted:`, error && error.message);
+      return json(500, { error: AUDIT_FAILED });
     }
 
     const tx = rows.map((row) => ({

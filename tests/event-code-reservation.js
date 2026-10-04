@@ -164,7 +164,7 @@ const newSession = () => createGame({
     table.put({ PK: 'GAMES', SK: `GAME#${OWN_CODE}`, orgId: 'org_a', ttl: 2000000000 });
     table.put({ PK: `GAME#${OWN_CODE}`, SK: 'METADATA', orgId: 'org_a' });
     const res = await clearAllGames({
-      requestContext: { ...asHost('org_a', { groups: 'admins' }), http: { method: 'DELETE', path: '/admin/clear-all-games' } },
+      requestContext: { ...asHost('org_a', { groups: 'admins', orgRole: 'owner' }), http: { method: 'DELETE', path: '/admin/clear-all-games' } },
     });
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.deepStrictEqual(reservation(EVENT_CODE), { PK: 'GAMES', SK: `GAME#${EVENT_CODE}`, orgId: 'org_b', Kind: 'event', ttl: 2000000000 },

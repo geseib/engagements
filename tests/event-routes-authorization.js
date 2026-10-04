@@ -132,6 +132,18 @@ const PUBLIC_ROUTES = [
       ['Engage staff who are not members', asHost('', { groups: 'admins,hosts', orgIds: '' }), code],
       ['a malformed code', asHost('org_nw'), '53a7'],
     ]) {
+      // CHANGED 2026-10-04 (the owner's delete rule): Engage staff outside the
+      // team may DELETE an event or an item, giving a reason — without one
+      // they get 400 reason_required, never the event's contents
+      // (tests/delete-authorization.js). Every other route stays members-only.
+      if (/^DELETE/.test(key) && /Engage staff/.test(label)) {
+        await check(`${key} — ${label}: 400 reason_required, nothing else`, async () => {
+          const res = await callAs(key, ctx, c);
+          assert.strictEqual(res.statusCode, 400, res.body);
+          assert.strictEqual(bodyOf(res).code, 'reason_required');
+        });
+        continue;
+      }
       await check(`${key} — ${label}: the unknown code's 404`, async () => {
         const res = await callAs(key, ctx, c);
         assert.strictEqual(res.statusCode, 404, res.body);

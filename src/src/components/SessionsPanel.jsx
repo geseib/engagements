@@ -10,6 +10,7 @@ import {
   isBuildSession, buildRoomPath, buildReportPath,
 } from '../buildroom/buildHostApi';
 import Icon from './Icon';
+import DeleteReasonField, { needsReason } from './DeleteReasonField';
 import ListControls from './ListControls';
 import useListControls from '../hooks/useListControls';
 import { matchesListFilters } from '../config/listControls';
@@ -111,6 +112,17 @@ export default function SessionsPanel({
   const [busyId, setBusyId] = useState(null);
   const [confirmAll, setConfirmAll] = useState(false);
   const [typed, setTyped] = useState('');
+  /*
+    THE OWNER'S DELETE RULE (2026-10-04). Each row says the role this caller
+    would delete it in (`deleteAs`, from GET /games): its host, an owner or
+    admin of the team, or Engage staff — who must give a reason. `reasonFor`
+    is the row whose inline confirm is asking for that reason; `deleteAllAs`
+    is the same answer for Delete all.
+  */
+  const [reasonFor, setReasonFor] = useState(null);
+  const [reasonText, setReasonText] = useState('');
+  const [deleteAllAs, setDeleteAllAs] = useState(undefined);
+  const [allReason, setAllReason] = useState('');
   /** The event rows whose agenda items are showing. */
   const [openEvents, setOpenEvents] = useState(() => new Set());
   const toggleEvent = (code) => setOpenEvents((prev) => {
@@ -128,6 +140,7 @@ export default function SessionsPanel({
         throw new Error(data.error || `Could not load sessions (HTTP ${response.status})`);
       }
       setSessions(mergeSessions(data));
+      setDeleteAllAs(data.deleteAllAs);
       setError(null);
     } catch (err) {
       console.error('Error loading sessions:', err);
@@ -143,11 +156,18 @@ export default function SessionsPanel({
 
   /* ---------------------------------------------------------------- deletes */
 
-  const deleteOne = async (session) => {
-    if (isEventRow(session)) { await deleteOneEvent(session); return; }
+  /** Delete, or — for Engage staff — open the row's inline confirm with its reason field. */
+  const deleteOne = async (session, reason = '') => {
+    if (session.deleteAs === 'platform-admin' && !reason) {
+      setReasonText('');
+      setReasonFor(session.gameId);
+      return;
+    }
+    if (isEventRow(session)) { await deleteOneEvent(session, reason); return; }
     const name = session.title || 'this session';
     if (
-      !window.confirm(
+      !reason
+      && !window.confirm(
         `Delete ${name} (${session.gameId})?\n\nEvery answer, vote and player record stored under this session goes with it. The question set it was built from is not touched.`
       )
     ) {
@@ -157,13 +177,19 @@ export default function SessionsPanel({
     try {
       const response = await authFetch(
         adminApiUrl(`admin/clear-game/${encodeURIComponent(session.gameId)}`),
-        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+        }
       );
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (result.code === 'reason_required') { setReasonFor(session.gameId); return; }
         throw new Error(result.error || `Could not delete ${session.gameId}`);
       }
       setSessions((prev) => prev.filter((item) => item.gameId !== session.gameId));
+      setReasonFor(null);
       setError(null);
     } catch (err) {
       console.error('Delete session error:', err);
@@ -179,10 +205,11 @@ export default function SessionsPanel({
     items ran. Saved reports stay, as they do for any session. Refused while an
     item is running, with the server's sentence.
   */
-  const deleteOneEvent = async (event) => {
+  const deleteOneEvent = async (event, reason = '') => {
     const name = event.title || `event ${event.gameId}`;
     if (
-      !window.confirm(
+      !reason
+      && !window.confirm(
         `Delete ${name} (${event.gameId})?\n\nIts agenda, its join code and the sessions its items ran go with it, with every answer in them. Saved reports are kept.`
       )
     ) {
@@ -190,10 +217,12 @@ export default function SessionsPanel({
     }
     setBusyId(event.gameId);
     try {
-      await deleteEvent(event.gameId);
+      await (reason ? deleteEvent(event.gameId, { reason }) : deleteEvent(event.gameId));
       setSessions((prev) => prev.filter((item) => item.gameId !== event.gameId));
+      setReasonFor(null);
       setError(null);
     } catch (err) {
+      if (needsReason(err)) { setReasonFor(event.gameId); return; }
       setError(err.message || `Could not delete ${name}`);
     } finally {
       setBusyId(null);
@@ -213,7 +242,7 @@ export default function SessionsPanel({
       for (const event of sessions.filter(isEventRow)) {
         try {
           // eslint-disable-next-line no-await-in-loop
-          await deleteEvent(event.gameId);
+          await (allAsStaff ? deleteEvent(event.gameId, { reason: allReason.trim() }) : deleteEvent(event.gameId));
         } catch (err) {
           kept.push(event);
         }
@@ -221,6 +250,7 @@ export default function SessionsPanel({
       const response = await authFetch(adminApiUrl('admin/clear-all-games'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        ...(allAsStaff ? { body: JSON.stringify({ reason: allReason.trim() }) } : {}),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -232,6 +262,7 @@ export default function SessionsPanel({
         : null);
       setConfirmAll(false);
       setTyped('');
+      setAllReason('');
     } catch (err) {
       console.error('Delete all sessions error:', err);
       setError(err.message || 'Failed to delete sessions');
@@ -258,17 +289,68 @@ export default function SessionsPanel({
     },
   });
 
-  const armed = typed.trim() === DELETE_ALL_PHRASE;
+  const allAsStaff = deleteAllAs === 'platform-admin';
+  const armed = typed.trim() === DELETE_ALL_PHRASE && (!allAsStaff || allReason.trim().length > 0);
 
   /*
     ONE SESSION'S ROW — unchanged from before events were rows, apart from the
     type chip coming from config/engagementKinds.js (resolveGameType inside,
     so a legacy row with no type still reads "—", never "Call & Answer").
   */
+  /*
+    STAFF'S INLINE CONFIRM — the row's own delete confirm, asking for the
+    reason (2026-10-04). Under the row it is about, never a dialog over it.
+  */
+  const renderReasonRow = (row) => (reasonFor === row.gameId ? (
+    <tr key={`${row.gameId}-reason`} className="sp-reasonrow" data-testid="reason-row">
+      <td colSpan={9}>
+        <div className="sp-reason">
+          <p className="sp-reason-q">
+            Delete <b>{row.title || row.gameId}</b>? {isEventRow(row)
+              ? 'Its agenda, its join code and the sessions its items ran go with it. Saved reports are kept.'
+              : 'Every answer, vote and player record stored under it goes with it.'}
+          </p>
+          <DeleteReasonField
+            id={`sp-reason-${row.gameId}`}
+            value={reasonText}
+            onChange={setReasonText}
+            scope="sp"
+            labelClass="sp-reason-label"
+            hintClass="sp-dim"
+          />
+          <div className="sp-reason-acts">
+            <button type="button" className="sp-btn sp-btn--sm" onClick={() => setReasonFor(null)}>Keep it</button>
+            <button
+              type="button"
+              className="sp-btn sp-btn--sm sp-btn--dangersolid"
+              disabled={!reasonText.trim() || busyId === row.gameId}
+              onClick={() => deleteOne(row, reasonText.trim())}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  ) : null);
+
+  /** Delete, or — when this caller may not — the same button, disabled, saying who may. */
+  const deleteButton = (row, busy) => (
+    <button
+      type="button"
+      className="sp-btn sp-btn--sm sp-btn--ghostdanger"
+      disabled={busy || row.deleteAs === ''}
+      title={row.deleteAs === '' ? 'Only the host who created it, or an owner or admin of this team, can delete it.' : undefined}
+      onClick={() => deleteOne(row)}
+    >
+      Delete
+    </button>
+  );
+
   const renderSession = (session) => {
     const kind = kindOf(session);
     const busy = busyId === session.gameId;
-    return (
+    return [(
       <tr key={session.gameId} className={busy ? 'sp-busy' : undefined}>
         <td>
           <span className="sp-nm">{session.title || 'Untitled session'}</span>
@@ -301,18 +383,11 @@ export default function SessionsPanel({
                 <a className="sp-btn sp-btn--sm" href={buildReportPath(session.gameId)}>Report</a>
               </>
             )}
-            <button
-              type="button"
-              className="sp-btn sp-btn--sm sp-btn--ghostdanger"
-              disabled={busy}
-              onClick={() => deleteOne(session)}
-            >
-              Delete
-            </button>
+            {deleteButton(session, busy)}
           </div>
         </td>
       </tr>
-    );
+    ), renderReasonRow(session)];
   };
 
   /*
@@ -365,17 +440,11 @@ export default function SessionsPanel({
                 Open
               </button>
             )}
-            <button
-              type="button"
-              className="sp-btn sp-btn--sm sp-btn--ghostdanger"
-              disabled={busy}
-              onClick={() => deleteOne(event)}
-            >
-              Delete
-            </button>
+            {deleteButton(event, busy)}
           </div>
         </td>
       </tr>,
+      renderReasonRow(event),
     ];
     if (open) {
       (event.items || []).forEach((item, n) => {
@@ -505,17 +574,20 @@ export default function SessionsPanel({
               shown.length !== sessions.length ? ` · ${shown.length} shown` : ''
             }`}
           >
+            {deleteAllAs !== '' && (
             <button
               type="button"
               className="sp-btn sp-btn--danger"
               onClick={() => {
                 setTyped('');
+                setAllReason('');
                 setConfirmAll(true);
               }}
             >
               <Icon name="Trash" weight="bold" size={14} color="currentColor" />
               Delete all sessions…
             </button>
+            )}
           </ListControls>
 
           {shown.length === 0 ? (
@@ -649,6 +721,16 @@ export default function SessionsPanel({
                   onChange={(event) => setTyped(event.target.value)}
                 />
               </div>
+              {allAsStaff && (
+                <DeleteReasonField
+                  id="sp-delall-reason"
+                  value={allReason}
+                  onChange={setAllReason}
+                  scope="sp"
+                  labelClass="sp-reason-label"
+                  hintClass="sp-dim"
+                />
+              )}
             </div>
 
             <footer>

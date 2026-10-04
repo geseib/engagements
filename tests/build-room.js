@@ -140,10 +140,10 @@ const GAME = '4821';
 const ORG = 'org_TestOrg1';
 const put = (item) => store.set(key(item.PK, item.SK), item);
 
-function seed({ orgId = '' } = {}) {
+function seed({ orgId = '', createdBy = '' } = {}) {
   store.clear();
   sent = [];
-  put({ PK: `GAME#${GAME}`, SK: 'METADATA', GameType: 'build', Title: 'Food bank sign-up', Details: 'Build a volunteer sign-up site', ttl: 2000000000, ...(orgId ? { orgId } : {}) });
+  put({ PK: `GAME#${GAME}`, SK: 'METADATA', GameType: 'build', Title: 'Food bank sign-up', Details: 'Build a volunteer sign-up site', ttl: 2000000000, ...(orgId ? { orgId } : {}), ...(createdBy ? { CreatedBy: createdBy } : {}) });
   put({ PK: `GAME#${GAME}`, SK: 'STATE', State: 'STARTED' });
   put({ PK: `GAME#${GAME}`, SK: 'PLAYER#Priya', PlayerName: 'Priya', ClientId: 'c-priya' });
   put({ PK: `GAME#${GAME}`, SK: 'PLAYER#Marcus', PlayerName: 'Marcus', ClientId: 'c-marcus' });
@@ -450,12 +450,18 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await agentCall('POST', 'images', { data: '' })).status, 400);
   });
   await check('the host can delete a screenshot; it leaves the bucket and the timeline', async () => {
+    // A room in an organisation, made by this host: a delete is the creator's,
+    // an org admin's or staff's with a reason, and leaves an audit entry
+    // (2026-10-04; tests/delete-authorization.js has every role).
+    seed({ orgId: ORG, createdBy: 'user-1' });
+    const ownHost = { ...HOST, orgId: ORG, orgIds: ORG, orgRole: 'member' };
     const id = (await agentCall('POST', 'images', { data: PNG.toString('base64'), kind: 'final', caption: 'Final' })).body.image.imageId;
     assert.ok([...bucket.keys()].some((k) => k.endsWith(id)));
     assert.strictEqual((await agentCall('POST', `images/${id}`, { action: 'delete' })).status, 403);
-    await hostCall('POST', `images/${id}`, { action: 'delete' });
+    assert.strictEqual((await hostCall('POST', `images/${id}`, { action: 'delete' }, ownHost)).status, 200);
+    assert.ok([...store.values()].some((r) => r.PK === `ORG#${ORG}#AUDIT` && r.Action === 'buildroom-artifact.delete'));
     assert.ok(![...bucket.keys()].some((k) => k.endsWith(id)));
-    const h = await hostCall('GET', 'state');
+    const h = await hostCall('GET', 'state', null, ownHost);
     assert.ok(!h.body.images.some((i) => i.imageId === id));
     assert.ok(!h.body.log.some((l) => l.kind === 'image' && l.detail === id));
   });

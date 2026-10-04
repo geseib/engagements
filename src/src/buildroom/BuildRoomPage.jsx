@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../components/Modal';
 import Icon from '../components/Icon';
+import DeleteReasonField from '../components/DeleteReasonField';
 import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import BuildReport from './BuildReport';
@@ -507,7 +508,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               )}
 
               <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
-              {host && <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} />}
+              {host && <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} />}
             </>
           )}
         </main>
@@ -515,7 +516,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <aside className="brm-side">
           {host && onCrew && <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />}
           {host && !onCrew && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
-          <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} />
+          <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} />
         </aside>
       </div>
 
@@ -1084,8 +1085,17 @@ function IdleStage({ room, now, host }) {
 const SHOT_KIND = { mockup: 'Mockup', final: 'Final', progress: 'Progress' };
 
 /** Every screenshot Claude sent, for the host to check or remove. */
-function ShotsPanel({ images, busy, run, api }) {
+/*
+  THE OWNER'S DELETE RULE (2026-10-04): GET build/state says the role this
+  host would delete in (`deleteAs`). Engage staff give a reason in the same
+  inline confirm; '' means this caller may not remove anything here.
+*/
+const NOT_YOURS = 'Only the host who created this room, or an owner or admin of its team, can delete from it.';
+
+function ShotsPanel({ images, busy, run, api, deleteAs }) {
   const [confirm, setConfirm] = useState(null);
+  const [reason, setReason] = useState('');
+  const asStaff = deleteAs === 'platform-admin';
   return (
     <section className="brm-panel" aria-labelledby="brm-shots-h">
       <h2 className="brm-h" id="brm-shots-h">Screenshots</h2>
@@ -1100,11 +1110,14 @@ function ShotsPanel({ images, busy, run, api }) {
                 <span className="brm-chip">{im.label ? `Choice ${im.label}` : SHOT_KIND[im.kind] || im.kind}</span>
                 {confirm === im.imageId ? (
                   <>
+                    {asStaff && (
+                      <DeleteReasonField id={`brm-reason-${im.imageId}`} value={reason} onChange={setReason} scope="brm" labelClass="brm-lbl" inputClass="brm-input brm-ta brm-ta--sm" hintClass="brm-hint" />
+                    )}
                     <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirm(null)}>Keep</button>
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy} onClick={() => run(() => api.deleteImage(im.imageId))}>Remove</button>
+                    <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.deleteImage(im.imageId, asStaff ? reason.trim() : ''))}>Remove</button>
                   </>
                 ) : (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger brm-push" aria-label={`Remove ${im.caption || 'screenshot'}`} onClick={() => setConfirm(im.imageId)}>Remove</button>
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger brm-push" aria-label={`Remove ${im.caption || 'screenshot'}`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirm(im.imageId); }}>Remove</button>
                 )}
               </div>
             </div>
@@ -1227,9 +1240,11 @@ function AskList({ asks, host, busy, ended, run, api, currentAskId }) {
 
 // ── Timeline ────────────────────────────────────────────────────────────────
 
-function TimelineEntry({ entry, host, busy, ended, run, api }) {
+function TimelineEntry({ entry, host, busy, ended, run, api, deleteAs }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState('');
+  const asStaff = deleteAs === 'platform-admin';
   const [text, setText] = useState(entry.text);
   const save = async () => {
     const ok = await run(() => api.logAction(entry.logId, { action: 'edit', text }));
@@ -1263,13 +1278,16 @@ function TimelineEntry({ entry, host, busy, ended, run, api }) {
             {confirming ? (
               <>
                 <span className="brm-hint">Delete this entry?</span>
+                {asStaff && (
+                  <DeleteReasonField id={`brm-reason-${entry.logId}`} value={reason} onChange={setReason} scope="brm" labelClass="brm-lbl" inputClass="brm-input brm-ta brm-ta--sm" hintClass="brm-hint" />
+                )}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirming(false)}>Keep</button>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy} onClick={() => run(() => api.logAction(entry.logId, { action: 'delete' }))}>Delete</button>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.logAction(entry.logId, { action: 'delete', ...(asStaff ? { reason: reason.trim() } : {}) }))}>Delete</button>
               </>
             ) : (
               <>
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" aria-label={`Edit "${entry.text}"`} onClick={() => setEditing(true)}>Edit</button>
-                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${entry.text}"`} onClick={() => setConfirming(true)}>Delete</button>}
+                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${entry.text}"`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirming(true); }}>Delete</button>}
               </>
             )}
           </span>
@@ -1282,7 +1300,7 @@ function TimelineEntry({ entry, host, busy, ended, run, api }) {
 const WALL_HIDDEN_KINDS = ['note', 'ask', 'direction'];
 const WALL_DETAIL_HIDDEN_KINDS = ['decision', 'idea'];
 
-function Timeline({ log, host, busy, ended, run, api }) {
+function Timeline({ log, host, busy, ended, run, api, deleteAs }) {
   const [text, setText] = useState('');
   const [kind, setKind] = useState('verbal');
   const [forAgent, setForAgent] = useState(false);
@@ -1326,7 +1344,7 @@ function Timeline({ log, host, busy, ended, run, api }) {
       {shown.length ? (
         <ul className="brm-tl">
           {shown.map((entry) => (
-            <TimelineEntry key={`${entry.logId}:${entry.editedAt || ''}`} entry={entry} host={host} busy={busy} ended={ended} run={run} api={api} />
+            <TimelineEntry key={`${entry.logId}:${entry.editedAt || ''}`} entry={entry} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={deleteAs} />
           ))}
         </ul>
       ) : (

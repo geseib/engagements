@@ -538,8 +538,13 @@ function createTable() {
           }
 
           case 'query': {
-            const pk = input.ExpressionAttributeValues[':pk'];
-            const prefix = input.ExpressionAttributeValues[':sk'] ?? '';
+            // The placeholders as the KeyConditionExpression names them —
+            // ddb-delete.js says `:setpk`, most handlers `:pk` / `:sk`.
+            const kce = String(input.KeyConditionExpression || '');
+            const pkName = (/PK\s*=\s*(:\w+)/.exec(kce) || [])[1] || ':pk';
+            const skName = (/begins_with\(\s*SK\s*,\s*(:\w+)\s*\)/.exec(kce) || [])[1] || ':sk';
+            const pk = input.ExpressionAttributeValues[pkName];
+            const prefix = input.ExpressionAttributeValues[skName] ?? '';
             let items = [...store.values()].filter(
               (item) => item.PK === pk && String(item.SK).startsWith(String(prefix))
             );

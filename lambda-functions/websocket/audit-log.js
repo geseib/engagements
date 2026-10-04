@@ -99,6 +99,7 @@ const TITLE_MAX = 300;
 const REASON_MAX = 1000;
 const DETAIL_KEYS_MAX = 16;
 const DETAIL_STRING_MAX = 128;
+const DETAIL_STRING_RE = new RegExp(`^[A-Za-z0-9_#:.@+/-]{0,${DETAIL_STRING_MAX}}$`);
 const PAGE_DEFAULT = 25;
 const PAGE_MAX = 100;
 
@@ -114,7 +115,9 @@ function cleanDetail(detail) {
   const scalar = (v) => {
     if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
     if (typeof v === 'boolean' || v === null) return v;
-    if (typeof v === 'string') return v.length <= DETAIL_STRING_MAX ? v : undefined;
+    // An id, a kind, a date or a code: no spaces, so typed prose cannot ride
+    // here unsealed (Title and Reason are the sealed places for words).
+    if (typeof v === 'string') return DETAIL_STRING_RE.test(v) ? v : undefined;
     return undefined;
   };
   for (const [k, v] of Object.entries(detail).slice(0, DETAIL_KEYS_MAX)) {
@@ -168,6 +171,7 @@ async function recordAudit(db, {
 
   const org = clean(orgId);
   const targetId = clean(String((target && target.id) ?? ''));
+  if (!targetId) throw new Error('audit-log: the target needs an id');
   const title = typeof (target && target.title) === 'string'
     ? target.title.trim().slice(0, TITLE_MAX)
     : ((target && target.title) || '');

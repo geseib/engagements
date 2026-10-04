@@ -485,7 +485,9 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
   // reservation burns one of 9,000 codes for 90 days; missing the index row
   // leaves a deleted session listed and offered.
   await check('deleting a session frees its code AND unlists it', async () => {
-    const res = await deleteGame({ pathParameters: { gameId: doomedId } });
+    // As ACME's admin: since 2026-10-04 a delete needs the creator, an org
+    // admin or staff with a reason (tests/delete-authorization.js).
+    const res = await deleteGame(asHost(ACME, { pathParameters: { gameId: doomedId } }));
     assert.strictEqual(res.statusCode, 200, res.body);
     assert.strictEqual(reservationOf(doomedId), undefined, 'the code is still reserved');
     assert.strictEqual(indexRowOf(ACME, doomedId), undefined, 'the session is still listed');
@@ -500,7 +502,7 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
     reset();
     const g = await createFor(ACME);
     const before = rowsIn(`GAME#${g.gameId}`).length;
-    const res = await deleteGame({ pathParameters: { gameId: g.gameId } });
+    const res = await deleteGame(asHost(ACME, { pathParameters: { gameId: g.gameId } }));
     assert.strictEqual(parse(res).itemsDeleted, before + 2,
       `reported ${parse(res).itemsDeleted}, expected ${before + 2} (session rows + index + reservation)`);
   });
@@ -529,7 +531,7 @@ function reset() { store.clear(); log.length = 0; failPutOn = new Set(); }
     store.set(key(`ORG#${ACME}`, 'MEMBER#u1'), { PK: `ORG#${ACME}`, SK: 'MEMBER#u1' });
 
     const res = await clearAllGames({
-      requestContext: { authorizer: { lambda: { userId: 'u1', groups: 'admins,hosts', orgId: ACME } } },
+      requestContext: { authorizer: { lambda: { userId: 'u1', groups: 'admins,hosts', orgId: ACME, orgRole: 'admin' } } },
     });
     assert.strictEqual(res.statusCode, 200, res.body);
 
