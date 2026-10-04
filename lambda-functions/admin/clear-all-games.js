@@ -3,7 +3,9 @@ const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/l
 const { batchDeleteKeys } = require('./shared/ddb-delete');
 const {
   GAMES_RESERVATION_PK, gamesIndexPk, callerOrgId,
+  deleteRole, deleteRefusal, cleanDeleteReason, deleteActor,
 } = require('./shared/tenant');
+const { recordAudit } = require('./shared/audit-log');
 
 /**
  * DELETE THIS ORGANISATION'S SESSIONS.
@@ -106,6 +108,25 @@ exports.handler = async (event) => {
     };
   }
 
+  /*
+    WHO MAY (the owner, 2026-10-04): an owner or admin of this organisation,
+    or Engage staff giving a reason. Nobody else — there is no host of "all
+    the sessions". The route was staff-only before (the authorizer's default
+    for /admin/*); it is now open to hosts so an org's own owner and admins can
+    reach it, and this is the check that decides.
+  */
+  let body = {};
+  try { body = JSON.parse(event.body || '{}') || {}; } catch (e) { body = {}; }
+  const reason = cleanDeleteReason(body.reason);
+  const role = deleteRole(event, { orgId });
+  const refused = deleteRefusal(role, reason);
+  if (refused) {
+    const error = refused.code === 'not_allowed'
+      ? 'Only an owner or admin of this organisation, or Engage staff giving a reason, can delete all its sessions.'
+      : refused.error;
+    return { statusCode: refused.status, headers: cors, body: JSON.stringify({ success: false, code: refused.code, error }) };
+  }
+
   console.log(`🗑️ Clearing sessions for ${orgId}`);
 
   try {
@@ -152,6 +173,25 @@ exports.handler = async (event) => {
         continue;
       }
       keys.push({ PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` });
+    }
+
+    // THE AUDIT ENTRY, BEFORE ANYTHING IS DELETED. No entry, no delete.
+    try {
+      await recordAudit(db, {
+        orgId,
+        action: 'sessions.delete-all',
+        actor: deleteActor(event, role),
+        target: { type: 'organisation', id: orgId, title: '' },
+        reason: role === 'platform-admin' ? reason : '',
+        detail: { sessions: gameIds.length, eventSessionsKept: eventItems },
+      });
+    } catch (error) {
+      console.error(`❌ clear-all-games: the audit entry for ${orgId} could not be written; nothing was deleted:`, error && error.message);
+      return {
+        statusCode: 500,
+        headers: cors,
+        body: JSON.stringify({ success: false, error: 'Could not record who is deleting these sessions, so nothing was deleted. Try again.' }),
+      };
     }
 
     const totalDeleted = await batchDeleteKeys(db, process.env.TABLE_NAME, keys);

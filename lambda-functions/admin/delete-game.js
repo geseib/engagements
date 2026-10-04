@@ -1,7 +1,12 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, DeleteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { collectPartitionKeys, batchDeleteKeys } = require('./shared/ddb-delete');
-const { GAMES_RESERVATION_PK, gamesIndexPk } = require('./shared/tenant');
+const {
+  GAMES_RESERVATION_PK, gamesIndexPk, isPlatformAdmin, callerOrgId, callerOrgIds,
+  deleteRole, deleteRefusal, cleanDeleteReason, deleteActor,
+} = require('./shared/tenant');
+const { decryptItem } = require('./shared/tenant-crypto');
+const { recordAudit } = require('./shared/audit-log');
 const { callerUserId } = require('./shared/question-set-access');
 
 const dynamoClient = new DynamoDBClient({});
@@ -80,8 +85,52 @@ exports.handler = async (event) => {
     const metadata = await db.send(new GetCommand({
       TableName: TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      ProjectionExpression: 'orgId, EventRef'
+      ProjectionExpression: 'orgId, EventRef, CreatedBy, GameType, Title'
     }));
+    const meta = metadata.Item || null;
+    if (!meta && !reservation.Item) {
+      return { statusCode: 404, headers, body: JSON.stringify({ success: false, error: 'No session has that code.' }) };
+    }
+    const orgId = (meta && meta.orgId) || (reservation.Item && reservation.Item.orgId) || '';
+
+    /*
+      WHO MAY DELETE IT (the owner, 2026-10-04): the host who created it, an
+      owner or admin of its organisation, or Engage staff giving a reason —
+      and whoever it is, an audit entry is written first (tenant.deleteRole,
+      audit-log.js). This route checked NOTHING before: any host could clear
+      any organisation's session by its four digits.
+
+      A caller outside the owning organisation who is not staff gets the
+      unknown code's 404, as every session route answers a rival (tenant.js
+      callerMayDriveSession): a 403 would confirm the code is somebody's. A
+      member without the role gets 403 and the sentence. A session with no
+      organisation has no team whose log could hold the entry, so it is not
+      deleted here; it expires on its own (90 days unstarted, 7 from start).
+    */
+    if (!orgId) {
+      return {
+        statusCode: 409,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          code: 'no_organisation',
+          error: 'This session belongs to no organisation, so there is no team log to record its delete. It expires on its own.'
+        })
+      };
+    }
+    const member = callerOrgId(event) === orgId || callerOrgIds(event).includes(orgId);
+    if (!member && !isPlatformAdmin(event)) {
+      return { statusCode: 404, headers, body: JSON.stringify({ success: false, error: 'No session has that code.' }) };
+    }
+    let body = {};
+    try { body = JSON.parse(event.body || '{}') || {}; } catch (e) { body = {}; }
+    const reason = cleanDeleteReason(body.reason);
+    const role = deleteRole(event, { orgId, createdBy: meta && meta.CreatedBy });
+    const refused = deleteRefusal(role, reason);
+    if (refused) {
+      return { statusCode: refused.status, headers, body: JSON.stringify({ success: false, code: refused.code, error: refused.error }) };
+    }
+
     /*
       AN EVENT ITEM'S SESSION BELONGS TO ITS EVENT (2026-10-04). It is listed
       under its event, not on its own, and the event's agenda points at it;
@@ -90,21 +139,46 @@ exports.handler = async (event) => {
       (DELETE /events/{code}) takes its item sessions with it, so that is the
       way, and the answer says so.
     */
-    if (metadata.Item && metadata.Item.EventRef) {
+    if (meta && meta.EventRef) {
       return {
         statusCode: 409,
         headers,
         body: JSON.stringify({
           success: false,
           code: 'event_item',
-          eventCode: String(metadata.Item.EventRef),
-          error: `This session is part of event ${metadata.Item.EventRef}. Delete the event instead; its sessions go with it.`
+          eventCode: String(meta.EventRef),
+          error: `This session is part of event ${meta.EventRef}. Delete the event instead; its sessions go with it.`
         })
       };
     }
-    let orgId = (reservation.Item && reservation.Item.orgId) || '';
-    if (!orgId) {
-      orgId = (metadata.Item && metadata.Item.orgId) || '';
+
+    // THE AUDIT ENTRY, BEFORE ANYTHING IS DELETED. No entry, no delete.
+    let title = '';
+    if (meta && meta.Title) {
+      try {
+        const plain = await decryptItem(orgId, 'session', { Title: meta.Title });
+        title = typeof plain.Title === 'string' ? plain.Title : '';
+      } catch (e) {
+        console.warn(`⚠️ delete-game: could not read the title of ${gameId} for the audit entry`);
+      }
+    }
+    const isBuild = Boolean(meta && meta.GameType === 'build');
+    try {
+      await recordAudit(db, {
+        orgId,
+        action: isBuild ? 'buildroom.delete' : 'session.delete',
+        actor: deleteActor(event, role),
+        target: { type: isBuild ? 'buildroom' : 'session', id: gameId, title },
+        reason: role === 'platform-admin' ? reason : '',
+        detail: { gameType: (meta && meta.GameType) || 'unknown' },
+      });
+    } catch (error) {
+      console.error(`❌ delete-game: the audit entry for ${gameId} could not be written; nothing was deleted:`, error && error.message);
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ success: false, error: 'Could not record who is deleting this session, so nothing was deleted. Try again.' })
+      };
     }
 
     // First, get all items related to this game.

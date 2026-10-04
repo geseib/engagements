@@ -371,6 +371,14 @@ function requiredGroupsForRoute(method, path) {
   if (path.startsWith('admin/clear-game')) {
     return ['hosts', 'admins'];
   }
+  // Delete-all, for an organisation's own owner and admins (2026-10-04, the
+  // owner's delete rule). They are `hosts`, and this was staff-only by the
+  // /admin/* default. Reaching it is not permission: clear-all-games.js lets
+  // only an owner or admin of the acting organisation, or Engage staff giving
+  // a reason, delete anything (tenant.deleteRole).
+  if (method === 'POST' && path === 'admin/clear-all-games') {
+    return ['hosts', 'admins'];
+  }
   // Hosts build and manage their own question sets. See HOST_ADMIN_ROUTES.
   if (HOST_ADMIN_ROUTES.has(`${method} ${path}`)) {
     return ['hosts', 'admins'];

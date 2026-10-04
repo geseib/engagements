@@ -1,6 +1,6 @@
 const { createGame } = require('./schema-compliant-manager');
 const { reserveCode, CodeSpaceExhausted } = require('./code-reservation');
-const { callerOrgId } = require('./tenant');
+const { callerOrgId, callerUserId } = require('./tenant');
 const { findSetMetadata } = require('./set-version');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
@@ -295,6 +295,9 @@ exports.handler = async (event) => {
           // the game pins the pair (tenant.js header).
           questionSetScope: setScope,
           orgId,
+          // WHO MADE IT (2026-10-04): the account that may delete it as its
+          // host (tenant.deleteRole). Sessions made before this record none.
+          createdBy: callerUserId(event),
           selectedCategories: selectedCategories || [],
           hostPreferences: {
             randomizeQuestions: isSurvey ? false : randomizeQuestions !== false, // Default to true if not specified

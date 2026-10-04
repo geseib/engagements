@@ -457,6 +457,100 @@ function isPlatformAdmin(event) {
   return callerGroups(event).includes('admins');
 }
 
+// ── Who may DELETE an engagement, and in what role ──────────────────────────
+/**
+ * THE OWNER'S RULE (2026-10-04), for every delete of an engagement and what it
+ * owns — a session, a Build Room and its artifacts, an event, an event item,
+ * delete-all:
+ *
+ *   "it should be deletable by three types of people: the host that created
+ *    it, an admin for the org, and [an Engage platform admin] with a
+ *    documented reason (logged to the org's or user's admin page), and log the
+ *    user that deleted."
+ *
+ * `deleteRole` answers the first half and nothing else: the role this caller
+ * would delete in, or '' when they may not. In order:
+ *
+ *   'host'           the account that created it (`createdBy` on the row) and
+ *                    still a member of the organisation it belongs to;
+ *   'org-owner'      an owner of that organisation,
+ *   'org-admin'      or an admin of it — read, like every role here, for the
+ *                    ACTIVE organisation only (`callerOrgRole` knows no
+ *                    other), so an admin acts for that team to use the role;
+ *   'platform-admin' Engage staff (`admins`), who must then give a reason:
+ *                    the handler refuses one without (400), and the reason is
+ *                    written to the organisation's audit log (audit-log.js).
+ *
+ * A caller who qualifies as host or org owner/admin is recorded as that, even
+ * when they are also staff — no reason is asked of them. A row with no
+ * `createdBy` (every session made before 2026-10-04; events have always
+ * recorded theirs) has no host to match, so only an org owner/admin or staff
+ * may delete it. A row with no organisation answers '' for everyone but staff.
+ */
+const DELETE_ROLES = Object.freeze(['host', 'org-owner', 'org-admin', 'platform-admin']);
+const DELETE_REASON_MAX = 500;
+
+/** The signed-in account's id, or '' (an agent key's `agent:` id is not an account). */
+function callerUserId(event) {
+  const { lambda, claims } = authCtx(event);
+  const id = clean(lambda.userId ?? claims.sub ?? '');
+  return id.startsWith('agent:') ? '' : id;
+}
+
+function deleteRole(event, { orgId, createdBy } = {}) {
+  const org = clean(orgId);
+  const staff = isPlatformAdmin(event);
+  if (!org) return staff ? 'platform-admin' : '';
+  const sub = callerUserId(event);
+  const member = callerOrgId(event) === org || callerOrgIds(event).includes(org);
+  if (sub && member && clean(createdBy) === sub) return 'host';
+  if (callerOrgId(event) === org) {
+    const role = callerOrgRole(event);
+    if (role === 'owner') return 'org-owner';
+    if (role === 'admin') return 'org-admin';
+  }
+  return staff ? 'platform-admin' : '';
+}
+
+/** A reason as given, trimmed and capped, or '' for none. */
+function cleanDeleteReason(value) {
+  return String(value == null ? '' : value).trim().slice(0, DELETE_REASON_MAX);
+}
+
+/**
+ * Why this delete may not go ahead — `{ status, code, error }` — or null.
+ * Nobody in a role: 403. Engage staff with no reason: 400 `reason_required`,
+ * which the console answers by asking for one in its delete confirm.
+ */
+function deleteRefusal(role, reason) {
+  if (!role) {
+    return {
+      status: 403,
+      code: 'not_allowed',
+      error: 'Only the host who created this, an owner or admin of its organisation, or Engage staff giving a reason can delete it.',
+    };
+  }
+  if (role === 'platform-admin' && !cleanDeleteReason(reason)) {
+    return {
+      status: 400,
+      code: 'reason_required',
+      error: 'Engage staff must say why they are deleting another team’s engagement. The reason is kept in that team’s audit log.',
+    };
+  }
+  return null;
+}
+
+/** The audit log's `actor` for this caller in this role (audit-log.js). */
+function deleteActor(event, role) {
+  const { lambda, claims } = authCtx(event);
+  return {
+    sub: callerUserId(event),
+    email: clean(lambda.email ?? claims.email ?? ''),
+    name: clean(lambda.username ?? claims['cognito:username'] ?? ''),
+    role,
+  };
+}
+
 // ── Guards, returning a response or null, like requireSetManager ────────────
 function deny(message) {
   return {
@@ -495,4 +589,5 @@ module.exports = {
   roleAtLeast, readableScopes, canManageScope,
   callerMayDriveSession, callerMayManageEvent,
   requireOrg, requireOrgAdmin, tenantStamp,
+  DELETE_ROLES, DELETE_REASON_MAX, callerUserId, deleteRole, deleteRefusal, cleanDeleteReason, deleteActor,
 };

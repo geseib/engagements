@@ -18,6 +18,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const { json, notFound, trace } = require('./event-http');
 const S = require('./event-store');
+const { deleteRole } = require('../tenant');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = () => process.env.TABLE_NAME;
@@ -28,7 +29,12 @@ exports.handler = async (request) => {
   try {
     const meta = await S.openEvent(db, TABLE(), request, code);
     if (!meta) return notFound();
-    return json(200, await S.hostView(db, TABLE(), meta, code, 'get-event'));
+    const view = await S.hostView(db, TABLE(), meta, code, 'get-event');
+    // The role this caller would delete the event (or one of its items) in —
+    // the owner's delete rule, 2026-10-04 (tenant.deleteRole). The builder asks
+    // Engage staff for a reason when it says 'platform-admin'.
+    view.event.deleteAs = deleteRole(request, { orgId: meta.orgId, createdBy: meta.CreatedBy });
+    return json(200, view);
   } catch (error) {
     console.error('❌ get-event failed:', error && error.message);
     return json(500, { error: 'Could not load the event. Try again.' });

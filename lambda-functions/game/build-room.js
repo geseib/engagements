@@ -21,7 +21,10 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand,
 } = require('@aws-sdk/lib-dynamodb');
-const { callerMayDriveSession } = require('./tenant');
+const {
+  callerMayDriveSession, deleteRole, deleteRefusal, cleanDeleteReason, deleteActor,
+} = require('./tenant');
+const { recordAudit } = require('./audit-log');
 const { encryptItem, decryptItem, encryptValue, decryptValue } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { toAll } = require('./survey-broadcast');
@@ -373,6 +376,37 @@ async function postLog(ctx, role, body) {
   return reply(201, { entry: S.logView(row) });
 }
 
+/**
+ * A ROOM'S ARTIFACT, DELETED (the owner, 2026-10-04): a screenshot or a
+ * timeline entry goes only for the host who created the room, an owner or
+ * admin of its organisation, or Engage staff giving a reason — and an audit
+ * entry is written first, whoever it is (tenant.deleteRole, audit-log.js).
+ * Null when it may go ahead; otherwise the response to send. Rooms made before
+ * 2026-10-04 record no creator, so for them it is the org's owner or admin,
+ * or staff. A room with no organisation has no log to hold the entry.
+ */
+async function gateArtifactDelete(ctx, body, target, detail) {
+  if (!ctx.orgId) return fail(409, 'This room belongs to no organisation, so nothing in it can be deleted.', { code: 'no_organisation' });
+  const reason = cleanDeleteReason((body || {}).reason);
+  const role = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+  const refused = deleteRefusal(role, reason);
+  if (refused) return fail(refused.status, refused.error, { code: refused.code });
+  try {
+    await recordAudit(db, {
+      orgId: ctx.orgId,
+      action: 'buildroom-artifact.delete',
+      actor: deleteActor(ctx.request, role),
+      target,
+      reason: role === 'platform-admin' ? reason : '',
+      detail: { room: ctx.gameId, ...(detail || {}) },
+    });
+  } catch (error) {
+    console.error(`❌ BUILD ROOM: the audit entry for ${target.type} ${target.id} could not be written; nothing was deleted:`, error && error.message);
+    return fail(500, 'Could not record who is deleting this, so nothing was deleted. Try again.');
+  }
+  return null;
+}
+
 async function editLog(ctx, logId, body) {
   const b = body || {};
   const room = await loadRoom(ctx);
@@ -381,6 +415,10 @@ async function editLog(ctx, logId, body) {
   const now = new Date().toISOString();
   let out;
   if (b.action === 'delete') {
+    const refused = await gateArtifactDelete(ctx, b, {
+      type: 'buildroom-log', id: `${ctx.gameId}/${logId}`, title: String(entry.Text || '').slice(0, 120),
+    }, { kind: String(entry.Kind || '') });
+    if (refused) return refused;
     // Kept as a tombstone-free delete: the timeline is the host's to curate.
     await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: entry.SK } }));
     out = { ...S.logView(entry), deleted: true };
@@ -662,6 +700,10 @@ async function imageAction(ctx, imageId, body) {
   if (!img) return fail(404, 'No such image');
   const action = String((body || {}).action || '');
   if (action === 'delete') {
+    const refused = await gateArtifactDelete(ctx, body, {
+      type: 'buildroom-image', id: `${ctx.gameId}/${imageId}`, title: String(img.Caption || '').slice(0, 120),
+    }, { kind: String(img.Kind || '') });
+    if (refused) return refused;
     await s3().send(new (s3sdk().DeleteObjectCommand)({ Bucket: MEDIA_BUCKET(), Key: S.imageKey(ctx.gameId, imageId) })).catch(() => {});
     await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: img.SK } }));
     for (const l of room.logs.filter((x) => x.Kind === 'image' && x.Detail === imageId)) {
@@ -1072,6 +1114,9 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
 
   if (method === 'GET' && a === 'state' && !b) {
     const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
+    // The role the host's screen would delete a screenshot or an entry in
+    // (the owner's delete rule, 2026-10-04): it asks staff for a reason.
+    if (role === 'host') view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
     return reply(200, view);
   }
   // Claude's cheapest call: nothing but its inbox (the wrapper below attaches
@@ -1260,6 +1305,8 @@ exports.handler = async (event) => {
       pk: `GAME#${gameId}`,
       meta,
       orgId,
+      // The request, for the delete rule (gateArtifactDelete).
+      request: event,
       // Every BUILD# row dies with the session: it copies the session's own
       // ttl (written at creation, rewritten at start by session-start.js —
       // the one owner of that rule). A session with none predates the ttl

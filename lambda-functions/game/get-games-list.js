@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, BatchGetCommand } = require('@aws-sdk/lib-dynamodb');
 const { countParticipants } = require('./player-rows');
-const { callerOrgId, gamesIndexPk } = require('./tenant');
+const { callerOrgId, gamesIndexPk, deleteRole } = require('./tenant');
 const { decryptItems } = require('./tenant-crypto');
 const { SURVEY_CLOSED } = require('./survey-names');
 const { readOrgEvents, itemSessionIndex } = require('./engagement-catalog');
@@ -284,6 +284,10 @@ exports.handler = async (event) => {
       lastPlayedAt: game.LastPlayedAt,
       visibility: game.Visibility || 'public',
       hostName: game.HostName,
+      // THE ROLE THIS CALLER WOULD DELETE IT IN (the owner's delete rule,
+      // 2026-10-04): 'host', 'org-owner', 'org-admin', 'platform-admin' (who
+      // must give a reason — the console asks for one) or '' (may not).
+      deleteAs: deleteRole(event, { orgId, createdBy: game.CreatedBy }),
       ...(game.EventRef ? { eventRef: String(game.EventRef), eventItem: game.EventItem || '' } : {}),
     }));
 
@@ -356,7 +360,10 @@ exports.handler = async (event) => {
       game.surveyClosed = game.gameType === 'survey' && SURVEY_RESULTS_STATES.has(states.get(game.gameId));
     });
 
-    const events = orgEvents.map((event) => eventRow(event, itemSessions));
+    const events = orgEvents.map((row) => ({
+      ...eventRow(row, itemSessions),
+      deleteAs: deleteRole(event, { orgId, createdBy: row.createdBy }),
+    }));
 
     console.log(`✅ Returning ${topLevel.length} games and ${events.length} events for history`);
 
@@ -365,6 +372,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         games: topLevel,
         events,
+        // Delete all: an owner or admin of this organisation, or staff with a reason.
+        deleteAllAs: deleteRole(event, { orgId }),
         count: topLevel.length,
         timestamp: new Date().toISOString()
       }),

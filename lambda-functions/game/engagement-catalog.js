@@ -119,6 +119,8 @@ async function readOrgEvents(db, tableName, orgId) {
       timeZone: plain.TimeZone || listRow.TimeZone || '',
       state: plain.State || listRow.State || 'SCHEDULED',
       createdAt: (meta && meta.CreatedAt) || null,
+      // Who may delete it as its host (tenant.deleteRole).
+      createdBy: (meta && meta.CreatedBy) || '',
       endedAt: (meta && meta.EndedAt) || null,
       itemCount: Number(plain.ItemCount) || items.length,
       attendeeCount: Number(plain.AttendeeCount) || 0,

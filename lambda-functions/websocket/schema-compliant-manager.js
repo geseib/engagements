@@ -190,6 +190,9 @@ const createGame = async (gameId, gameData) => {
           // of the top level and file it under its event. Plaintext ids, as
           // on METADATA.
           ...(gameData.eventRef ? { EventRef: gameData.eventRef, EventItem: gameData.eventItem || '' } : {}),
+          // The creator, plaintext like orgId: who may delete it as its host
+          // (tenant.deleteRole, 2026-10-04). Absent on older sessions.
+          ...(gameData.createdBy ? { CreatedBy: gameData.createdBy } : {}),
           Visibility: gameData.visibility || 'public',
           AccessCode: gameData.accessCode || null,
           Started: false, // Game is created but not started
@@ -259,6 +262,7 @@ const createGame = async (gameId, gameData) => {
         // session-count.js bills the event once instead of each item. Absent
         // on every session a host creates by hand.
         ...(gameData.eventRef ? { EventRef: gameData.eventRef, EventItem: gameData.eventItem || '' } : {}),
+        ...(gameData.createdBy ? { CreatedBy: gameData.createdBy } : {}),
         Visibility: gameData.visibility || 'public',
         AccessCode: gameData.accessCode || null,
         Started: false, // Game is created but not started
