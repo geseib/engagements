@@ -151,6 +151,18 @@
   color: var(--text);
 }
 
+/* THE TYPE FILTER (2026-10-04): the search's twin, at body size like every
+   input here, and only as wide as its longest option. */
+.shist__srch--type { flex: 0 0 auto; }
+.shist__srch--type select {
+  font: 400 var(--shist-t-body)/1.4 var(--font-ui);
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--shist-rule-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
 .shist__count {
   flex: 0 0 auto;
   font-size: var(--shist-t-label);
@@ -246,6 +258,29 @@
 }
 
 .shist__tbl td:first-child { padding-top: 5px; padding-bottom: 5px; height: auto; }
+
+/* AN EVENT'S ROW opens to its agenda (2026-10-04). The disclosure is the
+   name, a real button holding one text node (.shist__nm) so truncation still
+   works; item rows sit one step in, at the label size. */
+.shist__disclose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shist__disclose > svg { flex: none; color: var(--muted); }
+.shist__disclose:hover .shist__nm { text-decoration: underline; }
+.shist__subrow td { font-size: var(--shist-t-label); }
+.shist__subrow td:first-child { padding-left: 30px; }
+.shist__subrow .shist__nm { font-weight: 500; }
 .shist__when { font-size: var(--shist-t-label); color: var(--muted); white-space: nowrap; }
 .shist__mono { font-family: var(--shist-font-mono); font-size: 14px; }
 

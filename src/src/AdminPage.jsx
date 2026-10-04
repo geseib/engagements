@@ -1875,6 +1875,13 @@ function AdminPage() {
                   : undefined
               }
               totalSetCount={questionSets.length || undefined}
+              /* An event's row opens its builder, in the Events place — the
+                 one that already edits it (2026-10-04). Navigate first: it
+                 closes any place, then this one opens. */
+              onOpenEvent={(code, title) => {
+                handleNavigate('events');
+                setEventPlace({ code, title });
+              }}
             />
           )}
 

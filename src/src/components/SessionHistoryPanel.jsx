@@ -3,10 +3,13 @@ import './SessionHistoryPanel.css';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
 import { formatWhen, countOrDash } from '../config/tableCells';
-import { resolveGameType, gameTypeLabel, gameTypeMeta } from '../config/gameTypes';
 import {
-  BUILD_LABEL, isBuildSession, buildRoomPath, buildReportPath,
+  isBuildSession, buildRoomPath, buildReportPath,
 } from '../buildroom/buildHostApi';
+import {
+  kindOf, kindLabel, kindIcon, isEventRow, typeOptions, itemTitles, itemKindLabel, itemStateLabel,
+  eventStateLabel, itemCountText, eventStagePath, eventAgendaPath, itemSessionPath, EVENT_KIND,
+} from '../config/engagementKinds';
 
 /**
  * THE HOST'S OWN SESSION LIST, AS A TABLE.
@@ -104,6 +107,17 @@ import {
  * unchanged, the same as any other session of its `started` state.
  */
 export function rowActions(session) {
+  /*
+    AN EVENT (2026-10-04) — one row, like any session. OPEN is its stage (the
+    agenda board, /host/event/<code>), EDIT its agenda builder (the host's
+    side of the console's builder), LINK the attendees' join link. Its items'
+    sessions are under it, each with its own Continue and Report.
+  */
+  if (isEventRow(session)) {
+    return {
+      start: false, continue: false, report: false, edit: true, results: false, open: true,
+    };
+  }
   // A Build Room opens on its own page (/build), which starts nothing and
   // edits nothing here: Continue and Report, always.
   if (isBuildSession(session)) {
@@ -129,9 +143,15 @@ export function rowActions(session) {
 export function matchesSearch(session, term) {
   const q = String(term || '').trim().toLowerCase();
   if (!q) return true;
-  return [session.title, session.eventTitle, session.gameId, session.hostName, session.questionSetId]
+  return [session.title, session.eventTitle, session.gameId, session.hostName, session.questionSetId,
+    ...itemTitles(session)]
     .filter(Boolean)
     .some((v) => String(v).toLowerCase().includes(q));
+}
+
+/** Does this row survive the Type filter? 'all' keeps everything. */
+export function matchesType(session, type) {
+  return !type || type === 'all' || kindOf(session) === type;
 }
 
 /** Newest first, and the newest one's id — the row that gets the Latest flag. */
@@ -169,10 +189,18 @@ export default function SessionHistoryPanel({
   notice = '',
 }) {
   const [search, setSearch] = useState('');
+  const [type, setType] = useState('all');
+  /** The event rows whose agenda items are showing. */
+  const [openEvents, setOpenEvents] = useState(() => new Set());
+  const toggleEvent = (code) => setOpenEvents((prev) => {
+    const next = new Set(prev);
+    if (next.has(code)) next.delete(code); else next.add(code);
+    return next;
+  });
   const { sorted, latestId } = useMemo(() => orderSessions(sessions), [sessions]);
   const shown = useMemo(
-    () => sorted.filter((s) => matchesSearch(s, search)),
-    [sorted, search]
+    () => sorted.filter((s) => matchesSearch(s, search) && matchesType(s, type)),
+    [sorted, search, type]
   );
 
   const titleOf = (s) => s.title || s.eventTitle || 'Untitled session';
@@ -227,6 +255,14 @@ export default function SessionHistoryPanel({
               placeholder="Title, code, host or set…"
             />
           </label>
+          {/* TYPE, like the console's Sessions list (2026-10-04): every format,
+              Build Room, and Event while events are in the list. */}
+          <label className="shist__srch shist__srch--type">
+            <span className="shist__srch-lab">Type</span>
+            <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by type">
+              {typeOptions(sorted).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
           <span className="shist__count">
             {shown.length === sorted.length
               ? `${sorted.length} ${sorted.length === 1 ? 'session' : 'sessions'}`
@@ -269,18 +305,25 @@ export default function SessionHistoryPanel({
             )}
             {sorted.length > 0 && shown.length === 0 && (
               <tr className="shist__dim">
-                <td colSpan={9}>No session matches that search.</td>
+                <td colSpan={9}>No session matches that search and type.</td>
               </tr>
             )}
 
-            {shown.map((session) => {
+            {shown.map((session) => (isEventRow(session) ? renderEvent(session) : renderSession(session)))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  function renderSession(session) {
               /*
                 `resolveGameType`, not `normalizeGameType`. The latter always
                 returns something — its documented job — which would print
                 "Call & Answer" on every legacy row whose type was never
                 written. "We do not know" has to survive as "we do not know".
               */
-              const type = resolveGameType(session.gameType);
+              const kind = kindOf(session);
               const acts = rowActions(session);
               const isCurrent = session.gameId === currentGameId;
               const isLatest = session.gameId === latestId;
@@ -303,21 +346,12 @@ export default function SessionHistoryPanel({
                   </td>
                   <td className="shist__mono">{session.gameId}</td>
                   <td>
-                    {isBuildSession(session) ? (
-                      /* Not a config/gameTypes.js type on purpose (Build Room PLAN §4). */
+                    {/* Build Room is not a config/gameTypes.js type on purpose
+                        (Build Room PLAN §4); config/engagementKinds.js names it. */}
+                    {kind ? (
                       <span className="shist__chip shist__chip--type">
-                        <Icon name="Wrench" weight="bold" size={13} color="currentColor" />
-                        {` ${BUILD_LABEL}`}
-                      </span>
-                    ) : type ? (
-                      <span className="shist__chip shist__chip--type">
-                        <Icon
-                          name={gameTypeMeta(type).icon}
-                          weight="bold"
-                          size={13}
-                          color="currentColor"
-                        />
-                        {` ${gameTypeLabel(type)}`}
+                        <Icon name={kindIcon(kind)} weight="bold" size={13} color="currentColor" />
+                        {` ${kindLabel(kind)}`}
                       </span>
                     ) : '—'}
                   </td>
@@ -447,10 +481,138 @@ export default function SessionHistoryPanel({
                   </td>
                 </tr>
               );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  }
+
+  /*
+    AN EVENT'S ROW, AND — OPENED — ITS AGENDA (2026-10-04). One row, labelled
+    Event with its item count; the disclosure is the name, a real button.
+    Each item says its kind and state; an engagement's session continues on
+    the host's stage inside the event (the stage's AGENDA door leads back) and
+    opens its report, or says it has expired. A talk or a break has no session.
+  */
+  function renderEvent(event) {
+    const acts = rowActions(event);
+    const open = openEvents.has(event.gameId);
+    const title = event.title || 'Untitled event';
+    const itemsId = `shist-items-${event.gameId}`;
+    const rows = [
+      <tr key={event.gameId} data-testid="event-row">
+        <td>
+          <button
+            type="button"
+            className="shist__disclose"
+            aria-expanded={open}
+            aria-controls={itemsId}
+            onClick={() => toggleEvent(event.gameId)}
+            title={title}
+          >
+            <Icon name={open ? 'CaretDown' : 'CaretRight'} weight="bold" size={12} color="currentColor" />
+            <span className="shist__nm">{title}</span>
+          </button>
+          <span className="shist__sub2">
+            {itemCountText(event.itemCount)}
+            {event.place ? ` · ${event.place}` : ''}
+          </span>
+        </td>
+        <td className="shist__mono">{event.gameId}</td>
+        <td>
+          <span className="shist__chip shist__chip--type">
+            <Icon name={kindIcon(EVENT_KIND)} weight="bold" size={13} color="currentColor" />
+            {` ${kindLabel(EVENT_KIND)}`}
+          </span>
+        </td>
+        <td>
+          <span className={`shist__chip ${event.started ? 'shist__chip--on' : 'shist__chip--off'}`}>
+            {eventStateLabel(event)}
+          </span>
+        </td>
+        <td className="shist__num">{countOrDash(event.playerCount)}</td>
+        <td className="shist__num">—</td>
+        <td className="shist__when">{formatWhen(event.createdAt)}</td>
+        <td className="shist__when">{formatWhen(event.lastPlayedAt)}</td>
+        <td>
+          <div className="shist__acts">
+            {acts.edit && (
+              <button
+                type="button"
+                className="shist__btn shist__btn--sm"
+                onClick={() => navigate(eventAgendaPath(event.gameId))}
+                title={`Edit the agenda of "${title}"`}
+              >
+                <Icon name="PencilSimple" weight="bold" size={14} /> Edit
+              </button>
+            )}
+            {acts.open && (
+              <button
+                type="button"
+                className="shist__btn shist__btn--sm shist__btn--primary"
+                onClick={() => navigate(eventStagePath(event.gameId))}
+                title={`Open "${title}" on its stage`}
+              >
+                <Icon name="Play" weight="fill" size={14} /> Open
+              </button>
+            )}
+            <button
+              type="button"
+              className="shist__btn shist__btn--sm"
+              onClick={() => onCopyPlayerUrl(event.gameId, { event: true })}
+              title={`Copy the join link for "${title}"`}
+            >
+              <Icon name="LinkSimple" weight="bold" size={14} /> Link
+            </button>
+          </div>
+        </td>
+      </tr>,
+    ];
+    if (!open) return rows;
+    (event.items || []).forEach((item, n) => {
+      const s = item.session;
+      const itemTitle = item.title || (item.decryptFailed ? 'Unreadable item' : itemKindLabel(item.type));
+      rows.push(
+        <tr key={`${event.gameId}-${item.itemId}`} className="shist__subrow" id={n === 0 ? itemsId : undefined} data-testid="event-item-row">
+          <td>
+            <span className="shist__nm">{itemTitle}</span>
+            <span className="shist__sub2">{item.minutes ? `${item.minutes} min` : '—'}</span>
+          </td>
+          <td className="shist__mono">{s ? s.gameId : '—'}</td>
+          <td><span className="shist__chip shist__chip--type">{` ${itemKindLabel(item.type)}`}</span></td>
+          <td>
+            <span className={`shist__chip ${item.state === 'planned' ? 'shist__chip--off' : 'shist__chip--on'}`}>
+              {itemStateLabel(item.state)}
+            </span>
+          </td>
+          <td className="shist__num">{s ? countOrDash(s.playerCount) : '—'}</td>
+          <td className="shist__num">{s ? countOrDash(s.roundsPlayed) : '—'}</td>
+          <td className="shist__when">{formatWhen(item.startedAt)}</td>
+          <td className="shist__when">{formatWhen(item.endedAt)}</td>
+          <td>
+            <div className="shist__acts">
+              {s && s.started && (
+                <button
+                  type="button"
+                  className="shist__btn shist__btn--sm"
+                  onClick={() => onReport(s.gameId, itemTitle)}
+                  title={`Read the report for "${itemTitle}"`}
+                >
+                  <Icon name="ChartBar" weight="bold" size={14} /> Report
+                </button>
+              )}
+              {s && (
+                <button
+                  type="button"
+                  className="shist__btn shist__btn--sm shist__btn--primary"
+                  onClick={() => navigate(itemSessionPath(s.gameId, event.gameId))}
+                  title={`Continue "${itemTitle}" on the stage`}
+                >
+                  <Icon name="Play" weight="fill" size={14} /> Continue
+                </button>
+              )}
+              {item.sessionGone && <span className="shist__chip shist__chip--off">Session expired</span>}
+            </div>
+          </td>
+        </tr>,
+      );
+    });
+    return rows;
+  }
 }

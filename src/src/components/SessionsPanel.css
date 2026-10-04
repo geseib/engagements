@@ -259,6 +259,30 @@
   text-overflow: ellipsis;
 }
 .sp-tbl td:first-child { padding-top: 4px; padding-bottom: 4px; height: auto; }
+
+/* AN EVENT'S ROW opens to its agenda (2026-10-04, events and Build Rooms as
+   rows). The disclosure is the name itself, a real button: a single text node
+   (.sp-nm) inside keeps the truncation working (hard rule 8). Item rows sit
+   one step in, at the label size, under the same rules and hover. */
+.sp-disclose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sp-disclose > svg { flex: none; color: var(--muted); }
+.sp-disclose:hover .sp-nm { text-decoration: underline; }
+.sp-subrow td { font-size: var(--sp-t-label); }
+.sp-subrow td:first-child { padding-left: 30px; }
+.sp-subrow .sp-nm { font-weight: 500; }
 .sp-when { font-size: var(--sp-t-label); color: var(--muted); white-space: nowrap; }
 .sp-mono { font-family: var(--sp-font-mono); font-size: 14px; }
 .sp-danger-text { color: var(--danger-text); }
