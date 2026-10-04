@@ -1,0 +1,8 @@
+{
+  "name": "engage-ci-tools",
+  "private": true,
+  "description": "Pinned tools for the CodeBuild deploy (scripts/ci/bundle-lambdas.js). Exact versions on purpose: see the SAM CLI pin note in buildspec-dev.yml.",
+  "dependencies": {
+    "esbuild": "0.24.2"
+  }
+}
