@@ -21,7 +21,7 @@ import BuildRoomPage from '../buildroom/BuildRoomPage';
 import { buildApi } from '../buildroom/buildHostApi';
 import { feedbackDraft } from '../buildroom/BuildCrew';
 
-jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
+jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn(), getAuthToken: jest.fn(async () => 'id-token') }));
 jest.mock('../WebSocketClient', () => ({
   __esModule: true,
   default: {
@@ -31,6 +31,8 @@ jest.mock('../WebSocketClient', () => ({
     offMessage: jest.fn(),
     onReconnected: jest.fn(),
     onConnectionStatusChange: jest.fn(),
+    isConnected: jest.fn(() => false),
+    ensureConnected: jest.fn(),
   },
 }));
 

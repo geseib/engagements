@@ -15,11 +15,14 @@ import React from 'react';
 import {
   render, screen, fireEvent, waitFor, within, act,
 } from '@testing-library/react';
-import { authFetch } from '../auth/authFetch';
+import { authFetch, getAuthToken } from '../auth/authFetch';
 import webSocketClient from '../WebSocketClient';
 import BuildRoomPage, { BuildCreate, stageHint, ConnectPanel } from '../buildroom/BuildRoomPage';
+import reloadPage from '../utils/reloadPage';
 
-jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
+jest.mock('../utils/reloadPage', () => ({ __esModule: true, default: jest.fn() }));
+
+jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn(), getAuthToken: jest.fn(async () => 'id-token') }));
 jest.mock('../WebSocketClient', () => ({
   __esModule: true,
   default: {
@@ -29,6 +32,8 @@ jest.mock('../WebSocketClient', () => ({
     offMessage: jest.fn(),
     onReconnected: jest.fn(),
     onConnectionStatusChange: jest.fn(),
+    isConnected: jest.fn(() => false),
+    ensureConnected: jest.fn(),
   },
 }));
 
@@ -118,6 +123,7 @@ async function openRoom(state) {
 beforeEach(() => {
   window.API_BASE = API;
   jest.clearAllMocks();
+  getAuthToken.mockImplementation(async () => 'id-token');
 });
 
 describe('loading and live updates', () => {
@@ -671,5 +677,89 @@ describe('create', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create room' }));
     await waitFor(() => expect(navigate).toHaveBeenCalled());
     expect(calls[2]).toMatchObject({ url: `${API}games/5150/build/settings`, body: { reviewAgentAsks: false } });
+  });
+});
+
+
+describe('the connection (owner, 2026-10-04: a long wait left only "refresh the page")', () => {
+  const socketSays = (up) => act(() => { webSocketClient.onConnectionStatusChange.mock.calls.slice(-1)[0][0](up); });
+
+  test('Connecting, then Live, then Disconnected with one click to reconnect', async () => {
+    await openRoom(hostState());
+    expect(screen.getByTestId('brm-conn').textContent).toBe('Connecting…');
+    socketSays(true);
+    expect(screen.getByTestId('brm-conn').textContent).toBe('Live');
+    socketSays(false);
+    const chip = screen.getByRole('button', { name: 'Disconnected · Reconnect' });
+    const before = calls.filter((c) => c.url.endsWith('/build/state')).length;
+    fireEvent.click(chip);
+    await waitFor(() => expect(webSocketClient.ensureConnected).toHaveBeenCalled());
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/build/state')).length).toBeGreaterThan(before));
+  });
+
+  test('waking the laptop or coming back online reconnects without a reload', async () => {
+    await openRoom(hostState());
+    webSocketClient.ensureConnected.mockClear();
+    act(() => { window.dispatchEvent(new Event('online')); });
+    expect(webSocketClient.ensureConnected).toHaveBeenCalledTimes(1);
+    act(() => { window.dispatchEvent(new Event('focus')); });
+    expect(webSocketClient.ensureConnected).toHaveBeenCalledTimes(2);
+  });
+
+  test('a sign-in that has run out says so, and Sign in again comes back to this room', async () => {
+    await openRoom(hostState());
+    try {
+      getAuthToken.mockImplementation(async () => null);
+      authFetch.mockImplementation(async () => res({ message: 'Unauthorized' }, false, 401));
+      act(() => { window.dispatchEvent(new Event('focus')); });
+      const chip = await screen.findByRole('button', { name: 'Signed out · Sign in again' });
+      fireEvent.click(chip);
+      await waitFor(() => expect(reloadPage).toHaveBeenCalled());
+      expect(sessionStorage.getItem('authReturnTo')).toBe(`/build?gameId=${GAME}`);
+    } finally {
+      sessionStorage.removeItem('authReturnTo');
+    }
+  });
+
+  test('a request that never reached the server offers Reconnect, and clears once the room loads again', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));
+    const working = authFetch.getMockImplementation();
+    authFetch.mockImplementation(async (url, opts = {}) => {
+      if ((opts.method || 'GET') === 'POST') throw new TypeError('Failed to fetch');
+      return working(url, opts);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    const bar = await screen.findByRole('alert');
+    expect(bar.textContent).toMatch(/did not reach the server/);
+    expect(within(bar).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    authFetch.mockImplementation(working);
+    fireEvent.click(within(bar).getByRole('button', { name: 'Reconnect' }));
+    await waitFor(() => expect(screen.queryByText(/did not reach the server/)).toBeNull());
+  });
+});
+
+describe('the join QR and link (owner, 2026-10-04)', () => {
+  test('click the QR to see it big; a click anywhere puts it away; the link copies the full URL', async () => {
+    await openRoom(hostState());
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /Show the QR code bigger/ }));
+      const big = screen.getByRole('dialog', { name: 'Join QR code' });
+      const full = `${window.location.origin}/play?gameId=${GAME}`;
+      // The link copies, and does NOT close the big QR.
+      fireEvent.click(within(big).getByRole('button', { name: `Copy the join link ${full}` }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(full));
+      expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+      // A click anywhere else (here: on the code itself) closes it.
+      fireEvent.click(within(big).getByRole('img'));
+      expect(screen.queryByRole('dialog', { name: 'Join QR code' })).toBeNull();
+      // The address in the foot copies the full link too.
+      writeText.mockClear();
+      fireEvent.click(screen.getByRole('button', { name: `Copy the join link ${full}` }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(full));
+    } finally {
+      delete navigator.clipboard;
+    }
   });
 });

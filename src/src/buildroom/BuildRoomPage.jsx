@@ -21,6 +21,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../components/Modal';
+import { getAuthToken } from '../auth/authFetch';
+import { rememberReturnPath } from '../auth/returnPath';
+import reloadPage from '../utils/reloadPage';
 import Icon from '../components/Icon';
 import DeleteReasonField from '../components/DeleteReasonField';
 import webSocketClient from '../WebSocketClient';
@@ -337,6 +340,29 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [openShareId, setOpenShareId] = useState(null);
   const now = useNow(5000);
 
+  // ── THE CONNECTION (owner, 2026-10-04) ────────────────────────────────
+  // After a long wait the laptop sleeps, the socket gives up after five
+  // retries, and every action said "check the connection" until the page was
+  // reloaded. So the host sees one honest status in the header (live,
+  // connecting, disconnected, no internet, signed out), the page recovers on
+  // its own when the laptop wakes or comes back online, and one click
+  // reconnects -- or, when the sign-in has run out, signs in again and comes
+  // back to this room.
+  const [wsConnected, setWsConnected] = useState(() => webSocketClient.isConnected());
+  const everConnected = useRef(false);
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  const [link, setLink] = useState('ok'); // 'ok' | 'network' | 'auth'
+  const errorKind = useRef('');            // the kind of the error bar's error
+  /** 'auth' when the sign-in is gone, 'network' when the server was not reached, else ''. */
+  const failureKind = useCallback(async (e) => {
+    if (e && e.status === 401) return 'auth';
+    if (e && e.status) return '';
+    // No status: the request never got an answer. A sign-in that has run out
+    // can look like this too (an authorizer refusal may carry no CORS headers),
+    // so ask the auth layer before calling it the network.
+    return (await getAuthToken()) ? 'network' : 'auth';
+  }, []);
+
   const inFlight = useRef(false);
   const again = useRef(false);
   const refresh = useCallback(async () => {
@@ -349,14 +375,61 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           const next = await api.state();
           setRoom(next);
           setLoadError('');
+          setLink('ok');
+          // A network failure the page has since recovered from is not news.
+          if (errorKind.current === 'network') { errorKind.current = ''; setError(''); }
         } catch (e) {
-          setLoadError(e.message || 'The room could not be loaded.');
+          const kind = await failureKind(e);
+          if (kind) setLink(kind);
+          setLoadError(kind === 'auth' ? '' : (e.message || 'The room could not be loaded.'));
         }
       } while (again.current);
     } finally {
       inFlight.current = false;
     }
-  }, [api]);
+  }, [api, failureKind]);
+
+  /** One click: reconnect the socket and reload the room, or sign in again. */
+  const reconnect = useCallback(async () => {
+    if (link === 'auth' || !(await getAuthToken())) {
+      rememberReturnPath();      // a Google sign-in leaves the page and comes back here
+      reloadPage();              // a protected page shows the sign-in form in place
+      return;
+    }
+    webSocketClient.ensureConnected();
+    refresh();
+  }, [link, refresh]);
+
+  useEffect(() => {
+    const onStatus = (up) => {
+      if (up) everConnected.current = true;
+      setWsConnected(Boolean(up));
+    };
+    webSocketClient.onConnectionStatusChange(onStatus);
+    // Waking, coming back online, or returning to the tab: the same resync the
+    // regular host page does (GameHostPage, "A4"), so no reload is needed.
+    const resync = () => { setOnline(navigator.onLine !== false); webSocketClient.ensureConnected(); refresh(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') resync(); };
+    const onOffline = () => setOnline(false);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', resync);
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('focus', resync);
+    window.addEventListener('pageshow', resync);
+    return () => {
+      webSocketClient.onConnectionStatusChange(null);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', resync);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('focus', resync);
+      window.removeEventListener('pageshow', resync);
+    };
+  }, [refresh]);
+
+  let connection = 'live';
+  if (link === 'auth') connection = 'signin';
+  else if (!online) connection = 'offline';
+  else if (!wsConnected || link === 'network') connection = everConnected.current || link === 'network' ? 'disconnected' : 'connecting';
 
   // First load, the fallback poll, and the host socket.
   useEffect(() => {
@@ -395,12 +468,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       await refresh();
       return out;
     } catch (e) {
-      setError(e.message || 'That did not work.');
+      const kind = await failureKind(e);
+      if (kind) setLink(kind);
+      errorKind.current = kind;
+      setError(kind === 'auth'
+        ? 'Your sign-in has run out. Sign in again to keep running the room; nothing in it is lost.'
+        : (e.message || 'That did not work.'));
       return undefined;
     } finally {
       setBusy(false);
     }
-  }, [refresh]);
+  }, [refresh, failureKind]);
 
   const goView = (next) => {
     setView(next);
@@ -437,6 +515,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     <ImageLoader.Provider value={loadImage}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}`} data-theme="dark">
       <RoomHeader
+        connection={connection}
+        onReconnect={reconnect}
         room={room}
         now={now}
         host={host}
@@ -456,10 +536,20 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {host && error && (
         <div className="brm-alert brm-alert--bar" role="alert">
           {error}
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setError('')}>Dismiss</button>
+          {['network', 'auth'].includes(errorKind.current) && (
+            <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>
+              {errorKind.current === 'auth' ? 'Sign in again' : 'Reconnect'}
+            </button>
+          )}
+          <button type="button" className={`brm-btn brm-btn--sm brm-btn--ghost${['network', 'auth'].includes(errorKind.current) ? '' : ' brm-push'}`} onClick={() => { errorKind.current = ''; setError(''); }}>Dismiss</button>
         </div>
       )}
-      {host && loadError && <div className="brm-alert brm-alert--bar" role="alert">{loadError}</div>}
+      {host && loadError && (
+        <div className="brm-alert brm-alert--bar" role="alert">
+          {loadError}
+          <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>Reconnect</button>
+        </div>
+      )}
       {ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
 
       <div className="brm-grid">
@@ -562,7 +652,28 @@ function AgentChip({ agent, now }) {
   );
 }
 
-function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended }) {
+const CONNECTION = {
+  live: { text: 'Live', title: 'Connected to the room. Changes arrive as they happen.' },
+  connecting: { text: 'Connecting…', title: 'Opening the live connection to the room.' },
+  disconnected: { text: 'Disconnected · Reconnect', title: 'The live connection dropped. Click to reconnect now; it also retries on its own.' },
+  offline: { text: 'No internet · Try again', title: 'This laptop is offline. The room reconnects when it is back.' },
+  signin: { text: 'Signed out · Sign in again', title: 'Your sign-in has run out. Sign in again and you come straight back to this room.' },
+};
+
+/** The host's one connection status. A button whenever there is something to do. */
+export function ConnectionChip({ connection = 'live', onReconnect }) {
+  const c = CONNECTION[connection] || CONNECTION.live;
+  if (connection === 'live' || connection === 'connecting') {
+    return <span className={`brm-conn brm-conn--${connection}`} title={c.title} data-testid="brm-conn">{c.text}</span>;
+  }
+  return (
+    <button type="button" className={`brm-conn brm-conn--${connection}`} title={c.title} onClick={onReconnect} data-testid="brm-conn">
+      {c.text}
+    </button>
+  );
+}
+
+function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
   return (
     <header className="brm-hbar">
       <div className="brm-hbar-title">
@@ -573,6 +684,7 @@ function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, on
         <span className="brm-codewrap"><span className="brm-muted brm-small">Join code</span> <span className="brm-code">{room.gameId}</span></span>
         <span className="brm-chip">{room.playerCount || 0} joined</span>
         <AgentChip agent={room.agent} now={now} />
+        {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
         {host && (
           <>
             <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onConnect}>
@@ -605,19 +717,57 @@ function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, on
   );
 }
 
+/** The full join link, copied with one click, so the host can paste it into a chat or an email. */
+function CopyLinkButton({ url, className, children }) {
+  const [said, setSaid] = useState('');
+  const copy = async (e) => {
+    e.stopPropagation(); // inside the enlarged QR, a click anywhere else closes it
+    const ok = await copyText(url);
+    setSaid(ok ? 'Link copied' : 'Press and hold to copy');
+    setTimeout(() => setSaid(''), 2500);
+  };
+  return (
+    <button type="button" className={className} onClick={copy} title={`Copy ${url}`} aria-label={`Copy the join link ${url}`}>
+      {children}
+      <span className="brm-copied" role="status">{said}</span>
+    </button>
+  );
+}
+
+/**
+ * The QR, big enough to scan from the back of the room (owner, 2026-10-04).
+ * A click anywhere puts it away; the link under it copies instead.
+ */
+export function QrZoom({ playUrl, gameId, onClose }) {
+  return (
+    <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Join QR code">
+      <div className="brm-qrzoom-body" onClick={onClose}>
+        <div className="brm-qrzoom-qr" role="img" aria-label={`QR code to join at ${playUrl}`}>
+          <QRCodeSVG value={playUrl} size={512} level="M" includeMargin={false} />
+        </div>
+        <CopyLinkButton url={playUrl} className="brm-qrzoom-url">{playUrl}</CopyLinkButton>
+        <div className="brm-qrzoom-code">Code <b>{gameId}</b></div>
+        <p className="brm-qrzoom-hint">Click anywhere to put it away. Click the link to copy it.</p>
+      </div>
+    </Modal>
+  );
+}
+
 function JoinFoot({ gameId, room, current, crew = false }) {
   const origin = window.location.origin;
   const playUrl = `${origin}/play?gameId=${gameId}`;
+  const [zoom, setZoom] = useState(false);
   const answered = current ? (current.kind === 'suggest' && current.status === 'voting' ? current.voteCount : current.answerCount) : null;
   return (
     <div className="brm-foot">
       <div className="brm-join">
-        <div className="brm-qr" aria-label={`QR code to join at ${playUrl}`} role="img">
+        <button type="button" className="brm-qr" aria-label={`Show the QR code bigger (join at ${playUrl})`} title="Show it bigger" onClick={() => setZoom(true)}>
           <QRCodeSVG value={playUrl} size={84} level="M" includeMargin={false} />
-        </div>
-        <div className="brm-jt"><b>{window.location.host}/play</b>code</div>
+        </button>
+        <CopyLinkButton url={playUrl} className="brm-jt brm-jt--copy"><b>{window.location.host}/play</b>code</CopyLinkButton>
         <span className="brm-jc">{gameId}</span>
       </div>
+      {zoom && <QrZoom playUrl={playUrl} gameId={gameId} onClose={() => setZoom(false)} />}
       {crew && !current ? (
         <div className="brm-resp">Join as a builder <span>tap I have Claude Code on your phone</span></div>
       ) : current && current.status !== 'results' ? (
