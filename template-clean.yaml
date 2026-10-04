@@ -2277,9 +2277,27 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # Files go with the rows that point at them (shared/artifact-sweep.js):
+          # an event item's slides, a Build Room's screenshots and patches.
+          MEDIA_BUCKET: !Ref MediaBucket
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # Delete, never read: an event's decks/ and a Build Room's builds/, and
+        # the listing of builds/<gameId>/ that finds a removed room's files.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ s3:DeleteObject ]
+              Resource:
+                - !Sub '${MediaBucket.Arn}/decks/*'
+                - !Sub '${MediaBucket.Arn}/builds/*'
+            - Effect: Allow
+              Action: [ s3:ListBucket ]
+              Resource: !GetAtt MediaBucket.Arn
+              Condition:
+                StringLike:
+                  s3:prefix: [ 'builds/*' ]
         - DynamoDBStreamReadPolicy:
             TableName: !Ref GameTable
             StreamName: !Select [3, !Split ['/', !GetAtt GameTable.StreamArn]]

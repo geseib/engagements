@@ -77,13 +77,33 @@ exports.handler = async (event) => {
         body: JSON.stringify({ success: false, error: 'No session has that code.' })
       };
     }
+    const metadata = await db.send(new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+      ProjectionExpression: 'orgId, EventRef'
+    }));
+    /*
+      AN EVENT ITEM'S SESSION BELONGS TO ITS EVENT (2026-10-04). It is listed
+      under its event, not on its own, and the event's agenda points at it;
+      deleting it here would leave an item naming a session that is gone
+      while the event still runs. The event's own delete
+      (DELETE /events/{code}) takes its item sessions with it, so that is the
+      way, and the answer says so.
+    */
+    if (metadata.Item && metadata.Item.EventRef) {
+      return {
+        statusCode: 409,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          code: 'event_item',
+          eventCode: String(metadata.Item.EventRef),
+          error: `This session is part of event ${metadata.Item.EventRef}. Delete the event instead; its sessions go with it.`
+        })
+      };
+    }
     let orgId = (reservation.Item && reservation.Item.orgId) || '';
     if (!orgId) {
-      const metadata = await db.send(new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-        ProjectionExpression: 'orgId'
-      }));
       orgId = (metadata.Item && metadata.Item.orgId) || '';
     }
 

@@ -12,7 +12,7 @@
  *
  * rejects: a code released while EVENT# rows remain; a half-finished delete;
  * a delete through a foreign member, a non-member or no identity; a delete
- * of an event with an item that has started; an agenda read that stops at
+ * of an event with an item live (a room may be in it); an agenda read that stops at
  * the first 1 MB page; a delete that could release a session's code; a
  * session delete releasing an event's; the route answering while the switch
  * is off.
@@ -78,7 +78,7 @@ async function makeEvent({ breaks = 3 } = {}) {
   const res = await del(code);
   await check('200, naming the code', () => {
     assert.strictEqual(res.statusCode, 200, res.body);
-    assert.deepStrictEqual(bodyOf(res), { deleted: code });
+    assert.deepStrictEqual(bodyOf(res), { deleted: code, sessions: 0 });
   });
   await check('every item, METADATA, the list row and the reservation are gone', () =>
     assert.deepStrictEqual(owned(code), []));
@@ -115,8 +115,8 @@ async function makeEvent({ breaks = 3 } = {}) {
     });
   }
 
-  console.log('\n3. only while every item is planned');
-  await check('an item that has started: 409 with a plain sentence, and nothing deleted', async () => {
+  console.log('\n3. never while an item is running');
+  await check('a live item: 409 with a plain sentence, and nothing deleted', async () => {
     const row = [...table.store.values()].find((r) => r.PK === `EVENT#${kept}` && String(r.SK).startsWith('ITEM#'));
     table.put({ ...row, State: 'live' });
     try {
@@ -124,7 +124,7 @@ async function makeEvent({ breaks = 3 } = {}) {
       const r = await del(kept);
       assert.strictEqual(r.statusCode, 409, r.body);
       assert.deepStrictEqual(bodyOf(r), {
-        error: 'This event has an item that has started, so it cannot be deleted.', code: 'not_planned',
+        error: 'This event has an item running. End it on the stage, then delete the event.', code: 'item_running',
       });
       assert.strictEqual(snapshot(), before);
     } finally { table.put(row); }
