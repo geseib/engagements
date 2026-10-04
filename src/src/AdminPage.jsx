@@ -39,6 +39,7 @@ import OrgSwitcher from './components/OrgSwitcher';
 import TeamPanel from './components/TeamPanel';
 import BillingPanel from './components/BillingPanel';
 import PrivacyPanel from './components/PrivacyPanel';
+import AuditLog from './components/AuditLog';
 import EventsPanel, { NewEventButton } from './components/EventsPanel';
 import EventBuilder from './components/EventBuilder';
 import pricing from '../../lambda-functions/game/pricing';
@@ -2110,7 +2111,16 @@ function AdminPage() {
               PrivacyPanel now says only that: nothing is recorded yet, and
               names the one case where a read can happen.
             */
-            <PrivacyPanel org={{ id: activeOrg.orgId, name: activeOrg.name }} />
+            /*
+              The AUDIT LOG is wired, though (GET /orgs/{orgId}/audit): who
+              changed what here and why. This section is drawn only for an
+              owner or admin, or a person's own space (consoleSections.js),
+              and the route re-checks the role.
+            */
+            <PrivacyPanel
+              org={{ id: activeOrg.orgId, name: activeOrg.name }}
+              activity={<AuditLog path={`orgs/${encodeURIComponent(activeOrg.orgId)}/audit`} />}
+            />
           )}
 
           {resolvedTab === 'settings' && (

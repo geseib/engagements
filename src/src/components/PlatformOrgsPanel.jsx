@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import OrgBillingDrawer from './OrgBillingDrawer';
+import { AuditLogDialog } from './AuditLog';
 import './PlatformOrgsPanel.css';
 
 /**
@@ -57,6 +58,8 @@ export function sinceLabel(iso) {
 export default function PlatformOrgsPanel() {
   const [orgs, setOrgs] = useState([]);
   const [billing, setBilling] = useState(null);
+  /* The audit log dialog: an org row (its log), 'all' (every staff action), or null. */
+  const [activity, setActivity] = useState(null);
   const [counts, setCounts] = useState({ teams: 0, personal: 0, suspended: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -132,6 +135,14 @@ export default function PlatformOrgsPanel() {
           {counts.pending ? <>{', '}<strong>{counts.pending}</strong>{' waiting'}</> : null}
           {counts.suspended ? <>{', '}<strong>{counts.suspended}</strong>{' suspended'}</> : null}
         </span>
+        <button
+          type="button"
+          className="porgs-btn porgs-head-btn"
+          onClick={() => setActivity('all')}
+          data-testid="porgs-staff-activity"
+        >
+          Staff activity…
+        </button>
       </div>
 
       {loading && <p className="porgs-loading">Loading organisations…</p>}
@@ -211,6 +222,16 @@ export default function PlatformOrgsPanel() {
                         >
                           Billing…
                         </button>
+                        {/* Who changed what in this organisation (the audit log). */}
+                        <button
+                          type="button"
+                          className="porgs-btn"
+                          disabled={busy}
+                          onClick={() => setActivity(org)}
+                          data-testid="porgs-activity"
+                        >
+                          Activity…
+                        </button>
                         {status === 'active' && !personal && (
                           <button
                             type="button"
@@ -232,6 +253,13 @@ export default function PlatformOrgsPanel() {
       )}
 
       {billing && <OrgBillingDrawer org={billing} onClose={() => setBilling(null)} />}
+      {activity && (
+        <AuditLogDialog
+          org={activity === 'all' ? null : activity}
+          orgNames={Object.fromEntries(orgs.map((o) => [o.orgId, o.name]))}
+          onClose={() => setActivity(null)}
+        />
+      )}
 
       <p className="porgs-note">
         <strong>There is no “view their sets” button, and that is the change.</strong>
