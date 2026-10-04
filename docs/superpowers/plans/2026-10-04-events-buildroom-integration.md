@@ -99,3 +99,32 @@ by their code through the event row.
 4. Not fixed, found on the way: `POST /admin/clear-game/{id}` checks no ownership (any host can
    clear any org's session by code); a report index row is keyed by a four-digit code that can be
    redrawn while the report lives.
+
+## 7. As built (2026-10-04)
+
+All of sections 2–5 were built as planned, test-first. What differs from the plan, and what was
+found on the way:
+
+- **Event delete after a run** keeps the old safety rule in a narrower form: refused while an item is
+  `live` or `paused` (`item_running`), allowed for `planned` and `done`. Each item's write is
+  conditioned on the state the request read.
+- **Delete all** in the console deletes events first through `DELETE /events/{code}`, then calls
+  clear-all-games, which now leaves item sessions alone; a refused (running) event is named in the
+  alert and stays in the list.
+- **Build Room report**: Save report sits in the report's bar with the keep choice inline (no dialog
+  over the report). The save path is `utils/saveReport.js`, which the session report now uses too.
+- **Found while looking in a browser** and fixed: the console Sessions table drew Players and Rounds
+  at zero width (the column widths summed to 100% without them), and a Build Room row's Open/Report/
+  Delete overflowed toward the hidden start of a `flex-end` group (hard rule 9). `Printer` was not
+  in `Icon.jsx`, so every Print button drew the fallback circle.
+- `docs/architecture/api.md` was already stale on dev (the Build Room routes were missing); it is
+  regenerated. No route was added.
+
+Tests added: `tests/engagement-session-list.js`, `tests/engagement-report-list.js`,
+`tests/engagement-lifecycle.js`, `tests/artifact-sweep.js`; `src/src/__tests__/engagementRows.test.jsx`,
+`src/src/__tests__/createOtherEngagements.test.jsx`. Each backend suite was run red against the
+previous code first.
+
+Not done, on purpose: a link from a single item session's report back to its event (the event row
+in Reports is the hub); delete-set-version's warning about event items pinned to a version (carried
+from M1b); the ownership check on `POST /admin/clear-game` and the recycled-code report row (§6.4).
