@@ -8,7 +8,7 @@ them, so it is the only source this doc will accept. The hand-written file it
 replaced documented an `/api/…` prefix no route ever had, three handlers that
 were already dead, and five files that did not exist.
 
-172 routes across 9 groups. 147 carry the Cognito authorizer; 25 are public.
+176 routes across 9 groups. 149 carry the Cognito authorizer; 27 are public.
 
 `public` means no authorizer **on the route**. Several public routes still
 enforce rules in the handler: the participant journey carries no token by
@@ -85,6 +85,10 @@ on `requestContext.routeKey`.
 | POST | `/games/briefing/draft` | **Cognito** | `lambda-functions/game/draft-briefing.js` |
 | GET | `/games/{gameId}/ai-summary/host` | **Cognito** | `lambda-functions/game/get-ai-summary.js` |
 | GET | `/games/{gameId}/answers/host` | **Cognito** | `lambda-functions/game/get-answers.js` |
+| GET | `/games/{gameId}/build-play/{proxy+}` | public | `lambda-functions/game/build-room.js` |
+| POST | `/games/{gameId}/build-play/{proxy+}` | public | `lambda-functions/game/build-room.js` |
+| GET | `/games/{gameId}/build/{proxy+}` | **Cognito** | `lambda-functions/game/build-room.js` |
+| POST | `/games/{gameId}/build/{proxy+}` | **Cognito** | `lambda-functions/game/build-room.js` |
 | GET | `/games/{gameId}/report/download` | public | `lambda-functions/game/download-report.js` |
 | GET | `/games/{gameId}/state/{playerId}` | public | `lambda-functions/game/get-game-state.js` |
 | PUT | `/games/{gameId}/survey/answers` | public | `lambda-functions/game/survey-answers.js` |
