@@ -164,6 +164,26 @@ describe('each ask status', () => {
     expect(posts()[1].body).toEqual({ action: 'open' });
   });
 
+  test('proposed: options with no preview say so, and Claude can be asked for mockups', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));
+    const note = screen.getByTestId('brm-previews-missing');
+    // A carries a preview link; only B has nothing to show.
+    expect(note.textContent).toMatch(/No preview for option B yet\./);
+    fireEvent.click(within(note).getByRole('button', { name: 'Ask Claude for mockups' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body.text).toMatch(/^Before ask 3 opens to the room: make a quick mockup of option B, /);
+    expect(lastPost().body.text).toContain('share_image (askId "003", label B)');
+    await waitFor(() => expect(screen.getByTestId('brm-previews-missing').textContent).toMatch(/Asked Claude for mockups/));
+    expect(within(screen.getByTestId('brm-previews-missing')).queryByRole('button')).toBeNull();
+  });
+
+  test('proposed: every option previewed, no notice', async () => {
+    const withPreviews = { ...CHOICE, Options: CHOICE.Options.map((o) => ({ ...o, url: `http://localhost:5173/${o.label.toLowerCase()}` })) };
+    await openRoom(hostState({ asks: [{ ...withPreviews, Status: 'proposed' }] }));
+    expect(screen.getByRole('button', { name: 'Open to the room' })).toBeInTheDocument();
+    expect(screen.queryByTestId('brm-previews-missing')).toBeNull();
+  });
+
   test('proposed: Discard', async () => {
     await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Proposed ask 3' })).getByRole('button', { name: 'Discard' }));

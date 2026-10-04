@@ -663,6 +663,25 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
   const setOpt = (i, key, value) => setOptions((list) => list.map((o, j) => (j === i ? { ...o, [key]: value } : o)));
   const letter = (i) => String.fromCharCode(65 + i);
 
+  // PREVIEWS BEFORE THE ROOM SEES IT (owner, 2026-10-04). An option with no
+  // screenshot and no preview link is judged by its title alone. Claude is told
+  // to attach mockups before it waits; when it has not, the host can ask for
+  // them here, and Claude gets the direction at once (wait_for_room returns on
+  // a direction, engage-mcp.mjs).
+  const [askedMockups, setAskedMockups] = useState(false);
+  const missing = ask.kind === 'choice'
+    ? (ask.options || []).map((o, i) => (o.imageId || o.url ? null : (o.label || letter(i)))).filter(Boolean)
+    : [];
+  const askForMockups = async () => {
+    const list = missing.join(', ');
+    const out = await run(() => api.postDirection(
+      `Before ask ${askNumber(ask.askId)} opens to the room: make a quick mockup of ${missing.length === 1 ? `option ${list}` : `options ${list}`}, `
+      + `stamp each with its letter, screenshot it, and attach it to its option with share_image (askId "${ask.askId}", label ${list}). `
+      + 'Then tell me they are in.',
+    ));
+    if (out !== undefined) setAskedMockups(true);
+  };
+
   return (
     <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`}>
       <div className="brm-row brm-gap">
@@ -708,6 +727,23 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
             </button>
           )}
           <div className="brm-notice"><b>Letters are fixed.</b> Claude stamps &quot;Choice A&quot;, &quot;Choice B&quot; on its mockups, so renaming an option keeps its letter.</div>
+          {missing.length > 0 && !ended && (
+            <div className="brm-notice brm-row brm-gap" role="status" data-testid="brm-previews-missing">
+              {askedMockups ? (
+                <span>Asked Claude for mockups. Each appears under its option as Claude attaches it.</span>
+              ) : (
+                <span>
+                  <b>No preview for {missing.length === 1 ? `option ${missing[0]}` : `options ${missing.join(', ')}`} yet.</b>{' '}
+                  {connected
+                    ? 'The room chooses faster from a picture. Claude can make a quick mockup of each.'
+                    : 'Claude is not connected, so it cannot make mockups now. Add a preview URL above, or open the ask without.'}
+                </span>
+              )}
+              {connected && !askedMockups && (
+                <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={askForMockups}>Ask Claude for mockups</button>
+              )}
+            </div>
+          )}
         </div>
       )}
       {ask.kind === 'rating' && (

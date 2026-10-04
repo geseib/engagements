@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -487,7 +487,7 @@ const TOOLS = [
   },
   {
     name: 'ask_room_to_choose',
-    description: 'Ask the room to pick between 2–6 concrete options (a poll). Engage assigns the labels Choice A, B, C… and returns a badge snippet for each. Create this ask BEFORE showing mockups, then stamp each mockup with exactly the letter returned so the wall and the phones match what is on screen. Returns an askId; then call wait_for_room.',
+    description: 'Ask the room to pick between 2–6 concrete options (a poll). Engage assigns the labels Choice A, B, C… and returns a badge snippet for each. Create this ask BEFORE showing mockups, then stamp each mockup with exactly the letter returned so the wall and the phones match what is on screen. When the options can be SEEN (a layout, a look, a screen, words on a page), attach a screenshot of each to its option with share_image BEFORE you call wait_for_room: the host reviews the ask with those pictures, and the room votes on them. Returns an askId.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -968,6 +968,14 @@ const HANDLERS = {
     for (const o of labelled) lines.push('', `Choice ${o.label}:`, badgeSnippet(o.label));
     lines.push('', 'Then tell the host the local URL of each variant (e.g. "Choice A → http://localhost:<port>/a"), ' +
       'and post_update with kind "showing" when they are ready to flip through.');
+    // The host reviews a proposed ask BEFORE the room sees it, and judges it by
+    // what each option shows (owner, 2026-10-04: "shouldn't the preview
+    // mockups be prepopulated?"). So the pictures come first, the wait second.
+    lines.push('', 'PREVIEWS BEFORE YOU WAIT: if these options can be seen (a layout, a look, a screen, words on a page), ' +
+      'build a quick mockup of each NOW, stamp it with its letter, screenshot it, and share_image it onto its option ' +
+      `(askId "${ask.askId}", label ${labelled.map((o) => o.label).join(', ')}). Only then call wait_for_room. ` +
+      'The host reviews this ask with those pictures and the room votes on them. ' +
+      'If the choice is not something you can show, skip the mockups and say so in one line to the host (post_update).');
     return createdAskText(ask, res.inbox, lines.join('\n'));
   },
 
@@ -1004,6 +1012,10 @@ const HANDLERS = {
       collect(res.inbox);
       ask = res.ask || {};
       if (ask.status === 'decided' || ask.status === 'discarded') break;
+      // A direction from the host while you wait (e.g. "make mockups for this
+      // ask") must not sit unread for the rest of the wait: return it now.
+      // The decision of THIS ask is not such an item; it ends the wait above.
+      if (inbox.some((d) => String(d.askId || '') !== String(ask.askId || id) || !d.askId)) break;
       if (ask.status !== lastStatus || n % 5 === 0) {
         const t = (ask.results || {}).total || 0;
         ctx.progress(Math.round((Date.now() - started) / 1000), maxWait,
@@ -1024,6 +1036,11 @@ const HANDLERS = {
       return ok(`The host discarded ask ${ask.askId} ("${s(ask.prompt)}"). ` +
         'Do not wait on it; carry on with your own judgement, or ask a better-framed question if the decision still matters.' +
         (ask.decision && ask.decision.note ? `\nHost's note: ${s(ask.decision.note)}` : ''), inbox);
+    }
+    const directed = inbox.filter((d) => String(d.askId || '') !== String(ask.askId || id) || !d.askId);
+    if (directed.length) {
+      return ok(`The host sent you a direction while you waited on ask ${ask.askId || id} (it is ${statusLine(ask)}). ` +
+        `Act on it now, then call wait_for_room with askId "${ask.askId || id}" again.`, inbox);
     }
     return ok(`Still waiting after ${Math.round((Date.now() - started) / 1000)}s — ask ${ask.askId || id} is not decided yet.\n\n` +
       `${renderAsk(ask)}\n\n` +
@@ -1602,6 +1619,7 @@ How to collaborate:
 - Keep every question short and plain: it is read from the back of a room on a projector. Put background in "context", not in the question.
 - Use ask_room_for_ideas for open questions, ask_room_to_choose for 2–6 concrete options, ask_room_to_rate for a 1–5 pulse on something you have shown.
 - When showing variants, create the ask_room_to_choose ask FIRST, then label every variant on screen with exactly the letter Engage returned ("Choice A", "Choice B", …) using the badge snippet it gives you. Tell the host the local URL of each one.
+- A choice the room can SEE gets its previews before you wait: screenshot each mockup and share_image it onto its option, then call wait_for_room. The host reviews proposed asks by those pictures, and may send "make mockups" as a direction if they are missing.
 - Asks may arrive as "proposed": the host reviews them before the room sees them. That is normal. Keep working on anything that does not depend on the answer, then call wait_for_room. If it times out, call it again.
 - The host's direction is final. It may edit, merge or overrule the raw vote and add what people said out loud; build what the direction says.
 - Post a short post_update after each meaningful change (kind "showing" when you put something on screen for the room). One line, written for the room, not a commit message.

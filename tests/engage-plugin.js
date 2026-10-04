@@ -36,6 +36,14 @@ const server = http.createServer((req, res) => {
       return send(200, { gameId: '4321', title: 'Sign-up site', goal: 'Pick a shift fast', state: 'STARTED', players: [], playerCount: 0, asks: [], log: [], inbox: [] });
     }
     if (req.method === 'POST' && p === 'log') return send(201, { entry: { logId: 'l1', ...JSON.parse(raw) }, inbox: [] });
+    // A proposed choice the host has not opened, and a direction the host sent
+    // meanwhile ("make mockups"): wait_for_room must hand it over at once.
+    if (req.method === 'GET' && p === 'asks/007') {
+      return send(200, {
+        ask: { askId: '007', kind: 'choice', prompt: 'Which header?', status: 'proposed', options: [{ label: 'A', title: 'Bold' }, { label: 'B', title: 'Calm' }] },
+        inbox: [{ id: 'd1', text: 'Before ask 007 opens: make a quick mockup of each option.', from: 'host' }],
+      });
+    }
     if (req.method === 'POST' && p === 'asks') {
       const b = JSON.parse(raw);
       return send(201, { ask: { askId: '001', kind: b.kind, prompt: b.prompt, status: 'proposed', options: (b.options || []).map((o, i) => ({ ...o, label: 'AB'[i] })) }, inbox: [] });
@@ -143,6 +151,15 @@ async function check(name, fn) {
     assert.ok(!r.isError && !/CHECK THESE LINKS/.test(r.text), r.text);
     const c = await mcp.call('ask_room_to_choose', { question: 'Which?', options: [{ title: 'A', url: `http://localhost:${mine.port}/a` }, { title: 'B' }] });
     assert.ok(!c.isError, c.text);
+    // The pictures come before the wait (owner, 2026-10-04).
+    assert.ok(/PREVIEWS BEFORE YOU WAIT/.test(c.text) && /share_image it onto its option/.test(c.text) && /label A, B/.test(c.text), c.text);
+  });
+  await check('a direction sent while Claude waits on an ask reaches it at once, not after the wait', async () => {
+    const t0 = Date.now();
+    const r = await mcp.call('wait_for_room', { askId: '007', maxWaitSeconds: 60 });
+    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0}ms`);
+    assert.ok(/sent you a direction while you waited on ask 007/.test(r.text) && /make a quick mockup of each option/.test(r.text), r.text);
+    assert.ok(/call wait_for_room with askId "007" again/.test(r.text), r.text);
   });
   await check('a link nothing answers is posted with a warning to start the server', async () => {
     old.child.kill(); mine.child.kill();
