@@ -232,12 +232,19 @@
 .sp-tbl tbody tr:hover td { background: var(--sp-row-hover); }
 .sp-busy td { opacity: .55; }
 
-.sp-col-name  { width: 30%; }
-.sp-col-id    { width: 11%; }
-.sp-col-type  { width: 13%; }
-.sp-col-state { width: 13%; }
-.sp-col-when  { width: 12%; }
-.sp-col-acts  { width: 9%; }
+/* The nine columns add up to 100%. They used to add up to 100% WITHOUT the
+   two count columns, which `table-layout: fixed` then drew at zero width:
+   Players and Rounds were in the markup and on nobody's screen (found
+   2026-10-04, looking at this table in a browser). */
+.sp-col-name  { width: 24%; }
+.sp-col-id    { width: 8%; }
+.sp-col-type  { width: 11%; }
+.sp-col-state { width: 11%; }
+.sp-col-num   { width: 6%; }
+.sp-col-when  { width: 9%; }
+.sp-col-acts  { width: 16%; }
+.sp-num { text-align: right; font-size: var(--sp-t-label); color: var(--muted); }
+.sp-tbl th.sp-col-num { text-align: right; }
 
 .sp-nm {
   font-weight: 600;
@@ -287,7 +294,12 @@
 .sp-mono { font-family: var(--sp-font-mono); font-size: 14px; }
 .sp-danger-text { color: var(--danger-text); }
 
-.sp-rowact { display: flex; gap: 5px; justify-content: flex-end; opacity: 0; }
+/* margin-left: auto on the first action and a wrap, never justify-content:
+   flex-end (hard rule 9): a Build Room's Open, Report and Delete outgrow the
+   cell, and a flex-end group overflows toward its start, where the cell's
+   overflow hides it — Open was cut off (seen 2026-10-04 in a browser). */
+.sp-rowact { display: flex; flex-wrap: wrap; gap: 5px; opacity: 0; }
+.sp-rowact > :first-child { margin-left: auto; }
 .sp-tbl tr:hover .sp-rowact,
 .sp-tbl tr:focus-within .sp-rowact { opacity: 1; }
 
