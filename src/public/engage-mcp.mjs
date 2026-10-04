@@ -26,7 +26,12 @@ import { homedir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = '1.1.0';
+// THE PLUGIN'S VERSION. Bump it with every change to this file:
+// --install-plugin compares it with what Claude Code has installed to decide
+// install / update / "you're all set", so a change shipped under the same
+// version would never reach a laptop that already has the plugin.
+// tests/engage-plugin-version.js fails until the version and its pin move.
+const VERSION = '1.2.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -1843,16 +1848,39 @@ async function hookCheckpoint() {
 }
 
 /**
- * --install-plugin [--api <url>]: write the Engage plugin for Claude Code to
- * ~/.engage/claude-plugin (a local marketplace holding one plugin: this server,
- * the slash commands, and the Stop hook above), remember the API, and register
- * it with Claude Code if the `claude` command is here.
+ * --install-plugin [--api <url>]: make sure this laptop has THIS version of
+ * the Engage plugin for Claude Code. One command, run every time from the
+ * Build Room page, which says what it did:
+ *   - not installed            → write it to ~/.engage/claude-plugin (a local
+ *                                marketplace holding one plugin: this server,
+ *                                the slash commands and the Stop hook above)
+ *                                and install it
+ *   - another version          → rewrite it and update Claude Code's copy
+ *                                (the page's version wins, so a laptop moving
+ *                                between tiers follows the site it came from)
+ *   - this version, turned off → turn it back on
+ *   - this version, on         → "You're all set", and touch nothing
+ * The API is remembered every time, so the same laptop can move from the dev
+ * site to the test site and back.
  */
-function installPlugin(argv) {
-  const apiArg = argv[argv.indexOf('--api') + 1];
-  const home = pathJoin(homedir(), '.engage');
-  const root = pathJoin(home, 'claude-plugin');
-  const plug = pathJoin(root, 'engage');
+const PLUGIN_ID = 'engage@engage-local';
+
+/** What Claude Code reports for the Engage plugin, or why it cannot say. */
+function installedPlugin(claude) {
+  const probe = claude(['--version']);
+  if (probe.error) return { claude: false };
+  const r = claude(['plugin', 'list', '--json']);
+  try {
+    const entry = (JSON.parse(r.stdout || '[]') || []).find((p) => p && p.id === PLUGIN_ID);
+    return entry
+      ? { claude: true, installed: true, version: String(entry.version || ''), enabled: entry.enabled !== false }
+      : { claude: true, installed: false };
+  } catch {
+    return { claude: true, installed: null }; // an older claude: cannot tell, so install
+  }
+}
+
+function writePlugin(home, root, plug) {
   for (const d of [pathJoin(root, '.claude-plugin'), pathJoin(plug, '.claude-plugin'), pathJoin(plug, 'commands'), pathJoin(plug, 'hooks')]) mkdirSync(d, { recursive: true });
   const w = (file, body) => writeFileSync(file, typeof body === 'string' ? body : JSON.stringify(body, null, 2) + '\n');
   w(pathJoin(root, '.claude-plugin', 'marketplace.json'), {
@@ -1882,26 +1910,75 @@ function installPlugin(argv) {
     const body = promptText(p.name, arg ? { [arg.name]: '$ARGUMENTS' } : {});
     cmd(p.name, p.description, arg ? `<${arg.name}>` : '', body);
   }
-  if (apiArg && /^https?:\/\//i.test(apiArg)) {
-    mkdirSync(home, { recursive: true });
-    w(globalFile(), { api: apiArg.replace(/\/+$/, '') + '/' });
-  }
+}
+
+function installPlugin(argv) {
+  const apiArg = argv[argv.indexOf('--api') + 1];
+  const home = pathJoin(homedir(), '.engage');
+  const root = pathJoin(home, 'claude-plugin');
+  const plug = pathJoin(root, 'engage');
   const out = (...lines) => process.stdout.write(lines.join('\n') + '\n');
-  out(`Wrote the Engage plugin to ${plug}`);
   const claude = (args) => spawnSync('claude', args, { encoding: 'utf8' });
-  const probe = claude(['--version']);
-  if (probe.error) {
-    out('', 'The claude command is not on PATH here. In Claude Code, run:');
-    out(`  /plugin marketplace add ${root}`);
-    out('  /plugin install engage@engage-local');
-  } else {
-    const add = claude(['plugin', 'marketplace', 'add', root]);
-    if (add.status !== 0) claude(['plugin', 'marketplace', 'update', 'engage-local']);
-    const inst = claude(['plugin', 'install', 'engage@engage-local']);
-    out(inst.status === 0 ? 'Installed the engage plugin in Claude Code.' :
-      `Could not install automatically (${(inst.stderr || inst.stdout || '').trim().slice(0, 200)}). In Claude Code run: /plugin marketplace add ${root} then /plugin install engage@engage-local`);
+  const NEXT = ['', 'Next: on the Build Room page, mint a key and copy the connect command.'];
+
+  // Which Engage site this laptop talks to: remembered on every run.
+  let apiNote = '';
+  if (apiArg && /^https?:\/\//i.test(apiArg)) {
+    const api = apiArg.replace(/\/+$/, '') + '/';
+    let before = '';
+    try { before = JSON.parse(readFileSync(globalFile(), 'utf8')).api || ''; } catch { /* first run */ }
+    mkdirSync(home, { recursive: true });
+    writeFileSync(globalFile(), JSON.stringify({ api }, null, 2) + '\n');
+    if (before && before !== api) apiNote = `It now talks to ${api} (it was ${before}).`;
   }
-  out('', 'Next: start (or restart) Claude Code in your project folder and type', '  /engage:connect <the key from the Build Room page>');
+
+  const have = installedPlugin(claude);
+  const filesCurrent = (() => {
+    try { return JSON.parse(readFileSync(pathJoin(plug, '.claude-plugin', 'plugin.json'), 'utf8')).version === VERSION; } catch { return false; }
+  })();
+
+  if (have.claude && have.installed && have.version === VERSION && filesCurrent) {
+    if (!have.enabled) {
+      const on = claude(['plugin', 'enable', PLUGIN_ID]);
+      out(on.status === 0
+        ? `The Engage plugin ${VERSION} was installed but turned off. It is on again; restart Claude Code if it is open.`
+        : `The Engage plugin ${VERSION} is installed but turned off. In Claude Code run: /plugin enable ${PLUGIN_ID}`);
+    } else {
+      out(`You're all set: the Engage plugin ${VERSION} is installed and on.`);
+    }
+    if (apiNote) out(apiNote);
+    out(...NEXT);
+    return;
+  }
+
+  writePlugin(home, root, plug);
+
+  if (!have.claude) {
+    out(`Wrote the Engage plugin ${VERSION} to ${plug}.`, '', 'The claude command is not on PATH here. In Claude Code, run:');
+    out(`  /plugin marketplace add ${root}`);
+    out(`  /plugin install ${PLUGIN_ID}`);
+    if (apiNote) out(apiNote);
+    out(...NEXT);
+    return;
+  }
+
+  const manual = (why) => out(`Could not finish automatically (${why}). In Claude Code run: /plugin marketplace add ${root} then /plugin install ${PLUGIN_ID}`);
+  const add = claude(['plugin', 'marketplace', 'add', root]);
+  if (add.status !== 0) claude(['plugin', 'marketplace', 'update', 'engage-local']);
+
+  if (have.installed) {
+    const from = have.version || 'an unknown version';
+    let up = claude(['plugin', 'update', PLUGIN_ID]);
+    if (up.status !== 0) up = claude(['plugin', 'install', PLUGIN_ID]);
+    if (up.status === 0) out(`Updated the Engage plugin from ${from} to ${VERSION}. Restart Claude Code if it is open, so it loads the new version.`);
+    else manual((up.stderr || up.stdout || '').trim().slice(0, 200));
+  } else {
+    const inst = claude(['plugin', 'install', PLUGIN_ID]);
+    if (inst.status === 0) out(`Installed the Engage plugin ${VERSION} in Claude Code.`);
+    else manual((inst.stderr || inst.stdout || '').trim().slice(0, 200));
+  }
+  if (apiNote) out(apiNote);
+  out(...NEXT);
 }
 
 // ---------------------------------------------------------------------------

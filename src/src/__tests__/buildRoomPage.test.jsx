@@ -17,7 +17,7 @@ import {
 } from '@testing-library/react';
 import { authFetch } from '../auth/authFetch';
 import webSocketClient from '../WebSocketClient';
-import BuildRoomPage, { BuildCreate, stageHint } from '../buildroom/BuildRoomPage';
+import BuildRoomPage, { BuildCreate, stageHint, ConnectPanel } from '../buildroom/BuildRoomPage';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 jest.mock('../WebSocketClient', () => ({
@@ -354,10 +354,25 @@ describe('Connect Claude Code', () => {
     await openRoom(hostState());
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Mint a key' }));
+    // The four steps, in the order they are done (owner, 2026-10-04).
+    const titles = [...dialog.querySelectorAll('.brm-step-title')].map((n) => n.textContent);
+    expect(titles).toEqual([
+      'Check for the latest Engage plugin',
+      'Mint a key and copy the connect command',
+      'Start Claude Code in your project folder and paste the command',
+      'Kick off',
+    ]);
+    expect(within(dialog).getByTestId('brm-kickoff').textContent).toBe('/engage:kickoff');
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mint a key and copy the command' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/keys`));
     const command = await within(dialog).findByTestId('brm-command');
     const key = `eng_${GAME}_${'k'.repeat(43)}`;
+    // One click mints AND copies the line to paste into Claude Code.
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`/engage:connect ${key}`));
+    expect(within(dialog).getByRole('status').textContent).toMatch(/^Copied\. Paste it into Claude Code\./);
+    delete navigator.clipboard;
     expect(command.textContent).toContain(`--env ENGAGE_KEY=${key}`);
     expect(command.textContent).toContain(`--env ENGAGE_API=${API}`);
     expect(command.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
@@ -387,7 +402,9 @@ describe('Connect Claude Code', () => {
     ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:wrap-up', '/engage:share-repo', '/mcp__engage__kickoff'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
     });
-    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(6);
+    // Step 1 (install) and step 4 (kick off), then one per prompt card.
+    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(2 + 6);
+    expect(within(dialog).queryByTestId('brm-share-repo')).toBeNull(); // not a crew room
 
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Review Claude's questions/ }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/settings`));
@@ -397,6 +414,28 @@ describe('Connect Claude Code', () => {
     await waitFor(() => expect(revoke).not.toBeDisabled());
     fireEvent.click(revoke);
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/keys/abc123def456/revoke`));
+  });
+
+  const panel = (room, api = {}) => render(
+    <ConnectPanel room={{ settings: {}, ...room }} gameId={GAME} api={{ mintKey: jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' })), revokeKey: jest.fn(), saveSettings: jest.fn(), ...api }} run={(fn) => fn()} busy={false} onClose={() => {}} />,
+  );
+
+  test('a crew room adds a fifth step: share the repo', () => {
+    panel({ agent: {}, crew: { enabled: true } });
+    const titles = [...document.querySelectorAll('.brm-step-title')].map((n) => n.textContent);
+    expect(titles[4]).toBe('Open the project to your crew');
+    expect(screen.getByTestId('brm-share-repo').textContent).toBe('/engage:share-repo');
+  });
+
+  test('with Claude connected on a live key, minting again warns that it disconnects', async () => {
+    const mintKey = jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' }));
+    panel({ agent: { lastSeenAt: ago(5), key: { keyId: 'k1', createdAt: ago(600) } } }, { mintKey });
+    expect(screen.getByText(/Claude Code is connected with the current key/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Mint a new key and copy the command' }));
+    expect(mintKey).not.toHaveBeenCalled();
+    expect(screen.getByText(/Claude Code disconnects until you paste the new command/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(mintKey).not.toHaveBeenCalled();
   });
 });
 

@@ -1424,96 +1424,137 @@ function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' })
 export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   // THE KEY IS SHOWN ONCE: it lives in this component's state only, and is
   // gone when the panel closes. The server stores only its sha256.
+  //
+  // FOUR STEPS, IN THE ORDER THEY ARE DONE (owner, 2026-10-04): check for the
+  // latest plugin (installs, updates, or says you are all set), mint a key and
+  // copy the connect command, paste it into Claude Code, kick off. A crew room
+  // adds a fifth: share the repo. Everything else is folded away below them.
   const [minted, setMinted] = useState(null);
+  const [copied, setCopied] = useState('');
   const [confirmMint, setConfirmMint] = useState(false);
   const agent = room.agent || {};
   const liveKey = agent.key;
+  const connected = Boolean(agent.lastSeenAt);
+  const crew = Boolean(room.crew && room.crew.enabled);
   const command = minted ? connectCommand({ origin: window.location.origin, api: apiBase(), key: minted.key }) : '';
   const install = pluginInstallCommand({ origin: window.location.origin, api: apiBase() });
   const connectLine = minted ? pluginConnectCommand(minted.key) : '';
+  const kickoff = pluginCommand('kickoff');
+  const shareRepo = pluginCommand('share-repo');
 
+  // Mint, then copy the connect command in the same click. A browser may refuse
+  // the copy once the click is a network round-trip old; the command is shown
+  // either way, with its own Copy button.
   const mint = async () => {
     setConfirmMint(false);
     const out = await run(() => api.mintKey('Claude Code'));
-    if (out && out.key) setMinted({ key: out.key, keyId: out.keyId });
+    if (!out || !out.key) return;
+    setMinted({ key: out.key, keyId: out.keyId });
+    const ok = await copyText(pluginConnectCommand(out.key));
+    setCopied(ok ? 'Copied. Paste it into Claude Code.' : 'Copy it with the button below.');
   };
   const revoke = async () => {
     if (!liveKey) return;
     await run(() => api.revokeKey(liveKey.keyId));
     setMinted(null);
+    setCopied('');
   };
 
   const step = (done, wait) => (done ? 'is-done' : wait ? 'is-wait' : '');
+  const mintLabel = liveKey ? 'Mint a new key and copy the command' : 'Mint a key and copy the command';
 
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
       <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} />
-      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and saves every step in git. Needs Node 18 or later.</p>
+      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and saves every step in git.</p>
 
-      <h3 className="brm-h5">Once per laptop: install the Engage plugin</h3>
-      <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
-      <div className="brm-row brm-gap">
-        <CopyButton text={install} label="Copy install command" />
-        <span className="brm-hint">Run it in a terminal. It adds the plugin to Claude Code: the Engage tools, the /engage commands, and a checkpoint in git at the end of every turn (in this project only; never pushed).</span>
-      </div>
-
-      <h3 className="brm-h5">Each session: connect with this room&apos;s key</h3>
-      {minted ? (
-        <>
-          <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
-            <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</div>
-          </div>
-          <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
-          <div className="brm-row brm-gap">
-            <CopyButton text={connectLine} label="Copy" className="brm-btn brm-btn--sm brm-btn--primary" />
-            <span className="brm-hint">Type it into Claude Code, in your project folder. Key …{minted.key.slice(-4)} · minted just now</span>
-          </div>
-          <details className="brm-alt">
-            <summary>Without the plugin</summary>
-            <p className="brm-hint">One command in the terminal instead, then restart Claude Code. No automatic checkpoints; Claude can still call checkpoint.</p>
-            <pre className="brm-cmd" data-testid="brm-command">{command}</pre>
-            <CopyButton text={command} label="Copy command" />
-          </details>
-        </>
-      ) : liveKey ? (
-        <div className="brm-notice">
-          <b>A key is active</b> (minted {clockTime(liveKey.createdAt)}{liveKey.lastUsedAt ? `, last used ${clockTime(liveKey.lastUsedAt)}` : ', not used yet'}). It was shown once and cannot be shown again.
-          Lost the command? Mint a new key; the old one stops working at once.
-        </div>
-      ) : (
-        <div className="brm-notice">No key yet. Minting one gives you the command to paste.</div>
-      )}
-
-      <div className="brm-row brm-gap">
-        {confirmMint ? (
-          <>
-            <span className="brm-hint">The current key stops working immediately.</span>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>Mint a new key</button>
-          </>
-        ) : (
-          <button type="button" className={`brm-btn brm-btn--sm${minted ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
-            {liveKey ? 'Mint a new key' : 'Mint a key'}
-          </button>
-        )}
-        {liveKey && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={revoke}>Revoke key</button>}
-      </div>
-
-      <ol className="brm-steps">
-        <li className={step(Boolean(liveKey || minted), !(liveKey || minted))}>
+      <ol className="brm-steps brm-steps--connect">
+        <li className={step(connected, false)}>
           <span className="brm-n">1</span>
-          <span>Install the plugin (once), then mint a key. It appears once.</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Check for the latest Engage plugin</span>
+            <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
+            <div className="brm-row brm-gap">
+              <CopyButton text={install} label="Copy" />
+              <span className="brm-hint">Run it in a terminal. It installs the plugin if it is missing, updates it if it is out of date, or tells you you&apos;re all set. Needs Node 18 or later.</span>
+            </div>
+          </div>
         </li>
-        <li className={step(Boolean(agent.lastSeenAt), Boolean(liveKey || minted) && !agent.lastSeenAt)}>
+
+        <li className={step(Boolean(minted) || connected, !minted && !connected)}>
           <span className="brm-n">2</span>
-          <span>{agent.lastSeenAt
-            ? 'Claude Code has called in.'
-            : 'In Claude Code, type the /engage:connect line above.'}</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Mint a key and copy the connect command</span>
+            {minted ? (
+              <>
+                <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
+                  <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</div>
+                </div>
+                <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
+                <div className="brm-row brm-gap">
+                  <CopyButton text={connectLine} label="Copy again" />
+                  <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
+                </div>
+              </>
+            ) : liveKey ? (
+              <p className="brm-hint brm-block">
+                {connected ? 'Claude Code is connected with the current key. ' : ''}
+                A key was minted {clockTime(liveKey.createdAt)}{liveKey.lastUsedAt ? ` and last used ${clockTime(liveKey.lastUsedAt)}` : ''}. It was shown once.
+                Minting a new one stops the old key at once.
+              </p>
+            ) : null}
+            <div className="brm-row brm-gap">
+              {confirmMint ? (
+                <>
+                  <span className="brm-hint">The current key stops working immediately{connected ? ', and Claude Code disconnects until you paste the new command' : ''}.</span>
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>{mintLabel}</button>
+                </>
+              ) : !minted && (
+                <button type="button" className={`brm-btn brm-btn--sm${connected ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
+                  {mintLabel}
+                </button>
+              )}
+              {liveKey && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={revoke}>Revoke key</button>}
+            </div>
+          </div>
         </li>
-        <li className={step(false, Boolean(agent.lastSeenAt))}>
+
+        <li className={step(connected, Boolean(minted) && !connected)}>
           <span className="brm-n">3</span>
-          <span>Type {pluginCommand('kickoff')}, or paste the Kick off card below.</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Start Claude Code in your project folder and paste the command</span>
+            <span className="brm-hint">{connected
+              ? 'Claude Code has called in.'
+              : 'In a terminal, go to your project folder and run claude. Paste the connect command and press Enter.'}</span>
+          </div>
         </li>
+
+        <li className={step(false, connected)}>
+          <span className="brm-n">4</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Kick off</span>
+            <pre className="brm-cmd" data-testid="brm-kickoff">{kickoff}</pre>
+            <div className="brm-row brm-gap">
+              <CopyButton text={kickoff} label="Copy" />
+              <span className="brm-hint">Run it in Claude Code. Claude reads the room, restates the goal and posts its plan.{crew ? '' : ' From then on every turn is saved as a git commit in this project, never pushed.'}</span>
+            </div>
+          </div>
+        </li>
+
+        {crew && (
+          <li className={step(false, false)}>
+            <span className="brm-n">5</span>
+            <div className="brm-step-body">
+              <span className="brm-step-title">Open the project to your crew</span>
+              <pre className="brm-cmd" data-testid="brm-share-repo">{shareRepo}</pre>
+              <div className="brm-row brm-gap">
+                <CopyButton text={shareRepo} label="Copy" />
+                <span className="brm-hint">Run it in Claude Code. It makes the base branch, shares the repo with the room and proposes the first tasks. Every turn is already saved as a git commit here, never pushed.</span>
+              </div>
+            </div>
+          </li>
+        )}
       </ol>
 
       <label className="brm-check brm-field">
@@ -1526,17 +1567,29 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
         <span>Review Claude&apos;s questions before the room sees them<span className="brm-hint brm-block">When off, Claude&apos;s asks open to the room straight away.</span></span>
       </label>
 
-      <h3 className="brm-h5">Prompt cards: paste into Claude Code</h3>
-      <p className="brm-hint">Each is also a command in Claude Code: {PROMPT_CARDS.map((p) => pluginCommand(p.name)).join(', ')} with the plugin, or {slashCommand('kickoff')} and so on without it.</p>
-      <div className="brm-cards">
-        {PROMPT_CARDS.map((p) => (
-          <div className="brm-pcard" key={p.name}>
-            <div className="brm-pt">{p.title} <span className="brm-slash">{pluginCommand(p.name)}</span></div>
-            <p className="brm-pq">{p.text}</p>
-            <CopyButton text={p.text} />
-          </div>
-        ))}
-      </div>
+      <details className="brm-alt">
+        <summary>More commands for later</summary>
+        <p className="brm-hint">Each is a command in Claude Code with the plugin, or a card to paste: {PROMPT_CARDS.map((p) => pluginCommand(p.name)).join(', ')}. Without the plugin they are {slashCommand('kickoff')} and so on.</p>
+        <div className="brm-cards">
+          {PROMPT_CARDS.map((p) => (
+            <div className="brm-pcard" key={p.name}>
+              <div className="brm-pt">{p.title} <span className="brm-slash">{pluginCommand(p.name)}</span></div>
+              <p className="brm-pq">{p.text}</p>
+              <CopyButton text={p.text} />
+            </div>
+          ))}
+        </div>
+      </details>
+
+      {minted && (
+        <details className="brm-alt">
+          <summary>Without the plugin</summary>
+          <p className="brm-hint">One command in the terminal instead, then restart Claude Code. No automatic checkpoints; Claude can still call checkpoint.</p>
+          <pre className="brm-cmd" data-testid="brm-command">{command}</pre>
+          <CopyButton text={command} label="Copy command" />
+        </details>
+      )}
+
       <p className="brm-hint">Game {gameId}. The key is never shown in Present mode.</p>
       <div className="brm-row"><button type="button" className="brm-btn brm-push" onClick={onClose}>Done</button></div>
     </Modal>

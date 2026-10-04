@@ -224,6 +224,13 @@
 }
 .brm .brm-steps li.is-done .brm-n { background: var(--success); color: var(--bg); }
 .brm .brm-steps li.is-wait .brm-n { background: transparent; border: 1.5px dashed var(--primary); color: var(--primary); }
+/* Connect Claude Code: each step carries its own title, command and copy
+   button (ConnectPanel, 2026-10-04). min-width 0 lets a long command scroll
+   inside its box instead of widening the dialog. */
+.brm .brm-steps--connect { gap: 16px; }
+.brm .brm-step-body { flex: 1; min-width: 0; display: grid; gap: 8px; }
+.brm .brm-step-title { font-weight: 700; line-height: 24px; }
+.brm .brm-step-body .brm-cmd { margin: 0; }
 
 /* ---- the stage (the wall) ----------------------------------------------- */
 .brm .brm-stage {
