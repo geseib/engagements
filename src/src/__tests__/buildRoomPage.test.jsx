@@ -524,7 +524,7 @@ describe('the report view', () => {
     serve(hostState());
     window.history.pushState({}, '', `/build?gameId=${GAME}&view=report`);
     render(<BuildRoomPage />);
-    expect(await screen.findByRole('button', { name: /Print \/ Save as PDF/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Print$/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Back to room/ }));
     expect(await screen.findByRole('button', { name: /Present/ })).toBeInTheDocument();
   });

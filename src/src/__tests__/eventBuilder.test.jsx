@@ -498,7 +498,7 @@ describe('deleting the event (final review I1)', () => {
     await mount({ onDeleted });
     startDelete();
     const confirm = screen.getByTestId('delete-confirm');
-    expect(confirm).toHaveTextContent('Delete “Q4 Kickoff”? Its agenda and its join code, 5307, go with it. This cannot be undone.');
+    expect(confirm).toHaveTextContent('Delete “Q4 Kickoff”? Its agenda, its join code, 5307, and the sessions its items ran go with it. Saved reports are kept. This cannot be undone.');
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(within(confirm).getByRole('button', { name: 'Keep it' }));
     expect(screen.queryByTestId('delete-confirm')).toBeNull();

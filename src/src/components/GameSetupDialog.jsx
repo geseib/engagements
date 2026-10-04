@@ -89,7 +89,30 @@ import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOpt
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import Modal from './Modal';
 import PlanLimitNotice from './PlanLimitNotice';
+import { BUILD_KIND, EVENT_KIND, kindLabel } from '../config/engagementKinds';
+import pricing from '../../../lambda-functions/game/pricing';
 import './GameSetupDialog.css';
+
+/*
+  EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04). The owner: events
+  and Build Rooms "have connect to the current systems for creating and
+  editing those types of engagements". Each already has its own setup screen
+  — the new-event dialog and agenda builder, the Build Room setup page — so
+  picking one here does not rebuild it: the set, categories and options give
+  way to one sentence, and the primary button hands the title over to that
+  screen (`onChooseOther`). Create mode only; Event only while events are
+  switched on for the tier (`eventsAccess.enabled`), and on Free it says which
+  plan brings them instead of going on.
+*/
+const OTHER_FORMATS = Object.freeze([BUILD_KIND, EVENT_KIND]);
+const OTHER_LABELS = Object.freeze({
+  [BUILD_KIND]: 'Set up the Build Room',
+  [EVENT_KIND]: 'Continue to the event',
+});
+const OTHER_BLURBS = Object.freeze({
+  [BUILD_KIND]: 'Build something with your Claude Code while the room suggests and votes. You decide. You set the goal on the next screen.',
+  [EVENT_KIND]: `A whole agenda behind one code: quizzes, polls, talks and breaks, in the order you run them. You set the day and place next, then build the agenda. ${pricing.formatCents(pricing.PER_EVENT_CENTS)} an event, counted when it first goes live.`,
+});
 
 export default function GameSetupDialog({
   /*
@@ -115,6 +138,18 @@ export default function GameSetupDialog({
   billingHref = '/admin?section=billing',
   /** What GET /games/{id}/host-details returned — get-game.js's host door. */
   initialValues = null,
+  /**
+   * May this host make an event here? `{ enabled, canCreate, offerPlanName }`
+   * from utils/eventsAccess.js, or null while unknown. Event is offered only
+   * when `enabled`.
+   */
+  eventsAccess = null,
+  /**
+   * (kind, { title }) => void — Event or Build Room was chosen: the page
+   * opens that engagement's own setup screen with the title carried over.
+   * Absent, neither is offered.
+   */
+  onChooseOther,
   isFirstEngagement = true,
   eventTitle = '',
   onEventTitleChange,
@@ -249,7 +284,14 @@ export default function GameSetupDialog({
     else onEventTitleChange?.(value);
   };
 
-  const isCallAndAnswer = normalizeGameType(engagementType) === 'call-and-answer';
+  /** Event or Build Room: set up on its own screen, not by this form. */
+  const isOther = OTHER_FORMATS.includes(engagementType);
+  const otherFormats = isEdit || !onChooseOther ? [] : [
+    BUILD_KIND,
+    ...(eventsAccess && eventsAccess.enabled ? [EVENT_KIND] : []),
+  ];
+  const eventBlocked = engagementType === EVENT_KIND && !(eventsAccess && eventsAccess.canCreate);
+  const isCallAndAnswer = !isOther && normalizeGameType(engagementType) === 'call-and-answer';
 
   // Merged by id, page copy first. A set the host just made exists only in
   // `localSets` until the page next re-reads; a set the page already knows about
@@ -273,7 +315,7 @@ export default function GameSetupDialog({
     "Anonymous responses" card, which `anonymityApplies` already hides because
     a survey holds no vote. Names replaces it.
   */
-  const isSurvey = normalizeGameType(engagementType) === 'survey';
+  const isSurvey = !isOther && normalizeGameType(engagementType) === 'survey';
   const chosenSet = allSets.find((s) => sameSetRef(s, newGameSetRef)) || null;
   /*
     THE GOAL is bounded by the chosen set's size — the version a create pins.
@@ -298,8 +340,10 @@ export default function GameSetupDialog({
   const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, goalBound).error || '');
   // A draft still being written would be lost by a Create pressed now, and a
   // goal the set cannot meet would only be refused by the server.
-  const canCreate = Boolean(newGameSetId) && title.trim().length > 0
-    && !(isCallAndAnswer && briefingWorking) && !goalProblem;
+  const canCreate = isOther
+    ? !eventBlocked
+    : Boolean(newGameSetId) && title.trim().length > 0
+      && !(isCallAndAnswer && briefingWorking) && !goalProblem;
 
   /** The chosen set's own summary prompt, for the Advanced line's claim —
       SessionOptions checks it against the prompt library it reads. */
@@ -308,7 +352,8 @@ export default function GameSetupDialog({
   // The page reloads the voices that suit this format. On mount too, so the
   // default format's list is the one the picker below shows.
   useEffect(() => {
-    onFormatChange?.(engagementType);
+    // Event and Build Room have no voices to load.
+    if (!OTHER_FORMATS.includes(engagementType)) onFormatChange?.(engagementType);
   }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chooseFormat = (typeId) => {
@@ -353,6 +398,10 @@ export default function GameSetupDialog({
 
   const submit = () => {
     if (!canCreate || busy) return;
+    if (isOther) {
+      onChooseOther?.(engagementType, { title: title.trim() });
+      return;
+    }
     // An edit that deselected every category is refused HERE, not sent and
     // bounced: the backend would 400 it, but the host is mid-form and the
     // helper line under the grid already says why.
@@ -440,7 +489,7 @@ export default function GameSetupDialog({
   */
   const footNote = isEdit
     ? 'This session has not started, so nobody can join it yet.'
-    : (isSurvey ? null : 'Nobody can join until you start it.');
+    : (isSurvey || isOther ? null : 'Nobody can join until you start it.');
 
   return (
     <Modal
@@ -508,7 +557,8 @@ export default function GameSetupDialog({
         <div className="form-group">
           <span className="gsd-label" id="gsd-format-label">Format</span>
           <div className="gsd-types" role="group" aria-labelledby="gsd-format-label">
-            {PICKER_GAME_TYPES.map((type) => (
+            {[...PICKER_GAME_TYPES.map((type) => ({ id: type.id, label: type.label })),
+              ...otherFormats.map((id) => ({ id, label: kindLabel(id) }))].map((type) => (
               <button
                 key={type.id}
                 type="button"
@@ -524,7 +574,13 @@ export default function GameSetupDialog({
           {/* `blurb` exists for every type and was rendered nowhere in the
               app — dead data that answers "what is Wavelength?" for the price
               of one line. */}
-          <p className="gsd-blurb">{gameTypeMeta(engagementType).blurb}</p>
+          <p className="gsd-blurb">{isOther ? OTHER_BLURBS[engagementType] : gameTypeMeta(engagementType).blurb}</p>
+          {eventBlocked && (
+            <small className="dialog-help-text" data-testid="gsd-event-plan">
+              {`Events come with the ${(eventsAccess && eventsAccess.offerPlanName) || 'paid plan'}. `}
+              <a href={billingHref}>See plans</a>
+            </small>
+          )}
           {isEdit && (
             /* DISABLED, NOT HIDDEN, AND THE NOTE SAYS WHY. The format and set
                pin derived rows at create time (question-set version, the
@@ -539,6 +595,7 @@ export default function GameSetupDialog({
           )}
         </div>
 
+        {!isOther && (
         <div className="gsd-row">
           <div className="form-group">
             <label htmlFor="gsd-set">Question set</label>
@@ -620,6 +677,7 @@ export default function GameSetupDialog({
             />
           )}
         </div>
+        )}
 
         {/*
           WORKIE'S BRIEFING — main view, Call & Answer only (mockups 01, 03).
@@ -636,6 +694,7 @@ export default function GameSetupDialog({
           (events M1b). Always rendered, so a value set and folded away is
           still in the form.
         */}
+        {!isOther && (
         <SessionOptions
           idPrefix="gsd"
           gameType={engagementType}
@@ -657,6 +716,7 @@ export default function GameSetupDialog({
           questionCount={chosenCount}
           boundBySize={!isEdit}
         />
+        )}
       </div>
 
       {/*
@@ -734,7 +794,8 @@ export default function GameSetupDialog({
           >
             {busy
               ? (isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…'))
-              : (isEdit ? 'Save changes' : (isSurvey ? 'Open the survey' : 'Create engagement'))}
+              : (isEdit ? 'Save changes' : (OTHER_LABELS[engagementType]
+                || (isSurvey ? 'Open the survey' : 'Create engagement')))}
           </button>
         </div>
       )}

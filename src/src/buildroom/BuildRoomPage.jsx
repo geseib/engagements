@@ -243,14 +243,15 @@ export function OpenLink({ href, label, primary = false }) {
 export default function BuildRoomPage() {
   const params = new URLSearchParams(window.location.search);
   const gameId = (params.get('gameId') || '').trim();
-  if (!gameId) return <BuildCreate />;
+  // The create screen's Build Room format carries the typed title over.
+  if (!gameId) return <BuildCreate initialTitle={(params.get('title') || '').slice(0, 120)} />;
   return <BuildRoom gameId={gameId} initialView={params.get('view') === 'report' ? 'report' : 'room'} />;
 }
 
 // ── Create ──────────────────────────────────────────────────────────────────
 
-export function BuildCreate({ navigate = (url) => window.location.assign(url) }) {
-  const [title, setTitle] = useState('');
+export function BuildCreate({ navigate = (url) => window.location.assign(url), initialTitle = '' }) {
+  const [title, setTitle] = useState(initialTitle);
   const [goal, setGoal] = useState('');
   const [visibility, setVisibility] = useState('public');
   const [accessCode, setAccessCode] = useState('');

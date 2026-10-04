@@ -119,11 +119,11 @@ test('Ideas from the room and who took part', () => {
   ['Ana', 'Jordan', 'Sam'].forEach((name) => expect(within(people).getByText(name)).toBeInTheDocument());
 });
 
-test('Print / Save as PDF calls window.print, and Back calls onBack', () => {
+test('Print calls window.print, and Back calls onBack', () => {
   const print = jest.spyOn(window, 'print').mockImplementation(() => {});
   const onBack = jest.fn();
   render(<BuildReport state={state()} onBack={onBack} />);
-  fireEvent.click(screen.getByRole('button', { name: /Print \/ Save as PDF/ }));
+  fireEvent.click(screen.getByRole('button', { name: /^Print$/ }));
   expect(print).toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: /Back to room/ }));
   expect(onBack).toHaveBeenCalled();

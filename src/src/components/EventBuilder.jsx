@@ -683,7 +683,7 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
         {confirmingDelete ? (
           <div className="evb-confirm" data-testid="delete-confirm">
             <p>
-              Delete “{event.title}”? Its agenda and its join code, {event.code}, go with it. This cannot be undone.
+              Delete “{event.title}”? Its agenda, its join code, {event.code}, and the sessions its items ran go with it. Saved reports are kept. This cannot be undone.
             </p>
             <button type="button" ref={keepRef} className="evb-btn" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Keep it</button>
             <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={removeEvent} disabled={deleting}>

@@ -15,15 +15,26 @@
  * room stays a count. It reads `state.crew`, which GET build/state carries as
  * `crewView(room, 'host')` (lambda-functions/game/build-crew.js).
  *
- * A pure function of HostState (build-store.js `hostView`). Host notes are
+ * SAVED LIKE ANY SESSION'S REPORT (2026-10-04). It used to be print-only, so
+ * it lasted exactly as long as the room's rows (7 days from start) and never
+ * reached Reports. Save report keeps it as a PDF for 90 days or a year through
+ * the same save-report route and helper the session report uses
+ * (utils/saveReport.js): one report per room, a link and a passkey
+ * (ReportSavedDialog), listed in Reports as a Build Room. The keep choice is
+ * inline in the bar, not a dialog over the report it is about.
+ *
+ * Otherwise a pure function of HostState (build-store.js `hostView`). Host notes are
  * left out: a `note` is never shown to the room, and a report gets handed
  * round. Everything Claude or a phone wrote renders as text; links only when
  * http(s).
  */
-import React from 'react';
+import React, { useState } from 'react';
 import BuildImage from './BuildImage';
 import Icon from '../components/Icon';
-import { safeHref } from './buildHostApi';
+import ReportSavedDialog from '../components/ReportSavedDialog';
+import { saveReportPdf } from '../utils/saveReport';
+import { unexpectedSaveMessage } from '../config/reportPdf';
+import { safeHref, apiBase } from './buildHostApi';
 import './BuildReport.css';
 
 const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate 1–5' };
@@ -212,6 +223,32 @@ function Decision({ ask }) {
 
 export default function BuildReport({ state, onBack }) {
   const s = state || {};
+  const [choosing, setChoosing] = useState(false);
+  const [keepYear, setKeepYear] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(null);
+  const [saveError, setSaveError] = useState('');
+
+  const save = async () => {
+    if (saving || !s.gameId) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const result = await saveReportPdf({
+        element: document.querySelector('.brr-sheet'),
+        gameId: s.gameId,
+        title: s.title || 'Build Room',
+        permanent: keepYear,
+        apiBase: apiBase(),
+      });
+      setChoosing(false);
+      setSaved(result);
+    } catch (err) {
+      setSaveError((err && err.hostMessage) || unexpectedSaveMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
   const log = (s.log || []).filter((l) => l.kind !== 'note');
   const asks = (s.asks || []).filter((a) => !['proposed', 'discarded'].includes(a.status));
   const ideas = s.ideas || [];
@@ -235,10 +272,43 @@ export default function BuildReport({ state, onBack }) {
             <Icon name="ArrowLeft" size={14} /> Back to room
           </button>
         )}
-        <button type="button" className="brr-btn" onClick={() => window.print()}>
-          <Icon name="FilePdf" size={14} /> Print / Save as PDF
+        <button type="button" className="brr-btn brr-btn--ghost" onClick={() => window.print()}>
+          <Icon name="Printer" size={14} /> Print
         </button>
+        {s.gameId && (
+          <button
+            type="button"
+            className="brr-btn"
+            onClick={() => { setSaveError(''); setChoosing(true); }}
+            disabled={saving || choosing}
+            aria-expanded={choosing}
+            aria-controls="brr-keep"
+          >
+            <Icon name="FloppyDisk" size={14} /> {saving ? 'Saving…' : 'Save report'}
+          </button>
+        )}
       </div>
+      {choosing && (
+        <div className="brr-keep" id="brr-keep" role="group" aria-labelledby="brr-keep-q">
+          <p className="brr-keep-q" id="brr-keep-q">How long should it be kept? It is listed in Reports either way.</p>
+          <label className="brr-keep-opt">
+            <input type="radio" name="brr-keep" checked={!keepYear} onChange={() => setKeepYear(false)} />
+            <span><b>Keep for 90 days</b> Deleted automatically 90 days after you save it.</span>
+          </label>
+          <label className="brr-keep-opt">
+            <input type="radio" name="brr-keep" checked={keepYear} onChange={() => setKeepYear(true)} />
+            <span><b>Keep for 1 year</b> Deleted automatically a year after you save it.</span>
+          </label>
+          <div className="brr-keep-acts">
+            <button type="button" className="brr-btn brr-btn--ghost" onClick={() => setChoosing(false)} disabled={saving}>Cancel</button>
+            <button type="button" className="brr-btn" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          </div>
+          {saveError && <p className="brr-keep-err" role="alert">{saveError}</p>}
+        </div>
+      )}
+      {saved && (
+        <ReportSavedDialog saved={saved} gameId={s.gameId} onClose={() => setSaved(null)} />
+      )}
       <article className="brr-sheet">
         <div className="brr-kick">Build Room report{date ? ` · ${date}` : ''}{first ? ` · ${hhmm(first)}–${hhmm(last)}` : ''}</div>
         <h1>{s.title || 'Build Room'}</h1>
