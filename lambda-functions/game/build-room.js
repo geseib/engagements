@@ -401,7 +401,7 @@ async function gateArtifactDelete(ctx, body, target, detail) {
       detail: { room: ctx.gameId, ...(detail || {}) },
     });
   } catch (error) {
-    console.error(`❌ BUILD ROOM: the audit entry for ${target.type} ${target.id} could not be written; nothing was deleted:`, error && error.message);
+    console.error(`BUILD ROOM: the audit entry for ${target.type} ${target.id} could not be written; nothing was deleted:`, error && error.message);
     return fail(500, 'Could not record who is deleting this, so nothing was deleted. Try again.');
   }
   return null;

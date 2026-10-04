@@ -112,7 +112,7 @@ exports.handler = async (event) => {
     WHO MAY (the owner, 2026-10-04): an owner or admin of this organisation,
     or Engage staff giving a reason. Nobody else — there is no host of "all
     the sessions". The route was staff-only before (the authorizer's default
-    for /admin/*); it is now open to hosts so an org's own owner and admins can
+    for admin routes); it is now open to hosts so an org's own owner and admins can
     reach it, and this is the check that decides.
   */
   let body = {};

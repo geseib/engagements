@@ -106,7 +106,7 @@ async function twoItems(code) {
   console.log('\n2. the session routes leave an event\'s sessions to the event');
   await check('clear-game refuses an item session, says which event, and deletes nothing', async () => {
     const before = rowsOf(`GAME#${frictionGame}`).length;
-    const res = await clearGame({ pathParameters: { gameId: frictionGame }, requestContext: asHost(NW, { groups: 'admins,hosts' }) });
+    const res = await clearGame({ pathParameters: { gameId: frictionGame }, requestContext: asHost(NW, { groups: 'hosts', orgRole: 'admin' }) });
     assert.strictEqual(res.statusCode, 409, res.body);
     const body = bodyOf(res);
     assert.strictEqual(body.code, 'event_item');
@@ -124,7 +124,7 @@ async function twoItems(code) {
     const legacy = table.get(`ORG#${NW}#GAMES`, `GAME#${frictionGame}`);
     delete legacy.EventRef; delete legacy.EventItem;
     table.put(legacy);
-    const res = await clearAll({ requestContext: { ...asHost(NW, { groups: 'admins' }), http: { method: 'POST' } } });
+    const res = await clearAll({ requestContext: { ...asHost(NW, { groups: 'hosts', orgRole: 'admin' }), http: { method: 'POST' } } });
     assert.strictEqual(res.statusCode, 200, res.body);
     const body = bodyOf(res);
     assert.strictEqual(body.sessionsDeleted, 1);

@@ -136,6 +136,11 @@ const parse = (res) => JSON.parse(res.body);
   no sessions, and the handler correctly deletes nothing.
 */
 const ORG = 'org_9xK4Fq7Pz2mNbVc8dQwLxR';
+/* An owner of the organisation: since 2026-10-04 a delete is the creator's,
+   an org owner's or admin's, or Engage staff's with a reason
+   (tests/delete-authorization.js has every role). This suite is about paging
+   and retries, so it deletes as the owner. */
+const OWNER = { requestContext: { authorizer: { lambda: { userId: 'u1', groups: 'hosts', orgId: ORG, orgIds: ORG, orgRole: 'owner' } } } };
 
 function seedGame(gameId, { players = 10, responses = 30, orgId = ORG } = {}) {
   put({ PK: 'GAMES', SK: `GAME#${gameId}`, gameId, orgId });
@@ -163,7 +168,7 @@ function check(label, fn) {
   queryPageSize = 50;                       // 161 rows => 4 pages
   {
     const before = rowsIn('GAME#4242').length;
-    const res = await deleteGame.handler({ pathParameters: { gameId: '4242' } });
+    const res = await deleteGame.handler({ ...OWNER, pathParameters: { gameId: '4242' } });
     check('delete-game returns 200', () => assert.strictEqual(res.statusCode, 200, res.body));
     check('delete-game follows LastEvaluatedKey', () =>
       assert(log.filter((c) => c.type === 'query').length >= 4,
@@ -188,7 +193,7 @@ function check(label, fn) {
   seedGame('7777', { players: 10, responses: 40 });
   {
     deferOnce = new Set(['GAME#7777|RESPONSE#012', 'GAME#7777|PLAYER#3']);
-    const res = await deleteGame.handler({ pathParameters: { gameId: '7777' } });
+    const res = await deleteGame.handler({ ...OWNER, pathParameters: { gameId: '7777' } });
     check('delete-game retries UnprocessedItems rather than dropping them', () =>
       assert(res.statusCode === 200 && rowsIn('GAME#7777').length === 0,
         `status=${res.statusCode} left=${rowsIn('GAME#7777').length}`));
@@ -207,7 +212,7 @@ function check(label, fn) {
        — it used to Scan the whole table and take every tenant's sessions with
        it. See tests/clear-sessions-scoped.js and tenant-session-scoping.js. */
     const res = await clearAll.handler({
-      requestContext: { authorizer: { lambda: { userId: 'u1', groups: 'admins,hosts', orgId: ORG } } },
+      requestContext: { authorizer: { lambda: { userId: 'u1', groups: 'admins,hosts', orgId: ORG, orgRole: 'owner' } } },
     });
     check('clear-all-games returns 200', () => assert.strictEqual(res.statusCode, 200, res.body));
     check('clear-all-games retries UnprocessedItems rather than dropping them', () => {
