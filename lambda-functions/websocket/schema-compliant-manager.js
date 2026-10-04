@@ -183,6 +183,13 @@ const createGame = async (gameId, gameData) => {
           // games pinned to a version with ONE Query of an org's partition
           // instead of a GetItem per game.
           ...(pinnedVersion !== null ? { QuestionSetVersion: pinnedVersion } : {}),
+          // AN EVENT'S ITEM SESSION SAYS SO ON ITS LIST ROW (2026-10-04,
+          // events and Build Rooms integration). The owner: an event is ONE
+          // row in every list, and its items' sessions are never listed a
+          // second time. get-games-list.js reads these to leave the row out
+          // of the top level and file it under its event. Plaintext ids, as
+          // on METADATA.
+          ...(gameData.eventRef ? { EventRef: gameData.eventRef, EventItem: gameData.eventItem || '' } : {}),
           Visibility: gameData.visibility || 'public',
           AccessCode: gameData.accessCode || null,
           Started: false, // Game is created but not started
