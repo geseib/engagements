@@ -249,7 +249,15 @@ rule to option 2: an idea put to a vote by the host +2, and +5 if it wins.
 | Wrapped stage | The History screen's closing side column (C12) |
 | Dialogs: Connect, Wrap up, Crew, Early look, End, Compose | Unchanged; Compose also opens from "Ask the room" |
 
-## 11. Questions for the owner
+## 11. Owner rulings so far (2026-10-05)
+
+- **Mockups before a vote: auto-open is on by default.** With "mockups first", the vote
+  opens to the room by itself when the last picture arrives. The host can turn it off per
+  vote in the dialog (C3b shows that case).
+- **The default vote is Pick one (A, B, C).** Pick up to 2 and Rate each stay available in
+  the dialog.
+
+## 12. Questions for the owner
 
 1. **The shape.** One queue, one composer, one History, and four screens (Host, Stage,
    Build, History) in a header. Is that the direction?
@@ -258,8 +266,8 @@ rule to option 2: an idea put to a vote by the host +2, and +5 if it wins.
    ask's text and names be hidden until hovered?
 3. **Switching screens for the host.** When an ask opens, should the room's view switch to
    Stage by itself? And when the host sends a direction, should it go back to Build?
-4. **Putting ideas to a vote.** Should the room choose one (A/B/C), pick up to two, or
-   rate each? The mockup offers all three; one default is simpler.
+4. ~~**Putting ideas to a vote.**~~ Answered by the owner, 2026-10-05: **Pick one (A/B/C)
+   is the default**; Pick up to 2 and Rate each stay as choices in the dialog.
 5. **The Build screen.** Is it fine that it needs a one-time browser permission and does
    not work in Safari, with the new-tab fallback? See PLAN step 0 for the spike.
 6. **History on phones.** Show everything the wall shows, or decisions and pictures only?

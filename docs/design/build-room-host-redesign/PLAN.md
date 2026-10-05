@@ -1,6 +1,6 @@
 # Build Room host redesign: build plan (second pass)
 
-Prerequisite: the owner has answered `RATIONALE.md` §11, at least questions 1, 2 and 5.
+Prerequisite: the owner has answered `RATIONALE.md` §12, at least questions 1, 2 and 5.
 
 Every step ships on its own and leaves the page working. Verify each one with:
 
@@ -91,7 +91,8 @@ A push to `dev` deploys; push finished steps only (CLAUDE.md).
 - New in the backend:
   - a host-created idea (`Source: 'host'`) for Queue it;
   - an idea status `later`;
-  - `POST build/asks-from-ideas` (`{ ideaIds, kind: choice|rating, prompt, open, askForMockups, openWhenReady }`),
+  - `POST build/asks-from-ideas` (`{ ideaIds, kind: choice|rating, maxPicks, prompt, open, askForMockups, openWhenReady }`),
+    defaulting to `kind: choice`, `maxPicks: 1` (Pick one) and `openWhenReady: true` (owner, 2026-10-05),
     which creates the ask and marks the ideas promoted.
     - With `askForMockups`, the ask is created **proposed**, so the room cannot see it,
       and today's "make a mockup of each, attach it to its option" direction is posted to

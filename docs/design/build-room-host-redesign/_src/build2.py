@@ -186,7 +186,7 @@ def p_c3():
     modal = '''<div class="scrim" style="bottom:0;z-index:60"></div><div style="position:absolute;z-index:61;left:50%;top:120px;transform:translateX(-50%);width:620px;background:var(--m-drawer);border:1px solid var(--m-rule);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 30px 70px rgba(0,0,0,.5)">
 <div class="row"><h3 style="margin:0;font:800 19px/1.2 var(--font-ui)">Put 3 ideas to a vote</h3><span class="x push" style="width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted)">×</span></div>
 <label><span class="lbl">Question for the room</span><input class="in" value="Which should Claude build next?"></label>
-<div><span class="lbl">How people vote</span><div class="row"><span class="fold is-in">Pick one (A, B, C)</span><span class="fold">Pick up to 2</span><span class="fold">Rate each 1 to 5</span></div></div>
+<div><span class="lbl">How people vote <span style="color:var(--muted)">· Pick one is the default</span></span><div class="row"><span class="fold is-in">Pick one (A, B, C)</span><span class="fold">Pick up to 2</span><span class="fold">Rate each 1 to 5</span></div></div>
 <ul class="list"><li><span class="L" style="width:26px;height:26px;font-size:15px;border-radius:6px">A</span><span class="grow">Text a reminder the day before</span><span class="who">Dee</span></li><li><span class="L L--b" style="width:26px;height:26px;font-size:15px;border-radius:6px">B</span><span class="grow">Put the address and a map link at the top</span><span class="who">Jo</span></li><li><span class="L L--c" style="width:26px;height:26px;font-size:15px;border-radius:6px">C</span><span class="grow">Let people sign up as a pair</span><span class="who">Lee</span></li></ul>
 <p class="hint">Names are not shown to the room. When you decide, the winner goes to Claude as a direction and each idea is marked as used or not.</p>
 <div class="row"><span class="switch on"><i></i>Ask Claude for a quick mockup of each first</span></div>
@@ -218,7 +218,7 @@ def q_vote(state):
         thumbs = ('<figure><img src="img/choice-a.svg" alt=""><figcaption><b>A</b> Text a reminder the day before</figcaption></figure>'
                   '<figure><img src="img/choice-b.svg" alt=""><figcaption><b>B</b> Address and map link at the top</figcaption></figure>'
                   '<figure><img src="img/preview.svg" alt="" style="aspect-ratio:640/336;object-fit:cover;object-position:top"><figcaption><b>C</b> Sign up as a pair</figcaption></figure>')
-        note = '<div class="hint">You turned off "open by itself", so it waits for you. Check the pictures, then open it.</div>'
+        note = '<div class="hint">Open-by-itself is on by default; this host turned it off for this vote, so it waits. Check the pictures, then open it.</div>'
         acts = '<span class="btn btn--sm btn--primary">Open to the room</span><span class="btn btn--sm">Answer for the room</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--danger-text)">Discard</span>'
         cls = ' is-wait'
     return (f'<div class="q-item{cls}"><div class="q-top"><span class="srcdot srcdot--you">Y</span><span class="src">Your vote, from 3 ideas</span>{top}</div>'
@@ -244,7 +244,7 @@ def p_c3b():
          [(1, 'The vote is a proposed ask with empty pictures', 'It behaves like one of Claude\'s proposed asks today: the room cannot see it, each option fills in as Claude calls share_image with its askId and letter, and the card counts "1 of 3".'),
           (2, 'Three ways out while it waits', '<b>Open now, without the rest</b> if Claude is slow or the room is ready (options without a picture show their words only, as today). <b>Edit</b> the question or the options. <b>Cancel the vote</b>: the ideas go back to the queue.'),
           (3, 'The room is not left staring', 'The Stage keeps showing Claude at work, and Now says what it is doing: making the mockups.'),
-          (4, 'Ready: open it, or it already opened', 'With "open it as soon as all 3 are in" on, the last picture opens the vote and the ask pill appears in the header (and the room\'s screen can jump to Stage, owner question 3). With it off, the card turns green and waits for the host, as here.')])
+          (4, 'Ready: it opens itself (the default), or waits', 'Open-by-itself is on by default (owner, 2026-10-05). The last picture opens the vote and the ask pill appears in the header (and the room\'s screen can jump to Stage, owner question 3). Turned off for a vote, the card turns green and waits for the host, as drawn here.')])
 
 
 def now_live():
