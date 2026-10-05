@@ -20,7 +20,7 @@
  *   ENGAGE_POLL_MS  (optional) wait_for_room poll interval in ms, default 3000
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -1471,6 +1471,7 @@ const PROMPTS = [
     ] },
   { name: 'wrap-up', description: 'Summarise what was built, write the session outcome and post a final milestone.', arguments: [] },
   { name: 'continue', description: 'Pick up the host\'s latest direction from the Build Room and keep going; then listen for the next one.', arguments: [] },
+  { name: 'preview', description: 'Build and serve a local preview of the work so far, put the link on the host\'s screen, and screenshot it for the room.', arguments: [] },
   { name: 'join', description: 'Builder: join the crew from this folder. Get the room\'s code and base branch, make your branch, run it, report to the board, and pick a task.',
     arguments: [{ name: 'key', description: 'Your builder key from your phone (eng_…); leave out if this project is already connected', required: false }] },
   { name: 'early-look', description: 'Builder: screenshot what you have running and share it as an early look (or its next version).',
@@ -1526,6 +1527,16 @@ function promptText(name, args) {
         '7. Implement the host\'s direction — it is final and may combine variants or add the room\'s comments. Remove the badges from the result, clean up the throwaway variants, and post_update when it is in place.',
       ].join('\n');
     }
+    case 'preview':
+      return [
+        'Show the room the work so far, running.',
+        '',
+        '1. Work out how this project runs. In order of preference: the project\'s own dev server (a "dev" or "start" script in package.json, or the framework\'s usual command); a build step and then a static server for its output folder; or, for plain HTML, a static server for the folder (npx serve, or python3 -m http.server).',
+        '2. If it is already running from earlier in this session, reuse it. Otherwise install what is missing, start it in the background on a free port, and wait until the page answers (curl the URL).',
+        '3. post_update with kind "showing", one line for the room saying what they are looking at, and link set to the local URL. The host gets an Open button for it on the big screen.',
+        '4. Screenshot the main page (e.g. npx playwright screenshot --viewport-size=1280,800 <url> preview.png) and share_image it with kind "progress", so phones see it too.',
+        '5. Tell me the URL in one line. If it cannot run yet, say plainly what is missing instead of guessing.',
+      ].join('\n');
     case 'wrap-up':
       return [
         'We are wrapping up the Build Room session.',
@@ -1868,6 +1879,111 @@ async function hookCheckpoint() {
   } catch (e) { log('checkpoint post failed:', e.message); }
 }
 
+// ---------------------------------------------------------------------------
+// What Claude is doing, live (owner, 2026-10-04)
+// ---------------------------------------------------------------------------
+//
+// The plugin's PostToolUse hook (--activity) turns each tool Claude uses into
+// ONE plain line for the room and appends it to .engage/activity.jsonl in a
+// connected project (git-ignored with the rest of .engage/). It makes no
+// network call, so it costs Claude a node start and nothing else. This
+// server, already running beside Claude, sends new lines every few seconds.
+//
+// The room may be watching on a projector, so a line says what KIND of thing
+// happened and to which file, never what is in it: a file's name, a command's
+// program and subcommand ("npm test", "git commit"), a website's host. Never a
+// command's arguments, a search pattern, or anything a tool returned.
+const activityFile = (dir = projectDir()) => pathJoin(dir, '.engage', 'activity.jsonl');
+const ACTIVITY_MS = Math.max(200, Number(process.env.ENGAGE_ACTIVITY_MS) || 4000);
+const ACTIVITY_FILE_MAX = 64 * 1024; // the server is not sending: stop growing
+const PROGRAMS_WITH_SUBCOMMANDS = ['npm', 'npx', 'pnpm', 'yarn', 'bun', 'deno', 'git', 'gh', 'node', 'python', 'python3', 'pip', 'uv', 'make', 'docker', 'cargo', 'go'];
+const WORD = /^[a-z][a-z0-9:_.-]{0,30}$/;
+
+/** "FOO=1 cd app && npm run dev -- --port 3000" -> "npm run dev". '' when unsure. */
+export function commandName(command) {
+  const segments = String(command || '').split(/&&|\|\||;|\|/).map((x) => x.trim().split(/\s+/).filter(Boolean));
+  for (const tokens of segments) {
+    let i = 0;
+    while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i += 1; // FOO=bar prefixes
+    const prog = String(tokens[i] || '').split('/').pop();
+    if (!prog || prog === 'cd' || prog === 'export' || prog === 'source') continue;
+    if (!/^[A-Za-z0-9._-]{1,30}$/.test(prog)) return '';
+    const next = tokens[i + 1] || '';
+    if (PROGRAMS_WITH_SUBCOMMANDS.includes(prog) && WORD.test(next)) {
+      const third = tokens[i + 2] || '';
+      return ['run', 'exec', 'x'].includes(next) && WORD.test(third) ? `${prog} ${next} ${third}` : `${prog} ${next}`;
+    }
+    return prog;
+  }
+  return '';
+}
+
+/** One plain line from a PostToolUse hook's input, or null to show nothing. */
+export function activityLine(data) {
+  const tool = String((data && data.tool_name) || '');
+  const input = (data && data.tool_input) || {};
+  const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || 'a file';
+  // Engage's own tools already show up as what they post; another server's
+  // tools could carry anything, so they are left out.
+  if (tool.startsWith('mcp__')) return null;
+  switch (tool) {
+    case 'Edit': case 'MultiEdit': return { kind: 'edit', text: `Edited ${base(input.file_path)}` };
+    case 'NotebookEdit': return { kind: 'edit', text: `Edited ${base(input.notebook_path)}` };
+    case 'Write': return { kind: 'edit', text: `Wrote ${base(input.file_path)}` };
+    case 'Read': return { kind: 'read', text: `Read ${base(input.file_path)}` };
+    case 'Glob': case 'Grep': case 'LS': return { kind: 'search', text: 'Searched the code' };
+    case 'Bash': { const c = commandName(input.command); return { kind: 'run', text: c ? `Ran ${c}` : 'Ran a command' }; }
+    case 'WebFetch': {
+      let host = '';
+      try { host = new URL(String(input.url || '')).hostname; } catch { /* not a URL */ }
+      return { kind: 'web', text: host ? `Looked at ${host}` : 'Looked something up online' };
+    }
+    case 'WebSearch': return { kind: 'web', text: 'Searched the web' };
+    case 'Task': case 'Agent': return { kind: 'agent', text: 'Asked a helper agent' };
+    case 'TodoWrite': return { kind: 'plan', text: 'Updated its to-do list' };
+    default: return null;
+  }
+}
+
+/** --activity: the PostToolUse hook. Never fails the tool, never prints. */
+function hookActivity() {
+  let data = {};
+  try { data = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { /* not JSON */ }
+  const dir = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
+  if (!existsSync(sessionFile(dir))) return; // not a Build Room project: touch nothing
+  const line = activityLine(data);
+  if (!line) return;
+  const file = activityFile(dir);
+  try { if (statSync(file).size > ACTIVITY_FILE_MAX) return; } catch { /* no file yet */ }
+  appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...line }) + '\n');
+}
+
+/** Send what the hook wrote since the last round. One round at a time. */
+let pumping = false;
+async function pumpActivity() {
+  if (pumping) return;
+  pumping = true;
+  try {
+    const file = activityFile();
+    let raw = '';
+    try { raw = readFileSync(file, 'utf8'); } catch { return; }
+    if (!raw.trim()) return;
+    writeFileSync(file, ''); // taken; a line the hook writes between these two calls is dropped (rare, harmless)
+    reloadConfig();
+    if (CONFIG.problems.length) return;
+    const items = raw.split('\n').filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((x) => x && x.text).slice(-25);
+    // The server never hands over Claude's inbox on this route (build-room.js),
+    // so ignoring the answer cannot swallow a direction.
+    if (items.length) await api('POST', 'activity', { items }, AbortSignal.timeout(8000));
+  } catch (e) {
+    log('activity post failed:', e && e.message);
+  } finally {
+    pumping = false;
+  }
+}
+
 /**
  * --install-plugin [--api <url>]: make sure this laptop has THIS version of
  * the Engage plugin for Claude Code. One command, run every time from the
@@ -1918,8 +2034,12 @@ function writePlugin(home, root, plug) {
   });
   w(pathJoin(plug, '.mcp.json'), { mcpServers: { engage: { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs'] } } });
   w(pathJoin(plug, 'hooks', 'hooks.json'), {
-    description: 'Checkpoint the work in git at the end of every turn, in projects connected to a Build Room.',
-    hooks: { Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --checkpoint', timeout: 60 }] }] },
+    description: 'In projects connected to a Build Room: a git checkpoint at the end of every turn, and one plain line per tool for the room\'s live view.',
+    hooks: {
+      Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --checkpoint', timeout: 60 }] }],
+      // One plain line per tool for the room's live view (hookActivity).
+      PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
+    },
   });
   copyFileSync(fileURLToPath(import.meta.url), pathJoin(plug, 'engage-mcp.mjs'));
   const cmd = (name, description, hint, body) => w(pathJoin(plug, 'commands', `${name}.md`),
@@ -2117,13 +2237,22 @@ function dispatch(msg) {
   });
 }
 
-const CLI = process.argv.includes('--install-plugin') ? 'install' : process.argv.includes('--checkpoint') ? 'checkpoint' : null;
+const CLI = process.argv.includes('--install-plugin') ? 'install' : process.argv.includes('--checkpoint') ? 'checkpoint' : process.argv.includes('--activity') ? 'activity' : null;
 if (CLI === 'install') {
   try { installPlugin(process.argv); } catch (e) { process.stderr.write(`Install failed: ${e.message}\n`); process.exit(1); }
   process.exit(0);
 }
 if (CLI === 'checkpoint') {
   hookCheckpoint().catch((e) => log('checkpoint hook:', e && e.message)).finally(() => process.exit(0));
+}
+if (CLI === 'activity') {
+  try { hookActivity(); } catch (e) { log('activity hook:', e && e.message); }
+  process.exit(0);
+}
+// The live-activity pump, only while running as Claude's MCP server.
+if (!CLI) {
+  const t = setInterval(pumpActivity, ACTIVITY_MS);
+  if (t.unref) t.unref();
 }
 
 let buffer = '';

@@ -190,7 +190,10 @@ const hardStop = setTimeout(() => {
   });
   await check('prompts/list and prompts/get kickoff', async () => {
     const l = await mcp.request('prompts/list', {});
-    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'join', 'early-look', 'review', 'share-repo']);
+    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'preview', 'join', 'early-look', 'review', 'share-repo']);
+    // Preview the work (owner, 2026-10-04): serve it, link it, screenshot it.
+    const pv = (await mcp.request('prompts/get', { name: 'preview' })).result.messages[0].content.text;
+    assert.ok(/dev server/.test(pv) && /kind "showing"/.test(pv) && /share_image/.test(pv), pv);
     const g = await mcp.request('prompts/get', { name: 'kickoff' });
     const m = g.result.messages[0];
     assert.strictEqual(m.role, 'user');

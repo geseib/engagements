@@ -118,6 +118,7 @@ const timeKey = (iso) => `${String(Date.parse(iso) || Date.now()).padStart(13, '
 
 const SK = Object.freeze({
   state: 'BUILD#STATE',
+  activity: 'BUILD#ACTIVITY',
   ask: (askId) => `BUILD#ASK#${askId}`,
   resp: (askId, respId) => `BUILD#RESP#${askId}#${respId}`,
   ans: (askId, player) => `BUILD#ANS#${askId}#${player}`,
@@ -152,6 +153,7 @@ const imageKey = (gameId, imageId) => `builds/${gameId}/${imageId}`;
 /** Which tenant-crypto entity a BUILD# row belongs to (null = nothing sealed). */
 function entityForSk(sk) {
   if (sk === SK.state) return 'buildState';
+  if (sk === SK.activity) return 'buildActivity';
   if (sk.startsWith('BUILD#ASK#')) return 'buildAsk';
   if (sk.startsWith('BUILD#RESP#') || sk.startsWith('BUILD#ANS#')) return 'buildResponse';
   if (sk.startsWith('BUILD#LOG#')) return 'buildLog';
@@ -298,12 +300,13 @@ function transition(ask, action) {
 /** Sort every BUILD# row into its kind. Rows must already be decrypted. */
 function roomFromRows(rows) {
   const room = {
-    state: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
+    state: null, activity: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
     builders: [], tasks: [], shares: [], comments: [], reviews: [],
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
     if (sk === SK.state) room.state = r;
+    else if (sk === SK.activity) room.activity = r;
     else if (sk.startsWith('BUILD#ASK#')) room.asks.push(r);
     else if (sk.startsWith('BUILD#RESP#')) room.resps.push(r);
     else if (sk.startsWith('BUILD#ANS#')) room.answers.push(r);
@@ -480,7 +483,7 @@ function optionImages(room, askId) {
 }
 
 function ideaView(r) {
-  return { ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null };
+  return { ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null, aboutLogId: r.AboutLogId || null };
 }
 
 function outcomeView(o) {
@@ -535,6 +538,42 @@ const settingsOf = (stateRow) => ({
 });
 
 /** What the host (and Claude) sees: everything. */
+// ── What Claude Code is doing (owner, 2026-10-04) ─────────────────────────
+// The plugin's PostToolUse hook writes one plain line per tool Claude uses
+// ("Edited Header.jsx", "Ran npm test"); its server sends them here in
+// batches. One row holds the latest few: it is a live view, not a record, so
+// it never reaches the timeline, the report or a phone.
+const ACTIVITY_KINDS = Object.freeze(['edit', 'read', 'run', 'search', 'web', 'agent', 'plan', 'other']);
+const ACTIVITY_KEEP = 12;
+const ACTIVITY_PER_POST = 25;
+
+/** A posted batch, cleaned: known kinds, short plain text, a sane time. */
+function normalizeActivity(items, nowIso) {
+  if (!Array.isArray(items)) return { error: 'items must be a list' };
+  const now = Date.parse(nowIso);
+  const out = [];
+  for (const it of items.slice(-ACTIVITY_PER_POST)) {
+    if (!it || typeof it !== 'object') continue;
+    const text = cleanText(it.text, 120).replace(/\s+/g, ' ');
+    if (!text) continue;
+    const kind = ACTIVITY_KINDS.includes(it.kind) ? it.kind : 'other';
+    const t = Date.parse(it.at);
+    // A laptop clock can be off; never in the future, never older than an hour.
+    const at = new Date(Number.isFinite(t) ? Math.min(Math.max(t, now - 3600000), now) : now).toISOString();
+    out.push({ at, kind, text });
+  }
+  return { value: out };
+}
+
+/** The kept list after a batch: newest last, at most ACTIVITY_KEEP. */
+function mergeActivity(kept, incoming) {
+  return [...(Array.isArray(kept) ? kept : []), ...incoming]
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+    .slice(-ACTIVITY_KEEP);
+}
+
+const activityView = (row) => ((row && Array.isArray(row.Items)) ? row.Items.slice(-ACTIVITY_KEEP) : []);
+
 function hostView({ gameId, meta, sessionState, room, players, now, audience = 'host' }) {
   const isAgent = audience === 'agent';
   return {
@@ -546,6 +585,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     playerCount: players.length,
     settings: settingsOf(room.state),
     agent: agentStatus(room.state, room.keys, now),
+    activity: activityView(room.activity),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
     // Host notes are the host's own; Claude never sees them.
@@ -655,6 +695,7 @@ module.exports = {
   IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
+  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

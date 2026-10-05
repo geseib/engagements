@@ -36,6 +36,7 @@ const server = http.createServer((req, res) => {
       return send(200, { gameId: '4321', title: 'Sign-up site', goal: 'Pick a shift fast', state: 'STARTED', players: [], playerCount: 0, asks: [], log: [], inbox: [] });
     }
     if (req.method === 'POST' && p === 'log') return send(201, { entry: { logId: 'l1', ...JSON.parse(raw) }, inbox: [] });
+    if (req.method === 'POST' && p === 'activity') return send(200, { activity: JSON.parse(raw).items });
     // A proposed choice the host has not opened, and a direction the host sent
     // meanwhile ("make mockups"): wait_for_room must hand it over at once.
     if (req.method === 'GET' && p === 'asks/008') {
@@ -183,6 +184,52 @@ async function check(name, fn) {
   });
   mcp.child.kill();
 
+  console.log('\nwhat Claude is doing, live (owner, 2026-10-04)');
+  const activityHook = (cwd, data) => spawnSync(process.execPath, [SCRIPT, '--activity'],
+    { input: JSON.stringify(data), env: { PATH: process.env.PATH, HOME: home, CLAUDE_PROJECT_DIR: cwd }, encoding: 'utf8', timeout: 10000 });
+  const activityPath = path.join(project, '.engage', 'activity.jsonl');
+  const linesIn = () => (fs.existsSync(activityPath) ? fs.readFileSync(activityPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+  await check('the hook writes one plain line per tool, and never a command\'s arguments', async () => {
+    fs.writeFileSync(activityPath, '');
+    for (const data of [
+      { tool_name: 'Edit', tool_input: { file_path: '/Users/x/app/src/Header.jsx', old_string: 'SECRET-OLD', new_string: 'SECRET-NEW' } },
+      { tool_name: 'Bash', tool_input: { command: 'API_TOKEN=sk-live-123 cd app && npm run dev -- --token sk-live-456' } },
+      { tool_name: 'Grep', tool_input: { pattern: 'password=hunter2' } },
+      { tool_name: 'WebFetch', tool_input: { url: 'https://docs.example.com/a?key=abc' } },
+      { tool_name: 'mcp__other__read_secrets', tool_input: { q: 'x' } },
+    ]) {
+      const r = activityHook(project, data);
+      assert.strictEqual(r.status, 0, r.stderr);
+      assert.strictEqual(r.stdout, '', 'a hook prints nothing');
+    }
+    assert.deepStrictEqual(linesIn().map((l) => [l.kind, l.text]), [
+      ['edit', 'Edited Header.jsx'], ['run', 'Ran npm run dev'], ['search', 'Searched the code'], ['web', 'Looked at docs.example.com'],
+    ]);
+    const raw = fs.readFileSync(activityPath, 'utf8');
+    for (const secret of ['SECRET', 'sk-live', 'hunter2', 'key=abc', '/Users/x']) assert.ok(!raw.includes(secret), `${secret} leaked`);
+  });
+  await check('in any other folder the hook writes nothing', async () => {
+    const other = tmp('other-activity');
+    activityHook(other, { tool_name: 'Edit', tool_input: { file_path: 'a.js' } });
+    assert.ok(!fs.existsSync(path.join(other, '.engage')), 'never writes outside a Build Room project');
+  });
+  await check('the server sends the lines to the room in a batch and empties the file', async () => {
+    const before = requests.filter((q) => q.url.endsWith('/build/activity')).length;
+    const pump = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: project, ENGAGE_ACTIVITY_MS: '200' });
+    try {
+      const deadline = Date.now() + 5000;
+      while (requests.filter((q) => q.url.endsWith('/build/activity')).length === before && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const sentNow = requests.filter((q) => q.url.endsWith('/build/activity')).slice(before);
+      assert.strictEqual(sentNow.length, 1, 'one batch');
+      assert.deepStrictEqual(sentNow[0].body.items.map((i) => i.text), ['Edited Header.jsx', 'Ran npm run dev', 'Searched the code', 'Looked at docs.example.com']);
+      assert.strictEqual(fs.readFileSync(activityPath, 'utf8'), '', 'the file is emptied');
+    } finally {
+      pump.child.kill();
+    }
+  });
+
   console.log('\nthe Stop hook');
   // Async on purpose: the fake API lives in THIS process, and spawnSync would
   // block it from answering the hook's request.
@@ -235,7 +282,11 @@ async function check(name, fn) {
     assert.ok(/\$ARGUMENTS/.test(fs.readFileSync(path.join(plug, 'commands', 'connect.md'), 'utf8')));
     // The crew commands: /engage:join <key>, /engage:early-look, /engage:review.
     assert.deepStrictEqual(fs.readdirSync(path.join(plug, 'commands')).sort(),
-      ['ab-mockups.md', 'connect.md', 'continue.md', 'early-look.md', 'ideas.md', 'join.md', 'kickoff.md', 'review.md', 'share-repo.md', 'wrap-up.md']);
+      ['ab-mockups.md', 'connect.md', 'continue.md', 'early-look.md', 'ideas.md', 'join.md', 'kickoff.md', 'preview.md', 'review.md', 'share-repo.md', 'wrap-up.md']);
+    // The live view: one plain line per tool, from a PostToolUse hook on every tool.
+    assert.strictEqual(hooks.hooks.PostToolUse[0].matcher, '*');
+    assert.ok(/--activity/.test(hooks.hooks.PostToolUse[0].hooks[0].command));
+    assert.ok(/npm run dev|dev server/.test(fs.readFileSync(path.join(plug, 'commands', 'preview.md'), 'utf8')));
     const join = fs.readFileSync(path.join(plug, 'commands', 'join.md'), 'utf8');
     assert.ok(/argument-hint: <key>/.test(join) && /connect with key "\$ARGUMENTS"/.test(join) && /crew_status/.test(join) && /claim_task/.test(join), join);
     const review = fs.readFileSync(path.join(plug, 'commands', 'review.md'), 'utf8');

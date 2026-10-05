@@ -27,7 +27,7 @@ const {
 const { recordAudit } = require('./audit-log');
 const { encryptItem, decryptItem, encryptValue, decryptValue } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
-const { toAll } = require('./survey-broadcast');
+const { toAll, toHosts } = require('./survey-broadcast');
 const S = require('./build-store');
 const C = require('./build-crew');
 
@@ -1112,6 +1112,26 @@ async function routeBuilder(ctx, method, parts, body, query) {
   return fail(403, 'Builders cannot do that');
 }
 
+/**
+ * POST activity — Claude's live "what I am doing" lines (owner, 2026-10-04).
+ * Kept on one row, the latest few, and pushed to the HOST's screens only with
+ * the lines in the message: no Rev bump, no buildChanged, so no phone refetches
+ * the room every few seconds while Claude works.
+ */
+async function postActivity(ctx, body) {
+  const now = new Date().toISOString();
+  const norm = S.normalizeActivity((body || {}).items, now);
+  if (norm.error) return fail(400, norm.error);
+  if (!norm.value.length) return reply(200, { activity: [] });
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.activity } }));
+  // Sealed like every other line in a team's room (tenant-crypto buildActivity).
+  const kept = res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildActivity', res.Item) : res.Item) : null;
+  const items = S.mergeActivity(kept ? kept.Items : [], norm.value);
+  await put(ctx, { SK: S.SK.activity, Items: items, UpdatedAt: now });
+  await toHosts(db, TABLE(), ctx.gameId, { type: 'buildActivity', gameId: ctx.gameId, items }).catch(() => {});
+  return reply(200, { activity: items });
+}
+
 async function routeHost(ctx, role, method, parts, body, event, query) {
   const [a, b, c, d] = parts;
   const hostOnly = () => (role === 'host' ? null : fail(403, 'Only the host can do that'));
@@ -1144,6 +1164,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   const ended = (await sessionState(ctx)) === 'ENDED';
   if (ended && !(a === 'outcome' || (a === 'log' && b))) return fail(409, 'This session has ended');
 
+  if (a === 'activity' && !b) return role === 'agent' ? postActivity(ctx, body) : fail(403, 'Only Claude reports its activity');
   if (a === 'asks' && !b) return createAsk(ctx, role, body);
   if (a === 'asks' && b && !c) return hostOnly() || askAction(ctx, role, b, body);
   if (a === 'asks' && b && c === 'responses') return hostOnly() || hostResponse(ctx, b, d || null, body);
@@ -1221,11 +1242,27 @@ async function routePlay(ctx, method, parts, body, query) {
   const room = await loadRoom(ctx);
 
   if (a === 'idea') {
-    const text = S.cleanText(input.text, S.LIMITS.idea);
+    let text = S.cleanText(input.text, S.LIMITS.idea);
+    // FEEDBACK ON A PREVIEW (owner, 2026-10-04): when Claude shows the work, a
+    // phone can say "Looks good" or "Needs a change". It is an idea that names
+    // the preview, so the host's ideas lane, "pass to Claude" and the report
+    // all carry it with no new kind of row.
+    let aboutLogId = '';
+    if (input.aboutLogId) {
+      const about = room.logs.find((l) => l.LogId === String(input.aboutLogId) && l.Kind === 'showing');
+      if (!about) return fail(409, 'That preview is no longer on screen');
+      const verdict = { good: 'Looks good', change: 'Needs a change' }[input.verdict];
+      if (!verdict) return fail(400, 'Say whether it looks good or needs a change');
+      if (input.verdict === 'change' && !text) return fail(400, 'Say what should change');
+      if (room.ideas.some((i) => i.PlayerName === me.playerName && i.AboutLogId === about.LogId)) return fail(409, 'You already sent feedback on this preview');
+      const what = S.cleanText(about.Text, 80);
+      text = `On the preview "${what}": ${verdict}${text ? `: ${text}` : ''}`;
+      aboutLogId = about.LogId;
+    }
     if (!text) return fail(400, 'Write your idea');
     if (room.ideas.filter((i) => i.PlayerName === me.playerName).length >= 20) return fail(429, 'That is plenty of ideas from one phone for now');
     const sk = S.SK.idea(now);
-    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now });
+    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now, ...(aboutLogId ? { AboutLogId: aboutLogId } : {}) });
     const st = await touchState(ctx);
     await announce(ctx, st.Rev);
     return reply(201, { ok: true });
@@ -1332,7 +1369,10 @@ exports.handler = async (event) => {
         : await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
       // Directions ride along on every call Claude makes, so it hears the
       // room on its very next tool call without having to ask.
-      if (res.statusCode < 500 && !res.isBase64Encoded) {
+      // NOT on an activity post: the plugin sends those from a background
+      // pump that never reads the answer, so a direction carried on one would
+      // be marked delivered and never reach Claude.
+      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity') {
         const inbox = await takeInbox(ctx, role);
         const parsed = JSON.parse(res.body || '{}');
         res.body = JSON.stringify({ ...parsed, inbox });

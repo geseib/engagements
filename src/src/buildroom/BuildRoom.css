@@ -557,3 +557,17 @@
   .brm .brm-rating { grid-template-columns: minmax(0, 1fr); }
   .brm .brm-hostkit { margin-left: 0; }
 }
+
+/* Live: what Claude Code is doing (ClaudeActivity). */
+.brm .brm-activity { display: grid; gap: 8px; }
+.brm .brm-activity.is-live { border-color: var(--brm-line-amber); }
+.brm .brm-activity-now { margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--brm-t-body); font-weight: 700; color: var(--text); }
+.brm .brm-activity-now > span:first-of-type { min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-activity-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.brm .brm-activity-list li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-activity-list li > span:first-of-type { min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+
+/* Auto-open Claude's questions (AutoSwitch). */
+.brm .brm-auto { display: inline-flex; align-items: center; gap: 6px; font-size: var(--brm-t-floor); font-weight: 700; color: var(--muted); cursor: pointer; }
+.brm .brm-auto.is-on { color: var(--primary); }
+.brm .brm-auto input { accent-color: var(--primary); }

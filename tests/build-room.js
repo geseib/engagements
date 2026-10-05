@@ -523,8 +523,78 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await playCall('POST', 'idea', { ...priya, text: 'late idea' })).status, 409);
   });
 
+  console.log('\nwhat Claude Code is doing (owner, 2026-10-04)');
+  seed();
+  await check('activity lines reach the HOST\'s screen only, cleaned, the latest twelve kept', async () => {
+    sent = [];
+    const r = await agentCall('POST', 'activity', { items: [
+      { at: new Date().toISOString(), kind: 'edit', text: 'Edited Header.jsx' },
+      { kind: 'bogus', text: '  Ran   npm test  ' },
+      { kind: 'edit', text: '' },
+    ] });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.activity.map((a) => [a.kind, a.text]), [['edit', 'Edited Header.jsx'], ['other', 'Ran npm test']]);
+    assert.ok(sent.length > 0 && sent.every((x) => x.connectionId === 'host-1' && x.message.type === 'buildActivity'), JSON.stringify(sent));
+    assert.deepStrictEqual(sent[0].message.items.map((a) => a.text), ['Edited Header.jsx', 'Ran npm test']);
+    const h = await hostCall('GET', 'state');
+    assert.deepStrictEqual(h.body.activity.map((a) => a.text), ['Edited Header.jsx', 'Ran npm test']);
+    const p = await playCall('GET', 'state', priya);
+    assert.strictEqual(p.body.activity, undefined, 'a phone never sees it');
+    for (let i = 1; i <= 20; i += 1) {
+      await agentCall('POST', 'activity', { items: [{ at: new Date(Date.now() + i).toISOString(), kind: 'run', text: `Step ${i}` }] });
+    }
+    const after = (await hostCall('GET', 'state')).body.activity;
+    assert.strictEqual(after.length, S.ACTIVITY_KEEP);
+    assert.strictEqual(after[after.length - 1].text, 'Step 20');
+  });
+  await check('an activity post never takes Claude\'s inbox: a direction waits for a call Claude reads', async () => {
+    assert.strictEqual((await hostCall('POST', 'directions', { text: 'Make the header bigger' })).status, 201);
+    const a = await agentCall('POST', 'activity', { items: [{ kind: 'edit', text: 'Edited Header.jsx' }] });
+    assert.strictEqual(a.body.inbox, undefined, 'the pump would throw it away');
+    const r = await agentCall('GET', 'inbox');
+    assert.deepStrictEqual(r.body.inbox.map((d) => d.text), ['Make the header bigger']);
+  });
+  await check('only Claude reports activity, and a laptop clock in the future is pulled back to now', async () => {
+    assert.strictEqual((await hostCall('POST', 'activity', { items: [{ kind: 'edit', text: 'x' }] })).status, 403);
+    const r = await agentCall('POST', 'activity', { items: [{ at: '2099-01-01T00:00:00.000Z', kind: 'read', text: 'Read App.jsx' }] });
+    const mine = r.body.activity.find((a) => a.text === 'Read App.jsx');
+    assert.ok(Date.parse(mine.at) <= Date.now(), mine.at);
+    assert.strictEqual((await agentCall('POST', 'activity', { items: 'nope' })).status, 400);
+  });
+
+  console.log('\nfeedback on a preview (owner, 2026-10-04)');
+  seed();
+  await check('a phone says "Looks good" or "Needs a change" on what Claude is showing; once per preview', async () => {
+    const shown = await agentCall('POST', 'log', { kind: 'showing', text: 'Header B is live', link: 'http://localhost:5173/' });
+    assert.strictEqual(shown.status, 201, JSON.stringify(shown.body));
+    const logId = shown.body.entry.logId;
+    const p = await playCall('GET', 'state', priya);
+    assert.ok(p.body.log.some((e) => e.logId === logId && e.kind === 'showing'), 'the phone sees the preview');
+    assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'change' })).status, 400, 'a change needs words');
+    assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'meh' })).status, 400);
+    assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'change', text: 'Bigger button' })).status, 201);
+    assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'good' })).status, 409, 'once per preview');
+    assert.strictEqual((await playCall('POST', 'idea', { ...marcus, aboutLogId: logId, verdict: 'good' })).status, 201);
+    assert.strictEqual((await playCall('POST', 'idea', { ...marcus, aboutLogId: 'nope', verdict: 'good' })).status, 409);
+    const h = await hostCall('GET', 'state');
+    // Sorted by name: two ideas inside one millisecond have no stable order.
+    assert.deepStrictEqual(h.body.ideas.map((i) => [i.playerName, i.text, i.aboutLogId]).sort(), [
+      ['Marcus', 'On the preview "Header B is live": Looks good', logId],
+      ['Priya', 'On the preview "Header B is live": Needs a change: Bigger button', logId],
+    ]);
+    const mine = (await playCall('GET', 'state', priya)).body.myIdeas;
+    assert.deepStrictEqual(mine.map((i) => i.aboutLogId), [logId]);
+  });
+
   console.log('\nan org session is sealed at rest');
   seed({ orgId: ORG });
+  await check('Claude\'s activity is ciphertext at rest in an org session, and plain through the API', async () => {
+    const r = await agentCall('POST', 'activity', { items: [{ kind: 'edit', text: 'Edited payroll.js' }] });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.ok(!JSON.stringify([...store.values()]).includes('payroll.js'), 'activity is plaintext at rest');
+    const h = await hostCall('GET', 'state', undefined, { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG });
+    assert.ok(h.body.activity.some((a) => a.text === 'Edited payroll.js'), JSON.stringify(h.body.activity));
+  });
   await check('prompt, options, suggestions, timeline and wrap-up are ciphertext in the table and plaintext through the API', async () => {
     const HOST_ORG = { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG };
     const r = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Secret question' }, HOST_ORG);

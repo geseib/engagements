@@ -45,7 +45,7 @@ const NOW = new Date().toISOString();
 const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 
 /** HostState, computed by build-store.js from rows — never hand-shaped. */
-function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], logs = [], ideas = [], keys = [] } = {}) {
+function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], logs = [], ideas = [], keys = [], activity = null } = {}) {
   const rows = [
     { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), ...st },
     ...asks.map((a) => ({ SK: `BUILD#ASK#${a.AskId}`, Source: 'agent', CreatedAt: ago(600), ...a })),
@@ -55,6 +55,7 @@ function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], l
     ...logs.map((l, i) => ({ SK: `BUILD#LOG#${String(i).padStart(13, '0')}#x${i}`, LogId: `${i}-x${i}`, CreatedAt: ago(900 - i * 60), ...l })),
     ...ideas.map((d, i) => ({ SK: `BUILD#IDEA#${String(i).padStart(13, '0')}#i${i}`, IdeaId: `${i}-i${i}`, Status: 'new', CreatedAt: ago(120), ...d })),
     ...keys.map((k) => ({ SK: `BUILD#KEY#${k.KeyId}`, ...k })),
+    ...(activity ? [{ SK: 'BUILD#ACTIVITY', Items: activity }] : []),
   ];
   return S.hostView({
     gameId: GAME,
@@ -290,7 +291,7 @@ describe('each ask status', () => {
 
   test('results: switching Send to Claude off records the decision only', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
-    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Send to Claude' }));
     fireEvent.click(screen.getByRole('button', { name: 'Record decision' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', sendToAgent: false }));
   });
@@ -457,11 +458,11 @@ describe('Connect Claude Code', () => {
     await openRoom(hostState({ keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
     fireEvent.click(screen.getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:wrap-up', '/engage:share-repo', '/mcp__engage__kickoff'].forEach((slash) => {
+    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:preview', '/engage:wrap-up', '/engage:share-repo', '/mcp__engage__kickoff'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
     });
     // Step 1 (install) and step 4 (kick off), then one per prompt card.
-    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(2 + 6);
+    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(2 + 7);
     expect(within(dialog).queryByTestId('brm-share-repo')).toBeNull(); // not a crew room
 
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Review Claude's questions/ }));
@@ -761,5 +762,37 @@ describe('the join QR and link (owner, 2026-10-04)', () => {
     } finally {
       delete navigator.clipboard;
     }
+  });
+});
+
+
+describe('what Claude is doing, the preview button and Auto (owner, 2026-10-04)', () => {
+  test('the live activity: the newest line leads, the host sees the last few, a socket message updates it with no refetch', async () => {
+    await openRoom(hostState({ activity: [
+      { at: ago(40), kind: 'read', text: 'Read App.jsx' },
+      { at: ago(10), kind: 'edit', text: 'Edited Header.jsx' },
+    ] }));
+    expect(screen.getByTestId('brm-activity-now').textContent).toMatch(/^Edited Header\.jsx/);
+    expect(screen.getByText('Read App.jsx')).toBeInTheDocument();
+    const statesBefore = calls.filter((c) => c.url.endsWith('/build/state')).length;
+    const onActivity = webSocketClient.onMessage.mock.calls.filter(([type]) => type === 'buildActivity').pop()[1];
+    act(() => { onActivity({ gameId: GAME, items: [{ at: ago(1), kind: 'run', text: 'Ran npm test' }] }); });
+    expect(screen.getByTestId('brm-activity-now').textContent).toMatch(/^Ran npm test/);
+    expect(calls.filter((c) => c.url.endsWith('/build/state')).length).toBe(statesBefore);
+  });
+
+  test('Preview the work sends Claude the preview instructions', async () => {
+    await openRoom(hostState());
+    fireEvent.click(screen.getByRole('button', { name: /Preview the work/ }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body.text).toMatch(/^Show the room the work so far, running\./);
+    expect(lastPost().body.text).toContain('post_update with kind "showing"');
+  });
+
+  test('Auto-open Claude\'s questions saves the setting the other way round', async () => {
+    await openRoom(hostState());
+    fireEvent.click(screen.getByRole('switch', { name: /Auto-open Claude's questions/ }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/settings`));
+    expect(lastPost().body).toEqual({ reviewAgentAsks: false });
   });
 });

@@ -529,6 +529,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
   buildShare: Object.freeze(['Title', 'Versions', 'PrUrl']),
   buildComment: Object.freeze(['Text']),
   buildReview: Object.freeze(['Does', 'Fits', 'Risk', 'Suggestions', 'TestsSummary']),
+  // Claude's live activity lines ("Edited payroll.js"): the team's content too.
+  buildActivity: Object.freeze(['Items']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

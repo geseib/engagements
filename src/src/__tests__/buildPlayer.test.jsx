@@ -12,7 +12,7 @@
  * as markup.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import BuildPlayer, { POLL_MS } from '../buildroom/BuildPlayer';
 
 const API = 'http://localhost:3000/api/';
@@ -463,5 +463,41 @@ describe('guidance', () => {
       expect(container.textContent).not.toMatch(EMOJI);
       unmount();
     }
+  });
+});
+
+describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
+  const SHOWING = { logId: 'L9', kind: 'showing', text: 'Header B is live', createdAt: '2026-10-04T12:00:00.000Z', link: 'http://localhost:5173/' };
+
+  test('Looks good goes at once, naming the preview', async () => {
+    serve(baseView({ log: [SHOWING] }));
+    await mount();
+    const card = screen.getByRole('region', { name: 'Feedback on the preview' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Looks good' }));
+    await waitFor(() => expect(posts('idea').length).toBe(1));
+    expect(posts('idea')[0].body).toMatchObject({ aboutLogId: 'L9', verdict: 'good', text: '' });
+  });
+
+  test('Needs a change asks what, and sends it', async () => {
+    serve(baseView({ log: [SHOWING] }));
+    await mount();
+    const card = screen.getByRole('region', { name: 'Feedback on the preview' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Needs a change' }));
+    const send = within(card).getByRole('button', { name: 'Send' });
+    expect(send).toBeDisabled();
+    fireEvent.change(within(card).getByLabelText('What should change?'), { target: { value: 'Bigger button' } });
+    fireEvent.click(send);
+    await waitFor(() => expect(posts('idea').length).toBe(1));
+    expect(posts('idea')[0].body).toMatchObject({ aboutLogId: 'L9', verdict: 'change', text: 'Bigger button' });
+  });
+
+  test('once sent, the card thanks you; with nothing shown there is no card', async () => {
+    serve(baseView({ log: [SHOWING], myIdeas: [{ ideaId: 'i1', text: 'On the preview "Header B is live": Looks good', status: 'new', aboutLogId: 'L9' }] }));
+    const { unmount } = await mount();
+    expect(within(screen.getByRole('region', { name: 'Feedback on the preview' })).getByText(/Your feedback is with the host/)).toBeInTheDocument();
+    unmount();
+    serve(baseView({ log: [] }));
+    await mount();
+    expect(screen.queryByRole('region', { name: 'Feedback on the preview' })).toBeNull();
   });
 });

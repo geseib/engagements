@@ -3,7 +3,7 @@ import BuildImage, { ImageLoader } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
-import { fetchBuildState, sendResponse, sendVote, sendIdea } from './buildPlayApi';
+import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback } from './buildPlayApi';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import './BuildPlayer.css';
 
@@ -654,6 +654,65 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
   );
 }
 
+/* ------------------------------------------------------ preview feedback -- */
+
+/** The newest thing Claude is showing, or null. */
+export function latestPreview(log) {
+  const shown = (log || []).filter((e) => e && e.kind === 'showing');
+  return shown.length ? shown[shown.length - 1] : null;
+}
+
+/**
+ * WHEN CLAUDE SHOWS THE WORK, THE ROOM CAN ANSWER (owner, 2026-10-04).
+ * "Looks good" goes at once; "Needs a change" asks what. It reaches the host
+ * as an idea that names the preview, once per preview per phone.
+ */
+function PreviewFeedback({ api, preview, sent, onResult }) {
+  const [changing, setChanging] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const send = async (verdict) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await sendPreviewFeedback(api, preview.logId, verdict, verdict === 'change' ? text.trim() : '');
+    setBusy(false);
+    if (!r.ok) setError(r.error);
+    onResult(r);
+  };
+  return (
+    <section className="bpl-ideas bpl-pvfb" aria-label="Feedback on the preview">
+      {/* The preview itself is the newest "Showing" line in the feed: it is
+          not repeated here (one fact, once a viewport). */}
+      <h3 className="plr-lab">What do you think of the preview?</h3>
+      {sent ? (
+        <p className="bpl-ok" role="status">Thanks. Your feedback is with the host.</p>
+      ) : (
+        <>
+          <p className="plr-help">It is the newest Showing line in the build below.</p>
+          {!changing ? (
+            <div className="bpl-fbrow">
+              <button type="button" className="bpl-send" disabled={busy} onClick={() => send('good')}>Looks good</button>
+              <button type="button" className="bpl-send bpl-send--alt" disabled={busy} onClick={() => setChanging(true)}>Needs a change</button>
+            </div>
+          ) : (
+            <>
+              <label className="bpl-label" htmlFor="bpl-pvfb-text">What should change?</label>
+              <textarea id="bpl-pvfb-text" className="plr-inp bpl-area bpl-area--short" maxLength={TEXT_MAX} value={text} onChange={(e) => setText(e.target.value)} />
+              <div className="bpl-fbrow">
+                <button type="button" className="bpl-send" disabled={busy || !text.trim()} onClick={() => send('change')}>Send</button>
+                <button type="button" className="bpl-send bpl-send--alt" disabled={busy} onClick={() => setChanging(false)}>Back</button>
+              </div>
+            </>
+          )}
+          <ErrorLine error={error} />
+        </>
+      )}
+    </section>
+  );
+}
+
 /* --------------------------------------------------------------- ideas -- */
 
 function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) {
@@ -796,7 +855,11 @@ export default function BuildPlayer({
     });
   }
 
+  const preview = latestPreview(view.log);
+  const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
   const ideas = (
+    <>
+    {preview && <PreviewFeedback key={preview.logId} api={api} preview={preview} sent={previewSent} onResult={onResult} />}
     <IdeaComposer
       api={api}
       ideas={view.myIdeas}
@@ -806,6 +869,7 @@ export default function BuildPlayer({
       setDraft={setIdeaDraft}
       onResult={onResult}
     />
+    </>
   );
 
   const crewOn = Boolean(view.crew && view.crew.enabled);

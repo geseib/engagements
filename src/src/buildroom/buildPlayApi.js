@@ -94,6 +94,14 @@ export function sendIdea({ apiBase, gameId, playerName, clientId }, text) {
 }
 
 /**
+ * Feedback on what Claude is showing (owner, 2026-10-04): "Looks good", or
+ * "Needs a change" with what to change. Once per preview per phone.
+ */
+export function sendPreviewFeedback({ apiBase, gameId, playerName, clientId }, aboutLogId, verdict, text = '') {
+  return post(apiBase, gameId, 'idea', { playerName, clientId }, { aboutLogId, verdict, text });
+}
+
+/**
  * POST crew/builder-key — this phone becomes a builder, and gets the key its
  * own Claude Code connects with. Shown once: the server keeps only its hash,
  * and a second call retires the first key.

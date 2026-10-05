@@ -100,6 +100,11 @@ export const PROMPT_CARDS = [
     text: 'Pick up my latest direction from the Build Room with check_directions and room_status, do it, post what changed, then call wait_for_direction and keep listening for the next one.',
   },
   {
+    name: 'preview',
+    title: 'Preview the work',
+    text: 'Show the room the work so far, running. Work out how this project runs (its dev server, a build and a static server, or plain HTML), start it in the background on a free port or reuse the one already running, and wait until the page answers. Then post_update with kind "showing", one line for the room and the link to the local URL, screenshot the main page and share_image it, and tell me the URL. If it cannot run yet, say plainly what is missing.',
+  },
+  {
     name: 'share-repo',
     title: 'Share the repo with the crew',
     text: 'Open this project to the crew. Cut a base branch for this session from main (build-room/ and the join code), push it, then call share_repo with the remote URL, the base branch and its commit. Builders branch from it; only I merge into it.',
@@ -436,6 +441,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     refresh();
     const poll = setInterval(refresh, POLL_MS);
     webSocketClient.onMessage('buildChanged', () => refresh());
+    // Claude's live activity carries its own lines: show them, no refetch.
+    webSocketClient.onMessage('buildActivity', (msg) => {
+      const items = msg && Array.isArray(msg.items) ? msg.items : null;
+      if (items) setRoom((r) => (r ? { ...r, activity: items } : r));
+    });
     webSocketClient.onMessage('gameEnded', () => refresh());
     webSocketClient.onReconnected(() => refresh());
     webSocketClient.connect(gameId, null, true, { hostTicket: () => api.hostTicket() });
@@ -443,6 +453,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       clearInterval(poll);
       webSocketClient.disconnect();
       webSocketClient.offMessage('buildChanged');
+      webSocketClient.offMessage('buildActivity');
       webSocketClient.offMessage('gameEnded');
       webSocketClient.onReconnected(null);
     };
@@ -604,6 +615,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         </main>
 
         <aside className="brm-side">
+          {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full={host} />}
           {host && onCrew && <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />}
           {host && !onCrew && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
           <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} />
@@ -630,6 +642,49 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
     </div>
     </ImageLoader.Provider>
+  );
+}
+
+// ── What Claude is doing ────────────────────────────────────────────────────
+
+const ACTIVITY_FRESH_MS = 2 * 60 * 1000;
+const ACTIVITY_ICON = { edit: 'PencilSimple', read: 'FileText', run: 'Terminal', search: 'MagnifyingGlass', web: 'Globe', agent: 'UsersThree', plan: 'ListChecks', other: 'Gear' };
+
+/**
+ * LIVE: WHAT CLAUDE CODE IS DOING (owner, 2026-10-04). One line per tool,
+ * from the plugin's hook: what kind of thing and which file, never what is in
+ * it. The newest line leads; the host also sees the last few. Quiet after two
+ * minutes without a line, so a stale "Editing…" never sits on the wall.
+ */
+export function ClaudeActivity({ activity, agent, now, full }) {
+  const items = (activity || []).slice().reverse();
+  const latest = items[0];
+  const fresh = latest && now - Date.parse(latest.at) < ACTIVITY_FRESH_MS;
+  if (!latest && !(agent && agent.connected)) return null;
+  return (
+    <section className={`brm-panel brm-activity${fresh ? ' is-live' : ''}`} aria-labelledby="brm-activity-h" aria-live="polite">
+      <h2 className="brm-h5" id="brm-activity-h">{fresh ? 'Claude Code is working' : 'Claude Code'}</h2>
+      {latest ? (
+        <p className="brm-activity-now" data-testid="brm-activity-now">
+          <Icon name={ACTIVITY_ICON[latest.kind] || 'Gear'} size={18} />
+          <span>{latest.text}</span>
+          <span className="brm-muted brm-small">{agoText(latest.at, now) || 'just now'}</span>
+        </p>
+      ) : (
+        <p className="brm-hint">Nothing yet. What Claude does shows up here as it works.</p>
+      )}
+      {full && items.length > 1 && (
+        <ul className="brm-activity-list">
+          {items.slice(1, 8).map((a) => (
+            <li key={`${a.at}:${a.text}`}>
+              <Icon name={ACTIVITY_ICON[a.kind] || 'Gear'} size={14} />
+              <span>{a.text}</span>
+              <span className="brm-muted brm-small">{agoText(a.at, now)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -660,6 +715,27 @@ const CONNECTION = {
   signin: { text: 'Signed out · Sign in again', title: 'Your sign-in has run out. Sign in again and you come straight back to this room.' },
 };
 
+/**
+ * AUTO (owner, 2026-10-04): Claude's questions open to the room as soon as it
+ * asks them, with no review step. The same setting as "Review Claude's
+ * questions" in the Connect panel, the other way round, kept in sight.
+ */
+export function AutoSwitch({ settings, busy, run, api }) {
+  const auto = settings ? settings.reviewAgentAsks === false : false;
+  return (
+    <label className={`brm-auto${auto ? ' is-on' : ''}`} title="When on, Claude's questions open to the room straight away, with no review first">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={auto}
+        disabled={busy}
+        onChange={(e) => run(() => api.saveSettings({ reviewAgentAsks: !e.target.checked }))}
+      />
+      <span>Auto-open Claude&apos;s questions</span>
+    </label>
+  );
+}
+
 /** The host's one connection status. A button whenever there is something to do. */
 export function ConnectionChip({ connection = 'live', onReconnect }) {
   const c = CONNECTION[connection] || CONNECTION.live;
@@ -685,6 +761,7 @@ function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, on
         <span className="brm-chip">{room.playerCount || 0} joined</span>
         <AgentChip agent={room.agent} now={now} />
         {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
+        {host && !ended && <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />}
         {host && (
           <>
             <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onConnect}>
@@ -1380,6 +1457,7 @@ export function deliveryLine(agent) {
 }
 
 const CONTINUE_PROMPT = PROMPT_CARDS.find((c) => c.name === 'continue');
+const PREVIEW_PROMPT = PROMPT_CARDS.find((c) => c.name === 'preview');
 const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
 
 /**
@@ -1418,6 +1496,17 @@ function NextPanel({ agent, busy, run, api, onCompose }) {
               <Icon name="PaperPlaneTilt" size={16} /> Send to Claude
             </button>
             {quiet && CONTINUE_PROMPT && <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" />}
+            {/* One click: Claude builds and serves a local preview, puts its
+                link on this screen and screenshots it (owner, 2026-10-04). */}
+            <button
+              type="button"
+              className="brm-btn brm-push"
+              disabled={busy || quiet}
+              title={quiet ? 'Connect Claude Code first' : 'Claude starts or builds the project, serves it locally, and puts the link here'}
+              onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text)); if (ok !== undefined) setSent('Preview the work'); }}
+            >
+              <Icon name="Monitor" size={16} /> Preview the work
+            </button>
           </div>
           {sent && <p className="brm-hint" role="status">Sent: {sent}</p>}
         </form>
