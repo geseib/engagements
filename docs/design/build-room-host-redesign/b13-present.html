@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" data-theme="dark" class="d-room">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B13 Present on the wall (Room profile) · Build Room host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<nav class="pg-nav">
+<a href="index.html">Overview</a>
+<a href="00-today.html">00 Today, measured</a>
+<a href="b1-building.html">B1 Claude is building</a>
+<a href="b2-proposed.html">B2 Claude proposes an ask</a>
+<a href="b3-live.html">B3 The room is answering</a>
+<a href="b4-decide.html">B4 Results and the direction</a>
+<a href="b5-spoken.html">B5 Answer for the room</a>
+<a href="b6-crew.html">B6 Crew mode</a>
+<a href="b7-wrapped.html">B7 Wrapped up</a>
+<a href="b8-ended.html">B8 Session ended</a>
+<a href="b9-people.html">B9 Drawer: People</a>
+<a href="b10-ideas.html">B10 Drawer: Ideas</a>
+<a href="b11-claude.html">B11 Drawer: Claude</a>
+<a href="b12-record.html">B12 Drawer: Record</a>
+<a class="here" href="b13-present.html">B13 Present on the wall</a>
+<a href="b14-connection.html">B14 Connection dropped</a>
+<a href="a1-console.html">A1 Layout A: control screen</a>
+<a href="a2-console-decide.html">A2 Layout A: deciding</a>
+<a href="a3-remote.html">A3 Layout A: phone or tablet remote</a>
+<a href="notices.html">N Notices</a>
+<a href="scores.html">S Players and scores</a>
+</nav>
+<div class="pg-title"><h1>B13 · Present on the wall (Room profile)</h1><p>P, or Present in the drawer's Session row. The dock keeps only the status line and the HOST badge; no toasts, no buttons. The redesigned default is already close to this, which is the point.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr "><header class="rail"><span class="phase phase--build">Building</span><div class="rail-title"><b>Volunteer sign-up</b><span>Ask 2 decided · 3 asks so far</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us/play</span><span class="code" title="Hover to show the QR; click to pin it">4821</span></div></header><div class="bar bar--build"></div><div class="main"><div class="content">
+<div class="building"><span class="pulse"></span><h2 class="q">Claude is building</h2><span class="mins">working for 6 min</span></div>
+<div class="now-doing">Right now: <b>Editing src/Header.jsx</b> · 12s ago</div>
+<div class="idle-grid">
+<div style="display:flex;flex-direction:column;gap:20px">
+<div class="latest"><div class="k">Latest decision · Ask 2</div><div class="t">Use the calm photo and the shift calendar, and show spots left</div></div>
+<ul class="ticker">
+<li class="new"><span class="k">Showing</span><span>The shift calendar is up</span><span class="a">1 min</span></li>
+<li><span class="k">Progress</span><span>Spots left now count down live</span><span class="a">4 min</span></li>
+<li><span class="k">Progress</span><span>Scaffolded the page</span><span class="a">9 min</span></li>
+</ul></div>
+<img class="shot" src="img/preview.svg" alt="Latest screenshot: the shift calendar" style="aspect-ratio:16/10">
+</div></div>
+<aside class="meter"><span class="lbl">Here</span><span class="big">18<small> / 18</small></span><span class="bar2"><span style="width:100%"></span></span><span class="says">Send an idea from your phone any time</span><div class="joinbox"><span class="qr"></span><p>Join on a phone, laptop or tablet<b>4821</b></p></div></aside></div><footer class="dock"><span class="more" title="Host drawer (\ key)">··· HOST <span class="dot">3</span></span><div class="status ">Claude is building the shift calendar</div></footer><span class="pin" style="left:16px;top:790px">1</span><span class="pin" style="left:1000px;top:120px">2</span></div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>The only host trace is a number</h3><p>The badge keeps counting. Pressing \ or HOST leaves Present and opens the drawer in one move.</p></div>
+<div class="note"><h3><b class="n">2</b>The wall gets state changes, never toasts</h3><p>A join raises the count; a Claude post joins the ticker; a preview lands as the screenshot. That is the projector-safe version of every notice, and the stage already draws it.</p></div>
+</div>
+
+<script src="mock.js"></script>
+</body>
+</html>
