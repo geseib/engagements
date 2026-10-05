@@ -18,6 +18,7 @@ PAGES = [
     ('c1-host.html', 'C1', 'Host: Claude is building'),
     ('c2-claude-asks.html', 'C2', 'Host: Claude proposes'),
     ('c3-to-a-vote.html', 'C3', 'Host: ideas to a vote'),
+    ('c3b-mockups.html', 'C3b', 'Host: the vote waits for mockups'),
     ('c4-live.html', 'C4', 'Host: the room is answering'),
     ('c5-decide.html', 'C5', 'Host: results and direction'),
     ('c6-stage.html', 'C6', 'Stage screen'),
@@ -189,13 +190,61 @@ def p_c3():
 <ul class="list"><li><span class="L" style="width:26px;height:26px;font-size:15px;border-radius:6px">A</span><span class="grow">Text a reminder the day before</span><span class="who">Dee</span></li><li><span class="L L--b" style="width:26px;height:26px;font-size:15px;border-radius:6px">B</span><span class="grow">Put the address and a map link at the top</span><span class="who">Jo</span></li><li><span class="L L--c" style="width:26px;height:26px;font-size:15px;border-radius:6px">C</span><span class="grow">Let people sign up as a pair</span><span class="who">Lee</span></li></ul>
 <p class="hint">Names are not shown to the room. When you decide, the winner goes to Claude as a direction and each idea is marked as used or not.</p>
 <div class="row"><span class="switch on"><i></i>Ask Claude for a quick mockup of each first</span></div>
-<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--ghost push">Save as a draft</span><span class="btn btn--primary">Open to the room</span></div></div>'''
+<div class="inline-note">The vote waits in your queue, hidden from the room, until the mockups are in. Claude is connected, so it starts now.</div>
+<div class="row"><span class="switch on"><i></i>Open it to the room as soon as all 3 are in</span></div>
+<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Ask Claude for 3 mockups</span></div></div>'''
+    modal_off = modal.replace('<div class="row"><span class="switch on"><i></i>Ask Claude for a quick mockup of each first</span></div>', '<div class="row"><span class="switch"><i></i>Ask Claude for a quick mockup of each first</span></div>')
+    modal_off = modal_off[:modal_off.index('<div class="inline-note">The vote waits')] + '<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--ghost push">Save as a draft</span><span class="btn btn--primary">Open to the room</span></div></div>'
     s = host_screen(now_building(), q, extra=modal)
-    page('c3-to-a-vote.html', 'Host screen: send ideas to the room', 'Tick ideas in the queue and put them to a vote. One idea can go alone too ("Ask the room" on its card: rate it, or ask for ideas on it).',
-         [s],
+    s_off = host_screen(now_building(), q, extra=modal_off)
+    page('c3-to-a-vote.html', 'Host screen: send ideas to the room', 'Tick ideas in the queue and put them to a vote. Top: with mockups, the button becomes "Ask Claude for 3 mockups" and the vote waits (C3b). Bottom: without, it opens at once, or saves as a draft.',
+         [s, s_off],
          [(1, 'The room votes on the room\'s ideas', 'Ideas become the options of a Choose ask, or a Rate ask per idea. Letters are assigned in the order shown. Names stay off the wall, as for suggestions today.'),
-          (2, 'Claude can draw them first', 'With the switch on, Claude is asked for a mockup of each option before the ask opens. That is the existing "Ask Claude for mockups" direction, sent at creation.'),
+          (2, 'Mockups first means the vote waits', 'With the switch on there is no "Open to the room": the ask is created as a proposed ask (the room cannot see it), Claude gets the existing "make a mockup of each, attach it to its option" direction, and the vote sits in the queue until the pictures are in (C3b). The second switch opens it by itself when the last one arrives. If Claude is not connected the switch is off, with the reason.'),
           (3, 'What it needs that does not exist', 'A route to create an ask from ideas and mark them used (today an idea can only be added to an open Ideas ask). PLAN.md step 4.')])
+
+
+def q_vote(state):
+    if state == 'waiting':
+        top = '<span class="chip chip--amber">Choose · Ask 4</span><span class="meta" style="margin-left:auto">Claude is making mockups · 1 of 3</span>'
+        thumbs = ('<figure><img src="img/choice-a.svg" alt=""><figcaption><b>A</b> Text a reminder the day before</figcaption></figure>'
+                  '<figure><span class="thumb--none" style="display:grid;place-items:center;aspect-ratio:640/336;border:1px dashed var(--m-rule);border-radius:7px;color:var(--muted);font-size:13px">Claude is making it</span><figcaption><b>B</b> Address and map link at the top</figcaption></figure>'
+                  '<figure><span class="thumb--none" style="display:grid;place-items:center;aspect-ratio:640/336;border:1px dashed var(--m-rule);border-radius:7px;color:var(--muted);font-size:13px">Waiting</span><figcaption><b>C</b> Sign up as a pair</figcaption></figure>')
+        note = '<div class="hint">Opens to the room by itself when all 3 are in. The room cannot see it yet.</div>'
+        acts = '<span class="btn btn--sm btn--ghost">Open now, without the rest</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--danger-text)">Cancel the vote</span>'
+        cls = ' is-wait'
+    else:
+        top = '<span class="chip chip--green">Mockups ready</span><span class="chip chip--amber">Choose · Ask 4</span><span class="meta" style="margin-left:auto">3 of 3 · just now</span>'
+        thumbs = ('<figure><img src="img/choice-a.svg" alt=""><figcaption><b>A</b> Text a reminder the day before</figcaption></figure>'
+                  '<figure><img src="img/choice-b.svg" alt=""><figcaption><b>B</b> Address and map link at the top</figcaption></figure>'
+                  '<figure><img src="img/preview.svg" alt="" style="aspect-ratio:640/336;object-fit:cover;object-position:top"><figcaption><b>C</b> Sign up as a pair</figcaption></figure>')
+        note = '<div class="hint">You turned off "open by itself", so it waits for you. Check the pictures, then open it.</div>'
+        acts = '<span class="btn btn--sm btn--primary">Open to the room</span><span class="btn btn--sm">Answer for the room</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--danger-text)">Discard</span>'
+        cls = ' is-wait'
+    return (f'<div class="q-item{cls}"><div class="q-top"><span class="srcdot srcdot--you">Y</span><span class="src">Your vote, from 3 ideas</span>{top}</div>'
+            f'<div class="q-text q-text--big">Which should Claude build next?</div>'
+            f'<div class="thumbs" style="grid-template-columns:1fr 1fr 1fr">{thumbs}</div>{note}<div class="q-acts">{acts}</div></div>')
+
+
+def now_mockups():
+    return '''<div class="now"><div class="colh"><h2>Now</h2><span class="dotline dotline--claude" style="margin-left:auto">making mockups</span></div>
+<p class="nq">Claude is mocking up 3 ideas for the next vote</p>
+<ul class="list"><li><span class="tm">now</span><span class="grow ell"><b>Editing</b> mockups/b-address.html</span></li><li><span class="tm">30s</span><span class="grow ell">Running npx playwright screenshot</span></li><li><span class="tm">50s</span><span class="grow ell"><b>Shared</b> Choice A onto ask 4</span></li></ul>
+<div class="row"><span class="btn">Show the build</span><span class="hint" style="margin-left:auto">Stage shows: Claude is building</span></div></div>'''
+
+
+def p_c3b():
+    waiting = host_screen(now_mockups(), queue_col([q_vote('waiting'), Q_SAM], 3, more='+ 1 more'), header=hdr(queue=3, claude='Claude is making mockups'))
+    waiting = waiting[:-6] + pin(1, 466, 84) + pin(2, 466, 330) + pin(3, 2, 52) + '</div>'
+    ready = host_screen(now_building(), queue_col([q_vote('ready'), Q_SAM], 3, more='+ 1 more'), header=hdr(queue=3))
+    ready = ready[:-6] + pin(4, 466, 84) + '</div>'
+    page('c3b-mockups.html', 'Host screen: the vote waits for its mockups',
+         'What happens after "Ask Claude for 3 mockups". Top: Claude has sent one of three; the vote sits at the top of the queue, hidden from the room. Bottom: all three are in.',
+         [waiting, ready],
+         [(1, 'The vote is a proposed ask with empty pictures', 'It behaves like one of Claude\'s proposed asks today: the room cannot see it, each option fills in as Claude calls share_image with its askId and letter, and the card counts "1 of 3".'),
+          (2, 'Three ways out while it waits', '<b>Open now, without the rest</b> if Claude is slow or the room is ready (options without a picture show their words only, as today). <b>Edit</b> the question or the options. <b>Cancel the vote</b>: the ideas go back to the queue.'),
+          (3, 'The room is not left staring', 'The Stage keeps showing Claude at work, and Now says what it is doing: making the mockups.'),
+          (4, 'Ready: open it, or it already opened', 'With "open it as soon as all 3 are in" on, the last picture opens the vote and the ask pill appears in the header (and the room\'s screen can jump to Stage, owner question 3). With it off, the card turns green and waits for the host, as here.')])
 
 
 def now_live():
@@ -399,6 +448,6 @@ def p_index():
     page('index.html', 'Build Room host redesign', 'Second pass: one queue, one History, four screens.', [], after=after)
 
 
-for fn in [p_index, p_c0, p_c1, p_c2, p_c3, p_c4, p_c5, p_c6, p_c7, p_c8, p_c9, p_c10, p_c11, p_c12]:
+for fn in [p_index, p_c0, p_c1, p_c2, p_c3, p_c3b, p_c4, p_c5, p_c6, p_c7, p_c8, p_c9, p_c10, p_c11, p_c12]:
     fn()
 print('built', len(PAGES), 'second-pass pages')

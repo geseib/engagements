@@ -80,7 +80,9 @@ Every item has the same routes:
 | **Later / Dismiss** | Dismissed items can be restored, as ideas can today. |
 
 Tick several items to route them together. The main use is "put these three ideas to a
-vote".
+vote". With "mockups first" on, the dialog's button reads **Ask Claude for 3 mockups**,
+not Open. The vote waits in the queue, hidden from the room, while Claude fills each
+option, and then it opens by itself or waits for the host (C3b).
 
 **Now.** One card: what Claude or the room is doing at this moment. While Claude builds
 it shows the live activity, with Show the build and Preview the work. While an ask is live
@@ -202,6 +204,7 @@ good / Needs a change") moves onto the preview it is about.
 | Host's own queue items | — | a host-created idea (Source host) |
 | Send to Claude from any item | ideas (`direct`), the log (`forAgent`) | the same for feedback and host notes |
 | Put ideas to a vote | an idea can join an open Ideas ask (`suggest`) | create a Choose or Rate ask from selected ideas and mark them promoted |
+| Mockups before the vote | a proposed ask can ask Claude for mockups; `share_image` fills each option | the vote is created proposed and waits; optional open-when-all-are-in, done on the server (C3b) |
 | History chain | idea `promoted`; decision `chosen`; delivery `deliveredAt`; feedback `AboutLogId` | a `RelatesTo` on log rows, so idea → ask → decision → showing can be drawn |
 | Four screens | Present toggle; the stage | the header, the Build frame, the History screen |
 | Phone History tab | images and log already in `publicView` | the tab and gallery; "In a vote now" and "Sent to Claude" idea states |

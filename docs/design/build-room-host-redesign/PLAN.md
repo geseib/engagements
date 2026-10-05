@@ -91,9 +91,17 @@ A push to `dev` deploys; push finished steps only (CLAUDE.md).
 - New in the backend:
   - a host-created idea (`Source: 'host'`) for Queue it;
   - an idea status `later`;
-  - `POST build/asks-from-ideas` (`{ ideaIds, kind: choice|rating, prompt, open, askForMockups }`),
-    which creates the ask, marks the ideas promoted, and optionally posts the mockups
-    direction.
+  - `POST build/asks-from-ideas` (`{ ideaIds, kind: choice|rating, prompt, open, askForMockups, openWhenReady }`),
+    which creates the ask and marks the ideas promoted.
+    - With `askForMockups`, the ask is created **proposed**, so the room cannot see it,
+      and today's "make a mockup of each, attach it to its option" direction is posted to
+      Claude. The vote waits in the queue as Claude's `share_image` calls fill each
+      option (C3b).
+    - With `openWhenReady`, the server opens the ask when the last option receives its
+      picture. That check lives in the image upload handler, so it works with the host
+      page closed.
+    - The host can still Open now (options without a picture show their words only),
+      Edit, or Cancel. Cancel returns the ideas to the queue as new.
   - Each is tested in `tests/build-room.js`, including the delete and authorisation
     rules.
 - The page:
@@ -101,7 +109,7 @@ A push to `dev` deploys; push finished steps only (CLAUDE.md).
   - per-item routes;
   - multi-select with the bulk bar;
   - the "Put N ideas to a vote" dialog (Modal: X and Cancel, one `requestClose`).
-- **Mockups:** C1, C2, C3.
+- **Mockups:** C1, C2, C3, C3b.
 
 **5. History.**
 - Server work:
