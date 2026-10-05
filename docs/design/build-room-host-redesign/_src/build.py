@@ -16,7 +16,7 @@ CODE = '4821'
 
 # (file, code, short title) — the nav order
 PAGES = [
-    ('index.html', '', 'Overview'),
+    ('first-pass.html', '', 'First pass: overview'),
     ('00-today.html', '00', 'Today, measured'),
     ('b1-building.html', 'B1', 'Claude is building'),
     ('b2-proposed.html', 'B2', 'Claude proposes an ask'),
@@ -41,7 +41,7 @@ PAGES = [
 
 
 def nav(current):
-    out = ['<nav class="pg-nav">']
+    out = ['<nav class="pg-nav"><a href="index.html"><b>Second pass (current)</b></a> ·']
     for f, code, name in PAGES:
         label = (code + ' ' if code else '') + name
         cls = ' class="here"' if f == current else ''
@@ -638,7 +638,7 @@ def p_index():
 <h2>Every state</h2><div class="cards">{cards}</div>
 <h2>How to view</h2><p>From the repo root: <code>python3 -m http.server 8131 --directory docs/design</code>, then open <code>http://localhost:8131/build-room-host-redesign/</code>. Each screen scales to the window. Rebuild with <code>python3 docs/design/build-room-host-redesign/_src/build.py</code>. <code>today/</code> holds the current page rendered from fixture state, for comparison.</p>
 </div>'''
-    page('index.html', 'Build Room host redesign', 'Overview, recommendation and every state.', [], after=after)
+    page('first-pass.html', 'Build Room host redesign, first pass', 'Superseded by the second pass (index.html). Kept for comparison: the drawer-and-dock layout.', [], after=after)
 
 
 for fn in [p_index, p_today, p_b1, p_b2, p_b3, p_b4, p_b5, p_b6, p_b7, p_b8, p_b9, p_b10, p_b11, p_b12, p_b13, p_b14, p_a1, p_a2, p_a3, p_notices, p_scores]:

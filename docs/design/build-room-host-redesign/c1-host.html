@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C1 Host screen: Claude is building · Build Room host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="v2.css">
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Second pass</b>
+<a href="index.html">Overview</a>
+<a href="c0-model.html">C0 The model</a>
+<a class="here" href="c1-host.html">C1 Host: Claude is building</a>
+<a href="c2-claude-asks.html">C2 Host: Claude proposes</a>
+<a href="c3-to-a-vote.html">C3 Host: ideas to a vote</a>
+<a href="c4-live.html">C4 Host: the room is answering</a>
+<a href="c5-decide.html">C5 Host: results and direction</a>
+<a href="c6-stage.html">C6 Stage screen</a>
+<a href="c7-build.html">C7 Build screen</a>
+<a href="c8-build-blocked.html">C8 Build screen, blocked</a>
+<a href="c9-history.html">C9 History screen</a>
+<a href="c10-artifacts.html">C10 History: artifacts</a>
+<a href="c11-phones.html">C11 Phones</a>
+<a href="c12-wrapped.html">C12 Wrapped and ended</a>
+<span class="sp"></span><a href="first-pass.html">First pass</a><a href="notices.html">Notices</a><a href="scores.html">Scores</a></nav>
+<div class="pg-title"><h1>C1 · Host screen: Claude is building</h1><p>The host's working screen. Everything that needs a decision is in one queue, whoever it came from. Everything that happened is in History. What is happening now is one card.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Volunteer sign-up</span><div class="views"><span class="view is-on">Host<span class=n>4</span><kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4821</b> · 18 here</span><span class="menu" title="Connect Claude Code, Crew, Wrap up, Report, End session">···</span></header><div class="host"><section class="col"><div class="now"><div class="colh"><h2>Now</h2><span class="dotline dotline--claude" style="margin-left:auto">building for 6 min</span></div>
+<p class="nq">Claude is building the shift calendar</p>
+<ul class="list"><li><span class="tm">now</span><span class="grow ell"><b>Editing</b> src/Header.jsx</span></li><li><span class="tm">40s</span><span class="grow ell">Running npm run build</span></li><li><span class="tm">1m</span><span class="grow ell">Reading src/App.jsx</span></li></ul>
+<div class="row"><span class="btn btn--primary">Show the build</span><span class="btn">Preview the work</span><span class="hint" style="margin-left:auto">Stage shows: Claude is building</span></div></div><div class="composer"><span class="lbl" style="margin:0">Add something</span>
+<textarea class="ta" placeholder="An idea, what the room said out loud, or a note for Claude"></textarea>
+<div class="routes"><span class="btn btn--sm">Send to Claude</span><span class="split"><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm">▾</span></span><span class="btn btn--sm btn--ghost">Queue it</span><span class="btn btn--sm btn--ghost" style="margin-left:auto" title="Into History as what the room said, nothing else">Log it</span></div></div></section><section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">5</span><span class="hint" style="margin-left:auto">Claude first, then oldest</span></div><div class="filters"><span class="flt is-on">All</span><span class="flt">Claude · 1</span><span class="flt">Room · 3</span><span class="flt">You · 1</span><span class="flt">Crew · 1</span></div><div class="q-item is-wait"><div class="q-top"><span class="srcdot srcdot--claude">C</span><span class="src">Claude asks the room</span><span class="chip chip--amber">Choose</span><span class="meta" style="margin-left:auto">Claude is waiting · 40s</span></div>
+<div class="q-text q-text--big">Which header should volunteers see first?</div>
+<div class="thumbs"><figure><img src="img/choice-a.svg" alt=""><figcaption><b>A</b> Bold banner</figcaption></figure><figure><img src="img/choice-b.svg" alt=""><figcaption><b>B</b> Calm photo + calendar</figcaption></figure></div>
+<div class="q-acts"><span class="btn btn--sm btn--primary">Open to the room</span><span class="btn btn--sm">Answer for the room</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--danger-text)">Discard</span></div></div><div class="q-item"><div class="q-top"><span class="box"></span><span class="srcdot">D</span><span class="src">Dee · idea</span><span class="meta" style="margin-left:auto">2 min</span></div>
+<div class="q-text">Text a reminder the day before</div>
+<div class="q-acts"><span class="btn btn--sm">Send to Claude</span><span class="split"><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm">▾</span></span><span class="btn btn--sm btn--ghost">Later</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--muted)">Dismiss</span></div></div><div class="q-item"><div class="q-top"><span class="box"></span><span class="srcdot">S</span><span class="src">Sam · on the preview</span><span class="chip chip--red">Needs a change</span><span class="meta" style="margin-left:auto">1 min</span></div>
+<div class="q-text">The 13:00 row should say full, in red</div>
+<div class="q-acts"><span class="btn btn--sm">Send to Claude</span><span class="split"><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm">▾</span></span><span class="btn btn--sm btn--ghost">Later</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--muted)">Dismiss</span></div></div><div class="hint" style="text-align:center">+ 2 more: your note, Ana's early look</div></section><section class="col"><div class="tabs" style="padding:0"><span class="tab is-on">History</span><span class="tab">People</span><span class="tab">Claude</span><span class="tab" style="margin-left:auto;color:var(--secondary)">Full screen · 4</span></div>
+<ul class="hist">
+<li><span class="tm">10:46</span><span class="pt pt--claude"></span><div class="bd"><b>Claude showed</b> the shift calendar<img src="img/preview.svg" alt=""><span class="sub">3 phones answered: 2 Looks good, 1 Needs a change</span></div></li>
+<li><span class="tm">10:44</span><span class="pt pt--room"></span><div class="bd">Dee's idea <b>went to a vote</b><span class="chain"><span>Ask 2</span><i>→</i><span>9 of 14 picked it</span><i>→</i><span>sent to Claude</span></span></div></li>
+<li><span class="tm">10:41</span><span class="pt pt--dec"></span><div class="bd"><b>Decided</b> · Ask 2: use the calm photo and the shift calendar<span class="sub">Claude has it · built it 10:46</span></div></li>
+<li><span class="tm">10:38</span><span class="pt"></span><div class="bd">The room said: it has to work on old phones<span class="sub">Logged by you, sent to Claude</span></div></li>
+<li><span class="tm">10:31</span><span class="pt pt--dec"></span><div class="bd"><b>Decided</b> · Ask 1: no account needed to sign up</div></li>
+</ul></section></div><span class="pin" style="left:470px;top:16px">1</span><span class="pin" style="left:466px;top:84px">2</span><span class="pin" style="left:466px;top:520px">3</span><span class="pin" style="left:2px;top:440px">4</span><span class="pin" style="left:1018px;top:84px">5</span><span class="pin" style="left:2px;top:52px">6</span></div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Four screens in one header</h3><p><b>Host · Stage · Build · History</b>, keys 1 to 4. This replaces Present: instead of hiding controls, the host chooses what the room looks at. P still works: it flips between Host and the last screen shown to the room.</p></div>
+<div class="note"><h3><b class="n">2</b>One queue</h3><p>Claude's proposed asks, ideas from phones, feedback on a preview, the host's own notes and crew early looks, in one list. Claude's asks sort first because Claude is waiting on them; the rest are oldest first. Filters narrow it by source.</p></div>
+<div class="note"><h3><b class="n">3</b>Every item has the same routes</h3><p><b>Send to Claude</b>, <b>Ask the room</b> (put it to a vote, ask for a rating, or ask for ideas on it), <b>Later</b>, <b>Dismiss</b>. A Claude ask adds Open to the room and Answer for the room. Tick several items to route them together (C3).</p></div>
+<div class="note"><h3><b class="n">4</b>One composer for everything the host types</h3><p>It replaces three forms on today's page: Tell Claude, the timeline's "Log what the room said" and the Ask the room buttons. Type once, then choose where it goes.</p></div>
+<div class="note"><h3><b class="n">5</b>History beside the queue</h3><p>Decisions and actions, newest first, with screenshots at the moment they arrived. Each entry shows its chain: idea, then vote, then sent to Claude, then built. Open History for the full screen (C9).</p></div>
+<div class="note"><h3><b class="n">6</b>Now: what Claude or the room is doing</h3><p>Between asks: Claude's live activity, with Show the build (switches the room to the Build screen) and Preview the work.</p></div>
+</div>
+
+<script src="mock.js"></script>
+</body>
+</html>

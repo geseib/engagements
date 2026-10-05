@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C9 History screen · Build Room host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="v2.css">
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Second pass</b>
+<a href="index.html">Overview</a>
+<a href="c0-model.html">C0 The model</a>
+<a href="c1-host.html">C1 Host: Claude is building</a>
+<a href="c2-claude-asks.html">C2 Host: Claude proposes</a>
+<a href="c3-to-a-vote.html">C3 Host: ideas to a vote</a>
+<a href="c4-live.html">C4 Host: the room is answering</a>
+<a href="c5-decide.html">C5 Host: results and direction</a>
+<a href="c6-stage.html">C6 Stage screen</a>
+<a href="c7-build.html">C7 Build screen</a>
+<a href="c8-build-blocked.html">C8 Build screen, blocked</a>
+<a class="here" href="c9-history.html">C9 History screen</a>
+<a href="c10-artifacts.html">C10 History: artifacts</a>
+<a href="c11-phones.html">C11 Phones</a>
+<a href="c12-wrapped.html">C12 Wrapped and ended</a>
+<span class="sp"></span><a href="first-pass.html">First pass</a><a href="notices.html">Notices</a><a href="scores.html">Scores</a></nav>
+<div class="pg-title"><h1>C9 · History screen</h1><p>The session's story, for the room: every decision and the actions around it, with the artifacts at the moment they were made. Projectable at the Room ladder; the same story is on phones (C11) and in the report.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Volunteer sign-up</span><div class="views"><span class="view">Host<span class=n>4</span><kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view is-on">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4821</b> · 18 here</span><span class="menu" title="Connect Claude Code, Crew, Wrap up, Report, End session">···</span></header><div class="histscreen"><ul class="story">
+<li><span class="tm">10:46</span><span class="pt pt--claude"></span><div class="bd"><span class="k">Claude showed</span>The shift calendar is up<div class="imgs"><img src="img/preview.svg" alt=""></div></div></li>
+<li><span class="tm">10:44</span><span class="pt pt--dec"></span><div class="bd"><span class="k">Decided · Ask 2</span>Build reminder texts next<span class="chain" style="font-size:16px"><span>an idea from a phone</span><i>→</i><span>9 of 14 voted for it</span><i>→</i><span>Claude has it</span></span></div></li>
+<li><span class="tm">10:31</span><span class="pt pt--dec"></span><div class="bd"><span class="k">Decided · Ask 1</span>Calm photo and the shift calendar<div class="imgs"><img src="img/choice-a.svg" alt=""><img src="img/choice-b.svg" alt="" style="outline:3px solid var(--secondary)"></div></div></li>
+<li><span class="tm">10:22</span><span class="pt"></span><div class="bd"><span class="k">The room said</span>It has to work on old phones</div></li>
+</ul><aside style="display:flex;flex-direction:column;gap:14px"><div class="filters"><span class="flt is-on">Everything</span><span class="flt">Decisions</span><span class="flt">Artifacts</span></div>
+<div class="card"><span class="h3">Decided so far</span><ol style="margin:0;padding-left:20px;font-size:17px;line-height:1.5"><li>No account needed</li><li>Calm photo and the shift calendar</li><li>Reminder texts next</li></ol></div>
+<div class="card"><span class="h3">Made so far</span><p style="margin:0;font-size:17px">8 screenshots · 2 previews · 14 ideas, 9 used</p></div></aside></div></div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Today's Timeline, grown up</h3><p>The wall timeline already filters out host notes and system rows (WALL_HIDDEN_KINDS). History keeps that rule and adds screenshots inline and the chain from idea to vote to direction to build.</p></div>
+<div class="note"><h3><b class="n">2</b>Look back on purpose</h3><p>A host can bring the room back to a decision ("we picked this at 10:31") with one key. Clicking an entry in History on the Host screen jumps here to it.</p></div>
+<div class="note"><h3><b class="n">3</b>Editing stays on the Host screen</h3><p>Edit and delete (with the delete rule) are on the Host screen's History column, never on this one.</p></div>
+</div>
+
+<script src="mock.js"></script>
+</body>
+</html>

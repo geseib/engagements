@@ -1,274 +1,264 @@
-# Build Room host redesign: rationale
+# Build Room host redesign: rationale (second pass)
 
-Design only, 2026-10-05. Nothing in `src/` changes in this task. The mockups in this
-folder are the design (see `index.html`); this file records why they look the way they
-do, what was measured, and what the owner still has to decide.
+Design only. Nothing in `src/` changes in this task. The mockups are the design; this file
+records why they look the way they do, what was measured, and what the owner still has to
+decide.
 
-**Viewing:** `python3 -m http.server 8131 --directory docs/design`, then open
-`http://localhost:8131/build-room-host-redesign/`. Add `#s1` or `#s2` to any page's URL to
-see one screen alone, fitted to the window. Rebuild with
-`python3 docs/design/build-room-host-redesign/_src/build.py`.
+**Viewing:**
+
+```bash
+python3 -m http.server 8131 --directory docs/design
+```
+
+Then open `http://localhost:8131/build-room-host-redesign/`. Add `#s1` to a page's URL to
+see the screen alone, fitted to the window.
+
+Rebuild with `_src/build2.py` (second pass) and `_src/build.py` (first pass, kept as
+`first-pass.html` and the `b-`/`a-` pages).
 
 ---
 
-## 1. The owner's brief, restated
+## 1. The brief, both rounds
+
+Round 1 (2026-10-05):
 
 > "too much to take in … requiring the host to scroll up and down … keep things minimal
 > on the screen … much of the mechanics are here … When can something be collapsed or
 > simplified?"
 
-The mechanics stay. What changes is **when** each one is in front of the host and
-**where** it lives. Nothing the host can do today is removed (§6 maps every control to
-its new place).
+Round 2, on the first pass:
+
+> "I like the idea that Claude and humans asks/ideas/input queue up together. The ability
+> to send ideas to the room for feedback or vote, … sending ideas to Claude Code is also
+> a good option. … the present button is not useful as is. … there was an artifact section
+> in the original that we could review back through, might need to have it avail to the
+> participants as well. … this history of decision and actions is great as well. … present
+> is really switching to the local live view of the development server page … iframe the
+> page in a header that allows you to switch back to the tab of the host screen."
+
+The first pass (`first-pass.html`) answered round 1 with the regular stage's layout: a
+rail, a stage, a dock with one next move, and a tabbed drawer. It kept two things apart
+that the owner wants together, ideas in one tab and Claude's asks in another. It buried
+the history in a Record tab. And it treated Present as a way to hide controls rather than
+a choice of what to show. The second pass rebuilds around the owner's words.
 
 ## 2. What today's page does, measured
 
 Rendered from fixture state built by the real backend's pure half (`build-store.js`
-`roomFromRows` + `hostView`, the shape `GET build/state` returns) with the real
-stylesheets, at 1440×900. The renders are in `today/` and on `00-today.html`.
+`roomFromRows` + `hostView`) with the real stylesheets, at 1440×900. The renders are in
+`today/` and on `00-today.html`.
 
-| State | Page height | Header | Stage starts | Host acts at | Buttons |
-|---|---|---|---|---|---|
-| Claude building | 1260px | 147px (three rows) | 163px | What next? 680–982px | 29 |
-| Claude proposes an ask | **1866px** | 147px | **878px**, below the fold | Review card 163–862px | 34 |
-| Live ask | 1260px | 147px | 163px | top of the stage | 33 |
-| Results to decide | **1822px** | 147px | 163px | Send to Claude ~1100px | 38 |
+| State | Page height | Stage starts | Host acts at | Buttons |
+|---|---|---|---|---|
+| Claude building | 1260px | 163px | What next? 680–982px | 29 |
+| Claude proposes an ask | 1866px | **878px** (below the fold) | review card 163–862px | 34 |
+| Live ask | 1260px | 163px | top of the stage | 33 |
+| Results to decide | 1822px | 163px | Send to Claude ~1100px | 38 |
 
-The fixture is small (four asks, two ideas). A real hour adds an asks table and a
-screenshot grid under everything above.
+The header is 147px (three rows, eleven controls). Six to eight panels are open in every
+state.
 
-The cause is not any one panel. It is that **every panel is open in every state**: eleven
-header controls, three panels under the stage (What next, Asks, Screenshots), and three
-in the right column (Claude activity, Ideas inbox, Timeline with its own form). Nothing
-tells the host what matters now, and the thing that matters now moves: the review card
-pushes the stage down, and the decide panel sits under the stage.
+## 3. The model: three nouns and four screens
 
-What I could and could not see: I rendered the host page in four states with fixtures
-and measured them in the browser pane. I did not sign in to dev or run a live session;
-crew, wrapped and ended states were read from the code, not rendered.
+Everything on today's page is one of these (`c0-model.html`).
 
-## 3. What the other engagement types already do
+**The queue: waiting for you.** One list of everything that needs a decision, whoever it
+came from:
 
-The regular host stage (`GameHostPage.jsx` + `components/stage/`) solved this problem
-once. Its rule, from the code comment at the stage: everything the room sees is inside
-`<Stage>`; everything only the host needs is a fixed panel over it, **opened deliberately
-and closed by advancing**. CRITIQUE §4 praises "separating the two audiences
-*temporally* rather than spatially".
+- **Claude:** proposed asks, which sort first because Claude is waiting on them.
+- **The room:** ideas sent from phones, and "Needs a change" feedback on a preview.
+- **You:** notes the host queued.
+- **The crew:** early looks and requests for help.
 
-Its parts:
+Every item has the same routes:
 
-- **Rail** (`Rail.jsx`): phase chip, title, context, join cluster. The code previews the
-  QR on hover and pins it on click.
-- **Phase bar**: one colour per phase.
-- **Main + RoomMeter**: the content, and an answered/voted count in a side column.
-- **Dock** (`Dock.jsx`): a room-safe status line, one primary action with its key
-  (Space), one secondary, and `SESSION`. The dock is a no-overlay zone (audit A6).
-- **Drawer** (`SessionSetupPanel`, `styles.css:480+`): `min(560px, 44vw)`, `#111D33`,
-  2px `--primary` edge. It overlays and stops at the dock. Its tabs are Players,
-  Questions, Rounds and Settings, and `\` opens it.
-- **HostRemote** (`/remote`): the host's second screen on a phone, laptop or tablet.
-- **No toasts** anywhere (GameHostPage.jsx says so in a comment).
+| Route | What it does |
+|---|---|
+| **Ask the room** | Open it (a Claude ask). Put several to a vote. Ask for ratings. Ask the room for ideas on it. |
+| **Send to Claude** | As a direction, with the host's words added if wanted. |
+| **Decide yourself** | Answer for the room, as today's "said out loud". |
+| **Later / Dismiss** | Dismissed items can be restored, as ideas can today. |
 
-Today's Build Room uses none of these. It is a dashboard page with a Present toggle. The
-redesign brings it onto the same grammar, so a host who has run a trivia round already
-knows where everything is.
+Tick several items to route them together. The main use is "put these three ideas to a
+vote".
 
-## 4. The attention model
+**Now.** One card: what Claude or the room is doing at this moment. While Claude builds
+it shows the live activity, with Show the build and Preview the work. While an ask is live
+it shows the counts, Close, Answer for the room and Edit. At results it shows the
+direction sentence, Adjust and Send to Claude.
 
-Four rules. Each mockup follows all four.
+**History.** Every decision and action, with the artifacts at the moment they were made,
+and the chain from an idea to its vote, to the direction, to what Claude built. The same
+story appears in four places:
 
-**1. The screen is the room's by default.** The rail, the stage and the dock's status
-line are room-safe in every state. Host-only things are either inside the drawer
-(opened on purpose) or are numbers and buttons in the dock that mean nothing to a reader
-at the back of the room.
+- the Host screen's right column (editable);
+- the History screen (projectable);
+- the phone's History tab;
+- the report.
 
-**2. There is always exactly one next move, and it is always in the same place.** The
-dock primary, bottom right, with a key. The order of precedence is:
+**Four screens in one header, instead of Present:**
 
-| When | Dock primary | Secondary |
-|---|---|---|
-| The connection is down | Reconnect / Sign in again | — |
-| Results are showing | Send to Claude (the sheet) | — |
-| An ask is live | Close and show results (Space) | Answer for the room |
-| Ideas ask, collecting | Open voting (Space) | Answer for the room |
-| A proposed ask is waiting | Review ask N (R) | — |
-| Crew board, a share waiting | Open the early look | Room asks |
-| Between asks | Tell Claude (T) | Ask the room |
-| Wrapped | Open the demo | Edit the wrap-up |
-| Ended | Open the report | Edit the wrap-up |
-
-A proposed ask that arrives while another ask is live does not take the primary. It
-shows as a dashed amber "Ask 4 waiting for you" chip beside the status line, which
-matches the dashed amber edge of the proposed card.
-
-**3. What arrives is a notice first and a panel second.** An idea, a join, preview
-feedback or a Claude post does not grow a panel on the page. It raises a badge, may show
-a short toast, and lands in the drawer tab where it is handled. See §5.
-
-**4. Words open where the decision is.** A direction for Claude, an answer for the room
-and a Tell Claude message all need typing. They open as a **sheet** that grows up out of
-the dock and leaves the stage above it in view. The host decides while looking at the
-results; they are not covered (the container rule: stay inline when a modal would cover
-the thing being judged).
-
-### What is always visible, what collapses, and when
-
-| Always (every state) | Collapsed until needed | Only in its state |
-|---|---|---|
-| Rail: phase, title, join code | The drawer and its five tabs | Review card (Asks tab, proposed) |
-| The stage | Edit question and options (accordion) | The direction sheet (results) |
-| The dock: status, one primary, HOST badge | Decide → Adjust (chosen, fold in, note, record only) | The spoken sheet (answer for the room) |
-| The answered count (meter column) | Asks, Timeline, Screenshots (Record tab accordions) | Crew tab (crew on) |
-| | Handled ideas, directions sent | Host bar (connection down) |
-
-### Present (P)
-
-Present stays, with the same key and the same test, but it hides much less, because the
-default screen is already close to it. In Present the dock keeps its status line and the
-HOST badge (a number), no toasts are drawn, and pressing `\` or HOST leaves Present and
-opens the drawer in one move.
-
-## 5. Notices
-
-Full catalogue on `notices.html`. In short:
-
-- **Four tiers.**
-  - Ambient: a badge or a count only.
-  - Info: a toast for 8s, with the one action that answers it.
-  - Action: the item takes the dock and stays until handled.
-  - Alert: a host bar or an error toast that stays until dismissed.
-- **What triggers one:**
-  - someone joined (batched every 20s);
-  - an idea arrived;
-  - preview feedback (batched per preview);
-  - everyone has answered;
-  - Claude proposed an ask;
-  - Claude is showing something (a preview is ready);
-  - Claude has your direction;
-  - Claude went quiet when it was expected to act;
-  - a crew early look arrived;
-  - the connection dropped, the sign-in ran out, or the laptop went offline;
-  - an action failed.
-- **Stacking.**
-  - At most three toasts, newest on top. Older ones fold into "+ N more in the drawer".
-  - Notices of the same kind merge ("Jo and Lee sent ideas").
-  - Toasts sit in the stage's meter column, under the answered count. They never cover
-    the count, the question or the dock. When the drawer is open they move left of it.
-- **Acknowledging.**
-  - Every toast has an X.
-  - Opening the tab a notice points to marks it read and clears its share of the HOST
-    badge.
-  - Clicking a toast's body opens that tab with the item highlighted.
-- **Projector-safe.**
-  - No toast is ever drawn in Present.
-  - The room learns of each event through the stage it already reads: the count rises,
-    the ticker grows, the screenshot changes, the ask opens.
-  - Ideas and feedback carry names and never reach the wall, as today.
-- **No Notices tab.** A notice points to something that lives in a tab (an idea in
-  Ideas, a join in People). A sixth tab would hold a second copy of each. Layout A, which
-  has room to spare, does show a Notices feed. This is owner question 3.
-
-## 6. Every element, and where it goes
-
-"Who": R = the room on the projector, H = the host alone. "How often" is per session.
-
-| Element today | Who | When / how often | Where in B |
+| Screen | Key | What it is | For |
 |---|---|---|---|
-| Title, goal | R | always | Rail (goal as context or on the idle stage) |
-| Join code | R | always | Rail join cluster; hover shows the QR (as Rail.jsx) |
-| Joined count | R+H | always | Meter column on the stage; People tab |
-| Claude Code chip | H (R reads it) | always | Stage line "Claude is building / listening"; Claude tab status |
-| Connection chip | H | rarely matters | Host bar when not live (B14); drawer header "Live" |
-| Auto-open switch | H | once per session | Asks tab, beside the review it skips; also in Claude tab |
-| Connect Claude Code | H | once, at start | Claude tab; the first-run How it works panel keeps its button |
-| Crew / Open to a crew | H | once | People tab footer (open); Crew tab (while on) |
-| Run crew code switch | H | once | Crew tab |
-| Wrap up, Report, End session | H | once each | Drawer footer "Session" row; dock primary when wrapped/ended |
-| Present toggle | H | a few times | Drawer footer; P key (unchanged) |
-| Error bar (with Reconnect / Sign in again) | H | rare | Error toast (stays) or host bar for connection |
-| Ended notice bar | R+H | once | Dock status line (B8) |
-| How a Build Room works (first run) | H | first session | Stays, in the stage area, until Claude has posted |
-| Stage tabs (Room asks / Crew board) | R+H | crew only | Dock secondary (one switch) |
-| Review card (proposed) | H | per Claude ask | Asks tab, first; edit fields in an accordion |
-| Ask Claude for mockups | H | per choice ask with no preview | Inside the review card, unchanged |
-| Answer for the room (proposed/live) | H | sometimes | Review card button; dock secondary when live; opens the spoken sheet |
-| Current ask on the stage | R | per ask | Stage, unchanged in content, at the Room ladder |
-| Edit wording / Open voting / Reopen / Discard (stage) | H | rare except Open voting | Open voting = dock primary for an Ideas ask; others on the ask's row in Asks |
-| Stage hint line | H | every state | Gone from the stage; the dock primary and the sheet's sub-line carry it |
-| Suggestion Hide/Show, who said it | H | per suggestion | Asks tab, the open ask's row expands to its suggestions |
-| Add what the room said (suggest) | H | sometimes | Same place, and the Record tab's quick log |
-| Decide panel | H | per ask | The direction sheet (B4); Adjust holds every control |
-| JoinFoot QR + copy link + count | R | always | Meter column (QR box), rail code; People tab has Show QR / Copy link |
-| QrZoom | R | at the start | Unchanged; from the rail code or the meter QR |
-| What next? Tell Claude | H | between asks | Dock primary "Tell Claude" opens the Tell sheet (B11) |
-| Preview the work | H | a few times | Claude tab; and a toast action when a preview lands |
-| Copy the Continue prompt | H | when Claude is quiet | Claude tab; the "Claude went quiet" toast |
-| Ask the room (Ideas / Choose / Rate) | H | a few times | Dock secondary between asks; Asks tab |
-| Asks table | H (R in Present) | reference | Record tab and Asks tab, accordion |
-| Screenshots panel | H | reference | Record tab accordion |
-| Claude activity (live) | R newest line, H list | always while building | Stage "Right now" line; Claude tab, full list |
-| Ideas inbox | H | per idea | Ideas tab; toast on arrival |
-| Preview feedback | H | per preview | Ideas tab, grouped under the preview |
-| Timeline + quick log | R (filtered) H (full) | reference | Record tab; the wall's filtered timeline is unchanged in Present |
-| Crew incoming / early look / tasks | H | crew only | Crew tab; newest share is the dock primary |
-| Dialogs (Connect, Wrap up, Crew, Early look, End, Compose) | H | rare | Unchanged: they are already the right container |
+| Host | 1 | Now, the composer, the queue, History | the host |
+| Stage | 2 | the current ask or results, big, with Close in the dock | the room, during an ask |
+| Build | 3 | the live product from the local dev server, framed under the header | the room, while Claude builds |
+| History | 4 | the story, and the artifacts grid | the room, looking back; the closing screen |
 
-## 7. Two layouts, and the recommendation
+The header is the same on all four: the title, the four tabs, an ask pill when an ask is
+open, Claude's status, the join code (QR on hover) and a menu. The menu holds Connect
+Claude Code, Crew, Wrap up, Report and End session. **P** flips between Host and the
+last screen shown to the room, so the existing key keeps meaning "show the room".
 
-**B: one screen, stage first, a host drawer (recommended).** Pages B1–B14.
+## 4. Why this focuses attention
 
-**A: two screens.** A1 and A2 show a control console on the laptop and a separate stage
-window on the projector. A3 shows a Build Room remote on a phone, laptop or tablet.
+- **One place for "what do I do next".** On the Host screen it is the top of the queue
+  plus the Now card. Today the next move can be anywhere from 163px to 1100px down a
+  scrolling page.
+- **One way to route anything.** Today an idea has Send to Claude / Add to current ideas /
+  Dismiss, a Claude ask has Open / Discard / Answer, a timeline note has Send to Claude,
+  and preview feedback has nothing at all. In the queue, every item offers the same four
+  routes in the same order. A host learns them once.
+- **One composer.** Today Tell Claude, the timeline's "Log what the room said" and the Ask
+  the room buttons are three separate forms. Now the host types once and picks where it
+  goes: Send to Claude, Ask the room, Queue it, or Log it into History.
+- **The room sees what the host chooses.** Stage, Build and History are made to be
+  projected. Choosing a screen is a clearer act than toggling Present, and it is what the
+  owner said presenting really is.
+- **Nothing scrolls the page.** Each Host column scrolls on its own, and the queue
+  collapses to "+ N more".
 
-| | A (console + stage window) | B (stage + dock + drawer) |
+### What is always visible, what collapses
+
+| Always, on every screen | On the Host screen | Collapsed until needed |
 |---|---|---|
-| Mirrored projector (the common room) | Shows the console to the room; needs Present, today's problem | Works: the default screen is room-safe |
-| Extended display or screen share | Best: everything open, nothing hidden | Good: share the window; open the drawer when needed |
-| One laptop, no projector (a call) | Two windows to arrange every session | One window |
-| Matches regular sessions | No; a new grammar | Yes: rail, dock, drawer and `\` |
-| Build cost | Two layouts kept in step | One layout; the panels are reusable |
-| Focus | Everything open at once, which is the clutter again with more room | One next move, in one place |
+| Header: title, four tabs, ask pill, Claude status, join code | Now, the composer, the queue, History | Review fields (Edit on a Claude ask) |
+| The Host tab's count of what is waiting | | Decide → Adjust (chosen, fold in, note, record only) |
+| | | Queue beyond its first items ("+ N more") |
+| | | People and Claude activity (tabs beside History) |
+| | | Handled and dismissed items |
 
-**Recommendation: B now, with A3 (the remote) as a later step.** B fixes the reported
-problem on the hardware most hosts have, and it teaches nothing new. Its drawer panels
-are self-contained, so they can later mount in a Build Room view of `/remote`. That
-remote is the real answer for a host whose laptop mirrors to the projector. The console
-(A1) is not worth a second layout: it is today's page with more width.
+## 5. The projector rule, and notices
 
-## 8. Players and scores (proposed, not built)
+Stage, Build and History are made to be seen. On them, anything waiting for the host
+shows **only as a number on the Host tab** and the ask pill. Names, and the text of ideas,
+feedback and proposed asks, appear only on the Host screen. A proposed ask's question
+never reaches the wall before the host opens it.
 
-Details are on `scores.html`. Three options:
+On the Host screen the queue itself is the notice, so toasts are rarely needed. The
+first pass's tiers (`notices.html`) still apply:
+
+- **Ambient:** counts only.
+- **Info:** a short toast, Host screen only.
+- **Action:** the queue's top item, and the Host tab count.
+- **Alert:** a bar under the header for the connection, on every screen. The connection
+  is host-only, but when it drops the room is not seeing changes either.
+
+## 6. The Build screen: the owner's idea, and what was measured
+
+The live product, framed under the Engage header. During a Choose ask whose options have
+local links, Choice A and Choice B get tabs, so the room sees each one running. A small
+room-safe pill over the frame shows that an ask is open and how many have answered.
+
+**Measured 2026-10-05 in the desktop app's browser pane (Chromium 152).** An https page
+framed `http://localhost:8131`. The frame stayed blank and a `fetch` to the same address
+failed. The local server's log shows neither request arrived, and no permission prompt
+appeared. The server itself was up (`curl` returned 200).
+
+This is consistent with Chrome's local network access protection: public sites need the
+user's permission to reach localhost, and Chrome asks with a one-time prompt. The
+embedded pane may not be able to show that prompt. Not yet tested: the owner's Chrome,
+Edge, Safari and Firefox, and dev servers that send `X-Frame-Options` (Rails and Django
+do by default).
+
+So:
+
+- **PLAN step 0 is a spike on the owner's browsers** before anything is built.
+- **The design never shows a blank frame.** C8: when the frame does not load, the screen
+  shows the newest screenshot, the permission step, and "Open the build in a new tab".
+- **Phones never get localhost links**, as today (`publicUrl` strips them). They get the
+  screenshots instead.
+
+## 7. Artifacts, for the host and for participants
+
+"Artifacts" is the repo's own word for a room's screenshots and timeline entries (the
+delete rule, `gateArtifactDelete` in `build-room.js`). Today they are the Screenshots
+panel on the host page and "Screenshots along the way" in the report.
+
+In the second pass they live in History, inline at the moment they arrived (C9). They are
+also a grid filter (C10). Each artifact says what it was for: an ask's mockup with its
+letter, a progress shot with its time, or a preview link marked "on this laptop only".
+
+**Phones already receive every screenshot** in their state (`publicView` returns
+`images`), but `BuildPlayer.jsx` shows only option images and the finals. A phone History
+tab with decisions and pictures (C11) is front-end work only. Preview feedback ("Looks
+good / Needs a change") moves onto the preview it is about.
+
+## 8. What is new behaviour, and what is only layout
+
+| Piece | Exists today | New |
+|---|---|---|
+| Queue of Claude asks, ideas, feedback | all three exist (proposed asks; ideas; ideas with AboutLogId) | showing them as one list; a "Later" state |
+| Host's own queue items | — | a host-created idea (Source host) |
+| Send to Claude from any item | ideas (`direct`), the log (`forAgent`) | the same for feedback and host notes |
+| Put ideas to a vote | an idea can join an open Ideas ask (`suggest`) | create a Choose or Rate ask from selected ideas and mark them promoted |
+| History chain | idea `promoted`; decision `chosen`; delivery `deliveredAt`; feedback `AboutLogId` | a `RelatesTo` on log rows, so idea → ask → decision → showing can be drawn |
+| Four screens | Present toggle; the stage | the header, the Build frame, the History screen |
+| Phone History tab | images and log already in `publicView` | the tab and gallery; "In a vote now" and "Sent to Claude" idea states |
+
+## 9. Players and scores
+
+Unchanged from the first pass (`scores.html`). Three options:
 
 1. **Counts only.**
-2. **Taking part and influence.** Answer 1; idea or suggestion 2 (at most 3 counted per
-   ask); preview feedback 1; a suggestion that wins or is chosen +5; an idea that is used
-   +3.
+2. **Taking part and influence.** Recommended if points are wanted.
 3. **Influence only.**
 
-Every rule is countable from rows that exist today. Points never reward picking the
-winning option. The People tab (B9) works with any option.
+A People tab sits beside History on the Host screen. The second pass adds one candidate
+rule to option 2: an idea put to a vote by the host +2, and +5 if it wins.
 
-Two of these touch earlier owner rulings:
+## 10. Every element, and where it goes
 
-- **The wall.** The scoreboard is Trivia and Call and Answer only (2026-09-25).
-- **Anonymity.** A named +5 on the wall would hint who wrote a winning anonymous
-  suggestion. The owner accepted the same side effect for trivia.
+| Today | Second pass |
+|---|---|
+| Header: join code, joined count | Header join cluster |
+| Header: Claude chip, connection chip | Header Claude status; the connection bar when it drops |
+| Header: Auto switch, Connect Claude Code, Crew, Wrap up, Report, End | Header menu (Auto also on the Claude tab) |
+| Present toggle, P | The four screens; P flips between Host and the last projected screen |
+| Error bar | A toast on the Host screen that stays; the connection bar on every screen |
+| How a Build Room works (first run) | The Now card, until Claude first posts |
+| Review card (proposed) | The queue's top item; Edit opens the review fields in place |
+| Ask Claude for mockups | On that item, as today; and a switch when putting ideas to a vote |
+| Answer for the room | A route on a Claude ask; a button on the live Now card |
+| The current ask (stage) | The Stage screen; summarised in the Now card |
+| Edit wording, Open voting, Close, Reopen, Discard | The Now card (Close on the Stage dock too) |
+| Suggestions with Hide/Show, add what the room said | The Now card for an Ideas ask (expand), and the composer's Log it |
+| Decide panel | The Now card at results, with Adjust |
+| JoinFoot QR + link, QrZoom | The Stage meter; header code (QR on hover, click to pin) |
+| What next? (Tell Claude, Preview, Continue prompt, Ask the room) | The composer; Preview on the Now card; Continue on the Claude tab |
+| Asks table | History, Decisions filter (with Reopen on the Host column) |
+| Screenshots panel | History, Artifacts filter (C10), remove with the delete rule |
+| Claude activity | The Now card (newest three) and the Claude tab (full) |
+| Ideas inbox (new, handled) | The queue (Room filter); handled ones under Dismissed |
+| Timeline + quick log | History; the quick log is the composer's Log it |
+| Crew board, StageTabs | The Stage screen shows the crew board in crew mode |
+| CrewIncoming, early look, tasks | Queue items (Crew filter); the Crew dialog keeps settings and tasks |
+| Wrapped stage | The History screen's closing side column (C12) |
+| Dialogs: Connect, Wrap up, Crew, Early look, End, Compose | Unchanged; Compose also opens from "Ask the room" |
 
-## 9. Questions for the owner
+## 11. Questions for the owner
 
-1. **Layout.** B (one screen, rail + dock + drawer, like regular sessions) with a Build
-   Room remote later, or A (a control screen plus a separate stage window) now?
-2. **The mirrored projector.** With the drawer open on a mirrored laptop, the room sees
-   it. Should the review card in the Asks tab show a proposed ask's question only after
-   the host clicks Review? The mockup does. Or is the room seeing a draft question fine?
-3. **Notices.** Toasts plus badges that point into the tabs (recommended), or also a
-   sixth "Notices" tab listing everything recent?
-4. **Join toasts.** A batched toast for joins ("Wen and 2 others joined"), or the count
-   only?
-5. **Scores.** Option 1, 2 or 3? On the host's screen only, or on the wall through the
-   scoreboard (which would extend it beyond Trivia and Call and Answer)? In the report?
-   Points for crew builders?
-6. **Claude's activity on the wall.** The newest line ("Editing src/Header.jsx") sits on
-   the stage today and in the mockups. Keep it for the room, or host-only?
-7. **The remote.** Is a Build Room view of the phone/tablet remote worth building after
-   B (PLAN step 9)?
+1. **The shape.** One queue, one composer, one History, and four screens (Host, Stage,
+   Build, History) in a header. Is that the direction?
+2. **The Host screen on the wall.** On a mirrored projector the room can glimpse the Host
+   screen, including the queue's ideas with names. Is that fine, or should a proposed
+   ask's text and names be hidden until hovered?
+3. **Switching screens for the host.** When an ask opens, should the room's view switch to
+   Stage by itself? And when the host sends a direction, should it go back to Build?
+4. **Putting ideas to a vote.** Should the room choose one (A/B/C), pick up to two, or
+   rate each? The mockup offers all three; one default is simpler.
+5. **The Build screen.** Is it fine that it needs a one-time browser permission and does
+   not work in Safari, with the new-tab fallback? See PLAN step 0 for the spike.
+6. **History on phones.** Show everything the wall shows, or decisions and pictures only?
+7. **Scores.** Option 1, 2 or 3; on the wall or not; in the report or not (as in the
+   first pass).

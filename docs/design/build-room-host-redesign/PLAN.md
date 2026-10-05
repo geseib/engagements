@@ -1,173 +1,164 @@
-# Build Room host redesign: build plan (Layout B)
+# Build Room host redesign: build plan (second pass)
 
-Prerequisite: the owner has answered `RATIONALE.md` §9, at least questions 1–3. Scoring
-(question 5) is not in this plan except as a gated last step.
+Prerequisite: the owner has answered `RATIONALE.md` §11, at least questions 1, 2 and 5.
 
-Every step below is small, ships on its own behind no flag (each one leaves the page
-working), and is verified the same way:
+Every step ships on its own and leaves the page working. Verify each one with:
 
 - the frontend suite;
-- `tests/build-room-copy.js` (no emoji in Build Room files);
+- the backend tests it touches;
+- `tests/build-room-copy.js`;
 - `npm run build`;
-- a render of the touched states in the browser pane, compared with the matching mockup
-  here.
+- a render in the browser pane compared with its mockup.
 
-A push to `dev` deploys. Push only finished steps, per CLAUDE.md.
+A push to `dev` deploys; push finished steps only (CLAUDE.md).
 
 ## Ground rules
 
-- **Nothing is deleted that a test or the owner relies on.** Every test in
-  `__tests__/buildRoomPage.test.jsx` keeps its intent:
-  - its 49 tests find controls by role and name, not by position;
-  - a moved control keeps its accessible name ("Open to the room", "Answer for the room",
-    "Send to Claude", "Close", "Discard", "Reconnect", "Present");
-  - a test that clicks a control which now sits inside a closed drawer first opens the
-    drawer. That is a one-line helper (`openHost('Ideas')`), not a rewrite.
-- **Reuse the stage, do not copy it.**
-  - `components/stage/Stage.jsx` takes `rail`, `meter`, `dock` and children slots, and
-    owns the profile class and the fitter.
-  - `Rail.jsx` and `Dock.jsx` take plain props.
-  - The Build Room mounts them. It does not re-cut them in `BuildRoom.css`.
-  - The drawer reuses the `SessionSetupPanel` geometry (`styles.css:480+`) through its
-    own `.brm-drawer` scope, since that class name is load-bearing for the regular
-    stage's keys.
-- **The `.brm` scope and `buildRoomPalette.test.js` stay the contract** for every new
-  selector. New tints are composited and asserted there.
-- **Present stays.** The P key and its test stay; only what Present has to hide shrinks.
+- **Nothing a test or the owner relies on is deleted.**
+  - The 49 tests in `__tests__/buildRoomPage.test.jsx` find controls by role and name.
+    Moved controls keep their names: "Open to the room", "Answer for the room",
+    "Send to Claude", "Close", "Discard", "Reconnect", "Sign in again".
+  - The Present tests are rewritten with the same intent. On the Stage, Build and History
+    screens, no host-only control, idea author, host note or proposed ask is rendered.
+    P still switches what the room sees.
+- **Build on the shipped stage.**
+  - The Stage screen mounts `components/stage/Stage.jsx` with `Rail`, `RoomMeter` and
+    `Dock`. The fitter and the four display profiles come with it.
+  - Host chrome stays in the `.brm` scope, and `buildRoomPalette.test.js` measures every
+    new pairing and tint.
+- **Pure functions first.** Where possible a step starts with a pure function and its
+  unit tests, then the component.
+- **The server owns names.** Anything that derives per-person data (queue, People,
+  chains) is computed in `build-store.js` `hostView` / `publicView`. The phone view never
+  carries what it should not.
+
+## Step 0. Spike: can Engage frame the local build? (half a day, no product code)
+
+- On engage.dev, open a scratch page (or the console) and frame a local Vite server in
+  the owner's Chrome, Edge, Safari and Firefox.
+- Record for each:
+  - whether a permission prompt appears;
+  - what Allow does;
+  - what is remembered;
+  - what `allow="local-network-access"` on the iframe changes.
+- Also try a dev server that sends `X-Frame-Options: SAMEORIGIN` (Rails, Django).
+- Write the result into this folder.
+- If no browser frames it, the Build screen ships as C8 only: the screenshot, plus Open in
+  a new tab.
 
 ## Steps
 
-**1. Host chrome becomes a drawer (no visual change to the stage yet).**
-- Add `BuildHostDrawer.jsx` with tabs People, Ideas, Claude, Asks and Record, plus Crew
-  while crew mode is on. It has an X, Escape, `\`, a focus trap, and stops at the dock.
-- Move into it, unchanged:
-  - `IdeasInbox` goes to Ideas;
-  - `ClaudeActivity` (full) goes to Claude, with the Connect button and `AutoSwitch`;
-  - `AskList` and the `ProposedCard`s go to Asks;
-  - `Timeline` and `ShotsPanel` go to Record, as accordions with summary lines;
-  - `CrewIncoming`, `CrewTasks` and `RunCrewCodeSwitch` go to Crew.
-- The Session row in the drawer footer gets Present, Wrap up, Report and End session.
-- **Test:** each moved control is reached through the drawer.
-  `buildRoomPage.test.jsx` gains `openHost(tab)`.
-- **Mockups:** B9–B12, B6 (second screen).
-
-**2. The rail replaces the header.**
-- Mount `Rail` with:
-  - phase: Building, Choose, Ideas, Rate, Vote, Results, Wrapped up, Ended;
+**1. The header and the four screens.**
+- Add `BuildHeader.jsx`:
   - the title;
-  - context ("Ask 3 of 3");
-  - the join cluster, with the code previewing the QR on hover and pinning it on click.
-- Remove the header's eleven controls; step 1 already gave each one its home.
-- The Claude status becomes the stage line, plus the drawer header.
-- `ConnectionChip`'s states become the host bar (step 6).
-- **Test:** the connection tests keep their names and assert on the bar.
-- **Mockups:** every B page's rail.
+  - the Host, Stage, Build and History tabs (keys 1–4; P flips Host and the last projected
+    screen);
+  - the ask pill;
+  - Claude status;
+  - the join code with the QR on hover (reuse `QrZoom`);
+  - the menu: Connect, Crew, Auto, Wrap up, Report, End.
+- `view` state replaces `present`.
+- In this step Host is today's page minus its header; Stage is today's stage. Build and
+  History show placeholders.
+- **Mockups:** every C page's header.
 
-**3. The dock and the one next move.**
-- Mount `Dock` with:
-  - the room-safe status;
-  - the HOST button with its unread badge;
-  - one primary and one secondary, from a pure function `nextMove(room, ui)` that
-    returns `{ status, primary, secondary, waiting }` in the precedence of RATIONALE §4.
-    It is unit-tested on its own, with one case per row of that table.
-- Keys:
-  - Space fires the primary;
-  - R opens review;
-  - T opens Tell Claude;
-  - none of them fire while typing (the existing `isTyping` guard).
-- Remove from the stage:
-  - `NextPanel`; its parts are the Tell sheet (step 4) and Ask the room;
-  - the stage hint lines;
-  - `AskStage`'s host kit. Close and Open voting go to the dock; Edit wording, Reopen and
-    Discard go to the ask's row in Asks.
-- **Mockups:** B1, B3, B7, B8.
+**2. The Stage screen.**
+- Stage mounts the shipped `Stage` with the current ask, results, crew board or idle
+  content.
+- The dock has Close / Open voting and Answer for the room, with Space.
+- No host-only element on it (the rewritten Present test).
+- **Mockups:** C6.
 
-**4. Sheets: direction, spoken answer, Tell Claude.**
-- `DecidePanel` renders as a dock sheet. The sentence and Send stay visible; Chosen,
-  Fold in, the note and the Send to Claude switch fold into an **Adjust** accordion whose
-  summary line states their values.
-- Spoken mode (from the dock or from the review card) uses the same sheet.
-- `NextPanel`'s Tell form becomes the Tell sheet.
-- The stage gives up height through the existing fitter (`fitKey`), not by scrolling.
-- **Test:** the decide, spoken and Tell tests keep passing with their current names; one
-  new test checks that Adjust's summary names the chosen option.
-- **Mockups:** B4, B5, B11.
+**3. The Host screen: Now and the composer.**
+- The Now card states:
+  - building: activity, Show the build, Preview the work;
+  - live: counts, Close, Answer for the room, Edit, with Discard and Reopen under Edit;
+  - results: `DecidePanel` with Adjust;
+  - first run: How it works.
+- The composer replaces `NextPanel` and the timeline's quick log. Its routes:
+  - Send to Claude (`postDirection`);
+  - Ask the room (`AskComposer`, prefilled);
+  - Queue it (step 4);
+  - Log it (`postLog` with kind verbal).
+- **Mockups:** C1, C4, C5.
 
-**5. The review card, collapsed.**
-- `ReviewCard` shows the question, the options with their thumbnails, the missing
-  preview note, Discard, Answer for the room and Open to the room.
-- Its five edit inputs fold into "Edit the question and options".
-- Edits still save before Open (the existing `beforeDecide` / `open` order).
-- The dock shows "Ask N waiting for you", and its primary becomes Review ask N when no
-  ask is live.
-- **Mockups:** B2.
+**4. The queue.**
+- Server work:
+  - `hostView` returns `queue`: proposed asks, ideas with status new or later, preview
+    feedback, crew shares incoming, and host items, each with `source`, `kind`, `text`,
+    `createdAt` and a stable id.
+  - Pure ordering function: Claude's asks first, then oldest. It has unit tests.
+- New in the backend:
+  - a host-created idea (`Source: 'host'`) for Queue it;
+  - an idea status `later`;
+  - `POST build/asks-from-ideas` (`{ ideaIds, kind: choice|rating, prompt, open, askForMockups }`),
+    which creates the ask, marks the ideas promoted, and optionally posts the mockups
+    direction.
+  - Each is tested in `tests/build-room.js`, including the delete and authorisation
+    rules.
+- The page:
+  - the queue column with filters;
+  - per-item routes;
+  - multi-select with the bulk bar;
+  - the "Put N ideas to a vote" dialog (Modal: X and Cancel, one `requestClose`).
+- **Mockups:** C1, C2, C3.
 
-**6. Notices.**
-- Add `BuildNotices.jsx`:
-  - a reducer that diffs successive `GET build/state` results and `buildActivity`
-    messages into notices (pure and unit-tested; joins batched every 20s, same-kind
-    notices merged);
-  - a toast stack (at most three, `role="status"`, alerts `role="alert"`);
-  - per-tab unread counts.
-- Hidden in Present. Clicking a toast opens its tab.
-- The error bar becomes an error toast that stays.
-- The connection becomes the host bar.
-- No server change is needed: every trigger in `notices.html` is a difference between
-  two states the page already fetches.
-- **Mockups:** B1, B14, notices.html.
+**5. History.**
+- Server work:
+  - add `RelatesTo` to log rows written by idea actions, decisions, directions and
+    `share_image`;
+  - a pure `historyChains(room)` with tests.
+- The page:
+  - the Host column (editable entries, delete rule, newest first, screenshots inline);
+  - the History screen at the Room ladder, with Everything, Decisions and Artifacts
+    filters;
+  - the wrap-up side column.
+- `Timeline`, `ShotsPanel` and `AskList` become views of this one list, so no capability
+  is lost.
+- **Mockups:** C9, C10, C12.
 
-**7. People tab (counts only).**
-- The roster with:
-  - answers (from answers and votes);
-  - ideas (ideas and suggestions);
-  - picked (chosen respIds; ideas with status used);
-  - feedback (ideas with AboutLogId).
-- Count server-side in `hostView` (`build-store.js`), so the page never derives names
-  from rows it does not otherwise hold. The tests build fixtures through `hostView`
-  already.
-- No points.
-- **Mockups:** B9 without the Points column.
+**6. The Build screen.**
+- Shape it from the step 0 result.
+- The frame (`sandbox` without `allow-top-navigation`) shows:
+  - the newest local link (a showing entry, the preview, or the outcome demo);
+  - a tab per option's local link during a Choose ask.
+- Reload and Open in a new tab are always present.
+- A load timeout falls back to C8.
+- The room-safe ask pill sits over the frame.
+- **Mockups:** C7, C8.
 
-**8. Polish and measure.**
-- Render every state at Room, TV, Call and Table (swap the `d-*` class, per
-  `engage2-viewing-the-stage`).
-- Check the dock never overlaps and nothing scrolls the page.
-- Update `docs/design/AUDIT.md` for the Build Room.
+**7. Phones.**
+- `BuildPlayer.jsx` gains a History tab: the decisions, Claude's posts and the pictures
+  (from `publicView`, which already carries `images` and the room's log).
+- Preview feedback moves onto its picture.
+- "In a vote now" and "Sent to Claude" idea states join `IDEA_STATUS`.
+- **Mockups:** C11.
+
+**8. People, and polish.**
+- The People tab with counts (scores only after the owner's answer; `scores.html`).
+- Measure every screen at Room, TV, Call and Table.
+- Update `docs/design/AUDIT.md`.
 - Push to dev, look on `engage.dev.seibtribe.us`, then test.
 
-**9. (Later, owner question 7) A Build Room view of the remote.**
-- `/remote?gameId=X` detects a build session and mounts the drawer panels in
-  HostRemote's layout:
-  - a status card;
-  - the needs-you queue (proposed asks, new ideas, feedback);
-  - one sticky primary from `nextMove`.
-- It uses the same host routes and the host-ticket socket.
-- **Mockups:** A3.
-
-**10. (Gated on owner question 5) Points.**
-- Add the chosen rule set as a pure function beside `standings.js`.
-- Add the Points column.
-- Only if the owner says so, wire the Scoreboard's `S` for build sessions.
+**9. (Later) The remote.**
+- A build view of `/remote`: the Now card, the queue and the composer on a phone, laptop
+  or tablet, so the laptop can stay on the Stage or Build screen (first pass, A3).
 
 ## Which component moves where
 
-| Component (BuildRoomPage.jsx unless named) | Today | After |
-|---|---|---|
-| `RoomHeader`, `AgentChip`, `ConnectionChip` | header | `Rail`; drawer header; host bar |
-| `AutoSwitch` | header | Asks tab and Claude tab |
-| `ConnectPanel`, `WrapUpPanel`, `EndDialog`, `AskComposer`, `CrewDialog`, `EarlyLookDialog`, `QrZoom` | dialogs | unchanged |
-| `ReviewCard` | main column, first | Asks tab, collapsed edit |
-| `AskStage` | stage + host kit | stage only; kit split dock / Asks row |
-| `ChoiceBoard`, `RatingBoard`, `SuggestBoard`, `Whys` | stage | stage (suggestion Hide moves to the Asks row) |
-| `DecidePanel` | under the stage | dock sheet, Adjust accordion |
-| `IdleStage`, `WrappedStage` | stage | stage (the activity line joins IdleStage) |
-| `JoinFoot` | under the stage | meter column (QR box) + rail code |
-| `NextPanel` | under the stage | Tell sheet + dock secondary; Preview + Continue in Claude tab |
-| `AskList` | under the stage | Asks and Record tabs |
-| `ShotsPanel` | under the stage | Record tab |
-| `ClaudeActivity` | right column | stage line (newest) + Claude tab (full) |
-| `IdeasInbox` | right column | Ideas tab |
-| `Timeline` | right column | Record tab; the wall's filtered timeline unchanged in Present |
-| `StageTabs` (BuildCrew.jsx) | above the stage | dock secondary |
-| `CrewBoard`, `EarlyLook` | stage | stage |
-| `CrewIncoming`, `CrewTasks`, `RunCrewCodeSwitch` | right column / header | Crew tab |
+| Today (BuildRoomPage.jsx unless named) | After |
+|---|---|
+| `RoomHeader`, `AgentChip`, `ConnectionChip`, `AutoSwitch` | `BuildHeader` (and its menu); the connection bar |
+| `ReviewCard` | a queue item (Claude ask); Edit expands today's fields |
+| `AskStage`, `ChoiceBoard`, `RatingBoard`, `SuggestBoard`, `Whys` | the Stage screen; a summary in the Now card |
+| `DecidePanel` | the Now card at results |
+| `IdleStage`, `WrappedStage` | the Stage screen (idle) and History's closing column |
+| `JoinFoot`, `QrZoom` | the Stage meter; the header code |
+| `NextPanel` | the composer + the Now card |
+| `AskList`, `ShotsPanel`, `Timeline` | History (Host column, History screen, filters) |
+| `ClaudeActivity` | the Now card + the Claude tab |
+| `IdeasInbox` | the queue |
+| `CrewBoard`, `StageTabs` | the Stage screen in crew mode |
+| `CrewIncoming` | queue items (Crew) |
+| `CrewTasks`, `RunCrewCodeSwitch` | the Crew dialog |
+| Dialogs (Connect, Wrap up, Crew, Early look, End, Compose) | unchanged |
