@@ -71,9 +71,16 @@ export const FEED_KINDS = Object.freeze({
 const DETAIL_KINDS = ['progress', 'showing', 'milestone'];
 const FEED_LENGTH = 8;
 
-const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', dismissed: 'Not used this time' };
-/** What a phone says about its own idea; one shown on the wall says so (owner, 2026-10-05). */
-const ideaStatusText = (idea) => (idea.walled ? 'Shown on the wall' : IDEA_STATUS[idea.status] || IDEA_STATUS.new);
+const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', later: 'Saved for later', dismissed: 'Not used this time' };
+/**
+ * What a phone says about its own idea; one shown on the wall says so (owner,
+ * 2026-10-05), and one the host put to a vote says so (step 4).
+ */
+const ideaStatusText = (idea) => {
+  if (idea.walled) return 'Shown on the wall';
+  if (idea.status === 'promoted' && idea.promotedTo) return 'Put to a vote';
+  return IDEA_STATUS[idea.status] || IDEA_STATUS.new;
+};
 
 export function isHttpUrl(value) {
   if (!value) return false;

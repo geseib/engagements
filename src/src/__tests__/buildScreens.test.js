@@ -3,6 +3,7 @@
  */
 import {
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
+  queueItems, filterQueue, laterIdeas,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
 } from '../buildroom/buildScreens';
 
@@ -35,6 +36,28 @@ describe('what the header counts', () => {
       asks: [{ status: 'proposed' }, { status: 'live' }, { status: 'proposed' }],
       ideas: [{ status: 'new' }, { status: 'dismissed' }, { status: 'promoted' }],
     })).toBe(3);
+  });
+
+  test('the queue: Claude\'s asks first, then everything else oldest first; later is its own fold', () => {
+    const room = {
+      asks: [
+        { askId: '004', status: 'proposed', source: 'host', createdAt: 't3' },
+        { askId: '005', status: 'proposed', source: 'agent', createdAt: 't5' },
+        { askId: '002', status: 'live', source: 'agent', createdAt: 't0' },
+      ],
+      ideas: [
+        { ideaId: 'i1', status: 'new', source: 'room', createdAt: 't1' },
+        { ideaId: 'i2', status: 'new', source: 'host', createdAt: 't4' },
+        { ideaId: 'i3', status: 'later', source: 'room', createdAt: 't2' },
+        { ideaId: 'i4', status: 'promoted', source: 'room', createdAt: 't2' },
+      ],
+    };
+    const q = queueItems(room);
+    expect(q.map((x) => [x.id, x.from])).toEqual([['ask:005', 'claude'], ['idea:i1', 'room'], ['ask:004', 'you'], ['idea:i2', 'you']]);
+    expect(filterQueue(q, 'you').map((x) => x.id)).toEqual(['ask:004', 'idea:i2']);
+    expect(filterQueue(q, 'all')).toBe(q);
+    expect(laterIdeas(room).map((i) => i.ideaId)).toEqual(['i3']);
+    expect(waitingCount(room)).toBe(4);
   });
 
   test('the ask pill: answered of here, votes while voting, results when closed', () => {

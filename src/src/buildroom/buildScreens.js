@@ -42,11 +42,39 @@ export function togglePresent(current, lastProjected) {
  * projected screen the room sees the count, never the content.
  */
 export function waitingCount(room) {
-  if (!room) return 0;
-  const proposed = (room.asks || []).filter((a) => a.status === 'proposed').length;
-  const ideas = (room.ideas || []).filter((i) => i.status === 'new').length;
-  return proposed + ideas;
+  return queueItems(room).length;
 }
+
+/**
+ * THE QUEUE (step 4, C1): everything waiting on the host, in one list.
+ * Claude's asks first (Claude is waiting on them), then everything else
+ * oldest first: the host's drafts and waiting votes, the room's ideas and
+ * the host's own queued ideas. Each item: `{type: 'ask'|'idea', id, from:
+ * 'claude'|'room'|'you', at, ask?|idea?}`.
+ */
+export function queueItems(room) {
+  if (!room) return [];
+  const asks = (room.asks || []).filter((a) => a.status === 'proposed')
+    .map((a) => ({ type: 'ask', id: `ask:${a.askId}`, from: a.source === 'agent' ? 'claude' : 'you', at: a.createdAt || '', ask: a }));
+  const ideas = (room.ideas || []).filter((i) => i.status === 'new')
+    .map((i) => ({ type: 'idea', id: `idea:${i.ideaId}`, from: i.source === 'host' ? 'you' : 'room', at: i.createdAt || '', idea: i }));
+  const byAge = (x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
+  const claude = asks.filter((x) => x.from === 'claude').sort(byAge);
+  const rest = [...asks.filter((x) => x.from !== 'claude'), ...ideas].sort(byAge);
+  return [...claude, ...rest];
+}
+
+/** The queue's filter chips (C1), with counts. */
+export const QUEUE_FILTERS = Object.freeze([
+  { key: 'all', label: 'All' },
+  { key: 'claude', label: 'Claude' },
+  { key: 'room', label: 'Room' },
+  { key: 'you', label: 'You' },
+]);
+export const filterQueue = (items, key) => (key === 'all' ? items : items.filter((x) => x.from === key));
+
+/** Ideas the host set aside with Later: their own fold under the queue. */
+export const laterIdeas = (room) => ((room && room.ideas) || []).filter((i) => i.status === 'later');
 
 /** The open ask the header pill names, or null: "Ask 3 · 5 of 18" / "Ask 3 · results". */
 export function askPill(room) {

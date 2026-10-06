@@ -760,3 +760,32 @@
 .brm .brm-unheard { border-left: 4px solid var(--primary); display: grid; gap: 8px; margin-top: 0; }
 .brm .brm-unheard-t { margin: 0; line-height: 1.4; }
 .brm .brm-unheard code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--primary); }
+
+/* ---- The queue (step 4, C1): filters, ticks, the bulk bar ----------------- */
+.brm .brm-queue { display: grid; gap: 0; min-width: 0; }
+.brm .brm-qfilters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.brm .brm-qchip {
+  min-height: 30px; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--brm-rule); background: transparent; color: var(--muted);
+  font: inherit; font-size: var(--brm-t-label);
+}
+.brm .brm-qchip.is-on { border-color: var(--secondary); color: var(--text); background: var(--brm-tint-blue); }
+.brm .brm-qchip:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-qbulk {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin: 0 0 8px;
+  font-size: var(--brm-t-label);
+}
+.brm .brm-qtick { width: 18px; height: 18px; accent-color: var(--primary); flex: none; }
+.brm .brm-qidea.is-ticked { outline: 2px solid var(--primary); outline-offset: -2px; }
+.brm .brm-idea-acts .brm-more-panel { min-width: 260px; }
+/* C3b: a waiting vote shows a tile per option, its mockup as Claude attaches it. */
+.brm .brm-mocktiles { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.brm .brm-mocktiles li { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.brm .brm-mocktile-img { margin: 0; }
+.brm .brm-mocktile-img img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; object-position: top; border-radius: 6px; }
+.brm .brm-mocktile-wait {
+  display: grid; place-items: center; aspect-ratio: 4 / 3; border-radius: 6px;
+  border: 1px dashed var(--brm-rule); color: var(--muted); font-size: var(--brm-t-label); text-align: center; padding: 6px;
+}
+.brm .brm-mocktile-t { font-size: var(--brm-t-label); overflow-wrap: anywhere; }

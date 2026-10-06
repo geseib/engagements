@@ -868,6 +868,117 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(!JSON.stringify([...store.values()]).includes('A secret compliment'), 'the wall comment is plaintext at rest');
   });
 
+  console.log('\nthe queue: later, queue it, ideas to a vote, mockups first, open next (step 4)');
+  const state = async () => (await hostCall('GET', 'state')).body;
+  const threeIdeas = async () => {
+    await sendIdea(priya, 'Text a reminder the day before');
+    await sendIdea(marcus, 'Put the address and a map link at the top');
+    await sendIdea(priya, 'Let people sign up as a pair');
+    // In the order they were sent (ideas sent in one millisecond sort by their random suffix).
+    const ideas = (await state()).ideas;
+    return ['Text a reminder the day before', 'Put the address and a map link at the top', 'Let people sign up as a pair']
+      .map((t) => ideas.find((i) => i.text === t).ideaId);
+  };
+  await check('Later parks an idea; Restore brings it back', async () => {
+    seed();
+    await sendIdea(priya, 'Dark mode');
+    const idea = await ideaOf('Dark mode');
+    assert.strictEqual((await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'later' })).body.idea.status, 'later');
+    assert.strictEqual((await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'restore' })).body.idea.status, 'new');
+  });
+  await check('Queue it: the host\'s own idea waits in the queue and never shows on a phone', async () => {
+    seed();
+    const r = await hostCall('POST', 'ideas', { text: 'Check it on a small phone' });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.strictEqual(r.body.idea.source, 'host');
+    assert.strictEqual((await hostCall('POST', 'ideas', { text: '  ' })).status, 400);
+    assert.strictEqual((await agentCall('POST', 'ideas', { text: 'Claude cannot queue' })).status, 403);
+    const p = await playCall('GET', 'state', { playerName: 'Host', clientId: 'c-host-named' });
+    assert.ok(!JSON.stringify(p.body).includes('Check it on a small phone'));
+  });
+  await check('ideas to a vote: Pick one by default, opens at once, the ideas are used', async () => {
+    seed();
+    const ids = await threeIdeas();
+    const r = await hostCall('POST', 'asks-from-ideas', { ideaIds: ids });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    const ask = r.body.ask;
+    assert.deepStrictEqual([ask.kind, ask.status, ask.maxPicks, ask.prompt], ['choice', 'live', 1, 'Which should Claude build next?'], JSON.stringify(ask));
+    assert.deepStrictEqual(ask.options.map((o) => [o.label, o.title]), [['A', 'Text a reminder the day before'], ['B', 'Put the address and a map link at the top'], ['C', 'Let people sign up as a pair']]);
+    assert.deepStrictEqual(ask.fromIdeas, ids);
+    const st = await state();
+    assert.strictEqual(st.currentAskId || st.current?.askId, ask.askId);
+    assert.ok(st.ideas.every((i) => i.status === 'promoted' && i.promotedTo === ask.askId));
+    // Used once: a second vote from the same ideas is refused.
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: ids })).status, 409);
+  });
+  await check('ideas to a vote: needs 2 to 6, the host only, and real ideas', async () => {
+    seed();
+    const ids = await threeIdeas();
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[0]] })).status, 400);
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[0], 'nope'] })).status, 404);
+    assert.strictEqual((await agentCall('POST', 'asks-from-ideas', { ideaIds: ids })).status, 403);
+    const pick2 = await hostCall('POST', 'asks-from-ideas', { ideaIds: ids, maxPicks: 2, prompt: 'Which two first?', open: false });
+    assert.deepStrictEqual([pick2.body.ask.status, pick2.body.ask.maxPicks, pick2.body.ask.prompt], ['proposed', 2, 'Which two first?']);
+  });
+  await check('mockups first: the vote waits hidden, Claude is asked, Ready when every option has a picture', async () => {
+    seed();
+    const ids = await threeIdeas();
+    const r = await hostCall('POST', 'asks-from-ideas', { ideaIds: ids, askForMockups: true });
+    const id = r.body.ask.askId;
+    assert.strictEqual(r.body.ask.status, 'proposed');
+    assert.deepStrictEqual(r.body.ask.mockups, { asked: true, have: 0, total: 3, ready: false });
+    const p = await playCall('GET', 'state', priya);
+    assert.ok(!JSON.stringify(p.body).includes('Which should Claude build next'), `the room cannot see it yet: ${JSON.stringify(p.body)}`);
+    const inbox = (await agentCall('GET', 'inbox')).body.inbox;
+    assert.ok(inbox.some((d) => /make a quick mockup of options A, B, C/.test(d.text) && d.askId === id), JSON.stringify(inbox));
+    for (const label of ['A', 'B']) await agentCall('POST', 'images', { data: PNG.toString('base64'), kind: 'mockup', askId: id, label });
+    let ask = (await state()).asks.find((a) => a.askId === id);
+    assert.deepStrictEqual(ask.mockups, { asked: true, have: 2, total: 3, ready: false });
+    await agentCall('POST', 'images', { data: PNG.toString('base64'), kind: 'mockup', askId: id, label: 'C' });
+    ask = (await state()).asks.find((a) => a.askId === id);
+    assert.strictEqual(ask.mockups.ready, true);
+    assert.strictEqual(ask.status, 'proposed', 'Ready never opens by itself');
+  });
+  await check('Open next: lined up behind the open ask, opens when it closes', async () => {
+    seed();
+    const ids = await threeIdeas();
+    const now = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How close is this?' });
+    const openId = now.body.ask.askId;
+    const waiting = (await hostCall('POST', 'asks-from-ideas', { ideaIds: ids, askForMockups: true })).body.ask.askId;
+    const q = await hostCall('POST', `asks/${waiting}`, { action: 'openNext' });
+    assert.strictEqual(q.status, 200, JSON.stringify(q.body));
+    assert.strictEqual(q.body.ask.next, true);
+    assert.strictEqual(q.body.ask.status, 'proposed');
+    await hostCall('POST', `asks/${openId}`, { action: 'close' });
+    const st = await state();
+    assert.strictEqual(st.asks.find((a) => a.askId === waiting).status, 'live');
+    assert.ok(st.log.some((l) => /Opened ask \d+ next/.test(l.text)));
+    // Only a waiting ask can be lined up.
+    assert.strictEqual((await hostCall('POST', `asks/${openId}`, { action: 'openNext' })).status, 409);
+  });
+  await check('Open next with nothing open opens it now; Not next takes it out of line', async () => {
+    seed();
+    const ids = await threeIdeas();
+    const waiting = (await hostCall('POST', 'asks-from-ideas', { ideaIds: ids, open: false })).body.ask.askId;
+    assert.strictEqual((await hostCall('POST', `asks/${waiting}`, { action: 'openNext' })).body.ask.status, 'live');
+    seed();
+    const ids2 = await threeIdeas();
+    const open = (await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How close?' })).body.ask.askId;
+    const w2 = (await hostCall('POST', 'asks-from-ideas', { ideaIds: ids2, open: false })).body.ask.askId;
+    await hostCall('POST', `asks/${w2}`, { action: 'openNext' });
+    assert.strictEqual((await hostCall('POST', `asks/${w2}`, { action: 'notNext' })).body.ask.next, undefined);
+    await hostCall('POST', `asks/${open}`, { action: 'close' });
+    assert.strictEqual((await state()).asks.find((a) => a.askId === w2).status, 'proposed');
+  });
+  await check('Cancel the vote: the ideas go back to the queue', async () => {
+    seed();
+    const ids = await threeIdeas();
+    const id = (await hostCall('POST', 'asks-from-ideas', { ideaIds: ids, askForMockups: true })).body.ask.askId;
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'discard' })).status, 200);
+    const st = await state();
+    assert.ok(st.ideas.every((i) => i.status === 'new' && !i.promotedTo), JSON.stringify(st.ideas));
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

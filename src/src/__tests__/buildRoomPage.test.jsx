@@ -366,9 +366,9 @@ describe('the host side panel', () => {
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'delete' }));
   });
 
-  test('ideas inbox: Send to Claude, and Dismiss', async () => {
+  test('the queue: Send to Claude, and Dismiss', async () => {
     await openRoom(hostState({ ideas: [{ PlayerName: 'Jordan', Text: 'A map link for parking' }] }));
-    const inbox = screen.getByRole('region', { name: /Ideas inbox/ });
+    const inbox = screen.getByRole('region', { name: 'The queue' });
     fireEvent.click(within(inbox).getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/ideas/0-i0`));
     expect(lastPost().body).toEqual({ action: 'direct' });
@@ -567,7 +567,7 @@ describe('the Stage screen (was Present mode)', () => {
     expect(screen.getByText('Ask Dee about parking later')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stage' }));
 
-    expect(screen.queryByRole('region', { name: /Ideas inbox/ })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'The queue' })).toBeNull();
     expect(screen.queryByText('Ask Dee about parking later')).toBeNull();
     expect(screen.queryByText('Something rude')).toBeNull();
     expect(screen.queryByText('Ana')).toBeNull();
@@ -611,11 +611,11 @@ describe('the Stage screen (was Present mode)', () => {
     await openRoom(busyRoom());
     const log = screen.getByLabelText(/log what the room said/i);
     fireEvent.keyDown(log, { key: 'p' });
-    expect(screen.getByRole('region', { name: /Ideas inbox/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'The queue' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'p' });
-    expect(screen.queryByRole('region', { name: /Ideas inbox/ })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'The queue' })).toBeNull();
     fireEvent.keyDown(window, { key: 'P' });
-    expect(screen.getByRole('region', { name: /Ideas inbox/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'The queue' })).toBeInTheDocument();
   });
 });
 
@@ -846,7 +846,7 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     fireEvent.keyDown(window, { key: '4' });
     expect(screen.getByRole('heading', { name: 'Decided so far' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: '1' });
-    expect(screen.getByRole('region', { name: /Ideas inbox/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'The queue' })).toBeInTheDocument();
   });
 
   test('P flips between Host and the last screen the room saw', async () => {
@@ -1153,11 +1153,14 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
 describe('acknowledge, and a comment on the wall (owner, 2026-10-05)', () => {
   test('Acknowledge and Show on the wall each say what they do, and post', async () => {
     await openRoom(hostState({ ideas: [{ PlayerName: 'Jordan', Text: 'I like the look of the new buttons' }] }));
-    const inbox = screen.getByRole('region', { name: /Ideas inbox/ });
+    const inbox = screen.getByRole('region', { name: 'The queue' });
     const ack = within(inbox).getByRole('button', { name: 'Acknowledge' });
     expect(ack.getAttribute('title')).toBe('Mark it as seen. Their phone says so; nothing goes to Claude.');
     fireEvent.click(ack);
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'acknowledge' }));
+    // Show on the wall sits in the idea's Ask the room menu (step 4, C1).
+    await waitFor(() => expect(within(inbox).getByRole('button', { name: 'Ask the room' })).not.toBeDisabled());
+    fireEvent.click(within(inbox).getByRole('button', { name: 'Ask the room' }));
     const wall = within(inbox).getByRole('button', { name: 'Show on the wall' });
     await waitFor(() => expect(wall).not.toBeDisabled());
     fireEvent.click(wall);
@@ -1259,5 +1262,110 @@ describe('the decision records how it was made; Claude gets the question and the
     fireEvent.keyDown(window, { key: '4' });
     const decided = screen.getByRole('heading', { name: 'Decided so far' }).closest('section');
     expect(decided.textContent).toMatch('Which header should volunteers see first: Bold banner · by the wheel');
+  });
+});
+
+describe('the queue (step 4: C1, C3, C3b)', () => {
+  const IDEAS = [
+    { PlayerName: 'Dee', Text: 'Text a reminder the day before', CreatedAt: ago(300) },
+    { PlayerName: 'Jo', Text: 'Put the address and a map link at the top', CreatedAt: ago(200) },
+    { Source: 'host', PlayerName: 'Host', Text: 'Let people sign up as a pair', CreatedAt: ago(100) },
+  ];
+  const queue = () => screen.getByRole('region', { name: 'The queue' });
+
+  test('filters by who it came from; Claude\'s ask comes first', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }], ideas: IDEAS }));
+    const q = queue();
+    expect(within(q).getByRole('button', { name: 'Claude · 1' })).toBeInTheDocument();
+    expect(within(q).getByRole('button', { name: 'Room · 2' })).toBeInTheDocument();
+    fireEvent.click(within(q).getByRole('button', { name: 'You · 1' }));
+    expect(within(q).getByText('Let people sign up as a pair')).toBeInTheDocument();
+    expect(within(q).queryByText('Text a reminder the day before')).toBeNull();
+    expect(within(q).getByText(/You · queued/)).toBeInTheDocument();
+  });
+
+  test('tick three, put them to a vote: Pick one by default, opens now', async () => {
+    await openRoom(hostState({ ideas: IDEAS }));
+    const q = queue();
+    IDEAS.forEach((i) => fireEvent.click(within(q).getByRole('checkbox', { name: `Tick: ${i.Text}` })));
+    const bar = within(q).getByRole('group', { name: 'Ticked ideas' });
+    expect(bar.textContent).toMatch('3 ticked');
+    fireEvent.click(within(bar).getByRole('button', { name: 'Put 3 to a vote' }));
+    const dialog = screen.getByRole('dialog', { name: 'Put 3 ideas to a vote' });
+    expect(within(dialog).getByRole('radio', { name: 'Pick one (A, B, C)' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open the vote' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks-from-ideas`));
+    expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1', '2-i2'], prompt: 'Which should Claude build next?', maxPicks: 1, open: true });
+  });
+
+  test('mockups first: the button asks Claude for N mockups and says the vote waits', async () => {
+    await openRoom(hostState({ ideas: IDEAS }));
+    const q = queue();
+    IDEAS.slice(0, 2).forEach((i) => fireEvent.click(within(q).getByRole('checkbox', { name: `Tick: ${i.Text}` })));
+    fireEvent.click(within(q).getByRole('button', { name: 'Put 2 to a vote' }));
+    const dialog = screen.getByRole('dialog', { name: 'Put 2 ideas to a vote' });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Ask Claude for a quick mockup of each first' }));
+    expect(dialog.textContent).toMatch('The vote waits in your queue, hidden from the room');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask Claude for 2 mockups' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1'], prompt: 'Which should Claude build next?', maxPicks: 1, askForMockups: true }));
+  });
+
+  test('a single idea\'s menu needs another ticked before it can go to a vote; Later posts later', async () => {
+    await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
+    const q = queue();
+    fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
+    expect(within(q).getByRole('button', { name: 'Put to a vote (tick another idea first)' })).toBeDisabled();
+    fireEvent.click(within(q).getAllByRole('button', { name: 'Later' })[0]);
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'later' }));
+  });
+
+  const WAITING = (over = {}) => ({
+    AskId: '004', Kind: 'choice', Prompt: 'Which should Claude build next?', Source: 'host', Status: 'proposed',
+    FromIdeas: ['0-i0', '1-i1', '2-i2'], AskForMockups: true, MaxPicks: 1,
+    Options: [
+      { label: 'A', title: 'Text a reminder', imageId: 'img-a' },
+      { label: 'B', title: 'Address and map link' },
+      { label: 'C', title: 'Sign up as a pair' },
+    ],
+    ...over,
+  });
+  const LIVE = { AskId: '005', Kind: 'rating', Prompt: 'How close is this?', Options: [], Status: 'live', Source: 'host' };
+
+  test('waiting on mockups: 1 of 3, hidden, Open now without the rest, Cancel the vote', async () => {
+    await openRoom(hostState({ asks: [WAITING()] }));
+    const card = screen.getByRole('region', { name: 'Proposed ask 4' });
+    expect(within(card).getByTestId('brm-mockups-wait').textContent).toBe('Claude is making mockups · 1 of 3');
+    expect(card.textContent).toMatch('Your vote, from 3 ideas');
+    expect(card.textContent).toMatch('The room cannot see it yet. It is marked Ready when all 3 are in; you open it.');
+    expect(within(card).getByRole('button', { name: 'Open now, without the rest' })).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: 'Cancel the vote' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'discard' }));
+  });
+
+  test('Ready while another ask is open: Open next lines it up, or close that one and open this', async () => {
+    const ready = WAITING({ Options: WAITING().Options.map((o) => ({ ...o, imageId: `img-${o.label}` })) });
+    await openRoom(hostState({ st: { CurrentAskId: '005' }, asks: [LIVE, ready] }));
+    const card = screen.getByRole('region', { name: 'Proposed ask 4' });
+    expect(within(card).getByTestId('brm-mockups-ready')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Close ask 5 and open this' })).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: 'Open next' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'openNext' }));
+  });
+
+  test('lined up: says so, and Not next takes it out of line', async () => {
+    const ready = WAITING({ Options: WAITING().Options.map((o) => ({ ...o, imageId: `img-${o.label}` })) });
+    await openRoom(hostState({ st: { CurrentAskId: '005', NextAskId: '004' }, asks: [LIVE, ready] }));
+    const card = screen.getByRole('region', { name: 'Proposed ask 4' });
+    expect(card.textContent).toMatch('Opens after ask 5');
+    fireEvent.click(within(card).getByRole('button', { name: 'Not next' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'notNext' }));
+  });
+
+  test('Queue it: the composer puts the host\'s own idea in the queue', async () => {
+    await openRoom(hostState());
+    fireEvent.change(screen.getByLabelText('Tell Claude, or log what the room said'), { target: { value: 'Check it on a small phone' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue it' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/ideas`));
+    expect(lastPost().body).toEqual({ text: 'Check it on a small phone' });
   });
 });

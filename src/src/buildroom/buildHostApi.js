@@ -101,8 +101,12 @@ export function buildApi(gameId) {
     /** The host removes a screenshot. */
     /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
     deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
-    /** 'direct' | 'suggest' | 'dismiss' | 'restore' */
+    /** 'direct' | 'suggest' | 'acknowledge' | 'wall' | 'later' | 'dismiss' | 'restore' */
     ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
+    /** Queue it: the host's own idea, waiting in the queue (step 4). */
+    queueIdea: (text) => post('ideas', { text }),
+    /** `{ideaIds, prompt?, maxPicks?, open?, askForMockups?}` → `{ask}`: ticked ideas to a vote (step 4, C3). */
+    askFromIdeas: (body) => post('asks-from-ideas', body),
     /** Acknowledge every new idea at once (owner, 2026-10-05). */
     acknowledgeAll: () => post('ideas/acknowledge-all'),
     /** Take the room comment off the wall before its time is up. */

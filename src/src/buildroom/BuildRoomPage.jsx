@@ -43,6 +43,7 @@ import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
   questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
+  queueItems, QUEUE_FILTERS, filterQueue, laterIdeas,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -681,11 +682,16 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.clearWall())}>Take it down</button>
             </div>
           )}
-          {proposed.map((ask) => (
-            <ReviewCard key={`${ask.askId}:${ask.status}`} ask={ask} busy={busy} ended={ended} run={run} api={api} connected={room.agent?.connected} />
-          ))}
-          {onCrew && <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />}
-          {!onCrew && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
+          {onCrew ? (
+            <>
+              {proposed.map((ask) => (
+                <ReviewCard key={`${ask.askId}:${ask.status}`} ask={ask} openAsk={openAskOf(room)} busy={busy} ended={ended} run={run} api={api} connected={room.agent?.connected} />
+              ))}
+              <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />
+            </>
+          ) : (
+            <Queue room={room} current={current} busy={busy} ended={ended} run={run} api={api} />
+          )}
         </section>
 
         {/* WHAT HAPPENED (owner, 2026-10-05): the timeline, the asks and the
@@ -904,7 +910,7 @@ export function ConnectionChip({ connection = 'live', onReconnect }) {
  * dialog closes the menu; a switch leaves it open. A click inside a dialog
  * the menu opened (Run crew code asks first) is not "outside".
  */
-function SessionMenu({ children }) {
+function SessionMenu({ children, label = 'More', groupLabel = 'Session' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -925,10 +931,10 @@ function SessionMenu({ children }) {
   return (
     <div className="brm-more" ref={ref}>
       <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        More <Icon name="CaretDown" size={14} />
+        {label} <Icon name="CaretDown" size={14} />
       </button>
       {open && (
-        <div className="brm-more-panel" role="group" aria-label="Session">
+        <div className="brm-more-panel" role="group" aria-label={groupLabel}>
           {children(() => setOpen(false))}
         </div>
       )}
@@ -1254,7 +1260,7 @@ export function QrZoom({ playUrl, gameId, onClose }) {
 
 // ── Review (proposed) ───────────────────────────────────────────────────────
 
-function ReviewCard({ ask, busy, ended, run, api, connected }) {
+function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   const [prompt, setPrompt] = useState(ask.prompt);
   const [detail, setDetail] = useState(ask.detail || '');
   const [options, setOptions] = useState(() => (ask.options || []).map((o) => ({ ...o })));
@@ -1276,6 +1282,15 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
     return api.askAction(ask.askId, { action: 'open' });
   });
   const discard = () => run(() => api.askAction(ask.askId, { action: 'discard' }));
+  const lineUp = (action) => run(() => api.askAction(ask.askId, { action }));
+  // THE VOTE THAT WAITS FOR MOCKUPS (C3b): hidden until the pictures are in,
+  // then Ready; it opens only when the host opens it, or lined up next.
+  const mockups = ask.mockups || null;
+  const waitingOnClaude = Boolean(mockups && !mockups.ready);
+  const blocking = openAsk && openAsk.askId !== ask.askId ? openAsk : null;
+  let openLabel = 'Open to the room';
+  if (blocking) openLabel = `Close ask ${askNumber(blocking.askId)} and open this`;
+  else if (waitingOnClaude) openLabel = 'Open now, without the rest';
   const setOpt = (i, key, value) => setOptions((list) => list.map((o, j) => (j === i ? { ...o, [key]: value } : o)));
   const letter = (i) => String.fromCharCode(65 + i);
 
@@ -1303,18 +1318,35 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
   return (
     <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`}>
       <div className="brm-row brm-gap">
-        <span className="brm-chip brm-chip--amber">{ask.source === 'agent' ? 'Proposed by Claude' : 'Draft'} · not shown to the room</span>
+        <span className="brm-chip brm-chip--amber">{ask.source === 'agent' ? 'Proposed by Claude' : ask.fromIdeas ? `Your vote, from ${ask.fromIdeas.length} ideas` : 'Draft'} · not shown to the room</span>
+        {mockups && (mockups.ready
+          ? <span className="brm-chip brm-chip--live" data-testid="brm-mockups-ready">Mockups ready</span>
+          : <span className="brm-chip" data-testid="brm-mockups-wait">Claude is making mockups · {mockups.have} of {mockups.total}</span>)}
+        {ask.next && <span className="brm-chip">Opens after ask {blocking ? askNumber(blocking.askId) : ''}</span>}
         {ask.source === 'agent' && connected && <span className="brm-muted brm-small brm-push">Claude is waiting</span>}
       </div>
       <div className="brm-row brm-gap">
         <h2 className="brm-h">Ask {askNumber(ask.askId)} · {KIND_LABEL[ask.kind]}</h2>
         {ask.kind === 'choice' && <span className="brm-hint brm-push">Options can change until someone answers</span>}
       </div>
-      <p className="brm-stagehint">{stageHint(ask)}</p>
+      {!mockups && <p className="brm-stagehint">{stageHint(ask)}</p>}
       {/* WHAT THE ROOM WOULD SEE, then the edits folded (C2): most of
           Claude's asks open as written, so the fields are one click away. */}
       <p className="brm-reviewq">{prompt || ask.prompt}</p>
-      {ask.kind === 'choice' && (
+      {ask.kind === 'choice' && mockups && (
+        // C3b: a tile per option, its picture as Claude attaches it.
+        <ul className="brm-mocktiles">
+          {(ask.options || []).map((o, i) => (
+            <li key={o.label || i}>
+              {o.imageId
+                ? <BuildImage imageId={o.imageId} alt={`Choice ${letter(i)}`} className="brm-mocktile-img" />
+                : <span className="brm-mocktile-wait">{i === (ask.options || []).findIndex((x) => !x.imageId) ? 'Claude is making it' : 'Waiting'}</span>}
+              <span className="brm-mocktile-t"><b>{letter(i)}</b> {o.title}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {ask.kind === 'choice' && !mockups && (
         <ul className="brm-reviewopts">
           {options.map((o, i) => (
             <li key={o.label || i}>
@@ -1326,7 +1358,14 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
         </ul>
       )}
       {ask.kind === 'rating' && <p className="brm-hint">1 means {RATING_SCALE.lowLabel.toLowerCase()} · 5 means {RATING_SCALE.highLabel.toLowerCase()}</p>}
-      {missing.length > 0 && !ended && (
+      {mockups && !ended && (
+        <p className="brm-hint" role="status">
+          {mockups.ready
+            ? (blocking ? `Ask ${askNumber(blocking.askId)} is still open. Open next puts this vote on the room's screens as soon as you close ask ${askNumber(blocking.askId)}.` : 'Every option has its picture. Open it when you are ready.')
+            : `The room cannot see it yet. It is marked Ready when all ${mockups.total} are in; you open it.`}
+        </p>
+      )}
+      {missing.length > 0 && !ended && !mockups && (
         <div className="brm-notice brm-row brm-gap" role="status" data-testid="brm-previews-missing">
           {askedMockups ? (
             <span>Asked Claude for mockups. Each appears under its option as Claude attaches it.</span>
@@ -1386,12 +1425,15 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
       </details>
       {!ended && (
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} onClick={discard}>Discard</button>
+          <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} title={ask.fromIdeas ? 'The ideas go back to the queue' : undefined} onClick={discard}>{ask.fromIdeas ? 'Cancel the vote' : 'Discard'}</button>
           {dirty && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy} onClick={save}>Save edits</button>}
           {!answering && (
             <button type="button" className={`brm-btn brm-btn--ghost${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={() => setAnswering(true)}>Answer for the room</button>
           )}
-          <button type="button" className={`brm-btn brm-btn--primary${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>Open to the room</button>
+          {blocking && (ask.next
+            ? <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title="Take it out of line; it waits here" onClick={() => lineUp('notNext')}>Not next</button>
+            : <button type="button" className={`brm-btn${mockups && mockups.ready ? ' brm-btn--primary' : ''}`} disabled={busy || !prompt.trim()} title={`Opens as soon as ask ${askNumber(blocking.askId)} closes`} onClick={() => lineUp('openNext')}>Open next</button>)}
+          <button type="button" className={`brm-btn${blocking && mockups && mockups.ready ? '' : ' brm-btn--primary'}${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>{openLabel}</button>
         </div>
       )}
       {answering && !ended && (
@@ -2038,6 +2080,7 @@ const LOG_KINDS = [
  * where it belongs. It replaces "What next?" (Tell Claude, Ask the room) and
  * the timeline's own log form, which were two boxes for one act.
  *   Send to Claude  a direction, delivered on Claude's next call
+ *   Queue it        the host's own idea, into the queue (step 4)
  *   Log it          into the timeline as what the room said, a host note or
  *                   a milestone; "Also tell Claude" sends it too
  *   Ask the room    Ideas, Choose or Rate (the Ask the room dialog)
@@ -2053,6 +2096,12 @@ function Composer({ agent, busy, run, api, onCompose }) {
     if (!words) return;
     const ok = await run(() => api.postDirection(words));
     if (ok !== undefined) { setText(''); setSaid(`Sent: ${words}`); }
+  };
+  // QUEUE IT (step 4, C1): the host's own idea, waiting in the queue for later.
+  const queue = async () => {
+    if (!words) return;
+    const ok = await run(() => api.queueIdea(words));
+    if (ok !== undefined) { setText(''); setSaid('In the queue.'); }
   };
   const log = async () => {
     if (!words) return;
@@ -2077,6 +2126,7 @@ function Composer({ agent, busy, run, api, onCompose }) {
           <button type="submit" className="brm-btn brm-btn--primary" disabled={busy || !words}>
             <Icon name="PaperPlaneTilt" size={16} /> Send to Claude
           </button>
+          <button type="button" className="brm-btn" disabled={busy || !words} title="Keep it in your queue for later" onClick={queue}>Queue it</button>
           <span className="brm-row brm-push">
             <select className="brm-input brm-input--sm brm-select" aria-label="Log it as" value={logKind} onChange={(e) => setLogKind(e.target.value)}>
               {LOG_KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
@@ -2235,53 +2285,124 @@ function Timeline({ log, host, stopped = false, busy, ended, run, api, deleteAs 
   );
 }
 
-// ── Ideas inbox (host only) ─────────────────────────────────────────────────
+// ── The queue (host only, step 4) ───────────────────────────────────────────
 
 /** What happened to a handled idea, in the host's words. */
 const HANDLED = { promoted: 'used', acknowledged: 'acknowledged', dismissed: 'dismissed' };
 
-function IdeasInbox({ ideas, current, busy, ended, run, api }) {
-  const fresh = ideas.filter((i) => i.status === 'new');
-  const handled = ideas.filter((i) => i.status !== 'new');
+/** The ask the room is answering now, or null. */
+const openAskOf = (room) => (room.asks || []).find((a) => a.askId === room.currentAskId && ['live', 'voting'].includes(a.status)) || null;
+
+/** "Dee · idea", "You · queued", "Sam · on the preview". */
+function ideaWho(idea) {
+  if (idea.source === 'host') return 'You · queued';
+  return `${idea.playerName} · ${idea.aboutLogId ? 'on the preview' : 'idea'}`;
+}
+
+/**
+ * THE QUEUE (step 4, C1–C3b): everything waiting on the host in one list,
+ * Claude's asks first, then oldest first. Filters by who it came from; tick
+ * ideas to act on several at once, or put them to a vote.
+ */
+function Queue({ room, current, busy, ended, run, api }) {
+  const [filter, setFilter] = useState('all');
+  const [ticked, setTicked] = useState([]);
+  const [voteOf, setVoteOf] = useState(null);
+  const items = queueItems(room);
+  const shown = filterQueue(items, filter);
+  const ideas = room.ideas || [];
+  const live = new Set(items.filter((x) => x.type === 'idea').map((x) => x.idea.ideaId));
+  const tickedLive = ticked.filter((id) => live.has(id));
+  const later = laterIdeas(room);
+  const handled = ideas.filter((i) => ['promoted', 'acknowledged', 'dismissed'].includes(i.status));
+  const freshRoom = items.filter((x) => x.type === 'idea' && x.from === 'room');
   const canSuggest = Boolean(current && current.kind === 'suggest' && ['live', 'voting'].includes(current.status));
+  const openAsk = openAskOf(room);
+  const connected = Boolean(room.agent && room.agent.connected);
+  const count = (key) => filterQueue(items, key).length;
+
+  const toggle = (id) => setTicked((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
   const act = (idea, action) => run(() => api.ideaAction(idea.ideaId, action));
+  const bulk = async (action) => {
+    const ids = tickedLive;
+    const ok = await run(async () => { for (const id of ids) await api.ideaAction(id, action); return true; });
+    if (ok !== undefined) setTicked([]);
+  };
+  const toVote = (ids) => setVoteOf(ids.map((id) => ideas.find((i) => i.ideaId === id)).filter(Boolean));
+
   return (
-    <section className="brm-inbox" aria-labelledby="brm-inbox-h">
-      <h2 className="brm-h5" id="brm-inbox-h">Ideas inbox · {fresh.length} new <span className="brm-hostonly">host only</span></h2>
-      {!fresh.length && <p className="brm-hint">Phones can send an idea at any time. They land here for you to triage.</p>}
+    <section className="brm-queue" aria-label="The queue">
+      <div className="brm-qfilters" role="group" aria-label="Show">
+        {QUEUE_FILTERS.map((f) => (
+          <button key={f.key} type="button" className={`brm-qchip${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
+            {f.label}{f.key !== 'all' ? ` · ${count(f.key)}` : ''}
+          </button>
+        ))}
+        <span className="brm-hint brm-push">Claude first, then oldest</span>
+      </div>
+
+      {!ended && tickedLive.length > 0 && (
+        <div className="brm-qbulk" role="group" aria-label="Ticked ideas">
+          <b>{tickedLive.length} ticked</b>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy || tickedLive.length < 2 || tickedLive.length > 6} title={tickedLive.length < 2 ? 'Tick at least 2' : tickedLive.length > 6 ? 'A vote takes at most 6' : undefined} onClick={() => toVote(tickedLive)}>
+            Put {tickedLive.length} to a vote
+          </button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('direct')}>Send to Claude</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('later')}>Later</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('acknowledge')}>Acknowledge</button>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked([])}>Clear</button>
+        </div>
+      )}
+
       {/* A burst of reactions after Claude shows something: clear them in one go. */}
-      {!ended && fresh.length >= 2 && (
+      {!ended && freshRoom.length >= 2 && !tickedLive.length && (
         <div className="brm-row brm-gap brm-ackall">
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" disabled={busy} title="Mark every new one as seen. Nothing goes to Claude." onClick={() => run(() => api.acknowledgeAll())}>
-            Acknowledge all {fresh.length}
+            Acknowledge all {freshRoom.length}
           </button>
         </div>
       )}
-      {fresh.map((idea) => (
-        <div className="brm-idea" key={idea.ideaId}>
-          <div className="brm-idea-text">{idea.text}</div>
-          <div className="brm-who">{idea.playerName} · {clockTime(idea.createdAt)}</div>
-          {!ended && (
-            <div className="brm-idea-acts">
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act(idea, 'direct')}>Send to Claude</button>
-              {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude.
-                  The sender's phone says "Seen by the host"; WALL also puts it
-                  on the Stage for a short while, with no name. */}
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Show it on the Stage for 20 seconds, without a name. Nothing goes to Claude." onClick={() => act(idea, 'wall')}>Show on the wall</button>
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Mark it as seen. Their phone says so; nothing goes to Claude." onClick={() => act(idea, 'acknowledge')}>Acknowledge</button>
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy || !canSuggest} title={canSuggest ? undefined : 'Open an Ideas ask first'} onClick={() => act(idea, 'suggest')}>Add to current ideas</button>
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => act(idea, 'dismiss')}>Dismiss</button>
+
+      {!items.length && <p className="brm-empty">Nothing waiting. Phones can send an idea at any time, and Claude&apos;s questions land here first.</p>}
+      {items.length > 0 && !shown.length && <p className="brm-hint">Nothing from {QUEUE_FILTERS.find((f) => f.key === filter).label.toLowerCase()} right now.</p>}
+
+      {shown.map((x) => (x.type === 'ask' ? (
+        <ReviewCard key={`${x.ask.askId}:${x.ask.status}`} ask={x.ask} openAsk={openAsk} busy={busy} ended={ended} run={run} api={api} connected={connected} />
+      ) : (
+        <QueueIdea
+          key={x.idea.ideaId} idea={x.idea} busy={busy} ended={ended}
+          ticked={tickedLive.includes(x.idea.ideaId)} onTick={() => toggle(x.idea.ideaId)}
+          onAct={(action) => act(x.idea, action)}
+          canSuggest={canSuggest}
+          onVote={() => toVote(tickedLive.includes(x.idea.ideaId) ? tickedLive : [...tickedLive, x.idea.ideaId])}
+          voteCount={tickedLive.includes(x.idea.ideaId) ? tickedLive.length : tickedLive.length + 1}
+        />
+      )))}
+
+      {later.length > 0 && (
+        <details className="brm-handled">
+          <summary>Later · {later.length}</summary>
+          {later.map((idea) => (
+            <div className="brm-idea brm-idea--done" key={idea.ideaId}>
+              <div className="brm-idea-text">{idea.text}</div>
+              <div className="brm-who">{ideaWho(idea)}</div>
+              {!ended && (
+                <div className="brm-row brm-gap">
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Back to the queue</button>
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'dismiss')}>Dismiss</button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      ))}
+          ))}
+        </details>
+      )}
       {handled.length > 0 && (
         <details className="brm-handled">
           <summary>{handled.length} handled</summary>
           {handled.map((idea) => (
             <div className="brm-idea brm-idea--done" key={idea.ideaId}>
               <div className="brm-idea-text">{idea.text}</div>
-              <div className="brm-who">{idea.playerName} · {idea.walled ? 'on the wall' : HANDLED[idea.status] || idea.status}</div>
+              <div className="brm-who">{ideaWho(idea)} · {idea.walled ? 'on the wall' : idea.promotedTo ? `in ask ${askNumber(idea.promotedTo)}` : HANDLED[idea.status] || idea.status}</div>
               {!ended && ['dismissed', 'acknowledged'].includes(idea.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</button>
               )}
@@ -2289,7 +2410,116 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
           ))}
         </details>
       )}
+
+      {voteOf && (
+        <VoteFromIdeasDialog
+          ideas={voteOf} connected={connected} openAsk={openAsk} busy={busy} run={run} api={api}
+          onClose={() => setVoteOf(null)}
+          onDone={() => { setVoteOf(null); setTicked([]); }}
+        />
+      )}
     </section>
+  );
+}
+
+/** One idea in the queue (C1): tick it, or send it where it belongs. */
+function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount }) {
+  return (
+    <div className={`brm-idea brm-qidea${ticked ? ' is-ticked' : ''}`}>
+      <div className="brm-row brm-gap">
+        {!ended && (
+          <input type="checkbox" className="brm-qtick" checked={ticked} onChange={onTick} aria-label={`Tick: ${idea.text}`} />
+        )}
+        <span className="brm-who">{ideaWho(idea)} · {clockTime(idea.createdAt)}</span>
+      </div>
+      <div className="brm-idea-text">{idea.text}</div>
+      {!ended && (
+        <div className="brm-idea-acts">
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => onAct('direct')}>Send to Claude</button>
+          <SessionMenu label="Ask the room" groupLabel="Ask the room">
+            {(close) => (
+              <>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || voteCount < 2 || voteCount > 6} title={voteCount < 2 ? 'Tick another idea to vote between them' : undefined} onClick={() => { close(); onVote(); }}>
+                  {voteCount < 2 ? 'Put to a vote (tick another idea first)' : `Put ${voteCount} ideas to a vote`}
+                </button>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || !canSuggest} title={canSuggest ? undefined : 'Open an Ideas ask first'} onClick={() => { close(); onAct('suggest'); }}>Add to the open Ideas ask</button>
+                {/* WALL (owner, 2026-10-05): on the Stage for 20 seconds, no name. */}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title="On the Stage for 20 seconds, without a name. Nothing goes to Claude." onClick={() => { close(); onAct('wall'); }}>Show on the wall</button>
+              </>
+            )}
+          </SessionMenu>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. It waits under Later." onClick={() => onAct('later')}>Later</button>
+          {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude. */}
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Mark it as seen. Their phone says so; nothing goes to Claude." onClick={() => onAct('acknowledge')}>Acknowledge</button>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => onAct('dismiss')}>Dismiss</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * PUT N IDEAS TO A VOTE (C3): Pick one by default (owner, 2026-10-05). With
+ * "Ask Claude for a quick mockup of each first", the vote waits in the queue,
+ * hidden from the room, until the pictures are in (C3b).
+ */
+export function VoteFromIdeasDialog({ ideas, connected, openAsk, busy, run, api, onClose, onDone }) {
+  const [prompt, setPrompt] = useState('Which should Claude build next?');
+  const [maxPicks, setMaxPicks] = useState(1);
+  const [mockups, setMockups] = useState(false);
+  const n = ideas.length;
+  const letter = (i) => String.fromCharCode(65 + i);
+  const send = async (extra) => {
+    const out = await run(() => api.askFromIdeas({ ideaIds: ideas.map((i) => i.ideaId), prompt: prompt.trim(), maxPicks, ...extra }));
+    if (out !== undefined) onDone();
+  };
+  const picks = [1, ...(n > 2 ? [2] : []), ...(n > 3 ? [3] : [])];
+  return (
+    <Modal overlayClassName="brm-scrim" contentClassName="brm-modal" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-vote-title">
+      <DialogHead id="brm-vote-title" title={`Put ${n} ideas to a vote`} onClose={onClose} />
+      <label className="brm-field"><span className="brm-lbl">Question for the room</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
+      <div className="brm-field">
+        <span className="brm-lbl">How people vote · Pick one is the default</span>
+        <div className="brm-seg" role="radiogroup" aria-label="How people vote">
+          {picks.map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={maxPicks === k} className={`brm-segbtn${maxPicks === k ? ' is-on' : ''}`} onClick={() => setMaxPicks(k)}>
+              {k === 1 ? `Pick one (${ideas.map((_, i) => letter(i)).join(', ')})` : `Pick up to ${k}`}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ul className="brm-reviewopts">
+        {ideas.map((idea, i) => (
+          <li key={idea.ideaId}>
+            <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
+            <span className="brm-reviewopt-t">{idea.text}</span>
+            <span className="brm-who brm-push">{idea.source === 'host' ? 'You' : idea.playerName}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="brm-hint">Names are not shown to the room. When you decide, the winner goes to Claude as a direction and each idea is marked as used.</p>
+      <label className="brm-check brm-field">
+        <input type="checkbox" checked={mockups} disabled={!connected && !mockups} onChange={(e) => setMockups(e.target.checked)} />
+        Ask Claude for a quick mockup of each first
+      </label>
+      {mockups && (
+        <div className="brm-notice brm-unheard">
+          The vote waits in your queue, hidden from the room, until Claude has made the mockups. Meanwhile you can ask the room other things. When they are in, the vote is marked Ready and you open it.
+        </div>
+      )}
+      {!connected && <p className="brm-hint">Claude Code is not connected, so it cannot make mockups now.</p>}
+      <div className="brm-row brm-gap">
+        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>
+        {!mockups && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ open: false })}>Save as a draft</button>}
+        {mockups ? (
+          <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</button>
+        ) : (
+          <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !prompt.trim()} onClick={() => send({ open: true })}>
+            {openAsk ? `Close ask ${askNumber(openAsk.askId)} and open the vote` : 'Open the vote'}
+          </button>
+        )}
+      </div>
+    </Modal>
   );
 }
 

@@ -286,6 +286,28 @@ async function askAction(ctx, role, askId, body) {
   const now = new Date().toISOString();
   const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
 
+  // OPEN NEXT (step 4, C3b): line a waiting ask up behind the open one. It
+  // opens when the current ask closes; with nothing open, it opens now.
+  if (action === 'opennext' || action === 'notnext') {
+    if (ask.Status !== 'proposed') return fail(409, `This ask is ${ask.Status}; only a waiting ask can be lined up`);
+    const current = room.state && room.state.CurrentAskId ? findAsk(room, room.state.CurrentAskId) : null;
+    const somethingOpen = Boolean(current && S.OPEN_STATUSES.includes(current.Status));
+    if (action === 'notnext') {
+      if (room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+    } else if (somethingOpen) {
+      await touchState(ctx, { set: { NextAskId: askId } });
+      await logEntry(ctx, { kind: 'ask', text: `Ask ${Number(askId)} opens when ask ${Number(current.AskId)} closes`, by: 'system', askId });
+    } else {
+      await put(ctx, { ...ask, Status: 'live', OpenedAt: now });
+      await makeCurrent(ctx, room, askId, role);
+      if (room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+    }
+    const after = await loadRoom(ctx);
+    const rev = (await touchState(ctx)).Rev;
+    await announce(ctx, rev);
+    return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host') });
+  }
+
   if (action === 'edit') {
     const edited = S.applyEdit(ask, b, { answered });
     if (edited.error) return fail(400, edited.error);
@@ -333,6 +355,21 @@ async function askAction(ctx, role, askId, body) {
       await touchState(ctx, { set: { CurrentAskId: '' } });
     }
     if (action === 'close') await logEntry(ctx, { kind: 'ask', text: `Closed: ${ask.Prompt}`, by: 'system', askId });
+    // Opened by hand: it is no longer waiting to go next.
+    if (action === 'open' && room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+    if (action === 'discard') {
+      if (room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+      // Cancelling a vote made from ideas puts them back in the queue.
+      for (const id of ask.FromIdeas || []) {
+        const idea = findIdea(room, id);
+        if (idea && idea.PromotedTo === askId) {
+          const back = { ...idea, Status: 'new', UpdatedAt: now };
+          delete back.PromotedTo;
+          await put(ctx, back);
+        }
+      }
+    }
+    if (action === 'close' || action === 'decide' || action === 'discard') await openNextIfQueued(ctx, askId);
   }
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
@@ -586,8 +623,11 @@ async function ideaAction(ctx, ideaId, body) {
     // WALL also puts it on the Stage for a short while, with no name.
     status = 'acknowledged';
   } else if (action === 'dismiss') status = 'dismissed';
+  // LATER (step 4): not now, not gone. It leaves the queue and waits in its
+  // own fold until the host brings it back.
+  else if (action === 'later') status = 'later';
   else if (action === 'restore') status = 'new';
-  else return fail(400, 'action must be direct, suggest, acknowledge, wall, dismiss or restore');
+  else return fail(400, 'action must be direct, suggest, acknowledge, wall, later, dismiss or restore');
   const next = { ...idea, Status: status, UpdatedAt: now, ...(action === 'wall' ? { WalledAt: now } : {}) };
   if (action === 'restore') delete next.WalledAt;
   await put(ctx, next);
@@ -619,6 +659,84 @@ async function clearWall(ctx) {
   const rev = (await touchState(ctx, { set: { WallComment: null } })).Rev;
   await announce(ctx, rev);
   return reply(200, { ok: true });
+}
+
+/**
+ * QUEUE IT (step 4, C1): the host's own idea, from the composer, waiting in
+ * the queue beside the room's. It never reaches a phone's "your ideas".
+ */
+async function hostIdea(ctx, body) {
+  const text = S.cleanText((body || {}).text, S.LIMITS.idea);
+  if (!text) return fail(400, 'Write the idea');
+  const now = new Date().toISOString();
+  const sk = S.SK.idea(now);
+  const item = { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: 'Host', Source: 'host', Text: text, Status: 'new', CreatedAt: now };
+  await put(ctx, item);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { idea: S.ideaView(item) });
+}
+
+/**
+ * IDEAS TO A VOTE (step 4, C3, C3b). The ticked ideas become a Choose ask and
+ * are marked used. Three ways out:
+ *   - open now (the default): the vote is live at once;
+ *   - `open: false`: a draft, waiting in the queue;
+ *   - `askForMockups`: a draft too, and Claude is asked for a mockup of each
+ *     option. It is Ready when every option has a picture and opens only when
+ *     the host opens it (or said "Open next").
+ * Cancelling the vote (discard) puts the ideas back in the queue.
+ */
+async function askFromIdeas(ctx, body) {
+  const b = body || {};
+  const ids = Array.isArray(b.ideaIds) ? [...new Set(b.ideaIds.map(String))] : [];
+  const room = await loadRoom(ctx);
+  const ideas = ids.map((id) => findIdea(room, id));
+  if (ideas.some((i) => !i)) return fail(404, 'One of those ideas is gone');
+  if (ideas.some((i) => !['new', 'later', 'acknowledged'].includes(i.Status || 'new'))) {
+    return fail(409, 'One of those ideas is already in a vote or sent to Claude');
+  }
+  const norm = S.voteFromIdeas(ideas, b);
+  if (norm.error) return fail(400, norm.error);
+  const mockups = b.askForMockups === true;
+  const status = mockups || b.open === false ? 'proposed' : 'live';
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const askId = S.pad3(st.AskSeq || 1);
+  const now = new Date().toISOString();
+  const v = norm.value;
+  await put(ctx, {
+    SK: S.SK.ask(askId), AskId: askId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: v.options, MaxPicks: v.maxPicks,
+    Status: status, Source: 'host', CreatedAt: now, FromIdeas: ids,
+    ...(mockups ? { AskForMockups: true } : {}),
+    ...(status === 'live' ? { OpenedAt: now } : {}),
+  });
+  for (const idea of ideas) await put(ctx, { ...idea, Status: 'promoted', PromotedTo: askId, UpdatedAt: now });
+  if (status === 'live') await makeCurrent(ctx, room, askId, 'host');
+  // No question in the entry: phones read the timeline, and a waiting vote
+  // stays hidden from the room until it opens.
+  else await logEntry(ctx, { kind: 'ask', text: `${ideas.length} ideas are waiting for a vote`, by: 'system', askId });
+  if (mockups) await logEntry(ctx, { kind: 'direction', text: S.mockupDirection(askId, v.options.map((o) => o.label)), by: 'host', askId, forAgent: true });
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { ask: S.askView(findAsk(after, askId), after, 'host') });
+}
+
+/** Open the ask the host lined up with "Open next", once the current one closes. */
+async function openNextIfQueued(ctx, closedAskId) {
+  const room = await loadRoom(ctx);
+  const nextId = room.state && room.state.NextAskId;
+  if (!nextId || nextId === closedAskId) return;
+  // Only once nothing is open: answering a waiting ask for the room closes
+  // nothing the room is looking at.
+  if (room.asks.some((x) => S.OPEN_STATUSES.includes(x.Status))) return;
+  const next = findAsk(room, nextId);
+  await touchState(ctx, { set: { NextAskId: '' } });
+  if (!next || next.Status !== 'proposed') return;
+  const now = new Date().toISOString();
+  await put(ctx, { ...next, Status: 'live', OpenedAt: now });
+  await makeCurrent(ctx, room, nextId, 'host');
+  await logEntry(ctx, { kind: 'ask', text: `Opened ask ${Number(nextId)} next, as you lined it up`, by: 'system', askId: nextId });
 }
 
 async function postOutcome(ctx, role, body) {
@@ -1315,6 +1433,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
   if (a === 'ideas' && b === 'acknowledge-all' && !c) return hostOnly() || acknowledgeAll(ctx);
   if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
+  if (a === 'ideas' && !b) return hostOnly() || hostIdea(ctx, body);
+  if (a === 'asks-from-ideas' && !b) return hostOnly() || askFromIdeas(ctx, body);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);
@@ -1404,7 +1524,7 @@ async function routePlay(ctx, method, parts, body, query) {
       aboutLogId = about.LogId;
     }
     if (!text) return fail(400, 'Write your idea');
-    if (room.ideas.filter((i) => i.PlayerName === me.playerName).length >= 20) return fail(429, 'That is plenty of ideas from one phone for now');
+    if (room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').length >= 20) return fail(429, 'That is plenty of ideas from one phone for now');
     const sk = S.SK.idea(now);
     await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now, ...(aboutLogId ? { AboutLogId: aboutLogId } : {}) });
     const st = await touchState(ctx);

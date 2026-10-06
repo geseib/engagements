@@ -425,6 +425,15 @@ function askView(ask, room, audience, me) {
   if (showResults && out.results && ask.Kind !== 'rating') out.results.tied = tiedIds(ask, room);
   if (ask.Wheel) out.wheel = wheelView(ask.Wheel, me);
   if (ask.RevotedAs) out.revotedAs = ask.RevotedAs;
+  // THE QUEUE (step 4): a vote made from ideas, and one waiting on Claude's
+  // mockups. Ready when every option has a picture; it never opens by itself
+  // unless the host said "Open next" (owner, 2026-10-05).
+  if (ask.FromIdeas && ask.FromIdeas.length) out.fromIdeas = ask.FromIdeas;
+  if (ask.AskForMockups && isHost) {
+    const m = mockupProgress(out);
+    out.mockups = { asked: true, have: m.have, total: m.total, ready: ask.Status === 'proposed' && m.total > 0 && m.have === m.total };
+  }
+  if (isHost && room.state && room.state.NextAskId === ask.AskId && ask.Status === 'proposed') out.next = true;
   if (ask.RevoteOf) out.revoteOf = ask.RevoteOf;
   if (ask.Decision) {
     out.decision = {
@@ -484,7 +493,46 @@ function ideaView(r) {
   return {
     ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null, aboutLogId: r.AboutLogId || null,
     walled: Boolean(r.WalledAt),
+    // 'room' (a phone) or 'host' (Queue it, from the host's own composer).
+    source: r.Source || 'room',
+    promotedTo: r.PromotedTo || null,
   };
+}
+
+/** How many of a viewed ask's options carry a picture. */
+function mockupProgress(view) {
+  const opts = (view && view.options) || [];
+  return { have: opts.filter((o) => o.imageId).length, total: opts.length };
+}
+
+/**
+ * IDEAS TO A VOTE (step 4, C3). The ticked ideas become a Choose ask, one
+ * option each, in the order they were ticked. An idea longer than an option
+ * title keeps its whole text as the option's detail. Pick one is the default
+ * (owner, 2026-10-05). Returns `{value}` or `{error}`.
+ */
+const DEFAULT_VOTE_PROMPT = 'Which should Claude build next?';
+function voteFromIdeas(ideas, body) {
+  const b = body || {};
+  if (ideas.length < MIN_OPTIONS) return { error: `Tick at least ${MIN_OPTIONS} ideas to put to a vote` };
+  if (ideas.length > MAX_OPTIONS) return { error: `A vote takes at most ${MAX_OPTIONS} ideas` };
+  const prompt = cleanText(b.prompt, LIMITS.prompt) || DEFAULT_VOTE_PROMPT;
+  const options = ideas.map((i, n) => {
+    const text = cleanText(i.Text, LIMITS.idea);
+    const title = text.length > LIMITS.optionTitle ? `${text.slice(0, LIMITS.optionTitle - 1).trimEnd()}…` : text;
+    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '' };
+  });
+  const mp = Number(b.maxPicks);
+  const maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, options.length) : 1;
+  return { value: { kind: 'choice', prompt, detail: cleanText(b.detail, LIMITS.detail), options, maxPicks } };
+}
+
+/** The direction that asks Claude for a mockup of each option of a waiting vote. */
+function mockupDirection(askId, labels) {
+  const list = labels.join(', ');
+  return `Before ask ${Number(askId)} opens to the room: make a quick mockup of ${labels.length === 1 ? `option ${list}` : `options ${list}`}, `
+    + `stamp each with its letter, screenshot it, and attach it to its option with share_image (askId "${askId}", label ${list}). `
+    + 'The vote waits until they are in. Then tell me they are ready.';
 }
 
 /**
@@ -645,7 +693,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
       .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
       .map((l) => ({ ...l, link: publicUrl(l.link) })),
-    myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName).map(ideaView) : [],
+    myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
     images: room.images.map(imageView),
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome)),
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
@@ -795,6 +843,6 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
+  WALL_COMMENT_MS, wallCommentView, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };
