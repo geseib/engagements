@@ -406,9 +406,24 @@ def p_c12():
 
 # ── C13 the question library ───────────────────────────────────────────────
 
-LIB = [
-    ('Start', [
+LIB_THINK = [
+    ('Who it is for', [
         ('Ideas', 'Who is this for, in one sentence?', 'Keep in mind'),
+        ('Ideas', 'Who is this not for?', 'Keep in mind'),
+        ('Ideas', 'Who did we forget?', 'Keep in mind'),
+        ('Ideas', 'What job is someone hiring this to do?', 'Keep in mind')]),
+    ('Think differently', [
+        ('Ideas', 'How could we reach the same goal a completely different way?', 'Ask Claude'),
+        ('Ideas', 'How would we do this with no app at all?', 'Ask Claude'),
+        ('Ideas', 'Who has solved this already, in a different field?', 'Ask Claude'),
+        ('Ideas', 'How would we make sure nobody ever used it?', 'Keep in mind'),
+        ('Ideas', 'What would make this ten times better, not ten percent?', 'Later')]),
+]
+
+LIB = [
+    ('Who it is for', [
+        ('Ideas', 'Who is this for, in one sentence?', 'Keep in mind')]),
+    ('Start', [
         ('Ideas', 'What does done look like by the end of today?', 'Keep in mind'),
         ('Ideas', 'What must it never do?', 'Keep in mind'),
         ('Ideas', 'It is launch day. Write the headline.', 'Keep in mind')]),
@@ -425,39 +440,61 @@ LIB = [
 ]
 
 
-def p_c13():
+def lib_modal(lib, selected, right, groups_on='All'):
     rows = ''
-    for grp, qs in LIB:
+    for grp, qs in lib:
         rows += f'<div class="h3" style="margin:8px 0 2px">{grp}</div><ul class="list">'
         for i, (kind, q, gets) in enumerate(qs):
-            sel = ' style="background:var(--m-tint-amber);border-radius:8px;padding-left:8px"' if q.startswith('What would stop') else ''
+            sel = ' style="background:var(--m-tint-amber);border-radius:8px;padding-left:8px"' if q == selected else ''
             chip = {'Ideas': 'chip--blue', 'Rate': 'chip--green', 'Choose': 'chip--amber'}[kind]
             rows += f'<li{sel}><span class="chip {chip}" style="width:62px;justify-content:center">{kind}</span><span class="grow ell">{q}</span><span class="who">{gets}</span></li>'
         rows += '</ul>'
-    modal = f'''<div class="scrim" style="bottom:0;z-index:60"></div><div style="position:absolute;z-index:61;left:50%;top:76px;transform:translateX(-50%);width:1180px;height:790px;background:var(--m-drawer);border:1px solid var(--m-rule);border-radius:14px;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 30px 70px rgba(0,0,0,.5)">
+    return f'''<div class="scrim" style="bottom:0;z-index:60"></div><div style="position:absolute;z-index:61;left:50%;top:76px;transform:translateX(-50%);width:1180px;height:790px;background:var(--m-drawer);border:1px solid var(--m-rule);border-radius:14px;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 30px 70px rgba(0,0,0,.5)">
 <div class="row" style="padding:16px 20px;border-bottom:1px solid var(--m-rule)"><h3 style="margin:0;font:800 19px/1.2 var(--font-ui)">Ask the room</h3><span class="hint">Start from a ready question, or write your own</span><span class="x push" style="width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted)">×</span></div>
 <div style="display:grid;grid-template-columns:1fr 470px;min-height:0">
 <div style="padding:14px 20px;overflow:hidden;border-right:1px solid var(--m-rule);display:flex;flex-direction:column;gap:8px">
 <div class="row"><input class="in" style="flex:1" placeholder="Search ready questions"><span class="flt is-on">Starters and pulse · Engage</span><span class="flt">Discovery · your team</span><span class="flt">Write my own</span></div>
+<div class="filters">{"".join(f'<span class="flt{" is-on" if g == groups_on else ""}">{g}</span>' for g in ["All", "Who it is for", "Start", "Think differently", "While building", "Wrapping up"])}</div>
 {rows}</div>
-<div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+{right}</div></div>
+<div class="row" style="padding:10px 20px;border-top:1px solid var(--m-rule)"><span class="hint">Ready questions come from any Call and Answer or Poll set tagged build-room. Rate questions use a 1 to 5 scale; Choose up to 6 options.</span></div></div>'''
+
+
+RIGHT_STOP = '''<div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
 <div class="row"><span class="chip chip--blue">Ideas</span><span class="hint">from Build Room starters · Call and Answer</span></div>
 <label><span class="lbl">Question for the room</span><input class="in" value="What would stop someone using it?"></label>
 <label><span class="lbl">Context (optional)</span><textarea class="ta" style="min-height:52px">Think of the busiest volunteer you know, on an old phone.</textarea></label>
 <div><span class="lbl">When it is decided, Claude gets it as</span><div class="row"><span class="fold is-in">Do now</span><span class="fold">Keep in mind</span><span class="fold">Later</span><span class="fold">Ask Claude</span></div>
 <p class="hint" style="margin-top:6px">Do now: the winning answer goes to Claude as the next thing to build. The rest go on the brief's Later list.</p></div>
 <label><span class="lbl">Note for Claude (from the set, editable)</span><textarea class="ta" style="min-height:52px">Fix the top answer first. Say in one line what you changed.</textarea></label>
-<div class="row" style="margin-top:auto"><span class="btn btn--ghost">Back</span><span class="btn btn--ghost push">Queue it</span><span class="btn btn--primary">Open to the room</span></div></div></div>
-<div class="row" style="padding:10px 20px;border-top:1px solid var(--m-rule)"><span class="hint">Ready questions come from any Call and Answer or Poll set tagged build-room. Rate questions use a 1 to 5 scale; Choose up to 6 options.</span></div></div>'''
+<div class="row" style="margin-top:auto"><span class="btn btn--ghost">Back</span><span class="btn btn--ghost push">Queue it</span><span class="btn btn--primary">Open to the room</span></div>'''
+
+RIGHT_DIFF = '''<div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+<div class="row"><span class="chip chip--blue">Ideas</span><span class="hint">from Build Room starters · Think differently</span></div>
+<label><span class="lbl">Question for the room</span><input class="in" value="How could we reach the same goal a completely different way?"></label>
+<label><span class="lbl">Context (optional)</span><textarea class="ta" style="min-height:52px">Forget what is on the screen. If we started again with the same goal, what would we build instead?</textarea></label>
+<div><span class="lbl">When it is decided, Claude gets it as</span><div class="row"><span class="fold">Do now</span><span class="fold">Keep in mind</span><span class="fold">Later</span><span class="fold is-in">Ask Claude</span></div>
+<p class="hint" style="margin-top:6px">Ask Claude: Claude says on the screen how it would build the winning approach and what it would cost, and keeps building the current one until the room decides.</p></div>
+<label><span class="lbl">Note for Claude (from the set, editable)</span><textarea class="ta" style="min-height:76px">In a few lines, say how you would build the winning approach and what it would cost next to the current one. Do not switch unless a Do now says so.</textarea></label>
+<div class="row" style="margin-top:auto"><span class="btn btn--ghost">Back</span><span class="btn btn--ghost push">Queue it</span><span class="btn btn--primary">Open to the room</span></div></div>'''
+
+
+def p_c13():
+    modal = lib_modal(LIB, 'What would stop someone using it?', RIGHT_STOP)
+    modal2 = lib_modal(LIB_THINK, 'How could we reach the same goal a completely different way?', RIGHT_DIFF, 'Think differently')
     s2 = host_screen(now_building(), queue_col([Q_DEE, Q_SAM], 3), extra=modal)
     s2 = s2[:-6] + pin(1, 150, 150) + pin(2, 150, 230) + pin(3, 820, 330) + pin(4, 820, 450) + '</div>'
+    s3 = host_screen(now_building(), queue_col([Q_DEE, Q_SAM], 3), extra=modal2)
+    s3 = s3[:-6] + pin(5, 150, 196) + pin(6, 820, 400) + '</div>'
     page('c13-library.html', 'Ask the room: the question library',
          'Every "Ask the room" (the composer, a queue item, the empty Now card) opens here. Left: ready questions from sets tagged build-room, grouped by when in a session they help. Right: the chosen one, editable, with what Claude gets when it is decided.',
-         [s2],
+         [s2, s3],
          [(1, 'Ordinary question sets, tagged build-room', 'A Call and Answer question becomes an Ideas ask (everyone answers, then votes: the same shape). A Poll rating question on a 1 to 5 scale becomes a Rate ask; a Poll choice question with up to 6 options becomes Choose. Anything else in a set is not shown here. Sets come from the Engage library and from the host\'s team, as on the regular host shelf.'),
           (2, 'Grouped by when they help', 'The set\'s categories do the grouping (Start, While building, Before wrapping up), so a team can add its own groups without new fields.'),
           (3, 'Thinking tools, not just polls', 'Some starters borrow from known methods: the launch-day headline is Amazon\'s "working backwards", and "a month from now nobody uses it" is Gary Klein\'s pre-mortem. Each says where it comes from in the set, and nowhere on the wall.'),
-          (4, 'The question carries how Claude should use the answer', 'Each ready question stores a default for what Claude gets (C14) and a short note for Claude. The host can change both before opening.')])
+          (4, 'The question carries how Claude should use the answer', 'Each ready question stores a default for what Claude gets (C14) and a short note for Claude. The host can change both before opening.'),
+          (5, 'Who it is for, and Think differently', 'Two groups added at the owner\'s request: questions about the people (who it is for, who it is not for, who we forgot, the job they hire it to do) and questions that reframe the problem (the same goal a completely different way, no app at all, borrowed from another field, inversion, ten times better). Second screen.'),
+          (6, 'Reframing answers go to Claude as Ask Claude', 'Claude says what the other approach would take and keeps building the current one. If the room wants to switch, the host puts "keep going" against "switch" to a Pick one vote with mockups first (C3b).')])
 
 
 # ── C14 what Claude gets ───────────────────────────────────────────────────

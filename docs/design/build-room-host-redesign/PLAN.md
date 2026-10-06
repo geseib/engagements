@@ -149,7 +149,8 @@ A push to `dev` deploys; push finished steps only (CLAUDE.md).
 - Ship the two starter sets drafted in `starter-set.md` (owner, 2026-10-05):
   - "Build Room starters" (Call and Answer) and "Build Room pulse" (Poll, rating 1–5);
   - both tagged `build-room`, with topic `business-work`;
-  - categories Start / While building / Before wrapping up.
+  - categories Who it is for / Start / Think differently / While building / Before
+    wrapping up.
 
   Move the CSVs into `sets/` once the importer reads `ClaudeGets` and `ClaudeNote`. Upload
   them to the platform library on each tier through the normal upload path, never by
