@@ -6,7 +6,7 @@
  * POST body like `routePlay` in build-room.js reads it.
  *
  * rejects: a screen that does not follow `current.status`; a POST body the
- * server would not read; a phone that can vote for its own suggestion or pick
+ * server would not read; a phone that can pick
  * past maxPicks; a refresh that ignores `rev`; a host `note` reaching the
  * room; a `javascript:` link rendered as a link; markup from Claude rendered
  * as markup.
@@ -266,16 +266,24 @@ describe('Vote (suggest, voting)', () => {
     }),
   });
 
-  test('own suggestion is marked and not selectable; maxPicks holds; POST respIds', async () => {
+  test('your own suggestion is marked "yours" and counts like any other (owner, 2026-10-06)', async () => {
     serve(voting());
     await mount();
     await screen.findByText('Not seeing which shifts need people');
     const own = screen.getByRole('checkbox', { name: /Having to make an account first/ });
-    expect(own).toHaveAttribute('aria-disabled', 'true');
+    expect(own).not.toHaveAttribute('aria-disabled');
     expect(own).toHaveTextContent('yours');
+    expect(screen.queryByText(/can't vote for your own/)).toBeNull();
+    fireEvent.click(own);
+    expect(own).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(own);
     expect(own).toHaveAttribute('aria-checked', 'false');
+  });
 
+  test('maxPicks holds; POST respIds', async () => {
+    serve(voting());
+    await mount();
+    await screen.findByText('Not seeing which shifts need people');
     fireEvent.click(screen.getByRole('checkbox', { name: /shifts/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: /park/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: /teens/ }));

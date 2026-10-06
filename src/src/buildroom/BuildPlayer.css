@@ -276,7 +276,6 @@
   background: var(--bpl-amber-tint);
 }
 
-.bpl .bpl-vrow.bpl-vrow--own { cursor: default; }
 
 .bpl .bpl-vrow:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 

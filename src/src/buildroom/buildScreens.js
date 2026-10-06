@@ -124,13 +124,22 @@ export function stageModel(room, current) {
     }
     return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'decide', label: 'Decide on Host' } };
   }
+  // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06): wherever the room could
+  // vote between options, the host may let the wheel pick instead.
+  const instead = { action: 'wheel', label: 'Spin the wheel instead' };
   if (current.status === 'voting') {
     const voted = current.voteCount || 0;
-    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} have voted`, primary: { action: 'close', label: 'Close and show results' } };
+    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} have voted`, primary: { action: 'close', label: 'Close and show results' }, secondary: instead };
   }
   const answered = current.answerCount || 0;
   if (current.kind === 'suggest') {
-    return { phase: 'ASK', context, meter: { heading: 'Ideas', count: answered, of: null }, status: `${answered} ${answered === 1 ? 'idea' : 'ideas'} so far`, primary: { action: 'vote', label: 'Open voting' } };
+    return {
+      phase: 'ASK', context, meter: { heading: 'Ideas', count: answered, of: null }, status: `${answered} ${answered === 1 ? 'idea' : 'ideas'} so far`,
+      primary: { action: 'vote', label: 'Open voting' }, ...(answered >= 2 ? { secondary: instead } : {}),
+    };
   }
-  return { phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: here }, status: `${answered} of ${here} have answered`, primary: { action: 'close', label: 'Close and show results' } };
+  return {
+    phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: here }, status: `${answered} of ${here} have answered`,
+    primary: { action: 'close', label: 'Close and show results' }, ...(current.kind === 'choice' ? { secondary: instead } : {}),
+  };
 }

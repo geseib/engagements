@@ -1396,6 +1396,10 @@ function AskStage({ ask, room, host, busy, ended, run, api }) {
               {['live', 'voting'].includes(ask.status) && !answering && (
                 <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
               )}
+              {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
+              {['live', 'voting'].includes(ask.status) && ask.kind !== 'rating' && (
+                <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Close it and let the wheel pick from every option" onClick={() => act('wheel')}>Spin the wheel instead</button>
+              )}
               {['live', 'voting'].includes(ask.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => act('close')}>Close</button>
               )}

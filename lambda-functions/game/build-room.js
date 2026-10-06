@@ -358,19 +358,32 @@ async function spinWheel(ctx, ask, by) {
 
 async function wheelAction(ctx, role, room, ask, action, b) {
   if (role !== 'host') return fail(403, 'Only the host spins the wheel');
-  if (ask.Status !== 'results') return fail(409, 'Close the ask first: the wheel and a revote come after the results');
   if (ask.Kind === 'rating') return fail(400, 'A rating has nothing to spin between');
+  // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06: "available anytime there
+  // is a chance to vote, because it could be an option vs voting"): an open
+  // ask may go straight to the wheel, which closes it first. Spinning again,
+  // handing the turn on and a revote all come after the results.
+  const open = ['live', 'voting'].includes(ask.Status);
+  if (!(ask.Status === 'results' || (action === 'wheel' && open))) {
+    return fail(409, action === 'wheel' ? 'The wheel is for an open or closed ask' : 'Close the ask first: this comes after the results');
+  }
   const askId = ask.AskId;
   const now = new Date().toISOString();
 
   if (action === 'wheel') {
     const tied = S.tiedIds(ask, room);
-    const among = b.among === 'all' || tied.length < 2 ? 'all' : 'tied';
+    // Instead of a vote it holds every option; after a tie, the tied ones.
+    const among = open || b.among === 'all' || tied.length < 2 ? 'all' : 'tied';
     const slices = S.wheelSlices(ask, room, among);
     if (slices.length < S.WHEEL_MIN) return fail(409, 'The wheel needs at least two options');
     const players = b.spinner === 'host' ? [] : await loadPlayers(ctx);
     const spinner = pickOne(players);
-    await put(ctx, { ...ask, Wheel: { Slices: slices, Among: among, Spinner: spinner, Armed: Boolean(spinner), Spins: [], SetAt: now } });
+    await put(ctx, {
+      ...ask,
+      ...(open ? { Status: 'results', ClosedAt: now } : {}),
+      Wheel: { Slices: slices, Among: among, Spinner: spinner, Armed: Boolean(spinner), Spins: [], SetAt: now },
+    });
+    if (open) await logEntry(ctx, { kind: 'ask', by: 'system', askId, text: `Closed for the wheel: ${ask.Prompt}` });
     await logEntry(ctx, { kind: 'ask', by: 'system', askId, text: spinner ? `Spin the wheel: ${spinner} spins` : 'Spin the wheel' });
   } else if (action === 'spin') {
     // The host can always spin, the first time and every respin.
@@ -1425,7 +1438,9 @@ async function routePlay(ctx, method, parts, body, query) {
     const valid = new Map(room.resps.filter((r) => r.AskId === askId && !r.Hidden).map((r) => [r.RespId, r]));
     const ids = [...new Set((Array.isArray(input.respIds) ? input.respIds : []).map(String))];
     if (ids.some((id) => !valid.has(id))) return fail(400, 'That suggestion is not on the ballot');
-    if (ids.some((id) => valid.get(id).PlayerName === me.playerName && (valid.get(id).Source || 'player') === 'player')) return fail(400, 'Vote for other people\'s ideas');
+    // YOUR OWN IDEA COUNTS (owner, 2026-10-06: "we couldn't restrict voting
+    // for your own, especially if there is only two voters; we won't get
+    // anywhere"). With two people, each could only vote for the other's.
     const max = ask.MaxPicks || S.DEFAULT_MAX_PICKS;
     if (ids.length > max) return fail(400, `Pick up to ${max}`);
     await put(ctx, { SK: S.SK.vote(askId, me.playerName), AskId: askId, PlayerName: me.playerName, RespIds: ids, CreatedAt: now });

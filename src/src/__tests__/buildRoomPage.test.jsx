@@ -1154,3 +1154,18 @@ describe('acknowledge, and a comment on the wall (owner, 2026-10-05)', () => {
     expect(document.querySelector('.brm-wallcomment')).toBeNull();
   });
 });
+
+describe('the wheel whenever the room could vote (owner, 2026-10-06)', () => {
+  test('an open Choose offers Spin the wheel instead, on the Host and on the Stage', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], answers: CHOICE_ANSWERS }));
+    const kit = screen.getByRole('region', { name: 'Current ask' });
+    fireEvent.click(within(kit).getByRole('button', { name: 'Spin the wheel instead' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'wheel' }));
+    fireEvent.keyDown(window, { key: '2' });
+    const dock = document.querySelector('footer.dock');
+    const instead = within(dock).getByRole('button', { name: 'Spin the wheel instead' });
+    await waitFor(() => expect(instead).not.toBeDisabled());
+    fireEvent.click(instead);
+    await waitFor(() => expect(calls.filter((c) => c.method === 'POST' && c.body && c.body.action === 'wheel')).toHaveLength(2));
+  });
+});

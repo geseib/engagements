@@ -398,8 +398,8 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
   const voted = sent.length > 0;
   const unchanged = voted && sameSet(sent, sel);
 
+  // Your own idea counts too (owner, 2026-10-06); it is marked "yours".
   const toggle = (r) => {
-    if (r.mine) return;
     if (sel.includes(r.respId)) setSel(sel.filter((x) => x !== r.respId));
     else if (!atLimit) setSel([...sel, r.respId]);
   };
@@ -421,7 +421,6 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
         {Array.from({ length: max }, (_, i) => <i key={i} className={i < sel.length ? 'bpl-slot--on' : ''} />)}
       </div>
       <button type="button" className="plr-btn" disabled={(!sel.length && !voted) || unchanged || busy} onClick={submit}>{label}</button>
-      <p className="plr-note plr-note--after bpl-center">You can't vote for your own.</p>
     </>
   );
 
@@ -449,7 +448,7 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
                   type="button"
                   role="checkbox"
                   aria-checked={on}
-                  aria-disabled={r.mine || (atLimit && !on) || undefined}
+                  aria-disabled={(atLimit && !on) || undefined}
                   className={`bpl-vrow${r.mine ? ' bpl-vrow--own' : ''}`}
                   onClick={() => toggle(r)}
                 >
