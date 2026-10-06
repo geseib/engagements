@@ -10325,6 +10325,23 @@ body {
   font-size: 0.9rem;
 }
 
+/* IN A BUILD ROOM (step 7b, C15): the question form's section for a set
+   tagged build-room. A plain fieldset with the form's own rule colour. */
+.qs-buildroom {
+  border: 1px solid var(--qs-rule);
+  border-radius: 10px;
+  padding: 10px 14px 4px;
+  margin: 8px 0 14px;
+}
+.qs-buildroom legend {
+  padding: 0 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .qs-panel-actions {
   display: flex;
   flex-wrap: wrap;

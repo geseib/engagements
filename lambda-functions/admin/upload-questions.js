@@ -35,6 +35,7 @@ const {
   legacySurveyJsonToCsv,
 } = require('./shared/survey-kinds');
 const { clampBackground } = require('./shared/question-background');
+const { CLAUDE_GETS, normalizeClaudeGets, clampClaudeNote } = require('./shared/build-room-fields');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -453,6 +454,11 @@ exports.handler = async (event) => {
     // actually uses them, so an ordinary CSV keeps its familiar shape.
     let roundKindIndex = getColumnIndex('RoundKind');
     let sourceAttributionIndex = getColumnIndex('SourceAttribution');
+    // READY QUESTIONS FOR A BUILD ROOM (step 7b): what Claude gets when the
+    // room decides, and how to use it. Exact names only; absent from every
+    // set but the Build Room ones (shared/build-room-fields.js).
+    const claudeGetsIndex = getColumnIndex('ClaudeGets');
+    const claudeNoteIndex = getColumnIndex('ClaudeNote');
     // PROVENANCE, never identity (decision 2). Where a copied question came
     // from, stamped once when it was copied and read by NOTHING — no permission
     // decision, no propagation, no lookup. They are here for one reason: the
@@ -624,6 +630,7 @@ exports.handler = async (event) => {
     // thrown at the first one so the author is told about ALL of them in a
     // single 400 instead of fixing a hundred-row CSV one cell per upload.
     const badRoundKinds = [];
+    const badClaudeGets = [];
     let questionCount = 0;
 
     // Read one already-parsed cell. Deliberately NO `.replace(/"/g, '')` here:
@@ -723,6 +730,12 @@ exports.handler = async (event) => {
         // exists to stop.
         const rowRoundKind = roundKindCell ? normalizeRoundKind(roundKindCell) : '';
         if (rowRoundKind === null) badRoundKinds.push({ row: i + 1, value: roundKindCell });
+        // Refused like RoundKind, for the same reason: a typo must not quietly
+        // become Do now.
+        const claudeGetsCell = cell(values, claudeGetsIndex);
+        const rowClaudeGets = normalizeClaudeGets(claudeGetsCell);
+        if (rowClaudeGets === null) badClaudeGets.push({ row: i + 1, value: claudeGetsCell });
+        const rowClaudeNote = clampClaudeNote(cell(values, claudeNoteIndex));
 
         // Use new fields if available, otherwise fall back to legacy
         const finalQuestionDetail = questionDetail || legacyDetail || ''; // Use question detail or legacy detail for trivia
@@ -765,6 +778,8 @@ exports.handler = async (event) => {
             // Capitalised, matching every other CSV-derived attribute on this
             // row (Title, Detail, Category, Tags, AnswerDetails, School, Image).
             RoundKind: rowRoundKind || '',
+            ClaudeGets: rowClaudeGets || '',
+            ClaudeNote: rowClaudeNote,
             SourceAttribution: sourceAttribution,
             SourceSetId: sourceSetIdCell,
             SourceQuestionSk: sourceQuestionSkCell,
@@ -854,6 +869,15 @@ exports.handler = async (event) => {
       return badRequest(
         `The RoundKind column has ${badRoundKinds.length} unrecognised value${badRoundKinds.length === 1 ? '' : 's'}: `
         + `${shown}${more}. Expected one of: ${ROUND_KIND_IDS.join(', ')}, or an empty cell to inherit the set's.`
+      );
+    }
+
+    if (badClaudeGets.length > 0) {
+      const shown = badClaudeGets.slice(0, 5).map((b) => `row ${b.row} ("${b.value}")`).join(', ');
+      const more = badClaudeGets.length > 5 ? ` and ${badClaudeGets.length - 5} more` : '';
+      return badRequest(
+        `The ClaudeGets column has ${badClaudeGets.length} unrecognised value${badClaudeGets.length === 1 ? '' : 's'}: `
+        + `${shown}${more}. Expected one of: ${CLAUDE_GETS.join(', ')}, or an empty cell.`
       );
     }
 
@@ -1197,6 +1221,9 @@ exports.handler = async (event) => {
         // existing set's rows are byte-identical to what they were and the
         // download stays free to omit both columns.
         ...(question.RoundKind ? { RoundKind: question.RoundKind } : {}),
+        // Build Room ready questions (step 7b): only when set, like RoundKind.
+        ...(question.ClaudeGets ? { ClaudeGets: question.ClaudeGets } : {}),
+        ...(question.ClaudeNote ? { ClaudeNote: question.ClaudeNote } : {}),
         ...(question.SourceAttribution ? { SourceAttribution: question.SourceAttribution } : {}),
         // Write-once provenance. NEVER read for a permission decision — the
         // rule is `canManageSet` on the SET this row now lives in, and nothing

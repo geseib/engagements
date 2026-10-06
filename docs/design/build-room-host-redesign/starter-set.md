@@ -1,4 +1,14 @@
-# Build Room starter sets (draft for review)
+# Build Room starter sets
+
+**Shipped (step 7b, 2026-10-06):** `sets/build-room-starters.csv` and
+`sets/build-room-pulse.csv`, installed with
+`scripts/install-question-set.js <table> <file> --type <type> --title "..." --topic business-work --tags build-room`.
+`tests/question-set-roundtrip.js` imports both files with the real importer.
+
+**One change from the draft below:** the pulse questions use the Build Room's fixed scale,
+1 "Needs work" and 5 "Great" (owner, 2026-10-06: "a fixed opinion of great vs needs
+work, with 5 being great"), not the per-question labels in the table.
+
 
 Owner, 2026-10-05: **"yes build-room tag and ship the starter set."**
 

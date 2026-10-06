@@ -27,6 +27,8 @@ import SurveyQuestionFields, {
   SurveyAddMenu, SurveyKindChip, SurveyPreviewLine, SurveyRequiredMark,
 } from './SurveyQuestionFields';
 import { SURVEY_CATEGORY, POLL_KINDS } from '../config/surveyKinds';
+import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS } from '../buildroom/readyQuestions';
+import { CLAUDE_KINDS } from '../buildroom/buildScreens';
 import {
   ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
 } from '../utils/addQuestions';
@@ -1622,6 +1624,7 @@ export default function QuestionsPanel({
             siblings={siblings}
             siblingCategory={draftCategory}
             setId={setId}
+            buildRoom={isBuildRoomSet(questionSet)}
             /* `null`, not `{ ...disabled }`: QuestionForm already guards every
                AI element on `ai &&`, so withholding the object removes the
                toggle, the brief panel and the provenance line together. A
@@ -1915,6 +1918,8 @@ function QuestionForm({
    * makes room for it beside the fields.
    */
   surveyPhonePreview = null,
+  /** The set carries the `build-room` tag (step 7b, C15). */
+  buildRoom = false,
 }) {
   const set = (field) => (e) => onChange({ ...draft, [field]: e.target.value });
   const id = (field) => `q-${field}-${draft.uid}`;
@@ -2202,8 +2207,47 @@ function QuestionForm({
         </p>
       </div>
 
+      {buildRoom && <BuildRoomFields draft={draft} engagementType={engagementType} onChange={onChange} idOf={id} />}
+
       {footer}
     </div>
+  );
+}
+
+/**
+ * IN A BUILD ROOM (step 7b, C15): a set tagged `build-room` lists its
+ * questions in the Build Room's Ask the room. How each is asked is derived
+ * from the set's type and the question's kind (buildroom/readyQuestions.js),
+ * never typed; what Claude gets when the room decides, and a note on how to
+ * use the answer, are the question's own. Neither matters outside a Build Room.
+ */
+function BuildRoomFields({ draft, engagementType, onChange, idOf }) {
+  const out = buildAskFromQuestion({ ...draft, title: draft.title || 'x' }, { engagementType });
+  return (
+    <fieldset className="qs-buildroom">
+      <legend>In a Build Room</legend>
+      <p className="qs-panel-note" id={idOf('askedAs')}>
+        {out.ask
+          ? `Asked as ${ASKED_AS[out.ask.kind]}. ${out.ask.kind === 'suggest' ? 'Everyone answers, then votes.' : out.ask.kind === 'rating' ? 'The room rates 1 to 5: 1 needs work, 5 is great.' : 'The room picks from the options.'}`
+          : `Not offered in a Build Room. ${out.reason}`}
+      </p>
+      {out.ask && (
+        <div className="qs-form-grid">
+          <div className="form-group">
+            <label htmlFor={idOf('claudeGets')}>When decided, Claude gets it as</label>
+            <select id={idOf('claudeGets')} className="form-select" value={draft.claudeGets || 'do-now'} onChange={(e) => onChange({ ...draft, claudeGets: e.target.value })}>
+              {CLAUDE_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+            </select>
+            <p className="qs-panel-note">{(CLAUDE_KINDS.find((k) => k.key === (draft.claudeGets || 'do-now')) || CLAUDE_KINDS[0]).hint}</p>
+          </div>
+          <div className="form-group">
+            <label htmlFor={idOf('claudeNote')}>Note for Claude</label>
+            <textarea id={idOf('claudeNote')} className="form-textarea" rows="3" maxLength={1000} value={draft.claudeNote || ''} onChange={(e) => onChange({ ...draft, claudeNote: e.target.value })} />
+            <p className="qs-panel-note">How Claude should use the room&apos;s answer. Never shown to the room.</p>
+          </div>
+        </div>
+      )}
+    </fieldset>
   );
 }
 

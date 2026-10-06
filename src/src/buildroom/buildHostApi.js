@@ -110,6 +110,13 @@ export function buildApi(gameId) {
     editBrief: (body) => post('brief', body),
     /** The brief's Later list, to a Pick one vote. */
     laterToVote: () => post('brief/vote', {}),
+    /**
+     * READY QUESTIONS (step 7b, C13): every set this host can read, from the
+     * session picker's own route; the library keeps those tagged build-room.
+     */
+    questionSets: () => call('question-sets').then((out) => (Array.isArray(out.sets) ? out.sets : [])),
+    /** One set's questions, read in the scope the set was listed in. */
+    setQuestions: (set) => call(`question-sets/${seg(set.id)}/questions${set.scope ? `?scope=${seg(set.scope)}` : ''}`),
     /** `{ideaIds, prompt?, maxPicks?, open?, askForMockups?}` → `{ask}`: ticked ideas to a vote (step 4, C3). */
     askFromIdeas: (body) => post('asks-from-ideas', body),
     /** Acknowledge every new idea at once (owner, 2026-10-05). */

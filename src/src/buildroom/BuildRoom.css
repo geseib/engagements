@@ -808,3 +808,23 @@
   border-radius: 6px; padding: 6px 8px; font-size: var(--brm-t-label);
 }
 .brm .brm-brief-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* ---- Ask the room with ready questions (step 7b, C13) ------------------- */
+.brm .brm-modal--lib { width: min(1040px, 100%); max-height: calc(100vh - 48px); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.brm .brm-libgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; min-height: 0; }
+.brm .brm-libgrid > form { overflow: auto; min-height: 0; padding-right: 4px; }
+.brm .brm-lib { display: grid; align-content: start; gap: 8px; min-height: 0; overflow: auto; padding-right: 4px; }
+.brm .brm-lib-list section { display: grid; gap: 2px; margin-bottom: 10px; }
+.brm .brm-lib-q {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 6px;
+  padding: 6px 8px; font: inherit; font-size: var(--brm-t-label);
+}
+.brm .brm-lib-q:hover { background: var(--surface-2); }
+.brm .brm-lib-q.is-on { background: var(--surface-2); border-color: var(--primary); }
+.brm .brm-lib-q:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-lib-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  .brm .brm-libgrid { grid-template-columns: 1fr; }
+  .brm .brm-lib { max-height: 40vh; }
+}

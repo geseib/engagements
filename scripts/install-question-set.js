@@ -40,7 +40,7 @@ const flag = (name, fallback = null) => {
 const apply = argv.includes('--apply');
 
 if (!tableName || !file) {
-  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <topic> [--description "..."] [--persona <id>] [--quickstart] [--apply]');
+  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <topic> [--description "..."] [--persona <id>] [--quickstart] [--tags a,b] [--apply]');
   process.exit(2);
 }
 
@@ -55,6 +55,11 @@ const topic = flag('topic');
 const customDescription = flag('description', '');
 const personaId = flag('persona');
 const quickstart = argv.includes('--quickstart');
+/* SET TAGS, comma-separated: e.g. --tags build-room makes a Call and Answer or
+   Poll set Build Room ready (step 7b). The importer normalises them
+   (shared/set-topics.js normalizeSetTags), as it does for the console. */
+const tagsFlag = flag('tags');
+const tags = typeof tagsFlag === 'string' ? tagsFlag.split(',').map((t) => t.trim()).filter(Boolean) : [];
 
 if (!customTitle) { console.error('--title is required'); process.exit(2); }
 if (!topic || topic === true) {
@@ -119,6 +124,7 @@ async function dryImport() {
         customDescription,
         engagementType,
         topic,
+        ...(tags.length ? { tags } : {}),
       }),
     });
     const payload = JSON.parse(res.body || '{}');
@@ -246,6 +252,7 @@ function reportImport(payload, writes) {
       customDescription,
       engagementType,
       topic,
+      ...(tags.length ? { tags } : {}),
     }),
   });
 
@@ -281,6 +288,6 @@ function reportImport(payload, writes) {
   const it = final.Item || {};
   console.log('\nVerified on the SETS row:');
   console.log(`  active=${it.active}  quickstart=${it.quickstart}  personaId=${it.personaId}`);
-  console.log(`  engagementType=${it.engagementType}  questionCount=${it.questionCount}`);
+  console.log(`  engagementType=${it.engagementType}  questionCount=${it.questionCount}  tags=${JSON.stringify(it.tags || [])}`);
   if (it.ttl) { console.error('  WARNING: this row carries a ttl — see docs/architecture/data-model.md'); }
 })().catch((e) => { console.error('error:', e); process.exit(1); });

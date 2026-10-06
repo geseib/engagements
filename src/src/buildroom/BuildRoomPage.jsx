@@ -30,6 +30,8 @@ import Icon from '../components/Icon';
 import DeleteReasonField from '../components/DeleteReasonField';
 import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
+import { editableRows } from '../utils/questionRows';
+import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady } from './readyQuestions';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
 import BuildWheel from './BuildWheel';
@@ -2916,16 +2918,124 @@ function EndDialog({ api, run, busy, onClose }) {
   );
 }
 
+/**
+ * READY QUESTIONS (step 7b, C13): the questions of every set this host can
+ * read that carries the `build-room` tag, grouped as a session meets them.
+ * Picking one fills the form beside it, editable, with what Claude gets and
+ * the set's note for Claude. A set it cannot reach, or no ready set at all,
+ * leaves the library empty and the form as it always was.
+ */
+function ReadyLibrary({ api, selectedKey, onPick }) {
+  const [sets, setSets] = useState(null);
+  const [active, setActive] = useState('');
+  const [loaded, setLoaded] = useState({});
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('all');
+  const setKey = (st) => `${st.scope || ''}:${st.id}`;
+  useEffect(() => {
+    let live = true;
+    Promise.resolve(api && api.questionSets ? api.questionSets() : [])
+      .then((list) => {
+        if (!live) return;
+        const ready = (list || []).filter((st) => isBuildRoomSet(st) && ['call-and-answer', 'poll'].includes(st.engagementType));
+        setSets(ready);
+        if (ready.length) setActive(setKey(ready[0]));
+      })
+      .catch(() => { if (live) setSets([]); });
+    return () => { live = false; };
+  }, [api]);
+  const set = (sets || []).find((st) => setKey(st) === active) || null;
+  useEffect(() => {
+    if (!set || loaded[active]) return undefined;
+    let live = true;
+    api.setQuestions(set)
+      .then((payload) => {
+        if (!live) return;
+        const items = editableRows(payload, set.engagementType)
+          .map((row) => ({ row, out: buildAskFromQuestion(row, set) }))
+          .filter((x) => x.out.ask)
+          .map((x) => ({ key: `${active}:${x.row.sk}`, category: x.row.category, ask: x.out.ask, setName: set.name || 'Ready questions' }));
+        setLoaded((l) => ({ ...l, [active]: items }));
+      })
+      .catch(() => { if (live) setLoaded((l) => ({ ...l, [active]: [] })); });
+    return () => { live = false; };
+  }, [active, set, loaded, api]);
+
+  if (sets === null) return <aside className="brm-lib" aria-label="Ready questions"><p className="brm-hint">Loading ready questions…</p></aside>;
+  if (!sets.length) {
+    return (
+      <aside className="brm-lib" aria-label="Ready questions">
+        <p className="brm-hint">No ready questions yet. Tag a Call and Answer or Poll set <b>build-room</b> and its questions appear here.</p>
+      </aside>
+    );
+  }
+  const items = loaded[active] || null;
+  const q = query.trim().toLowerCase();
+  const shown = (items || []).filter((it) => (category === 'all' || it.category === category) && (!q || it.ask.prompt.toLowerCase().includes(q)));
+  const cats = [...new Set((items || []).map((it) => it.category))];
+  return (
+    <aside className="brm-lib" aria-label="Ready questions">
+      <input className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
+      {sets.length > 1 && (
+        <div className="brm-qfilters" role="group" aria-label="Ready sets">
+          {sets.map((st) => (
+            <button key={setKey(st)} type="button" className={`brm-qchip${active === setKey(st) ? ' is-on' : ''}`} aria-pressed={active === setKey(st)} onClick={() => { setActive(setKey(st)); setCategory('all'); }}>
+              {st.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {cats.length > 1 && (
+        <div className="brm-qfilters" role="group" aria-label="Categories">
+          {['all', ...cats].map((c) => (
+            <button key={c} type="button" className={`brm-qchip${category === c ? ' is-on' : ''}`} aria-pressed={category === c} onClick={() => setCategory(c)}>{c === 'all' ? 'All' : c}</button>
+          ))}
+        </div>
+      )}
+      {items === null && <p className="brm-hint">Loading…</p>}
+      {items && !shown.length && <p className="brm-hint">No ready question matches.</p>}
+      <div className="brm-lib-list">
+        {groupReady(shown).map((g) => (
+          <section key={g.category} aria-label={g.category}>
+            <h3 className="brm-h5">{g.category}</h3>
+            {g.items.map((it) => (
+              <button key={it.key} type="button" className={`brm-lib-q${selectedKey === it.key ? ' is-on' : ''}`} aria-pressed={selectedKey === it.key} onClick={() => onPick(it)}>
+                <span className="brm-chip">{ASKED_AS[it.ask.kind]}</span>
+                <span className="brm-lib-t">{it.ask.prompt}</span>
+                <span className="brm-who">{claudeKindLabel(it.ask.claudeGets)}</span>
+              </button>
+            ))}
+          </section>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
   const [prompt, setPrompt] = useState(initialPrompt);
   const [detail, setDetail] = useState(initialDetail);
   const [options, setOptions] = useState([{ title: '', url: '' }, { title: '', url: '' }]);
   const [draft, setDraft] = useState(false);
+  // WHAT CLAUDE GETS (step 7c), and where the question came from (step 7b).
+  const [claudeGets, setClaudeGets] = useState('do-now');
+  const [claudeNote, setClaudeNote] = useState('');
+  const [from, setFrom] = useState(null);
   const dirty = Boolean(prompt || detail || options.some((o) => o.title));
   const requestClose = () => {
     if (dirty && !window.confirm('Discard this question?')) return;
     onClose();
+  };
+  const pickReady = (it) => {
+    const a = it.ask;
+    setKind(a.kind);
+    setPrompt(a.prompt);
+    setDetail(a.detail || '');
+    if (a.kind === 'choice') setOptions(a.options.map((o) => ({ title: o.title, url: '' })));
+    setClaudeGets(a.claudeGets || 'do-now');
+    setClaudeNote(a.claudeNote || '');
+    setFrom(it);
   };
   const filled = options.filter((o) => o.title.trim());
   const ready = prompt.trim() && (kind !== 'choice' || filled.length >= 2);
@@ -2937,6 +3047,9 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
       prompt: prompt.trim(),
       detail: detail.trim(),
       ...(kind === 'choice' ? { options: filled.map((o) => ({ title: o.title.trim(), url: o.url.trim() })) } : {}),
+      ...(kind === 'choice' && from && from.ask.maxPicks > 1 ? { maxPicks: from.ask.maxPicks } : {}),
+      ...(from || claudeGets !== 'do-now' ? { claudeGets } : {}),
+      ...(claudeNote.trim() ? { claudeNote: claudeNote.trim() } : {}),
       ...(draft ? { draft: true } : {}),
     };
     const ok = await run(() => api.createAsk(body));
@@ -2944,41 +3057,60 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
   };
   const setOpt = (i, k, v) => setOptions((l) => l.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
   return (
-    <Modal overlayClassName="brm-scrim" contentClassName="brm-modal" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
-      <form onSubmit={submit}>
-        <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
-        <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">
-          {['suggest', 'choice', 'rating'].map((k) => (
-            <button key={k} type="button" role="radio" aria-checked={kind === k} className={`brm-segbtn${kind === k ? ' is-on' : ''}`} onClick={() => setKind(k)}>{KIND_LABEL[k]}</button>
-          ))}
-        </div>
-        <label className="brm-field"><span className="brm-lbl">Question (shown big on the wall)</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
-        <label className="brm-field"><span className="brm-lbl">Context (optional)</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} /></label>
-        {kind === 'choice' && (
-          <div className="brm-field">
-            <span className="brm-lbl">Options</span>
-            {options.map((o, i) => (
-              <div className="brm-optedit" key={i}>
-                <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{String.fromCharCode(65 + i)}</span>
-                <div className="brm-optfields">
-                  <input className="brm-input" aria-label={`Option ${String.fromCharCode(65 + i)}`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
-                  <input className="brm-input brm-input--sm" aria-label={`Option ${String.fromCharCode(65 + i)} preview URL`} placeholder="Preview URL (optional)" value={o.url} onChange={(e) => setOpt(i, 'url', e.target.value)} />
-                </div>
-                {i === options.length - 1 && options.length > 2 ? (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label="Remove option" onClick={() => setOptions((l) => l.slice(0, -1))}><Icon name="X" size={14} /></button>
-                ) : <span />}
-              </div>
-            ))}
-            {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
+    <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
+      <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
+      <div className="brm-libgrid">
+        <ReadyLibrary api={api} selectedKey={from ? from.key : ''} onPick={pickReady} />
+        <form onSubmit={submit}>
+          <div className="brm-row brm-gap">
+            <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">
+              {['suggest', 'choice', 'rating'].map((k) => (
+                <button key={k} type="button" role="radio" aria-checked={kind === k} className={`brm-segbtn${kind === k ? ' is-on' : ''}`} onClick={() => setKind(k)}>{KIND_LABEL[k]}</button>
+              ))}
+            </div>
+            {from && <span className="brm-hint brm-push">from {from.setName} · {from.category}</span>}
           </div>
-        )}
-        {kind === 'rating' && <p className="brm-hint">The room rates 1 to 5: 1 means needs work, 5 means great.</p>}
-        <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Save as a draft; don&apos;t open it yet</label>
-        <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
-          <button type="submit" className="brm-btn brm-btn--primary brm-push" disabled={busy || !ready}>{draft ? 'Save draft' : 'Ask the room'}</button>
-        </div>
-      </form>
+          <label className="brm-field"><span className="brm-lbl">Question (shown big on the wall)</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
+          <label className="brm-field"><span className="brm-lbl">Context (optional)</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} /></label>
+          {kind === 'choice' && (
+            <div className="brm-field">
+              <span className="brm-lbl">Options</span>
+              {options.map((o, i) => (
+                <div className="brm-optedit" key={i}>
+                  <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{String.fromCharCode(65 + i)}</span>
+                  <div className="brm-optfields">
+                    <input className="brm-input" aria-label={`Option ${String.fromCharCode(65 + i)}`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
+                    <input className="brm-input brm-input--sm" aria-label={`Option ${String.fromCharCode(65 + i)} preview URL`} placeholder="Preview URL (optional)" value={o.url} onChange={(e) => setOpt(i, 'url', e.target.value)} />
+                  </div>
+                  {i === options.length - 1 && options.length > 2 ? (
+                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label="Remove option" onClick={() => setOptions((l) => l.slice(0, -1))}><Icon name="X" size={14} /></button>
+                  ) : <span />}
+                </div>
+              ))}
+              {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
+            </div>
+          )}
+          {kind === 'rating' && <p className="brm-hint">The room rates 1 to 5: 1 means needs work, 5 means great.</p>}
+          <div className="brm-field">
+            <span className="brm-lbl">When it is decided, Claude gets it as</span>
+            <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="When it is decided, Claude gets it as">
+              {CLAUDE_KINDS.map((k) => (
+                <button key={k.key} type="button" role="radio" aria-checked={claudeGets === k.key} className={`brm-segbtn${claudeGets === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => setClaudeGets(k.key)}>{k.label}</button>
+              ))}
+            </div>
+            <span className="brm-hint">{CLAUDE_KINDS.find((k) => k.key === claudeGets).hint}</span>
+          </div>
+          <label className="brm-field">
+            <span className="brm-lbl">Note for Claude (optional; never shown to the room)</span>
+            <textarea className="brm-input brm-ta brm-ta--sm" value={claudeNote} maxLength={1000} onChange={(e) => setClaudeNote(e.target.value)} placeholder="How Claude should use the answer" />
+          </label>
+          <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Save as a draft; don&apos;t open it yet</label>
+          <div className="brm-row brm-gap">
+            <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
+            <button type="submit" className="brm-btn brm-btn--primary brm-push" disabled={busy || !ready}>{draft ? 'Save draft' : 'Ask the room'}</button>
+          </div>
+        </form>
+      </div>
     </Modal>
   );
 }

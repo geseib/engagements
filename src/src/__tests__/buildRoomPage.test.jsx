@@ -1454,3 +1454,76 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
     expect(screen.getByText('Keep in mind · Claude has it')).toBeInTheDocument();
   });
 });
+
+describe('Ask the room: ready questions (step 7b, C13)', () => {
+  const SETS = [
+    { id: 'br-starters', scope: 'platform', name: 'Build Room starters', engagementType: 'call-and-answer', tags: ['build-room'] },
+    { id: 'br-pulse', scope: 'platform', name: 'Build Room pulse', engagementType: 'poll', tags: ['build-room'] },
+    { id: 'retro', scope: 'platform', name: 'Team retro', engagementType: 'call-and-answer', tags: ['retro'] },
+  ];
+  const QS = {
+    'br-starters': [
+      { id: 'c001#001', Category: 'Who it is for', title: 'Who is this for, in one sentence?', detail: 'Name a real kind of person.', ClaudeGets: 'keep', ClaudeNote: 'Treat the winning answer as the audience.' },
+      { id: 'c002#001', Category: 'While building', title: 'What should we cut?', ClaudeGets: 'do-now' },
+    ],
+    'br-pulse': [
+      { id: 'c001#001', Category: 'While building', title: 'How clear is the main screen?', kind: 'rating', scale: '1-5', ClaudeGets: 'keep' },
+      { id: 'c001#002', Category: 'While building', title: 'Ship it?', kind: 'yesno' },
+    ],
+  };
+  const withLibrary = () => {
+    const base = authFetch.getMockImplementation();
+    authFetch.mockImplementation(async (url, opts = {}) => {
+      if (url === `${API}question-sets`) return res({ sets: SETS });
+      const m = url.match(/question-sets\/([^/]+)\/questions\?scope=platform$/);
+      if (m) return res({ setId: m[1], questions: QS[m[1]] });
+      return base(url, opts);
+    });
+  };
+  const openAsk = async () => {
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    await within(dialog).findByText('Who is this for, in one sentence?');
+    return dialog;
+  };
+
+  test('lists only build-room sets, grouped as a session meets them, with how each is asked', async () => {
+    await openRoom(hostState());
+    withLibrary();
+    const dialog = await openAsk();
+    const lib = within(dialog).getByRole('complementary', { name: 'Ready questions' });
+    expect(within(lib).getByRole('button', { name: 'Build Room starters' })).toBeInTheDocument();
+    expect(within(lib).queryByRole('button', { name: 'Team retro' })).toBeNull();
+    expect(within(lib).getAllByRole('heading').map((h) => h.textContent)).toEqual(['Who it is for', 'While building']);
+    expect(within(lib).getByRole('button', { name: /Who is this for, in one sentence\?/ }).textContent).toMatch(/^IdeasWho is this for, in one sentence\?Keep in mind$/);
+    fireEvent.click(within(lib).getByRole('button', { name: 'Build Room pulse' }));
+    await within(lib).findByText('How clear is the main screen?');
+    expect(within(lib).queryByText('Ship it?')).toBeNull();
+  });
+
+  test('picking one fills the form, editable, and sends its kind and note with it', async () => {
+    await openRoom(hostState());
+    withLibrary();
+    const dialog = await openAsk();
+    fireEvent.click(within(dialog).getByRole('button', { name: /Who is this for, in one sentence\?/ }));
+    expect(within(dialog).getByLabelText(/Question/)).toHaveValue('Who is this for, in one sentence?');
+    expect(dialog.textContent).toMatch('from Build Room starters · Who it is for');
+    const kinds = within(dialog).getByRole('radiogroup', { name: 'When it is decided, Claude gets it as' });
+    expect(within(kinds).getByRole('radio', { name: 'Keep in mind' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(dialog).getByLabelText(/Note for Claude/)).toHaveValue('Treat the winning answer as the audience.');
+    fireEvent.change(within(dialog).getByLabelText(/Question/), { target: { value: 'Who is this for, really?' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks`));
+    expect(lastPost().body).toEqual({
+      kind: 'suggest', prompt: 'Who is this for, really?', detail: 'Name a real kind of person.',
+      claudeGets: 'keep', claudeNote: 'Treat the winning answer as the audience.',
+    });
+  });
+
+  test('no ready set: the library says how to make one, and the form works as before', async () => {
+    await openRoom(hostState());
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    expect(await within(dialog).findByText(/No ready questions yet/)).toBeInTheDocument();
+  });
+});

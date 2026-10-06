@@ -85,6 +85,9 @@ const HEADER_TO_FIELD = {
   tags: 'Tags',
   roundkind: 'RoundKind',
   sourceattribution: 'SourceAttribution',
+  // Build Room ready questions (step 7b).
+  claudegets: 'ClaudeGets',
+  claudenote: 'ClaudeNote',
   optiona: 'optionA',
   optionb: 'optionB',
   optionc: 'optionC',
