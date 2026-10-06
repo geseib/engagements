@@ -146,9 +146,14 @@ A push to `dev` deploys; push finished steps only (CLAUDE.md).
 - **Mockups:** C11.
 
 **7b. Ready questions (C13, C15).**
-- Seed a platform set "Build Room starters" (Call and Answer, tagged `build-room`, topic
-  `business-work`, categories Start / While building / Before wrapping up) through the
-  normal upload path.
+- Ship the two starter sets drafted in `starter-set.md` (owner, 2026-10-05):
+  - "Build Room starters" (Call and Answer) and "Build Room pulse" (Poll, rating 1–5);
+  - both tagged `build-room`, with topic `business-work`;
+  - categories Start / While building / Before wrapping up.
+
+  Move the CSVs into `sets/` once the importer reads `ClaudeGets` and `ClaudeNote`. Upload
+  them to the platform library on each tier through the normal upload path, never by
+  writing rows directly.
 - Add two optional question fields, `ClaudeGets` and `ClaudeNote`, in
   `upload-questions.js` and `edit-question-set.js`. `ClaudeNote` goes in the
   tenant-crypto question field list.

@@ -415,10 +415,12 @@ LIB = [
     ('While building', [
         ('Rate', 'How close is this to something you would use?', 'Keep in mind'),
         ('Ideas', 'What would stop someone using it?', 'Do now'),
+        ('Ideas', 'What is confusing on the screen right now?', 'Do now'),
         ('Ideas', 'What should we cut?', 'Do now'),
-        ('Choose', 'Which should Claude build next? (from the Later list)', 'Do now')]),
+        ('Rate', 'How clear is the main screen?', 'Keep in mind')]),
     ('Before wrapping up', [
-        ('Ideas', 'A month from now nobody uses it. Why?', 'Later'),
+        ('Ideas', 'A month from now, nobody uses it. Why?', 'Later'),
+        ('Ideas', 'What should we build next time?', 'Later'),
         ('Rate', 'Would you use this tomorrow?', 'Keep in mind')]),
 ]
 
@@ -436,10 +438,10 @@ def p_c13():
 <div class="row" style="padding:16px 20px;border-bottom:1px solid var(--m-rule)"><h3 style="margin:0;font:800 19px/1.2 var(--font-ui)">Ask the room</h3><span class="hint">Start from a ready question, or write your own</span><span class="x push" style="width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted)">×</span></div>
 <div style="display:grid;grid-template-columns:1fr 470px;min-height:0">
 <div style="padding:14px 20px;overflow:hidden;border-right:1px solid var(--m-rule);display:flex;flex-direction:column;gap:8px">
-<div class="row"><input class="in" style="flex:1" placeholder="Search ready questions"><span class="flt is-on">Build Room starters · Engage</span><span class="flt">Discovery · your team</span><span class="flt">Write my own</span></div>
+<div class="row"><input class="in" style="flex:1" placeholder="Search ready questions"><span class="flt is-on">Starters and pulse · Engage</span><span class="flt">Discovery · your team</span><span class="flt">Write my own</span></div>
 {rows}</div>
 <div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
-<div class="row"><span class="chip chip--blue">Ideas</span><span class="hint">from Build Room starters · a Call and Answer set</span></div>
+<div class="row"><span class="chip chip--blue">Ideas</span><span class="hint">from Build Room starters · Call and Answer</span></div>
 <label><span class="lbl">Question for the room</span><input class="in" value="What would stop someone using it?"></label>
 <label><span class="lbl">Context (optional)</span><textarea class="ta" style="min-height:52px">Think of the busiest volunteer you know, on an old phone.</textarea></label>
 <div><span class="lbl">When it is decided, Claude gets it as</span><div class="row"><span class="fold is-in">Do now</span><span class="fold">Keep in mind</span><span class="fold">Later</span><span class="fold">Ask Claude</span></div>

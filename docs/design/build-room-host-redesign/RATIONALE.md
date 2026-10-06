@@ -290,8 +290,9 @@ Before wrapping up, so a team can add its own groups with no new field.
 
 "Asked as" is derived from the set type and the question kind, never typed.
 
-**A starter set** ("Build Room starters", platform library, tagged `build-room`) ships
-with about ten questions. Two borrow from named methods:
+**Starter sets** ship in the platform library, tagged `build-room`: "Build Room
+starters" (Call and Answer, 9 questions) and "Build Room pulse" (Poll, 3 ratings on a
+1–5 scale). Both are drafted in `starter-set.md`. Two borrow from named methods:
 - the launch-day headline is Amazon's "working backwards";
 - "a month from now nobody uses it. Why?" is Gary Klein's pre-mortem.
 
@@ -339,8 +340,10 @@ said in confidence.
   "auto-open on by default"; the owner corrected it the same day.)
 - **The default vote is Pick one (A, B, C).** Pick up to 2 and Rate each stay available in
   the dialog.
-- **Ready questions are stored as Call and Answer or Poll sets, tagged as Build Room
-  ready.** The tag is `build-room` (§10b).
+- **Ready questions are stored as Call and Answer or Poll sets, tagged `build-room`, and
+  the platform library ships the starter sets** (owner: "yes build-room tag and ship the
+  starter set"). Drafted in `starter-set.md`: "Build Room starters" (Call and Answer,
+  9 questions) and "Build Room pulse" (Poll, 3 ratings).
 
 ## 12. Questions for the owner
 
@@ -351,8 +354,7 @@ said in confidence.
    ask's text and names be hidden until hovered?
 3. **Switching screens for the host.** When an ask opens, should the room's view switch to
    Stage by itself? And when the host sends a direction, should it go back to Build?
-8. **Ready questions.** Is the tag `build-room` the right marker, and should the platform
-   library ship the "Build Room starters" set (C13, C15)?
+8. ~~**Ready questions.**~~ Answered: the `build-room` tag, and ship the starters (§11).
 9. **What Claude gets.** Four kinds (Do now, Keep in mind, Later, Ask Claude) and a room
    brief kept in Engage rather than Claude Code's memory, with an offer at wrap-up to
    save the lasting rules into the project. Right split?
