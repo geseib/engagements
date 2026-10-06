@@ -426,8 +426,8 @@ describe('Connect Claude Code', () => {
     const titles = [...dialog.querySelectorAll('.brm-step-title')].map((n) => n.textContent);
     expect(titles).toEqual([
       'Check for the latest Engage plugin',
-      'Mint a key and copy the connect command',
-      'Start Claude Code in your project folder and paste the command',
+      'Mint a key and copy the start command',
+      'Paste it into a terminal',
       'Kick off',
     ]);
     expect(within(dialog).getByTestId('brm-kickoff').textContent).toBe('/engage:kickoff');
@@ -437,9 +437,12 @@ describe('Connect Claude Code', () => {
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/keys`));
     const command = await within(dialog).findByTestId('brm-command');
     const key = `eng_${GAME}_${'k'.repeat(43)}`;
-    // One click mints AND copies the line to paste into Claude Code.
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`/engage:connect ${key}`));
-    expect(within(dialog).getByRole('status').textContent).toMatch(/^Copied\. Paste it into Claude Code\./);
+    // One click mints AND copies the start command (owner, 2026-10-06): a new
+    // folder named for the session, Claude Code started in it, connected.
+    const start = `mkdir -p ~/build-room/volunteer-sign-up && cd ~/build-room/volunteer-sign-up && claude "/engage:connect ${key}"`;
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(start));
+    expect(within(dialog).getByRole('status').textContent).toMatch(/^Copied\. Paste it into a terminal\./);
+    expect(within(dialog).getByTestId('brm-start').textContent).toBe(start);
     delete navigator.clipboard;
     expect(command.textContent).toContain(`--env ENGAGE_KEY=${key}`);
     expect(command.textContent).toContain(`--env ENGAGE_API=${API}`);
@@ -461,6 +464,25 @@ describe('Connect Claude Code', () => {
     expect(within(again).queryByTestId('brm-connect')).toBeNull();
     expect(within(again).getByTestId('brm-install')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(key);
+  });
+
+  test('the project folder is named for the session, and the host can rename it before minting', async () => {
+    await openRoom(hostState());
+    fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
+    const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
+    const folder = within(dialog).getByLabelText('Project folder');
+    expect(folder).toHaveValue('volunteer-sign-up');
+    fireEvent.change(folder, { target: { value: 'Shift Picker; rm -rf /' } });
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Mint a key and copy the command' }));
+      const key = `eng_${GAME}_${'k'.repeat(43)}`;
+      // Only the slug's own letters reach the shell.
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(`mkdir -p ~/build-room/shift-picker-rm-rf && cd ~/build-room/shift-picker-rm-rf && claude "/engage:connect ${key}"`));
+    } finally {
+      delete navigator.clipboard;
+    }
   });
 
   test('revoke, the review setting, and the six prompt cards with their slash commands', async () => {

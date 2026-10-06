@@ -230,6 +230,21 @@ export function pluginInstallCommand({ origin, api }) {
 /** Each session, with the plugin: one line typed into Claude Code. */
 export const pluginConnectCommand = (key) => `/engage:connect ${key}`;
 
+/**
+ * THE START CAP (owner, 2026-10-06): a folder named for the project. The same
+ * rule as the plugin's projectSlug (engage-mcp.mjs): lower case, words joined
+ * by hyphens, a leading "Build" dropped.
+ */
+export function projectSlug(title) {
+  const words = String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const trimmed = words[0] === 'build' && words.length > 1 ? words.slice(1) : words;
+  return trimmed.join('-').slice(0, 60).replace(/-+$/, '') || 'build-room';
+}
+/** What a host may type as the folder name: the slug's own alphabet, nothing a shell would read. */
+export const cleanFolder = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+/** One paste into a terminal: make the folder, start Claude Code in it, connect. */
+export const startCommand = (folder, key) => `mkdir -p ~/build-room/${folder} && cd ~/build-room/${folder} && claude "/engage:connect ${key}"`;
+
 export function connectCommand({ origin, api, key }) {
   const site = String(origin || '').replace(/\/+$/, '');
   return [

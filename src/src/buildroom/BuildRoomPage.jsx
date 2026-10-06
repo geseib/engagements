@@ -37,7 +37,7 @@ import BuildImage, { ImageLoader } from './BuildImage';
 import BuildWheel from './BuildWheel';
 import {
   pluginInstallCommand,
-  pluginConnectCommand,
+  pluginConnectCommand, projectSlug, cleanFolder, startCommand,
   hostImageUrl,
   apiBase, buildApi, createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
@@ -2808,6 +2808,11 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   const command = minted ? connectCommand({ origin: window.location.origin, api: apiBase(), key: minted.key }) : '';
   const install = pluginInstallCommand({ origin: window.location.origin, api: apiBase() });
   const connectLine = minted ? pluginConnectCommand(minted.key) : '';
+  // THE START CAP (owner, 2026-10-06): a new folder named for the project,
+  // ~/build-room/<name>; the host may rename it before copying.
+  const [folder, setFolder] = useState(() => projectSlug(room.title));
+  const folderName = cleanFolder(folder) || projectSlug(room.title);
+  const startLine = minted ? startCommand(folderName, minted.key) : '';
   const kickoff = pluginCommand('kickoff');
   const shareRepo = pluginCommand('share-repo');
 
@@ -2819,8 +2824,8 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
     const out = await run(() => api.mintKey('Claude Code'));
     if (!out || !out.key) return;
     setMinted({ key: out.key, keyId: out.keyId });
-    const ok = await copyText(pluginConnectCommand(out.key));
-    setCopied(ok ? 'Copied. Paste it into Claude Code.' : 'Copy it with the button below.');
+    const ok = await copyText(startCommand(folderName, out.key));
+    setCopied(ok ? 'Copied. Paste it into a terminal.' : 'Copy it with the button below.');
   };
   const revoke = async () => {
     if (!liveKey) return;
@@ -2835,7 +2840,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
       <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} />
-      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and saves every step in git.</p>
+      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and keeps the project tidy in git: one commit per decision, never pushed.</p>
 
       <ol className="brm-steps brm-steps--connect">
         <li className={step(connected, false)}>
@@ -2853,17 +2858,28 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
         <li className={step(Boolean(minted) || connected, !minted && !connected)}>
           <span className="brm-n">2</span>
           <div className="brm-step-body">
-            <span className="brm-step-title">Mint a key and copy the connect command</span>
+            <span className="brm-step-title">Mint a key and copy the start command</span>
+            <label className="brm-field">
+              <span className="brm-lbl">Project folder</span>
+              <span className="brm-row brm-gap">
+                <span className="brm-mono">~/build-room/</span>
+                <input className="brm-input brm-input--sm" aria-label="Project folder" value={folder} maxLength={60} onChange={(e) => setFolder(e.target.value)} />
+              </span>
+              <span className="brm-hint">A new folder for this build, named for the session. Claude sets up git there: README, DECISIONS and a first commit.</span>
+            </label>
             {minted ? (
               <>
                 <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
                   <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</div>
                 </div>
-                <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
+                <pre className="brm-cmd" data-testid="brm-start">{startLine}</pre>
                 <div className="brm-row brm-gap">
-                  <CopyButton text={connectLine} label="Copy again" />
+                  <CopyButton text={startLine} label="Copy again" />
                   <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
                 </div>
+                <p className="brm-hint">Already running Claude Code in the right folder? Paste this into it instead:</p>
+                <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
+                <div className="brm-row brm-gap"><CopyButton text={connectLine} label="Copy" /></div>
               </>
             ) : liveKey ? (
               <p className="brm-hint brm-block">
@@ -2892,10 +2908,10 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
         <li className={step(connected, Boolean(minted) && !connected)}>
           <span className="brm-n">3</span>
           <div className="brm-step-body">
-            <span className="brm-step-title">Start Claude Code in your project folder and paste the command</span>
+            <span className="brm-step-title">Paste it into a terminal</span>
             <span className="brm-hint">{connected
               ? 'Claude Code has called in.'
-              : 'In a terminal, go to your project folder and run claude. Paste the connect command and press Enter.'}</span>
+              : `It makes ~/build-room/${folderName}, starts Claude Code there and connects it to this room.`}</span>
           </div>
         </li>
 
@@ -2906,7 +2922,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
             <pre className="brm-cmd" data-testid="brm-kickoff">{kickoff}</pre>
             <div className="brm-row brm-gap">
               <CopyButton text={kickoff} label="Copy" />
-              <span className="brm-hint">Run it in Claude Code. Claude reads the room, restates the goal and posts its plan.{crew ? '' : ' From then on every turn is saved as a git commit in this project, never pushed.'}</span>
+              <span className="brm-hint">Run it in Claude Code. Claude reads the room, restates the goal and posts its plan.{crew ? '' : ' Claude commits once per decision or milestone, and each turn is kept as a hidden snapshot. Nothing is pushed.'}</span>
             </div>
           </div>
         </li>
@@ -2919,7 +2935,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
               <pre className="brm-cmd" data-testid="brm-share-repo">{shareRepo}</pre>
               <div className="brm-row brm-gap">
                 <CopyButton text={shareRepo} label="Copy" />
-                <span className="brm-hint">Run it in Claude Code. It makes the base branch, shares the repo with the room and proposes the first tasks. Every turn is already saved as a git commit here, never pushed.</span>
+                <span className="brm-hint">Run it in Claude Code. It makes the base branch, shares the repo with the room and proposes the first tasks. Claude commits once per decision here, and each turn is kept as a hidden snapshot. Nothing is pushed.</span>
               </div>
             </div>
           </li>

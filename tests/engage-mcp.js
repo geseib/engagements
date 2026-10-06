@@ -54,6 +54,7 @@ const choiceAsk = (status) => ({
 });
 
 let inboxPolls = 0;
+let endedNext = false;
 // The four kinds and the brief (step 7c): what GET state hands over next.
 let stateInbox = [];
 let stateBrief;
@@ -68,6 +69,7 @@ const server = http.createServer((req, res) => {
     requests.push(rec);
     const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
     if (failNext401) { failNext401 = false; return send(401, { error: 'Key revoked' }); }
+    if (endedNext) { endedNext = false; return send(409, { error: 'This session has ended' }); }
     const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '');
     if (req.method === 'GET' && p === 'state') {
       return send(200, {
@@ -186,11 +188,11 @@ const hardStop = setTimeout(() => {
   });
 
   console.log('\n2. listings');
-  await check('tools/list has all twenty-four tools (thirteen room, eleven crew) with object schemas', async () => {
+  await check('tools/list has all twenty-five tools (fourteen room, eleven crew) with object schemas', async () => {
     const r = await mcp.request('tools/list', {});
     const names = r.result.tools.map(t => t.name).sort();
     assert.deepStrictEqual(names, ['announce_merge', 'ask_for_help', 'ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions', 'checkpoint',
-      'claim_task', 'comment_share', 'connect', 'crew_status', 'get_results', 'get_share', 'post_update', 'propose_task', 'review_share', 'room_status',
+      'claim_task', 'comment_share', 'commit', 'connect', 'crew_status', 'get_results', 'get_share', 'post_update', 'propose_task', 'review_share', 'room_status',
       'share_image', 'share_pr', 'share_repo', 'share_work', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
     for (const t of r.result.tools) {
       assert.strictEqual(t.inputSchema.type, 'object', t.name);
@@ -199,7 +201,7 @@ const hardStop = setTimeout(() => {
   });
   await check('prompts/list and prompts/get kickoff', async () => {
     const l = await mcp.request('prompts/list', {});
-    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'preview', 'join', 'early-look', 'review', 'share-repo']);
+    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'restore', 'preview', 'join', 'early-look', 'review', 'share-repo']);
     // Preview the work (owner, 2026-10-04): serve it, link it, screenshot it.
     const pv = (await mcp.request('prompts/get', { name: 'preview' })).result.messages[0].content.text;
     assert.ok(/dev server/.test(pv) && /kind "showing"/.test(pv) && /share_image/.test(pv), pv);
@@ -342,6 +344,13 @@ const hardStop = setTimeout(() => {
     const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'About an hour', kind: 'answer' } });
     assert.ok(!r.result.isError, textOf(r));
     assert.strictEqual(requests[requests.length - 1].body.kind, 'answer');
+  });
+  await check('a session the host ended: the reply is the closing checklist, ask before stopping servers', async () => {
+    endedNext = true;
+    const r = await mcp.request('tools/call', { name: 'room_status', arguments: {} });
+    const t = textOf(r);
+    assert.ok(r.result.isError, t);
+    assert.ok(/The host has ended the Build Room/.test(t) && /Wrap up: <what was built>/.test(t) && /Ask me before stopping any of them/.test(t) && /no more wait_for_direction/.test(t), t);
   });
   await check('a 401 becomes an isError result that explains the key', async () => {
     failNext401 = true;
