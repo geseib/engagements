@@ -566,6 +566,7 @@ function ideaView(r) {
     // 'room' (a phone) or 'host' (Queue it, from the host's own composer).
     source: r.Source || 'room',
     promotedTo: r.PromotedTo || null,
+    promotedVia: r.PromotedVia || null,
   };
 }
 

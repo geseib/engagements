@@ -977,3 +977,52 @@
 /* The wheel on a phone (BuildWheel; its own sheet draws it). */
 .bpl .bpl-wheel { display: grid; justify-items: center; gap: 8px; margin: 12px 0 18px; }
 .bpl .bpl-wheel-turn { margin: 0; text-align: center; }
+
+/* ==========================================================================
+   NOW · IDEAS · HISTORY (step 7, C11). The tabs sit at the top of the
+   scrolling stage, the same on a phone and on a laptop (PlayerSurface's
+   profiles centre the column on a laptop). Sticky, so they stay in reach while
+   History scrolls. Colours from the tokens above: --text on --bg 14.97:1,
+   --bpl-muted on --bg, --primary on --bg for the open-ask dot.
+   ========================================================================== */
+.bpl .bpl-tabs {
+  position: sticky; top: -20px; z-index: 2;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 4px;
+  margin: -20px 0 16px; padding: 10px 0 8px;
+  background: var(--bg); border-bottom: 1px solid var(--bpl-rule);
+}
+.bpl .bpl-tab {
+  min-height: var(--bpl-tap); border: 0; border-radius: 10px; cursor: pointer;
+  background: transparent; color: var(--bpl-muted);
+  font: inherit; font-size: var(--plr-t-meta); font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.bpl .bpl-tab.is-on { background: var(--surface); color: var(--text); }
+.bpl .bpl-tab:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.bpl .bpl-tabdot {
+  font-size: var(--plr-t-meta); font-weight: 700; color: var(--bg); background: var(--primary);
+  border-radius: 999px; padding: 1px 8px;
+}
+.bpl .bpl-tabcount { font-weight: 600; color: var(--bpl-muted); }
+.bpl .bpl-tabh { margin: 0 0 12px; font-size: var(--plr-t-secondary); line-height: 1.2; }
+
+.bpl .bpl-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.bpl .bpl-filter {
+  min-height: 36px; padding: 4px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--bpl-rule-strong); background: transparent; color: var(--bpl-muted);
+  font: inherit; font-size: var(--plr-t-meta);
+}
+.bpl .bpl-filter.is-on { border-color: var(--bpl-blue-edge); background: var(--bpl-blue-tint); color: var(--text); }
+.bpl .bpl-filter:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.bpl .bpl-story { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+.bpl .bpl-story-it { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.bpl .bpl-story-it .bpl-ago { padding-top: 2px; }
+.bpl .bpl-story-body { min-width: 0; }
+.bpl .bpl-story-t { margin: 0; }
+.bpl .bpl-story-h { color: var(--text); }
+.bpl .bpl-story-it--decided .bpl-story-h { color: var(--bpl-success-text); }
+.bpl .bpl-story-mine { margin: 4px 0 0; }
+.bpl .bpl-shot { margin: 10px 0 0; }
+.bpl .bpl-story .bpl-pvfb { margin-top: 12px; }
+.bpl .bpl-pvnote .bpl-send { margin-top: 8px; }

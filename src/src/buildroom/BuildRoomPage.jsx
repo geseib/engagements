@@ -46,6 +46,7 @@ import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
   questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, claudeKindLabel, asField,
+  roomStory, filterStory, artifactsOf,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -1247,16 +1248,94 @@ function BuildScreen({ room, now }) {
  * the timeline as the wall shows it (no host notes, no idea authors), and
  * every screenshot. Nothing here edits; the Host screen does that.
  */
+/**
+ * HISTORY (step 5, C9 and C10): the session's story for the room, on the
+ * wall. Everything is what Claude showed, what was decided and how, and what
+ * the room said, newest first, with the pictures at the moment they were
+ * made; Decisions is the decisions alone; Artifacts is every picture, each
+ * saying what it was for; Full timeline is the room's whole timeline. Nothing
+ * here edits: that stays on the Host screen.
+ */
+const HISTORY_FILTERS = [
+  { key: 'all', label: 'Everything' },
+  { key: 'decisions', label: 'Decisions' },
+  { key: 'artifacts', label: 'Artifacts' },
+  { key: 'timeline', label: 'Full timeline' },
+];
+
+export function StoryItem({ item }) {
+  return (
+    <li className={`brm-story-it brm-story-it--${item.type}`}>
+      <span className="brm-story-tm">{clockTime(item.at)}</span>
+      <span className="brm-story-dot" aria-hidden="true" />
+      <div className="brm-story-body">
+        <span className="brm-story-h">{item.heading}</span>
+        <p className="brm-story-t">{item.text}</p>
+        {item.chain.length > 0 && (
+          <p className="brm-story-chain" aria-label="How it was decided">
+            {item.chain.map((c, i) => (
+              <React.Fragment key={c}>
+                {i > 0 && <span className="brm-story-arrow" aria-hidden="true">→</span>}
+                <span className="brm-story-step">{c}</span>
+              </React.Fragment>
+            ))}
+          </p>
+        )}
+        {item.imageIds.length > 0 && (
+          <div className="brm-story-pics">
+            {item.imageIds.map((id) => (
+              <BuildImage key={id} imageId={id} alt={item.text} className={`brm-shot brm-story-pic${(item.chosenLabels || []).length && item.imageIds[0] === id ? ' is-chosen' : ''}`} />
+            ))}
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
 function HistoryScreen({ room }) {
-  const decided = (room.asks || [])
+  const [filter, setFilter] = useState('all');
+  const asks = room.asks || [];
+  const story = roomStory({ log: room.log || [], asks, images: room.images || [] });
+  const arts = artifactsOf({ images: room.images || [], asks });
+  const shown = filterStory(story, filter === 'decisions' ? 'decisions' : 'all');
+  const decided = asks
     .filter((a) => a.status === 'decided' && a.decision)
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
-  const images = (room.images || []).slice().reverse();
+  const ideas = room.ideas || [];
+  const usedIdeas = ideas.filter((i) => i.status === 'promoted').length;
   const noop = () => undefined;
   return (
     <div className="brm-screenbody brm-histscreen">
-      <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />
+      <div className="brm-histmain">
+        {filter === 'timeline' && <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />}
+        {filter === 'artifacts' && (arts.length ? (
+          <ul className="brm-arts" aria-label="Artifacts">
+            {arts.map((a) => (
+              <li key={a.imageId} className={`brm-art${a.chosen ? ' is-chosen' : ''}`}>
+                <BuildImage imageId={a.imageId} alt={a.title} className="brm-shot brm-art-img" />
+                <span className="brm-art-t">{a.title}</span>
+                <span className="brm-who">{a.meta} · {clockTime(a.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="brm-empty">Claude&apos;s screenshots and mockups collect here as it works.</p>)}
+        {(filter === 'all' || filter === 'decisions') && (shown.length ? (
+          <ol className="brm-story" aria-label={filter === 'decisions' ? 'Decisions' : 'The story so far'}>
+            {shown.map((it) => <StoryItem key={it.id} item={it} />)}
+          </ol>
+        ) : (
+          <p className="brm-empty">{filter === 'decisions' ? 'Nothing decided yet.' : 'What Claude shows, what the room decides and what it says collect here.'}</p>
+        ))}
+      </div>
       <div className="brm-histside">
+        <div className="brm-qfilters" role="group" aria-label="Show">
+          {HISTORY_FILTERS.map((f) => (
+            <button key={f.key} type="button" className={`brm-qchip${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
+              {f.label}{f.key === 'artifacts' ? ` · ${arts.length}` : ''}
+            </button>
+          ))}
+        </div>
         <section className="brm-panel" aria-labelledby="brm-decided-h">
           <h2 className="brm-h" id="brm-decided-h">Decided so far</h2>
           {decided.length ? (
@@ -1272,17 +1351,11 @@ function HistoryScreen({ room }) {
             <p className="brm-hint">Nothing decided yet.</p>
           )}
         </section>
-        <section className="brm-panel" aria-labelledby="brm-artifacts-h">
-          <h2 className="brm-h" id="brm-artifacts-h">Screenshots</h2>
-          {images.length ? (
-            <div className="brm-shotgrid">
-              {images.map((im) => (
-                <BuildImage key={im.imageId} imageId={im.imageId} caption={im.caption || (im.label ? `Choice ${im.label}` : '')} className="brm-shot brm-shot--grid" />
-              ))}
-            </div>
-          ) : (
-            <p className="brm-hint">Claude&apos;s screenshots collect here as it works.</p>
-          )}
+        <section className="brm-panel" aria-labelledby="brm-made-h">
+          <h2 className="brm-h" id="brm-made-h">Made so far</h2>
+          <p className="brm-made">
+            {arts.length} {arts.length === 1 ? 'screenshot' : 'screenshots'} · {ideas.length} {ideas.length === 1 ? 'idea' : 'ideas'}{ideas.length ? `, ${usedIdeas} used` : ''}
+          </p>
         </section>
       </div>
     </div>

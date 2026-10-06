@@ -599,6 +599,8 @@ describe('the Stage screen (was Present mode)', () => {
       ],
     }));
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    // The whole timeline is one filter away from the story (step 5).
+    fireEvent.click(screen.getByRole('button', { name: 'Full timeline' }));
     const tl = screen.getByRole('region', { name: 'Timeline' });
     const texts = within(tl).getAllByRole('listitem').map((li) => li.textContent);
     expect(texts.map((t) => ['Header B in place', 'Add a parking map', 'Use B with a bigger button'].find((x) => t.includes(x)))).toEqual(['Header B in place', 'Add a parking map', 'Use B with a bigger button']);
@@ -872,7 +874,11 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
       logs: [{ Kind: 'note', Text: 'Ask Dee about parking later', By: 'host' }, { Kind: 'progress', Text: 'Header B in place', By: 'agent' }],
     }));
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
-    expect(screen.getByText('Which header should volunteers see first: Calm photo + calendar')).toBeInTheDocument();
+    // The story (step 5) and "Decided so far" both carry the decision.
+    const story = screen.getByRole('list', { name: 'The story so far' });
+    expect(within(story).getByText('Which header should volunteers see first: Calm photo + calendar')).toBeInTheDocument();
+    expect(within(story).getByText('Decided · Ask 3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Full timeline' }));
     expect(within(screen.getByRole('region', { name: 'Timeline' })).getByText('Header B in place')).toBeInTheDocument();
     expect(screen.queryByText('Ask Dee about parking later')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull();
@@ -1253,6 +1259,24 @@ describe('the decision records how it was made; Claude gets the question and the
     fireEvent.click(within(screen.getByRole('region', { name: 'Current ask' })).getByRole('button', { name: 'Choose this instead' }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Direction for Claude' })).getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ direction: 'Which header should volunteers see first: Bold banner', chosen: ['A'], method: 'host' }));
+  });
+
+  test('History tells the story: each decision with how it was made, and Artifacts say what each picture was for', async () => {
+    await openRoom(hostState({
+      asks: [{
+        ...CHOICE, Status: 'decided', DecidedAt: ago(60), FromIdeas: ['i1', 'i2'],
+        Options: CHOICE.Options.map((o) => ({ ...o, imageId: `img-${o.label}` })),
+        Decision: { direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], method: 'vote', deliveredAt: ago(50) },
+      }],
+      answers: CHOICE_ANSWERS,
+    }));
+    fireEvent.keyDown(window, { key: '4' });
+    const story = screen.getByRole('list', { name: 'The story so far' });
+    const chain = within(story).getByLabelText('How it was decided');
+    expect(chain.textContent).toMatch(/^2 ideas from the room→\d+ of \d+ picked it→Claude has it$/);
+    // No screenshot rows in this room: Artifacts says where they will appear.
+    fireEvent.click(screen.getByRole('button', { name: 'Artifacts · 0' }));
+    expect(screen.getByText(/screenshots and mockups collect here/)).toBeInTheDocument();
   });
 
   test('History shows how each decision was made', async () => {

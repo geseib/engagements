@@ -278,3 +278,107 @@ export const CLAUDE_KINDS = Object.freeze([
 export const claudeKindLabel = (key) => (CLAUDE_KINDS.find((k) => k.key === key) || CLAUDE_KINDS[0]).label;
 /** The body field for a kind: Do now is the default, so it sends nothing. */
 export const asField = (key) => (key && key !== 'do-now' ? { as: key } : {});
+
+/* ------------------------------------------------------------- history -- */
+
+/**
+ * THE ROOM'S STORY (step 5, C9 and C11): what Claude showed, what the room
+ * decided and how, what the room said, and the pictures, newest first. One
+ * model for the History screen the room sees on the wall and the History tab
+ * on every phone and laptop. Built from what each already has: the host's
+ * view carries `asks`; a phone's carries `decisions` and its own ideas.
+ *
+ * Item: `{ id, at, type, heading, text, askId?, imageIds[], link?, chain[], mine? }`
+ *   type  showed | decided | said | milestone | picture | wrapped
+ */
+const STORY_GAP_MS = 2 * 60 * 1000;
+const t = (iso) => Date.parse(iso || '') || 0;
+const askNo = (askId) => Number(askId) || askId;
+
+/** How a decided ask came to be decided, in a few words each (host only). */
+export function decisionChain(ask) {
+  if (!ask || !ask.decision) return [];
+  const d = ask.decision;
+  const chain = [];
+  if (ask.fromIdeas && ask.fromIdeas.length) chain.push(ask.fromIdeas.length === 1 ? 'an idea from the room' : `${ask.fromIdeas.length} ideas from the room`);
+  else if (ask.fromQuestion) chain.push('a ready question');
+  else if (ask.source === 'agent') chain.push('Claude asked');
+  const r = ask.results || {};
+  const method = d.method || (d.spoken ? 'spoken' : 'vote');
+  if (method === 'wheel') chain.push('the wheel picked it');
+  else if (method === 'spoken') chain.push('said out loud');
+  else if (method === 'host') chain.push("the host's pick");
+  else if (ask.kind === 'rating' && r.rating && r.rating.avg !== null && r.rating.avg !== undefined) chain.push(`rated ${r.rating.avg} of 5 by ${r.rating.count}`);
+  else if (ask.kind === 'choice' && Array.isArray(r.options)) {
+    const pick = r.options.find((o) => (d.chosen || []).includes(o.label));
+    if (pick && r.total) chain.push(`${pick.count} of ${r.total} picked it`);
+  } else if (ask.kind === 'suggest' && Array.isArray(r.ranked)) {
+    const pick = r.ranked.find((x) => (d.chosen || []).includes(x.respId));
+    if (pick && pick.votes) chain.push(`${pick.votes} voted for it`);
+  }
+  if (d.sentToAgent === false) chain.push('recorded only');
+  else chain.push(d.deliveredAt ? 'Claude has it' : 'waiting for Claude');
+  return chain;
+}
+
+export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [] } = {}) {
+  const items = [];
+  const imgById = new Map((images || []).map((im) => [im.imageId, im]));
+  // A picture shared within two minutes after Claude showed something belongs to it.
+  const showings = [];
+  for (const e of log || []) {
+    if (e.kind === 'showing') {
+      const it = { id: e.logId, at: e.createdAt, type: 'showed', heading: 'Claude showed', text: e.text, link: e.link || '', imageIds: [], chain: [] };
+      items.push(it);
+      showings.push(it);
+    } else if (e.kind === 'verbal') {
+      items.push({ id: e.logId, at: e.createdAt, type: 'said', heading: 'The room said', text: e.text, imageIds: [], chain: [] });
+    } else if (e.kind === 'milestone') {
+      items.push({ id: e.logId, at: e.createdAt, type: 'milestone', heading: 'Milestone', text: e.text, imageIds: [], chain: [] });
+    } else if (e.kind === 'outcome') {
+      items.push({ id: e.logId, at: e.createdAt, type: 'wrapped', heading: 'Wrapped up', text: e.detail || e.text, imageIds: [], chain: [] });
+    }
+  }
+  for (const e of log || []) {
+    if (e.kind !== 'image' || !e.detail) continue;
+    const im = imgById.get(e.detail);
+    if (im && im.askId) continue; // a mockup belongs to its ask's decision
+    const near = showings.filter((s) => t(e.createdAt) >= t(s.at) && t(e.createdAt) - t(s.at) <= STORY_GAP_MS).pop();
+    if (near) near.imageIds.push(e.detail);
+    else items.push({ id: e.logId, at: e.createdAt, type: 'picture', heading: im && im.kind === 'final' ? 'The finished product' : 'Claude shared a picture', text: e.text, imageIds: [e.detail], chain: [] });
+  }
+  const decided = asks
+    ? asks.filter((a) => a.status === 'decided' && a.decision).map((a) => ({ askId: a.askId, direction: a.decision.direction, at: a.decision.decidedAt || a.decidedAt, ask: a }))
+    : (decisions || []).map((d) => ({ askId: d.askId, direction: d.direction, at: d.decidedAt }));
+  for (const d of decided) {
+    const mockups = (images || []).filter((im) => im.askId === d.askId && im.label);
+    const chosen = d.ask ? (d.ask.decision.chosen || []) : [];
+    const shown = chosen.length ? mockups.filter((im) => chosen.includes(im.label)).concat(mockups.filter((im) => !chosen.includes(im.label))) : mockups;
+    items.push({
+      id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: `Decided · Ask ${askNo(d.askId)}`, text: d.direction || '',
+      askId: d.askId, imageIds: shown.map((im) => im.imageId), chosenLabels: chosen,
+      chain: d.ask ? decisionChain(d.ask) : [],
+      mine: (myIdeas || []).some((i) => i.promotedTo === d.askId),
+    });
+  }
+  return items.sort((a, b) => t(b.at) - t(a.at));
+}
+
+export const STORY_FILTERS = Object.freeze([
+  { key: 'all', label: 'Everything' },
+  { key: 'decisions', label: 'Decisions' },
+  { key: 'pictures', label: 'Pictures' },
+]);
+export const filterStory = (items, key) => (key === 'decisions' ? items.filter((i) => i.type === 'decided') : key === 'pictures' ? items.filter((i) => i.imageIds.length) : items);
+
+/** Every picture, newest first, each saying what it was for (C10). */
+export function artifactsOf({ images = [], asks = [] } = {}) {
+  const askById = new Map((asks || []).map((a) => [a.askId, a]));
+  return (images || []).slice().sort((a, b) => t(b.createdAt) - t(a.createdAt)).map((im) => {
+    const ask = im.askId ? askById.get(im.askId) : null;
+    const chosen = Boolean(ask && ask.decision && (ask.decision.chosen || []).includes(im.label));
+    const who = im.by === 'agent' ? 'Claude' : im.by === 'builder' ? 'A builder' : 'The host';
+    const what = im.askId ? `Ask ${askNo(im.askId)} mockup${chosen ? ' · chosen' : ''}` : im.kind === 'final' ? 'the finished product' : 'progress';
+    return { ...im, title: im.caption || (im.label ? `Choice ${im.label}` : 'A screenshot'), meta: `${who} · ${what}`, chosen };
+  });
+}

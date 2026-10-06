@@ -879,6 +879,14 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     return ['Text a reminder the day before', 'Put the address and a map link at the top', 'Let people sign up as a pair']
       .map((t) => ideas.find((i) => i.text === t).ideaId);
   };
+  await check('a used idea says how: sent to Claude, or added to the room\'s ideas (step 7)', async () => {
+    seed();
+    await sendIdea(priya, 'Bigger dates');
+    const idea = await ideaOf('Bigger dates');
+    await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'direct' });
+    const mine = (await playCall('GET', 'state', priya)).body.myIdeas.find((i) => i.text === 'Bigger dates');
+    assert.deepStrictEqual([mine.status, mine.promotedVia], ['promoted', 'claude']);
+  });
   await check('Later parks an idea; Restore brings it back', async () => {
     seed();
     await sendIdea(priya, 'Dark mode');

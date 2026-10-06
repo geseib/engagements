@@ -199,3 +199,67 @@ describe('the fixed rating scale (owner, 2026-10-06)', () => {
     expect([1, 3, 5].map(ratingStep)).toEqual(['1 · Needs work', '3', '5 · Great']);
   });
 });
+
+describe('the room\'s story (step 5, C9 and C11)', () => {
+  const { roomStory, decisionChain, filterStory, artifactsOf } = require('../buildroom/buildScreens');
+  const at = (m) => `2026-10-06T10:${String(m).padStart(2, '0')}:00.000Z`;
+  const LOG = [
+    { logId: 'l1', kind: 'verbal', text: 'It has to work on old phones', createdAt: at(22) },
+    { logId: 'l2', kind: 'progress', text: 'Scaffolded', createdAt: at(25) },
+    { logId: 'l3', kind: 'showing', text: 'The shift calendar is up', link: 'http://localhost:5173', createdAt: at(46) },
+    { logId: 'l4', kind: 'image', text: 'The calendar', detail: 'img-cal', createdAt: at(47) },
+    { logId: 'l5', kind: 'image', text: 'Choice A', detail: 'img-a', createdAt: at(24) },
+    { logId: 'l6', kind: 'image', text: 'Later shot', detail: 'img-late', createdAt: at(55) },
+  ];
+  const IMAGES = [
+    { imageId: 'img-cal', kind: 'progress', by: 'agent', createdAt: at(47) },
+    { imageId: 'img-a', kind: 'mockup', askId: '001', label: 'A', by: 'agent', createdAt: at(24), caption: 'Bold banner' },
+    { imageId: 'img-b', kind: 'mockup', askId: '001', label: 'B', by: 'agent', createdAt: at(24) },
+    { imageId: 'img-late', kind: 'final', by: 'agent', createdAt: at(55) },
+  ];
+  const ASK1 = {
+    askId: '001', kind: 'choice', status: 'decided', source: 'host', fromIdeas: ['i1', 'i2'],
+    results: { total: 14, options: [{ label: 'A', count: 5 }, { label: 'B', count: 9 }] },
+    decision: { direction: 'Calm photo and the shift calendar', chosen: ['B'], method: 'vote', sentToAgent: true, deliveredAt: at(32), decidedAt: at(31) },
+  };
+
+  test('newest first: a picture joins what Claude showed; a mockup joins its decision, the chosen one first', () => {
+    const s = roomStory({ log: LOG, asks: [ASK1], images: IMAGES });
+    expect(s.map((i) => i.type)).toEqual(['picture', 'showed', 'decided', 'said']);
+    expect(s[0]).toMatchObject({ heading: 'The finished product', imageIds: ['img-late'] });
+    expect(s[1]).toMatchObject({ heading: 'Claude showed', text: 'The shift calendar is up', imageIds: ['img-cal'] });
+    expect(s[2]).toMatchObject({ heading: 'Decided · Ask 1', text: 'Calm photo and the shift calendar', imageIds: ['img-b', 'img-a'] });
+    expect(s[2].chain).toEqual(['2 ideas from the room', '9 of 14 picked it', 'Claude has it']);
+    expect(s.some((i) => i.text === 'Scaffolded')).toBe(false);
+  });
+
+  test('a phone: decisions from its own list, and "your idea was in this vote"', () => {
+    const s = roomStory({ log: LOG, decisions: [{ askId: '001', direction: 'Calm photo', decidedAt: at(31) }], images: IMAGES, myIdeas: [{ promotedTo: '001' }] });
+    const d = s.find((i) => i.type === 'decided');
+    expect(d).toMatchObject({ text: 'Calm photo', chain: [], mine: true });
+  });
+
+  test('the chain says how: the wheel, out loud, the host, a rating, and recorded only', () => {
+    expect(decisionChain({ ...ASK1, fromIdeas: null, source: 'agent', decision: { ...ASK1.decision, method: 'wheel', deliveredAt: null } }))
+      .toEqual(['Claude asked', 'the wheel picked it', 'waiting for Claude']);
+    expect(decisionChain({ kind: 'rating', fromQuestion: 'x', results: { rating: { avg: 4.2, count: 9 } }, decision: { method: 'vote', sentToAgent: false } }))
+      .toEqual(['a ready question', 'rated 4.2 of 5 by 9', 'recorded only']);
+    expect(decisionChain({ kind: 'suggest', decision: { method: 'spoken', deliveredAt: 'x' } })).toEqual(['said out loud', 'Claude has it']);
+  });
+
+  test('filters: decisions only, or anything with a picture', () => {
+    const s = roomStory({ log: LOG, asks: [ASK1], images: IMAGES });
+    expect(filterStory(s, 'decisions').map((i) => i.type)).toEqual(['decided']);
+    expect(filterStory(s, 'pictures').map((i) => i.type)).toEqual(['picture', 'showed', 'decided']);
+  });
+
+  test('artifacts say what each was for, newest first', () => {
+    const a = artifactsOf({ images: IMAGES, asks: [ASK1] });
+    expect(a.map((x) => [x.title, x.meta])).toEqual([
+      ['A screenshot', 'Claude · the finished product'],
+      ['A screenshot', 'Claude · progress'],
+      ['Bold banner', 'Claude · Ask 1 mockup'],
+      ['Choice B', 'Claude · Ask 1 mockup · chosen'],
+    ]);
+  });
+});

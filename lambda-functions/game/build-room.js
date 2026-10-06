@@ -655,7 +655,11 @@ async function ideaAction(ctx, ideaId, body) {
   else if (action === 'restore') status = 'new';
   else return fail(400, 'action must be direct, suggest, acknowledge, wall, later, dismiss or restore');
   const next = { ...idea, Status: status, UpdatedAt: now, ...(action === 'wall' ? { WalledAt: now } : {}) };
-  if (action === 'restore') delete next.WalledAt;
+  // How it was used, so the sender's phone can say (step 7, C11): sent to
+  // Claude, or added to the room's open Ideas ask.
+  if (action === 'direct') next.PromotedVia = 'claude';
+  if (action === 'suggest') next.PromotedVia = 'ideas';
+  if (action === 'restore') { delete next.WalledAt; delete next.PromotedVia; }
   await put(ctx, next);
   if (action === 'wall') {
     const comment = { IdeaId: idea.IdeaId, Text: idea.Text, At: now };
