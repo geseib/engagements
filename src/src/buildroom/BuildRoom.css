@@ -667,3 +667,49 @@
 .brm .brm-reviewopt-t { min-width: 0; overflow-wrap: anywhere; }
 .brm .brm-editfold { margin: 10px 0 0; background: transparent; }
 .brm .brm-editbody { padding: 4px 14px 2px; }
+
+/* THE HOST SCREEN NEVER SCROLLS THE WINDOW (owner, 2026-10-05). On a laptop
+   the screen is the window's height; each column scrolls inside itself, and
+   in the right column only the one open section does (HistoryStack). On a
+   small screen, where three columns cannot fit, the page scrolls as before. */
+.brm .brm-stack { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.brm .brm-stackitem { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px; min-height: 0; }
+.brm .brm-stackitem.is-open { border-color: var(--brm-line-amber); }
+.brm .brm-stackhead {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--brm-row-h); padding: 8px 14px;
+  background: transparent; border: 0; color: var(--text); cursor: pointer; text-align: left;
+  font: 700 var(--brm-t-body)/1.2 var(--font-ui);
+}
+.brm .brm-stackhead:focus-visible { outline: 2px solid var(--secondary); outline-offset: -2px; border-radius: 12px; }
+.brm .brm-stackbody { border-top: 1px solid var(--brm-rule); }
+/* The section's own panel and heading sit inside the row that names it. */
+.brm .brm-stackbody > .brm-panel { border: 0; border-radius: 0 0 12px 12px; background: transparent; max-height: none; }
+.brm .brm-stackbody > .brm-panel > .brm-h:first-child,
+.brm .brm-stackbody > .brm-panel > .brm-h5:first-child {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.brm .brm-stackbody > .brm-empty { margin: 12px; }
+
+@media (min-width: 1201px) {
+  .brm.brm-room--host { height: 100vh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .brm.brm-room--host > .brm-hbar,
+  .brm.brm-room--host > .brm-alert,
+  .brm.brm-room--host > .brm-notice { flex: none; }
+  .brm.brm-room--host > .brm-host { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .brm.brm-room--host .brm-hostcol { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .brm.brm-room--host .brm-hostcol--stack { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .brm.brm-room--host .brm-hostcol--stack > .brm-activity { flex: none; }
+  .brm.brm-room--host .brm-stack { flex: 1; }
+  .brm.brm-room--host .brm-stackitem { flex: none; }
+  .brm.brm-room--host .brm-stackitem.is-open { flex: 1; display: flex; flex-direction: column; }
+  .brm.brm-room--host .brm-stackitem.is-open > .brm-stackbody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+/* The asks table in the narrow right column: the kind column goes (the row's
+   question says it), and the number, status and action get fixed widths. */
+.brm .brm-stackbody .brm-tbl th.brm-col-kind,
+.brm .brm-stackbody .brm-tbl td:nth-child(3) { display: none; }
+.brm .brm-stackbody .brm-col-n { width: 34px; }
+.brm .brm-stackbody .brm-col-state { width: 86px; }
+.brm .brm-stackbody .brm-col-acts { width: 82px; }
+.brm .brm-stackbody .brm-tbl td, .brm .brm-stackbody .brm-tbl th { padding-left: 6px; padding-right: 6px; }

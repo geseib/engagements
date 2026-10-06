@@ -552,7 +552,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
   return (
     <ImageLoader.Provider value={loadImage}>
-    <div className={`brm brm-room${present ? ' brm--present' : ''}`} data-theme="dark">
+    <div className={`brm brm-room${present ? ' brm--present' : ''}${screen === 'host' ? ' brm-room--host' : ''}`} data-theme="dark">
       {screen === 'stage' ? (
         <BuildStage
           room={room}
@@ -665,21 +665,20 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           {!onCrew && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
         </section>
 
-        {/* WHAT HAPPENED: Claude at work during an ask, the timeline, and the
-            asks and screenshots folded until wanted (C1, C12). */}
-        <aside className="brm-hostcol">
+        {/* WHAT HAPPENED (owner, 2026-10-05): the timeline, the asks and the
+            screenshots, one open at a time; the open one fills the column and
+            scrolls inside itself, so the page never scrolls. */}
+        <aside className="brm-hostcol brm-hostcol--stack">
           {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
-          <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} />
-          {asks.length > 0 && (
-            <details className="brm-fold">
-              <summary>Asks <span className="brm-muted">· {asks.length}</span></summary>
-              <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
-            </details>
-          )}
-          <details className="brm-fold">
-            <summary>Screenshots <span className="brm-muted">· {(room.images || []).length}</span></summary>
-            <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} />
-          </details>
+          <HistoryStack
+            items={[
+              { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
+              { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
+                ? <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
+                : <div className="brm-empty">No asks yet.</div> },
+              { key: 'shots', label: 'Screenshots', count: (room.images || []).length, body: <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} /> },
+            ]}
+          />
         </aside>
       </div>
       )}
@@ -923,6 +922,39 @@ function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onRe
         )}
       </div>
     </header>
+  );
+}
+
+/**
+ * ONE OPEN AT A TIME (owner, 2026-10-05): "when you open one the other close.
+ * but you never scroll the browser window, just the active open box." The
+ * open section takes the column's height and scrolls inside itself; the
+ * closed ones are a row each. One is always open: Timeline to start.
+ */
+function HistoryStack({ items }) {
+  const [open, setOpen] = useState(items[0].key);
+  return (
+    <div className="brm-stack">
+      {items.map((it) => {
+        const isOpen = open === it.key;
+        return (
+          <div key={it.key} className={`brm-stackitem${isOpen ? ' is-open' : ''}`}>
+            <button
+              type="button"
+              className="brm-stackhead"
+              aria-expanded={isOpen}
+              aria-controls={`brm-stack-${it.key}`}
+              onClick={() => setOpen(it.key)}
+            >
+              <Icon name={isOpen ? 'CaretDown' : 'CaretRight'} size={14} />
+              {it.label}
+              <span className="brm-muted">{` · ${it.count}`}</span>
+            </button>
+            {isOpen && <div className="brm-stackbody" id={`brm-stack-${it.key}`}>{it.body}</div>}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

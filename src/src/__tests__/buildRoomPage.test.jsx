@@ -999,3 +999,27 @@ describe('the review card leads with what the room would see (C2)', () => {
     expect(card.querySelector('details.brm-editfold').open).toBe(true);
   });
 });
+
+describe('timeline, asks and screenshots: one open at a time (owner, 2026-10-05)', () => {
+  test('the Timeline starts open; opening Asks closes it; one is always open', async () => {
+    await openRoom(hostState({
+      asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'Go with B.' }, DecidedAt: ago(60) }],
+      logs: [{ Kind: 'progress', Text: 'Shift list renders', By: 'agent' }],
+    }));
+    const head = (name) => screen.getByRole('button', { name: new RegExp(`^${name} · `) });
+    expect(head('Timeline')).toHaveAttribute('aria-expanded', 'true');
+    expect(head('Asks')).toHaveAttribute('aria-expanded', 'false');
+    expect(head('Screenshots')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('region', { name: 'Timeline' })).toBeInTheDocument();
+
+    fireEvent.click(head('Asks'));
+    expect(head('Asks')).toHaveAttribute('aria-expanded', 'true');
+    expect(head('Timeline')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: 'Timeline' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Asks' })).toBeInTheDocument();
+
+    // Clicking the open one keeps it open: there is always one to read.
+    fireEvent.click(head('Asks'));
+    expect(head('Asks')).toHaveAttribute('aria-expanded', 'true');
+  });
+});
