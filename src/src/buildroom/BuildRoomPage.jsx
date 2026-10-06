@@ -620,7 +620,22 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>Reconnect</button>
         </div>
       )}
-      {ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
+      {host && ended && (
+        <div className="brm-notice brm-notice--bar brm-row brm-gap" data-testid="brm-endedbar">
+          <span>This session has ended. The timeline, the wrap-up and the report are still yours to edit.</span>
+          <a className="brm-btn brm-btn--sm brm-push" href="/">Back to the main menu</a>
+        </div>
+      )}
+      {!host && ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
+      {/* WRAPPED, NOT YET ENDED (owner, 2026-10-06): the next steps in one place. */}
+      {host && !ended && room.outcome && (
+        <div className="brm-notice brm-notice--bar brm-row brm-gap" data-testid="brm-wrappedbar">
+          <span>Claude has wrapped up. Look over the report, then end the session when the room is done.</span>
+          <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={() => goView('report')}>Report</button>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={() => setDialog('end')}>End session</button>
+          <a className="brm-btn brm-btn--sm brm-btn--ghost" href="/">Main menu</a>
+        </div>
+      )}
 
       {screen === 'build' && <BuildScreen room={room} now={now} />}
       {screen === 'history' && <HistoryScreen room={room} />}
@@ -1011,6 +1026,11 @@ function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onRe
                   <Icon name="FileText" size={14} /> Report
                 </button>
                 {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(close, onEnd)}>End session</button>}
+                {/* THE WAY BACK (owner, 2026-10-06: "a way to get back to the main
+                    menu"). The room keeps running; this only leaves the page. */}
+                <a className="brm-btn brm-btn--sm brm-btn--ghost" href="/">
+                  <Icon name="House" size={14} /> Main menu
+                </a>
               </>
             )}
           </SessionMenu>

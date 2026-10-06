@@ -1608,3 +1608,28 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     expect(await within(dialog).findByText(/No ready questions yet/)).toBeInTheDocument();
   });
 });
+
+describe('the way back to the main menu (owner, 2026-10-06)', () => {
+  test('More always has Main menu', async () => {
+    await openRoom(hostState());
+    openMore();
+    expect(screen.getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
+  });
+
+  test('wrapped up: a bar with the report, End session and the main menu', async () => {
+    await openRoom(hostState({ st: { Outcome: { summary: 'A connect four game.', built: [], links: [], nextSteps: [], by: 'agent', updatedAt: ago(30) } } }));
+    const bar = screen.getByTestId('brm-wrappedbar');
+    expect(bar.textContent).toMatch('Claude has wrapped up.');
+    expect(within(bar).getByRole('button', { name: 'Report' })).toBeInTheDocument();
+    expect(within(bar).getByRole('link', { name: 'Main menu' })).toHaveAttribute('href', '/');
+    fireEvent.click(within(bar).getByRole('button', { name: 'End session' }));
+    expect(screen.getByRole('dialog', { name: 'End this session?' })).toBeInTheDocument();
+  });
+
+  test('ended: the bar leads back to the main menu', async () => {
+    const st = hostState();
+    await openRoom({ ...st, state: 'ENDED' });
+    expect(within(screen.getByTestId('brm-endedbar')).getByRole('link', { name: 'Back to the main menu' })).toHaveAttribute('href', '/');
+    expect(screen.queryByTestId('brm-wrappedbar')).toBeNull();
+  });
+});
