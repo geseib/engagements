@@ -762,11 +762,43 @@ export function agentChipText(agent, now) {
   return `${name} not connected`;
 }
 
+/** What the host does when Claude Code has gone quiet (owner, 2026-10-05). */
+export const CONTINUE_COMMAND = pluginCommand('continue');
+
+/**
+ * Claude's status in the header. When Claude Code was here and has stopped
+ * ("last seen 4 min ago"), the chip is the fix: one click copies
+ * /engage:continue to paste into the Claude Code window, and its tooltip
+ * says so (owner, 2026-10-05). Connected, or never connected, it explains
+ * itself on hover and does nothing on click.
+ */
 function AgentChip({ agent, now }) {
+  const [copied, setCopied] = useState('');
+  const quiet = Boolean(agent && agent.lastSeenAt && !agent.connected && !agent.listening);
+  const cls = `brm-agentchip${agent && agent.connected ? ' is-on' : ''}${quiet ? ' is-quiet' : ''}`;
+  if (!quiet) {
+    const tip = !agent || !agent.lastSeenAt
+      ? 'Claude Code has not connected yet. Use More, then Connect Claude Code.'
+      : agent.listening
+        ? 'Claude Code is waiting for your next direction.'
+        : 'Claude Code is connected and working.';
+    return <span className={cls} data-testid="brm-agentchip" title={tip}>{agentChipText(agent, now)}</span>;
+  }
+  const copy = async () => {
+    const ok = await copyText(CONTINUE_COMMAND);
+    setCopied(ok ? `Copied ${CONTINUE_COMMAND}. Paste it into Claude Code.` : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    setTimeout(() => setCopied(''), 4000);
+  };
   return (
-    <span className={`brm-agentchip${agent && agent.connected ? ' is-on' : ''}`} data-testid="brm-agentchip">
-      {agentChipText(agent, now)}
-    </span>
+    <button
+      type="button"
+      className={cls}
+      data-testid="brm-agentchip"
+      title={`Claude Code has stopped. Click to copy ${CONTINUE_COMMAND}, then paste it into the Claude Code window and press Enter.`}
+      onClick={copy}
+    >
+      {copied || agentChipText(agent, now)}
+    </button>
   );
 }
 

@@ -713,3 +713,10 @@
 .brm .brm-stackbody .brm-col-state { width: 86px; }
 .brm .brm-stackbody .brm-col-acts { width: 82px; }
 .brm .brm-stackbody .brm-tbl td, .brm .brm-stackbody .brm-tbl th { padding-left: 6px; padding-right: 6px; }
+
+/* Claude Code has stopped: the chip copies /engage:continue (AgentChip). */
+.brm button.brm-agentchip { background: transparent; cursor: pointer; font-family: var(--font-ui); }
+.brm .brm-agentchip.is-quiet { color: var(--primary); border-color: var(--brm-line-amber); }
+.brm .brm-agentchip.is-quiet::before { background: var(--primary); }
+.brm button.brm-agentchip:hover, .brm button.brm-agentchip:focus-visible { background: var(--surface-2); }
+.brm button.brm-agentchip:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }

@@ -1023,3 +1023,29 @@ describe('timeline, asks and screenshots: one open at a time (owner, 2026-10-05)
     expect(head('Asks')).toHaveAttribute('aria-expanded', 'true');
   });
 });
+
+describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026-10-05)', () => {
+  test('a last-seen chip is a button whose tooltip says what to do, and a click copies the command', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: ago(3600) } }));
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const chip = screen.getByTestId('brm-agentchip');
+      expect(chip.tagName).toBe('BUTTON');
+      expect(chip.textContent).toMatch(/Claude Code last seen/);
+      expect(chip.getAttribute('title')).toBe('Claude Code has stopped. Click to copy /engage:continue, then paste it into the Claude Code window and press Enter.');
+      fireEvent.click(chip);
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('/engage:continue'));
+      expect(await screen.findByText('Copied /engage:continue. Paste it into Claude Code.')).toBeInTheDocument();
+    } finally {
+      delete navigator.clipboard;
+    }
+  });
+
+  test('connected, the chip explains itself and is not a button', async () => {
+    await openRoom(hostState());
+    const chip = screen.getByTestId('brm-agentchip');
+    expect(chip.tagName).toBe('SPAN');
+    expect(chip.getAttribute('title')).toBe('Claude Code is connected and working.');
+  });
+});
