@@ -12,7 +12,12 @@ Owner, 2026-10-06:
 > On "Later": "later to me means there is something for claude but we are putting in the
 > queue. maybe it was meant to send some info to claude but im not sure it was included."
 
-Status: **proposal, not built.** The questions at the end need the owner's answers first.
+Status: **approved 2026-10-06; being built.** The owner's answers:
+
+1. **For Claude, later:** nothing reaches Claude until the host sends it (Send now, or Put to a vote).
+2. **Folder:** `~/build-room/<name>`, named from the session title and editable in the Connect panel.
+3. **Snapshots:** yes, hidden snapshots every turn; one clean commit per decision or milestone.
+4. **Shutdown:** wrap-up asks the host before stopping Claude's servers.
 
 ## What happens today (measured in the code, 2026-10-06)
 

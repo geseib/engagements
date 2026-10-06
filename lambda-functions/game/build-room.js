@@ -149,6 +149,10 @@ async function announce(ctx, rev) {
 async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
+  // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
+  // but HELD: nothing reaches Claude until the host presses Send now.
+  const kind4 = S.claudeGetsOf(as);
+  const held = Boolean(forAgent) && kind4 === 'later';
   const row = {
     SK: sk,
     LogId: sk.slice('BUILD#LOG#'.length).replace('#', '-'),
@@ -158,21 +162,21 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(link ? { Link: link } : {}),
     By: by,
     ...(askId ? { AskId: askId } : {}),
-    ...(forAgent ? { ForAgent: true } : {}),
+    ...(forAgent && !held ? { ForAgent: true } : {}),
     ...(forBuilder ? { ForBuilder: forBuilder } : {}),
     ...(shareId ? { ShareId: shareId } : {}),
     ...(name ? { Name: name } : {}),
     ...(spoken ? { Spoken: true } : {}),
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
-    ...(forAgent ? { ForAgentAs: S.claudeGetsOf(as) } : {}),
+    ...(forAgent ? { ForAgentAs: kind4 } : {}),
     ...(forAgent && claudeNote ? { ClaudeNote: claudeNote } : {}),
     CreatedAt: now,
   };
   const saved = await put(ctx, row);
   // Keep in mind and Later stand: they join the room brief, which Claude
   // reads on every call until the host edits them away.
-  if (forAgent && ['keep', 'later'].includes(S.claudeGetsOf(as))) {
-    await addToBrief(ctx, S.claudeGetsOf(as), { id: row.LogId, text, from: by === 'room' ? 'the room' : askId ? `ask ${Number(askId)}` : 'you', askId: askId || null, at: now });
+  if (forAgent && ['keep', 'later'].includes(kind4)) {
+    await addToBrief(ctx, kind4, { id: row.LogId, text, from: by === 'room' ? 'the room' : askId ? `ask ${Number(askId)}` : 'you', askId: askId || null, at: now });
   }
   return saved;
 }
@@ -372,6 +376,7 @@ async function askAction(ctx, role, askId, body) {
       // As the host chose, else as the ready question's set says, else Do now.
       const as = S.claudeGetsOf(b.as, S.claudeGetsOf(ask.ClaudeGets));
       next.Decision.as = as;
+      if (as === 'later') next.Decision.heldForLater = true;
       await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '' });
     }
     await put(ctx, next);
@@ -702,6 +707,22 @@ async function editBrief(ctx, body) {
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { brief: next });
+}
+
+/**
+ * SEND NOW (owner, 2026-10-06): an item held For Claude, later goes to Claude
+ * as Do now, and leaves the list.
+ */
+async function sendLater(ctx, itemId) {
+  const room = await loadRoom(ctx);
+  const brief = S.briefView(room.state);
+  const item = brief.later.find((i) => i.id === itemId);
+  if (!item) return fail(404, 'That is no longer on the For Claude, later list');
+  await saveBrief(ctx, { ...brief, later: brief.later.filter((i) => i.id !== itemId) });
+  const row = await logEntry(ctx, { kind: 'direction', text: item.text, by: 'host', forAgent: true, as: 'do-now', askId: item.askId || undefined });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { entry: S.logView(row) });
 }
 
 /**
@@ -1504,6 +1525,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'asks-from-ideas' && !b) return hostOnly() || askFromIdeas(ctx, body);
   if (a === 'brief' && !b) return hostOnly() || editBrief(ctx, body);
   if (a === 'brief' && b === 'vote' && !c) return hostOnly() || laterToVote(ctx, body);
+  if (a === 'brief' && b === 'later' && c && d === 'send') return hostOnly() || sendLater(ctx, c);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);
@@ -1723,9 +1745,10 @@ exports.handler = async (event) => {
         const inbox = await takeInbox(ctx, role);
         const parsed = JSON.parse(res.body || '{}');
         // The brief rides along whenever it changed for Claude: a Keep in mind
-        // or a Later item in this delivery (the plugin rewrites .engage/brief.md).
-        if (role === 'agent' && !parsed.brief && inbox.some((d) => ['keep', 'later'].includes(d.as))) {
-          parsed.brief = S.briefView((await loadRoom(ctx)).state);
+        // item in this delivery (the plugin rewrites .engage/brief.md).
+        if (role === 'agent' && !parsed.brief && inbox.some((d) => d.as === 'keep')) {
+          // Never the Later list: it is held until the host sends an item.
+          parsed.brief = { ...S.briefView((await loadRoom(ctx)).state), later: [] };
         }
         res.body = JSON.stringify({ ...parsed, inbox });
         if (inbox.length) {

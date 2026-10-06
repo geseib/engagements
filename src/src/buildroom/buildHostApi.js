@@ -110,6 +110,8 @@ export function buildApi(gameId) {
     editBrief: (body) => post('brief', body),
     /** The brief's Later list, to a Pick one vote. */
     laterToVote: () => post('brief/vote', {}),
+    /** Send one held For Claude, later item now, as Do now. */
+    sendLater: (id) => post(`brief/later/${seg(id)}/send`, {}),
     /**
      * READY QUESTIONS (step 7b, C13): every set this host can read, from the
      * session picker's own route; the library keeps those tagged build-room.

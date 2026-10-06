@@ -272,7 +272,8 @@ export const agentStopped = (agent) => Boolean(agent && agent.lastSeenAt && !age
 export const CLAUDE_KINDS = Object.freeze([
   { key: 'do-now', label: 'Do now', hint: 'The next thing to build. Claude stops and does it.' },
   { key: 'keep', label: 'Keep in mind', hint: 'A rule or a fact for everything from now on. Goes on the brief; Claude does not stop.' },
-  { key: 'later', label: 'Later', hint: "Something to build, not now. Goes on the brief's Later list." },
+  // Held, not sent (owner, 2026-10-06: "only when I send it").
+  { key: 'later', label: 'For Claude, later', hint: 'Waits in your For Claude, later list. Claude hears nothing until you send it.' },
   { key: 'ask', label: 'Ask Claude', hint: 'A question. Claude answers on the screen and keeps building.' },
 ]);
 export const claudeKindLabel = (key) => (CLAUDE_KINDS.find((k) => k.key === key) || CLAUDE_KINDS[0]).label;
@@ -317,6 +318,7 @@ export function decisionChain(ask) {
     if (pick && pick.votes) chain.push(`${pick.votes} voted for it`);
   }
   if (d.sentToAgent === false) chain.push('recorded only');
+  else if (d.heldForLater) chain.push('for Claude, later');
   else chain.push(d.deliveredAt ? 'Claude has it' : 'waiting for Claude');
   return chain;
 }

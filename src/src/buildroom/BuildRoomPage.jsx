@@ -1069,7 +1069,7 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
   );
   return (
     <section className="brm-brief" aria-label="The room brief">
-      <p className="brm-hint">Claude reads this whenever it changes. It belongs to this room; at wrap-up Claude says which rules are worth keeping in the project, and you choose.</p>
+      <p className="brm-hint">Claude reads who it is for and Keep in mind whenever they change. For Claude, later stays with you until you send an item. At wrap-up Claude says which rules are worth keeping in the project, and you choose.</p>
       <div className="brm-brief-sec">
         <h3 className="brm-h5">Who it is for</h3>
         {ended ? <p>{b.forWhom || 'Not set.'}</p> : (
@@ -1080,10 +1080,10 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
         )}
       </div>
       {section('keep', 'Keep in mind', 'Send something to Claude as Keep in mind and it lands here.')}
-      {section('later', 'Later', 'Send something as Later and it waits here.')}
+      {section('later', 'For Claude, later', 'Send something For Claude, later and it waits here. Claude hears nothing until you send it.')}
       {!ended && b.later.length >= 2 && (
         <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy || b.later.length > 6} title={b.later.length > 6 ? 'A vote takes at most 6; remove some first' : 'A Pick one vote, open now'} onClick={() => run(() => api.laterToVote())}>
-          Put Later to a vote
+          Put them to a vote
         </button>
       )}
     </section>
@@ -2409,6 +2409,7 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
             {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
+            {host && entry.held && <span className="brm-tl-flag">For Claude, later · not sent</span>}
             {host && entry.forAgent && <span className="brm-tl-flag">{entry.as && entry.as !== 'do-now' ? `${claudeKindLabel(entry.as)} · ` : ''}{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${CONTINUE_COMMAND}` : 'Waiting for Claude'}</span>}
           </>
         )}
@@ -2482,6 +2483,40 @@ function ideaWho(idea) {
 }
 
 /**
+ * FOR CLAUDE, LATER (owner, 2026-10-06: "later to me means there is something
+ * for claude but we are putting in the queue"). Held on the host's side;
+ * nothing reaches Claude until Send now, or a vote over the list.
+ */
+function ForClaudeLater({ brief, busy, ended, run, api }) {
+  const list = (brief && brief.later) || [];
+  if (!list.length) return null;
+  const remove = (id) => run(() => api.editBrief({ later: list.filter((i) => i.id !== id).map(({ id: i, text }) => ({ id: i, text })) }));
+  return (
+    <details className="brm-handled brm-forlater" open>
+      <summary>For Claude, later · {list.length}</summary>
+      <p className="brm-hint">Claude has not heard these. Send one when it is time, or let the room pick.</p>
+      {list.map((i) => (
+        <div className="brm-idea" key={i.id}>
+          <div className="brm-idea-text">{i.text}</div>
+          <div className="brm-who">{i.from}</div>
+          {!ended && (
+            <div className="brm-idea-acts">
+              <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} title="Claude gets it now, as Do now" onClick={() => run(() => api.sendLater(i.id))}>Send now</button>
+              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => remove(i.id)}>Remove</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {!ended && list.length >= 2 && (
+        <button type="button" className="brm-btn brm-btn--sm" disabled={busy || list.length > 6} title={list.length > 6 ? 'A vote takes at most 6; remove some first' : 'A Pick one vote, open now'} onClick={() => run(() => api.laterToVote())}>
+          Put them to a vote
+        </button>
+      )}
+    </details>
+  );
+}
+
+/**
  * THE QUEUE (step 4, C1–C3b): everything waiting on the host in one list,
  * Claude's asks first, then oldest first. Filters by who it came from; tick
  * ideas to act on several at once, or put them to a vote.
@@ -2530,7 +2565,7 @@ function Queue({ room, current, busy, ended, run, api }) {
             Put {tickedLive.length} to a vote
           </button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('direct')}>Send to Claude</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('later')}>Later</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. They wait under Parked; nothing goes to Claude." onClick={() => bulk('later')}>Park</button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('acknowledge')}>Acknowledge</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked([])}>Clear</button>
         </div>
@@ -2561,9 +2596,11 @@ function Queue({ room, current, busy, ended, run, api }) {
         />
       )))}
 
+      <ForClaudeLater brief={room.brief} busy={busy} ended={ended} run={run} api={api} />
+
       {later.length > 0 && (
         <details className="brm-handled">
-          <summary>Later · {later.length}</summary>
+          <summary>Parked · {later.length}</summary>
           {later.map((idea) => (
             <div className="brm-idea brm-idea--done" key={idea.ideaId}>
               <div className="brm-idea-text">{idea.text}</div>
@@ -2630,7 +2667,8 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
               </>
             )}
           </SessionMenu>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. It waits under Later." onClick={() => onAct('later')}>Later</button>
+          {/* PARK (owner, 2026-10-06): the host's "not now". Nothing goes to Claude; "For Claude, later" is a different thing. */}
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. It waits under Parked; nothing goes to Claude." onClick={() => onAct('later')}>Park</button>
           {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude. */}
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Mark it as seen. Their phone says so; nothing goes to Claude." onClick={() => onAct('acknowledge')}>Acknowledge</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => onAct('dismiss')}>Dismiss</button>

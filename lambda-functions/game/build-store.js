@@ -510,6 +510,7 @@ function askView(ask, room, audience, me) {
       chosen: ask.Decision.chosen || [],
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
       sentToAgent: ask.Decision.sendToAgent !== false,
+      ...(isHost && ask.Decision.heldForLater ? { heldForLater: true } : {}),
       spoken: Boolean(ask.Decision.spoken),
       method: ask.Decision.method || (ask.Decision.spoken ? 'spoken' : 'vote'),
       decidedAt: ask.DecidedAt || null,
@@ -522,7 +523,9 @@ function askView(ask, room, audience, me) {
 function logView(r) {
   return {
     logId: r.LogId,
-    as: r.ForAgent ? claudeGetsOf(r.ForAgentAs) : null,
+    as: r.ForAgentAs ? claudeGetsOf(r.ForAgentAs) : null,
+    // For Claude, later: on the host's list, not sent (owner, 2026-10-06).
+    held: Boolean(r.ForAgentAs === 'later' && !r.ForAgent),
     kind: r.Kind,
     text: r.Text || '',
     detail: r.Detail || '',
@@ -725,7 +728,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     log: room.logs.filter((l) => !l.ForBuilder && !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
     ideas: isAgent ? [] : room.ideas.map(ideaView),
     wallComment: isAgent ? null : wallCommentView(room.state),
-    brief: briefView(room.state),
+    // Claude's copy has no Later list: it hears an item only when the host sends it.
+    brief: isAgent ? { ...briefView(room.state), later: [] } : briefView(room.state),
     images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
@@ -763,7 +767,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
+      .map(({ forAgent, deliveredAt, as, held, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
       .map((l) => ({ ...l, link: publicUrl(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
     images: room.images.map(imageView),

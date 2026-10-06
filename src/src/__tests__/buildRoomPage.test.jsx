@@ -1334,12 +1334,12 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     await waitFor(() => expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1'], prompt: 'Which should Claude build next?', maxPicks: 1, askForMockups: true }));
   });
 
-  test('a single idea\'s menu needs another ticked before it can go to a vote; Later posts later', async () => {
+  test('a single idea\'s menu needs another ticked before it can go to a vote; Park posts later', async () => {
     await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
     const q = queue();
     fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
     expect(within(q).getByRole('button', { name: 'Put to a vote (tick another idea first)' })).toBeDisabled();
-    fireEvent.click(within(q).getAllByRole('button', { name: 'Later' })[0]);
+    fireEvent.click(within(q).getAllByRole('button', { name: 'Park' })[0]);
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'later' }));
   });
 
@@ -1414,11 +1414,11 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
     await waitFor(() => expect(lastPost().body).toEqual({ text: 'Bigger buttons' }));
   });
 
-  test('an idea goes to Claude as Later from its own menu', async () => {
+  test('an idea goes For Claude, later from its own menu', async () => {
     await openRoom(hostState({ ideas: [{ PlayerName: 'Lee', Text: 'Sign up as a pair' }] }));
     const q = screen.getByRole('region', { name: 'The queue' });
     fireEvent.click(within(q).getByRole('button', { name: 'Send to Claude as' }));
-    fireEvent.click(within(within(q).getByRole('group', { name: 'Send to Claude as' })).getByRole('button', { name: /^Later/ }));
+    fireEvent.click(within(within(q).getByRole('group', { name: 'Send to Claude as' })).getByRole('button', { name: /^For Claude, later/ }));
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'direct', as: 'later' }));
   });
 
@@ -1466,11 +1466,25 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
     await waitFor(() => expect(lastPost().body).toEqual({ keep: [{ id: 'k1', text: 'No account needed' }, { text: 'Plain words' }] }));
   });
 
-  test('Put Later to a vote', async () => {
+  test('For Claude, later sits in the queue column: Claude has not heard it; Send now, Remove, or put them to a vote', async () => {
     await openRoom(hostState({ st: { Brief: BRIEF } }));
-    openBrief();
-    fireEvent.click(screen.getByRole('button', { name: 'Put Later to a vote' }));
+    const q = screen.getByRole('region', { name: 'The queue' });
+    const fold = within(q).getByText('For Claude, later · 2').closest('details');
+    expect(fold.textContent).toMatch('Claude has not heard these.');
+    fireEvent.click(within(fold).getAllByRole('button', { name: 'Send now' })[0]);
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/brief/later/l1/send`));
+    await waitFor(() => expect(within(fold).getAllByRole('button', { name: 'Remove' })[1]).not.toBeDisabled());
+    fireEvent.click(within(fold).getAllByRole('button', { name: 'Remove' })[1]);
+    await waitFor(() => expect(lastPost().body).toEqual({ later: [{ id: 'l1', text: 'Car park map' }] }));
+    await waitFor(() => expect(within(fold).getByRole('button', { name: 'Put them to a vote' })).not.toBeDisabled());
+    fireEvent.click(within(fold).getByRole('button', { name: 'Put them to a vote' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/brief/vote`));
+  });
+
+  test('a held item says so on the timeline, and a decision held for later says so in its path', async () => {
+    await openRoom(hostState({ logs: [{ Kind: 'direction', Text: 'Add dark mode', By: 'host', ForAgentAs: 'later' }] }));
+    expect(screen.getByText('For Claude, later · not sent')).toBeInTheDocument();
+    expect(screen.queryByText(/Waiting for Claude/)).toBeNull();
   });
 
   test('the timeline says which kind went to Claude', async () => {

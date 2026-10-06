@@ -988,24 +988,38 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   });
 
   console.log('\nwhat Claude gets: four kinds, and the room brief (step 7c)');
-  await check('Keep in mind and Later join the brief; Claude gets each with its kind, and the brief with it', async () => {
+  await check('Keep in mind reaches Claude and the brief; For Claude, later is held until the host sends it', async () => {
     seed();
     await hostCall('POST', 'directions', { text: 'Has to work on old phones', as: 'keep' });
     await hostCall('POST', 'directions', { text: 'Let people sign up as a pair', as: 'later' });
     await hostCall('POST', 'directions', { text: 'How long would reminder texts take?', as: 'ask' });
     await hostCall('POST', 'directions', { text: 'Make the 13:00 row say full' });
-    const st = await state();
+    let st = await state();
     assert.deepStrictEqual(st.brief.keep.map((i) => i.text), ['Has to work on old phones']);
     assert.deepStrictEqual(st.brief.later.map((i) => i.text), ['Let people sign up as a pair']);
     // (Entries written in one millisecond sort by their random suffix, so compare by text.)
     const kindOf = (list) => Object.fromEntries(list.map((x) => [x.text.replace(/^.*: /, ''), x.as]));
-    const want = { 'Has to work on old phones': 'keep', 'Let people sign up as a pair': 'later', 'How long would reminder texts take?': 'ask', 'Make the 13:00 row say full': 'do-now' };
-    assert.deepStrictEqual(kindOf(st.log.filter((l) => l.kind === 'direction')), want);
+    assert.deepStrictEqual(kindOf(st.log.filter((l) => l.kind === 'direction')), {
+      'Has to work on old phones': 'keep', 'Let people sign up as a pair': 'later', 'How long would reminder texts take?': 'ask', 'Make the 13:00 row say full': 'do-now',
+    });
+    const heldEntry = st.log.find((l) => l.text === 'Let people sign up as a pair');
+    assert.strictEqual(heldEntry.held, true);
+    // Owner, 2026-10-06: "only when I send it". Claude's inbox and brief carry no Later item.
     const r = await agentCall('GET', 'inbox');
-    assert.deepStrictEqual(kindOf(r.body.inbox), want);
+    assert.deepStrictEqual(kindOf(r.body.inbox), { 'Has to work on old phones': 'keep', 'How long would reminder texts take?': 'ask', 'Make the 13:00 row say full': 'do-now' });
     assert.deepStrictEqual(r.body.brief.keep.map((i) => i.text), ['Has to work on old phones'], 'the brief rides along');
-    // Claude's own state carries the brief too.
-    assert.strictEqual((await agentCall('GET', 'state')).body.brief.later[0].text, 'Let people sign up as a pair');
+    assert.deepStrictEqual(r.body.brief.later, [], 'never the Later list');
+    assert.deepStrictEqual((await agentCall('GET', 'state')).body.brief.later, []);
+    // Send now: it goes to Claude as Do now and leaves the list.
+    const id = st.brief.later[0].id;
+    assert.strictEqual((await agentCall('POST', `brief/later/${id}/send`, {})).status, 403);
+    const sent = await hostCall('POST', `brief/later/${id}/send`, {});
+    assert.strictEqual(sent.status, 201, JSON.stringify(sent.body));
+    const got = (await agentCall('GET', 'inbox')).body.inbox;
+    assert.deepStrictEqual(got.map((d) => [d.text, d.as]), [['Let people sign up as a pair', 'do-now']]);
+    st = await state();
+    assert.deepStrictEqual(st.brief.later, []);
+    assert.strictEqual((await hostCall('POST', `brief/later/${id}/send`, {})).status, 404);
     // An unknown kind is Do now.
     await hostCall('POST', 'directions', { text: 'Bigger buttons', as: 'whenever' });
     assert.strictEqual((await agentCall('GET', 'inbox')).body.inbox[0].as, 'do-now');
@@ -1039,6 +1053,14 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(d2.body.ask.decision.direction, 'add dark mode');
     assert.strictEqual((await agentCall('GET', 'inbox')).body.inbox[0].as, 'do-now');
     assert.deepStrictEqual((await state()).brief.keep, []);
+  });
+  await check('a decision sent For Claude, later is recorded, held and on the list; Claude hears nothing', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is it?' });
+    const d = await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'decide', direction: 'Add dark mode', as: 'later' });
+    assert.strictEqual(d.body.ask.decision.heldForLater, true);
+    assert.deepStrictEqual((await agentCall('GET', 'inbox')).body.inbox, []);
+    assert.deepStrictEqual((await state()).brief.later.map((i) => i.text), ['Add dark mode']);
   });
   await check('the host edits the brief, and puts Later to a vote', async () => {
     seed();
