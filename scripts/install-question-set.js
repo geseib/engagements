@@ -92,8 +92,18 @@ const setId = customTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
  * implementation here that drifts from it.
  */
 async function dryImport() {
-  const proto = DynamoDBDocumentClient.prototype;
-  const realSend = proto.send;
+  // EVERY COPY OF THE CLIENT THE HANDLER MIGHT LOAD. The handler resolves
+  // @aws-sdk/lib-dynamodb from its own folder (lambda-functions/admin/
+  // node_modules when that exists), not from lambda-functions/. Patching only
+  // the copy this script loaded let a "dry run" write for real (2026-10-06:
+  // it created two sets on engagedev without --apply).
+  const handlerRequire = createRequire(path.join(REPO, 'lambda-functions', 'admin', 'upload-questions.js'));
+  const protos = [...new Set([
+    DynamoDBDocumentClient.prototype,
+    handlerRequire('@aws-sdk/lib-dynamodb').DynamoDBDocumentClient.prototype,
+  ])];
+  const realSends = protos.map((p) => p.send);
+  const proto = { set send(fn) { protos.forEach((p) => { p.send = fn; }); } };
   const writes = [];
 
   proto.send = async function (cmd) {
@@ -132,7 +142,7 @@ async function dryImport() {
     if (res.statusCode >= 300) payload.__failed = true;
     return { payload, writes };
   } finally {
-    proto.send = realSend;   // never leave the prototype patched
+    protos.forEach((p, i) => { p.send = realSends[i]; });   // never leave a prototype patched
   }
 }
 
