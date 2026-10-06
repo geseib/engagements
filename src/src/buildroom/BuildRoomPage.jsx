@@ -42,7 +42,7 @@ import {
 import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
-  questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep,
+  questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -674,6 +674,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <h2 className="brm-h5" id="brm-waiting-h">
             Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
           </h2>
+          <UnheardNotice room={room} />
           {freshWallComment(room, now) && (
             <div className="brm-notice brm-row brm-gap brm-onwall" role="status">
               <span><b>On the wall now:</b> &ldquo;{room.wallComment.text}&rdquo;</span>
@@ -694,7 +695,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
           <HistoryStack
             items={[
-              { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
+              { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
               { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
                 ? <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
                 : <div className="brm-empty">No asks yet.</div> },
@@ -796,7 +797,7 @@ export const CONTINUE_COMMAND = pluginCommand('continue');
  */
 function AgentChip({ agent, now }) {
   const [copied, setCopied] = useState('');
-  const quiet = Boolean(agent && agent.lastSeenAt && !agent.connected && !agent.listening);
+  const quiet = agentStopped(agent);
   const cls = `brm-agentchip${agent && agent.connected ? ' is-on' : ''}${quiet ? ' is-quiet' : ''}`;
   if (!quiet) {
     const tip = !agent || !agent.lastSeenAt
@@ -821,6 +822,36 @@ function AgentChip({ agent, now }) {
     >
       {copied || agentChipText(agent, now)}
     </button>
+  );
+}
+
+/**
+ * CLAUDE HAS NOT HEARD THIS (owner, 2026-10-06): a direction sent while Claude
+ * Code has stopped waits on the server until Claude calls Engage again, which
+ * it only does after /engage:continue. Say so where the host is looking, with
+ * the command one click away.
+ */
+export function UnheardNotice({ room }) {
+  const [copied, setCopied] = useState('');
+  const waiting = unheard(room);
+  if (!waiting.length || !agentStopped(room && room.agent)) return null;
+  const copy = async () => {
+    const ok = await copyText(CONTINUE_COMMAND);
+    setCopied(ok ? 'Copied. Paste it into Claude Code and press Enter.' : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    setTimeout(() => setCopied(''), 5000);
+  };
+  const n = waiting.length;
+  return (
+    <div className="brm-notice brm-unheard" role="status" data-testid="brm-unheard">
+      <p className="brm-unheard-t">
+        <b>Claude Code has stopped.</b> It has not heard {n === 1 ? 'your last direction' : `${n} directions`} yet.
+        Run <code>{CONTINUE_COMMAND}</code> in Claude Code and it picks {n === 1 ? 'it' : 'them'} up.
+      </p>
+      <div className="brm-row brm-gap">
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" onClick={copy}>Copy {CONTINUE_COMMAND}</button>
+        {copied && <span className="brm-hint">{copied}</span>}
+      </div>
+    </div>
   );
 }
 
@@ -2116,7 +2147,7 @@ function AskList({ asks, host, busy, ended, run, api, currentAskId }) {
 
 // ── Timeline ────────────────────────────────────────────────────────────────
 
-function TimelineEntry({ entry, host, busy, ended, run, api, deleteAs }) {
+function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, deleteAs }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState('');
@@ -2146,7 +2177,7 @@ function TimelineEntry({ entry, host, busy, ended, run, api, deleteAs }) {
             {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
-            {host && entry.forAgent && <span className="brm-tl-flag">{entry.deliveredAt ? 'Claude has it' : 'Waiting for Claude'}</span>}
+            {host && entry.forAgent && <span className="brm-tl-flag">{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${CONTINUE_COMMAND}` : 'Waiting for Claude'}</span>}
           </>
         )}
         {host && !editing && (
@@ -2176,7 +2207,7 @@ function TimelineEntry({ entry, host, busy, ended, run, api, deleteAs }) {
 const WALL_HIDDEN_KINDS = ['note', 'ask', 'direction'];
 const WALL_DETAIL_HIDDEN_KINDS = ['decision', 'idea'];
 
-function Timeline({ log, host, busy, ended, run, api, deleteAs }) {
+function Timeline({ log, host, stopped = false, busy, ended, run, api, deleteAs }) {
   // The host logs from the one composer (Composer), not from a form here.
   // Newest first: in a live room the latest thing Claude or the room did is
   // what everyone looks for, and the panel scrolls.
@@ -2194,7 +2225,7 @@ function Timeline({ log, host, busy, ended, run, api, deleteAs }) {
       {shown.length ? (
         <ul className="brm-tl">
           {shown.map((entry) => (
-            <TimelineEntry key={`${entry.logId}:${entry.editedAt || ''}`} entry={entry} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={deleteAs} />
+            <TimelineEntry key={`${entry.logId}:${entry.editedAt || ''}`} entry={entry} host={host} stopped={stopped} busy={busy} ended={ended} run={run} api={api} deleteAs={deleteAs} />
           ))}
         </ul>
       ) : (

@@ -1524,7 +1524,13 @@ exports.handler = async (event) => {
       // NOT on an activity post: the plugin sends those from a background
       // pump that never reads the answer, so a direction carried on one would
       // be marked delivered and never reach Claude.
-      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity') {
+      // NOR on the end-of-turn checkpoint the plugin's Stop hook posts: it
+      // runs after Claude has stopped and drops the answer, so the host saw
+      // "Claude has it" for a direction Claude never heard (owner,
+      // 2026-10-06). The checkpoint TOOL marks itself `fromTool`; a checkpoint
+      // without it (any plugin's hook) leaves the inbox for the next real call.
+      const hookCheckpoint = parts[0] === 'log' && body && body.kind === 'checkpoint' && body.fromTool !== true;
+      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity' && !hookCheckpoint) {
         const inbox = await takeInbox(ctx, role);
         const parsed = JSON.parse(res.body || '{}');
         res.body = JSON.stringify({ ...parsed, inbox });

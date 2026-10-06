@@ -1050,6 +1050,40 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
   });
 });
 
+describe('a direction Claude has not heard while Claude Code has stopped (owner, 2026-10-06)', () => {
+  const SENT = [{ Kind: 'direction', Text: 'Board size: mega board', By: 'host', ForAgent: true }];
+  const openTimeline = () => fireEvent.click(screen.getByRole('button', { name: /^Timeline/ }));
+
+  test('stopped: the column says so, the copy button copies the command, the timeline does not claim delivery', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: ago(3600) }, logs: SENT }));
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const notice = screen.getByTestId('brm-unheard');
+      expect(notice.textContent).toMatch(/Claude Code has stopped\. It has not heard your last direction yet\./);
+      fireEvent.click(within(notice).getByRole('button', { name: 'Copy /engage:continue' }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('/engage:continue'));
+      openTimeline();
+      expect(screen.getByText('Waiting for Claude · run /engage:continue')).toBeInTheDocument();
+      expect(screen.queryByText('Claude has it')).toBeNull();
+    } finally {
+      delete navigator.clipboard;
+    }
+  });
+
+  test('connected, or already heard: no notice', async () => {
+    await openRoom(hostState({ logs: SENT }));
+    expect(screen.queryByTestId('brm-unheard')).toBeNull();
+  });
+
+  test('stopped but everything heard: no notice, and the timeline says Claude has it', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: ago(3600) }, logs: [{ ...SENT[0], DeliveredAt: ago(3500) }] }));
+    expect(screen.queryByTestId('brm-unheard')).toBeNull();
+    openTimeline();
+    expect(screen.getByText('Claude has it')).toBeInTheDocument();
+  });
+});
+
 describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-05)', () => {
   const TIE = [
     { AskId: '003', PlayerName: 'Ana', Choice: ['A'] },

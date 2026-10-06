@@ -753,3 +753,10 @@
   display: inline-flex; align-items: center; min-height: 30px; padding: 4px 10px; border-radius: 999px;
   font-size: var(--brm-t-label); font-weight: 700; color: var(--brm-success-text); background: var(--brm-tint-green);
 }
+
+/* ---- Claude has not heard this (UnheardNotice) ---------------------------
+   A direction waiting on a stopped Claude Code: the one notice in the
+   column with an edge, because nothing reaches Claude until the host acts. */
+.brm .brm-unheard { border-left: 4px solid var(--primary); display: grid; gap: 8px; margin-top: 0; }
+.brm .brm-unheard-t { margin: 0; line-height: 1.4; }
+.brm .brm-unheard code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--primary); }

@@ -128,6 +128,7 @@ async function check(name, fn) {
     assert.ok(!gitIn(project, 'ls-files').split('\n').some((f) => f.startsWith('.engage')));
     const posted = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).pop();
     assert.strictEqual(posted.body.kind, 'checkpoint');
+    assert.strictEqual(posted.body.fromTool, true, 'the tool reads its answer, so it may carry directions');
     assert.ok(/^commit [0-9a-f]{7,} · 2 files$/.test(posted.body.detail), posted.body.detail);
   });
   await check('nothing changed, nothing committed', async () => {
@@ -250,6 +251,8 @@ async function check(name, fn) {
     assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s'), 'Build Room 4321: Sign-up form done');
     const posted = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).pop();
     assert.deepStrictEqual([posted.body.kind, posted.body.text], ['checkpoint', 'Sign-up form done']);
+    // The hook drops the answer, so it must never be handed a direction (owner, 2026-10-06).
+    assert.strictEqual(posted.body.fromTool, undefined);
   });
   await check('in any other folder it touches nothing', async () => {
     const other = tmp('other');

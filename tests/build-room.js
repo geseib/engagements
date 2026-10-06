@@ -275,6 +275,24 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(h.body.agent.connected, true);
   });
 
+  await check('the Stop hook\'s checkpoint never takes a direction; the checkpoint tool does', async () => {
+    await agentCall('GET', 'state'); // drain anything earlier checks left
+    const said = await hostCall('POST', 'log', { kind: 'verbal', text: 'Make the board bigger', forAgent: true });
+    assert.strictEqual(said.status, 201, JSON.stringify(said.body));
+    // Claude Code has stopped; its plugin's Stop hook checkpoints the turn and drops the answer.
+    const hook = await agentCall('POST', 'log', { kind: 'checkpoint', text: 'Work in progress', detail: 'commit abc123 · 2 files' });
+    assert.strictEqual(hook.status, 201, JSON.stringify(hook.body));
+    assert.deepStrictEqual(hook.body.inbox, undefined, 'the hook is handed nothing');
+    let h = await hostCall('GET', 'state');
+    const entry = () => h.body.log.find((l) => l.text === 'Make the board bigger');
+    assert.strictEqual(entry().deliveredAt, null, 'still waiting for Claude, not "Claude has it"');
+    // Claude's own checkpoint tool reads its answer, so it may carry it.
+    const tool = await agentCall('POST', 'log', { kind: 'checkpoint', text: 'Saved', detail: 'commit def456 · 1 file', fromTool: true });
+    assert.ok(tool.body.inbox.some((d) => /Make the board bigger/.test(d.text)), JSON.stringify(tool.body));
+    h = await hostCall('GET', 'state');
+    assert.ok(entry().deliveredAt);
+  });
+
   await check('the host answers FOR the room: a proposed ask decided out loud, never opened to phones', async () => {
     const c = await agentCall('POST', 'asks', { kind: 'rating', prompt: 'How close is this?', lowLabel: 'Far', highLabel: 'There' });
     const id = c.body.ask.askId;

@@ -221,3 +221,17 @@ export function decisionMethod(ask, chosen, spoken) {
   return 'host';
 }
 export const METHOD_WORDS = Object.freeze({ vote: 'by vote', wheel: 'by the wheel', host: "the host's pick", spoken: 'said out loud' });
+
+/**
+ * What Claude has not heard yet: every entry meant for Claude that its
+ * plugin has not collected (the server's pendingDirections, as the host sees
+ * it). A host note never goes to Claude.
+ */
+export const unheard = (room) => ((room && room.log) || []).filter((l) => l.forAgent && !l.deliveredAt && l.kind !== 'note');
+
+/**
+ * Claude Code has stopped (owner, 2026-10-06): it connected once and is now
+ * neither working nor listening. Anything sent waits until the host runs
+ * /engage:continue in Claude Code, so the host must be told.
+ */
+export const agentStopped = (agent) => Boolean(agent && agent.lastSeenAt && !agent.connected && !agent.listening);

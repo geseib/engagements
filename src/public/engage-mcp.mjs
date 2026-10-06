@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.6.1';
+const VERSION = '1.6.2';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -1102,7 +1102,9 @@ const HANDLERS = {
     const r = gitCheckpoint(projectDir(), message);
     if (r.error) return { content: [{ type: 'text', text: `Could not checkpoint: ${r.error}` }], isError: true };
     if (!r.hash) return ok(`Nothing to commit${r.initialized ? ' (made this folder a git repository first)' : ''}. The work is already saved as ${r.head || 'the last checkpoint'}.`);
-    const res = await api('POST', 'log', { kind: 'checkpoint', text: message, detail: `commit ${r.hash} · ${r.files} file${r.files === 1 ? '' : 's'}` }, ctx.signal);
+    // fromTool: Claude reads this answer, so it may carry the host's directions
+    // (the Stop hook's checkpoint below does not, and never takes them).
+    const res = await api('POST', 'log', { kind: 'checkpoint', text: message, detail: `commit ${r.hash} · ${r.files} file${r.files === 1 ? '' : 's'}`, fromTool: true }, ctx.signal);
     return ok(`${r.initialized ? 'Made this folder a git repository, then saved' : 'Saved'} ${r.files} changed file${r.files === 1 ? '' : 's'} as commit ${r.hash}: "${message}". The room's timeline shows it.`, res.inbox);
   },
 
