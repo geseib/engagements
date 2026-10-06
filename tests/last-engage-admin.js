@@ -48,6 +48,7 @@ class AdminRemoveUserFromGroupCommand { constructor(i) { this.input = i; this.na
 class AdminDeleteUserCommand { constructor(i) { this.input = i; this.name = 'AdminDeleteUser'; } }
 class AdminDisableUserCommand { constructor(i) { this.input = i; this.name = 'AdminDisableUser'; } }
 class AdminEnableUserCommand { constructor(i) { this.input = i; this.name = 'AdminEnableUser'; } }
+class AdminGetUserCommand { constructor(i) { this.input = i; this.name = 'AdminGetUser'; } }
 
 class CognitoIdentityProviderClient {
   async send(cmd) {
@@ -86,6 +87,12 @@ class CognitoIdentityProviderClient {
         pool.get(u).enabled = false; return {};
       case 'AdminEnableUser':
         pool.get(u).enabled = true; return {};
+      case 'AdminGetUser': {
+        // Read by the audit entry written before every change (audit-log.js).
+        const r = pool.get(u);
+        if (!r) { const e = new Error('User does not exist.'); e.name = 'UserNotFoundException'; throw e; }
+        return { Enabled: r.enabled, UserAttributes: [{ Name: 'sub', Value: `sub-${u}` }, { Name: 'email', Value: `${u}@example.test` }] };
+      }
       default:
         throw new Error(`unexpected command ${cmd.name}`);
     }
@@ -102,19 +109,29 @@ const stubExports = {
   AdminDeleteUserCommand,
   AdminDisableUserCommand,
   AdminEnableUserCommand,
+  AdminGetUserCommand,
+};
+
+/* The table the audit entry lands in (admin/shared/audit-log.js): every change
+   on this screen writes one before it acts. */
+const { createPagedTable } = require('./helpers/paged-table');
+const { dynamoModules } = require('./helpers/ddb-module-stub');
+const auditTable = createPagedTable({ pageSize: 50 });
+const ddb = dynamoModules(auditTable);
+const STUBBED = {
+  '@aws-sdk/client-cognito-identity-provider': stubExports,
+  '@aws-sdk/lib-dynamodb': ddb.lib,
+  '@aws-sdk/client-dynamodb': ddb.client,
 };
 
 const realResolve = Module._resolveFilename;
 Module._resolveFilename = function patched(request, ...rest) {
-  if (request === '@aws-sdk/client-cognito-identity-provider') return request;
+  if (STUBBED[request]) return request;
   return realResolve.call(this, request, ...rest);
 };
-require.cache['@aws-sdk/client-cognito-identity-provider'] = {
-  id: '@aws-sdk/client-cognito-identity-provider',
-  filename: '@aws-sdk/client-cognito-identity-provider',
-  loaded: true,
-  exports: stubExports,
-};
+for (const [id, exports] of Object.entries(STUBBED)) {
+  require.cache[id] = { id, filename: id, loaded: true, exports };
+}
 
 process.env.USER_POOL_ID = 'us-east-1_TEST';
 

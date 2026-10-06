@@ -33,6 +33,9 @@ const { QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { readUsage } = require('../shared/usage');
+const {
+  recordAudit, markAuditOutcome, actorFromEvent, readAudit, readPlatformAudit,
+} = require('../shared/audit-log');
 
 /** The statuses an organisation can be in, and who may move it between them. */
 const STATUSES = ['pending', 'active', 'suspended'];
@@ -175,31 +178,94 @@ async function setStatus(event) {
 
   const now = new Date().toISOString();
   const actor = G.callerSub(event);
+  const from = G.clean(meta.status) || 'active';
+
+  /* THE AUDIT ENTRY (shared/audit-log.js), before either row moves. If it
+     cannot be written, the organisation keeps the status it had. */
+  let auditRef;
+  try {
+    auditRef = await recordAudit(G.db, {
+      orgId,
+      action: status === 'suspended' ? 'org.suspend'
+        : status === 'pending' ? 'org.set-pending'
+          : (from === 'pending' ? 'org.approve' : 'org.reinstate'),
+      actor: actorFromEvent(event, 'platform-admin'),
+      target: { type: 'org', id: orgId, title: G.clean(meta.name) },
+      reason: G.clean(body.reason).slice(0, 600),
+      detail: { from, to: status },
+    });
+  } catch (e) {
+    console.error('platform: status change refused, the audit entry could not be written:', e);
+    return G.fail(503, 'Nothing was changed: the change could not be recorded in the audit log. Try again.');
+  }
 
   /* Written to BOTH rows: METADATA is what every org-scoped guard reads, and
      the index row is what this screen reads. One without the other is an
      organisation that looks suspended to staff and works fine for its members,
      or the reverse — both are worse than either state alone. */
-  for (const Key of [
-    { PK: tenant.orgPk(orgId), SK: 'METADATA' },
-    { PK: tenant.ORGS_INDEX_PK, SK: tenant.orgPk(orgId) },
-  ]) {
-    await G.db.send(new UpdateCommand({
-      TableName: G.tableName(),
-      Key,
-      UpdateExpression: 'SET #s = :s, statusChangedAt = :t, statusChangedBy = :a',
-      ExpressionAttributeNames: { '#s': 'status' },
-      ExpressionAttributeValues: { ':s': status, ':t': now, ':a': actor },
-    }));
+  try {
+    for (const Key of [
+      { PK: tenant.orgPk(orgId), SK: 'METADATA' },
+      { PK: tenant.ORGS_INDEX_PK, SK: tenant.orgPk(orgId) },
+    ]) {
+      await G.db.send(new UpdateCommand({
+        TableName: G.tableName(),
+        Key,
+        UpdateExpression: 'SET #s = :s, statusChangedAt = :t, statusChangedBy = :a',
+        ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: { ':s': status, ':t': now, ':a': actor },
+      }));
+    }
+  } catch (e) {
+    await markAuditOutcome(G.db, auditRef, 'failed');
+    throw e;
   }
 
   console.log(`platform: ${actor} set ${orgId} to ${status}`);
   return G.json(200, { orgId, status, changedAt: now });
 }
 
+/**
+ * GET /platform/audit — the audit log, as Engage staff read it.
+ *
+ *   ?orgId=<id>   one organisation's whole log (what its own admins see on
+ *                 Data & privacy), for answering "what happened to this team"
+ *   (no orgId)    every entry whose actor was Engage staff, across the platform,
+ *                 including the ones with no organisation (an account that had
+ *                 no space yet, a discount code)
+ *
+ * Staff only, here and in the authorizer. Opening the sealed Title/Reason is a
+ * kms:Decrypt that names the organisation, so it is recorded in CloudTrail like
+ * every other read of a tenant's ciphertext. Paged: `limit`, `cursor`.
+ */
+async function readAuditLog(event) {
+  const refusal = requirePlatformAdmin(event);
+  if (refusal) return refusal;
+  const q = event?.queryStringParameters || {};
+  const orgId = G.clean(q.orgId);
+  try {
+    if (orgId) {
+      if (!G.isOrgId(orgId)) return G.fail(400, 'That is not an organisation id.');
+      const meta = await G.getOrgMetadata(orgId);
+      if (!meta) return G.fail(404, 'No such organisation.');
+      const page = await readAudit(G.db, { orgId, limit: q.limit, cursor: q.cursor });
+      return G.json(200, { orgId, ...page });
+    }
+    const page = await readPlatformAudit(G.db, { limit: q.limit, cursor: q.cursor });
+    return G.json(200, page);
+  } catch (e) {
+    if (e && e.statusCode === 400) return G.fail(400, e.message);
+    console.error('platform: audit read failed:', e);
+    return G.fail(500, 'The audit log could not be read.');
+  }
+}
+
 exports.handler = async (event) => {
   const method = event?.requestContext?.http?.method;
   if (method === 'OPTIONS') return G.handlePreflight();
+  if (method === 'GET' && /\/platform\/audit$/.test(String(event?.rawPath || event?.routeKey || ''))) {
+    return readAuditLog(event);
+  }
   if (method === 'GET') return listOrgs(event);
   if (method === 'POST') return setStatus(event);
   return G.fail(404, 'Endpoint not found');

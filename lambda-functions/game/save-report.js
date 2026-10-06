@@ -248,6 +248,13 @@ exports.handler = async (event) => {
       passkey,
       savedAt,
       expiresAt,
+      // WHAT KIND OF ENGAGEMENT, AND WHOSE (2026-10-04). Plaintext ids and a
+      // type, read off the session: the Reports list types every row and files
+      // an event item's report under its event, after the session is gone.
+      GameType: gameMetadata.Item.GameType || null,
+      ...(gameMetadata.Item.EventRef
+        ? { EventRef: String(gameMetadata.Item.EventRef), EventItem: gameMetadata.Item.EventItem || '' }
+        : {}),
       ttl: Math.floor(Date.parse(savedAt) / 1000) + retentionDays * 86400,
     };
     await db.send(new PutCommand({

@@ -6,13 +6,13 @@
  * POST body like `routePlay` in build-room.js reads it.
  *
  * rejects: a screen that does not follow `current.status`; a POST body the
- * server would not read; a phone that can vote for its own suggestion or pick
+ * server would not read; a phone that can pick
  * past maxPicks; a refresh that ignores `rev`; a host `note` reaching the
  * room; a `javascript:` link rendered as a link; markup from Claude rendered
  * as markup.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import BuildPlayer, { POLL_MS } from '../buildroom/BuildPlayer';
 
 const API = 'http://localhost:3000/api/';
@@ -237,15 +237,15 @@ describe('Choose (choice)', () => {
 });
 
 describe('Rate (rating)', () => {
-  test('1–5 with the end labels, POST rating + why', async () => {
+  test('1–5 on the fixed scale (old custom labels ignored), POST rating + why', async () => {
     serve(baseView({
       currentAskId: '005',
       current: ask({ askId: '005', kind: 'rating', prompt: 'How close is this?', scale: { min: 1, max: 5, lowLabel: 'Far off', highLabel: 'Nailed it' } }),
     }));
     await mount();
     await screen.findByText('How close is this?');
-    expect(screen.getByText('1 · Far off')).toBeInTheDocument();
-    expect(screen.getByText('5 · Nailed it')).toBeInTheDocument();
+    expect(screen.getByText('1 · Needs work')).toBeInTheDocument();
+    expect(screen.getByText('5 · Great')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: '4 of 5' }));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Rate 4' })); });
     expect(posts('respond')[0].body).toEqual({ playerName: ME, clientId: CID, askId: '005', rating: 4, why: '' });
@@ -266,16 +266,24 @@ describe('Vote (suggest, voting)', () => {
     }),
   });
 
-  test('own suggestion is marked and not selectable; maxPicks holds; POST respIds', async () => {
+  test('your own suggestion is marked "yours" and counts like any other (owner, 2026-10-06)', async () => {
     serve(voting());
     await mount();
     await screen.findByText('Not seeing which shifts need people');
     const own = screen.getByRole('checkbox', { name: /Having to make an account first/ });
-    expect(own).toHaveAttribute('aria-disabled', 'true');
+    expect(own).not.toHaveAttribute('aria-disabled');
     expect(own).toHaveTextContent('yours');
+    expect(screen.queryByText(/can't vote for your own/)).toBeNull();
+    fireEvent.click(own);
+    expect(own).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(own);
     expect(own).toHaveAttribute('aria-checked', 'false');
+  });
 
+  test('maxPicks holds; POST respIds', async () => {
+    serve(voting());
+    await mount();
+    await screen.findByText('Not seeing which shifts need people');
     fireEvent.click(screen.getByRole('checkbox', { name: /shifts/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: /park/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: /teens/ }));
@@ -463,5 +471,88 @@ describe('guidance', () => {
       expect(container.textContent).not.toMatch(EMOJI);
       unmount();
     }
+  });
+});
+
+describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
+  const SHOWING = { logId: 'L9', kind: 'showing', text: 'Header B is live', createdAt: '2026-10-04T12:00:00.000Z', link: 'http://localhost:5173/' };
+
+  test('Looks good goes at once, naming the preview', async () => {
+    serve(baseView({ log: [SHOWING] }));
+    await mount();
+    const card = screen.getByRole('region', { name: 'Feedback on the preview' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Looks good' }));
+    await waitFor(() => expect(posts('idea').length).toBe(1));
+    expect(posts('idea')[0].body).toMatchObject({ aboutLogId: 'L9', verdict: 'good', text: '' });
+  });
+
+  test('Needs a change asks what, and sends it', async () => {
+    serve(baseView({ log: [SHOWING] }));
+    await mount();
+    const card = screen.getByRole('region', { name: 'Feedback on the preview' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Needs a change' }));
+    const send = within(card).getByRole('button', { name: 'Send' });
+    expect(send).toBeDisabled();
+    fireEvent.change(within(card).getByLabelText('What should change?'), { target: { value: 'Bigger button' } });
+    fireEvent.click(send);
+    await waitFor(() => expect(posts('idea').length).toBe(1));
+    expect(posts('idea')[0].body).toMatchObject({ aboutLogId: 'L9', verdict: 'change', text: 'Bigger button' });
+  });
+
+  test('once sent, the card thanks you; with nothing shown there is no card', async () => {
+    serve(baseView({ log: [SHOWING], myIdeas: [{ ideaId: 'i1', text: 'On the preview "Header B is live": Looks good', status: 'new', aboutLogId: 'L9' }] }));
+    const { unmount } = await mount();
+    expect(within(screen.getByRole('region', { name: 'Feedback on the preview' })).getByText(/Your feedback is with the host/)).toBeInTheDocument();
+    unmount();
+    serve(baseView({ log: [] }));
+    await mount();
+    expect(screen.queryByRole('region', { name: 'Feedback on the preview' })).toBeNull();
+  });
+});
+
+describe('the wheel on a phone (owner, 2026-10-05)', () => {
+  const wheel = (over = {}) => ({
+    slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }],
+    spinner: 'Priya', armed: true, spins: [], landed: null, mine: true, ...over,
+  });
+  const results = (w) => baseView({
+    currentAskId: '003',
+    current: ask({ status: 'results', options: CHOICE_OPTS.slice(0, 2), results: { total: 2, options: [{ label: 'A', title: 'Bold banner', count: 1, pct: 50 }, { label: 'B', title: 'Calm photo + calendar', count: 1, pct: 50 }], whys: [], tied: ['A', 'B'] }, wheel: w }),
+  });
+
+  test('the phone the wheel picked gets the button, and spinning posts its turn', async () => {
+    serve(results(wheel()));
+    await mount();
+    expect(screen.getByText('Your turn.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Spin the wheel' }));
+    await waitFor(() => expect(posts('spin')).toHaveLength(1));
+    expect(posts('spin')[0].body).toEqual({ playerName: ME, clientId: CID, askId: '003' });
+  });
+
+  test('every other phone sees the wheel and who spins, with no button', async () => {
+    serve(results(wheel({ spinner: 'Dee', mine: false })));
+    await mount();
+    expect(screen.getByRole('img', { name: /A wheel of 2/ })).toBeInTheDocument();
+    expect(screen.getByText('Dee spins the wheel')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Spin the wheel' })).toBeNull();
+  });
+
+  test('a phone that opens after the spin sees where it landed', async () => {
+    serve(results(wheel({ armed: false, mine: false, spins: [{ spinId: 's1', at: '', by: 'Dee', result: 'B', turns: 5 }], landed: 'B' })));
+    await mount();
+    expect(screen.getByText('The wheel picked B: Calm photo + calendar')).toBeInTheDocument();
+  });
+});
+
+describe('a phone hears what happened to its comment (owner, 2026-10-05)', () => {
+  test('acknowledged reads "Seen by the host"; one on the wall reads "Shown on the wall"', async () => {
+    serve(baseView({ myIdeas: [
+      { ideaId: '1', text: 'Nice colours', status: 'acknowledged', walled: false, playerName: ME },
+      { ideaId: '2', text: 'The calendar reads well', status: 'acknowledged', walled: true, playerName: ME },
+    ] }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Send an idea to the host/ }));
+    expect(screen.getByText('Seen by the host')).toBeInTheDocument();
+    expect(screen.getByText('Shown on the wall')).toBeInTheDocument();
   });
 });

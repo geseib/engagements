@@ -371,6 +371,14 @@ function requiredGroupsForRoute(method, path) {
   if (path.startsWith('admin/clear-game')) {
     return ['hosts', 'admins'];
   }
+  // Delete-all, for an organisation's own owner and admins (2026-10-04, the
+  // owner's delete rule). They are `hosts`, and this was staff-only by the
+  // default for admin routes. Reaching it is not permission: clear-all-games.js lets
+  // only an owner or admin of the acting organisation, or Engage staff giving
+  // a reason, delete anything (tenant.deleteRole).
+  if (method === 'POST' && path === 'admin/clear-all-games') {
+    return ['hosts', 'admins'];
+  }
   // Hosts build and manage their own question sets. See HOST_ADMIN_ROUTES.
   if (HOST_ADMIN_ROUTES.has(`${method} ${path}`)) {
     return ['hosts', 'admins'];
@@ -505,6 +513,13 @@ function requiredGroupsForRoute(method, path) {
   // as the rules above. Without this line it fell to the trailing default,
   // which lets every host knock.
   if (path === 'platform/observability') {
+    return ['admins'];
+  }
+  // The audit log as Engage reads it — one organisation's (`?orgId=`) or every
+  // staff action across the platform. orgs/platform-orgs.js re-asks
+  // isPlatformAdmin. An organisation's own admins read theirs at
+  // `orgs/{orgId}/audit`, which ORG_ROUTE above already admits.
+  if (path === 'platform/audit') {
     return ['admins'];
   }
 
@@ -868,6 +883,9 @@ exports.handler = async (event) => {
         userId: decoded.sub,
         username,
         email,
+        // The person's own name, when the token carries one — who did it, in
+        // the audit log (admin/shared/audit-log.js actorFromEvent).
+        name: decoded.name || '',
         groups: groups.join(','),
         status: userStatus,
         role: decoded['custom:role'] || 'host',

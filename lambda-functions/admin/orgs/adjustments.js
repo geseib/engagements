@@ -37,6 +37,39 @@ const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { periodOf } = require('../shared/usage');
 const { offerWindow, isActive } = require('../shared/pricing-adjust');
+const { recordAudit, markAuditOutcome, actorFromEvent } = require('../shared/audit-log');
+
+/** How each kind reads in the audit log's "what it touched" column. */
+const KIND_TITLES = {
+  CREDIT_CENTS: 'Credit', CREDIT_UNITS: 'Extra allowance', RATE_OVERRIDE: 'Special rate',
+  OFFER: 'Months at a discount', CODE_REDEMPTION: 'Discount code',
+};
+
+/**
+ * THE AUDIT ENTRY (shared/audit-log.js), written before the ledger moves.
+ * Returns the entry's key, or an HTTP refusal when it cannot be written —
+ * in which case the caller changes nothing. The ledger row keeps its own
+ * createdBy/revokedBy; this is the same fact in the team's one log.
+ */
+async function audit(event, entry) {
+  try {
+    return { ref: await recordAudit(G.db, { ...entry, actor: actorFromEvent(event, 'platform-admin') }) };
+  } catch (e) {
+    console.error('adjustments: refused, the audit entry could not be written:', e);
+    return { refused: G.fail(503, 'Nothing was changed: this could not be recorded in the audit log. Try again.') };
+  }
+}
+
+/** Ids and numbers off a ledger row, for the entry's Detail. Never the note. */
+function adjustmentDetail(row) {
+  const d = { kind: row.kind, validFrom: row.validFrom || '', validTo: row.validTo || '' };
+  if (row.amountCents != null) d.amountCents = row.amountCents;
+  if (row.units) { d.sessions = row.units.sessions || 0; d.sets = row.units.sets || 0; }
+  if (row.rate && row.rate.baseCents != null) d.baseCents = row.rate.baseCents;
+  if (row.percentOff != null) d.percentOff = row.percentOff;
+  if (row.fixedOffCents != null) d.fixedOffCents = row.fixedOffCents;
+  return d;
+}
 
 const KINDS = ['CREDIT_CENTS', 'CREDIT_UNITS', 'RATE_OVERRIDE', 'OFFER'];
 const NOTE_MAX = 600;
@@ -173,9 +206,22 @@ async function grant(event, orgId) {
   const now = new Date().toISOString();
   const built = buildGrant(body, orgId, G.callerSub(event), G.callerEmail(event), now);
   if (built.error) return G.fail(400, built.error);
-  await G.db.send(new TransactWriteCommand({
-    TransactItems: [{ Put: { TableName: G.tableName(), Item: built.row, ConditionExpression: 'attribute_not_exists(PK)' } }],
-  }));
+  const a = await audit(event, {
+    orgId,
+    action: 'billing.grant',
+    target: { type: 'adjustment', id: built.row.adjId, title: KIND_TITLES[built.row.kind] || built.row.kind },
+    reason: built.row.note,
+    detail: adjustmentDetail(built.row),
+  });
+  if (a.refused) return a.refused;
+  try {
+    await G.db.send(new TransactWriteCommand({
+      TransactItems: [{ Put: { TableName: G.tableName(), Item: built.row, ConditionExpression: 'attribute_not_exists(PK)' } }],
+    }));
+  } catch (e) {
+    await markAuditOutcome(G.db, a.ref, 'failed');
+    throw e;
+  }
   return G.json(201, { adjustment: publicAdjustment(built.row, periodOf(new Date(now))) });
 }
 
@@ -189,13 +235,26 @@ async function revoke(event, orgId, adjId) {
   if (!row) return G.fail(404, 'No such adjustment.');
   if (row.revokedAt) return G.fail(409, 'Already revoked.');
   const now = new Date().toISOString();
-  await G.db.send(new UpdateCommand({
-    TableName: G.tableName(),
-    Key: { PK: row.PK, SK: row.SK },
-    UpdateExpression: 'SET revokedAt = :at, revokedBy = :by, revokeNote = :note',
-    ConditionExpression: 'attribute_not_exists(revokedAt)',
-    ExpressionAttributeValues: { ':at': now, ':by': G.callerSub(event), ':note': revokeNote },
-  }));
+  const a = await audit(event, {
+    orgId,
+    action: 'billing.revoke',
+    target: { type: 'adjustment', id: row.adjId, title: KIND_TITLES[row.kind] || row.kind },
+    reason: revokeNote,
+    detail: adjustmentDetail(row),
+  });
+  if (a.refused) return a.refused;
+  try {
+    await G.db.send(new UpdateCommand({
+      TableName: G.tableName(),
+      Key: { PK: row.PK, SK: row.SK },
+      UpdateExpression: 'SET revokedAt = :at, revokedBy = :by, revokeNote = :note',
+      ConditionExpression: 'attribute_not_exists(revokedAt)',
+      ExpressionAttributeValues: { ':at': now, ':by': G.callerSub(event), ':note': revokeNote },
+    }));
+  } catch (e) {
+    await markAuditOutcome(G.db, a.ref, 'failed');
+    throw e;
+  }
   return G.json(200, { adjustment: publicAdjustment({ ...row, revokedAt: now, revokedBy: G.callerSub(event), revokeNote }, periodOf(new Date(now))) });
 }
 
@@ -269,11 +328,26 @@ async function createCode(event) {
     return G.fail(400, 'A code gives a percentage or a fixed amount off.');
   }
   if (row.validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(row.validUntil)) return G.fail(400, 'validUntil must look like 2026-12-31.');
+  /* A code belongs to no team until one redeems it (that redemption is part
+     of the plan approval, and its entry is the approval's), so this entry is
+     Engage's alone: PLATFORM#AUDIT, no organisation. */
+  const a = await audit(event, {
+    orgId: '',
+    action: 'code.create',
+    target: { type: 'code', id: code, title: code },
+    reason: row.note,
+    detail: {
+      ...(row.percentOff != null ? { percentOff: row.percentOff } : { fixedOffCents: row.fixedOffCents }),
+      maxUses: row.maxUses, months: row.months, validUntil: row.validUntil,
+    },
+  });
+  if (a.refused) return a.refused;
   try {
     await G.db.send(new TransactWriteCommand({
       TransactItems: [{ Put: { TableName: G.tableName(), Item: row, ConditionExpression: 'attribute_not_exists(PK)' } }],
     }));
   } catch (e) {
+    await markAuditOutcome(G.db, a.ref, e && e.name === 'TransactionCanceledException' ? 'refused' : 'failed');
     if (e && e.name === 'TransactionCanceledException') return G.fail(409, `${code} already exists. Retire it to reuse the name.`);
     throw e;
   }
@@ -288,11 +362,24 @@ async function retireCode(event, code) {
   if (!row) return G.fail(404, 'No such code.');
   if (row.retiredAt) return G.fail(409, 'Already retired.');
   const now = new Date().toISOString();
-  await G.db.send(new UpdateCommand({
-    TableName: G.tableName(), Key: { PK: row.PK, SK: row.SK },
-    UpdateExpression: 'SET retiredAt = :at, retiredBy = :by',
-    ExpressionAttributeValues: { ':at': now, ':by': G.callerSub(event) },
-  }));
+  const a = await audit(event, {
+    orgId: '',
+    action: 'code.retire',
+    target: { type: 'code', id: c, title: c },
+    reason: G.clean((G.parseBody(event) || {}).note).slice(0, NOTE_MAX),
+    detail: { uses: row.uses || 0 },
+  });
+  if (a.refused) return a.refused;
+  try {
+    await G.db.send(new UpdateCommand({
+      TableName: G.tableName(), Key: { PK: row.PK, SK: row.SK },
+      UpdateExpression: 'SET retiredAt = :at, retiredBy = :by',
+      ExpressionAttributeValues: { ':at': now, ':by': G.callerSub(event) },
+    }));
+  } catch (e) {
+    await markAuditOutcome(G.db, a.ref, 'failed');
+    throw e;
+  }
   return G.json(200, { code: publicCode({ ...row, retiredAt: now }) });
 }
 

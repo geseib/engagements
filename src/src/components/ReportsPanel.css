@@ -244,6 +244,27 @@
   text-overflow: ellipsis;
 }
 .rp-tbl td:first-child { padding-top: 4px; padding-bottom: 4px; height: auto; }
+
+/* AN EVENT'S ROW opens to its agenda (2026-10-04). The disclosure is the
+   name, a real button holding one text node (.rp-nm) so truncation still
+   works; item rows sit one step in. */
+.rp-disclose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rp-disclose > svg { flex: none; color: var(--muted); }
+.rp-disclose:hover .rp-nm { text-decoration: underline; }
+.rp-subrow td:first-child { padding-left: 30px; }
 .rp-when { font-size: var(--rp-t-label); color: var(--muted); white-space: nowrap; }
 .rp-mono { font-family: var(--rp-font-mono); font-size: 14px; }
 .rp-danger-text { color: var(--danger-text); }
@@ -380,10 +401,11 @@
 .rp-envwarn b { color: var(--primary); }
 
 /* ---------------------------------------------------------- reports only -- */
-.rp-col-name  { width: 36%; }
-.rp-col-when  { width: 14%; }
-.rp-col-until { width: 16%; }
-.rp-col-sess  { width: 16%; }
+.rp-col-name  { width: 30%; }
+.rp-col-type  { width: 12%; }   /* every row typed, 2026-10-04 */
+.rp-col-when  { width: 12%; }
+.rp-col-until { width: 14%; }
+.rp-col-sess  { width: 14%; }
 .rp-col-acts  { width: 18%; }   /* Share and PDF */
 /* A PHONE. Five columns do not fit 375px: Share and PDF were cut off at the
    cell's edge and every date truncated — and the host opens this list from a
@@ -391,13 +413,14 @@
    can be done with it stay. The share row is one cell and is untouched. */
 @media (max-width: 560px) {
   .rp-tbl th:nth-child(2), .rp-tbl td:nth-child(2),
-  .rp-tbl th:nth-child(4), .rp-tbl td:nth-child(4) { display: none; }
+  .rp-tbl th:nth-child(3), .rp-tbl td:nth-child(3),
+  .rp-tbl th:nth-child(5), .rp-tbl td:nth-child(5) { display: none; }
   .rp-col-name  { width: 44%; }
   .rp-col-until { width: 24%; }
   .rp-col-acts  { width: 32%; }
   /* The kept-until date wraps rather than truncating: it is the one date
      this list exists to show. */
-  .rp-tbl td:nth-child(3) { white-space: normal; }
+  .rp-tbl td:nth-child(4) { white-space: normal; }
 }
 /* KEPT UNTIL is a DATE, never a countdown ("3 days left" is a different number
    tomorrow and lies on a printed page). Red only inside seven days; the pin

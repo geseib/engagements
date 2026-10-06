@@ -22,6 +22,9 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
+// The stage's ladders (--t-*), loaded app-wide by index.jsx: the Build Room's
+// Stage screen sizes its ask from them, as the regular stage does.
+const STAGE_CSS = read('styles', 'stage.css');
 const ROOM_CSS = read('buildroom', 'BuildRoom.css');
 const REPORT_CSS = read('buildroom', 'BuildReport.css');
 
@@ -206,7 +209,7 @@ describe.each([
 
   test('every custom property used is declared somewhere', () => {
     const declared = new Set();
-    for (const css of [GLOBAL_CSS, CSS]) {
+    for (const css of [GLOBAL_CSS, STAGE_CSS, CSS]) {
       for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) declared.add(m[1]);
     }
     const used = [...CSS.matchAll(/var\((--[a-z0-9-]+)/gi)].map((m) => m[1]);

@@ -17,14 +17,18 @@
  * asking, writes, bumps the room's Rev and tells every connection
  * `buildChanged` so each page refetches (notify → refresh, as everywhere).
  */
+const crypto = require('crypto');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand,
 } = require('@aws-sdk/lib-dynamodb');
-const { callerMayDriveSession } = require('./tenant');
+const {
+  callerMayDriveSession, deleteRole, deleteRefusal, cleanDeleteReason, deleteActor,
+} = require('./tenant');
+const { recordAudit } = require('./audit-log');
 const { encryptItem, decryptItem, encryptValue, decryptValue } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
-const { toAll } = require('./survey-broadcast');
+const { toAll, toHosts } = require('./survey-broadcast');
 const S = require('./build-store');
 const C = require('./build-crew');
 
@@ -142,7 +146,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   const row = {
@@ -158,6 +162,7 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(forBuilder ? { ForBuilder: forBuilder } : {}),
     ...(shareId ? { ShareId: shareId } : {}),
     ...(name ? { Name: name } : {}),
+    ...(spoken ? { Spoken: true } : {}),
     CreatedAt: now,
   };
   return put(ctx, row);
@@ -277,6 +282,7 @@ async function askAction(ctx, role, askId, body) {
   const ask = findAsk(room, askId);
   if (!ask) return fail(404, `No ask ${askId}`);
   const action = String(b.action || '').toLowerCase();
+  if (WHEEL_ACTIONS.includes(action)) return wheelAction(ctx, role, room, ask, action, b);
   const now = new Date().toISOString();
   const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
 
@@ -296,16 +302,30 @@ async function askAction(ctx, role, askId, body) {
     if (action === 'close') next.ClosedAt = now;
     if (action === 'discard') next.DiscardedAt = now;
     if (action === 'decide') {
-      const direction = S.cleanText(b.direction, S.LIMITS.direction) || S.defaultDirection(ask, room);
+      // A rating always carries its meaning: 5 is great, 1 needs work (owner, 2026-10-06).
+      const direction = S.withRatingMeaning(ask.Kind, S.cleanText(b.direction, S.LIMITS.direction) || S.defaultDirection(ask, room));
       if (!direction) return fail(400, 'Write the direction for Claude (nobody has answered yet)');
-      const chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
+      let chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
       const note = S.cleanText(b.note, S.LIMITS.note);
       const sendToAgent = b.sendToAgent !== false;
-      next.Decision = { direction, chosen, note, sendToAgent };
+      // Answered FOR the room: people said it out loud and the host recorded
+      // it. Claude and the report are told, so nobody reads "0 answered" as
+      // the room having no view.
+      const spoken = b.spoken === true;
+      // HOW IT WAS DECIDED, kept for the record and the History, never sent
+      // to Claude (owner, 2026-10-06): the room's vote, the wheel, the host's
+      // own pick, or what the room said out loud.
+      const landed = S.wheelLanded(ask);
+      // No words and no pick, after a spin: the wheel's slice is the choice.
+      if (!chosen.length && landed && !S.cleanText(b.direction, S.LIMITS.direction)) chosen = [landed.id];
+      const method = spoken ? 'spoken'
+        : S.DECISION_METHODS.includes(b.method) ? b.method
+          : landed && chosen.length === 1 && chosen[0] === landed.id ? 'wheel' : 'vote';
+      next.Decision = { direction, chosen, note, sendToAgent, method, ...(spoken ? { spoken: true } : {}) };
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent });
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken });
     }
     await put(ctx, next);
     if (action === 'open' || action === 'reopen') await makeCurrent(ctx, room, askId, role);
@@ -318,6 +338,107 @@ async function askAction(ctx, role, askId, body) {
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host') });
+}
+
+// ── The wheel, and the revote (owner, 2026-10-05) ──────────────────────────
+//
+// "If a tie, it's either a wheel spin or revote: host's choice. A random
+// person spins, but the host can always spin. If the room groans, respin."
+// Both happen at results. The wheel lands where crypto.randomInt says, here,
+// so every screen shows the same answer; screens only animate to it.
+
+const WHEEL_ACTIONS = ['wheel', 'spin', 'pass', 'revote'];
+
+/** A random entry, or null. */
+const pickOne = (list) => (list.length ? list[crypto.randomInt(list.length)] : null);
+
+async function spinWheel(ctx, ask, by) {
+  const w = ask.Wheel;
+  const slice = w.Slices[crypto.randomInt(w.Slices.length)];
+  const now = new Date().toISOString();
+  const spin = { SpinId: S.newId(), At: now, By: by, Result: slice.id, Turns: 5 + crypto.randomInt(3) };
+  const spins = [...(w.Spins || []), spin].slice(-S.WHEEL_KEEP_SPINS);
+  await put(ctx, { ...ask, Wheel: { ...w, Spins: spins, Armed: false } });
+  await logEntry(ctx, {
+    kind: 'ask', by: 'system', askId: ask.AskId,
+    text: `The wheel landed on ${slice.label ? `${slice.label}: ` : ''}${slice.text}`,
+  });
+  return spin;
+}
+
+async function wheelAction(ctx, role, room, ask, action, b) {
+  if (role !== 'host') return fail(403, 'Only the host spins the wheel');
+  if (ask.Kind === 'rating') return fail(400, 'A rating has nothing to spin between');
+  // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06: "available anytime there
+  // is a chance to vote, because it could be an option vs voting"): an open
+  // ask may go straight to the wheel, which closes it first. Spinning again,
+  // handing the turn on and a revote all come after the results.
+  const open = ['live', 'voting'].includes(ask.Status);
+  if (!(ask.Status === 'results' || (action === 'wheel' && open))) {
+    return fail(409, action === 'wheel' ? 'The wheel is for an open or closed ask' : 'Close the ask first: this comes after the results');
+  }
+  const askId = ask.AskId;
+  const now = new Date().toISOString();
+
+  if (action === 'wheel') {
+    const tied = S.tiedIds(ask, room);
+    // Instead of a vote it holds every option; after a tie, the tied ones.
+    const among = open || b.among === 'all' || tied.length < 2 ? 'all' : 'tied';
+    const slices = S.wheelSlices(ask, room, among);
+    if (slices.length < S.WHEEL_MIN) return fail(409, 'The wheel needs at least two options');
+    const players = b.spinner === 'host' ? [] : await loadPlayers(ctx);
+    const spinner = pickOne(players);
+    await put(ctx, {
+      ...ask,
+      ...(open ? { Status: 'results', ClosedAt: now } : {}),
+      Wheel: { Slices: slices, Among: among, Spinner: spinner, Armed: Boolean(spinner), Spins: [], SetAt: now },
+    });
+    if (open) await logEntry(ctx, { kind: 'ask', by: 'system', askId, text: `Closed for the wheel: ${ask.Prompt}` });
+    await logEntry(ctx, { kind: 'ask', by: 'system', askId, text: spinner ? `Spin the wheel: ${spinner} spins` : 'Spin the wheel' });
+  } else if (action === 'spin') {
+    // The host can always spin, the first time and every respin.
+    if (!ask.Wheel) return fail(409, 'Set up the wheel first');
+    await spinWheel(ctx, ask, 'host');
+  } else if (action === 'pass') {
+    // A respin by somebody else in the room: a new random spinner, armed.
+    if (!ask.Wheel) return fail(409, 'Set up the wheel first');
+    const players = await loadPlayers(ctx);
+    const others = players.filter((p) => p !== ask.Wheel.Spinner);
+    const spinner = pickOne(others.length ? others : players);
+    if (!spinner) return fail(409, 'Nobody has joined to spin');
+    await put(ctx, { ...ask, Wheel: { ...ask.Wheel, Spinner: spinner, Armed: true } });
+    await logEntry(ctx, { kind: 'ask', by: 'system', askId, text: `Spin again: ${spinner} spins` });
+  } else {
+    // REVOTE: a new ask with only the tied options, which keep their letters
+    // and their mockups, opened at once.
+    const tied = S.tiedIds(ask, room);
+    if (tied.length < 2) return fail(409, 'There is no tie to revote');
+    const st = await touchState(ctx, { add: { AskSeq: 1 } });
+    const newId = S.pad3(st.AskSeq || 1);
+    const base = {
+      SK: S.SK.ask(newId), AskId: newId, Kind: ask.Kind, Prompt: ask.Prompt, Source: 'host', CreatedAt: now, OpenedAt: now, RevoteOf: askId, MaxPicks: 1,
+    };
+    if (ask.Kind === 'choice') {
+      const images = S.optionImages(room, askId);
+      const options = (ask.Options || []).filter((o) => tied.includes(o.label))
+        .map((o) => ({ ...o, ...(o.imageId || images[o.label] ? { imageId: o.imageId || images[o.label] } : {}) }));
+      await put(ctx, { ...base, Detail: `A tie between ${options.map((o) => o.label).join(' and ')}. Vote again.`, Options: options, Status: 'live' });
+    } else {
+      await put(ctx, { ...base, Detail: 'A tie. Vote again between these.', Options: [], Status: 'voting', VotingAt: now });
+      const resps = room.resps.filter((r) => r.AskId === askId && tied.includes(r.RespId));
+      for (const r of resps) {
+        const id = S.newId();
+        await put(ctx, { SK: S.SK.resp(newId, id), AskId: newId, RespId: id, Text: r.Text, PlayerName: r.PlayerName, Source: r.Source || 'player', CreatedAt: now });
+      }
+    }
+    await put(ctx, { ...ask, RevotedAs: newId });
+    await makeCurrent(ctx, await loadRoom(ctx), newId, role);
+  }
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  const next = action === 'revote' ? findAsk(after, after.state.CurrentAskId) : findAsk(after, askId);
+  return reply(200, { ask: S.askView(next, after, 'host') });
 }
 
 async function hostResponse(ctx, askId, respId, body) {
@@ -373,6 +494,37 @@ async function postLog(ctx, role, body) {
   return reply(201, { entry: S.logView(row) });
 }
 
+/**
+ * A ROOM'S ARTIFACT, DELETED (the owner, 2026-10-04): a screenshot or a
+ * timeline entry goes only for the host who created the room, an owner or
+ * admin of its organisation, or Engage staff giving a reason — and an audit
+ * entry is written first, whoever it is (tenant.deleteRole, audit-log.js).
+ * Null when it may go ahead; otherwise the response to send. Rooms made before
+ * 2026-10-04 record no creator, so for them it is the org's owner or admin,
+ * or staff. A room with no organisation has no log to hold the entry.
+ */
+async function gateArtifactDelete(ctx, body, target, detail) {
+  if (!ctx.orgId) return fail(409, 'This room belongs to no organisation, so nothing in it can be deleted.', { code: 'no_organisation' });
+  const reason = cleanDeleteReason((body || {}).reason);
+  const role = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+  const refused = deleteRefusal(role, reason);
+  if (refused) return fail(refused.status, refused.error, { code: refused.code });
+  try {
+    await recordAudit(db, {
+      orgId: ctx.orgId,
+      action: 'buildroom-artifact.delete',
+      actor: deleteActor(ctx.request, role),
+      target,
+      reason: role === 'platform-admin' ? reason : '',
+      detail: { room: ctx.gameId, ...(detail || {}) },
+    });
+  } catch (error) {
+    console.error(`BUILD ROOM: the audit entry for ${target.type} ${target.id} could not be written; nothing was deleted:`, error && error.message);
+    return fail(500, 'Could not record who is deleting this, so nothing was deleted. Try again.');
+  }
+  return null;
+}
+
 async function editLog(ctx, logId, body) {
   const b = body || {};
   const room = await loadRoom(ctx);
@@ -381,6 +533,10 @@ async function editLog(ctx, logId, body) {
   const now = new Date().toISOString();
   let out;
   if (b.action === 'delete') {
+    const refused = await gateArtifactDelete(ctx, b, {
+      type: 'buildroom-log', id: `${ctx.gameId}/${logId}`, title: String(entry.Text || '').slice(0, 120),
+    }, { kind: String(entry.Kind || '') });
+    if (refused) return refused;
     // Kept as a tombstone-free delete: the timeline is the host's to curate.
     await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: entry.SK } }));
     out = { ...S.logView(entry), deleted: true };
@@ -423,17 +579,46 @@ async function ideaAction(ctx, ideaId, body) {
     const id = S.newId();
     await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'idea', CreatedAt: now });
     status = 'promoted';
+  } else if (action === 'acknowledge' || action === 'wall') {
+    // ACKNOWLEDGE (owner, 2026-10-05): a comment worth hearing that is not a
+    // job for Claude ("I like the new buttons"). Off the host's list, nothing
+    // to Claude, nothing in the record; the phone sees "Seen by the host".
+    // WALL also puts it on the Stage for a short while, with no name.
+    status = 'acknowledged';
   } else if (action === 'dismiss') status = 'dismissed';
   else if (action === 'restore') status = 'new';
-  else return fail(400, 'action must be direct, suggest, dismiss or restore');
-  const next = { ...idea, Status: status, UpdatedAt: now };
+  else return fail(400, 'action must be direct, suggest, acknowledge, wall, dismiss or restore');
+  const next = { ...idea, Status: status, UpdatedAt: now, ...(action === 'wall' ? { WalledAt: now } : {}) };
+  if (action === 'restore') delete next.WalledAt;
   await put(ctx, next);
+  if (action === 'wall') {
+    const comment = { IdeaId: idea.IdeaId, Text: idea.Text, At: now };
+    await touchState(ctx, { set: { WallComment: ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { WallComment: comment })).WallComment : comment } });
+  }
   if (action === 'direct' || action === 'suggest') {
     await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct' });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { idea: S.ideaView(next) });
+}
+
+/** Acknowledge every new idea at once: a burst of reactions after Claude shows something. */
+async function acknowledgeAll(ctx) {
+  const room = await loadRoom(ctx);
+  const now = new Date().toISOString();
+  const fresh = room.ideas.filter((i) => (i.Status || 'new') === 'new');
+  for (const idea of fresh) await put(ctx, { ...idea, Status: 'acknowledged', UpdatedAt: now });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { acknowledged: fresh.length });
+}
+
+/** Take the room comment off the wall before its time is up. */
+async function clearWall(ctx) {
+  const rev = (await touchState(ctx, { set: { WallComment: null } })).Rev;
+  await announce(ctx, rev);
+  return reply(200, { ok: true });
 }
 
 async function postOutcome(ctx, role, body) {
@@ -662,6 +847,10 @@ async function imageAction(ctx, imageId, body) {
   if (!img) return fail(404, 'No such image');
   const action = String((body || {}).action || '');
   if (action === 'delete') {
+    const refused = await gateArtifactDelete(ctx, body, {
+      type: 'buildroom-image', id: `${ctx.gameId}/${imageId}`, title: String(img.Caption || '').slice(0, 120),
+    }, { kind: String(img.Kind || '') });
+    if (refused) return refused;
     await s3().send(new (s3sdk().DeleteObjectCommand)({ Bucket: MEDIA_BUCKET(), Key: S.imageKey(ctx.gameId, imageId) })).catch(() => {});
     await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: img.SK } }));
     for (const l of room.logs.filter((x) => x.Kind === 'image' && x.Detail === imageId)) {
@@ -1065,6 +1254,26 @@ async function routeBuilder(ctx, method, parts, body, query) {
   return fail(403, 'Builders cannot do that');
 }
 
+/**
+ * POST activity — Claude's live "what I am doing" lines (owner, 2026-10-04).
+ * Kept on one row, the latest few, and pushed to the HOST's screens only with
+ * the lines in the message: no Rev bump, no buildChanged, so no phone refetches
+ * the room every few seconds while Claude works.
+ */
+async function postActivity(ctx, body) {
+  const now = new Date().toISOString();
+  const norm = S.normalizeActivity((body || {}).items, now);
+  if (norm.error) return fail(400, norm.error);
+  if (!norm.value.length) return reply(200, { activity: [] });
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.activity } }));
+  // Sealed like every other line in a team's room (tenant-crypto buildActivity).
+  const kept = res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildActivity', res.Item) : res.Item) : null;
+  const items = S.mergeActivity(kept ? kept.Items : [], norm.value);
+  await put(ctx, { SK: S.SK.activity, Items: items, UpdatedAt: now });
+  await toHosts(db, TABLE(), ctx.gameId, { type: 'buildActivity', gameId: ctx.gameId, items }).catch(() => {});
+  return reply(200, { activity: items });
+}
+
 async function routeHost(ctx, role, method, parts, body, event, query) {
   const [a, b, c, d] = parts;
   const hostOnly = () => (role === 'host' ? null : fail(403, 'Only the host can do that'));
@@ -1072,6 +1281,9 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
 
   if (method === 'GET' && a === 'state' && !b) {
     const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
+    // The role the host's screen would delete a screenshot or an entry in
+    // (the owner's delete rule, 2026-10-04): it asks staff for a reason.
+    if (role === 'host') view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
     return reply(200, view);
   }
   // Claude's cheapest call: nothing but its inbox (the wrapper below attaches
@@ -1094,12 +1306,15 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   const ended = (await sessionState(ctx)) === 'ENDED';
   if (ended && !(a === 'outcome' || (a === 'log' && b))) return fail(409, 'This session has ended');
 
+  if (a === 'activity' && !b) return role === 'agent' ? postActivity(ctx, body) : fail(403, 'Only Claude reports its activity');
   if (a === 'asks' && !b) return createAsk(ctx, role, body);
   if (a === 'asks' && b && !c) return hostOnly() || askAction(ctx, role, b, body);
   if (a === 'asks' && b && c === 'responses') return hostOnly() || hostResponse(ctx, b, d || null, body);
   if (a === 'log' && !b) return postLog(ctx, role, body);
   if (a === 'log' && b) return hostOnly() || editLog(ctx, b, body);
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
+  if (a === 'ideas' && b === 'acknowledge-all' && !c) return hostOnly() || acknowledgeAll(ctx);
+  if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);
@@ -1171,11 +1386,27 @@ async function routePlay(ctx, method, parts, body, query) {
   const room = await loadRoom(ctx);
 
   if (a === 'idea') {
-    const text = S.cleanText(input.text, S.LIMITS.idea);
+    let text = S.cleanText(input.text, S.LIMITS.idea);
+    // FEEDBACK ON A PREVIEW (owner, 2026-10-04): when Claude shows the work, a
+    // phone can say "Looks good" or "Needs a change". It is an idea that names
+    // the preview, so the host's ideas lane, "pass to Claude" and the report
+    // all carry it with no new kind of row.
+    let aboutLogId = '';
+    if (input.aboutLogId) {
+      const about = room.logs.find((l) => l.LogId === String(input.aboutLogId) && l.Kind === 'showing');
+      if (!about) return fail(409, 'That preview is no longer on screen');
+      const verdict = { good: 'Looks good', change: 'Needs a change' }[input.verdict];
+      if (!verdict) return fail(400, 'Say whether it looks good or needs a change');
+      if (input.verdict === 'change' && !text) return fail(400, 'Say what should change');
+      if (room.ideas.some((i) => i.PlayerName === me.playerName && i.AboutLogId === about.LogId)) return fail(409, 'You already sent feedback on this preview');
+      const what = S.cleanText(about.Text, 80);
+      text = `On the preview "${what}": ${verdict}${text ? `: ${text}` : ''}`;
+      aboutLogId = about.LogId;
+    }
     if (!text) return fail(400, 'Write your idea');
     if (room.ideas.filter((i) => i.PlayerName === me.playerName).length >= 20) return fail(429, 'That is plenty of ideas from one phone for now');
     const sk = S.SK.idea(now);
-    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now });
+    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now, ...(aboutLogId ? { AboutLogId: aboutLogId } : {}) });
     const st = await touchState(ctx);
     await announce(ctx, st.Rev);
     return reply(201, { ok: true });
@@ -1206,12 +1437,20 @@ async function routePlay(ctx, method, parts, body, query) {
       if (!Number.isInteger(r) || r < 1 || r > 5) return fail(400, 'Rate from 1 to 5');
       await put(ctx, { SK: S.SK.ans(askId, me.playerName), AskId: askId, PlayerName: me.playerName, Rating: r, Why: S.cleanText(input.why, S.LIMITS.why), CreatedAt: now });
     }
+  } else if (a === 'spin') {
+    // The one phone the wheel picked, once per turn; the host can always spin.
+    const w = ask.Wheel;
+    if (!w || ask.Status !== 'results') return fail(409, 'There is no wheel to spin');
+    if (w.Spinner !== me.playerName || !w.Armed) return fail(403, 'It is not your turn to spin');
+    await spinWheel(ctx, ask, me.playerName);
   } else if (a === 'vote') {
     if (ask.Kind !== 'suggest' || ask.Status !== 'voting') return fail(409, 'Voting is not open for this question');
     const valid = new Map(room.resps.filter((r) => r.AskId === askId && !r.Hidden).map((r) => [r.RespId, r]));
     const ids = [...new Set((Array.isArray(input.respIds) ? input.respIds : []).map(String))];
     if (ids.some((id) => !valid.has(id))) return fail(400, 'That suggestion is not on the ballot');
-    if (ids.some((id) => valid.get(id).PlayerName === me.playerName && (valid.get(id).Source || 'player') === 'player')) return fail(400, 'Vote for other people\'s ideas');
+    // YOUR OWN IDEA COUNTS (owner, 2026-10-06: "we couldn't restrict voting
+    // for your own, especially if there is only two voters; we won't get
+    // anywhere"). With two people, each could only vote for the other's.
     const max = ask.MaxPicks || S.DEFAULT_MAX_PICKS;
     if (ids.length > max) return fail(400, `Pick up to ${max}`);
     await put(ctx, { SK: S.SK.vote(askId, me.playerName), AskId: askId, PlayerName: me.playerName, RespIds: ids, CreatedAt: now });
@@ -1260,6 +1499,8 @@ exports.handler = async (event) => {
       pk: `GAME#${gameId}`,
       meta,
       orgId,
+      // The request, for the delete rule (gateArtifactDelete).
+      request: event,
       // Every BUILD# row dies with the session: it copies the session's own
       // ttl (written at creation, rewritten at start by session-start.js —
       // the one owner of that rule). A session with none predates the ttl
@@ -1280,7 +1521,16 @@ exports.handler = async (event) => {
         : await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
       // Directions ride along on every call Claude makes, so it hears the
       // room on its very next tool call without having to ask.
-      if (res.statusCode < 500 && !res.isBase64Encoded) {
+      // NOT on an activity post: the plugin sends those from a background
+      // pump that never reads the answer, so a direction carried on one would
+      // be marked delivered and never reach Claude.
+      // NOR on the end-of-turn checkpoint the plugin's Stop hook posts: it
+      // runs after Claude has stopped and drops the answer, so the host saw
+      // "Claude has it" for a direction Claude never heard (owner,
+      // 2026-10-06). The checkpoint TOOL marks itself `fromTool`; a checkpoint
+      // without it (any plugin's hook) leaves the inbox for the next real call.
+      const hookCheckpoint = parts[0] === 'log' && body && body.kind === 'checkpoint' && body.fromTool !== true;
+      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity' && !hookCheckpoint) {
         const inbox = await takeInbox(ctx, role);
         const parsed = JSON.parse(res.body || '{}');
         res.body = JSON.stringify({ ...parsed, inbox });

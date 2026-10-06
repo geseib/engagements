@@ -57,9 +57,16 @@ export async function updateEvent(code, fields) {
 
 /**
  * `{ deleted }` — the event, its agenda and its join code, in one step.
- * Refused (409, the server's sentence) unless every item is still planned.
+ * Refused (409, the server's sentence) while an item is running; refused 403
+ * to anyone but its host, an owner or admin of its team, or Engage staff
+ * giving a reason (400 `reason_required` without one).
  */
-export const deleteEvent = (code) => call(`events/${enc(code)}`, { method: 'DELETE' });
+export const deleteEvent = (code, { reason } = {}) => call(`events/${enc(code)}`, {
+  method: 'DELETE',
+  // Engage staff deleting another team's event say why (the owner's delete
+  // rule, 2026-10-04); nobody else sends one.
+  ...(reason ? { body: { reason } } : {}),
+});
 
 /** `{ item }`. `item` is `{ type, title, description, minutes, position, setRef? }`. */
 export const addItem = (code, item) => call(`events/${enc(code)}/items`, { method: 'POST', body: item });
@@ -68,8 +75,8 @@ export const addItem = (code, item) => call(`events/${enc(code)}/items`, { metho
 export const updateItem = (code, itemId, fields) =>
   call(`events/${enc(code)}/items/${enc(itemId)}`, { method: 'PUT', body: fields });
 
-export const removeItem = (code, itemId) =>
-  call(`events/${enc(code)}/items/${enc(itemId)}`, { method: 'DELETE' });
+export const removeItem = (code, itemId, { reason } = {}) =>
+  call(`events/${enc(code)}/items/${enc(itemId)}`, { method: 'DELETE', ...(reason ? { body: { reason } } : {}) });
 
 /** The whole agenda's order, every item once. */
 export const reorderItems = (code, order) =>

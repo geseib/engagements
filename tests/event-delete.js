@@ -11,8 +11,9 @@
  * so the code goes back only when nothing is left under EVENT#.
  *
  * rejects: a code released while EVENT# rows remain; a half-finished delete;
- * a delete through a foreign member, a non-member or no identity; a delete
- * of an event with an item that has started; an agenda read that stops at
+ * a delete through a foreign member, a non-member or no identity (Engage
+ * staff without a reason); a delete
+ * of an event with an item live (a room may be in it); an agenda read that stops at
  * the first 1 MB page; a delete that could release a session's code; a
  * session delete releasing an event's; the route answering while the switch
  * is off.
@@ -49,7 +50,11 @@ const add = (code, body) => items(request({
 const owned = (code) => [...table.store.values()].filter((r) => r.PK === `EVENT#${code}`
   || (r.PK === `ORG#${NW}#EVENTS` && r.SK === `EVENT#${code}`)
   || (r.PK === 'GAMES' && r.SK === `GAME#${code}`));
-const snapshot = () => JSON.stringify([...table.store.entries()].sort());
+/* Every row but the audit log's. Since 2026-10-04 a delete writes its audit
+   entry FIRST (no entry, no delete), so a delete cancelled at the transaction
+   still leaves the entry recording the attempt; "nothing deleted" is about
+   the event's own rows (tests/delete-authorization.js covers the log). */
+const snapshot = () => JSON.stringify([...table.store.entries()].filter(([k]) => !/#AUDIT\|/.test(k)).sort());
 
 async function makeEvent({ breaks = 3 } = {}) {
   const res = await create(request({
@@ -78,12 +83,14 @@ async function makeEvent({ breaks = 3 } = {}) {
   const res = await del(code);
   await check('200, naming the code', () => {
     assert.strictEqual(res.statusCode, 200, res.body);
-    assert.deepStrictEqual(bodyOf(res), { deleted: code });
+    assert.deepStrictEqual(bodyOf(res), { deleted: code, sessions: 0 });
   });
   await check('every item, METADATA, the list row and the reservation are gone', () =>
     assert.deepStrictEqual(owned(code), []));
   await check('in ONE transaction: all or nothing', () => {
-    const writes = table.log.slice(logFrom).filter((e) => ['transactWrite', 'put', 'update', 'delete', 'batchWrite'].includes(e.type));
+    // The one put before it is the audit entry (2026-10-04, written first).
+    const writes = table.log.slice(logFrom).filter((e) => ['transactWrite', 'put', 'update', 'delete', 'batchWrite'].includes(e.type))
+      .filter((e) => !(e.type === 'put' && /#AUDIT$/.test(e.input.Item.PK)));
     assert.deepStrictEqual(writes.map((e) => e.type), ['transactWrite']);
     assert.strictEqual(writes[0].input.TransactItems.length, 6, 'three items, METADATA, the list row and the code');
   });
@@ -101,7 +108,6 @@ async function makeEvent({ breaks = 3 } = {}) {
   const unknown = bodyOf(await del('9999'));
   for (const [label, ctx, c] of [
     ['another organisation\'s member', asHost(MD), kept],
-    ['a non-member (Engage staff in no organisation)', asHost('', { groups: 'admins,hosts', orgIds: '' }), kept],
     ['a signed-in account in no group', { authorizer: { lambda: { userId: 'u', orgId: NW, orgIds: NW } } }, kept],
     ['no identity at all', { authorizer: { lambda: { orgId: NW, orgIds: NW, groups: 'hosts' } } }, kept],
     ['a malformed code', asHost(NW), '53a7'],
@@ -115,8 +121,19 @@ async function makeEvent({ breaks = 3 } = {}) {
     });
   }
 
-  console.log('\n3. only while every item is planned');
-  await check('an item that has started: 409 with a plain sentence, and nothing deleted', async () => {
+  // CHANGED 2026-10-04 (the owner's delete rule): Engage staff outside the
+  // team may delete an event, but only giving a reason. Without one: 400 and
+  // every row still there. With one: tests/delete-authorization.js.
+  await check('Engage staff in no organisation, with no reason: 400 reason_required, and every row still there', async () => {
+    const before = snapshot();
+    const r = await del(kept, asHost('', { groups: 'admins,hosts', orgIds: '' }));
+    assert.strictEqual(r.statusCode, 400, r.body);
+    assert.strictEqual(bodyOf(r).code, 'reason_required');
+    assert.strictEqual(snapshot(), before);
+  });
+
+  console.log('\n3. never while an item is running');
+  await check('a live item: 409 with a plain sentence, and nothing deleted', async () => {
     const row = [...table.store.values()].find((r) => r.PK === `EVENT#${kept}` && String(r.SK).startsWith('ITEM#'));
     table.put({ ...row, State: 'live' });
     try {
@@ -124,7 +141,7 @@ async function makeEvent({ breaks = 3 } = {}) {
       const r = await del(kept);
       assert.strictEqual(r.statusCode, 409, r.body);
       assert.deepStrictEqual(bodyOf(r), {
-        error: 'This event has an item that has started, so it cannot be deleted.', code: 'not_planned',
+        error: 'This event has an item running. End it on the stage, then delete the event.', code: 'item_running',
       });
       assert.strictEqual(snapshot(), before);
     } finally { table.put(row); }

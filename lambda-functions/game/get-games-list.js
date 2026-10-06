@@ -1,9 +1,10 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, BatchGetCommand } = require('@aws-sdk/lib-dynamodb');
 const { countParticipants } = require('./player-rows');
-const { callerOrgId, gamesIndexPk } = require('./tenant');
+const { callerOrgId, gamesIndexPk, deleteRole } = require('./tenant');
 const { decryptItems } = require('./tenant-crypto');
 const { SURVEY_CLOSED } = require('./survey-names');
+const { readOrgEvents, itemSessionIndex } = require('./engagement-catalog');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -165,6 +166,54 @@ async function playerCountsByGame(gameIds) {
   return out;
 }
 
+/**
+ * AN EVENT AS ONE ROW OF THE SESSION LIST. The same columns a session fills
+ * where they mean the same thing — created, played, last played, people — and
+ * its items beneath it, each carrying its own session's counts when it has
+ * one. `sessionGone` marks an item whose session existed and has expired (a
+ * session is kept 7 days from its start; the event 90 days after its day), so
+ * a list says so instead of offering a dead Continue.
+ */
+function eventRow(event, itemSessions) {
+  const items = event.items.map((item) => {
+    const session = item.gameId ? itemSessions.get(item.gameId) || null : null;
+    return {
+      ...item,
+      session: session ? {
+        gameId: session.gameId,
+        gameType: session.gameType,
+        started: session.started,
+        playerCount: session.playerCount,
+        roundsPlayed: session.roundsPlayed,
+        lastPlayedAt: session.lastPlayedAt || null,
+        surveyClosed: session.surveyClosed,
+      } : null,
+      sessionGone: Boolean(item.gameId) && !session,
+    };
+  });
+  const played = items.map((i) => i.startedAt).filter(Boolean).sort();
+  return {
+    kind: 'event',
+    gameId: event.code,
+    eventCode: event.code,
+    gameType: 'event',
+    title: event.title,
+    place: event.place,
+    startsAt: event.startsAt,
+    timeZone: event.timeZone,
+    state: event.state,
+    createdAt: event.createdAt || null,
+    started: event.state !== 'SCHEDULED' || items.some((i) => i.state !== 'planned'),
+    lastPlayedAt: played.length ? played[played.length - 1] : null,
+    // People: the event's joins (attendee rows). Rounds belong to items.
+    playerCount: event.attendeeCount,
+    roundsPlayed: null,
+    itemCount: event.itemCount,
+    items,
+    ...(event.decryptFailed ? { decryptFailed: true } : {}),
+  };
+}
+
 exports.handler = async (event) => {
   try {
     /*
@@ -186,21 +235,30 @@ exports.handler = async (event) => {
       console.log('🎮 Games list requested by a caller with no organisation — returning an empty list');
       return {
         statusCode: 200,
-        body: JSON.stringify({ games: [], count: 0, timestamp: new Date().toISOString() }),
+        body: JSON.stringify({ games: [], events: [], count: 0, timestamp: new Date().toISOString() }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
 
     console.log(`🎮 Getting games list for org ${orgId}`);
 
-    const gamesResult = await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk',
-      ExpressionAttributeValues: {
-        ':pk': gamesIndexPk(orgId)
-      },
-      ScanIndexForward: false // Sort by SK in descending order (most recent first)
-    }));
+    // PAGED. A one-call Query stops at 1 MB and the list would quietly lose
+    // its oldest sessions the day the partition grew past it.
+    const indexItems = [];
+    let ExclusiveStartKey;
+    do {
+      const page = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk',
+        ExpressionAttributeValues: {
+          ':pk': gamesIndexPk(orgId)
+        },
+        ScanIndexForward: false, // Sort by SK in descending order (most recent first)
+        ...(ExclusiveStartKey ? { ExclusiveStartKey } : {}),
+      }));
+      indexItems.push(...((page && page.Items) || []));
+      ExclusiveStartKey = page && page.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
 
     // THE ONE PLACE THE CALLER'S OWN ORG IS THE RIGHT ANSWER.
     //
@@ -214,7 +272,7 @@ exports.handler = async (event) => {
     // Sessions written before this change are still plaintext in the same
     // partition and pass straight through (`decryptValue` unwraps envelopes and
     // nothing else), so the list mixes both forms happily.
-    const indexRows = await decryptItems(orgId, 'session', gamesResult.Items || []);
+    const indexRows = await decryptItems(orgId, 'session', indexItems);
 
     const games = indexRows.map(game => ({
       gameId: game.SK.replace('GAME#', ''),
@@ -225,11 +283,48 @@ exports.handler = async (event) => {
       started: game.Started || false,
       lastPlayedAt: game.LastPlayedAt,
       visibility: game.Visibility || 'public',
-      hostName: game.HostName
+      hostName: game.HostName,
+      // THE ROLE THIS CALLER WOULD DELETE IT IN (the owner's delete rule,
+      // 2026-10-04): 'host', 'org-owner', 'org-admin', 'platform-admin' (who
+      // must give a reason — the console asks for one) or '' (may not).
+      deleteAs: deleteRole(event, { orgId, createdBy: game.CreatedBy }),
+      ...(game.EventRef ? { eventRef: String(game.EventRef), eventItem: game.EventItem || '' } : {}),
     }));
 
+    /*
+      EVENTS ARE ONE ROW EACH, AND THEIR ITEMS' SESSIONS ARE NOT LISTED TWICE
+      (2026-10-04; the owner decided the shape). The organisation's events
+      come back beside the sessions, each with its agenda items; every session
+      an event item names — by the item's GameId, or by the session's own
+      EventRef (written on its list row since this change) — moves out of
+      `games` and under its item. A session whose event is not listed (the
+      switch is off, or the event is gone) stays a row of its own: it is then
+      listed once, at the top level, rather than nowhere.
+
+      A failed event read costs the events, never the sessions.
+    */
+    let orgEvents = [];
+    try {
+      orgEvents = await readOrgEvents(db, process.env.TABLE_NAME, orgId);
+    } catch (error) {
+      console.error('⚠️ events unavailable, returning sessions only:', error.message);
+    }
+    const listedCodes = new Set(orgEvents.map((e) => e.code));
+    const byItem = itemSessionIndex(orgEvents);
+    const parentOf = (game) => {
+      const named = byItem.get(game.gameId);
+      if (named) return named.code;
+      return game.eventRef && listedCodes.has(game.eventRef) ? game.eventRef : null;
+    };
+    const itemSessions = new Map();
+    const topLevel = [];
+    for (const game of games) {
+      if (parentOf(game)) itemSessions.set(game.gameId, game);
+      else topLevel.push(game);
+    }
+
     // Sort by creation date (most recent first)
-    games.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    topLevel.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     /*
       Enrichment is best-effort and deliberately not inside the map above: a
@@ -238,7 +333,7 @@ exports.handler = async (event) => {
       own failures per-session; this try/catch is the backstop for anything
       that escapes them, and it still returns the list.
     */
-    const ids = games.map((game) => game.gameId);
+    const ids = games.map((game) => game.gameId);  // item sessions are counted too
     let rounds = new Map();
     let states = new Map();
     let players = new Map();
@@ -265,13 +360,21 @@ exports.handler = async (event) => {
       game.surveyClosed = game.gameType === 'survey' && SURVEY_RESULTS_STATES.has(states.get(game.gameId));
     });
 
-    console.log(`✅ Returning ${games.length} games for history`);
+    const events = orgEvents.map((row) => ({
+      ...eventRow(row, itemSessions),
+      deleteAs: deleteRole(event, { orgId, createdBy: row.createdBy }),
+    }));
+
+    console.log(`✅ Returning ${topLevel.length} games and ${events.length} events for history`);
 
     return {
       statusCode: 200,
       body: JSON.stringify({
-        games: games,
-        count: games.length,
+        games: topLevel,
+        events,
+        // Delete all: an owner or admin of this organisation, or staff with a reason.
+        deleteAllAs: deleteRole(event, { orgId }),
+        count: topLevel.length,
         timestamp: new Date().toISOString()
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }

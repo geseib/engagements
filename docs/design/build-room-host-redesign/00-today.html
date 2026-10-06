@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-theme="dark" class="d-room">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>00 Today, measured · Build Room host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<nav class="pg-nav"><a href="index.html"><b>Second pass (current)</b></a> ·
+<a href="first-pass.html">First pass: overview</a>
+<a class="here" href="00-today.html">00 Today, measured</a>
+<a href="b1-building.html">B1 Claude is building</a>
+<a href="b2-proposed.html">B2 Claude proposes an ask</a>
+<a href="b3-live.html">B3 The room is answering</a>
+<a href="b4-decide.html">B4 Results and the direction</a>
+<a href="b5-spoken.html">B5 Answer for the room</a>
+<a href="b6-crew.html">B6 Crew mode</a>
+<a href="b7-wrapped.html">B7 Wrapped up</a>
+<a href="b8-ended.html">B8 Session ended</a>
+<a href="b9-people.html">B9 Drawer: People</a>
+<a href="b10-ideas.html">B10 Drawer: Ideas</a>
+<a href="b11-claude.html">B11 Drawer: Claude</a>
+<a href="b12-record.html">B12 Drawer: Record</a>
+<a href="b13-present.html">B13 Present on the wall</a>
+<a href="b14-connection.html">B14 Connection dropped</a>
+<a href="a1-console.html">A1 Layout A: control screen</a>
+<a href="a2-console-decide.html">A2 Layout A: deciding</a>
+<a href="a3-remote.html">A3 Layout A: phone or tablet remote</a>
+<a href="notices.html">N Notices</a>
+<a href="scores.html">S Players and scores</a>
+</nav>
+<div class="pg-title"><h1>00 · Today, measured</h1><p>Today's page rendered from fixture state (build-store.js roomFromRows + hostView, the shape GET build/state returns) with the real stylesheets, at 1440 wide. Measured, not estimated: see the table below. Only four asks and two ideas exist in this fixture; a real hour adds an asks table and a screenshot grid under all of it.</p></div>
+<div class="idx" style="padding-top:0"><table class="cmp">
+<tr><th>State (1440×900)</th><th>Page height</th><th>Header</th><th>Where the stage starts</th><th>Where the host acts</th><th>Buttons</th></tr>
+<tr><td>Claude building</td><td>1260px</td><td>147px, three rows</td><td>163px</td><td>"What next?" at 680–982px</td><td>29</td></tr>
+<tr><td>Claude proposes an ask</td><td><b>1866px</b></td><td>147px</td><td><b>878px, below the fold</b> (the review card is first)</td><td>Review card 163–862px</td><td>34</td></tr>
+<tr><td>Live ask</td><td>1260px</td><td>147px</td><td>163px</td><td>Close at the top of the stage</td><td>33</td></tr>
+<tr><td>Results to decide</td><td><b>1822px</b></td><td>147px</td><td>163px</td><td>Send to Claude at <b>~1100px</b></td><td>38</td></tr>
+</table>
+<p>What it adds up to: <b>eleven controls in the header</b> (join code, joined count, Claude chip, connection chip, Auto switch, Connect, Crew, Wrap up, Report, End, Present),
+<b>three always-open panels</b> under the stage (What next, Asks, Screenshots) and <b>three in the right column</b> (Claude activity, Ideas inbox, Timeline with its own form).
+Every one of them is visible at once, in every state, so nothing tells the host what matters now.</p></div><div class="fit" style="padding-top:12px"><div class="fit-box"><div class="small-label" style="margin-bottom:6px">Today · proposed (full page, 1866px tall)</div><iframe src="today/proposed.html" style="display:block;width:1440px;height:1866px;border:0;border-radius:10px;background:#0F1A2E"></iframe></div></div><div class="fit" style="padding-top:12px"><div class="fit-box"><div class="small-label" style="margin-bottom:6px">Today · results (full page, 1822px tall)</div><iframe src="today/results.html" style="display:block;width:1440px;height:1822px;border:0;border-radius:10px;background:#0F1A2E"></iframe></div></div><div class="fit" style="padding-top:12px"><div class="fit-box"><div class="small-label" style="margin-bottom:6px">Today · idle (full page, 1260px tall)</div><iframe src="today/idle.html" style="display:block;width:1440px;height:1260px;border:0;border-radius:10px;background:#0F1A2E"></iframe></div></div><div class="fit" style="padding-top:12px"><div class="fit-box"><div class="small-label" style="margin-bottom:6px">Today · live (full page, 1260px tall)</div><iframe src="today/live.html" style="display:block;width:1440px;height:1260px;border:0;border-radius:10px;background:#0F1A2E"></iframe></div></div>
+<script src="mock.js"></script>
+</body>
+</html>

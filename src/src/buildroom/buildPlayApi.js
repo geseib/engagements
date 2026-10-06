@@ -8,6 +8,7 @@
  *   POST games/{id}/build-play/respond   {playerName, clientId, askId, text | choice[] + why | rating + why}
  *   POST games/{id}/build-play/vote      {playerName, clientId, askId, respIds[]}
  *   POST games/{id}/build-play/idea      {playerName, clientId, text}
+ *   POST games/{id}/build-play/spin      {playerName, clientId, askId}  (only the phone the wheel picked)
  *
  * Crew mode (docs/design/build-room-crew/FLOWS.md; `routePlayCrew`):
  *
@@ -88,9 +89,22 @@ export function sendVote({ apiBase, gameId, playerName, clientId }, askId, respI
   return post(apiBase, gameId, 'vote', { playerName, clientId }, { askId, respIds });
 }
 
+/** POST spin — the wheel picked this phone to spin it (owner, 2026-10-05). */
+export function sendSpin({ apiBase, gameId, playerName, clientId }, askId) {
+  return post(apiBase, gameId, 'spin', { playerName, clientId }, { askId });
+}
+
 /** POST idea — a thought for the host, at any time. */
 export function sendIdea({ apiBase, gameId, playerName, clientId }, text) {
   return post(apiBase, gameId, 'idea', { playerName, clientId }, { text });
+}
+
+/**
+ * Feedback on what Claude is showing (owner, 2026-10-04): "Looks good", or
+ * "Needs a change" with what to change. Once per preview per phone.
+ */
+export function sendPreviewFeedback({ apiBase, gameId, playerName, clientId }, aboutLogId, verdict, text = '') {
+  return post(apiBase, gameId, 'idea', { playerName, clientId }, { aboutLogId, verdict, text });
 }
 
 /**

@@ -85,7 +85,7 @@ async function makeEvent(attendees, startsAt = startsIn(10)) {
   const res = await del(big.code);
   await check('200, naming the code', () => {
     assert.strictEqual(res.statusCode, 200, res.body);
-    assert.deepStrictEqual(bodyOf(res), { deleted: big.code });
+    assert.deepStrictEqual(bodyOf(res), { deleted: big.code, sessions: 0 });
   });
   await check('nothing is left under EVENT#, and the reservation is gone', () => {
     assert.deepStrictEqual(underEvent(big.code), []);

@@ -3,7 +3,9 @@ import BuildImage, { ImageLoader } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
-import { fetchBuildState, sendResponse, sendVote, sendIdea } from './buildPlayApi';
+import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin } from './buildPlayApi';
+import BuildWheel from './BuildWheel';
+import { RATING_SCALE } from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import './BuildPlayer.css';
 
@@ -69,7 +71,9 @@ export const FEED_KINDS = Object.freeze({
 const DETAIL_KINDS = ['progress', 'showing', 'milestone'];
 const FEED_LENGTH = 8;
 
-const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', dismissed: 'Not used this time' };
+const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', dismissed: 'Not used this time' };
+/** What a phone says about its own idea; one shown on the wall says so (owner, 2026-10-05). */
+const ideaStatusText = (idea) => (idea.walled ? 'Shown on the wall' : IDEA_STATUS[idea.status] || IDEA_STATUS.new);
 
 export function isHttpUrl(value) {
   if (!value) return false;
@@ -161,6 +165,23 @@ function useSend(onResult) {
     return r;
   };
   return { busy, error, run };
+}
+
+/**
+ * THE WHEEL ON A PHONE (owner, 2026-10-05). Everyone sees it spin and land;
+ * the one phone the wheel picked gets the button. Where it lands is the
+ * server's, so this phone and the wall show the same answer.
+ */
+function PhoneWheel({ ask, api, onResult }) {
+  const { busy, error, run } = useSend(onResult);
+  const w = ask.wheel;
+  return (
+    <div className="bpl-wheel">
+      {w.mine && <p className="plr-help bpl-wheel-turn"><b>Your turn.</b> Spin the wheel for the room.</p>}
+      <BuildWheel wheel={w} size="md" onSpin={w.mine ? () => run(() => sendSpin(api, ask.askId)) : null} spinLabel="Spin the wheel" busy={busy} />
+      <ErrorLine error={error} />
+    </div>
+  );
 }
 
 function SuggestAsk({ ask, mine, api, onResult, shell }) {
@@ -327,7 +348,6 @@ function RatingAsk({ ask, mine, api, onResult, shell }) {
   const [value, setValue] = useState(() => (sent && sent.rating) || null);
   const [why, setWhy] = useState(() => (sent && sent.why) || '');
   const { busy, error, run } = useSend(onResult);
-  const scale = ask.scale || {};
   const unchanged = Boolean(sent) && sent.rating === value && (sent.why || '') === why.trim();
 
   const submit = () => {
@@ -357,7 +377,7 @@ function RatingAsk({ ask, mine, api, onResult, shell }) {
       <>
         <AskHead ask={ask} word={KIND_WORD.rating} />
         <RatingInput
-          question={{ scale: '1-5', lowLabel: scale.lowLabel || '', highLabel: scale.highLabel || '' }}
+          question={{ scale: '1-5', lowLabel: RATING_SCALE.lowLabel, highLabel: RATING_SCALE.highLabel }}
           value={value}
           onChange={setValue}
         />
@@ -378,8 +398,8 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
   const voted = sent.length > 0;
   const unchanged = voted && sameSet(sent, sel);
 
+  // Your own idea counts too (owner, 2026-10-06); it is marked "yours".
   const toggle = (r) => {
-    if (r.mine) return;
     if (sel.includes(r.respId)) setSel(sel.filter((x) => x !== r.respId));
     else if (!atLimit) setSel([...sel, r.respId]);
   };
@@ -401,7 +421,6 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
         {Array.from({ length: max }, (_, i) => <i key={i} className={i < sel.length ? 'bpl-slot--on' : ''} />)}
       </div>
       <button type="button" className="plr-btn" disabled={(!sel.length && !voted) || unchanged || busy} onClick={submit}>{label}</button>
-      <p className="plr-note plr-note--after bpl-center">You can't vote for your own.</p>
     </>
   );
 
@@ -429,7 +448,7 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
                   type="button"
                   role="checkbox"
                   aria-checked={on}
-                  aria-disabled={r.mine || (atLimit && !on) || undefined}
+                  aria-disabled={(atLimit && !on) || undefined}
                   className={`bpl-vrow${r.mine ? ' bpl-vrow--own' : ''}`}
                   onClick={() => toggle(r)}
                 >
@@ -654,6 +673,65 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
   );
 }
 
+/* ------------------------------------------------------ preview feedback -- */
+
+/** The newest thing Claude is showing, or null. */
+export function latestPreview(log) {
+  const shown = (log || []).filter((e) => e && e.kind === 'showing');
+  return shown.length ? shown[shown.length - 1] : null;
+}
+
+/**
+ * WHEN CLAUDE SHOWS THE WORK, THE ROOM CAN ANSWER (owner, 2026-10-04).
+ * "Looks good" goes at once; "Needs a change" asks what. It reaches the host
+ * as an idea that names the preview, once per preview per phone.
+ */
+function PreviewFeedback({ api, preview, sent, onResult }) {
+  const [changing, setChanging] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const send = async (verdict) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await sendPreviewFeedback(api, preview.logId, verdict, verdict === 'change' ? text.trim() : '');
+    setBusy(false);
+    if (!r.ok) setError(r.error);
+    onResult(r);
+  };
+  return (
+    <section className="bpl-ideas bpl-pvfb" aria-label="Feedback on the preview">
+      {/* The preview itself is the newest "Showing" line in the feed: it is
+          not repeated here (one fact, once a viewport). */}
+      <h3 className="plr-lab">What do you think of the preview?</h3>
+      {sent ? (
+        <p className="bpl-ok" role="status">Thanks. Your feedback is with the host.</p>
+      ) : (
+        <>
+          <p className="plr-help">It is the newest Showing line in the build below.</p>
+          {!changing ? (
+            <div className="bpl-fbrow">
+              <button type="button" className="bpl-send" disabled={busy} onClick={() => send('good')}>Looks good</button>
+              <button type="button" className="bpl-send bpl-send--alt" disabled={busy} onClick={() => setChanging(true)}>Needs a change</button>
+            </div>
+          ) : (
+            <>
+              <label className="bpl-label" htmlFor="bpl-pvfb-text">What should change?</label>
+              <textarea id="bpl-pvfb-text" className="plr-inp bpl-area bpl-area--short" maxLength={TEXT_MAX} value={text} onChange={(e) => setText(e.target.value)} />
+              <div className="bpl-fbrow">
+                <button type="button" className="bpl-send" disabled={busy || !text.trim()} onClick={() => send('change')}>Send</button>
+                <button type="button" className="bpl-send bpl-send--alt" disabled={busy} onClick={() => setChanging(false)}>Back</button>
+              </div>
+            </>
+          )}
+          <ErrorLine error={error} />
+        </>
+      )}
+    </section>
+  );
+}
+
 /* --------------------------------------------------------------- ideas -- */
 
 function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) {
@@ -707,7 +785,7 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) 
               {mine.map((idea) => (
                 <li key={idea.ideaId}>
                   <span className="bpl-text">{idea.text}</span>
-                  <span className={`bpl-status bpl-status--${idea.status || 'new'}`}>{IDEA_STATUS[idea.status] || IDEA_STATUS.new}</span>
+                  <span className={`bpl-status bpl-status--${idea.walled ? 'walled' : idea.status || 'new'}`}>{ideaStatusText(idea)}</span>
                 </li>
               ))}
             </ul>
@@ -796,7 +874,11 @@ export default function BuildPlayer({
     });
   }
 
+  const preview = latestPreview(view.log);
+  const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
   const ideas = (
+    <>
+    {preview && <PreviewFeedback key={preview.logId} api={api} preview={preview} sent={previewSent} onResult={onResult} />}
     <IdeaComposer
       api={api}
       ideas={view.myIdeas}
@@ -806,6 +888,7 @@ export default function BuildPlayer({
       setDraft={setIdeaDraft}
       onResult={onResult}
     />
+    </>
   );
 
   const crewOn = Boolean(view.crew && view.crew.enabled);
@@ -868,6 +951,7 @@ export default function BuildPlayer({
           <Eyebrow word={decided ? 'Decided' : 'Results'} askId={ask.askId} />
           <h2 className="plr-q bpl-text">{ask.prompt}</h2>
           {decided ? <Decided decision={ask.decision} /> : null}
+          {ask.wheel ? <PhoneWheel ask={ask} api={api} onResult={onResult} /> : null}
           <Results ask={ask} mine={mine} />
           <Whys whys={ask.results && ask.results.whys} />
           {!decided ? <p className="plr-help">The host shapes this into Claude's next step.</p> : null}

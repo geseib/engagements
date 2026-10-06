@@ -139,6 +139,7 @@ const { appendReviewEvent, readReviewLog } = require('./shared/review-log');
 const { readSnapshot, deleteSnapshot } = require('./shared/snapshot-store');
 const { setMetadataKey, toVersion } = require('./shared/set-version');
 const { settleHeldSet } = require('./shared/public-hold');
+const { recordAudit, markAuditOutcome, actorFromEvent } = require('./shared/audit-log');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
@@ -285,7 +286,7 @@ const sameSet = (source, ref) => Boolean(source)
  * nothing is still something Engage did.
  */
 async function leaveServing({
-  sk, pointer, ref, version, publicSetId, platformSetId, note, reviewer,
+  sk, pointer, ref, version, publicSetId, platformSetId, note, reviewer, audit,
 }) {
   /*
     IS ANYBODY WAITING ON A DECISION HERE? That is the whole of the gate, and
@@ -337,6 +338,16 @@ async function leaveServing({
   // What was left serving: a public listing, or Engage's own set. Named the
   // same way in the log and in the answer, so neither has to be guessed at.
   const leftServing = platformSetId || publicSetId || pointer.publicSetId || '';
+  /* THE AUDIT ENTRY, before the log and the queue move. Engage's own set has
+     no organisation, so its entry is Engage's alone. */
+  const refused = await audit('publish.leave-serving', {
+    orgId: logRef && logRef.scope === tenant.ORG ? logRef.orgId : '',
+    setId: (logRef && logRef.setId) || platformSetId || '',
+    version: logVersion === undefined ? null : logVersion,
+    title: pointer.title || '',
+    publicSetId: publicSetId || pointer.publicSetId || '',
+  });
+  if (refused) return refused;
   if (logRef) {
     await appendReviewEvent(db, TABLE(), logRef, 'left-serving', {
       version: logVersion === undefined ? null : logVersion,
@@ -372,6 +383,43 @@ exports.handler = async (event) => {
   if (input.error) return json(400, { error: input.error });
   const { sk, ref, version, decision, note, notice, publicSetId, platformSetId } = input;
   const reviewer = reviewerOf(event);
+  /*
+    THE AUDIT ENTRY (shared/audit-log.js). Every decision here is Engage staff
+    acting on an organisation's share, so it is written to that organisation's
+    log BEFORE the first write of whichever branch runs, and a failed write
+    refuses the decision. The note is the reason. A branch that is refused
+    after its entry is written stamps the entry instead of leaving it to claim
+    a decision that never landed.
+  */
+  let auditRef = null;
+  const audit = async (action, {
+    orgId = '', setId = '', version: v = null, title = '', publicSetId: pub = '', resumed = false,
+  } = {}) => {
+    try {
+      auditRef = await recordAudit(db, {
+        orgId,
+        action,
+        actor: actorFromEvent(event, 'platform-admin'),
+        // A report can outlive its listing (tests/moderation-decide.js "a row
+        // whose listing has gone is still cleared"); the entry still needs an
+        // id, so it says so rather than refusing the clean-up.
+        target: { type: 'set', id: setId || pub || 'listing-removed', title },
+        reason: note,
+        detail: {
+          setId, version: v, ...(pub ? { publicSetId: pub } : {}), ...(resumed ? { resumed: true } : {}),
+          ...(notice.length ? { notice } : {}),
+        },
+      });
+      return null;
+    } catch (e) {
+      console.error('decide refused: the audit entry could not be written:', e);
+      return json(503, { error: 'Nothing was changed: the decision could not be recorded in the audit log. Try again.' });
+    }
+  };
+  const refuseAfterAudit = async (response) => {
+    await markAuditOutcome(db, auditRef, 'refused');
+    return response;
+  };
   try {
     const row = await db.send(new GetCommand({ TableName: TABLE(), Key: queueKey(sk) }));
     if (!row || !row.Item) return json(404, { error: 'Nothing is waiting under that entry — it may already be decided.' });
@@ -379,7 +427,7 @@ exports.handler = async (event) => {
     // The one answer that is not about a publish request, so it comes before
     // every read and every branch that assumes one.
     if (decision === LEAVE) {
-      return await leaveServing({ sk, pointer, ref, version, publicSetId, platformSetId, note, reviewer });
+      return await leaveServing({ sk, pointer, ref, version, publicSetId, platformSetId, note, reviewer, audit });
     }
     /*
       A ROW STAFF'S RE-CHECK RAISED IS NOT DECIDED HERE, and the refusal comes
@@ -446,6 +494,10 @@ exports.handler = async (event) => {
       return json(409, { error: `That entry is not waiting for a decision (status: ${review.status}).`, status: review.status });
     }
 
+    const auditOrgSet = (action, extra = {}) => audit(action, {
+      orgId: ref.orgId, setId: ref.setId, version, title: pointer.title || '', ...extra,
+    });
+
     if (orphaned) {
       if (decision === 'approve') {
         const snapshot = pointer.snapshotKey ? await readSnapshot(s3, BUCKET(), pointer.snapshotKey) : null;
@@ -461,6 +513,8 @@ exports.handler = async (event) => {
         // anyone takes of it (D5).
         const promptId = (snapshot.meta && snapshot.meta.promptId) || '';
         const promptDropped = Boolean(promptId) && !(await platformPromptExists(db, TABLE(), promptId));
+        const refused = await auditOrgSet('publish.approve');
+        if (refused) return refused;
         await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, notice, orphaned: true });
         // Ruling R9 applies here exactly as it does to the ordinary path's
         // resumingApprove below: the queue row is the completion marker, so a
@@ -483,6 +537,8 @@ exports.handler = async (event) => {
         await deleteQueueRow(db, TABLE(), sk);
         return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion, orphaned: true });
       }
+      const refusedReject = await auditOrgSet('publish.reject');
+      if (refusedReject) return refusedReject;
       await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note, orphaned: true });
       await settleHeldSet(db, TABLE(), ref, { outcome: 'declined', version, reason: 'declined', note });
       if (pointer.snapshotKey) await deleteSnapshot(s3, BUCKET(), pointer.snapshotKey);
@@ -495,6 +551,8 @@ exports.handler = async (event) => {
       if (!snapshot || !sameSet(snapshot.source, ref)) {
         return json(409, { error: 'The snapshot is gone, so there is nothing to publish — ask the organisation to submit it again.' });
       }
+      const refused = await auditOrgSet('publish.approve', { resumed: true });
+      if (refused) return refused;
       const resumedNote = review.note || '';
       const resumedNotice = Array.isArray(review.notice) ? review.notice : [];
       // Ruling R11: `decided` moved to right after the transition, so a crash
@@ -523,6 +581,8 @@ exports.handler = async (event) => {
     }
 
     if (resumingReject) {
+      const refused = await auditOrgSet('publish.reject', { resumed: true });
+      if (refused) return refused;
       const resumedNote = review.note || '';
       // Ruling R11: same back-fill guard as the resumed approve above.
       const log = await readReviewLog(db, TABLE(), ref);
@@ -541,12 +601,14 @@ exports.handler = async (event) => {
       if (!snapshot || !sameSet(snapshot.source, ref)) {
         return json(409, { error: 'The snapshot is gone, so there is nothing to publish — ask the organisation to submit it again.' });
       }
+      const refused = await auditOrgSet('publish.approve');
+      if (refused) return refused;
       const moved = await transitionReview(db, TABLE(), ref, version, review.status, {
         status: STATUS.PASSED, reviewer, decidedAt, note, ...(notice.length ? { notice } : {}),
       });
       if (!moved) {
         const now = await readReview(db, TABLE(), ref, version);
-        return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status, reviewer: now.reviewer || '' });
+        return refuseAfterAudit(json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status, reviewer: now.reviewer || '' }));
       }
       // Ruling R11: logged HERE, right after the transition succeeds — not
       // after publish/stamp, which can still throw and leave a resume with
@@ -567,10 +629,12 @@ exports.handler = async (event) => {
       return json(200, { decision, publicSetId: published.publicSetId, publicVersion: published.publicVersion });
     }
 
+    const refusedFlag = await auditOrgSet('publish.reject');
+    if (refusedFlag) return refusedFlag;
     const moved = await transitionReview(db, TABLE(), ref, version, review.status, { status: STATUS.FLAGGED, reviewer, decidedAt, note });
     if (!moved) {
       const now = await readReview(db, TABLE(), ref, version);
-      return json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status, reviewer: now.reviewer || '' });
+      return refuseAfterAudit(json(409, { error: `Already decided by ${now.reviewer || 'somebody else'}.`, status: now.status, reviewer: now.reviewer || '' }));
     }
     // Ruling R11: logged HERE, right after the transition, same as approve.
     await appendReviewEvent(db, TABLE(), ref, 'decided', { version, decision, reviewer, note });
@@ -580,6 +644,7 @@ exports.handler = async (event) => {
     await deleteQueueRow(db, TABLE(), sk);
     return json(200, { decision });
   } catch (error) {
+    if (auditRef) await markAuditOutcome(db, auditRef, 'failed');
     console.error('❌ decide failed:', error);
     return json(500, { error: `Could not record that decision: ${error.message}` });
   }

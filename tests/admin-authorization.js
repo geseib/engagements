@@ -52,6 +52,7 @@ class AdminRemoveUserFromGroupCommand { constructor(i) { this.input = i; this.ty
 class AdminDeleteUserCommand { constructor(i) { this.input = i; this.type = 'deleteUser'; } }
 class AdminDisableUserCommand { constructor(i) { this.input = i; this.type = 'disableUser'; } }
 class AdminEnableUserCommand { constructor(i) { this.input = i; this.type = 'enableUser'; } }
+class AdminGetUserCommand { constructor(i) { this.input = i; this.type = 'getUser'; } }
 
 stubs.set('@aws-sdk/client-cognito-identity-provider', {
   CognitoIdentityProviderClient: class {
@@ -63,6 +64,10 @@ stubs.set('@aws-sdk/client-cognito-identity-provider', {
         throw e;
       }
       if (cmd.type === 'listUsers') return { Users: poolUsers };
+      // Read by the audit entry written before every change (audit-log.js).
+      if (cmd.type === 'getUser') {
+        return { Enabled: true, UserAttributes: [{ Name: 'sub', Value: `sub-${cmd.input.Username}` }] };
+      }
       if (cmd.type === 'listGroups') {
         return { Groups: (groupsByUser[cmd.input.Username] || []).map((g) => ({ GroupName: g })) };
       }
@@ -76,7 +81,16 @@ stubs.set('@aws-sdk/client-cognito-identity-provider', {
   AdminDeleteUserCommand,
   AdminDisableUserCommand,
   AdminEnableUserCommand,
+  AdminGetUserCommand,
 });
+/* The table the audit entry lands in (admin/shared/audit-log.js). */
+{
+  const { createPagedTable } = require('./helpers/paged-table');
+  const { dynamoModules } = require('./helpers/ddb-module-stub');
+  const ddb = dynamoModules(createPagedTable({ pageSize: 50 }));
+  stubs.set('@aws-sdk/lib-dynamodb', ddb.lib);
+  stubs.set('@aws-sdk/client-dynamodb', ddb.client);
+}
 
 process.env.USER_POOL_ID = 'us-east-1_TEST';
 

@@ -7,8 +7,10 @@ const {
   AdminDeleteUserCommand,
   AdminDisableUserCommand,
   AdminEnableUserCommand,
-  ListUsersInGroupCommand
+  ListUsersInGroupCommand,
+  AdminGetUserCommand
 } = require('@aws-sdk/client-cognito-identity-provider');
+const { GetCommand } = require('@aws-sdk/lib-dynamodb');
 
 const cognito = new CognitoIdentityProviderClient({ region: 'us-east-1' });
 const USER_POOL_ID = process.env.USER_POOL_ID;
@@ -17,6 +19,9 @@ const USER_POOL_ID = process.env.USER_POOL_ID;
 // below, before any route runs. It used to say "Skip authorization for now"
 // and never stopped skipping — see that file for what that allowed.
 const { requireAdmin } = require('./shared/require-admin');
+const tenant = require('./shared/tenant');
+const G = require('./orgs/shared/org-guards');
+const { recordAudit, markAuditOutcome, actorFromEvent } = require('./shared/audit-log');
 
 // Simple function to list all users
 async function listUsers(event) {
@@ -206,11 +211,62 @@ async function lockoutRefusal(event, username, newState) {
     + 'or nobody will be able to reach Organisations, Moderation or Accounts again.';
 }
 
+
+/* ── THE AUDIT ENTRY (shared/audit-log.js) ──────────────────────────────────
+   Every move on this screen is Engage staff acting on a person, so every move
+   is written to that person's log BEFORE it happens, and a failed write
+   refuses the move. The person is named by their Cognito sub (stable across a
+   rename, unlike the username), and the log lives in their personal space —
+   or, for an account that has none yet (every approval), in the holding
+   partition audit-log.js moves into the space when it is created. */
+
+/** What the move is called in the log, given where the account stands now. */
+function auditActionFor(newState, fromGroups, enabled) {
+  if (newState === 'delete') return 'user.delete';
+  if (newState === 'disabled') return 'user.disable';
+  if (newState === 'admins') return 'user.make-admin';
+  if (newState === 'pending') return 'user.set-pending';
+  // hosts
+  if (enabled === false) return 'user.enable';
+  if (fromGroups.includes('admins')) return 'user.remove-admin';
+  if (!fromGroups.includes('hosts')) return 'user.approve';
+  return 'user.set-host';
+}
+
+/** The account's sub, email and name, from Cognito. Throws UserNotFoundException. */
+async function accountIdentity(username) {
+  const res = await cognito.send(new AdminGetUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
+  const attrs = {};
+  (res.UserAttributes || []).forEach((a) => { attrs[a.Name] = a.Value; });
+  return {
+    sub: attrs.sub || '',
+    email: attrs.email || '',
+    name: attrs.name || [attrs.given_name, attrs.family_name].filter(Boolean).join(' '),
+    enabled: res.Enabled,
+  };
+}
+
+/** The person's own space, when they have one that is still theirs; else ''. */
+async function personalSpaceOf(sub) {
+  if (!sub) return '';
+  const res = await G.db.send(new GetCommand({
+    TableName: G.tableName(),
+    Key: { PK: tenant.userPk(sub), SK: 'PROFILE' },
+  }));
+  const orgId = G.clean(res && res.Item && res.Item.personalOrgId);
+  if (!orgId) return '';
+  const [meta, membership] = await Promise.all([G.getOrgMetadata(orgId), G.getMembership(orgId, sub)]);
+  return meta && membership ? orgId : '';
+}
+
 async function changeUserState(event) {
   console.log('Changing user state');
   
   const { username } = event.pathParameters || {};
-  const { newState } = JSON.parse(event.body || '{}');
+  const parsedBody = JSON.parse(event.body || '{}');
+  const { newState } = parsedBody;
+  // Optional, and kept: the person reads it in their own log.
+  const reason = typeof parsedBody.reason === 'string' ? parsedBody.reason.trim().slice(0, 600) : '';
   
   if (!username || !newState) {
     return {
@@ -242,75 +298,39 @@ async function changeUserState(event) {
       };
     }
 
-    // Handle delete action
-    if (newState === 'delete') {
-      await cognito.send(new AdminDeleteUserCommand({
-        UserPoolId: USER_POOL_ID,
-        Username: username
-      }));
-      
-      console.log(`User ${username} deleted`);
-      return {
-        statusCode: 200,
-        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: true, message: 'User deleted' })
-      };
-    }
-    
-    // For other states, first remove user from all groups
-    const currentGroupsResponse = await cognito.send(new AdminListGroupsForUserCommand({
+    /* THE AUDIT ENTRY, after every refusal above and before anything below.
+       If it cannot be written, nothing is changed. */
+    const who = await accountIdentity(username);
+    const fromGroupsRes = await cognito.send(new AdminListGroupsForUserCommand({
       UserPoolId: USER_POOL_ID,
       Username: username
     }));
-    
-    // Remove from all current groups
-    if (currentGroupsResponse.Groups) {
-      for (const group of currentGroupsResponse.Groups) {
-        await cognito.send(new AdminRemoveUserFromGroupCommand({
-          UserPoolId: USER_POOL_ID,
-          Username: username,
-          GroupName: group.GroupName
-        }));
-        console.log(`Removed ${username} from group ${group.GroupName}`);
-      }
-    }
-    
-    /*
-      'disabled' IS NOT A GROUP, AND NEVER WAS. This used to fall through to
-      AdminAddUserToGroup with GroupName 'disabled' — a group no template has
-      ever created (only admins/hosts/pending exist) — so EVERY reject failed
-      with Cognito's raw "Group not found". And a group could never keep the
-      confirm dialog's promise anyway: membership does not stop a sign-in.
-      Cognito's account flag does. So a reject disables the ACCOUNT — which
-      works whether or not the person ever verified their email — and moving
-      someone back to a real state switches the account on again, or a
-      re-approved host would hold the hosts group and still be locked out.
-    */
-    if (newState === 'disabled') {
-      await cognito.send(new AdminDisableUserCommand({
-        UserPoolId: USER_POOL_ID,
-        Username: username
-      }));
-      console.log(`Disabled account for ${username}`);
-    } else {
-      await cognito.send(new AdminEnableUserCommand({
-        UserPoolId: USER_POOL_ID,
-        Username: username
-      }));
-      await cognito.send(new AdminAddUserToGroupCommand({
-        UserPoolId: USER_POOL_ID,
-        Username: username,
-        GroupName: newState
-      }));
-      console.log(`Added ${username} to group ${newState}`);
+    const fromGroups = (fromGroupsRes.Groups || []).map((g) => g.GroupName);
+    let auditRef;
+    try {
+      auditRef = await recordAudit(G.db, {
+        orgId: await personalSpaceOf(who.sub),
+        action: auditActionFor(newState, fromGroups, who.enabled),
+        actor: actorFromEvent(event, 'platform-admin'),
+        target: { type: 'user', id: who.sub || username, title: who.email || who.name || username },
+        reason,
+        detail: { from: who.enabled === false ? 'disabled' : (fromGroups[0] || 'none'), to: newState },
+      });
+    } catch (auditError) {
+      console.error('Refused: the audit entry could not be written:', auditError);
+      return {
+        statusCode: 503,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Nothing was changed: the change could not be recorded in the audit log. Try again.' })
+      };
     }
 
-    return {
-      statusCode: 200,
-      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, message: `User moved to ${newState}` })
-    };
-
+    try {
+      return await applyUserState(username, newState);
+    } catch (applyError) {
+      await markAuditOutcome(G.db, auditRef, 'failed');
+      throw applyError;
+    }
   } catch (error) {
     console.error('Error changing user state:', error);
     // The one failure an admin can actually act on gets its own answer: the
@@ -328,6 +348,78 @@ async function changeUserState(event) {
       body: JSON.stringify({ error: `Could not change that account's state: ${error.message}` })
     };
   }
+}
+
+/** The Cognito half of a state change. Runs only once the audit entry exists. */
+async function applyUserState(username, newState) {
+  // Handle delete action
+  if (newState === 'delete') {
+    await cognito.send(new AdminDeleteUserCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: username
+    }));
+    
+    console.log(`User ${username} deleted`);
+    return {
+      statusCode: 200,
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ success: true, message: 'User deleted' })
+    };
+  }
+  
+  // For other states, first remove user from all groups
+  const currentGroupsResponse = await cognito.send(new AdminListGroupsForUserCommand({
+    UserPoolId: USER_POOL_ID,
+    Username: username
+  }));
+  
+  // Remove from all current groups
+  if (currentGroupsResponse.Groups) {
+    for (const group of currentGroupsResponse.Groups) {
+      await cognito.send(new AdminRemoveUserFromGroupCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: username,
+        GroupName: group.GroupName
+      }));
+      console.log(`Removed ${username} from group ${group.GroupName}`);
+    }
+  }
+  
+  /*
+    'disabled' IS NOT A GROUP, AND NEVER WAS. This used to fall through to
+    AdminAddUserToGroup with GroupName 'disabled' — a group no template has
+    ever created (only admins/hosts/pending exist) — so EVERY reject failed
+    with Cognito's raw "Group not found". And a group could never keep the
+    confirm dialog's promise anyway: membership does not stop a sign-in.
+    Cognito's account flag does. So a reject disables the ACCOUNT — which
+    works whether or not the person ever verified their email — and moving
+    someone back to a real state switches the account on again, or a
+    re-approved host would hold the hosts group and still be locked out.
+  */
+  if (newState === 'disabled') {
+    await cognito.send(new AdminDisableUserCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: username
+    }));
+    console.log(`Disabled account for ${username}`);
+  } else {
+    await cognito.send(new AdminEnableUserCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: username
+    }));
+    await cognito.send(new AdminAddUserToGroupCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: username,
+      GroupName: newState
+    }));
+    console.log(`Added ${username} to group ${newState}`);
+  }
+
+  return {
+    statusCode: 200,
+    headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ success: true, message: `User moved to ${newState}` })
+  };
 }
 
 // Handle OPTIONS preflight requests

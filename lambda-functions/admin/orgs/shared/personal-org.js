@@ -87,6 +87,7 @@ const { TransactWriteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('../../shared/tenant');
 const { createOrgDataKey } = require('../../shared/tenant-crypto');
 const G = require('./org-guards');
+const { adoptPendingAudit } = require('../../shared/audit-log');
 
 /** The groups that mean APPROVED. `pending` is deliberately absent, and so is
  *  the empty list: an account with no groups at all has not been approved
@@ -460,6 +461,22 @@ async function ensurePersonalOrg(event) {
   }
 
   console.log(`🏠 provisioned personal organisation ${orgId} for ${sub}`);
+
+  /*
+    WHAT STAFF DID BEFORE THERE WAS A SPACE TO RECORD IT IN. Approving a
+    pending account is written to USER#<sub>#AUDIT, because the account has no
+    space yet (shared/audit-log.js). Now it has one: move those entries in,
+    sealed under its new key, so the person's own log starts with who let them
+    in. A failure here costs nothing but the move — the rows stay where they
+    are, the staff index still has them, and the next creation of a space
+    would try again. It must never cost the person their console.
+  */
+  try {
+    const moved = await adoptPendingAudit(G.db, sub, orgId);
+    if (moved) console.log(`moved ${moved} audit entr${moved === 1 ? 'y' : 'ies'} into ${orgId}`);
+  } catch (error) {
+    console.warn('ensurePersonalOrg: could not move earlier audit entries:', error.message);
+  }
   return { orgId, created: true, reason: 'created' };
 }
 

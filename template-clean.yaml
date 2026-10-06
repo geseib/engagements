@@ -1530,6 +1530,14 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
       Policies:
+        # kms:Decrypt for the AUDIT LOG (admin/shared/audit-log.js): the entry
+        # written before a grant, revoke or code change seals its Title and Reason under the affected
+        # organisation's key, which needs that key unwrapped.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         # NO kms:Decrypt — amounts, windows and staff notes; nothing a tenant wrote.
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
@@ -1607,12 +1615,19 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
       Policies:
-        # NO kms:Decrypt. This function reads the ORGS index and MEMBER counts,
-        # both of which are plaintext by design, and it must not be able to
-        # unwrap any organisation's data key — the absence of this statement is
-        # part of the guarantee, not an oversight. tests/kms-grants-match-code.js
-        # derives the grant set from the require graph and will fail if this
-        # function ever pulls tenant-crypto in.
+        # kms:Decrypt, since the AUDIT LOG (2026-10-04). It used to have none:
+        # the ORGS index and MEMBER counts are plaintext by design. But a status
+        # change now writes an audit entry BEFORE it lands, sealing its Title and
+        # Reason under that organisation's key, and GET /platform/audit opens
+        # entries for staff. Every unwrap names the organisation in its
+        # encryption context, so each is one org, in CloudTrail — the "cannot do
+        # it quietly" promise holds. Organisation CONTENT (sets, sessions,
+        # answers, reports) is still not read by anything in this function.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -1630,6 +1645,17 @@ Resources:
             ApiId: !Ref RestApi
             Path: /platform/orgs/{orgId}/status
             Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # The audit log as Engage staff read it: one organisation's
+        # (?orgId=) or every staff action. Staff only — authorizer.js names it
+        # ['admins'] and the handler re-asks isPlatformAdmin.
+        PlatformAuditLog:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/audit
+            Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -1958,6 +1984,14 @@ Resources:
           TABLE_NAME: !Ref GameTable
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # kms:Decrypt for the AUDIT LOG (admin/shared/audit-log.js): the entry
+        # written before a moderation decision seals its Title and Reason under the affected
+        # organisation's key, which needs that key unwrapped.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         # Approve reads the snapshot to publish it; reject deletes it (D9).
@@ -1988,6 +2022,14 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
       Policies:
+        # kms:Decrypt for the AUDIT LOG (admin/shared/audit-log.js): the entry
+        # written before a takedown seals its Title and Reason under the affected
+        # organisation's key, which needs that key unwrapped.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -2023,6 +2065,14 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
       Policies:
+        # kms:Decrypt for the AUDIT LOG READER (GET /orgs/{orgId}/audit): an
+        # entry's Title and Reason are sealed under the organisation's key, and
+        # its own owners and admins read them in the clear.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Events:
@@ -2031,6 +2081,17 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /orgs/{orgId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # This organisation's audit log, for its owners and admins
+        # (orgs/get-org.js getAudit). On this function rather than a new one:
+        # the stack is near CloudFormation's 500-resource limit.
+        GetOrgAudit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/audit
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
@@ -2277,9 +2338,27 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # Files go with the rows that point at them (shared/artifact-sweep.js):
+          # an event item's slides, a Build Room's screenshots and patches.
+          MEDIA_BUCKET: !Ref MediaBucket
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # Delete, never read: an event's decks/ and a Build Room's builds/, and
+        # the listing of builds/<gameId>/ that finds a removed room's files.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ s3:DeleteObject ]
+              Resource:
+                - !Sub '${MediaBucket.Arn}/decks/*'
+                - !Sub '${MediaBucket.Arn}/builds/*'
+            - Effect: Allow
+              Action: [ s3:ListBucket ]
+              Resource: !GetAtt MediaBucket.Arn
+              Condition:
+                StringLike:
+                  s3:prefix: [ 'builds/*' ]
         - DynamoDBStreamReadPolicy:
             TableName: !Ref GameTable
             StreamName: !Select [3, !Split ['/', !GetAtt GameTable.StreamArn]]
@@ -5108,6 +5187,13 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # The audit entry a delete writes first seals its title and reason
+        # with the organisation's key (audit-log.js, 2026-10-04).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Environment:
@@ -5135,6 +5221,14 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 30
       Policies:
+        # kms:Decrypt for the AUDIT LOG (admin/shared/audit-log.js): the entry
+        # written before a category change seals its Title and Reason under the affected
+        # organisation's key, which needs that key unwrapped.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Environment:
@@ -5162,6 +5256,13 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 300
       Policies:
+        # The audit entry a delete writes first seals its title and reason
+        # with the organisation's key (audit-log.js, 2026-10-04).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Environment:
@@ -6477,6 +6578,14 @@ Resources:
           USER_POOL_ID: !Ref UserPoolV2
           REGION: !Ref AWS::Region
       Policies:
+        # kms:Decrypt for the AUDIT LOG (admin/shared/audit-log.js): the entry
+        # written before an account change seals its Title and Reason under the affected
+        # organisation's key, which needs that key unwrapped.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Version: '2012-10-17'

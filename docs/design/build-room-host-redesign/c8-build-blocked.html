@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C8 Build screen when the browser refuses · Build Room host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="v2.css">
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Second pass</b>
+<a href="index.html">Overview</a>
+<a href="c0-model.html">C0 The model</a>
+<a href="c1-host.html">C1 Host: Claude is building</a>
+<a href="c2-claude-asks.html">C2 Host: Claude proposes</a>
+<a href="c3-to-a-vote.html">C3 Host: ideas to a vote</a>
+<a href="c3b-mockups.html">C3b Host: the vote waits for mockups</a>
+<a href="c4-live.html">C4 Host: the room is answering</a>
+<a href="c5-decide.html">C5 Host: results and direction</a>
+<a href="c6-stage.html">C6 Stage screen</a>
+<a href="c7-build.html">C7 Build screen</a>
+<a class="here" href="c8-build-blocked.html">C8 Build screen, blocked</a>
+<a href="c9-history.html">C9 History screen</a>
+<a href="c10-artifacts.html">C10 History: artifacts</a>
+<a href="c11-phones.html">C11 Phones</a>
+<a href="c12-wrapped.html">C12 Wrapped and ended</a>
+<a href="c13-library.html">C13 Ask the room: the question library</a>
+<a href="c14-claude-gets.html">C14 What Claude gets, and the room brief</a>
+<a href="c15-set-editor.html">C15 Making a set Build Room ready</a>
+<span class="sp"></span><a href="first-pass.html">First pass</a><a href="notices.html">Notices</a><a href="scores.html">Scores</a></nav>
+<div class="pg-title"><h1>C8 · Build screen when the browser refuses</h1><p>Measured 2026-10-05: in Chromium 152 (the desktop app's browser pane), an https page framing http://localhost showed nothing, the request never reached the server, and no prompt appeared. The design needs this fallback until the owner's browsers are tested (PLAN step 0).</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Volunteer sign-up</span><div class="views"><span class="view">Host<span class=n>4</span><kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view is-on">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4821</b> · 18 here</span><span class="menu" title="Connect Claude Code, Crew, Wrap up, Report, End session">···</span></header><div class="blocked"><div><img src="img/preview.svg" alt="" style="width:100%;border-radius:12px;border:1px solid var(--m-rule)"><p class="hint" style="margin-top:8px">The newest screenshot Claude sent · 10:46</p></div>
+<div style="display:flex;flex-direction:column;gap:14px"><h2 style="margin:0;font:800 28px/1.2 var(--font-display)">This browser will not show localhost inside Engage</h2>
+<p style="margin:0;color:var(--muted);font-size:17px">Chrome and Edge ask once: "Allow access to devices on your local network". Choose Allow and reload. Safari does not allow it at all.</p>
+<div class="row"><span class="btn btn--primary">Open the build in a new tab</span><span class="btn">Try again</span></div>
+<p class="hint">In a new tab, press the Engage tab or Cmd+Tab to come back. Until then the room sees this screenshot.</p></div></div></div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Never a blank frame</h3><p>If the frame does not load within a few seconds, the screen shows the newest screenshot and the two ways forward.</p></div>
+<div class="note"><h3><b class="n">2</b>To check before building</h3><p>Chrome's local network permission prompt; Safari; Firefox; a dev server that sends X-Frame-Options (Rails and Django do by default). See PLAN step 0.</p></div>
+</div>
+
+<script src="mock.js"></script>
+</body>
+</html>

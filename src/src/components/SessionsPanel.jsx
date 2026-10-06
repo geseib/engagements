@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { deleteEvent } from '../utils/eventsApi';
+import {
+  kindOf, kindLabel, isEventRow, typeOptions, itemTitles, mergeSessions, itemKindLabel,
+  itemStateLabel, eventStateLabel, itemCountText, itemSessionPath, EVENT_KIND,
+} from '../config/engagementKinds';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
-import { resolveGameType, gameTypeLabel } from '../config/gameTypes';
 import {
-  BUILD_LABEL, isBuildSession, buildRoomPath, buildReportPath,
+  isBuildSession, buildRoomPath, buildReportPath,
 } from '../buildroom/buildHostApi';
 import Icon from './Icon';
+import DeleteReasonField, { needsReason } from './DeleteReasonField';
 import ListControls from './ListControls';
 import useListControls from '../hooks/useListControls';
 import { matchesListFilters } from '../config/listControls';
@@ -67,9 +72,17 @@ const SESSION_SORTS = {
   orders by createdAt descending — so the first paint is unchanged; rows with
   no createdAt at all sink to the end rather than masquerading as newest.
 */
+/*
+  EVENTS AND BUILD ROOMS ARE ROWS HERE TOO (2026-10-04). GET /games answers
+  the organisation's events beside its sessions; config/engagementKinds.js
+  merges them, so an event is ONE row (its item sessions sit under it and are
+  never listed again) and a Build Room is one row labelled Build Room. TYPE is
+  a filter like State; an event matches a search on any of its items' titles.
+*/
 const SESSION_LIST_CONFIG = {
-  searchFields: ['title', 'gameId', 'hostName', 'questionSetId'],
+  searchFields: ['title', 'gameId', 'hostName', 'questionSetId', itemTitles],
   axes: {
+    type: { get: kindOf },
     state: { get: (session) => (session.started ? 'played' : 'unstarted') },
   },
   sorts: SESSION_SORTS,
@@ -85,6 +98,8 @@ export function matchesSessionFilters(session, filters) {
 
 export default function SessionsPanel({
   environment,
+  /** (code, title) => void — open an event in the console's Events place. */
+  onOpenEvent,
   /** How many question sets are inactive, when the page knows. Optional: an
    *  empty state that states "0 of 0 sets" while the list is loading is an
    *  empty state that lies. */
@@ -97,6 +112,24 @@ export default function SessionsPanel({
   const [busyId, setBusyId] = useState(null);
   const [confirmAll, setConfirmAll] = useState(false);
   const [typed, setTyped] = useState('');
+  /*
+    THE OWNER'S DELETE RULE (2026-10-04). Each row says the role this caller
+    would delete it in (`deleteAs`, from GET /games): its host, an owner or
+    admin of the team, or Engage staff — who must give a reason. `reasonFor`
+    is the row whose inline confirm is asking for that reason; `deleteAllAs`
+    is the same answer for Delete all.
+  */
+  const [reasonFor, setReasonFor] = useState(null);
+  const [reasonText, setReasonText] = useState('');
+  const [deleteAllAs, setDeleteAllAs] = useState(undefined);
+  const [allReason, setAllReason] = useState('');
+  /** The event rows whose agenda items are showing. */
+  const [openEvents, setOpenEvents] = useState(() => new Set());
+  const toggleEvent = (code) => setOpenEvents((prev) => {
+    const next = new Set(prev);
+    if (next.has(code)) next.delete(code); else next.add(code);
+    return next;
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,7 +139,8 @@ export default function SessionsPanel({
       if (!response.ok) {
         throw new Error(data.error || `Could not load sessions (HTTP ${response.status})`);
       }
-      setSessions(Array.isArray(data.games) ? data.games : []);
+      setSessions(mergeSessions(data));
+      setDeleteAllAs(data.deleteAllAs);
       setError(null);
     } catch (err) {
       console.error('Error loading sessions:', err);
@@ -122,10 +156,18 @@ export default function SessionsPanel({
 
   /* ---------------------------------------------------------------- deletes */
 
-  const deleteOne = async (session) => {
+  /** Delete, or — for Engage staff — open the row's inline confirm with its reason field. */
+  const deleteOne = async (session, reason = '') => {
+    if (session.deleteAs === 'platform-admin' && !reason) {
+      setReasonText('');
+      setReasonFor(session.gameId);
+      return;
+    }
+    if (isEventRow(session)) { await deleteOneEvent(session, reason); return; }
     const name = session.title || 'this session';
     if (
-      !window.confirm(
+      !reason
+      && !window.confirm(
         `Delete ${name} (${session.gameId})?\n\nEvery answer, vote and player record stored under this session goes with it. The question set it was built from is not touched.`
       )
     ) {
@@ -135,13 +177,19 @@ export default function SessionsPanel({
     try {
       const response = await authFetch(
         adminApiUrl(`admin/clear-game/${encodeURIComponent(session.gameId)}`),
-        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+        }
       );
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (result.code === 'reason_required') { setReasonFor(session.gameId); return; }
         throw new Error(result.error || `Could not delete ${session.gameId}`);
       }
       setSessions((prev) => prev.filter((item) => item.gameId !== session.gameId));
+      setReasonFor(null);
       setError(null);
     } catch (err) {
       console.error('Delete session error:', err);
@@ -151,21 +199,70 @@ export default function SessionsPanel({
     }
   };
 
+  /*
+    AN EVENT GOES THROUGH ITS OWN ROUTE (DELETE /events/{code}), which takes
+    its agenda, its join code, its attendees, its slides and the sessions its
+    items ran. Saved reports stay, as they do for any session. Refused while an
+    item is running, with the server's sentence.
+  */
+  const deleteOneEvent = async (event, reason = '') => {
+    const name = event.title || `event ${event.gameId}`;
+    if (
+      !reason
+      && !window.confirm(
+        `Delete ${name} (${event.gameId})?\n\nIts agenda, its join code and the sessions its items ran go with it, with every answer in them. Saved reports are kept.`
+      )
+    ) {
+      return;
+    }
+    setBusyId(event.gameId);
+    try {
+      await (reason ? deleteEvent(event.gameId, { reason }) : deleteEvent(event.gameId));
+      setSessions((prev) => prev.filter((item) => item.gameId !== event.gameId));
+      setReasonFor(null);
+      setError(null);
+    } catch (err) {
+      if (needsReason(err)) { setReasonFor(event.gameId); return; }
+      setError(err.message || `Could not delete ${name}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const deleteAll = async () => {
     setBusyId('__all__');
     try {
+      /*
+        EVENTS FIRST, EACH THROUGH ITS OWN ROUTE, so its item sessions go with
+        it; clear-all-games then deletes the sessions a host made and leaves
+        any event's. An event with an item running is refused and kept — and
+        named, so nobody thinks it went.
+      */
+      const kept = [];
+      for (const event of sessions.filter(isEventRow)) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await (allAsStaff ? deleteEvent(event.gameId, { reason: allReason.trim() }) : deleteEvent(event.gameId));
+        } catch (err) {
+          kept.push(event);
+        }
+      }
       const response = await authFetch(adminApiUrl('admin/clear-all-games'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        ...(allAsStaff ? { body: JSON.stringify({ reason: allReason.trim() }) } : {}),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(result.error || 'Could not delete the sessions');
       }
-      setSessions([]);
-      setError(null);
+      setSessions(kept);
+      setError(kept.length
+        ? `Kept ${kept.map((e) => e.title || e.gameId).join(', ')}: an item is running. End it on the stage, then delete the event.`
+        : null);
       setConfirmAll(false);
       setTyped('');
+      setAllReason('');
     } catch (err) {
       console.error('Delete all sessions error:', err);
       setError(err.message || 'Failed to delete sessions');
@@ -177,7 +274,7 @@ export default function SessionsPanel({
   /* --------------------------------------------------------------- the list */
 
   const {
-    state: { search, state: stateFilter, sort },
+    state: { search, type: typeFilter, state: stateFilter, sort },
     set,
     shown,
     drops,
@@ -187,11 +284,202 @@ export default function SessionsPanel({
   } = useListControls(sessions, SESSION_LIST_CONFIG, {
     labels: {
       search: (needle) => `Search “${needle}”`,
+      type: (value) => `Type: ${kindLabel(value)}`,
       state: (value) => `State: ${value === 'played' ? 'Played' : 'Never started'}`,
     },
   });
 
-  const armed = typed.trim() === DELETE_ALL_PHRASE;
+  const allAsStaff = deleteAllAs === 'platform-admin';
+  const armed = typed.trim() === DELETE_ALL_PHRASE && (!allAsStaff || allReason.trim().length > 0);
+
+  /*
+    ONE SESSION'S ROW — unchanged from before events were rows, apart from the
+    type chip coming from config/engagementKinds.js (resolveGameType inside,
+    so a legacy row with no type still reads "—", never "Call & Answer").
+  */
+  /*
+    STAFF'S INLINE CONFIRM — the row's own delete confirm, asking for the
+    reason (2026-10-04). Under the row it is about, never a dialog over it.
+  */
+  const renderReasonRow = (row) => (reasonFor === row.gameId ? (
+    <tr key={`${row.gameId}-reason`} className="sp-reasonrow" data-testid="reason-row">
+      <td colSpan={9}>
+        <div className="sp-reason">
+          <p className="sp-reason-q">
+            Delete <b>{row.title || row.gameId}</b>? {isEventRow(row)
+              ? 'Its agenda, its join code and the sessions its items ran go with it. Saved reports are kept.'
+              : 'Every answer, vote and player record stored under it goes with it.'}
+          </p>
+          <DeleteReasonField
+            id={`sp-reason-${row.gameId}`}
+            value={reasonText}
+            onChange={setReasonText}
+            scope="sp"
+            labelClass="sp-reason-label"
+            hintClass="sp-dim"
+          />
+          <div className="sp-reason-acts">
+            <button type="button" className="sp-btn sp-btn--sm" onClick={() => setReasonFor(null)}>Keep it</button>
+            <button
+              type="button"
+              className="sp-btn sp-btn--sm sp-btn--dangersolid"
+              disabled={!reasonText.trim() || busyId === row.gameId}
+              onClick={() => deleteOne(row, reasonText.trim())}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  ) : null);
+
+  /** Delete, or — when this caller may not — the same button, disabled, saying who may. */
+  const deleteButton = (row, busy) => (
+    <button
+      type="button"
+      className="sp-btn sp-btn--sm sp-btn--ghostdanger"
+      disabled={busy || row.deleteAs === ''}
+      title={row.deleteAs === '' ? 'Only the host who created it, or an owner or admin of this team, can delete it.' : undefined}
+      onClick={() => deleteOne(row)}
+    >
+      Delete
+    </button>
+  );
+
+  const renderSession = (session) => {
+    const kind = kindOf(session);
+    const busy = busyId === session.gameId;
+    return [(
+      <tr key={session.gameId} className={busy ? 'sp-busy' : undefined}>
+        <td>
+          <span className="sp-nm">{session.title || 'Untitled session'}</span>
+          <span className="sp-sub">
+            {session.questionSetId ? `Set: ${session.questionSetId}` : 'Set: —'}
+            {session.hostName ? ` · host ${session.hostName}` : ''}
+          </span>
+        </td>
+        <td className="sp-mono">{session.gameId}</td>
+        <td>
+          {kind ? <span className="sp-chip sp-chip--type">{kindLabel(kind)}</span> : '—'}
+        </td>
+        <td>
+          <span className={`sp-chip ${session.started ? 'sp-chip--on' : 'sp-chip--off'}`}>
+            {session.started ? 'Played' : 'Never started'}
+          </span>
+        </td>
+        {/* null, never 0 — "we could not read it" is not "nobody
+            joined". get-games-list sends null when its per-session
+            read failed or the row predates the counts. */}
+        <td className="sp-num">{countOrDash(session.playerCount)}</td>
+        <td className="sp-num">{countOrDash(session.roundsPlayed)}</td>
+        <td className="sp-when">{formatWhen(session.createdAt)}</td>
+        <td className="sp-when">{formatWhen(session.lastPlayedAt)}</td>
+        <td>
+          <div className="sp-rowact">
+            {isBuildSession(session) && (
+              <>
+                <a className="sp-btn sp-btn--sm" href={buildRoomPath(session.gameId)}>Open</a>
+                <a className="sp-btn sp-btn--sm" href={buildReportPath(session.gameId)}>Report</a>
+              </>
+            )}
+            {deleteButton(session, busy)}
+          </div>
+        </td>
+      </tr>
+    ), renderReasonRow(session)];
+  };
+
+  /*
+    AN EVENT'S ROW, AND — OPENED — ITS AGENDA. The same columns a session
+    fills where they mean the same thing: Players is the event's joins, Rounds
+    belongs to its items. The disclosure is a real button in the name cell
+    (aria-expanded), not a hover, so it reaches a keyboard and a touch screen.
+    Each item row says its kind and state, and an engagement's session — when
+    it has one — opens on the host's stage inside the event, or says it has
+    expired.
+  */
+  const renderEvent = (event) => {
+    const busy = busyId === event.gameId;
+    const open = openEvents.has(event.gameId);
+    const itemsId = `sp-items-${event.gameId}`;
+    const rows = [
+      <tr key={event.gameId} className={busy ? 'sp-busy' : undefined} data-testid="event-row">
+        <td>
+          <button
+            type="button"
+            className="sp-disclose"
+            aria-expanded={open}
+            aria-controls={itemsId}
+            onClick={() => toggleEvent(event.gameId)}
+            title={event.title || 'Untitled event'}
+          >
+            <Icon name={open ? 'CaretDown' : 'CaretRight'} weight="bold" size={12} color="currentColor" />
+            <span className="sp-nm">{event.title || 'Untitled event'}</span>
+          </button>
+          <span className="sp-sub">
+            {itemCountText(event.itemCount)}
+            {event.place ? ` · ${event.place}` : ''}
+          </span>
+        </td>
+        <td className="sp-mono">{event.gameId}</td>
+        <td><span className="sp-chip sp-chip--type">{kindLabel(EVENT_KIND)}</span></td>
+        <td>
+          <span className={`sp-chip ${event.started ? 'sp-chip--on' : 'sp-chip--off'}`}>
+            {eventStateLabel(event)}
+          </span>
+        </td>
+        <td className="sp-num">{countOrDash(event.playerCount)}</td>
+        <td className="sp-num">—</td>
+        <td className="sp-when">{formatWhen(event.createdAt)}</td>
+        <td className="sp-when">{formatWhen(event.lastPlayedAt)}</td>
+        <td>
+          <div className="sp-rowact">
+            {onOpenEvent && (
+              <button type="button" className="sp-btn sp-btn--sm" onClick={() => onOpenEvent(event.gameId, event.title)}>
+                Open
+              </button>
+            )}
+            {deleteButton(event, busy)}
+          </div>
+        </td>
+      </tr>,
+      renderReasonRow(event),
+    ];
+    if (open) {
+      (event.items || []).forEach((item, n) => {
+        const s = item.session;
+        rows.push(
+          <tr key={`${event.gameId}-${item.itemId}`} className="sp-subrow" id={n === 0 ? itemsId : undefined} data-testid="event-item-row">
+            <td>
+              <span className="sp-nm">{item.title || (item.decryptFailed ? 'Unreadable item' : itemKindLabel(item.type))}</span>
+              <span className="sp-sub">{item.minutes ? `${item.minutes} min` : '—'}</span>
+            </td>
+            <td className="sp-mono">{s ? s.gameId : '—'}</td>
+            <td><span className="sp-chip sp-chip--type">{itemKindLabel(item.type)}</span></td>
+            <td>
+              <span className={`sp-chip ${item.state === 'planned' ? 'sp-chip--off' : 'sp-chip--on'}`}>
+                {itemStateLabel(item.state)}
+              </span>
+            </td>
+            <td className="sp-num">{s ? countOrDash(s.playerCount) : '—'}</td>
+            <td className="sp-num">{s ? countOrDash(s.roundsPlayed) : '—'}</td>
+            <td className="sp-when">{formatWhen(item.startedAt)}</td>
+            <td className="sp-when">{formatWhen(item.endedAt)}</td>
+            <td>
+              <div className="sp-rowact">
+                {s && (
+                  <a className="sp-btn sp-btn--sm" href={itemSessionPath(s.gameId, event.gameId)}>Open session</a>
+                )}
+                {item.sessionGone && <span className="sp-chip sp-chip--off">Session expired</span>}
+              </div>
+            </td>
+          </tr>,
+        );
+      });
+    }
+    return rows;
+  };
 
   return (
     <div className="sp">
@@ -252,6 +540,13 @@ export default function SessionsPanel({
             }}
             selects={[
               {
+                key: 'type',
+                value: typeFilter,
+                onChange: (value) => set({ type: value }),
+                ariaLabel: 'Filter by type',
+                options: typeOptions(sessions),
+              },
+              {
                 key: 'state',
                 value: stateFilter,
                 onChange: (value) => set({ state: value }),
@@ -279,17 +574,20 @@ export default function SessionsPanel({
               shown.length !== sessions.length ? ` · ${shown.length} shown` : ''
             }`}
           >
+            {deleteAllAs !== '' && (
             <button
               type="button"
               className="sp-btn sp-btn--danger"
               onClick={() => {
                 setTyped('');
+                setAllReason('');
                 setConfirmAll(true);
               }}
             >
               <Icon name="Trash" weight="bold" size={14} color="currentColor" />
               Delete all sessions…
             </button>
+            )}
           </ListControls>
 
           {shown.length === 0 ? (
@@ -344,65 +642,7 @@ export default function SessionsPanel({
               </tr>
             </thead>
             <tbody>
-              {shown.map((session) => {
-                /*
-                  resolveGameType, not normalizeGameType. The latter always
-                  returns something — its documented job — which would print
-                  "Call & Answer" on every legacy row whose GameType was never
-                  written. "We do not know" has to survive as "we do not know".
-                */
-                const type = resolveGameType(session.gameType);
-                const busy = busyId === session.gameId;
-                return (
-                  <tr key={session.gameId} className={busy ? 'sp-busy' : undefined}>
-                    <td>
-                      <span className="sp-nm">{session.title || 'Untitled session'}</span>
-                      <span className="sp-sub">
-                        {session.questionSetId ? `Set: ${session.questionSetId}` : 'Set: —'}
-                        {session.hostName ? ` · host ${session.hostName}` : ''}
-                      </span>
-                    </td>
-                    <td className="sp-mono">{session.gameId}</td>
-                    <td>
-                      {/* A Build Room is deliberately not a config/gameTypes.js type
-                          (resolveGameType answers null), so it is named here. */}
-                      {isBuildSession(session)
-                        ? <span className="sp-chip sp-chip--type">{BUILD_LABEL}</span>
-                        : type ? <span className="sp-chip sp-chip--type">{gameTypeLabel(type)}</span> : '—'}
-                    </td>
-                    <td>
-                      <span className={`sp-chip ${session.started ? 'sp-chip--on' : 'sp-chip--off'}`}>
-                        {session.started ? 'Played' : 'Never started'}
-                      </span>
-                    </td>
-                    {/* null, never 0 — "we could not read it" is not "nobody
-                        joined". get-games-list sends null when its per-session
-                        read failed or the row predates the counts. */}
-                    <td className="sp-num">{countOrDash(session.playerCount)}</td>
-                    <td className="sp-num">{countOrDash(session.roundsPlayed)}</td>
-                    <td className="sp-when">{formatWhen(session.createdAt)}</td>
-                    <td className="sp-when">{formatWhen(session.lastPlayedAt)}</td>
-                    <td>
-                      <div className="sp-rowact">
-                        {isBuildSession(session) && (
-                          <>
-                            <a className="sp-btn sp-btn--sm" href={buildRoomPath(session.gameId)}>Open</a>
-                            <a className="sp-btn sp-btn--sm" href={buildReportPath(session.gameId)}>Report</a>
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          className="sp-btn sp-btn--sm sp-btn--ghostdanger"
-                          disabled={busy}
-                          onClick={() => deleteOne(session)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {shown.map((session) => (isEventRow(session) ? renderEvent(session) : renderSession(session)))}
             </tbody>
           </table>
           )}
@@ -481,6 +721,16 @@ export default function SessionsPanel({
                   onChange={(event) => setTyped(event.target.value)}
                 />
               </div>
+              {allAsStaff && (
+                <DeleteReasonField
+                  id="sp-delall-reason"
+                  value={allReason}
+                  onChange={setAllReason}
+                  scope="sp"
+                  labelClass="sp-reason-label"
+                  hintClass="sp-dim"
+                />
+              )}
             </div>
 
             <footer>

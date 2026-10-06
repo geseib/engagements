@@ -3,7 +3,9 @@ const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/l
 const { batchDeleteKeys } = require('./shared/ddb-delete');
 const {
   GAMES_RESERVATION_PK, gamesIndexPk, callerOrgId,
+  deleteRole, deleteRefusal, cleanDeleteReason, deleteActor,
 } = require('./shared/tenant');
+const { recordAudit } = require('./shared/audit-log');
 
 /**
  * DELETE THIS ORGANISATION'S SESSIONS.
@@ -47,8 +49,8 @@ const cors = {
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Engage-Org',
 };
 
-/** Every key in one partition, paginated. */
-async function partitionKeys(pk) {
+/** Every key in one partition, paginated (and an index row's EventRef, when asked). */
+async function partitionKeys(pk, projection = 'PK, SK') {
   const keys = [];
   let ExclusiveStartKey;
   do {
@@ -57,10 +59,12 @@ async function partitionKeys(pk) {
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk',
       ExpressionAttributeValues: { ':pk': pk },
-      ProjectionExpression: 'PK, SK',
+      ProjectionExpression: projection,
       ExclusiveStartKey,
     }));
-    for (const item of res.Items || []) keys.push({ PK: item.PK, SK: item.SK });
+    for (const item of res.Items || []) {
+      keys.push(item.EventRef ? { PK: item.PK, SK: item.SK, EventRef: item.EventRef } : { PK: item.PK, SK: item.SK });
+    }
     ExclusiveStartKey = res.LastEvaluatedKey;
   } while (ExclusiveStartKey);
   return keys;
@@ -74,6 +78,17 @@ async function isEventReservation(gameId) {
     ConsistentRead: true,
   }));
   return Boolean(res && res.Item && res.Item.Kind === 'event');
+}
+
+/** Does this session's METADATA say it is an event item's? */
+async function isEventItemSession(gameId) {
+  const res = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+    ProjectionExpression: 'EventRef',
+    ConsistentRead: true,
+  }));
+  return Boolean(res && res.Item && res.Item.EventRef);
 }
 
 exports.handler = async (event) => {
@@ -93,11 +108,46 @@ exports.handler = async (event) => {
     };
   }
 
+  /*
+    WHO MAY (the owner, 2026-10-04): an owner or admin of this organisation,
+    or Engage staff giving a reason. Nobody else — there is no host of "all
+    the sessions". The route was staff-only before (the authorizer's default
+    for admin routes); it is now open to hosts so an org's own owner and admins can
+    reach it, and this is the check that decides.
+  */
+  let body = {};
+  try { body = JSON.parse(event.body || '{}') || {}; } catch (e) { body = {}; }
+  const reason = cleanDeleteReason(body.reason);
+  const role = deleteRole(event, { orgId });
+  const refused = deleteRefusal(role, reason);
+  if (refused) {
+    const error = refused.code === 'not_allowed'
+      ? 'Only an owner or admin of this organisation, or Engage staff giving a reason, can delete all its sessions.'
+      : refused.error;
+    return { statusCode: refused.status, headers: cors, body: JSON.stringify({ success: false, code: refused.code, error }) };
+  }
+
   console.log(`🗑️ Clearing sessions for ${orgId}`);
 
   try {
     // The org's own index tells us which sessions are its own. Nothing else can.
-    const indexRows = await partitionKeys(gamesIndexPk(orgId));
+    const allIndexRows = await partitionKeys(gamesIndexPk(orgId), 'PK, SK, EventRef');
+    /*
+      AN EVENT ITEM'S SESSION IS THE EVENT'S TO DELETE (2026-10-04). Every
+      list files it under its event, and the event's agenda points at it; the
+      console deletes events through their own route (DELETE /events/{code}),
+      which takes their item sessions with them. So it is left out here,
+      index row and all — found by the index row's EventRef (written since
+      2026-10-04) or, for an older row, by its METADATA.
+    */
+    const indexRows = [];
+    let eventItems = 0;
+    for (const row of allIndexRows) {
+      const gameId = String(row.SK || '').replace(/^GAME#/, '');
+      // eslint-disable-next-line no-await-in-loop
+      if (row.EventRef || (gameId && await isEventItemSession(gameId))) { eventItems += 1; continue; }
+      indexRows.push({ PK: row.PK, SK: row.SK });
+    }
     const gameIds = indexRows
       .map((k) => String(k.SK || '').replace(/^GAME#/, ''))
       .filter(Boolean);
@@ -125,6 +175,25 @@ exports.handler = async (event) => {
       keys.push({ PK: GAMES_RESERVATION_PK, SK: `GAME#${gameId}` });
     }
 
+    // THE AUDIT ENTRY, BEFORE ANYTHING IS DELETED. No entry, no delete.
+    try {
+      await recordAudit(db, {
+        orgId,
+        action: 'sessions.delete-all',
+        actor: deleteActor(event, role),
+        target: { type: 'organisation', id: orgId, title: '' },
+        reason: role === 'platform-admin' ? reason : '',
+        detail: { sessions: gameIds.length, eventSessionsKept: eventItems },
+      });
+    } catch (error) {
+      console.error(`❌ clear-all-games: the audit entry for ${orgId} could not be written; nothing was deleted:`, error && error.message);
+      return {
+        statusCode: 500,
+        headers: cors,
+        body: JSON.stringify({ success: false, error: 'Could not record who is deleting these sessions, so nothing was deleted. Try again.' }),
+      };
+    }
+
     const totalDeleted = await batchDeleteKeys(db, process.env.TABLE_NAME, keys);
     console.log(`✅ Deleted ${totalDeleted} rows across ${gameIds.length} sessions for ${orgId}`);
 
@@ -136,6 +205,8 @@ exports.handler = async (event) => {
         message: `Deleted ${gameIds.length} session${gameIds.length === 1 ? '' : 's'}.`,
         sessionsDeleted: gameIds.length,
         itemsDeleted: totalDeleted,
+        // Kept: sessions that belong to an event (delete the event instead).
+        eventSessionsKept: eventItems,
         orgId,
       }),
     };

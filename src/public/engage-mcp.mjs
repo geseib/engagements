@@ -20,13 +20,18 @@
  *   ENGAGE_POLL_MS  (optional) wait_for_room poll interval in ms, default 3000
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = '1.1.0';
+// THE PLUGIN'S VERSION. Bump it with every change to this file:
+// --install-plugin compares it with what Claude Code has installed to decide
+// install / update / "you're all set", so a change shipped under the same
+// version would never reach a laptop that already has the plugin.
+// tests/engage-plugin-version.js fails until the version and its pin move.
+const VERSION = '1.6.2';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -219,7 +224,7 @@ function renderResults(ask) {
     const sc = ask.scale || {};
     const avg = typeof rt.avg === 'number' ? rt.avg.toFixed(1) : '—';
     lines.push(`Results: average ${avg} / ${sc.max || 5} from ${rt.count || 0} rating${rt.count === 1 ? '' : 's'}` +
-      (sc.lowLabel || sc.highLabel ? `  (1 = ${s(sc.lowLabel) || 'low'}, ${sc.max || 5} = ${s(sc.highLabel) || 'high'})` : ''));
+      `  (1 = ${s(sc.lowLabel) || 'Needs work'}, ${sc.max || 5} = ${s(sc.highLabel) || 'Great'})`);
     if (Array.isArray(rt.dist)) lines.push('  ' + rt.dist.map((n, i) => `${i + 1}: ${n}`).join('   '));
   } else {
     const ranked = Array.isArray(r.ranked) ? r.ranked : [];
@@ -251,20 +256,15 @@ function renderAsk(ask, { heading = true } = {}) {
     lines.push(`Status: ${statusLine(ask)}`);
   }
   const d = ask.decision;
+  // DECIDED: THE QUESTION AND THE ANSWER, NOTHING ELSE (owner, 2026-10-06:
+  // "Claude only needs question/answer: What should the background color be:
+  // blue"). How it was decided (a vote, the wheel, the host's pick, said out
+  // loud) is the room's record, and the tally is not Claude's to re-read.
   if (d && (ask.status === 'decided' || d.direction)) {
-    lines.push('', 'THE HOST\'S DIRECTION (final — build this):', `  ${s(d.direction) || '(no direction text)'}`);
-    if (Array.isArray(d.chosen) && d.chosen.length) {
-      const names = d.chosen.map(c => {
-        const o = (ask.options || []).find(o => o.label === c);
-        if (o) return `Choice ${c} — ${s(o.title)}`;
-        const resp = (ask.responses || []).find(x => x.respId === c) || ((ask.results || {}).ranked || []).find(x => x.respId === c);
-        return resp ? `"${s(resp.text)}"` : c;
-      });
-      lines.push(`  Chosen: ${names.join('; ')}`);
-    }
-    if (d.note) lines.push(`  Host's note: ${s(d.note)}`);
+    lines.push('', 'THE ROOM DECIDED (final — build this):', `  ${s(d.direction) || '(no direction text)'}`);
+    if (d.note) lines.push(`  Also from the room: ${s(d.note)}`);
   }
-  if (ask.status !== 'proposed') { lines.push(''); lines.push(renderResults(ask)); }
+  if (ask.status !== 'proposed' && ask.status !== 'decided') { lines.push(''); lines.push(renderResults(ask)); }
   return lines.join('\n');
 }
 
@@ -482,7 +482,7 @@ const TOOLS = [
   },
   {
     name: 'ask_room_to_choose',
-    description: 'Ask the room to pick between 2–6 concrete options (a poll). Engage assigns the labels Choice A, B, C… and returns a badge snippet for each. Create this ask BEFORE showing mockups, then stamp each mockup with exactly the letter returned so the wall and the phones match what is on screen. Returns an askId; then call wait_for_room.',
+    description: 'Ask the room to pick between 2–6 concrete options (a poll). Engage assigns the labels Choice A, B, C… and returns a badge snippet for each. Create this ask BEFORE showing mockups, then stamp each mockup with exactly the letter returned so the wall and the phones match what is on screen. When the options can be SEEN (a layout, a look, a screen, words on a page), attach a screenshot of each to its option with share_image BEFORE you call wait_for_room: the host reviews the ask with those pictures, and the room votes on them. Returns an askId.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -512,14 +512,12 @@ const TOOLS = [
   },
   {
     name: 'ask_room_to_rate',
-    description: 'Take a quick 1–5 pulse from the room, e.g. "How close is this to what we want?". Use to check direction after showing something, not for choosing between options. Returns an askId; then call wait_for_room.',
+    description: 'Take a quick 1–5 pulse from the room, e.g. "How close is this to what we want?". The scale is fixed: 1 needs work, 5 is great. Use to check direction after showing something, not for choosing between options. Returns an askId; then call wait_for_room.',
     inputSchema: {
       type: 'object',
       properties: {
         question: str('The question, short and readable on a projector.', { minLength: 1, maxLength: 300 }),
         context: str('Optional background shown under the question.', { maxLength: 1000 }),
-        lowLabel: str('Optional label for 1, e.g. "Way off".', { maxLength: 60 }),
-        highLabel: str('Optional label for 5, e.g. "Nailed it".', { maxLength: 60 }),
       },
       required: ['question'],
       additionalProperties: false,
@@ -963,16 +961,23 @@ const HANDLERS = {
     for (const o of labelled) lines.push('', `Choice ${o.label}:`, badgeSnippet(o.label));
     lines.push('', 'Then tell the host the local URL of each variant (e.g. "Choice A → http://localhost:<port>/a"), ' +
       'and post_update with kind "showing" when they are ready to flip through.');
+    // The host reviews a proposed ask BEFORE the room sees it, and judges it by
+    // what each option shows (owner, 2026-10-04: "shouldn't the preview
+    // mockups be prepopulated?"). So the pictures come first, the wait second.
+    lines.push('', 'PREVIEWS BEFORE YOU WAIT: if these options can be seen (a layout, a look, a screen, words on a page), ' +
+      'build a quick mockup of each NOW, stamp it with its letter, screenshot it, and share_image it onto its option ' +
+      `(askId "${ask.askId}", label ${labelled.map((o) => o.label).join(', ')}). Only then call wait_for_room. ` +
+      'The host reviews this ask with those pictures and the room votes on them. ' +
+      'If the choice is not something you can show, skip the mockups and say so in one line to the host (post_update).');
     return createdAskText(ask, res.inbox, lines.join('\n'));
   },
 
   async ask_room_to_rate(args, ctx) {
     const body = clean({
       kind: 'rating', prompt: reqStr(args, 'question'), detail: optStr(args, 'context'),
-      lowLabel: optStr(args, 'lowLabel'), highLabel: optStr(args, 'highLabel'),
     });
     const res = await api('POST', 'asks', body, ctx.signal);
-    return createdAskText(res.ask || {}, res.inbox, 'The room will rate 1–5 and can add a short "why".');
+    return createdAskText(res.ask || {}, res.inbox, 'The room will rate 1–5 (1 needs work, 5 is great) and can add a short "why".');
   },
 
   async wait_for_room(args, ctx) {
@@ -999,6 +1004,10 @@ const HANDLERS = {
       collect(res.inbox);
       ask = res.ask || {};
       if (ask.status === 'decided' || ask.status === 'discarded') break;
+      // A direction from the host while you wait (e.g. "make mockups for this
+      // ask") must not sit unread for the rest of the wait: return it now.
+      // The decision of THIS ask is not such an item; it ends the wait above.
+      if (inbox.some((d) => String(d.askId || '') !== String(ask.askId || id) || !d.askId)) break;
       if (ask.status !== lastStatus || n % 5 === 0) {
         const t = (ask.results || {}).total || 0;
         ctx.progress(Math.round((Date.now() - started) / 1000), maxWait,
@@ -1019,6 +1028,11 @@ const HANDLERS = {
       return ok(`The host discarded ask ${ask.askId} ("${s(ask.prompt)}"). ` +
         'Do not wait on it; carry on with your own judgement, or ask a better-framed question if the decision still matters.' +
         (ask.decision && ask.decision.note ? `\nHost's note: ${s(ask.decision.note)}` : ''), inbox);
+    }
+    const directed = inbox.filter((d) => String(d.askId || '') !== String(ask.askId || id) || !d.askId);
+    if (directed.length) {
+      return ok(`The host sent you a direction while you waited on ask ${ask.askId || id} (it is ${statusLine(ask)}). ` +
+        `Act on it now, then call wait_for_room with askId "${ask.askId || id}" again.`, inbox);
     }
     return ok(`Still waiting after ${Math.round((Date.now() - started) / 1000)}s — ask ${ask.askId || id} is not decided yet.\n\n` +
       `${renderAsk(ask)}\n\n` +
@@ -1088,7 +1102,9 @@ const HANDLERS = {
     const r = gitCheckpoint(projectDir(), message);
     if (r.error) return { content: [{ type: 'text', text: `Could not checkpoint: ${r.error}` }], isError: true };
     if (!r.hash) return ok(`Nothing to commit${r.initialized ? ' (made this folder a git repository first)' : ''}. The work is already saved as ${r.head || 'the last checkpoint'}.`);
-    const res = await api('POST', 'log', { kind: 'checkpoint', text: message, detail: `commit ${r.hash} · ${r.files} file${r.files === 1 ? '' : 's'}` }, ctx.signal);
+    // fromTool: Claude reads this answer, so it may carry the host's directions
+    // (the Stop hook's checkpoint below does not, and never takes them).
+    const res = await api('POST', 'log', { kind: 'checkpoint', text: message, detail: `commit ${r.hash} · ${r.files} file${r.files === 1 ? '' : 's'}`, fromTool: true }, ctx.signal);
     return ok(`${r.initialized ? 'Made this folder a git repository, then saved' : 'Saved'} ${r.files} changed file${r.files === 1 ? '' : 's'} as commit ${r.hash}: "${message}". The room's timeline shows it.`, res.inbox);
   },
 
@@ -1446,6 +1462,7 @@ const PROMPTS = [
     ] },
   { name: 'wrap-up', description: 'Summarise what was built, write the session outcome and post a final milestone.', arguments: [] },
   { name: 'continue', description: 'Pick up the host\'s latest direction from the Build Room and keep going; then listen for the next one.', arguments: [] },
+  { name: 'preview', description: 'Build and serve a local preview of the work so far, put the link on the host\'s screen, and screenshot it for the room.', arguments: [] },
   { name: 'join', description: 'Builder: join the crew from this folder. Get the room\'s code and base branch, make your branch, run it, report to the board, and pick a task.',
     arguments: [{ name: 'key', description: 'Your builder key from your phone (eng_…); leave out if this project is already connected', required: false }] },
   { name: 'early-look', description: 'Builder: screenshot what you have running and share it as an early look (or its next version).',
@@ -1501,6 +1518,16 @@ function promptText(name, args) {
         '7. Implement the host\'s direction — it is final and may combine variants or add the room\'s comments. Remove the badges from the result, clean up the throwaway variants, and post_update when it is in place.',
       ].join('\n');
     }
+    case 'preview':
+      return [
+        'Show the room the work so far, running.',
+        '',
+        '1. Work out how this project runs. In order of preference: the project\'s own dev server (a "dev" or "start" script in package.json, or the framework\'s usual command); a build step and then a static server for its output folder; or, for plain HTML, a static server for the folder (npx serve, or python3 -m http.server).',
+        '2. If it is already running from earlier in this session, reuse it. Otherwise install what is missing, start it in the background on a free port, and wait until the page answers (curl the URL).',
+        '3. post_update with kind "showing", one line for the room saying what they are looking at, and link set to the local URL. The host gets an Open button for it on the big screen.',
+        '4. Screenshot the main page (e.g. npx playwright screenshot --viewport-size=1280,800 <url> preview.png) and share_image it with kind "progress", so phones see it too.',
+        '5. Tell me the URL in one line. If it cannot run yet, say plainly what is missing instead of guessing.',
+      ].join('\n');
     case 'wrap-up':
       return [
         'We are wrapping up the Build Room session.',
@@ -1597,6 +1624,7 @@ How to collaborate:
 - Keep every question short and plain: it is read from the back of a room on a projector. Put background in "context", not in the question.
 - Use ask_room_for_ideas for open questions, ask_room_to_choose for 2–6 concrete options, ask_room_to_rate for a 1–5 pulse on something you have shown.
 - When showing variants, create the ask_room_to_choose ask FIRST, then label every variant on screen with exactly the letter Engage returned ("Choice A", "Choice B", …) using the badge snippet it gives you. Tell the host the local URL of each one.
+- A choice the room can SEE gets its previews before you wait: screenshot each mockup and share_image it onto its option, then call wait_for_room. The host reviews proposed asks by those pictures, and may send "make mockups" as a direction if they are missing.
 - Asks may arrive as "proposed": the host reviews them before the room sees them. That is normal. Keep working on anything that does not depend on the answer, then call wait_for_room. If it times out, call it again.
 - The host's direction is final. It may edit, merge or overrule the raw vote and add what people said out loud; build what the direction says.
 - Post a short post_update after each meaningful change (kind "showing" when you put something on screen for the room). One line, written for the room, not a commit message.
@@ -1842,17 +1870,145 @@ async function hookCheckpoint() {
   } catch (e) { log('checkpoint post failed:', e.message); }
 }
 
+// ---------------------------------------------------------------------------
+// What Claude is doing, live (owner, 2026-10-04)
+// ---------------------------------------------------------------------------
+//
+// The plugin's PostToolUse hook (--activity) turns each tool Claude uses into
+// ONE plain line for the room and appends it to .engage/activity.jsonl in a
+// connected project (git-ignored with the rest of .engage/). It makes no
+// network call, so it costs Claude a node start and nothing else. This
+// server, already running beside Claude, sends new lines every few seconds.
+//
+// The room may be watching on a projector, so a line says what KIND of thing
+// happened and to which file, never what is in it: a file's name, a command's
+// program and subcommand ("npm test", "git commit"), a website's host. Never a
+// command's arguments, a search pattern, or anything a tool returned.
+const activityFile = (dir = projectDir()) => pathJoin(dir, '.engage', 'activity.jsonl');
+const ACTIVITY_MS = Math.max(200, Number(process.env.ENGAGE_ACTIVITY_MS) || 4000);
+const ACTIVITY_FILE_MAX = 64 * 1024; // the server is not sending: stop growing
+const PROGRAMS_WITH_SUBCOMMANDS = ['npm', 'npx', 'pnpm', 'yarn', 'bun', 'deno', 'git', 'gh', 'node', 'python', 'python3', 'pip', 'uv', 'make', 'docker', 'cargo', 'go'];
+const WORD = /^[a-z][a-z0-9:_.-]{0,30}$/;
+
+/** "FOO=1 cd app && npm run dev -- --port 3000" -> "npm run dev". '' when unsure. */
+export function commandName(command) {
+  const segments = String(command || '').split(/&&|\|\||;|\|/).map((x) => x.trim().split(/\s+/).filter(Boolean));
+  for (const tokens of segments) {
+    let i = 0;
+    while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i += 1; // FOO=bar prefixes
+    const prog = String(tokens[i] || '').split('/').pop();
+    if (!prog || prog === 'cd' || prog === 'export' || prog === 'source') continue;
+    if (!/^[A-Za-z0-9._-]{1,30}$/.test(prog)) return '';
+    const next = tokens[i + 1] || '';
+    if (PROGRAMS_WITH_SUBCOMMANDS.includes(prog) && WORD.test(next)) {
+      const third = tokens[i + 2] || '';
+      return ['run', 'exec', 'x'].includes(next) && WORD.test(third) ? `${prog} ${next} ${third}` : `${prog} ${next}`;
+    }
+    return prog;
+  }
+  return '';
+}
+
+/** One plain line from a PostToolUse hook's input, or null to show nothing. */
+export function activityLine(data) {
+  const tool = String((data && data.tool_name) || '');
+  const input = (data && data.tool_input) || {};
+  const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || 'a file';
+  // Engage's own tools already show up as what they post; another server's
+  // tools could carry anything, so they are left out.
+  if (tool.startsWith('mcp__')) return null;
+  switch (tool) {
+    case 'Edit': case 'MultiEdit': return { kind: 'edit', text: `Edited ${base(input.file_path)}` };
+    case 'NotebookEdit': return { kind: 'edit', text: `Edited ${base(input.notebook_path)}` };
+    case 'Write': return { kind: 'edit', text: `Wrote ${base(input.file_path)}` };
+    case 'Read': return { kind: 'read', text: `Read ${base(input.file_path)}` };
+    case 'Glob': case 'Grep': case 'LS': return { kind: 'search', text: 'Searched the code' };
+    case 'Bash': { const c = commandName(input.command); return { kind: 'run', text: c ? `Ran ${c}` : 'Ran a command' }; }
+    case 'WebFetch': {
+      let host = '';
+      try { host = new URL(String(input.url || '')).hostname; } catch { /* not a URL */ }
+      return { kind: 'web', text: host ? `Looked at ${host}` : 'Looked something up online' };
+    }
+    case 'WebSearch': return { kind: 'web', text: 'Searched the web' };
+    case 'Task': case 'Agent': return { kind: 'agent', text: 'Asked a helper agent' };
+    case 'TodoWrite': return { kind: 'plan', text: 'Updated its to-do list' };
+    default: return null;
+  }
+}
+
+/** --activity: the PostToolUse hook. Never fails the tool, never prints. */
+function hookActivity() {
+  let data = {};
+  try { data = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { /* not JSON */ }
+  const dir = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
+  if (!existsSync(sessionFile(dir))) return; // not a Build Room project: touch nothing
+  const line = activityLine(data);
+  if (!line) return;
+  const file = activityFile(dir);
+  try { if (statSync(file).size > ACTIVITY_FILE_MAX) return; } catch { /* no file yet */ }
+  appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...line }) + '\n');
+}
+
+/** Send what the hook wrote since the last round. One round at a time. */
+let pumping = false;
+async function pumpActivity() {
+  if (pumping) return;
+  pumping = true;
+  try {
+    const file = activityFile();
+    let raw = '';
+    try { raw = readFileSync(file, 'utf8'); } catch { return; }
+    if (!raw.trim()) return;
+    writeFileSync(file, ''); // taken; a line the hook writes between these two calls is dropped (rare, harmless)
+    reloadConfig();
+    if (CONFIG.problems.length) return;
+    const items = raw.split('\n').filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((x) => x && x.text).slice(-25);
+    // The server never hands over Claude's inbox on this route (build-room.js),
+    // so ignoring the answer cannot swallow a direction.
+    if (items.length) await api('POST', 'activity', { items }, AbortSignal.timeout(8000));
+  } catch (e) {
+    log('activity post failed:', e && e.message);
+  } finally {
+    pumping = false;
+  }
+}
+
 /**
- * --install-plugin [--api <url>]: write the Engage plugin for Claude Code to
- * ~/.engage/claude-plugin (a local marketplace holding one plugin: this server,
- * the slash commands, and the Stop hook above), remember the API, and register
- * it with Claude Code if the `claude` command is here.
+ * --install-plugin [--api <url>]: make sure this laptop has THIS version of
+ * the Engage plugin for Claude Code. One command, run every time from the
+ * Build Room page, which says what it did:
+ *   - not installed            → write it to ~/.engage/claude-plugin (a local
+ *                                marketplace holding one plugin: this server,
+ *                                the slash commands and the Stop hook above)
+ *                                and install it
+ *   - another version          → rewrite it and update Claude Code's copy
+ *                                (the page's version wins, so a laptop moving
+ *                                between tiers follows the site it came from)
+ *   - this version, turned off → turn it back on
+ *   - this version, on         → "You're all set", and touch nothing
+ * The API is remembered every time, so the same laptop can move from the dev
+ * site to the test site and back.
  */
-function installPlugin(argv) {
-  const apiArg = argv[argv.indexOf('--api') + 1];
-  const home = pathJoin(homedir(), '.engage');
-  const root = pathJoin(home, 'claude-plugin');
-  const plug = pathJoin(root, 'engage');
+const PLUGIN_ID = 'engage@engage-local';
+
+/** What Claude Code reports for the Engage plugin, or why it cannot say. */
+function installedPlugin(claude) {
+  const probe = claude(['--version']);
+  if (probe.error) return { claude: false };
+  const r = claude(['plugin', 'list', '--json']);
+  try {
+    const entry = (JSON.parse(r.stdout || '[]') || []).find((p) => p && p.id === PLUGIN_ID);
+    return entry
+      ? { claude: true, installed: true, version: String(entry.version || ''), enabled: entry.enabled !== false }
+      : { claude: true, installed: false };
+  } catch {
+    return { claude: true, installed: null }; // an older claude: cannot tell, so install
+  }
+}
+
+function writePlugin(home, root, plug) {
   for (const d of [pathJoin(root, '.claude-plugin'), pathJoin(plug, '.claude-plugin'), pathJoin(plug, 'commands'), pathJoin(plug, 'hooks')]) mkdirSync(d, { recursive: true });
   const w = (file, body) => writeFileSync(file, typeof body === 'string' ? body : JSON.stringify(body, null, 2) + '\n');
   w(pathJoin(root, '.claude-plugin', 'marketplace.json'), {
@@ -1869,8 +2025,12 @@ function installPlugin(argv) {
   });
   w(pathJoin(plug, '.mcp.json'), { mcpServers: { engage: { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs'] } } });
   w(pathJoin(plug, 'hooks', 'hooks.json'), {
-    description: 'Checkpoint the work in git at the end of every turn, in projects connected to a Build Room.',
-    hooks: { Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --checkpoint', timeout: 60 }] }] },
+    description: 'In projects connected to a Build Room: a git checkpoint at the end of every turn, and one plain line per tool for the room\'s live view.',
+    hooks: {
+      Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --checkpoint', timeout: 60 }] }],
+      // One plain line per tool for the room's live view (hookActivity).
+      PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
+    },
   });
   copyFileSync(fileURLToPath(import.meta.url), pathJoin(plug, 'engage-mcp.mjs'));
   const cmd = (name, description, hint, body) => w(pathJoin(plug, 'commands', `${name}.md`),
@@ -1882,26 +2042,75 @@ function installPlugin(argv) {
     const body = promptText(p.name, arg ? { [arg.name]: '$ARGUMENTS' } : {});
     cmd(p.name, p.description, arg ? `<${arg.name}>` : '', body);
   }
-  if (apiArg && /^https?:\/\//i.test(apiArg)) {
-    mkdirSync(home, { recursive: true });
-    w(globalFile(), { api: apiArg.replace(/\/+$/, '') + '/' });
-  }
+}
+
+function installPlugin(argv) {
+  const apiArg = argv[argv.indexOf('--api') + 1];
+  const home = pathJoin(homedir(), '.engage');
+  const root = pathJoin(home, 'claude-plugin');
+  const plug = pathJoin(root, 'engage');
   const out = (...lines) => process.stdout.write(lines.join('\n') + '\n');
-  out(`Wrote the Engage plugin to ${plug}`);
   const claude = (args) => spawnSync('claude', args, { encoding: 'utf8' });
-  const probe = claude(['--version']);
-  if (probe.error) {
-    out('', 'The claude command is not on PATH here. In Claude Code, run:');
-    out(`  /plugin marketplace add ${root}`);
-    out('  /plugin install engage@engage-local');
-  } else {
-    const add = claude(['plugin', 'marketplace', 'add', root]);
-    if (add.status !== 0) claude(['plugin', 'marketplace', 'update', 'engage-local']);
-    const inst = claude(['plugin', 'install', 'engage@engage-local']);
-    out(inst.status === 0 ? 'Installed the engage plugin in Claude Code.' :
-      `Could not install automatically (${(inst.stderr || inst.stdout || '').trim().slice(0, 200)}). In Claude Code run: /plugin marketplace add ${root} then /plugin install engage@engage-local`);
+  const NEXT = ['', 'Next: on the Build Room page, mint a key and copy the connect command.'];
+
+  // Which Engage site this laptop talks to: remembered on every run.
+  let apiNote = '';
+  if (apiArg && /^https?:\/\//i.test(apiArg)) {
+    const api = apiArg.replace(/\/+$/, '') + '/';
+    let before = '';
+    try { before = JSON.parse(readFileSync(globalFile(), 'utf8')).api || ''; } catch { /* first run */ }
+    mkdirSync(home, { recursive: true });
+    writeFileSync(globalFile(), JSON.stringify({ api }, null, 2) + '\n');
+    if (before && before !== api) apiNote = `It now talks to ${api} (it was ${before}).`;
   }
-  out('', 'Next: start (or restart) Claude Code in your project folder and type', '  /engage:connect <the key from the Build Room page>');
+
+  const have = installedPlugin(claude);
+  const filesCurrent = (() => {
+    try { return JSON.parse(readFileSync(pathJoin(plug, '.claude-plugin', 'plugin.json'), 'utf8')).version === VERSION; } catch { return false; }
+  })();
+
+  if (have.claude && have.installed && have.version === VERSION && filesCurrent) {
+    if (!have.enabled) {
+      const on = claude(['plugin', 'enable', PLUGIN_ID]);
+      out(on.status === 0
+        ? `The Engage plugin ${VERSION} was installed but turned off. It is on again; restart Claude Code if it is open.`
+        : `The Engage plugin ${VERSION} is installed but turned off. In Claude Code run: /plugin enable ${PLUGIN_ID}`);
+    } else {
+      out(`You're all set: the Engage plugin ${VERSION} is installed and on.`);
+    }
+    if (apiNote) out(apiNote);
+    out(...NEXT);
+    return;
+  }
+
+  writePlugin(home, root, plug);
+
+  if (!have.claude) {
+    out(`Wrote the Engage plugin ${VERSION} to ${plug}.`, '', 'The claude command is not on PATH here. In Claude Code, run:');
+    out(`  /plugin marketplace add ${root}`);
+    out(`  /plugin install ${PLUGIN_ID}`);
+    if (apiNote) out(apiNote);
+    out(...NEXT);
+    return;
+  }
+
+  const manual = (why) => out(`Could not finish automatically (${why}). In Claude Code run: /plugin marketplace add ${root} then /plugin install ${PLUGIN_ID}`);
+  const add = claude(['plugin', 'marketplace', 'add', root]);
+  if (add.status !== 0) claude(['plugin', 'marketplace', 'update', 'engage-local']);
+
+  if (have.installed) {
+    const from = have.version || 'an unknown version';
+    let up = claude(['plugin', 'update', PLUGIN_ID]);
+    if (up.status !== 0) up = claude(['plugin', 'install', PLUGIN_ID]);
+    if (up.status === 0) out(`Updated the Engage plugin from ${from} to ${VERSION}. Restart Claude Code if it is open, so it loads the new version.`);
+    else manual((up.stderr || up.stdout || '').trim().slice(0, 200));
+  } else {
+    const inst = claude(['plugin', 'install', PLUGIN_ID]);
+    if (inst.status === 0) out(`Installed the Engage plugin ${VERSION} in Claude Code.`);
+    else manual((inst.stderr || inst.stdout || '').trim().slice(0, 200));
+  }
+  if (apiNote) out(apiNote);
+  out(...NEXT);
 }
 
 // ---------------------------------------------------------------------------
@@ -2019,13 +2228,22 @@ function dispatch(msg) {
   });
 }
 
-const CLI = process.argv.includes('--install-plugin') ? 'install' : process.argv.includes('--checkpoint') ? 'checkpoint' : null;
+const CLI = process.argv.includes('--install-plugin') ? 'install' : process.argv.includes('--checkpoint') ? 'checkpoint' : process.argv.includes('--activity') ? 'activity' : null;
 if (CLI === 'install') {
   try { installPlugin(process.argv); } catch (e) { process.stderr.write(`Install failed: ${e.message}\n`); process.exit(1); }
   process.exit(0);
 }
 if (CLI === 'checkpoint') {
   hookCheckpoint().catch((e) => log('checkpoint hook:', e && e.message)).finally(() => process.exit(0));
+}
+if (CLI === 'activity') {
+  try { hookActivity(); } catch (e) { log('activity hook:', e && e.message); }
+  process.exit(0);
+}
+// The live-activity pump, only while running as Claude's MCP server.
+if (!CLI) {
+  const t = setInterval(pumpActivity, ACTIVITY_MS);
+  if (t.unref) t.unref();
 }
 
 let buffer = '';

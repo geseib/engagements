@@ -19,6 +19,13 @@ const crypto = require('crypto');
 const GAME_TYPE_BUILD = 'build';
 
 const KINDS = Object.freeze(['suggest', 'choice', 'rating']);
+/**
+ * Every Rate ask uses one fixed scale (owner, 2026-10-06): 1 needs work, 5 is
+ * great. Hosts and Claude cannot relabel it, so a 4 always means the same
+ * thing in the room, in the log and to Claude. Rows written with custom
+ * labels read as this scale.
+ */
+const RATING_SCALE = Object.freeze({ min: 1, max: 5, lowLabel: 'Needs work', highLabel: 'Great' });
 const STATUSES = Object.freeze(['proposed', 'live', 'voting', 'results', 'decided', 'discarded']);
 /** Statuses in which the room is answering right now. */
 const OPEN_STATUSES = Object.freeze(['live', 'voting']);
@@ -118,6 +125,7 @@ const timeKey = (iso) => `${String(Date.parse(iso) || Date.now()).padStart(13, '
 
 const SK = Object.freeze({
   state: 'BUILD#STATE',
+  activity: 'BUILD#ACTIVITY',
   ask: (askId) => `BUILD#ASK#${askId}`,
   resp: (askId, respId) => `BUILD#RESP#${askId}#${respId}`,
   ans: (askId, player) => `BUILD#ANS#${askId}#${player}`,
@@ -152,6 +160,7 @@ const imageKey = (gameId, imageId) => `builds/${gameId}/${imageId}`;
 /** Which tenant-crypto entity a BUILD# row belongs to (null = nothing sealed). */
 function entityForSk(sk) {
   if (sk === SK.state) return 'buildState';
+  if (sk === SK.activity) return 'buildActivity';
   if (sk.startsWith('BUILD#ASK#')) return 'buildAsk';
   if (sk.startsWith('BUILD#RESP#') || sk.startsWith('BUILD#ANS#')) return 'buildResponse';
   if (sk.startsWith('BUILD#LOG#')) return 'buildLog';
@@ -226,14 +235,7 @@ function normalizeAsk(body) {
     const mp = Number(b.maxPicks);
     value.maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, value.options.length) : 1;
   }
-  if (kind === 'rating') {
-    value.scale = {
-      min: 1,
-      max: 5,
-      lowLabel: cleanText(b.lowLabel, LIMITS.scaleLabel),
-      highLabel: cleanText(b.highLabel, LIMITS.scaleLabel),
-    };
-  }
+  if (kind === 'rating') value.scale = { ...RATING_SCALE };
   if (kind === 'suggest') {
     const mp = Number(b.maxPicks);
     value.maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, 5) : DEFAULT_MAX_PICKS;
@@ -258,13 +260,6 @@ function applyEdit(ask, body, { answered }) {
     next.Options = opts.value;
     next.MaxPicks = Math.min(next.MaxPicks || 1, opts.value.length);
   }
-  if (ask.Kind === 'rating' && (b.lowLabel !== undefined || b.highLabel !== undefined)) {
-    next.Scale = {
-      ...(ask.Scale || { min: 1, max: 5 }),
-      ...(b.lowLabel !== undefined ? { lowLabel: cleanText(b.lowLabel, LIMITS.scaleLabel) } : {}),
-      ...(b.highLabel !== undefined ? { highLabel: cleanText(b.highLabel, LIMITS.scaleLabel) } : {}),
-    };
-  }
   return { value: next };
 }
 
@@ -276,7 +271,9 @@ const TRANSITIONS = Object.freeze({
   open: { from: ['proposed'], to: 'live' },
   vote: { from: ['live'], to: 'voting', kinds: ['suggest'] },
   close: { from: ['live', 'voting'], to: 'results' },
-  decide: { from: ['live', 'voting', 'results', 'decided'], to: 'decided' },
+  // `proposed` too: the host may answer FOR the room without opening the ask
+  // to phones, when people are talking instead of tapping (owner, 2026-10-04).
+  decide: { from: ['proposed', 'live', 'voting', 'results', 'decided'], to: 'decided' },
   reopen: { from: ['results', 'decided'], to: 'live' },
   discard: { from: ['proposed', 'live', 'voting', 'results'], to: 'discarded' },
 });
@@ -296,12 +293,13 @@ function transition(ask, action) {
 /** Sort every BUILD# row into its kind. Rows must already be decrypted. */
 function roomFromRows(rows) {
   const room = {
-    state: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
+    state: null, activity: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
     builders: [], tasks: [], shares: [], comments: [], reviews: [],
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
     if (sk === SK.state) room.state = r;
+    else if (sk === SK.activity) room.activity = r;
     else if (sk.startsWith('BUILD#ASK#')) room.asks.push(r);
     else if (sk.startsWith('BUILD#RESP#')) room.resps.push(r);
     else if (sk.startsWith('BUILD#ANS#')) room.answers.push(r);
@@ -381,8 +379,8 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: optionImages(room, ask.AskId)[o.label] || null })),
-    scale: ask.Scale || null,
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null })),
+    scale: ask.Kind === 'rating' ? RATING_SCALE : null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
     openedAt: ask.OpenedAt || null,
@@ -424,12 +422,18 @@ function askView(ask, room, audience, me) {
       out.results = { total: t.total, rating: t.rating, whys: t.whys.map((w) => (isHost ? w : { label: w.label, text: w.text })) };
     }
   }
+  if (showResults && out.results && ask.Kind !== 'rating') out.results.tied = tiedIds(ask, room);
+  if (ask.Wheel) out.wheel = wheelView(ask.Wheel, me);
+  if (ask.RevotedAs) out.revotedAs = ask.RevotedAs;
+  if (ask.RevoteOf) out.revoteOf = ask.RevoteOf;
   if (ask.Decision) {
     out.decision = {
       direction: ask.Decision.direction || '',
       chosen: ask.Decision.chosen || [],
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
       sentToAgent: ask.Decision.sendToAgent !== false,
+      spoken: Boolean(ask.Decision.spoken),
+      method: ask.Decision.method || (ask.Decision.spoken ? 'spoken' : 'vote'),
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -477,7 +481,21 @@ function optionImages(room, askId) {
 }
 
 function ideaView(r) {
-  return { ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null };
+  return {
+    ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null, aboutLogId: r.AboutLogId || null,
+    walled: Boolean(r.WalledAt),
+  };
+}
+
+/**
+ * A ROOM COMMENT ON THE WALL (owner, 2026-10-05: "build acknowledge, show on
+ * wall too"). One at a time, anonymous, for a short while: the Stage shows it
+ * while it is fresh. The host's screen only; never Claude's, never a phone's.
+ */
+const WALL_COMMENT_MS = 20 * 1000;
+function wallCommentView(state) {
+  const w = state && state.WallComment;
+  return w && w.Text ? { ideaId: w.IdeaId || null, text: w.Text, at: w.At || null } : null;
 }
 
 function outcomeView(o) {
@@ -532,6 +550,42 @@ const settingsOf = (stateRow) => ({
 });
 
 /** What the host (and Claude) sees: everything. */
+// ── What Claude Code is doing (owner, 2026-10-04) ─────────────────────────
+// The plugin's PostToolUse hook writes one plain line per tool Claude uses
+// ("Edited Header.jsx", "Ran npm test"); its server sends them here in
+// batches. One row holds the latest few: it is a live view, not a record, so
+// it never reaches the timeline, the report or a phone.
+const ACTIVITY_KINDS = Object.freeze(['edit', 'read', 'run', 'search', 'web', 'agent', 'plan', 'other']);
+const ACTIVITY_KEEP = 12;
+const ACTIVITY_PER_POST = 25;
+
+/** A posted batch, cleaned: known kinds, short plain text, a sane time. */
+function normalizeActivity(items, nowIso) {
+  if (!Array.isArray(items)) return { error: 'items must be a list' };
+  const now = Date.parse(nowIso);
+  const out = [];
+  for (const it of items.slice(-ACTIVITY_PER_POST)) {
+    if (!it || typeof it !== 'object') continue;
+    const text = cleanText(it.text, 120).replace(/\s+/g, ' ');
+    if (!text) continue;
+    const kind = ACTIVITY_KINDS.includes(it.kind) ? it.kind : 'other';
+    const t = Date.parse(it.at);
+    // A laptop clock can be off; never in the future, never older than an hour.
+    const at = new Date(Number.isFinite(t) ? Math.min(Math.max(t, now - 3600000), now) : now).toISOString();
+    out.push({ at, kind, text });
+  }
+  return { value: out };
+}
+
+/** The kept list after a batch: newest last, at most ACTIVITY_KEEP. */
+function mergeActivity(kept, incoming) {
+  return [...(Array.isArray(kept) ? kept : []), ...incoming]
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+    .slice(-ACTIVITY_KEEP);
+}
+
+const activityView = (row) => ((row && Array.isArray(row.Items)) ? row.Items.slice(-ACTIVITY_KEEP) : []);
+
 function hostView({ gameId, meta, sessionState, room, players, now, audience = 'host' }) {
   const isAgent = audience === 'agent';
   return {
@@ -543,6 +597,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     playerCount: players.length,
     settings: settingsOf(room.state),
     agent: agentStatus(room.state, room.keys, now),
+    activity: activityView(room.activity),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
     // Host notes are the host's own; Claude never sees them.
@@ -550,6 +605,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // crew entries beside them say what happened.
     log: room.logs.filter((l) => !l.ForBuilder && !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
     ideas: isAgent ? [] : room.ideas.map(ideaView),
+    wallComment: isAgent ? null : wallCommentView(room.state),
     images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
@@ -622,7 +678,11 @@ function pendingForBuilder(room, name) {
 
 /** The words Claude receives for one entry. */
 function inboxText(entry) {
-  if (entry.Kind === 'decision') return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '');
+  if (entry.Kind === 'decision') {
+    // The question and the answer, and the host's note when they added one.
+    // How it was decided stays on the decision (owner, 2026-10-06).
+    return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '');
+  }
   if (entry.Kind === 'idea') return `An idea from the room: ${entry.Text}`;
   if (entry.Kind === 'verbal') return `The room said: ${entry.Text}`;
   return entry.Text;
@@ -630,15 +690,98 @@ function inboxText(entry) {
 const inboxFrom = (entry) => (entry.Kind === 'decision' ? 'decision' : entry.Kind === 'idea' ? 'idea' : 'host');
 
 /** The text a decision hands Claude when the host did not write one. */
+// ── The wheel (owner, 2026-10-05) ───────────────────────────────────────────
+//
+// At results the host may spin a wheel over the tied options (or all of
+// them): a random person in the room spins it from their phone, the host can
+// always spin, and the room can ask for a respin. WHERE IT LANDS IS DECIDED
+// HERE, ON THE SERVER, so the wall, every phone and the host animate to the
+// same answer. The slices copy the options' words, so `Wheel` is sealed with
+// the ask (tenant-crypto buildAsk).
+
+const WHEEL_MIN = 2;
+const WHEEL_MAX = 12;
+const WHEEL_KEEP_SPINS = 20;
+
+/** The options or suggestions sharing the top count (two or more, and above zero). */
+function tiedIds(ask, room) {
+  const t = tally(ask, room);
+  if (ask.Kind === 'choice') {
+    const top = Math.max(0, ...t.options.map((o) => o.count));
+    const tied = t.options.filter((o) => o.count === top && top > 0);
+    return tied.length >= 2 ? tied.map((o) => o.label) : [];
+  }
+  if (ask.Kind === 'suggest') {
+    const top = Math.max(0, ...t.ranked.map((r) => r.votes));
+    const tied = t.ranked.filter((r) => r.votes === top && top > 0);
+    return tied.length >= 2 ? tied.map((r) => r.respId) : [];
+  }
+  return [];
+}
+
+/** What goes on the wheel: the tied ones when `among` is 'tied', else every option (top suggestions). */
+function wheelSlices(ask, room, among) {
+  const t = tally(ask, room);
+  const tied = new Set(tiedIds(ask, room));
+  const keep = (id) => among !== 'tied' || tied.has(id);
+  if (ask.Kind === 'choice') {
+    return (ask.Options || []).filter((o) => keep(o.label))
+      .map((o) => ({ id: o.label, label: o.label, text: cleanText(o.title, 120) })).slice(0, WHEEL_MAX);
+  }
+  if (ask.Kind === 'suggest') {
+    return t.ranked.filter((r) => keep(r.respId))
+      .map((r) => ({ id: r.respId, label: '', text: cleanText(r.text, 120) })).slice(0, WHEEL_MAX);
+  }
+  return [];
+}
+
+/** The wheel as a screen sees it. `mine` is true on the phone whose turn it is to spin. */
+function wheelView(w, me) {
+  const spins = (w.Spins || []).map((x) => ({ spinId: x.SpinId, at: x.At, by: x.By, result: x.Result, turns: x.Turns }));
+  const last = spins[spins.length - 1] || null;
+  return {
+    slices: (w.Slices || []).map((x) => ({ id: x.id, label: x.label || '', text: x.text || '' })),
+    spinner: w.Spinner || null,
+    armed: Boolean(w.Armed),
+    spins,
+    landed: last ? last.result : null,
+    mine: Boolean(me && w.Spinner && w.Armed && me.playerName === w.Spinner),
+  };
+}
+
+/** The slice the wheel last landed on, or null. */
+function wheelLanded(ask) {
+  const w = ask && ask.Wheel;
+  const last = w && (w.Spins || [])[(w.Spins || []).length - 1];
+  return last ? (w.Slices || []).find((x) => x.id === last.Result) || null : null;
+}
+
+/**
+ * WHAT CLAUDE IS TOLD IS THE QUESTION AND THE ANSWER (owner, 2026-10-06:
+ * "Claude only needs question/answer: What should the background color be:
+ * blue"). How the room got there (a vote, the wheel, the host's pick, said out
+ * loud) is recorded on the decision (`method`) and never sent to Claude.
+ */
+const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
+const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
+const DECISION_METHODS = Object.freeze(['vote', 'wheel', 'host', 'spoken']);
+/** A rating answer that carries its own meaning, so Claude and the log read it right. */
+const ratingAnswer = (avg) => (avg === null || avg === undefined || avg === '' ? '' : `${avg} out of 5 (5 is great, 1 needs work)`);
+const RATING_MEANING = '(5 is great, 1 needs work)';
+/** A rating decision always says what its numbers mean, even after the host rewrites it. */
+const withRatingMeaning = (kind, direction) => (kind !== 'rating' || !direction || /needs work/i.test(direction) ? direction : `${direction} ${RATING_MEANING}`);
+
 function defaultDirection(ask, room) {
+  const landed = wheelLanded(ask);
+  if (landed) return questionAnswer(ask.Prompt, landed.text);
   const t = tally(ask, room);
   if (ask.Kind === 'choice') {
     const top = [...t.options].sort((a, b) => b.count - a.count)[0];
-    return top ? `The room chose ${top.label}: ${top.title}` : '';
+    return top && top.count ? questionAnswer(ask.Prompt, top.title) : '';
   }
-  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : `The room rated this ${t.rating.avg} out of 5`;
+  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : questionAnswer(ask.Prompt, ratingAnswer(t.rating.avg));
   const top = t.ranked[0];
-  return top ? `The room's top idea: ${top.text}` : '';
+  return top ? questionAnswer(ask.Prompt, top.text) : '';
 }
 
 module.exports = {
@@ -649,6 +792,9 @@ module.exports = {
   IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
+  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
+  WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
+  WALL_COMMENT_MS, wallCommentView, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

@@ -276,7 +276,6 @@
   background: var(--bpl-amber-tint);
 }
 
-.bpl .bpl-vrow.bpl-vrow--own { cursor: default; }
 
 .bpl .bpl-vrow:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
@@ -621,6 +620,13 @@
 
 .bpl .bpl-send:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
+/* Feedback on the preview (PreviewFeedback): two answers side by side; the
+   second is the quieter one. */
+.bpl .bpl-pvfb { padding-top: 14px; border-top: 1px solid var(--bpl-rule); }
+.bpl .bpl-fbrow { display: flex; flex-wrap: wrap; gap: 10px; }
+.bpl .bpl-fbrow .bpl-send { flex: 1 1 140px; }
+.bpl .bpl-send--alt { background: transparent; color: var(--text); border-color: var(--bpl-rule-strong); }
+
 .bpl .bpl-ok { margin: 8px 0 0; font-size: var(--plr-t-meta); color: var(--bpl-success-text); }
 
 .bpl .bpl-myideas { margin: 12px 0 0; }
@@ -644,7 +650,7 @@
   color: var(--bpl-muted);
 }
 
-.bpl .bpl-status.bpl-status--promoted { color: var(--bpl-success-text); }
+.bpl .bpl-status.bpl-status--promoted, .bpl .bpl-status.bpl-status--acknowledged, .bpl .bpl-status.bpl-status--walled { color: var(--bpl-success-text); }
 
 /* Screenshots: a mockup on its option card, the finished product under What we built. */
 .bpl .bimg { margin: 10px 0 0; }
@@ -967,3 +973,7 @@
 }
 
 .bpl .bpl-base-tx { margin: 4px 0 0; font-size: var(--plr-t-body); }
+
+/* The wheel on a phone (BuildWheel; its own sheet draws it). */
+.bpl .bpl-wheel { display: grid; justify-items: center; gap: 8px; margin: 12px 0 18px; }
+.bpl .bpl-wheel-turn { margin: 0; text-align: center; }

@@ -81,6 +81,9 @@ const { encryptItem, encryptValue } = require('../tenant-crypto');
 const { getSetMetadata, knownVersions, toVersion } = require('../set-version');
 const rules = require('./agenda-rules');
 const { json, notFound, readBody, trace, methodOf } = require('./event-http');
+const {
+  openForDelete, deleteGate, auditDelete, AUDIT_FAILED,
+} = require('./delete-auth');
 const S = require('./event-store');
 const { checkItemSettings } = require('./item-settings');
 const { questionCountAt } = require('../session-goal');
@@ -352,10 +355,35 @@ async function addItem(request, meta, code) {
 }
 
 // ── DELETE: remove ──────────────────────────────────────────────────────────
-async function removeItem(meta, code, itemId) {
+async function removeItem(request, meta, code, itemId) {
+  /*
+    WHO MAY (the owner, 2026-10-04): the host who created the event, an owner
+    or admin of its organisation, or Engage staff giving a reason — and an
+    audit entry first, whoever it is (delete-auth.js). An item has no creator
+    of its own; it is its event's.
+  */
+  const gate = deleteGate(request, meta);
+  if (gate.refused) return json(gate.refused.status, { error: gate.refused.error, code: gate.refused.code });
   const row = await readItem(code, itemId);
   if (!row) return itemGone();
   if (row.State !== PLANNED) return json(409, { error: NOT_PLANNED, code: 'not_planned' });
+  let title = '';
+  try {
+    title = (await S.decryptItemRow(meta.orgId, { Title: row.Title })).Title || '';
+  } catch (error) {
+    console.warn(`⚠️ event-items: could not read ${row.SK}'s title for the audit entry`);
+  }
+  try {
+    await auditDelete(db, request, gate, {
+      orgId: meta.orgId,
+      action: 'event-item.delete',
+      target: { type: 'event-item', id: `${code}/${itemId}`, title: typeof title === 'string' ? title : '' },
+      detail: { event: code, item: itemId, itemType: String(row.Type || '') },
+    });
+  } catch (error) {
+    console.error(`❌ event-items: the audit entry for ${row.SK} could not be written; nothing was deleted:`, error && error.message);
+    return json(500, { error: AUDIT_FAILED });
+  }
   const counted = rules.isCounted(row.Type);
   const delta = { items: counted ? -1 : 0, engagements: rules.isEngagement(row.Type) ? -1 : 0, breaks: counted ? 0 : -1 };
   const now = new Date().toISOString();
@@ -792,7 +820,11 @@ exports.handler = async (request) => {
   const itemId = params.itemId === undefined ? null : String(params.itemId);
   const method = methodOf(request);
   try {
-    const meta = await S.openEvent(db, TABLE(), request, code);
+    // A delete has its own door: Engage staff outside the organisation may
+    // ask, giving a reason (delete-auth.js). Everything else is members only.
+    const meta = method === 'DELETE' && itemId !== null
+      ? await openForDelete(db, TABLE(), request, code)
+      : await S.openEvent(db, TABLE(), request, code);
     if (!meta) return notFound();
     // POST /events/{code}/run (events M3): running the day rides on this
     // function rather than a new one — run.js.
@@ -803,7 +835,7 @@ exports.handler = async (request) => {
       return json(404, { error: 'Endpoint not found' });
     }
     if (method === 'POST' && itemId === null) return await addItem(request, meta, code);
-    if (method === 'DELETE' && itemId !== null) return await removeItem(meta, code, itemId);
+    if (method === 'DELETE' && itemId !== null) return await removeItem(request, meta, code, itemId);
     if (method === 'PUT' && itemId === null) return await reorderItems(request, meta, code);
     if (method === 'PUT' && itemId !== null) return await editItem(request, meta, code, itemId);
     return json(404, { error: 'Endpoint not found' });

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C0 The model · Build Room host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="v2.css">
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Second pass</b>
+<a href="index.html">Overview</a>
+<a class="here" href="c0-model.html">C0 The model</a>
+<a href="c1-host.html">C1 Host: Claude is building</a>
+<a href="c2-claude-asks.html">C2 Host: Claude proposes</a>
+<a href="c3-to-a-vote.html">C3 Host: ideas to a vote</a>
+<a href="c3b-mockups.html">C3b Host: the vote waits for mockups</a>
+<a href="c4-live.html">C4 Host: the room is answering</a>
+<a href="c5-decide.html">C5 Host: results and direction</a>
+<a href="c6-stage.html">C6 Stage screen</a>
+<a href="c7-build.html">C7 Build screen</a>
+<a href="c8-build-blocked.html">C8 Build screen, blocked</a>
+<a href="c9-history.html">C9 History screen</a>
+<a href="c10-artifacts.html">C10 History: artifacts</a>
+<a href="c11-phones.html">C11 Phones</a>
+<a href="c12-wrapped.html">C12 Wrapped and ended</a>
+<a href="c13-library.html">C13 Ask the room: the question library</a>
+<a href="c14-claude-gets.html">C14 What Claude gets, and the room brief</a>
+<a href="c15-set-editor.html">C15 Making a set Build Room ready</a>
+<span class="sp"></span><a href="first-pass.html">First pass</a><a href="notices.html">Notices</a><a href="scores.html">Scores</a></nav>
+<div class="pg-title"><h1>C0 · The model</h1><p>Three nouns (the queue, Now, History) and four screens. Everything else on today's page is one of these.</p></div>
+<div class="idx" style="padding-top:0">
+<h2>Where things come from, where they go</h2>
+<div class="flow">
+<div class="colx"><div class="bx"><b>Claude Code</b><span>asks it proposes · previews it shows · questions</span></div><div class="bx"><b>The room</b><span>ideas from phones · feedback on a preview · what people say out loud</span></div><div class="bx"><b>You</b><span>notes and ideas you type</span></div><div class="bx"><b>The crew</b><span>early looks · requests for help</span></div></div>
+<div class="arrow">→</div>
+<div class="colx"><div class="bx big"><b>The queue: waiting for you</b><span>one list, one set of routes for every item:</span></div>
+<div class="bx"><b>Ask the room</b><span>open it · put several to a vote · ask for ratings · ask for ideas on it</span></div>
+<div class="bx"><b>Send to Claude</b><span>as a direction, with your words</span></div>
+<div class="bx"><b>Decide yourself</b><span>answer for the room (said out loud)</span></div>
+<div class="bx"><b>Later · Dismiss</b><span>nothing is lost: dismissed items can be restored</span></div></div>
+<div class="arrow">→</div>
+<div class="colx"><div class="bx big"><b>History</b><span>every decision and action, with its artifacts, as a story</span></div><div class="bx"><b>On the wall</b><span>the History screen</span></div><div class="bx"><b>On phones</b><span>the History tab</span></div><div class="bx"><b>In the report</b><span>the same entries</span></div></div>
+</div>
+<h2>Four screens instead of Present</h2>
+<table class="cmp"><tr><th style="width:12%">Screen</th><th>What it is</th><th style="width:30%">Who it is for</th></tr>
+<tr><td><b>Host</b> · 1</td><td>Now card, the one composer, the queue, History in a column (C1 to C5)</td><td>The host. Fine for the room to glimpse; it is where the work happens.</td></tr>
+<tr><td><b>Stage</b> · 2</td><td>The current ask or its results, big, with Close in the dock (C6)</td><td>The room, while an ask is open</td></tr>
+<tr><td><b>Build</b> · 3</td><td>The live product from the local dev server, framed under the header (C7, C8)</td><td>The room, while Claude builds</td></tr>
+<tr><td><b>History</b> · 4</td><td>The story so far, and the artifacts (C9, C10, C12)</td><td>The room, looking back; the close of the session</td></tr></table>
+<p>The header is the same on all four: title, the four tabs, an ask pill when an ask is open, Claude's status, the join code (the QR on hover) and a menu with Connect Claude Code, Crew, Wrap up, Report and End session. P flips between Host and the last screen shown to the room.</p>
+<h2>Projector rule</h2>
+<p>Stage, Build and History are made to be seen. On them, anything waiting for the host shows only as a number on the Host tab. Names and the text of ideas, feedback and proposed asks appear only on the Host screen.</p></div>
+<script src="mock.js"></script>
+</body>
+</html>

@@ -275,11 +275,21 @@ function scanForEventDumps() {
     const secrets = freshSecrets();
     const handler = load('admin/delete-game.js');
     sent = [];
-    const { out, logs } = await captureLogs(() => handler(apiEvent(secrets, {
+    /* Since 2026-10-04 a delete is the creator's, an org admin's or staff's
+       with a reason (tests/delete-authorization.js). The session here is the
+       caller's own, so the handler runs its whole path — audit entry, rows —
+       with the secret still in the body it must never print. */
+    ANSWERS.GetCommand = (cmd) => (cmd.input.Key.SK === 'METADATA'
+      ? { Item: { orgId: 'org_x', CreatedBy: SUB, GameType: 'trivia' } }
+      : { Item: { orgId: 'org_x' } });
+    const ev = apiEvent(secrets, {
       method: 'DELETE', routePath: '/admin/games/{gameId}', rawPath: '/admin/games/4821',
       pathParameters: { gameId: '4821' },
       body: { reason: secrets.body },
-    })));
+    });
+    ev.requestContext.authorizer.lambda = { userId: SUB, groups: 'hosts', orgId: 'org_x', orgIds: 'org_x', orgRole: 'member' };
+    const { out, logs } = await captureLogs(() => handler(ev));
+    delete ANSWERS.GetCommand;
     await check('the handler ran its whole path and answered 200', () => {
       assert.strictEqual(out && out.statusCode, 200, JSON.stringify(out).slice(0, 400));
       assert.ok(sent.includes('DeleteCommand'), `nothing was deleted: ${sent.join(', ')}`);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { RETENTION_LINE } from '../utils/auditCopy';
 import './PrivacyPanel.css';
 
 /**
@@ -280,6 +281,10 @@ export default function PrivacyPanel({
   org,
   encryption,
   accessLog,
+  /* The audit log (components/AuditLog.jsx), passed in already wired to this
+     organisation so this screen stays pure props. Absent, the section is not
+     drawn — never drawn empty, which would read as "nothing has changed". */
+  activity = null,
   onExport,
   onDelete,
   exporting = false,
@@ -327,6 +332,20 @@ export default function PrivacyPanel({
         This log cannot be edited or cleared, by you or by us. It is kept for the
         life of the organisation.
       </p>
+
+      {activity ? (
+        <>
+          {/* WHO CHANGED WHAT (owner, 2026-10-04): every change Engage staff
+              make to this organisation or account, written down before it
+              happens, with who did it and the reason they gave. */}
+          <h3 className="priv-secttl">Who changed what</h3>
+          <p className="priv-note" style={{ marginBottom: 10 }}>
+            What was changed here, who changed it, and the reason they gave.
+            Every change Engage staff make is listed. {RETENTION_LINE}
+          </p>
+          {activity}
+        </>
+      ) : null}
 
       <h3 className="priv-secttl">Leaving</h3>
       <div className="priv-grid2">

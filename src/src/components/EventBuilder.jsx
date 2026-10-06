@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
+import DeleteReasonField from './DeleteReasonField';
 import EventDetailsDialog from './EventDetailsDialog';
 import EventItemDialog from './EventItemDialog';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
@@ -152,6 +153,10 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
   const [dragFrom, setDragFrom] = useState(null);
   const [pinningId, setPinningId] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  /* THE OWNER'S DELETE RULE (2026-10-04): GET /events/{code} says the role
+     this caller would delete in (`event.deleteAs`). Engage staff give a reason,
+     in this same inline confirm; '' means this caller may not delete. */
+  const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   /* One delete in flight, read synchronously (as savingRef is): a second
@@ -336,7 +341,8 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
     setDeleteError('');
     const forCode = code;
     try {
-      await deleteEvent(code);
+      const why = event && event.deleteAs === 'platform-admin' ? deleteReason.trim() : '';
+      await (why ? deleteEvent(code, { reason: why }) : deleteEvent(code));
       if (stillCurrent(forCode) && deletedRef.current) deletedRef.current(forCode);
     } catch (err) {
       if (!stillCurrent(forCode)) return;
@@ -683,10 +689,25 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
         {confirmingDelete ? (
           <div className="evb-confirm" data-testid="delete-confirm">
             <p>
-              Delete “{event.title}”? Its agenda and its join code, {event.code}, go with it. This cannot be undone.
+              Delete “{event.title}”? Its agenda, its join code, {event.code}, and the sessions its items ran go with it. Saved reports are kept. This cannot be undone.
             </p>
             <button type="button" ref={keepRef} className="evb-btn" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Keep it</button>
-            <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={removeEvent} disabled={deleting}>
+            {event.deleteAs === 'platform-admin' && (
+              <DeleteReasonField
+                id="evb-delete-reason"
+                value={deleteReason}
+                onChange={setDeleteReason}
+                scope="evb"
+                inputClass="evb-input evb-textarea"
+                hintClass="evb-dim"
+              />
+            )}
+            <button
+              type="button"
+              className="evb-btn evb-btn--ghostdanger"
+              onClick={removeEvent}
+              disabled={deleting || (event.deleteAs === 'platform-admin' && !deleteReason.trim())}
+            >
               {deleting ? 'Deleting…' : 'Delete event'}
             </button>
           </div>
@@ -695,7 +716,9 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
             type="button"
             ref={deleteOpenerRef}
             className="evb-btn evb-btn--ghostdanger"
-            onClick={() => { setDeleteError(''); setConfirmingDelete(true); }}
+            onClick={() => { setDeleteError(''); setDeleteReason(''); setConfirmingDelete(true); }}
+            disabled={event.deleteAs === ''}
+            title={event.deleteAs === '' ? 'Only the host who created this event, or an owner or admin of this team, can delete it.' : undefined}
           >
             <Icon name="Trash" weight="bold" size={14} color="currentColor" /> Delete event…
           </button>
@@ -714,6 +737,7 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
           onClose={closeDialog}
           onSaved={afterSave}
           onRemoved={afterRemove}
+          deleteAs={event.deleteAs}
           /* A 404 or 409 from the dialog means this agenda is out of date:
              reload it, so the dialog (which stays open) reads the rows as
              they are now (final review M2). */

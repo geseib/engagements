@@ -31,6 +31,7 @@
  * catch it.
  */
 const { recordSetCount, countSets } = require('./shared/usage');
+const { sweepArtifacts } = require('./shared/artifact-sweep');
 
 /** `ORG#acme#SETS` -> `acme`. Anything else -> null, and is ignored.
  *  The filter is what stops this handler from reacting to its OWN writes: the
@@ -43,6 +44,14 @@ function orgOfSetsPartition(pk) {
 
 exports.handler = async (event) => {
   const records = (event && event.Records) || [];
+
+  // THE SECOND DUTY OF THE ONE STREAM CONSUMER (2026-10-04): files go with
+  // the rows that point at them — an event item's slides, a Build Room's
+  // screenshots and patches — on a delete and on ttl expiry alike
+  // (shared/artifact-sweep.js). A function family rather than a second
+  // consumer: the stack is near CloudFormation's 500-resource limit. It never
+  // throws, so it can never block the meter below.
+  const filesSwept = await sweepArtifacts(records);
 
   // One re-count per ORG per batch, not per record. A bulk upload of thirty
   // sets arrives as one batch of thirty records that all describe the same
@@ -62,7 +71,7 @@ exports.handler = async (event) => {
     if (org) orgs.add(org);
   }
 
-  if (!orgs.size) return { orgsMeasured: 0 };
+  if (!orgs.size) return { orgsMeasured: 0, filesSwept };
 
   let measured = 0;
   for (const orgId of orgs) {
@@ -76,7 +85,7 @@ exports.handler = async (event) => {
       console.error(`⚠️ usage-stream: could not measure ${orgId}, leaving it to the reconciler:`, error);
     }
   }
-  return { orgsMeasured: measured };
+  return { orgsMeasured: measured, filesSwept };
 };
 
 module.exports.orgOfSetsPartition = orgOfSetsPartition;

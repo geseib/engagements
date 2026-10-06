@@ -6,9 +6,11 @@
  *                                    the ideas inbox, Connect Claude Code
  *   /build?gameId=NNNN&view=report → the report (BuildReport.jsx)
  *
- * The same page is the wall (Present mode, the P key, hides every host-only
- * control, the ideas inbox, host notes, names and the key) and the host's
- * phone remote (one column under 900px).
+ * FOUR SCREENS (owner, 2026-10-05; docs/design/build-room-host-redesign):
+ * Host is the host's working screen; Stage, Build and History are made to be
+ * shown to the room, and render nothing host-only (no controls, ideas inbox,
+ * host notes, names or the key). Keys 1-4 pick one; P flips between Host and
+ * the last screen the room saw. One column under 900px, for a phone.
  *
  * LIVE. A host WebSocket (ticketed, as GameHostPage's) refetches GET
  * build/state on every `buildChanged`; an 8s poll is the fallback, because a
@@ -21,11 +23,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../components/Modal';
+import { getAuthToken } from '../auth/authFetch';
+import { rememberReturnPath } from '../auth/returnPath';
+import reloadPage from '../utils/reloadPage';
 import Icon from '../components/Icon';
+import DeleteReasonField from '../components/DeleteReasonField';
 import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
+import BuildWheel from './BuildWheel';
 import {
   pluginInstallCommand,
   pluginConnectCommand,
@@ -33,6 +40,15 @@ import {
   apiBase, buildApi, createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
 import './BuildRoom.css';
+import {
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
+  questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
+} from './buildScreens';
+import Stage from '../components/stage/Stage';
+import Rail from '../components/stage/Rail';
+import RoomMeter from '../components/stage/RoomMeter';
+import Dock from '../components/stage/Dock';
+import { loadProfile } from '../config/displayProfile';
 import {
   CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLook, EarlyLookDialog, RunCrewCodeSwitch, StageTabs, featuredShare,
 } from './BuildCrew';
@@ -94,6 +110,11 @@ export const PROMPT_CARDS = [
     name: 'continue',
     title: 'Continue',
     text: 'Pick up my latest direction from the Build Room with check_directions and room_status, do it, post what changed, then call wait_for_direction and keep listening for the next one.',
+  },
+  {
+    name: 'preview',
+    title: 'Preview the work',
+    text: 'Show the room the work so far, running. Work out how this project runs (its dev server, a build and a static server, or plain HTML), start it in the background on a free port or reuse the one already running, and wait until the page answers. Then post_update with kind "showing", one line for the room and the link to the local URL, screenshot the main page and share_image it, and tell me the URL. If it cannot run yet, say plainly what is missing.',
   },
   {
     name: 'share-repo',
@@ -158,17 +179,21 @@ const entryTone = (entry) => {
 
 /** The direction the decide panel starts with: the room's top answer, as a sentence. */
 export function defaultDirection(ask) {
+  // The question and the answer (owner, 2026-10-06).
+  const w = ask && ask.wheel;
+  const landed = w && w.landed ? (w.slices || []).find((x) => x.id === w.landed) : null;
+  if (landed) return questionAnswer(ask.prompt, landed.text);
   const r = (ask && ask.results) || {};
   if (ask.kind === 'choice') {
     const top = [...(r.options || [])].sort((a, b) => b.count - a.count)[0];
-    return top && top.count ? `Go with ${top.label}: ${top.title}.` : '';
+    return top && top.count ? questionAnswer(ask.prompt, top.title) : '';
   }
   if (ask.kind === 'rating') {
     return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
-      ? `The room rated this ${r.rating.avg} out of 5.` : '';
+      ? questionAnswer(ask.prompt, ratingAnswer(r.rating.avg)) : '';
   }
   const top = (r.ranked || [])[0];
-  return top ? `The room's top idea: ${top.text}` : '';
+  return top ? questionAnswer(ask.prompt, top.text) : '';
 }
 
 /** What the host can fold into the direction with one click. */
@@ -243,14 +268,15 @@ export function OpenLink({ href, label, primary = false }) {
 export default function BuildRoomPage() {
   const params = new URLSearchParams(window.location.search);
   const gameId = (params.get('gameId') || '').trim();
-  if (!gameId) return <BuildCreate />;
+  // The create screen's Build Room format carries the typed title over.
+  if (!gameId) return <BuildCreate initialTitle={(params.get('title') || '').slice(0, 120)} />;
   return <BuildRoom gameId={gameId} initialView={params.get('view') === 'report' ? 'report' : 'room'} />;
 }
 
 // ── Create ──────────────────────────────────────────────────────────────────
 
-export function BuildCreate({ navigate = (url) => window.location.assign(url) }) {
-  const [title, setTitle] = useState('');
+export function BuildCreate({ navigate = (url) => window.location.assign(url), initialTitle = '' }) {
+  const [title, setTitle] = useState(initialTitle);
   const [goal, setGoal] = useState('');
   const [visibility, setVisibility] = useState('public');
   const [accessCode, setAccessCode] = useState('');
@@ -327,13 +353,46 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [present, setPresent] = useState(false);
+  // FOUR SCREENS (owner, 2026-10-05). Host is the host's; Stage, Build and
+  // History are shown to the room. `lastShown` is where P goes back to.
+  const [screen, setScreenState] = useState('host');
+  const lastShown = useRef(null);
+  const setScreen = useCallback((next) => {
+    if (isProjected(next)) lastShown.current = next;
+    setScreenState(next);
+  }, []);
   const [view, setView] = useState(initialView);
+  // WHICH ANSWER GOES TO CLAUDE (owner, 2026-10-06): the winner unless the
+  // host picks another ("choose this instead"), on the Stage or the Host.
+  const [pick, setPick] = useState(null); // {askId, id}
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
   const [openShareId, setOpenShareId] = useState(null);
   const now = useNow(5000);
+
+  // ── THE CONNECTION (owner, 2026-10-04) ────────────────────────────────
+  // After a long wait the laptop sleeps, the socket gives up after five
+  // retries, and every action said "check the connection" until the page was
+  // reloaded. So the host sees one honest status in the header (live,
+  // connecting, disconnected, no internet, signed out), the page recovers on
+  // its own when the laptop wakes or comes back online, and one click
+  // reconnects -- or, when the sign-in has run out, signs in again and comes
+  // back to this room.
+  const [wsConnected, setWsConnected] = useState(() => webSocketClient.isConnected());
+  const everConnected = useRef(false);
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  const [link, setLink] = useState('ok'); // 'ok' | 'network' | 'auth'
+  const errorKind = useRef('');            // the kind of the error bar's error
+  /** 'auth' when the sign-in is gone, 'network' when the server was not reached, else ''. */
+  const failureKind = useCallback(async (e) => {
+    if (e && e.status === 401) return 'auth';
+    if (e && e.status) return '';
+    // No status: the request never got an answer. A sign-in that has run out
+    // can look like this too (an authorizer refusal may carry no CORS headers),
+    // so ask the auth layer before calling it the network.
+    return (await getAuthToken()) ? 'network' : 'auth';
+  }, []);
 
   const inFlight = useRef(false);
   const again = useRef(false);
@@ -347,20 +406,72 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           const next = await api.state();
           setRoom(next);
           setLoadError('');
+          setLink('ok');
+          // A network failure the page has since recovered from is not news.
+          if (errorKind.current === 'network') { errorKind.current = ''; setError(''); }
         } catch (e) {
-          setLoadError(e.message || 'The room could not be loaded.');
+          const kind = await failureKind(e);
+          if (kind) setLink(kind);
+          setLoadError(kind === 'auth' ? '' : (e.message || 'The room could not be loaded.'));
         }
       } while (again.current);
     } finally {
       inFlight.current = false;
     }
-  }, [api]);
+  }, [api, failureKind]);
+
+  /** One click: reconnect the socket and reload the room, or sign in again. */
+  const reconnect = useCallback(async () => {
+    if (link === 'auth' || !(await getAuthToken())) {
+      rememberReturnPath();      // a Google sign-in leaves the page and comes back here
+      reloadPage();              // a protected page shows the sign-in form in place
+      return;
+    }
+    webSocketClient.ensureConnected();
+    refresh();
+  }, [link, refresh]);
+
+  useEffect(() => {
+    const onStatus = (up) => {
+      if (up) everConnected.current = true;
+      setWsConnected(Boolean(up));
+    };
+    webSocketClient.onConnectionStatusChange(onStatus);
+    // Waking, coming back online, or returning to the tab: the same resync the
+    // regular host page does (GameHostPage, "A4"), so no reload is needed.
+    const resync = () => { setOnline(navigator.onLine !== false); webSocketClient.ensureConnected(); refresh(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') resync(); };
+    const onOffline = () => setOnline(false);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', resync);
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('focus', resync);
+    window.addEventListener('pageshow', resync);
+    return () => {
+      webSocketClient.onConnectionStatusChange(null);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', resync);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('focus', resync);
+      window.removeEventListener('pageshow', resync);
+    };
+  }, [refresh]);
+
+  let connection = 'live';
+  if (link === 'auth') connection = 'signin';
+  else if (!online) connection = 'offline';
+  else if (!wsConnected || link === 'network') connection = everConnected.current || link === 'network' ? 'disconnected' : 'connecting';
 
   // First load, the fallback poll, and the host socket.
   useEffect(() => {
     refresh();
     const poll = setInterval(refresh, POLL_MS);
     webSocketClient.onMessage('buildChanged', () => refresh());
+    // Claude's live activity carries its own lines: show them, no refetch.
+    webSocketClient.onMessage('buildActivity', (msg) => {
+      const items = msg && Array.isArray(msg.items) ? msg.items : null;
+      if (items) setRoom((r) => (r ? { ...r, activity: items } : r));
+    });
     webSocketClient.onMessage('gameEnded', () => refresh());
     webSocketClient.onReconnected(() => refresh());
     webSocketClient.connect(gameId, null, true, { hostTicket: () => api.hostTicket() });
@@ -368,21 +479,32 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       clearInterval(poll);
       webSocketClient.disconnect();
       webSocketClient.offMessage('buildChanged');
+      webSocketClient.offMessage('buildActivity');
       webSocketClient.offMessage('gameEnded');
       webSocketClient.onReconnected(null);
     };
   }, [api, gameId, refresh]);
 
-  // P toggles Present, unless somebody is typing.
+  // 1-4 pick a screen; P flips between Host and the last screen the room saw.
+  // Never while somebody is typing, never with a modifier, never inside a dialog.
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key !== 'p' && e.key !== 'P') return;
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
-      setPresent((p) => !p);
+      if (e.target && e.target.closest && e.target.closest('[role="dialog"]')) return;
+      if (e.key === 'p' || e.key === 'P') {
+        setScreenState((cur) => {
+          const next = togglePresent(cur, lastShown.current);
+          if (isProjected(next)) lastShown.current = next;
+          return next;
+        });
+        return;
+      }
+      const picked = screenForKey(e.key);
+      if (picked) setScreen(picked);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [setScreen]);
 
   /** Every host action: one at a time, the server's sentence on failure, then refetch. */
   const run = useCallback(async (fn) => {
@@ -393,12 +515,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       await refresh();
       return out;
     } catch (e) {
-      setError(e.message || 'That did not work.');
+      const kind = await failureKind(e);
+      if (kind) setLink(kind);
+      errorKind.current = kind;
+      setError(kind === 'auth'
+        ? 'Your sign-in has run out. Sign in again to keep running the room; nothing in it is lost.'
+        : (e.message || 'That did not work.'));
       return undefined;
     } finally {
       setBusy(false);
     }
-  }, [refresh]);
+  }, [refresh, failureKind]);
 
   const goView = (next) => {
     setView(next);
@@ -420,6 +547,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
   if (view === 'report') return <ImageLoader.Provider value={loadImage}><BuildReport state={room} onBack={() => goView('room')} /></ImageLoader.Provider>;
 
+  const present = isProjected(screen);
   const host = !present;
   const ended = room.state === 'ENDED';
   const asks = room.asks || [];
@@ -433,13 +561,33 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
   return (
     <ImageLoader.Provider value={loadImage}>
-    <div className={`brm brm-room${present ? ' brm--present' : ''}`} data-theme="dark">
+    <div className={`brm brm-room${present ? ' brm--present' : ''}${screen === 'host' ? ' brm-room--host' : ''}`} data-theme="dark">
+      {screen === 'stage' ? (
+        <BuildStage
+          room={room}
+          current={current}
+          crewOn={onCrew}
+          crew={crew}
+          onWall={onWall}
+          busy={busy}
+          ended={ended}
+          run={run}
+          api={api}
+          now={now}
+          onHost={() => setScreen('host')}
+          pickId={pick && current && pick.askId === current.askId ? pick.id : null}
+          onPick={(id) => { if (current) setPick({ askId: current.askId, id }); setScreen('host'); }}
+        />
+      ) : (
+      <>
       <RoomHeader
+        connection={connection}
+        onReconnect={reconnect}
         room={room}
         now={now}
         host={host}
-        present={present}
-        onPresent={() => setPresent((p) => !p)}
+        screen={screen}
+        onScreen={setScreen}
         onConnect={() => setDialog('connect')}
         onWrap={() => setDialog('wrap')}
         onReport={() => goView('report')}
@@ -454,15 +602,30 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {host && error && (
         <div className="brm-alert brm-alert--bar" role="alert">
           {error}
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setError('')}>Dismiss</button>
+          {['network', 'auth'].includes(errorKind.current) && (
+            <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>
+              {errorKind.current === 'auth' ? 'Sign in again' : 'Reconnect'}
+            </button>
+          )}
+          <button type="button" className={`brm-btn brm-btn--sm brm-btn--ghost${['network', 'auth'].includes(errorKind.current) ? '' : ' brm-push'}`} onClick={() => { errorKind.current = ''; setError(''); }}>Dismiss</button>
         </div>
       )}
-      {host && loadError && <div className="brm-alert brm-alert--bar" role="alert">{loadError}</div>}
+      {host && loadError && (
+        <div className="brm-alert brm-alert--bar" role="alert">
+          {loadError}
+          <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>Reconnect</button>
+        </div>
+      )}
       {ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
 
-      <div className="brm-grid">
-        <main className="brm-main">
-          {host && firstRun && (
+      {screen === 'build' && <BuildScreen room={room} now={now} />}
+      {screen === 'history' && <HistoryScreen room={room} />}
+      {screen === 'host' && (
+      <div className="brm-host">
+        {/* NOW: what Claude or the room is doing, with that moment's controls,
+            and the one composer for everything the host types (C1, C4, C5). */}
+        <main className="brm-hostcol" aria-label="Now">
+          {firstRun && (
             <section className="brm-panel brm-howto" aria-labelledby="brm-howto-h">
               <h2 className="brm-h" id="brm-howto-h">How a Build Room works</h2>
               <ol className="brm-steps">
@@ -480,43 +643,70 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
           {crew && <StageTabs stage={stage} onStage={setStage} crew={crew} host={host} />}
 
-          {host && proposed.map((ask) => (
-            <ReviewCard key={`${ask.askId}:${ask.status}`} ask={ask} busy={busy} ended={ended} run={run} api={api} connected={room.agent?.connected} />
-          ))}
-
           {onCrew ? (
             <>
-              {onWall && <EarlyLook key={onWall.shareId} share={onWall} crew={crew} host={false} stage />}
               <CrewBoard crew={crew} host={host} now={now} busy={busy} run={run} api={api} onOpen={setOpenShareId} playerCount={room.playerCount} />
-              <JoinFoot gameId={gameId} room={room} current={null} crew />
-              <CrewTasks crew={crew} host={host && !ended} busy={busy} run={run} api={api} />
+              <CrewTasks crew={crew} host={!ended} busy={busy} run={run} api={api} />
             </>
           ) : (
             <>
               {current ? (
-                <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={host} busy={busy} ended={ended} run={run} api={api} />
+                <div className="brm-now">
+                  <AskStage
+                    key={`${current.askId}:${current.status}`}
+                    ask={current} room={room} host busy={busy} ended={ended} run={run} api={api}
+                    pickId={pick && pick.askId === current.askId ? pick.id : null}
+                    onPick={(id) => setPick({ askId: current.askId, id })}
+                  />
+                </div>
               ) : (
-                <IdleStage room={room} now={now} host={host && !ended} />
+                <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} />
               )}
-
-              <JoinFoot gameId={gameId} room={room} current={current} />
-
-              {host && !ended && (
-                <NextPanel agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} />
-              )}
-
-              <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
-              {host && <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} />}
             </>
           )}
+
+          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} />}
         </main>
 
-        <aside className="brm-side">
-          {host && onCrew && <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />}
-          {host && !onCrew && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
-          <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} />
+        {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
+            them), then the room's ideas (C1, C2). */}
+        <section className="brm-hostcol" aria-labelledby="brm-waiting-h">
+          <h2 className="brm-h5" id="brm-waiting-h">
+            Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
+          </h2>
+          <UnheardNotice room={room} />
+          {freshWallComment(room, now) && (
+            <div className="brm-notice brm-row brm-gap brm-onwall" role="status">
+              <span><b>On the wall now:</b> &ldquo;{room.wallComment.text}&rdquo;</span>
+              <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.clearWall())}>Take it down</button>
+            </div>
+          )}
+          {proposed.map((ask) => (
+            <ReviewCard key={`${ask.askId}:${ask.status}`} ask={ask} busy={busy} ended={ended} run={run} api={api} connected={room.agent?.connected} />
+          ))}
+          {onCrew && <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />}
+          {!onCrew && <IdeasInbox ideas={room.ideas || []} current={current} busy={busy} ended={ended} run={run} api={api} />}
+        </section>
+
+        {/* WHAT HAPPENED (owner, 2026-10-05): the timeline, the asks and the
+            screenshots, one open at a time; the open one fills the column and
+            scrolls inside itself, so the page never scrolls. */}
+        <aside className="brm-hostcol brm-hostcol--stack">
+          {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
+          <HistoryStack
+            items={[
+              { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
+              { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
+                ? <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
+                : <div className="brm-empty">No asks yet.</div> },
+              { key: 'shots', label: 'Screenshots', count: (room.images || []).length, body: <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} /> },
+            ]}
+          />
         </aside>
       </div>
+      )}
+      </>
+      )}
 
       {host && dialog === 'connect' && (
         <ConnectPanel room={room} gameId={gameId} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
@@ -534,10 +724,53 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
     </div>
     </ImageLoader.Provider>
+  );
+}
+
+// ── What Claude is doing ────────────────────────────────────────────────────
+
+const ACTIVITY_FRESH_MS = 2 * 60 * 1000;
+const ACTIVITY_ICON = { edit: 'PencilSimple', read: 'FileText', run: 'Terminal', search: 'MagnifyingGlass', web: 'Globe', agent: 'UsersThree', plan: 'ListChecks', other: 'Gear' };
+
+/**
+ * LIVE: WHAT CLAUDE CODE IS DOING (owner, 2026-10-04). One line per tool,
+ * from the plugin's hook: what kind of thing and which file, never what is in
+ * it. The newest line leads; the host also sees the last few. Quiet after two
+ * minutes without a line, so a stale "Editing…" never sits on the wall.
+ */
+export function ClaudeActivity({ activity, agent, now, full }) {
+  const items = (activity || []).slice().reverse();
+  const latest = items[0];
+  const fresh = latest && now - Date.parse(latest.at) < ACTIVITY_FRESH_MS;
+  if (!latest && !(agent && agent.connected)) return null;
+  return (
+    <section className={`brm-panel brm-activity${fresh ? ' is-live' : ''}`} aria-labelledby="brm-activity-h" aria-live="polite">
+      <h2 className="brm-h5" id="brm-activity-h">{fresh ? 'Claude Code is working' : 'Claude Code'}</h2>
+      {latest ? (
+        <p className="brm-activity-now" data-testid="brm-activity-now">
+          <Icon name={ACTIVITY_ICON[latest.kind] || 'Gear'} size={18} />
+          <span>{latest.text}</span>
+          <span className="brm-muted brm-small">{agoText(latest.at, now) || 'just now'}</span>
+        </p>
+      ) : (
+        <p className="brm-hint">Nothing yet. What Claude does shows up here as it works.</p>
+      )}
+      {full && items.length > 1 && (
+        <ul className="brm-activity-list">
+          {items.slice(1, 8).map((a) => (
+            <li key={`${a.at}:${a.text}`}>
+              <Icon name={ACTIVITY_ICON[a.kind] || 'Gear'} size={14} />
+              <span>{a.text}</span>
+              <span className="brm-muted brm-small">{agoText(a.at, now)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -552,81 +785,470 @@ export function agentChipText(agent, now) {
   return `${name} not connected`;
 }
 
+/** What the host does when Claude Code has gone quiet (owner, 2026-10-05). */
+export const CONTINUE_COMMAND = pluginCommand('continue');
+
+/**
+ * Claude's status in the header. When Claude Code was here and has stopped
+ * ("last seen 4 min ago"), the chip is the fix: one click copies
+ * /engage:continue to paste into the Claude Code window, and its tooltip
+ * says so (owner, 2026-10-05). Connected, or never connected, it explains
+ * itself on hover and does nothing on click.
+ */
 function AgentChip({ agent, now }) {
+  const [copied, setCopied] = useState('');
+  const quiet = agentStopped(agent);
+  const cls = `brm-agentchip${agent && agent.connected ? ' is-on' : ''}${quiet ? ' is-quiet' : ''}`;
+  if (!quiet) {
+    const tip = !agent || !agent.lastSeenAt
+      ? 'Claude Code has not connected yet. Use More, then Connect Claude Code.'
+      : agent.listening
+        ? 'Claude Code is waiting for your next direction.'
+        : 'Claude Code is connected and working.';
+    return <span className={cls} data-testid="brm-agentchip" title={tip}>{agentChipText(agent, now)}</span>;
+  }
+  const copy = async () => {
+    const ok = await copyText(CONTINUE_COMMAND);
+    setCopied(ok ? `Copied ${CONTINUE_COMMAND}. Paste it into Claude Code.` : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    setTimeout(() => setCopied(''), 4000);
+  };
   return (
-    <span className={`brm-agentchip${agent && agent.connected ? ' is-on' : ''}`} data-testid="brm-agentchip">
-      {agentChipText(agent, now)}
-    </span>
+    <button
+      type="button"
+      className={cls}
+      data-testid="brm-agentchip"
+      title={`Claude Code has stopped. Click to copy ${CONTINUE_COMMAND}, then paste it into the Claude Code window and press Enter.`}
+      onClick={copy}
+    >
+      {copied || agentChipText(agent, now)}
+    </button>
   );
 }
 
-function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended }) {
+/**
+ * CLAUDE HAS NOT HEARD THIS (owner, 2026-10-06): a direction sent while Claude
+ * Code has stopped waits on the server until Claude calls Engage again, which
+ * it only does after /engage:continue. Say so where the host is looking, with
+ * the command one click away.
+ */
+export function UnheardNotice({ room }) {
+  const [copied, setCopied] = useState('');
+  const waiting = unheard(room);
+  if (!waiting.length || !agentStopped(room && room.agent)) return null;
+  const copy = async () => {
+    const ok = await copyText(CONTINUE_COMMAND);
+    setCopied(ok ? 'Copied. Paste it into Claude Code and press Enter.' : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    setTimeout(() => setCopied(''), 5000);
+  };
+  const n = waiting.length;
+  return (
+    <div className="brm-notice brm-unheard" role="status" data-testid="brm-unheard">
+      <p className="brm-unheard-t">
+        <b>Claude Code has stopped.</b> It has not heard {n === 1 ? 'your last direction' : `${n} directions`} yet.
+        Run <code>{CONTINUE_COMMAND}</code> in Claude Code and it picks {n === 1 ? 'it' : 'them'} up.
+      </p>
+      <div className="brm-row brm-gap">
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" onClick={copy}>Copy {CONTINUE_COMMAND}</button>
+        {copied && <span className="brm-hint">{copied}</span>}
+      </div>
+    </div>
+  );
+}
+
+const CONNECTION = {
+  live: { text: 'Live', title: 'Connected to the room. Changes arrive as they happen.' },
+  connecting: { text: 'Connecting…', title: 'Opening the live connection to the room.' },
+  disconnected: { text: 'Disconnected · Reconnect', title: 'The live connection dropped. Click to reconnect now; it also retries on its own.' },
+  offline: { text: 'No internet · Try again', title: 'This laptop is offline. The room reconnects when it is back.' },
+  signin: { text: 'Signed out · Sign in again', title: 'Your sign-in has run out. Sign in again and you come straight back to this room.' },
+};
+
+/**
+ * AUTO (owner, 2026-10-04): Claude's questions open to the room as soon as it
+ * asks them, with no review step. The same setting as "Review Claude's
+ * questions" in the Connect panel, the other way round, kept in sight.
+ */
+export function AutoSwitch({ settings, busy, run, api }) {
+  const auto = settings ? settings.reviewAgentAsks === false : false;
+  return (
+    <label className={`brm-auto${auto ? ' is-on' : ''}`} title="When on, Claude's questions open to the room straight away, with no review first">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={auto}
+        disabled={busy}
+        onChange={(e) => run(() => api.saveSettings({ reviewAgentAsks: !e.target.checked }))}
+      />
+      <span>Auto-open Claude&apos;s questions</span>
+    </label>
+  );
+}
+
+/** The host's one connection status. A button whenever there is something to do. */
+export function ConnectionChip({ connection = 'live', onReconnect }) {
+  const c = CONNECTION[connection] || CONNECTION.live;
+  if (connection === 'live' || connection === 'connecting') {
+    return <span className={`brm-conn brm-conn--${connection}`} title={c.title} data-testid="brm-conn">{c.text}</span>;
+  }
+  return (
+    <button type="button" className={`brm-conn brm-conn--${connection}`} title={c.title} onClick={onReconnect} data-testid="brm-conn">
+      {c.text}
+    </button>
+  );
+}
+
+/**
+ * THE SESSION MENU (owner, 2026-10-05: "too much to take in"). The header's
+ * once-a-session controls live here, out of the room's sight: Connect Claude
+ * Code, the crew, Auto, Wrap up, Report, End session. A pick that opens a
+ * dialog closes the menu; a switch leaves it open. A click inside a dialog
+ * the menu opened (Run crew code asks first) is not "outside".
+ */
+function SessionMenu({ children }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (ref.current && ref.current.contains(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('[role="dialog"]')) return;
+      setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <div className="brm-more" ref={ref}>
+      <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        More <Icon name="CaretDown" size={14} />
+      </button>
+      {open && (
+        <div className="brm-more-panel" role="group" aria-label="Session">
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * THE HEADER, the same on all four screens: the title, the screens, the open
+ * ask, Claude's status, the join code. On the Host screen it adds the live
+ * connection and the session menu; on a screen the room sees, nothing in it
+ * is host-only (the Host tab's count is a number, never content).
+ */
+function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
+  const waiting = waitingCount(room);
+  const pill = askPill(room);
+  const [qr, setQr] = useState(false);
+  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
+  const pick = (close, fn) => () => { close(); fn(); };
   return (
     <header className="brm-hbar">
       <div className="brm-hbar-title">
         <span className="brm-t" title={room.title}>{room.title || 'Build Room'}</span>
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
       </div>
-      <div className="brm-hbar-tools">
-        <span className="brm-codewrap"><span className="brm-muted brm-small">Join code</span> <span className="brm-code">{room.gameId}</span></span>
-        <span className="brm-chip">{room.playerCount || 0} joined</span>
-        <AgentChip agent={room.agent} now={now} />
-        {host && (
-          <>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onConnect}>
-              <Icon name="Lock" size={14} /> Connect Claude Code
-            </button>
-            {crew && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
-            {!ended && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onCrew}>
-                <Icon name="UsersThree" size={14} /> {crew ? 'Crew' : 'Open to a crew'}
-              </button>
-            )}
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onWrap}>Wrap up</button>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onReport}>
-              <Icon name="FileText" size={14} /> Report
-            </button>
-            {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={onEnd}>End session</button>}
-          </>
-        )}
-        <button
-          type="button"
-          className={`brm-btn brm-btn--sm brm-btn--ghost${present ? ' is-on' : ''}`}
-          onClick={onPresent}
-          aria-pressed={present}
-          title="Present mode hides every host-only control (P)"
-        >
-          <Icon name="Monitor" size={14} /> {present ? 'Exit present' : 'Present'}
+      <nav className="brm-screens" aria-label="Screens">
+        {SCREENS.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            className={`brm-screen${screen === s.key ? ' is-on' : ''}`}
+            aria-pressed={screen === s.key}
+            title={`${s.label} (${s.shortcut})`}
+            onClick={() => onScreen(s.key)}
+          >
+            {s.label}
+            {s.key === 'host' && waiting > 0 && <span className="brm-screen-n">{waiting}<span className="brm-sr"> waiting</span></span>}
+          </button>
+        ))}
+      </nav>
+      {pill && (
+        <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => onScreen('stage')}>
+          {pill.text}
         </button>
+      )}
+      <div className="brm-hbar-tools">
+        <AgentChip agent={room.agent} now={now} />
+        {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
+        <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => setQr(true)}>
+          <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
+        </button>
+        <span className="brm-chip">{room.playerCount || 0} joined</span>
+        {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
+        {host && (
+          <SessionMenu>
+            {(close) => (
+              <>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onConnect)}>
+                  <Icon name="Lock" size={14} /> Connect Claude Code
+                </button>
+                {!ended && (
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onCrew)}>
+                    <Icon name="UsersThree" size={14} /> {crew ? 'Crew' : 'Open to a crew'}
+                  </button>
+                )}
+                {crew && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
+                {!ended && <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onWrap)}>Wrap up</button>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onReport)}>
+                  <Icon name="FileText" size={14} /> Report
+                </button>
+                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(close, onEnd)}>End session</button>}
+              </>
+            )}
+          </SessionMenu>
+        )}
       </div>
     </header>
   );
 }
 
-function JoinFoot({ gameId, room, current, crew = false }) {
-  const origin = window.location.origin;
-  const playUrl = `${origin}/play?gameId=${gameId}`;
-  const answered = current ? (current.kind === 'suggest' && current.status === 'voting' ? current.voteCount : current.answerCount) : null;
+/**
+ * ONE OPEN AT A TIME (owner, 2026-10-05): "when you open one the other close.
+ * but you never scroll the browser window, just the active open box." The
+ * open section takes the column's height and scrolls inside itself; the
+ * closed ones are a row each. One is always open: Timeline to start.
+ */
+function HistoryStack({ items }) {
+  const [open, setOpen] = useState(items[0].key);
   return (
-    <div className="brm-foot">
-      <div className="brm-join">
-        <div className="brm-qr" aria-label={`QR code to join at ${playUrl}`} role="img">
-          <QRCodeSVG value={playUrl} size={84} level="M" includeMargin={false} />
-        </div>
-        <div className="brm-jt"><b>{window.location.host}/play</b>code</div>
-        <span className="brm-jc">{gameId}</span>
-      </div>
-      {crew && !current ? (
-        <div className="brm-resp">Join as a builder <span>tap I have Claude Code on your phone</span></div>
-      ) : current && current.status !== 'results' ? (
-        <div className="brm-resp">
-          {answered || 0} of {room.playerCount || 0}{' '}
-          <span>{current.status === 'voting' ? 'have voted' : current.kind === 'suggest' ? 'suggestions so far' : 'have answered'}</span>
-        </div>
-      ) : (
-        <div className="brm-resp">Got an idea? <span>Send it from your phone any time</span></div>
-      )}
+    <div className="brm-stack">
+      {items.map((it) => {
+        const isOpen = open === it.key;
+        return (
+          <div key={it.key} className={`brm-stackitem${isOpen ? ' is-open' : ''}`}>
+            <button
+              type="button"
+              className="brm-stackhead"
+              aria-expanded={isOpen}
+              aria-controls={`brm-stack-${it.key}`}
+              onClick={() => setOpen(it.key)}
+            >
+              <Icon name={isOpen ? 'CaretDown' : 'CaretRight'} size={14} />
+              {it.label}
+              <span className="brm-muted">{` · ${it.count}`}</span>
+            </button>
+            {isOpen && <div className="brm-stackbody" id={`brm-stack-${it.key}`}>{it.body}</div>}
+          </div>
+        );
+      })}
     </div>
+  );
+}
+
+// ── The Stage screen ────────────────────────────────────────────────────────
+
+/**
+ * STAGE: what the room reads during an ask, drawn by the regular host stage's
+ * own parts (components/stage/: Stage, Rail, RoomMeter, Dock), so a Build Room
+ * ask looks and behaves like any other session on the projector: the same
+ * display profiles and fitter, the phase chip and join code in the rail, the
+ * count in the meter, one move in the dock on Space. The rail is this screen's
+ * header; HOST at the dock's edge (or 1, or P) goes back, as SESSION does on
+ * the regular stage. Everything on it is room-safe (stageModel); deciding needs
+ * words, so at results the move is back to the Host screen.
+ */
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick }) {
+  const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
+  const [qr, setQr] = useState(false);
+  const m = stageModel(room, current);
+  const waiting = waitingCount(room);
+  const move = !ended && m.primary ? m.primary : null;
+  const doMove = useCallback((m) => {
+    if (!m || busy) return;
+    // The dock's "Go with B" is the winner: back to the Host with its sentence.
+    if (m.action === 'decide') { onPick(null); return; }
+    run(() => api.askAction(current.askId, { action: m.action }));
+  }, [busy, onPick, run, api, current]);
+  const act = useCallback(() => doMove(move), [doMove, move]);
+  // Space fires the dock's move: never while typing, and never when a focused
+  // control would take the Space itself.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('button, a, [role="button"], [role="dialog"]')) return;
+      e.preventDefault();
+      act();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [act]);
+  const body = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
+  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
+  let content;
+  if (crewOn) {
+    content = (
+      <>
+        {onWall && <EarlyLook key={onWall.shareId} share={onWall} crew={crew} host={false} stage />}
+        <CrewBoard crew={crew} host={false} now={now} busy={busy} run={run} api={api} onOpen={() => undefined} playerCount={room.playerCount} />
+      </>
+    );
+  } else if (current && m.wheel) {
+    content = (
+      <section className="brm-stage brm-wheelstage" aria-label="The wheel">
+        <span className="brm-eyebrow"><b>The wheel</b> · Ask {Number(current.askId) || current.askId}</span>
+        <h2 className="brm-q">{current.prompt}</h2>
+        <BuildWheel wheel={current.wheel} size="lg" />
+      </section>
+    );
+  } else if (current) {
+    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />;
+  } else {
+    content = <IdleStage room={room} now={now} host={false} />;
+  }
+  return (
+    <>
+      <Stage
+        profile={profile}
+        phase={m.phase || ''}
+        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}` : 'idle', crewOn ? 'crew' : ''].join('|')}
+        rail={(
+          <Rail
+            phase={m.phase}
+            title={room.title || 'Build Room'}
+            context={m.context}
+            join={ended
+              ? { code: room.gameId, closed: true }
+              : { url: `${window.location.host}/play`, code: room.gameId, onPreview: () => undefined, onPreviewEnd: () => undefined, onPin: () => setQr(true) }}
+          />
+        )}
+        meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} />}
+        dock={(
+          <Dock status={m.status}>
+            {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
+            {move && <button type="button" className="btn" disabled={busy} onClick={act}>{move.label}</button>}
+            {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
+            {move && <span className="kbd" aria-hidden="true">SPACE</span>}
+            <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
+              <span className="dock-more-lbl">HOST</span>
+              {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
+            </button>
+          </Dock>
+        )}
+      >
+        <div className="content"><div className="fitbox">{content}</div></div>
+      </Stage>
+      <WallComment comment={freshWallComment(room, now)} />
+      {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
+    </>
+  );
+}
+
+// ── The Build and History screens ───────────────────────────────────────────
+
+/**
+ * BUILD: what Claude has built so far (owner, 2026-10-05: "present is really
+ * switching to the local live view of the development server"). Showing the
+ * running page inside Engage waits on a browser check (PLAN step 0: an https
+ * page could not frame localhost in Chromium 152), so this screen shows the
+ * newest screenshot and opens the running build in a new tab: the fallback
+ * the design keeps anyway (C8).
+ */
+function BuildScreen({ room, now }) {
+  const { link, shot } = latestBuild(room);
+  return (
+    <section className="brm-screenbody brm-buildscreen" aria-label="The build">
+      <WallComment comment={freshWallComment(room, now)} />
+      <div className="brm-row">
+        <h2 className="brm-q">What Claude has built so far</h2>
+        {link && <span className="brm-push"><OpenLink href={link} label="Open the build" primary /></span>}
+      </div>
+      {shot ? (
+        <BuildImage imageId={shot.imageId} caption={shot.caption} className="brm-shot brm-shot--build" />
+      ) : (
+        <div className="brm-empty">Nothing to show yet. When Claude previews the work, its newest screenshot appears here.</div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * HISTORY: the room's story so far, to look back on together. The decisions,
+ * the timeline as the wall shows it (no host notes, no idea authors), and
+ * every screenshot. Nothing here edits; the Host screen does that.
+ */
+function HistoryScreen({ room }) {
+  const decided = (room.asks || [])
+    .filter((a) => a.status === 'decided' && a.decision)
+    .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
+  const images = (room.images || []).slice().reverse();
+  const noop = () => undefined;
+  return (
+    <div className="brm-screenbody brm-histscreen">
+      <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />
+      <div className="brm-histside">
+        <section className="brm-panel" aria-labelledby="brm-decided-h">
+          <h2 className="brm-h" id="brm-decided-h">Decided so far</h2>
+          {decided.length ? (
+            <ol className="brm-list brm-decided">
+              {decided.map((a) => (
+                <li key={a.askId}>
+                  {a.decision.direction || a.prompt}
+                  {a.decision.method && <span className="brm-muted brm-small">{` · ${METHOD_WORDS[a.decision.method] || a.decision.method}`}</span>}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="brm-hint">Nothing decided yet.</p>
+          )}
+        </section>
+        <section className="brm-panel" aria-labelledby="brm-artifacts-h">
+          <h2 className="brm-h" id="brm-artifacts-h">Screenshots</h2>
+          {images.length ? (
+            <div className="brm-shotgrid">
+              {images.map((im) => (
+                <BuildImage key={im.imageId} imageId={im.imageId} caption={im.caption || (im.label ? `Choice ${im.label}` : '')} className="brm-shot brm-shot--grid" />
+              ))}
+            </div>
+          ) : (
+            <p className="brm-hint">Claude&apos;s screenshots collect here as it works.</p>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/** The full join link, copied with one click, so the host can paste it into a chat or an email. */
+function CopyLinkButton({ url, className, children }) {
+  const [said, setSaid] = useState('');
+  const copy = async (e) => {
+    e.stopPropagation(); // inside the enlarged QR, a click anywhere else closes it
+    const ok = await copyText(url);
+    setSaid(ok ? 'Link copied' : 'Press and hold to copy');
+    setTimeout(() => setSaid(''), 2500);
+  };
+  return (
+    <button type="button" className={className} onClick={copy} title={`Copy ${url}`} aria-label={`Copy the join link ${url}`}>
+      {children}
+      <span className="brm-copied" role="status">{said}</span>
+    </button>
+  );
+}
+
+/**
+ * The QR, big enough to scan from the back of the room (owner, 2026-10-04).
+ * A click anywhere puts it away; the link under it copies instead.
+ */
+export function QrZoom({ playUrl, gameId, onClose }) {
+  return (
+    <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Join QR code">
+      <div className="brm-qrzoom-body" onClick={onClose}>
+        <div className="brm-qrzoom-qr" role="img" aria-label={`QR code to join at ${playUrl}`}>
+          <QRCodeSVG value={playUrl} size={512} level="M" includeMargin={false} />
+        </div>
+        <CopyLinkButton url={playUrl} className="brm-qrzoom-url">{playUrl}</CopyLinkButton>
+        <div className="brm-qrzoom-code">Code <b>{gameId}</b></div>
+        <p className="brm-qrzoom-hint">Click anywhere to put it away. Click the link to copy it.</p>
+      </div>
+    </Modal>
   );
 }
 
@@ -636,20 +1258,16 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
   const [prompt, setPrompt] = useState(ask.prompt);
   const [detail, setDetail] = useState(ask.detail || '');
   const [options, setOptions] = useState(() => (ask.options || []).map((o) => ({ ...o })));
-  const [low, setLow] = useState(ask.scale?.lowLabel || '');
-  const [high, setHigh] = useState(ask.scale?.highLabel || '');
 
   const optionsDirty = JSON.stringify(options.map(({ title, detail: d, url }) => [title, d, url]))
     !== JSON.stringify((ask.options || []).map(({ title, detail: d, url }) => [title, d, url]));
-  const dirty = prompt !== ask.prompt || detail !== (ask.detail || '') || optionsDirty
-    || low !== (ask.scale?.lowLabel || '') || high !== (ask.scale?.highLabel || '');
+  const dirty = prompt !== ask.prompt || detail !== (ask.detail || '') || optionsDirty;
 
   const editBody = () => ({
     action: 'edit',
     prompt,
     detail,
     ...(ask.kind === 'choice' ? { options: options.map(({ title, detail: d, url }) => ({ title, detail: d, url })) } : {}),
-    ...(ask.kind === 'rating' ? { lowLabel: low, highLabel: high } : {}),
   });
 
   const save = () => run(() => api.askAction(ask.askId, editBody()));
@@ -660,6 +1278,27 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
   const discard = () => run(() => api.askAction(ask.askId, { action: 'discard' }));
   const setOpt = (i, key, value) => setOptions((list) => list.map((o, j) => (j === i ? { ...o, [key]: value } : o)));
   const letter = (i) => String.fromCharCode(65 + i);
+
+  // PREVIEWS BEFORE THE ROOM SEES IT (owner, 2026-10-04). An option with no
+  // screenshot and no preview link is judged by its title alone. Claude is told
+  // to attach mockups before it waits; when it has not, the host can ask for
+  // them here, and Claude gets the direction at once (wait_for_room returns on
+  // a direction, engage-mcp.mjs).
+  const [askedMockups, setAskedMockups] = useState(false);
+  const [answering, setAnswering] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const missing = ask.kind === 'choice'
+    ? (ask.options || []).map((o, i) => (o.imageId || o.url ? null : (o.label || letter(i)))).filter(Boolean)
+    : [];
+  const askForMockups = async () => {
+    const list = missing.join(', ');
+    const out = await run(() => api.postDirection(
+      `Before ask ${askNumber(ask.askId)} opens to the room: make a quick mockup of ${missing.length === 1 ? `option ${list}` : `options ${list}`}, `
+      + `stamp each with its letter, screenshot it, and attach it to its option with share_image (askId "${ask.askId}", label ${list}). `
+      + 'Then tell me they are in.',
+    ));
+    if (out !== undefined) setAskedMockups(true);
+  };
 
   return (
     <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`}>
@@ -672,54 +1311,95 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
         {ask.kind === 'choice' && <span className="brm-hint brm-push">Options can change until someone answers</span>}
       </div>
       <p className="brm-stagehint">{stageHint(ask)}</p>
-      <label className="brm-field">
-        <span className="brm-lbl">Question (shown big on the wall)</span>
-        <input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} />
-      </label>
-      <label className="brm-field">
-        <span className="brm-lbl">Context (optional)</span>
-        <textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} />
-      </label>
+      {/* WHAT THE ROOM WOULD SEE, then the edits folded (C2): most of
+          Claude's asks open as written, so the fields are one click away. */}
+      <p className="brm-reviewq">{prompt || ask.prompt}</p>
       {ask.kind === 'choice' && (
-        <div className="brm-field">
-          <span className="brm-lbl">Options</span>
+        <ul className="brm-reviewopts">
           {options.map((o, i) => (
-            <div className="brm-optedit" key={o.label || i}>
+            <li key={o.label || i}>
               <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
-              <div className="brm-optfields">
-                <input className="brm-input" aria-label={`Option ${letter(i)} title`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
-                <input className="brm-input brm-input--sm" aria-label={`Option ${letter(i)} preview URL`} placeholder="Preview URL (optional, http or https)" value={o.url || ''} onChange={(e) => setOpt(i, 'url', e.target.value)} />
-                <BuildImage imageId={(ask.options[i] || {}).imageId} alt={`Choice ${letter(i)}`} className="brm-shot brm-shot--thumb" />
-              </div>
-              {/* Only the LAST option can go: the server letters options by
-                  position, and Claude has already stamped "Choice A" and "B". */}
-              {i === options.length - 1 && options.length > 2 ? (
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={`Remove ${letter(i)}`} onClick={() => setOptions((l) => l.slice(0, -1))}>
-                  <Icon name="X" size={14} />
-                </button>
-              ) : <span />}
-            </div>
+              <span className="brm-reviewopt-t">{o.title}</span>
+              <BuildImage imageId={(ask.options[i] || {}).imageId} alt={`Choice ${letter(i)}`} className="brm-shot brm-shot--thumb" />
+            </li>
           ))}
-          {options.length < 6 && (
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', detail: '', url: '' }])}>
-              <Icon name="Plus" size={14} /> Add option
-            </button>
+        </ul>
+      )}
+      {ask.kind === 'rating' && <p className="brm-hint">1 means {RATING_SCALE.lowLabel.toLowerCase()} · 5 means {RATING_SCALE.highLabel.toLowerCase()}</p>}
+      {missing.length > 0 && !ended && (
+        <div className="brm-notice brm-row brm-gap" role="status" data-testid="brm-previews-missing">
+          {askedMockups ? (
+            <span>Asked Claude for mockups. Each appears under its option as Claude attaches it.</span>
+          ) : (
+            <span>
+              <b>No preview for {missing.length === 1 ? `option ${missing[0]}` : `options ${missing.join(', ')}`} yet.</b>{' '}
+              {connected
+                ? 'The room chooses faster from a picture. Claude can make a quick mockup of each.'
+                : 'Claude is not connected, so it cannot make mockups now. Add a preview URL under Edit, or open the ask without.'}
+            </span>
           )}
-          <div className="brm-notice"><b>Letters are fixed.</b> Claude stamps &quot;Choice A&quot;, &quot;Choice B&quot; on its mockups, so renaming an option keeps its letter.</div>
+          {connected && !askedMockups && (
+            <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={askForMockups}>Ask Claude for mockups</button>
+          )}
         </div>
       )}
-      {ask.kind === 'rating' && (
-        <div className="brm-two">
-          <label className="brm-field"><span className="brm-lbl">1 means</span><input className="brm-input" value={low} maxLength={40} onChange={(e) => setLow(e.target.value)} /></label>
-          <label className="brm-field"><span className="brm-lbl">5 means</span><input className="brm-input" value={high} maxLength={40} onChange={(e) => setHigh(e.target.value)} /></label>
+      <details className="brm-fold brm-editfold" open={editOpen || dirty} onToggle={(e) => setEditOpen(e.currentTarget.open)}>
+        <summary>Edit the question and options</summary>
+        <div className="brm-editbody">
+        <label className="brm-field">
+          <span className="brm-lbl">Question (shown big on the wall)</span>
+          <input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} />
+        </label>
+        <label className="brm-field">
+          <span className="brm-lbl">Context (optional)</span>
+          <textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} />
+        </label>
+        {ask.kind === 'choice' && (
+          <div className="brm-field">
+            <span className="brm-lbl">Options</span>
+            {options.map((o, i) => (
+              <div className="brm-optedit" key={o.label || i}>
+                <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
+                <div className="brm-optfields">
+                  <input className="brm-input" aria-label={`Option ${letter(i)} title`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
+                  <input className="brm-input brm-input--sm" aria-label={`Option ${letter(i)} preview URL`} placeholder="Preview URL (optional, http or https)" value={o.url || ''} onChange={(e) => setOpt(i, 'url', e.target.value)} />
+                  <BuildImage imageId={(ask.options[i] || {}).imageId} alt={`Choice ${letter(i)}`} className="brm-shot brm-shot--thumb" />
+                </div>
+                {/* Only the LAST option can go: the server letters options by
+                    position, and Claude has already stamped "Choice A" and "B". */}
+                {i === options.length - 1 && options.length > 2 ? (
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={`Remove ${letter(i)}`} onClick={() => setOptions((l) => l.slice(0, -1))}>
+                    <Icon name="X" size={14} />
+                  </button>
+                ) : <span />}
+              </div>
+            ))}
+            {options.length < 6 && (
+              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', detail: '', url: '' }])}>
+                <Icon name="Plus" size={14} /> Add option
+              </button>
+            )}
+            <div className="brm-notice"><b>Letters are fixed.</b> Claude stamps &quot;Choice A&quot;, &quot;Choice B&quot; on its mockups, so renaming an option keeps its letter.</div>
+          </div>
+        )}
         </div>
-      )}
+      </details>
       {!ended && (
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} onClick={discard}>Discard</button>
           {dirty && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy} onClick={save}>Save edits</button>}
-          <button type="button" className={`brm-btn brm-btn--primary${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={open}>Open to the room</button>
+          {!answering && (
+            <button type="button" className={`brm-btn brm-btn--ghost${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={() => setAnswering(true)}>Answer for the room</button>
+          )}
+          <button type="button" className={`brm-btn brm-btn--primary${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>Open to the room</button>
         </div>
+      )}
+      {answering && !ended && (
+        <DecidePanel
+          ask={ask} busy={busy} run={run} api={api} spoken
+          onCancel={() => setAnswering(false)}
+          beforeDecide={dirty ? () => api.askAction(ask.askId, editBody()) : null}
+        />
       )}
     </section>
   );
@@ -727,8 +1407,9 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
 
 // ── The current ask ─────────────────────────────────────────────────────────
 
-function AskStage({ ask, room, host, busy, ended, run, api }) {
+function AskStage({ ask, room, host, busy, ended, run, api, pickId = null, onPick = null }) {
   const [editing, setEditing] = useState(false);
+  const [answering, setAnswering] = useState(false);
   const [prompt, setPrompt] = useState(ask.prompt);
   const [detail, setDetail] = useState(ask.detail || '');
   const act = (action) => run(() => api.askAction(ask.askId, { action }));
@@ -750,6 +1431,13 @@ function AskStage({ ask, room, host, busy, ended, run, api }) {
               {!editing && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setEditing(true)}>Edit wording</button>}
               {ask.status === 'live' && ask.kind === 'suggest' && (
                 <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act('vote')}>Open voting</button>
+              )}
+              {['live', 'voting'].includes(ask.status) && !answering && (
+                <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
+              )}
+              {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
+              {['live', 'voting'].includes(ask.status) && ask.kind !== 'rating' && (
+                <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Close it and let the wheel pick from every option" onClick={() => act('wheel')}>Spin the wheel instead</button>
               )}
               {['live', 'voting'].includes(ask.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => act('close')}>Close</button>
@@ -778,19 +1466,84 @@ function AskStage({ ask, room, host, busy, ended, run, api }) {
           </>
         )}
 
-        {ask.kind === 'choice' && <ChoiceBoard ask={ask} />}
+        {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} />}
         {ask.kind === 'rating' && <RatingBoard ask={ask} />}
-        {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} />}
+        {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />}
         {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
       </section>
+      {host && !ended && ask.status === 'results' && ask.kind !== 'rating' && (
+        <WheelPanel ask={ask} busy={busy} run={run} api={api} />
+      )}
       {host && !ended && ask.status === 'results' && (
-        <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} />
+        <DecidePanel key={`wheel:${ask.wheel ? ask.wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} pickId={pickId} />
+      )}
+      {host && !ended && answering && ['live', 'voting'].includes(ask.status) && (
+        <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} />
       )}
     </>
   );
 }
 
-function ChoiceBoard({ ask }) {
+/**
+ * THE WHEEL, OR A REVOTE (owner, 2026-10-05): "if a tie, it's either a wheel
+ * spin or revote, host's choice", and the wheel any time at results. A random
+ * person in the room spins it from their phone; the host can always spin;
+ * if the room groans, spin again or hand it to someone else. Where it lands
+ * fills in the direction below, which the host can still change.
+ */
+function WheelPanel({ ask, busy, run, api }) {
+  const tied = (ask.results && ask.results.tied) || [];
+  const act = (action, extra = {}) => run(() => api.askAction(ask.askId, { action, ...extra }));
+  const nameOf = (id) => {
+    if (ask.kind === 'choice') return id;
+    const r = ((ask.results && ask.results.ranked) || []).find((x) => x.respId === id);
+    return r ? `"${r.text}"` : id;
+  };
+  if (ask.revotedAs) {
+    return <p className="brm-notice">Voted again as ask {Number(ask.revotedAs) || ask.revotedAs}.</p>;
+  }
+  if (!ask.wheel) {
+    return (
+      <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
+        {tied.length >= 2 ? (
+          <p className="brm-notice"><b>A tie between {tied.map(nameOf).join(' and ')}.</b> Spin the wheel, or ask the room to vote again.</p>
+        ) : (
+          <p className="brm-hint">Let chance pick: the wheel holds every option.</p>
+        )}
+        <div className="brm-row brm-gap">
+          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={() => act('wheel')}>Spin the wheel</button>
+          {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={() => act('revote')}>Vote again</button>}
+        </div>
+        <p className="brm-hint">Someone in the room spins it from their phone. You can always spin it yourself.</p>
+      </section>
+    );
+  }
+  const w = ask.wheel;
+  return (
+    <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
+      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? 'Spin again' : 'Spin it yourself'} />
+      <div className="brm-row brm-gap brm-wheelacts">
+        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Pick someone else in the room to spin it" onClick={() => act('pass')}>Someone else spins</button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * "CHOOSE THIS INSTEAD" (owner, 2026-10-06), at results: the answer going to
+ * Claude says so; every other one offers itself. On the Stage a click goes to
+ * the Host with that answer's sentence in the direction; on the Host it swaps
+ * the sentence in place, as often as the host changes their mind.
+ */
+function PickButton({ id, current, onPick, idea = false }) {
+  if (current && id === current) return <span className="brm-pick is-on">Going to Claude</span>;
+  const label = `Choose this${idea ? ' idea' : ''}${current ? ' instead' : ''}`;
+  return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>{label}</button>;
+}
+
+function ChoiceBoard({ ask, pickId = null, onPick = null }) {
+  const picking = Boolean(onPick) && ask.status === 'results';
+  const current = picking ? pickId || winnerOf(ask) : null;
   const opts = (ask.results && ask.results.options) || [];
   const lead = Math.max(0, ...opts.map((o) => o.count));
   return (
@@ -810,6 +1563,7 @@ function ChoiceBoard({ ask }) {
             <BuildImage imageId={o.imageId} alt={`Choice ${o.label}: ${o.title}`} className="brm-shot brm-shot--opt" />
             <div className="brm-bar" aria-hidden="true"><span style={{ width: `${r.pct}%` }} /></div>
             <div className="brm-count"><b>{r.count}</b> {r.pct}%</div>
+            {picking && <PickButton id={o.label} current={current} onPick={onPick} />}
           </div>
         );
       })}
@@ -829,7 +1583,7 @@ function RatingBoard({ ask }) {
       <div className="brm-dist">
         {[1, 2, 3, 4, 5].map((n) => (
           <div className="brm-distrow" key={n}>
-            <span className="brm-distn">{n}{n === 1 && ask.scale?.lowLabel ? ` · ${ask.scale.lowLabel}` : ''}{n === 5 && ask.scale?.highLabel ? ` · ${ask.scale.highLabel}` : ''}</span>
+            <span className="brm-distn">{ratingStep(n)}</span>
             <div className="brm-bar"><span style={{ width: `${((rating.dist || [])[n - 1] || 0) / max * 100}%` }} /></div>
             <span className="brm-distc">{(rating.dist || [])[n - 1] || 0}</span>
           </div>
@@ -839,8 +1593,10 @@ function RatingBoard({ ask }) {
   );
 }
 
-function SuggestBoard({ ask, host, busy, ended, run, api }) {
+function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick = null }) {
   const [said, setSaid] = useState('');
+  const picking = Boolean(onPick) && ask.status === 'results';
+  const current = picking ? pickId || winnerOf(ask) : null;
   const all = ask.responses || [];
   const shown = host ? all : all.filter((r) => !r.hidden);
   const counting = ask.status !== 'live';
@@ -866,6 +1622,7 @@ function SuggestBoard({ ask, host, busy, ended, run, api }) {
               </span>
             )}
             {host && <span className="brm-who">{r.source === 'host' ? 'from the room, out loud' : r.playerName}{r.hidden ? ' · hidden' : ''}</span>}
+            {picking && !r.hidden && <PickButton id={r.respId} current={current} onPick={onPick} idea />}
             {host && !ended && (
               <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.responseAction(ask.askId, r.respId, { action: r.hidden ? 'show' : 'hide' }))}>
                 {r.hidden ? 'Show' : 'Hide'}
@@ -904,20 +1661,58 @@ function Whys({ ask, host }) {
   );
 }
 
-function DecidePanel({ ask, busy, run, api, playerCount }) {
-  const [direction, setDirection] = useState(() => defaultDirection(ask));
+/**
+ * The sentence Claude gets when the host answers FOR the room (people talked
+ * instead of tapping): built from what the host picked, edited freely after.
+ */
+export function spokenDirection(ask, chosen) {
+  // The question and the answer, as for a vote: that it was said out loud is
+  // recorded on the decision, not told to Claude (owner, 2026-10-06).
+  if (ask.kind === 'choice') {
+    const picked = (ask.options || []).filter((o) => chosen.includes(o.label)).map((o) => o.title);
+    return picked.length ? questionAnswer(ask.prompt, picked.join(' and ')) : '';
+  }
+  if (ask.kind === 'rating') return chosen[0] ? questionAnswer(ask.prompt, ratingAnswer(chosen[0])) : '';
+  return '';
+}
+
+function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide, pickId = null }) {
+  const [direction, setDirection] = useState(() => {
+    if (spoken) return '';
+    return pickId ? directionFor(ask, pickId) : defaultDirection(ask);
+  });
+  const [edited, setEdited] = useState(false);
   const [note, setNote] = useState('');
   const [send, setSend] = useState(true);
   const [folded, setFolded] = useState(() => new Set());
   const sources = foldSources(ask);
-  const topChoice = ask.kind === 'choice'
+  const topChoice = !spoken && ask.kind === 'choice'
     ? [...((ask.results && ask.results.options) || [])].sort((a, b) => b.count - a.count).filter((o) => o.count)[0]
     : null;
   const [chosen, setChosen] = useState(() => {
+    if (spoken) return [];
+    if (pickId) return [pickId];
+    if (ask.wheel && ask.wheel.landed) return [ask.wheel.landed];
     if (topChoice) return [topChoice.label];
     if (ask.kind === 'suggest' && ask.results?.ranked?.[0]) return [ask.results.ranked[0].respId];
     return [];
   });
+  // A pick above ("choose this instead") swaps the sentence and the choice,
+  // as often as the host changes their mind (owner, 2026-10-06).
+  const firstPick = useRef(true);
+  useEffect(() => {
+    if (firstPick.current) { firstPick.current = false; return; }
+    if (spoken || !pickId) return;
+    setDirection(directionFor(ask, pickId));
+    setChosen([pickId]);
+    setFolded(new Set());
+    setEdited(false);
+  }, [pickId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // In spoken mode the sentence follows the picks until the host types in it.
+  const pick = (next) => {
+    setChosen(next);
+    if (spoken && !edited) setDirection(spokenDirection(ask, next));
+  };
 
   const toggleFold = (s) => {
     const next = new Set(folded);
@@ -932,21 +1727,39 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
     }
     setFolded(next);
   };
-  const toggleChosen = (label) => setChosen((c) => (c.includes(label) ? c.filter((x) => x !== label) : [...c, label]));
+  const toggleChosen = (label) => pick(chosen.includes(label) ? chosen.filter((x) => x !== label) : [...chosen, label]);
 
-  const decide = () => run(() => api.askAction(ask.askId, {
-    action: 'decide', direction: direction.trim(), chosen, note: note.trim(), sendToAgent: send,
-  }));
+  const decide = () => run(async () => {
+    if (beforeDecide) await beforeDecide();
+    return api.askAction(ask.askId, {
+      action: 'decide', direction: direction.trim(), chosen, note: note.trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
+      method: decisionMethod(ask, chosen, spoken),
+    });
+  });
   const total = ask.results?.total || 0;
 
   return (
     <section className="brm-panel brm-decide" aria-labelledby={`brm-decide-${ask.askId}`}>
-      <h2 className="brm-h" id={`brm-decide-${ask.askId}`}>Direction for Claude</h2>
-      <p className="brm-sub">Claude builds from this sentence, not from the counts. Edit it freely. {total} of {playerCount || 0} answered.</p>
-      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => setDirection(e.target.value)} placeholder="What should Claude do now?" />
+      <h2 className="brm-h" id={`brm-decide-${ask.askId}`}>{spoken ? 'Answer for the room' : 'Direction for Claude'}</h2>
+      <p className="brm-sub">{spoken
+        ? 'For when people talk instead of tapping. Pick what the room said; Claude builds from the sentence below and is told it was said out loud.'
+        : `Claude builds from this sentence, not from the counts. Edit it freely. ${total} of ${playerCount || 0} answered.`}</p>
+      {spoken && ask.kind === 'rating' && (
+        <div className="brm-field">
+          <span className="brm-lbl">The room&apos;s rating</span>
+          <div className="brm-foldchips">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" className={`brm-fold${chosen[0] === String(n) ? ' is-in' : ''}`} aria-pressed={chosen[0] === String(n)} onClick={() => pick([String(n)])}>
+                {ratingStep(n)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => { setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
       {ask.kind === 'choice' && (
         <div className="brm-field">
-          <span className="brm-lbl">Chosen</span>
+          <span className="brm-lbl">{spoken ? 'What the room chose' : 'Chosen'}</span>
           <div className="brm-foldchips">
             {(ask.options || []).map((o) => (
               <button key={o.label} type="button" className={`brm-fold${chosen.includes(o.label) ? ' is-in' : ''}`} aria-pressed={chosen.includes(o.label)} onClick={() => toggleChosen(o.label)}>
@@ -969,7 +1782,7 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
         </div>
       )}
       <label className="brm-field">
-        <span className="brm-lbl">What the room said (optional; goes to Claude with the direction)</span>
+        <span className="brm-lbl">{spoken ? 'What people said (optional; goes to Claude with the answer)' : 'What the room said (optional; goes to Claude with the direction)'}</span>
         <input className="brm-input" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder='e.g. "show how many spots are left"' />
       </label>
       <div className="brm-row brm-gap">
@@ -978,7 +1791,8 @@ function DecidePanel({ ask, busy, run, api, playerCount }) {
           <span>Send to Claude</span>
         </label>
         <span className="brm-hint">{send ? "Delivered on Claude's next call" : 'Recorded in the timeline only'}</span>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || (!direction.trim() && !total)} onClick={decide}>
+        {onCancel && <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onCancel}>Cancel</button>}
+        <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} disabled={busy || (!direction.trim() && (spoken || !total))} onClick={decide}>
           <Icon name="ArrowRight" size={16} /> {send ? 'Send to Claude' : 'Record decision'}
         </button>
       </div>
@@ -1083,8 +1897,17 @@ function IdleStage({ room, now, host }) {
 const SHOT_KIND = { mockup: 'Mockup', final: 'Final', progress: 'Progress' };
 
 /** Every screenshot Claude sent, for the host to check or remove. */
-function ShotsPanel({ images, busy, run, api }) {
+/*
+  THE OWNER'S DELETE RULE (2026-10-04): GET build/state says the role this
+  host would delete in (`deleteAs`). Engage staff give a reason in the same
+  inline confirm; '' means this caller may not remove anything here.
+*/
+const NOT_YOURS = 'Only the host who created this room, or an owner or admin of its team, can delete from it.';
+
+function ShotsPanel({ images, busy, run, api, deleteAs }) {
   const [confirm, setConfirm] = useState(null);
+  const [reason, setReason] = useState('');
+  const asStaff = deleteAs === 'platform-admin';
   return (
     <section className="brm-panel" aria-labelledby="brm-shots-h">
       <h2 className="brm-h" id="brm-shots-h">Screenshots</h2>
@@ -1099,11 +1922,14 @@ function ShotsPanel({ images, busy, run, api }) {
                 <span className="brm-chip">{im.label ? `Choice ${im.label}` : SHOT_KIND[im.kind] || im.kind}</span>
                 {confirm === im.imageId ? (
                   <>
+                    {asStaff && (
+                      <DeleteReasonField id={`brm-reason-${im.imageId}`} value={reason} onChange={setReason} scope="brm" labelClass="brm-lbl" inputClass="brm-input brm-ta brm-ta--sm" hintClass="brm-hint" />
+                    )}
                     <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirm(null)}>Keep</button>
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy} onClick={() => run(() => api.deleteImage(im.imageId))}>Remove</button>
+                    <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.deleteImage(im.imageId, asStaff ? reason.trim() : ''))}>Remove</button>
                   </>
                 ) : (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger brm-push" aria-label={`Remove ${im.caption || 'screenshot'}`} onClick={() => setConfirm(im.imageId)}>Remove</button>
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger brm-push" aria-label={`Remove ${im.caption || 'screenshot'}`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirm(im.imageId); }}>Remove</button>
                 )}
               </div>
             </div>
@@ -1124,57 +1950,152 @@ export function deliveryLine(agent) {
 }
 
 const CONTINUE_PROMPT = PROMPT_CARDS.find((c) => c.name === 'continue');
+const PREVIEW_PROMPT = PROMPT_CARDS.find((c) => c.name === 'preview');
 const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
 
 /**
- * The two things a host does between asks, in one place: tell Claude what to
- * do next, or ask the room something. Always here, while Claude builds and
- * after it wraps up, so steering never means hunting for the control.
+ * NOW, BETWEEN ASKS (C1): what Claude is doing, the latest decision, and the
+ * two things the host does with the build: show it to the room (the Build
+ * screen) or ask Claude to run it and send a screenshot. When Claude has
+ * gone quiet, the Continue prompt is one click away.
  */
-function NextPanel({ agent, busy, run, api, onCompose }) {
+export const STARTER_PROMPT = 'What should we build?';
+
+function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose }) {
+  const [sent, setSent] = useState(false);
+  if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
+  const agent = room.agent || {};
+  const quiet = !(agent.listening || agent.connected);
+  const decided = (room.asks || []).filter((a) => a.status === 'decided' && a.decision)
+    .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
+  const latest = decided[decided.length - 1] || null;
+  const line = ended ? 'This session has ended.'
+    : agent.listening ? 'Claude is listening for you.'
+      : agent.connected ? 'Claude is building.'
+        : 'Waiting for Claude Code.';
+  // A ROOM THAT BEGINS WITH AN ASK (owner, 2026-10-05): before anything is
+  // built, the room picks what to build. The host lists the options or the
+  // room suggests; a tie goes to the wheel or a revote (WheelPanel); and the
+  // host can pick one and send it to Claude at any point.
+  const starter = !ended && !(room.asks || []).length && onCompose;
+  return (
+    <section className="brm-panel brm-nowcard" aria-labelledby="brm-now-h">
+      <h2 className="brm-h5" id="brm-now-h">Now</h2>
+      {starter && (
+        <div className="brm-starter">
+          <p className="brm-nowline">Start with the room: {STARTER_PROMPT}</p>
+          <p className="brm-hint">The room votes. A tie goes to the wheel, or to a revote. You can pick one and send it to Claude whenever you like.</p>
+          <div className="brm-row brm-gap">
+            <button type="button" className="brm-btn brm-btn--primary" onClick={() => onCompose('choice', { prompt: STARTER_PROMPT, detail: 'Pick the one you most want to see built today.' })}>
+              I&apos;ll list the options
+            </button>
+            <button type="button" className="brm-btn" onClick={() => onCompose('suggest', { prompt: STARTER_PROMPT, detail: 'Say what you would build, in a few words. Then everyone votes.' })}>
+              The room suggests
+            </button>
+          </div>
+        </div>
+      )}
+      <p className="brm-nowline">{line}</p>
+      {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
+      {latest && (
+        <div className="brm-latest">
+          <div className="brm-kind">Latest decision · Ask {askNumber(latest.askId)}</div>
+          <div className="brm-tx">{latest.decision.direction}</div>
+        </div>
+      )}
+      {!ended && (
+        <div className="brm-row brm-gap">
+          <button type="button" className="brm-btn" onClick={onShowBuild} title="Show the room the build (3)">
+            <Icon name="Monitor" size={16} /> Show the build
+          </button>
+          {/* One click: Claude builds and serves a local preview, puts its
+              link on this screen and screenshots it (owner, 2026-10-04). */}
+          <button
+            type="button"
+            className="brm-btn"
+            disabled={busy || quiet}
+            title={quiet ? 'Connect Claude Code first' : 'Claude starts or builds the project, serves it locally, and puts the link here'}
+            onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text)); if (ok !== undefined) setSent(true); }}
+          >
+            Preview the work
+          </button>
+          {quiet && CONTINUE_PROMPT && <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" />}
+        </div>
+      )}
+      {sent && <p className="brm-hint" role="status">Asked Claude to preview the work.</p>}
+    </section>
+  );
+}
+
+const LOG_KINDS = [
+  ['verbal', 'Room said'],
+  ['note', 'Host note (never shown)'],
+  ['milestone', 'Milestone'],
+];
+
+/**
+ * THE ONE COMPOSER (C1): everything the host types, written once, then sent
+ * where it belongs. It replaces "What next?" (Tell Claude, Ask the room) and
+ * the timeline's own log form, which were two boxes for one act.
+ *   Send to Claude  a direction, delivered on Claude's next call
+ *   Log it          into the timeline as what the room said, a host note or
+ *                   a milestone; "Also tell Claude" sends it too
+ *   Ask the room    Ideas, Choose or Rate (the Ask the room dialog)
+ */
+function Composer({ agent, busy, run, api, onCompose }) {
   const [text, setText] = useState('');
-  const [sent, setSent] = useState('');
-  const send = async (e) => {
+  const [said, setSaid] = useState('');
+  const [logKind, setLogKind] = useState('verbal');
+  const [alsoTell, setAlsoTell] = useState(false);
+  const words = text.trim();
+  const tell = async (e) => {
     e.preventDefault();
-    const words = text.trim();
     if (!words) return;
     const ok = await run(() => api.postDirection(words));
-    if (ok !== undefined) { setText(''); setSent(words); }
+    if (ok !== undefined) { setText(''); setSaid(`Sent: ${words}`); }
   };
-  const quiet = !(agent && (agent.listening || agent.connected));
+  const log = async () => {
+    if (!words) return;
+    const ok = await run(() => api.postLog({ kind: logKind, text: words, forAgent: logKind !== 'note' && alsoTell }));
+    if (ok !== undefined) { setText(''); setAlsoTell(false); setSaid('Logged.'); }
+  };
   return (
-    <section className="brm-panel brm-next" aria-labelledby="brm-next-h">
-      <h2 className="brm-h" id="brm-next-h">What next?</h2>
-      <div className="brm-next-grid">
-        <form className="brm-next-tell" onSubmit={send}>
-          <label className="brm-label" htmlFor="brm-tell">Tell Claude</label>
-          <textarea
-            id="brm-tell"
-            className="brm-input brm-ta"
-            placeholder="e.g. Make the sign-up button bigger, and add the parking map the room asked for."
-            value={text}
-            maxLength={2000}
-            onChange={(e) => { setText(e.target.value); setSent(''); }}
-          />
-          <p className="brm-hint">{deliveryLine(agent)}</p>
-          <div className="brm-row brm-gap">
-            <button type="submit" className="brm-btn brm-btn--primary" disabled={busy || !text.trim()}>
-              <Icon name="PaperPlaneTilt" size={16} /> Send to Claude
-            </button>
-            {quiet && CONTINUE_PROMPT && <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" />}
-          </div>
-          {sent && <p className="brm-hint" role="status">Sent: {sent}</p>}
-        </form>
-        <div className="brm-next-ask">
-          <div className="brm-label">Ask the room</div>
-          <div className="brm-askbtns brm-askbtns--stack">
-            <button type="button" className="brm-btn brm-askbtn" onClick={() => onCompose('suggest')}>Ideas<span>everyone suggests, then votes</span></button>
-            <button type="button" className="brm-btn brm-askbtn" onClick={() => onCompose('choice')}>Choose<span>A / B / C</span></button>
-            <button type="button" className="brm-btn brm-askbtn" onClick={() => onCompose('rating')}>Rate<span>1–5 pulse</span></button>
-          </div>
-          <p className="brm-hint">When you decide, the answer goes to Claude too.</p>
+    <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h">
+      <h2 className="brm-h5" id="brm-compose-h">Add something</h2>
+      <form onSubmit={tell}>
+        <label className="brm-sr" htmlFor="brm-compose">Tell Claude, or log what the room said</label>
+        <textarea
+          id="brm-compose"
+          className="brm-input brm-ta brm-ta--sm"
+          placeholder="An idea, what the room said out loud, or a note for Claude"
+          value={text}
+          maxLength={2000}
+          onChange={(e) => { setText(e.target.value); setSaid(''); }}
+        />
+        <p className="brm-hint">{deliveryLine(agent)}</p>
+        <div className="brm-row brm-gap">
+          <button type="submit" className="brm-btn brm-btn--primary" disabled={busy || !words}>
+            <Icon name="PaperPlaneTilt" size={16} /> Send to Claude
+          </button>
+          <span className="brm-row brm-push">
+            <select className="brm-input brm-input--sm brm-select" aria-label="Log it as" value={logKind} onChange={(e) => setLogKind(e.target.value)}>
+              {LOG_KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+            <label className="brm-check brm-small">
+              <input type="checkbox" checked={logKind !== 'note' && alsoTell} disabled={logKind === 'note'} onChange={(e) => setAlsoTell(e.target.checked)} />
+              Also tell Claude
+            </label>
+            <button type="button" className="brm-btn" disabled={busy || !words} onClick={log}>Log it</button>
+          </span>
         </div>
-      </div>
+        <div className="brm-row brm-gap">
+          <span className="brm-label">Ask the room</span>
+          <button type="button" className="brm-btn brm-btn--sm" title="Everyone suggests, then votes" onClick={() => onCompose('suggest')}>Ideas</button>
+          <button type="button" className="brm-btn brm-btn--sm" title="A, B or C" onClick={() => onCompose('choice')}>Choose</button>
+          <button type="button" className="brm-btn brm-btn--sm" title="A 1 to 5 pulse" onClick={() => onCompose('rating')}>Rate</button>
+        </div>
+        {said && <p className="brm-hint" role="status">{said}</p>}
+      </form>
     </section>
   );
 }
@@ -1226,9 +2147,11 @@ function AskList({ asks, host, busy, ended, run, api, currentAskId }) {
 
 // ── Timeline ────────────────────────────────────────────────────────────────
 
-function TimelineEntry({ entry, host, busy, ended, run, api }) {
+function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, deleteAs }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState('');
+  const asStaff = deleteAs === 'platform-admin';
   const [text, setText] = useState(entry.text);
   const save = async () => {
     const ok = await run(() => api.logAction(entry.logId, { action: 'edit', text }));
@@ -1254,7 +2177,7 @@ function TimelineEntry({ entry, host, busy, ended, run, api }) {
             {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
-            {host && entry.forAgent && <span className="brm-tl-flag">{entry.deliveredAt ? 'Claude has it' : 'Waiting for Claude'}</span>}
+            {host && entry.forAgent && <span className="brm-tl-flag">{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${CONTINUE_COMMAND}` : 'Waiting for Claude'}</span>}
           </>
         )}
         {host && !editing && (
@@ -1262,13 +2185,16 @@ function TimelineEntry({ entry, host, busy, ended, run, api }) {
             {confirming ? (
               <>
                 <span className="brm-hint">Delete this entry?</span>
+                {asStaff && (
+                  <DeleteReasonField id={`brm-reason-${entry.logId}`} value={reason} onChange={setReason} scope="brm" labelClass="brm-lbl" inputClass="brm-input brm-ta brm-ta--sm" hintClass="brm-hint" />
+                )}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirming(false)}>Keep</button>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy} onClick={() => run(() => api.logAction(entry.logId, { action: 'delete' }))}>Delete</button>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.logAction(entry.logId, { action: 'delete', ...(asStaff ? { reason: reason.trim() } : {}) }))}>Delete</button>
               </>
             ) : (
               <>
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" aria-label={`Edit "${entry.text}"`} onClick={() => setEditing(true)}>Edit</button>
-                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${entry.text}"`} onClick={() => setConfirming(true)}>Delete</button>}
+                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${entry.text}"`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirming(true); }}>Delete</button>}
               </>
             )}
           </span>
@@ -1281,10 +2207,8 @@ function TimelineEntry({ entry, host, busy, ended, run, api }) {
 const WALL_HIDDEN_KINDS = ['note', 'ask', 'direction'];
 const WALL_DETAIL_HIDDEN_KINDS = ['decision', 'idea'];
 
-function Timeline({ log, host, busy, ended, run, api }) {
-  const [text, setText] = useState('');
-  const [kind, setKind] = useState('verbal');
-  const [forAgent, setForAgent] = useState(false);
+function Timeline({ log, host, stopped = false, busy, ended, run, api, deleteAs }) {
+  // The host logs from the one composer (Composer), not from a form here.
   // Newest first: in a live room the latest thing Claude or the room did is
   // what everyone looks for, and the panel scrolls.
   // On the wall (Present) the timeline is the room's, as on the phones: no host
@@ -1295,37 +2219,13 @@ function Timeline({ log, host, busy, ended, run, api }) {
     .map((l) => (WALL_DETAIL_HIDDEN_KINDS.includes(l.kind) ? { ...l, detail: '' } : l))
     .map((l) => (l.kind === 'help' ? { ...l, text: `${l.name || 'A builder'} asked for help`, detail: '' } : l)))
     .slice().reverse();
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!text.trim()) return;
-    const ok = await run(() => api.postLog({ kind, text: text.trim(), forAgent: kind !== 'note' && forAgent }));
-    if (ok !== undefined) { setText(''); setForAgent(false); }
-  };
   return (
     <section className="brm-panel brm-tlpanel" aria-labelledby="brm-tl-h">
       <h2 className="brm-h5" id="brm-tl-h">Timeline</h2>
-      {host && !ended && (
-        <form className="brm-quicklog" onSubmit={submit}>
-          <label className="brm-sr" htmlFor="brm-quicklog-text">Log what the room said</label>
-          <textarea id="brm-quicklog-text" className="brm-input brm-ta brm-ta--sm" placeholder="Log what the room said…" value={text} maxLength={500} onChange={(e) => setText(e.target.value)} />
-          <div className="brm-row brm-gap">
-            <select className="brm-input brm-input--sm brm-select" aria-label="Entry kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="verbal">Room said</option>
-              <option value="note">Host note (never shown)</option>
-              <option value="milestone">Milestone</option>
-            </select>
-            <label className="brm-check brm-small">
-              <input type="checkbox" checked={kind !== 'note' && forAgent} disabled={kind === 'note'} onChange={(e) => setForAgent(e.target.checked)} />
-              Send to Claude
-            </label>
-            <button type="submit" className="brm-btn brm-btn--sm brm-push" disabled={busy || !text.trim()}>Log</button>
-          </div>
-        </form>
-      )}
       {shown.length ? (
         <ul className="brm-tl">
           {shown.map((entry) => (
-            <TimelineEntry key={`${entry.logId}:${entry.editedAt || ''}`} entry={entry} host={host} busy={busy} ended={ended} run={run} api={api} />
+            <TimelineEntry key={`${entry.logId}:${entry.editedAt || ''}`} entry={entry} host={host} stopped={stopped} busy={busy} ended={ended} run={run} api={api} deleteAs={deleteAs} />
           ))}
         </ul>
       ) : (
@@ -1337,6 +2237,9 @@ function Timeline({ log, host, busy, ended, run, api }) {
 
 // ── Ideas inbox (host only) ─────────────────────────────────────────────────
 
+/** What happened to a handled idea, in the host's words. */
+const HANDLED = { promoted: 'used', acknowledged: 'acknowledged', dismissed: 'dismissed' };
+
 function IdeasInbox({ ideas, current, busy, ended, run, api }) {
   const fresh = ideas.filter((i) => i.status === 'new');
   const handled = ideas.filter((i) => i.status !== 'new');
@@ -1346,6 +2249,14 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
     <section className="brm-inbox" aria-labelledby="brm-inbox-h">
       <h2 className="brm-h5" id="brm-inbox-h">Ideas inbox · {fresh.length} new <span className="brm-hostonly">host only</span></h2>
       {!fresh.length && <p className="brm-hint">Phones can send an idea at any time. They land here for you to triage.</p>}
+      {/* A burst of reactions after Claude shows something: clear them in one go. */}
+      {!ended && fresh.length >= 2 && (
+        <div className="brm-row brm-gap brm-ackall">
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" disabled={busy} title="Mark every new one as seen. Nothing goes to Claude." onClick={() => run(() => api.acknowledgeAll())}>
+            Acknowledge all {fresh.length}
+          </button>
+        </div>
+      )}
       {fresh.map((idea) => (
         <div className="brm-idea" key={idea.ideaId}>
           <div className="brm-idea-text">{idea.text}</div>
@@ -1353,6 +2264,11 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
           {!ended && (
             <div className="brm-idea-acts">
               <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act(idea, 'direct')}>Send to Claude</button>
+              {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude.
+                  The sender's phone says "Seen by the host"; WALL also puts it
+                  on the Stage for a short while, with no name. */}
+              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Show it on the Stage for 20 seconds, without a name. Nothing goes to Claude." onClick={() => act(idea, 'wall')}>Show on the wall</button>
+              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Mark it as seen. Their phone says so; nothing goes to Claude." onClick={() => act(idea, 'acknowledge')}>Acknowledge</button>
               <button type="button" className="brm-btn brm-btn--sm" disabled={busy || !canSuggest} title={canSuggest ? undefined : 'Open an Ideas ask first'} onClick={() => act(idea, 'suggest')}>Add to current ideas</button>
               <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => act(idea, 'dismiss')}>Dismiss</button>
             </div>
@@ -1365,8 +2281,8 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
           {handled.map((idea) => (
             <div className="brm-idea brm-idea--done" key={idea.ideaId}>
               <div className="brm-idea-text">{idea.text}</div>
-              <div className="brm-who">{idea.playerName} · {idea.status === 'dismissed' ? 'dismissed' : 'used'}</div>
-              {!ended && idea.status === 'dismissed' && (
+              <div className="brm-who">{idea.playerName} · {idea.walled ? 'on the wall' : HANDLED[idea.status] || idea.status}</div>
+              {!ended && ['dismissed', 'acknowledged'].includes(idea.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</button>
               )}
             </div>
@@ -1374,6 +2290,28 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
         </details>
       )}
     </section>
+  );
+}
+
+/**
+ * THE ROOM COMMENT ON THE WALL: one at a time, no name, for WALL_COMMENT_MS
+ * from when the host put it up (owner, 2026-10-05). Shown on the screens the
+ * room sees (Stage, Build); the host can take it down early from the Host.
+ */
+export const WALL_COMMENT_MS = 20 * 1000;
+export function freshWallComment(room, now) {
+  const w = room && room.wallComment;
+  if (!w || !w.text) return null;
+  const at = Date.parse(w.at || '');
+  return Number.isFinite(at) && now - at < WALL_COMMENT_MS ? w : null;
+}
+function WallComment({ comment }) {
+  if (!comment) return null;
+  return (
+    <div className="brm-wallcomment" role="status" key={comment.at}>
+      <span className="brm-wallcomment-k">Someone in the room said</span>
+      <q className="brm-wallcomment-t">{comment.text}</q>
+    </div>
   );
 }
 
@@ -1405,96 +2343,137 @@ function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' })
 export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   // THE KEY IS SHOWN ONCE: it lives in this component's state only, and is
   // gone when the panel closes. The server stores only its sha256.
+  //
+  // FOUR STEPS, IN THE ORDER THEY ARE DONE (owner, 2026-10-04): check for the
+  // latest plugin (installs, updates, or says you are all set), mint a key and
+  // copy the connect command, paste it into Claude Code, kick off. A crew room
+  // adds a fifth: share the repo. Everything else is folded away below them.
   const [minted, setMinted] = useState(null);
+  const [copied, setCopied] = useState('');
   const [confirmMint, setConfirmMint] = useState(false);
   const agent = room.agent || {};
   const liveKey = agent.key;
+  const connected = Boolean(agent.lastSeenAt);
+  const crew = Boolean(room.crew && room.crew.enabled);
   const command = minted ? connectCommand({ origin: window.location.origin, api: apiBase(), key: minted.key }) : '';
   const install = pluginInstallCommand({ origin: window.location.origin, api: apiBase() });
   const connectLine = minted ? pluginConnectCommand(minted.key) : '';
+  const kickoff = pluginCommand('kickoff');
+  const shareRepo = pluginCommand('share-repo');
 
+  // Mint, then copy the connect command in the same click. A browser may refuse
+  // the copy once the click is a network round-trip old; the command is shown
+  // either way, with its own Copy button.
   const mint = async () => {
     setConfirmMint(false);
     const out = await run(() => api.mintKey('Claude Code'));
-    if (out && out.key) setMinted({ key: out.key, keyId: out.keyId });
+    if (!out || !out.key) return;
+    setMinted({ key: out.key, keyId: out.keyId });
+    const ok = await copyText(pluginConnectCommand(out.key));
+    setCopied(ok ? 'Copied. Paste it into Claude Code.' : 'Copy it with the button below.');
   };
   const revoke = async () => {
     if (!liveKey) return;
     await run(() => api.revokeKey(liveKey.keyId));
     setMinted(null);
+    setCopied('');
   };
 
   const step = (done, wait) => (done ? 'is-done' : wait ? 'is-wait' : '');
+  const mintLabel = liveKey ? 'Mint a new key and copy the command' : 'Mint a key and copy the command';
 
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
       <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} />
-      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and saves every step in git. Needs Node 18 or later.</p>
+      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and saves every step in git.</p>
 
-      <h3 className="brm-h5">Once per laptop: install the Engage plugin</h3>
-      <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
-      <div className="brm-row brm-gap">
-        <CopyButton text={install} label="Copy install command" />
-        <span className="brm-hint">Run it in a terminal. It adds the plugin to Claude Code: the Engage tools, the /engage commands, and a checkpoint in git at the end of every turn (in this project only; never pushed).</span>
-      </div>
-
-      <h3 className="brm-h5">Each session: connect with this room&apos;s key</h3>
-      {minted ? (
-        <>
-          <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
-            <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</div>
-          </div>
-          <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
-          <div className="brm-row brm-gap">
-            <CopyButton text={connectLine} label="Copy" className="brm-btn brm-btn--sm brm-btn--primary" />
-            <span className="brm-hint">Type it into Claude Code, in your project folder. Key …{minted.key.slice(-4)} · minted just now</span>
-          </div>
-          <details className="brm-alt">
-            <summary>Without the plugin</summary>
-            <p className="brm-hint">One command in the terminal instead, then restart Claude Code. No automatic checkpoints; Claude can still call checkpoint.</p>
-            <pre className="brm-cmd" data-testid="brm-command">{command}</pre>
-            <CopyButton text={command} label="Copy command" />
-          </details>
-        </>
-      ) : liveKey ? (
-        <div className="brm-notice">
-          <b>A key is active</b> (minted {clockTime(liveKey.createdAt)}{liveKey.lastUsedAt ? `, last used ${clockTime(liveKey.lastUsedAt)}` : ', not used yet'}). It was shown once and cannot be shown again.
-          Lost the command? Mint a new key; the old one stops working at once.
-        </div>
-      ) : (
-        <div className="brm-notice">No key yet. Minting one gives you the command to paste.</div>
-      )}
-
-      <div className="brm-row brm-gap">
-        {confirmMint ? (
-          <>
-            <span className="brm-hint">The current key stops working immediately.</span>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>Mint a new key</button>
-          </>
-        ) : (
-          <button type="button" className={`brm-btn brm-btn--sm${minted ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
-            {liveKey ? 'Mint a new key' : 'Mint a key'}
-          </button>
-        )}
-        {liveKey && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={revoke}>Revoke key</button>}
-      </div>
-
-      <ol className="brm-steps">
-        <li className={step(Boolean(liveKey || minted), !(liveKey || minted))}>
+      <ol className="brm-steps brm-steps--connect">
+        <li className={step(connected, false)}>
           <span className="brm-n">1</span>
-          <span>Install the plugin (once), then mint a key. It appears once.</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Check for the latest Engage plugin</span>
+            <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
+            <div className="brm-row brm-gap">
+              <CopyButton text={install} label="Copy" />
+              <span className="brm-hint">Run it in a terminal. It installs the plugin if it is missing, updates it if it is out of date, or tells you you&apos;re all set. Needs Node 18 or later.</span>
+            </div>
+          </div>
         </li>
-        <li className={step(Boolean(agent.lastSeenAt), Boolean(liveKey || minted) && !agent.lastSeenAt)}>
+
+        <li className={step(Boolean(minted) || connected, !minted && !connected)}>
           <span className="brm-n">2</span>
-          <span>{agent.lastSeenAt
-            ? 'Claude Code has called in.'
-            : 'In Claude Code, type the /engage:connect line above.'}</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Mint a key and copy the connect command</span>
+            {minted ? (
+              <>
+                <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
+                  <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</div>
+                </div>
+                <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
+                <div className="brm-row brm-gap">
+                  <CopyButton text={connectLine} label="Copy again" />
+                  <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
+                </div>
+              </>
+            ) : liveKey ? (
+              <p className="brm-hint brm-block">
+                {connected ? 'Claude Code is connected with the current key. ' : ''}
+                A key was minted {clockTime(liveKey.createdAt)}{liveKey.lastUsedAt ? ` and last used ${clockTime(liveKey.lastUsedAt)}` : ''}. It was shown once.
+                Minting a new one stops the old key at once.
+              </p>
+            ) : null}
+            <div className="brm-row brm-gap">
+              {confirmMint ? (
+                <>
+                  <span className="brm-hint">The current key stops working immediately{connected ? ', and Claude Code disconnects until you paste the new command' : ''}.</span>
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>{mintLabel}</button>
+                </>
+              ) : !minted && (
+                <button type="button" className={`brm-btn brm-btn--sm${connected ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
+                  {mintLabel}
+                </button>
+              )}
+              {liveKey && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={revoke}>Revoke key</button>}
+            </div>
+          </div>
         </li>
-        <li className={step(false, Boolean(agent.lastSeenAt))}>
+
+        <li className={step(connected, Boolean(minted) && !connected)}>
           <span className="brm-n">3</span>
-          <span>Type {pluginCommand('kickoff')}, or paste the Kick off card below.</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Start Claude Code in your project folder and paste the command</span>
+            <span className="brm-hint">{connected
+              ? 'Claude Code has called in.'
+              : 'In a terminal, go to your project folder and run claude. Paste the connect command and press Enter.'}</span>
+          </div>
         </li>
+
+        <li className={step(false, connected)}>
+          <span className="brm-n">4</span>
+          <div className="brm-step-body">
+            <span className="brm-step-title">Kick off</span>
+            <pre className="brm-cmd" data-testid="brm-kickoff">{kickoff}</pre>
+            <div className="brm-row brm-gap">
+              <CopyButton text={kickoff} label="Copy" />
+              <span className="brm-hint">Run it in Claude Code. Claude reads the room, restates the goal and posts its plan.{crew ? '' : ' From then on every turn is saved as a git commit in this project, never pushed.'}</span>
+            </div>
+          </div>
+        </li>
+
+        {crew && (
+          <li className={step(false, false)}>
+            <span className="brm-n">5</span>
+            <div className="brm-step-body">
+              <span className="brm-step-title">Open the project to your crew</span>
+              <pre className="brm-cmd" data-testid="brm-share-repo">{shareRepo}</pre>
+              <div className="brm-row brm-gap">
+                <CopyButton text={shareRepo} label="Copy" />
+                <span className="brm-hint">Run it in Claude Code. It makes the base branch, shares the repo with the room and proposes the first tasks. Every turn is already saved as a git commit here, never pushed.</span>
+              </div>
+            </div>
+          </li>
+        )}
       </ol>
 
       <label className="brm-check brm-field">
@@ -1507,17 +2486,29 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
         <span>Review Claude&apos;s questions before the room sees them<span className="brm-hint brm-block">When off, Claude&apos;s asks open to the room straight away.</span></span>
       </label>
 
-      <h3 className="brm-h5">Prompt cards: paste into Claude Code</h3>
-      <p className="brm-hint">Each is also a command in Claude Code: {PROMPT_CARDS.map((p) => pluginCommand(p.name)).join(', ')} with the plugin, or {slashCommand('kickoff')} and so on without it.</p>
-      <div className="brm-cards">
-        {PROMPT_CARDS.map((p) => (
-          <div className="brm-pcard" key={p.name}>
-            <div className="brm-pt">{p.title} <span className="brm-slash">{pluginCommand(p.name)}</span></div>
-            <p className="brm-pq">{p.text}</p>
-            <CopyButton text={p.text} />
-          </div>
-        ))}
-      </div>
+      <details className="brm-alt">
+        <summary>More commands for later</summary>
+        <p className="brm-hint">Each is a command in Claude Code with the plugin, or a card to paste: {PROMPT_CARDS.map((p) => pluginCommand(p.name)).join(', ')}. Without the plugin they are {slashCommand('kickoff')} and so on.</p>
+        <div className="brm-cards">
+          {PROMPT_CARDS.map((p) => (
+            <div className="brm-pcard" key={p.name}>
+              <div className="brm-pt">{p.title} <span className="brm-slash">{pluginCommand(p.name)}</span></div>
+              <p className="brm-pq">{p.text}</p>
+              <CopyButton text={p.text} />
+            </div>
+          ))}
+        </div>
+      </details>
+
+      {minted && (
+        <details className="brm-alt">
+          <summary>Without the plugin</summary>
+          <p className="brm-hint">One command in the terminal instead, then restart Claude Code. No automatic checkpoints; Claude can still call checkpoint.</p>
+          <pre className="brm-cmd" data-testid="brm-command">{command}</pre>
+          <CopyButton text={command} label="Copy command" />
+        </details>
+      )}
+
       <p className="brm-hint">Game {gameId}. The key is never shown in Present mode.</p>
       <div className="brm-row"><button type="button" className="brm-btn brm-push" onClick={onClose}>Done</button></div>
     </Modal>
@@ -1588,13 +2579,11 @@ function EndDialog({ api, run, busy, onClose }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, api, run, busy, onClose }) {
+export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
-  const [prompt, setPrompt] = useState('');
-  const [detail, setDetail] = useState('');
+  const [prompt, setPrompt] = useState(initialPrompt);
+  const [detail, setDetail] = useState(initialDetail);
   const [options, setOptions] = useState([{ title: '', url: '' }, { title: '', url: '' }]);
-  const [low, setLow] = useState('');
-  const [high, setHigh] = useState('');
   const [draft, setDraft] = useState(false);
   const dirty = Boolean(prompt || detail || options.some((o) => o.title));
   const requestClose = () => {
@@ -1611,7 +2600,6 @@ export function AskComposer({ kind: initialKind, api, run, busy, onClose }) {
       prompt: prompt.trim(),
       detail: detail.trim(),
       ...(kind === 'choice' ? { options: filled.map((o) => ({ title: o.title.trim(), url: o.url.trim() })) } : {}),
-      ...(kind === 'rating' ? { lowLabel: low.trim(), highLabel: high.trim() } : {}),
       ...(draft ? { draft: true } : {}),
     };
     const ok = await run(() => api.createAsk(body));
@@ -1647,12 +2635,7 @@ export function AskComposer({ kind: initialKind, api, run, busy, onClose }) {
             {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
           </div>
         )}
-        {kind === 'rating' && (
-          <div className="brm-two">
-            <label className="brm-field"><span className="brm-lbl">1 means</span><input className="brm-input" value={low} maxLength={40} onChange={(e) => setLow(e.target.value)} /></label>
-            <label className="brm-field"><span className="brm-lbl">5 means</span><input className="brm-input" value={high} maxLength={40} onChange={(e) => setHigh(e.target.value)} /></label>
-          </div>
-        )}
+        {kind === 'rating' && <p className="brm-hint">The room rates 1 to 5: 1 means needs work, 5 means great.</p>}
         <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Save as a draft; don&apos;t open it yet</label>
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>

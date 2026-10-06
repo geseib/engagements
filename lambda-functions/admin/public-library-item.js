@@ -63,6 +63,7 @@ const { readReview, OBSERVED_CAP } = require('./shared/set-review');
 const { readReviewLog, appendReviewEvent } = require('./shared/review-log');
 const { writeShareStamp } = require('./shared/share-stamp');
 const { queueSk, queueKey, deleteQueueRow } = require('./shared/moderation-queue');
+const { recordAudit, markAuditOutcome, actorFromEvent } = require('./shared/audit-log');
 // The measurement half of this projection is shared with the AUTHOR's version
 // list (admin/get-set-versions.js), so "what a check measured" is one list
 // rather than two that drift. Everything a reviewer owns stays here.
@@ -216,15 +217,38 @@ exports.handler = async (event) => {
     // the check would have written, present or not.
     const version = toVersion(meta.sourceVersion);
     const reviewer = reviewerOf(event);
-    // R10: the organisation is told FIRST — the destructive delete is LAST.
-    // See the handler docstring for why.
-    if (source.orgId && source.setId) {
-      await appendReviewEvent(db, TABLE(), source, 'taken-down', { version, publicSetId, note, reviewer });
-      await writeShareStamp(db, TABLE(), source, { version, status: 'flagged', note }, { onlyIfPublicSetId: publicSetId });
-      await deleteQueueRow(db, TABLE(), queueSk(source, version));
+    /* THE AUDIT ENTRY (shared/audit-log.js), before anything moves: Engage
+       staff removing an organisation's published set from the library, in
+       that organisation's log, with the note as the reason. If it cannot be
+       written, the set stays published. */
+    let auditRef;
+    try {
+      auditRef = await recordAudit(db, {
+        orgId: source.orgId,
+        action: 'library.take-down',
+        actor: actorFromEvent(event, 'platform-admin'),
+        target: { type: 'public-set', id: publicSetId, title: meta.name || '' },
+        reason: note,
+        detail: { publicSetId, setId: source.setId, version, publicVersion: Number(meta.activeVersion) || 0 },
+      });
+    } catch (auditError) {
+      console.error('takedown refused: the audit entry could not be written:', auditError);
+      return json(503, { error: 'Nothing was changed: the takedown could not be recorded in the audit log. Try again.' });
     }
-    await deleteQueueRow(db, TABLE(), queueSk(pubRefOf(publicSetId), 0));
-    await unpublishSet(db, TABLE(), source, pubRefOf(publicSetId));
+    try {
+      // R10: the organisation is told FIRST — the destructive delete is LAST.
+      // See the handler docstring for why.
+      if (source.orgId && source.setId) {
+        await appendReviewEvent(db, TABLE(), source, 'taken-down', { version, publicSetId, note, reviewer });
+        await writeShareStamp(db, TABLE(), source, { version, status: 'flagged', note }, { onlyIfPublicSetId: publicSetId });
+        await deleteQueueRow(db, TABLE(), queueSk(source, version));
+      }
+      await deleteQueueRow(db, TABLE(), queueSk(pubRefOf(publicSetId), 0));
+      await unpublishSet(db, TABLE(), source, pubRefOf(publicSetId));
+    } catch (actionError) {
+      await markAuditOutcome(db, auditRef, 'failed');
+      throw actionError;
+    }
     return json(200, { takenDown: publicSetId });
   } catch (error) {
     console.error('❌ public-library item failed:', error);

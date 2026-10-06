@@ -99,9 +99,14 @@ export function buildApi(gameId) {
     logAction: (logId, body) => post(`log/${seg(logId)}`, body),
     postDirection: (text) => post('directions', { text }),
     /** The host removes a screenshot. */
-    deleteImage: (imageId) => post(`images/${seg(imageId)}`, { action: 'delete' }),
+    /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
+    deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
     /** 'direct' | 'suggest' | 'dismiss' | 'restore' */
     ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
+    /** Acknowledge every new idea at once (owner, 2026-10-05). */
+    acknowledgeAll: () => post('ideas/acknowledge-all'),
+    /** Take the room comment off the wall before its time is up. */
+    clearWall: () => post('ideas/wall/clear'),
     /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */
     saveOutcome: (body) => post('outcome', body),
     /** `{reviewAgentAsks?, agentName?}` → `{settings}` */

@@ -504,9 +504,11 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  prose and is sealed; statuses, labels, counts, timestamps, `PlayerName`
    *  (plaintext on every other player row) and the agent key's sha256 are
    *  structure and stay readable.
-   *   buildState    — SK=BUILD#STATE: the wrap-up Claude or the host wrote.
+   *   buildState    — SK=BUILD#STATE: the wrap-up Claude or the host wrote,
+   *                   and the room comment the host put on the wall.
    *   buildAsk      — SK=BUILD#ASK#nnn: the question, its options (titles,
-   *                   descriptions, preview URLs) and the host's decision.
+   *                   descriptions, preview URLs), the host's decision and the
+   *                   wheel's slices (they copy the options' words).
    *   buildResponse — SK=BUILD#RESP#… a suggestion, and BUILD#ANS#… the "why"
    *                   a phone gave with its pick.
    *   buildLog      — SK=BUILD#LOG#…: the timeline.
@@ -518,8 +520,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *   summary, files and commit, and the PR link), buildComment (reactions
    *   and replies), buildReview (the host's Claude's review). The repo and
    *   base branch ride in buildState.Crew. */
-  buildState: Object.freeze(['Outcome', 'Crew']),
-  buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision']),
+  buildState: Object.freeze(['Outcome', 'Crew', 'WallComment']),
+  buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel']),
   buildResponse: Object.freeze(['Text', 'Why']),
   buildLog: Object.freeze(['Text', 'Detail', 'Link']),
   buildIdea: Object.freeze(['Text']),
@@ -529,6 +531,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
   buildShare: Object.freeze(['Title', 'Versions', 'PrUrl']),
   buildComment: Object.freeze(['Text']),
   buildReview: Object.freeze(['Does', 'Fits', 'Risk', 'Suggestions', 'TestsSummary']),
+  // Claude's live activity lines ("Edited payroll.js"): the team's content too.
+  buildActivity: Object.freeze(['Items']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

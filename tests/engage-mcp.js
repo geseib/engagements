@@ -190,7 +190,10 @@ const hardStop = setTimeout(() => {
   });
   await check('prompts/list and prompts/get kickoff', async () => {
     const l = await mcp.request('prompts/list', {});
-    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'join', 'early-look', 'review', 'share-repo']);
+    assert.deepStrictEqual(l.result.prompts.map(p => p.name), ['kickoff', 'ideas', 'ab-mockups', 'wrap-up', 'continue', 'preview', 'join', 'early-look', 'review', 'share-repo']);
+    // Preview the work (owner, 2026-10-04): serve it, link it, screenshot it.
+    const pv = (await mcp.request('prompts/get', { name: 'preview' })).result.messages[0].content.text;
+    assert.ok(/dev server/.test(pv) && /kind "showing"/.test(pv) && /share_image/.test(pv), pv);
     const g = await mcp.request('prompts/get', { name: 'kickoff' });
     const m = g.result.messages[0];
     assert.strictEqual(m.role, 'user');
@@ -234,14 +237,15 @@ const hardStop = setTimeout(() => {
     assert.strictEqual(r.result.isError, true);
     assert.strictEqual(requests.length, 0);
   });
-  await check('wait_for_room polls until decided and returns the direction (with progress)', async () => {
+  await check('wait_for_room polls until decided and returns the decision alone (with progress)', async () => {
     requests.length = 0; askPolls = 0;
     const r = await mcp.request('tools/call', { name: 'wait_for_room', arguments: { askId: '003', maxWaitSeconds: 5 }, _meta: { progressToken: 'p1' } });
     const t = textOf(r);
     assert.ok(requests.length >= 3, `polled ${requests.length} times`);
     assert.ok(requests.every(q => q.method === 'GET' && q.url === '/dev/games/4321/build/asks/003'));
-    assert.ok(/DIRECTION/.test(t) && /keep the logo from A/.test(t), t);
-    assert.ok(/Choice B — Light minimal: 3 \(60%\)/.test(t) && /easier to read/.test(t), t);
+    assert.ok(/THE ROOM DECIDED/.test(t) && /keep the logo from A/.test(t), t);
+    // Decided: the decision, not the tally (owner, 2026-10-06: "Claude only needs question/answer").
+    assert.ok(!/Light minimal: 3 \(60%\)/.test(t), t);
     assert.ok(mcp.notifications.some(n => n.method === 'notifications/progress' && n.params.progressToken === 'p1'));
   });
   await check('wait_for_room times out cleanly while the ask is still live', async () => {

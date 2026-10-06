@@ -21,7 +21,7 @@ import BuildRoomPage from '../buildroom/BuildRoomPage';
 import { buildApi } from '../buildroom/buildHostApi';
 import { feedbackDraft } from '../buildroom/BuildCrew';
 
-jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
+jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn(), getAuthToken: jest.fn(async () => 'id-token') }));
 jest.mock('../WebSocketClient', () => ({
   __esModule: true,
   default: {
@@ -31,6 +31,8 @@ jest.mock('../WebSocketClient', () => ({
     offMessage: jest.fn(),
     onReconnected: jest.fn(),
     onConnectionStatusChange: jest.fn(),
+    isConnected: jest.fn(() => false),
+    ensureConnected: jest.fn(),
   },
 }));
 
@@ -145,6 +147,9 @@ async function openRoom(state) {
   render(<BuildRoomPage />);
   await screen.findByText('Volunteer sign-up');
 }
+/** The header's session menu (owner, 2026-10-05). */
+const openMore = () => fireEvent.click(screen.getByRole('button', { name: /^More/ }));
+
 async function openCrew(state = hostState()) {
   await openRoom(state);
   fireEvent.click(screen.getByRole('tab', { name: /The crew/ }));
@@ -162,12 +167,14 @@ describe('opening the room to a crew', () => {
   test('crew mode off: no stage tabs, no switch; the header offers Open to a crew', async () => {
     await openRoom(hostState({ crew: null, builders: [], tasks: [], shares: [], comments: [], reviews: [] }));
     expect(screen.queryByRole('tab', { name: /The crew/ })).toBeNull();
+    openMore();
     expect(screen.queryByRole('switch', { name: /Run crew code/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Open to a crew' })).toBeTruthy();
   });
 
   test('the dialog: repo not shared yet says how to ask Claude; one shared repo, no modes to pick; the switch; opening POSTs crew/settings', async () => {
     await openRoom(hostState({ crew: null, builders: [], tasks: [], shares: [], comments: [], reviews: [] }));
+    openMore();
     fireEvent.click(screen.getByRole('button', { name: 'Open to a crew' }));
     const dialog = screen.getByRole('dialog', { name: 'Open to a crew' });
     expect(within(dialog).getByText(/Claude has not shared the repo yet/)).toBeTruthy();
@@ -194,6 +201,7 @@ describe('opening the room to a crew', () => {
 
   test('crew on: the dialog shows the repo Claude shared, read-only, and can close the crew', async () => {
     await openRoom(hostState());
+    openMore();
     fireEvent.click(screen.getByRole('button', { name: 'Crew' }));
     const dialog = screen.getByRole('dialog', { name: 'The crew' });
     expect(within(dialog).getByRole('link', { name: CREW_ON.repoUrl }).getAttribute('href')).toBe(CREW_ON.repoUrl);
@@ -211,6 +219,7 @@ describe('opening the room to a crew', () => {
 describe('the Run crew code switch', () => {
   test('Off is shown, and turning it On asks first', async () => {
     await openRoom(hostState());
+    openMore();
     const sw = screen.getByRole('switch', { name: /Run crew code: Off/ });
     expect(sw.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(sw);
@@ -228,6 +237,7 @@ describe('the Run crew code switch', () => {
 
   test('On is shown, and turning it Off needs no confirm', async () => {
     await openRoom(hostState({ crew: { ...CREW_ON, runCrewCode: true } }));
+    openMore();
     const sw = screen.getByRole('switch', { name: /Run crew code: On/ });
     expect(sw.getAttribute('aria-checked')).toBe('true');
     expect(sw.className).toMatch(/is-on/);
@@ -426,10 +436,10 @@ describe('tasks', () => {
   });
 });
 
-describe('Present mode (the wall)', () => {
+describe('the Stage screen (the wall; was Present mode)', () => {
   async function present(state) {
     const board = await openCrew(state);
-    fireEvent.click(screen.getByRole('button', { name: /Present/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stage' }));
     return board;
   }
 
@@ -456,7 +466,8 @@ describe('Present mode (the wall)', () => {
     expect(within(look).getByText('Anonymous on the wall.')).toBeTruthy();
     expect(within(look).queryByRole('link')).toBeNull();
     expect(screen.queryByText('Parking map', { selector: '.brc-look-title' })).toBeNull();
-    // The timeline on the wall says who asked for help, not what.
+    // The timeline the room sees (now the History screen) says who asked for help, not what.
+    fireEvent.keyDown(window, { key: '4' });
     expect(screen.getByText('Ana asked for help')).toBeTruthy();
     expect(screen.queryByText('Where do shift times live?')).toBeNull();
   });

@@ -172,6 +172,35 @@ async function discardChildSession(db, tableName, gameId, orgId) {
 }
 
 /**
+ * AN ITEM'S SESSION, DELETED WITH ITS EVENT (2026-10-04, delete-event.js) —
+ * but only when it is still this event's. The session's METADATA must name
+ * this event (`EventRef`) and, when it records one, this item (`EventItem`).
+ * Anything else is left alone and the answer is false:
+ *   - no METADATA: the session expired (7 days from its start; the event is
+ *     kept 90 days after its day). What is left of it expires on its own ttl.
+ *   - METADATA naming another event, or none: the code was drawn again by
+ *     somebody else after this item's session expired. Theirs is not ours to
+ *     delete, nor their list row, nor their code.
+ * Never throws (discardChildSession logs its own failures).
+ */
+async function discardEventSession(db, tableName, { gameId, orgId, code, itemId }) {
+  let meta = null;
+  try {
+    const res = await db.send(new GetCommand({
+      TableName: tableName, Key: { PK: gamePk(gameId), SK: 'METADATA' }, ConsistentRead: true,
+    }));
+    meta = res && res.Item;
+  } catch (error) {
+    console.error(`❌ child-session: could not read ${gameId} before deleting it:`, error && error.message);
+    return false;
+  }
+  if (!meta || String(meta.EventRef || '') !== String(code)) return false;
+  if (meta.EventItem && itemId && String(meta.EventItem) !== String(itemId)) return false;
+  await discardChildSession(db, tableName, gameId, orgId || meta.orgId);
+  return true;
+}
+
+/**
  * THE PAUSE FLAG on the session's STATE (roadmap D1). While it is set, an
  * answer, a vote, a survey answer and a comment are refused (message.js,
  * submit-vote.js, survey-answers.js, comments.js). The round's own State is
@@ -246,5 +275,5 @@ async function toSession(db, tableName, gameId, message) {
 
 module.exports = {
   ANONYMITY_TYPES, SURVEY_OPEN,
-  childGameData, openingState, createChildSession, openChildSession, discardChildSession, setPaused, toSession,
+  childGameData, openingState, createChildSession, openChildSession, discardChildSession, discardEventSession, setPaused, toSession,
 };

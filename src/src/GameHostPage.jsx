@@ -96,6 +96,11 @@ import { authFetch } from './auth/authFetch';
 import { getEvent, runEvent } from './utils/eventsApi';
 import { navigateTo } from './auth/navigate';
 import {
+  mergeSessions, eventJoinPath, eventAgendaPath, BUILD_KIND,
+} from './config/engagementKinds';
+import { readEventsAccess } from './utils/eventsAccess';
+import EventDetailsDialog from './components/EventDetailsDialog';
+import {
   hasRunningOrder, readPanelParam, dropParam, PANEL_PARAM, QUESTIONS_PANEL, RUNNING_ORDER_LABEL,
 } from './config/runningOrder';
 
@@ -774,6 +779,32 @@ function GameHostPage() {
   const [showHostReports, setShowHostReports] = useState(false);
   const [createRefusal, setCreateRefusal] = useState(null);
   const [eventTitle, setEventTitle] = useState('');
+  /*
+    EVENT AND BUILD ROOM FROM THE CREATE SCREEN (2026-10-04). The create
+    dialog offers both as formats and hands each to its own setup screen:
+    a Build Room to /build (title carried over), an event to the new-event
+    dialog — the one WelcomeEvents and the console use — and from there to
+    its agenda. `eventsAccess` decides whether Event is offered at all (the
+    tier's switch, and the plan); read once, when the create screen first
+    opens. `newEventTitle` non-null shows the new-event dialog. Navigation
+    state, like the flags above: nothing here survives into a session.
+  */
+  const [eventsAccess, setEventsAccess] = useState(null);
+  const [newEventTitle, setNewEventTitle] = useState(null);
+  useEffect(() => {
+    if (!showNewGameDialog || eventsAccess) return undefined;
+    let live = true;
+    readEventsAccess().then((access) => { if (live) setEventsAccess(access); });
+    return () => { live = false; };
+  }, [showNewGameDialog, eventsAccess]);
+  const handleChooseOther = (kind, { title = '' } = {}) => {
+    if (kind === BUILD_KIND) {
+      navigateTo(title ? `/build?title=${encodeURIComponent(title)}` : '/build');
+      return;
+    }
+    setShowNewGameDialog(false);
+    setNewEventTitle(title);
+  };
 
   // EVERY OTHER FIELD ON THE CREATE SCREEN LIVES IN <GameSetupDialog>.
   // `eventTitle` stays because it is not only the form's — it is a per-game key
@@ -5015,8 +5046,11 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const copyPlayerUrl = (gameId) => {
-    const playerUrl = `${window.location.origin}/player?gameId=${gameId}`;
+  const copyPlayerUrl = (gameId, { event = false } = {}) => {
+    // An event's attendees join once, by the event's code (events M2).
+    const playerUrl = event
+      ? `${window.location.origin}${eventJoinPath(gameId)}`
+      : `${window.location.origin}/player?gameId=${gameId}`;
     navigator.clipboard.writeText(playerUrl).then(() => {
       console.log('📋 Player URL copied to clipboard');
     }).catch(err => {
@@ -5194,7 +5228,10 @@ Focus on actionable business strategy insights.`;
         return;
       }
       const data = await res.json();
-      setGamesList(data.games || []);
+      // Sessions and events as one list: an event is ONE row with its items,
+      // and its items' sessions are under it, never listed again (2026-10-04,
+      // config/engagementKinds.js).
+      setGamesList(mergeSessions(data));
     } catch (error) {
       console.error('Error fetching games list:', error);
       alert('Failed to load games list. Please try again.');
@@ -5969,9 +6006,24 @@ Focus on actionable business strategy insights.`;
   // the form and nothing else, and hands back one payload — including the
   // selected category ids, which is what freed handleStartNewGame from reading
   // them out of a closure leaveCurrentGame() had already invalidated.
+  // THE NEW-EVENT DIALOG, reached from the create screen's Event format: the
+  // same dialog as everywhere else, then the event's agenda. Closing it goes
+  // back to the create screen the host came from.
+  if (newEventTitle !== null) {
+    return (
+      <EventDetailsDialog
+        initial={{ title: newEventTitle }}
+        onClose={() => { setNewEventTitle(null); setShowNewGameDialog(true); }}
+        onSaved={(event) => { setNewEventTitle(null); navigateTo(eventAgendaPath(event.code)); }}
+      />
+    );
+  }
+
   if (showNewGameDialog) {
     return (
       <GameSetupDialog
+        eventsAccess={eventsAccess}
+        onChooseOther={handleChooseOther}
         isFirstEngagement={isLobbyState(gameState) && lessonNumber === 0}
         eventTitle={eventTitle}
         onEventTitleChange={setEventTitle}

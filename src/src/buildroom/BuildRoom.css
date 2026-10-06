@@ -34,6 +34,7 @@
   --brm-qr-bg: #FFFFFF;          /* a QR code needs a white quiet zone */
   --brm-rule: rgba(155, 168, 190, 0.22);
   --brm-scrim: rgba(5, 8, 15, 0.72);
+  --brm-qr-scrim: rgba(15, 26, 46, 0.94); /* QrZoom: denser, so the code is all a projector shows */
   --brm-tint-amber: rgba(246, 169, 76, 0.13);
   --brm-tint-amber-soft: rgba(246, 169, 76, 0.08);
   --brm-tint-blue: rgba(124, 167, 230, 0.14);
@@ -224,6 +225,13 @@
 }
 .brm .brm-steps li.is-done .brm-n { background: var(--success); color: var(--bg); }
 .brm .brm-steps li.is-wait .brm-n { background: transparent; border: 1.5px dashed var(--primary); color: var(--primary); }
+/* Connect Claude Code: each step carries its own title, command and copy
+   button (ConnectPanel, 2026-10-04). min-width 0 lets a long command scroll
+   inside its box instead of widening the dialog. */
+.brm .brm-steps--connect { gap: 16px; }
+.brm .brm-step-body { flex: 1; min-width: 0; display: grid; gap: 8px; }
+.brm .brm-step-title { font-weight: 700; line-height: 24px; }
+.brm .brm-step-body .brm-cmd { margin: 0; }
 
 /* ---- the stage (the wall) ----------------------------------------------- */
 .brm .brm-stage {
@@ -341,6 +349,48 @@
 .brm .brm-jt { font-size: var(--brm-st-meta); color: var(--muted); line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
 .brm .brm-jt b { display: block; color: var(--text); font-size: var(--brm-st-meta); }
 .brm .brm-jc { font: 800 44px/1 var(--font-display); color: var(--primary); letter-spacing: .08em; }
+
+/* The QR is a button now: click to see it big (QrZoom). */
+.brm button.brm-qr { border: 0; cursor: zoom-in; }
+.brm button.brm-qr:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+/* The join address copies the full link (CopyLinkButton). */
+.brm .brm-jt--copy { background: none; border: 0; padding: 0; text-align: left; cursor: copy; font: inherit; }
+.brm .brm-jt--copy:hover b, .brm .brm-jt--copy:focus-visible b { text-decoration: underline; }
+.brm .brm-copied { display: block; color: var(--brm-success-text); font-weight: 700; }
+.brm .brm-copied:empty { display: none; }
+
+/* The enlarged QR (QrZoom): a dusk scrim, the code on its white quiet zone,
+   sized to the screen so the back row can scan it. A click anywhere closes. */
+.brm .brm-qrzoom {
+  position: fixed; inset: 0; z-index: 1000; background: var(--brm-qr-scrim);
+  display: flex; align-items: flex-start; overflow-y: auto; padding: 24px; cursor: zoom-out;
+}
+.brm .brm-qrzoom-card { margin: auto; background: transparent; border: 0; outline: none; }
+.brm .brm-qrzoom-body { display: grid; justify-items: center; gap: 16px; text-align: center; }
+.brm .brm-qrzoom-qr {
+  width: min(70vh, 80vw); height: min(70vh, 80vw); padding: 20px; border-radius: 16px; background: var(--brm-qr-bg);
+}
+.brm .brm-qrzoom-qr svg { display: block; width: 100%; height: 100%; }
+.brm .brm-qrzoom-url {
+  background: var(--surface); color: var(--text); border: 1px solid var(--brm-rule); border-radius: 10px;
+  padding: 10px 16px; font: 700 var(--brm-st-meta)/1.3 var(--font-display); cursor: copy; overflow-wrap: anywhere; max-width: 90vw;
+}
+.brm .brm-qrzoom-url:hover, .brm .brm-qrzoom-url:focus-visible { border-color: var(--primary); }
+.brm .brm-qrzoom-code { color: var(--text); font-size: var(--brm-st-meta); }
+.brm .brm-qrzoom-code b { color: var(--primary); font: 800 44px/1 var(--font-display); letter-spacing: .08em; margin-left: 8px; }
+.brm .brm-qrzoom-hint { margin: 0; color: var(--muted); font-size: var(--brm-t-label); }
+
+/* The host's connection status (ConnectionChip). A button whenever there is
+   something to do about it. */
+.brm .brm-conn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  font-size: var(--brm-t-floor); font-weight: 700; border: 1px solid var(--brm-rule); background: transparent; color: var(--muted);
+}
+.brm .brm-conn::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.brm .brm-conn--live { color: var(--brm-success-text); }
+.brm .brm-conn--connecting { color: var(--muted); }
+.brm button.brm-conn { cursor: pointer; color: var(--danger-text); border-color: var(--danger-text); }
+.brm button.brm-conn:hover, .brm button.brm-conn:focus-visible { background: var(--surface-2); }
 .brm .brm-resp { font-size: var(--brm-st-body); font-weight: 700; }
 .brm .brm-resp span { color: var(--muted); font-weight: 500; font-size: var(--brm-st-meta); }
 
@@ -507,3 +557,206 @@
   .brm .brm-rating { grid-template-columns: minmax(0, 1fr); }
   .brm .brm-hostkit { margin-left: 0; }
 }
+
+/* Live: what Claude Code is doing (ClaudeActivity). */
+.brm .brm-activity { display: grid; gap: 8px; }
+.brm .brm-activity.is-live { border-color: var(--brm-line-amber); }
+.brm .brm-activity-now { margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--brm-t-body); font-weight: 700; color: var(--text); }
+.brm .brm-activity-now > span:first-of-type { min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-activity-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.brm .brm-activity-list li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-activity-list li > span:first-of-type { min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+
+/* Auto-open Claude's questions (AutoSwitch). */
+.brm .brm-auto { display: inline-flex; align-items: center; gap: 6px; font-size: var(--brm-t-floor); font-weight: 700; color: var(--muted); cursor: pointer; }
+.brm .brm-auto.is-on { color: var(--primary); }
+.brm .brm-auto input { accent-color: var(--primary); }
+
+/* ---- the four screens (owner, 2026-10-05; docs/design/build-room-host-redesign) ----
+   Host is the host's; Stage, Build and History are shown to the room. The
+   header carries the screens, the open ask, the join code and, on Host only,
+   the session menu. Tokens and tints only; contrast as the pairings above. */
+.brm .brm-screens {
+  display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--brm-rule);
+}
+.brm .brm-screen {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  border: 0; border-radius: 7px; background: transparent; cursor: pointer;
+  font: 700 var(--brm-t-label)/1 var(--font-ui); color: var(--muted);
+}
+.brm .brm-screen:hover { color: var(--text); }
+.brm .brm-screen.is-on { background: var(--surface-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--primary); }
+.brm .brm-screen:focus-visible, .brm .brm-askpill:focus-visible, .brm .brm-codebtn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-screen-n {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 10px; background: var(--primary); color: var(--bg); font-size: var(--brm-t-floor); font-weight: 800;
+}
+.brm .brm-askpill {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--brm-line-amber); background: var(--brm-tint-amber);
+  color: var(--primary); font: 700 var(--brm-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.brm .brm-askpill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.brm .brm-askpill.is-results { color: var(--brm-success-text); background: var(--brm-tint-green); border-color: transparent; }
+.brm .brm-codebtn { border: 1px solid transparent; border-radius: 8px; background: transparent; padding: 2px 6px; color: inherit; cursor: pointer; }
+.brm .brm-codebtn:hover { border-color: var(--brm-line-amber); }
+.brm .brm-more { position: relative; }
+.brm .brm-more-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 260px;
+  display: grid; gap: 6px; padding: 10px;
+  background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px;
+  box-shadow: 0 16px 40px var(--brm-scrim);
+}
+.brm .brm-more-panel .brm-btn { justify-content: flex-start; width: 100%; }
+
+/* A screen the room sees, below the header. */
+.brm .brm-screenbody { padding: 16px; display: grid; gap: 16px; }
+.brm .brm-buildscreen .brm-q { margin: 0; }
+.brm .brm-shot--build img { max-height: calc(100vh - 220px); object-fit: contain; object-position: top; }
+.brm .brm-histscreen { grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); align-items: start; }
+.brm .brm-histside { display: grid; gap: 16px; min-width: 0; }
+.brm .brm-decided { font-size: var(--brm-st-meta); }
+
+@media (max-width: 900px) {
+  .brm .brm-histscreen { grid-template-columns: minmax(0, 1fr); }
+  .brm .brm-screens { order: 3; }
+}
+
+/* The Stage screen: the ask sits on the regular stage (components/stage/Stage)
+   and reads at its ladder (--t-*, styles/stage.css), per display profile. */
+.brm .stage .brm-stage {
+  --brm-st-hero: var(--t-hero); --brm-st-q: var(--t-primary);
+  --brm-st-body: var(--t-body); --brm-st-meta: var(--t-meta);
+  background: transparent; border-color: transparent; padding: 0;
+}
+.brm .stage .brm-screen-n { margin-left: 6px; }
+
+/* The Host screen (C1): Now and the composer, Waiting for you, What happened.
+   Three columns on a laptop, two on a small one, one on a phone. */
+.brm .brm-host {
+  display: grid; gap: 16px; padding: 16px; align-items: start;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.1fr) minmax(280px, 0.85fr);
+}
+.brm .brm-hostcol { display: grid; gap: 16px; min-width: 0; align-content: start; }
+.brm .brm-now .brm-stage { padding: 14px; }
+.brm .brm-now { --brm-st-hero: 44px; --brm-st-q: 24px; --brm-st-body: 15px; --brm-st-meta: 13px; }
+.brm .brm-nowcard { display: grid; gap: 10px; }
+.brm .brm-nowcard .brm-h5 { margin: 0; }
+.brm .brm-nowline { margin: 0; font-size: var(--brm-t-title); font-weight: 800; line-height: 1.2; }
+.brm .brm-nowcard .brm-activity { background: transparent; border: 0; padding: 0; }
+.brm .brm-composer .brm-ta { min-height: 72px; }
+.brm .brm-composer .brm-label { margin: 0 4px 0 0; }
+.brm .brm-fold { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px; }
+.brm .brm-fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: var(--brm-t-body); list-style-position: inside; }
+.brm .brm-fold > .brm-panel { border: 0; border-top: 1px solid var(--brm-rule); border-radius: 0 0 12px 12px; }
+
+@media (max-width: 1200px) {
+  .brm .brm-host { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .brm .brm-host > .brm-hostcol:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 900px) {
+  .brm .brm-host { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+}
+
+/* The review card (C2): what the room would see, then the edits folded. */
+.brm .brm-reviewq { margin: 6px 0 8px; font-size: var(--brm-t-head); font-weight: 700; line-height: 1.3; }
+.brm .brm-reviewopts { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.brm .brm-reviewopts li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.brm .brm-reviewopts .brm-shot--thumb { margin-top: 0; max-width: 140px; }
+.brm .brm-reviewopt-t { min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-editfold { margin: 10px 0 0; background: transparent; }
+.brm .brm-editbody { padding: 4px 14px 2px; }
+
+/* THE HOST SCREEN NEVER SCROLLS THE WINDOW (owner, 2026-10-05). On a laptop
+   the screen is the window's height; each column scrolls inside itself, and
+   in the right column only the one open section does (HistoryStack). On a
+   small screen, where three columns cannot fit, the page scrolls as before. */
+.brm .brm-stack { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.brm .brm-stackitem { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px; min-height: 0; }
+.brm .brm-stackitem.is-open { border-color: var(--brm-line-amber); }
+.brm .brm-stackhead {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--brm-row-h); padding: 8px 14px;
+  background: transparent; border: 0; color: var(--text); cursor: pointer; text-align: left;
+  font: 700 var(--brm-t-body)/1.2 var(--font-ui);
+}
+.brm .brm-stackhead:focus-visible { outline: 2px solid var(--secondary); outline-offset: -2px; border-radius: 12px; }
+.brm .brm-stackbody { border-top: 1px solid var(--brm-rule); }
+/* The section's own panel and heading sit inside the row that names it. */
+.brm .brm-stackbody > .brm-panel { border: 0; border-radius: 0 0 12px 12px; background: transparent; max-height: none; }
+.brm .brm-stackbody > .brm-panel > .brm-h:first-child,
+.brm .brm-stackbody > .brm-panel > .brm-h5:first-child {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.brm .brm-stackbody > .brm-empty { margin: 12px; }
+
+@media (min-width: 1201px) {
+  .brm.brm-room--host { height: 100vh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .brm.brm-room--host > .brm-hbar,
+  .brm.brm-room--host > .brm-alert,
+  .brm.brm-room--host > .brm-notice { flex: none; }
+  .brm.brm-room--host > .brm-host { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .brm.brm-room--host .brm-hostcol { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .brm.brm-room--host .brm-hostcol--stack { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .brm.brm-room--host .brm-hostcol--stack > .brm-activity { flex: none; }
+  .brm.brm-room--host .brm-stack { flex: 1; }
+  .brm.brm-room--host .brm-stackitem { flex: none; }
+  .brm.brm-room--host .brm-stackitem.is-open { flex: 1; display: flex; flex-direction: column; }
+  .brm.brm-room--host .brm-stackitem.is-open > .brm-stackbody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+/* The asks table in the narrow right column: the kind column goes (the row's
+   question says it), and the number, status and action get fixed widths. */
+.brm .brm-stackbody .brm-tbl th.brm-col-kind,
+.brm .brm-stackbody .brm-tbl td:nth-child(3) { display: none; }
+.brm .brm-stackbody .brm-col-n { width: 34px; }
+.brm .brm-stackbody .brm-col-state { width: 86px; }
+.brm .brm-stackbody .brm-col-acts { width: 82px; }
+.brm .brm-stackbody .brm-tbl td, .brm .brm-stackbody .brm-tbl th { padding-left: 6px; padding-right: 6px; }
+
+/* Claude Code has stopped: the chip copies /engage:continue (AgentChip). */
+.brm button.brm-agentchip { background: transparent; cursor: pointer; font-family: var(--font-ui); }
+.brm .brm-agentchip.is-quiet { color: var(--primary); border-color: var(--brm-line-amber); }
+.brm .brm-agentchip.is-quiet::before { background: var(--primary); }
+.brm button.brm-agentchip:hover, .brm button.brm-agentchip:focus-visible { background: var(--surface-2); }
+.brm button.brm-agentchip:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
+/* The wheel at results (WheelPanel; BuildWheel.css draws the wheel). */
+.brm .brm-wheelpanel { display: grid; gap: 10px; justify-items: stretch; }
+.brm .brm-wheelpanel .bwh { justify-self: center; }
+.brm .brm-wheelacts { justify-content: center; margin-top: 0; }
+.brm .brm-wheelstage { display: grid; justify-items: center; gap: 14px; text-align: center; }
+.brm .brm-wheelstage .bwh { font-size: var(--brm-st-body); }
+.brm .brm-starter { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--brm-line-amber); border-radius: 10px; background: var(--brm-tint-amber-soft); }
+.brm .brm-starter .brm-row { margin-top: 2px; }
+
+/* A room comment on the wall (WallComment): over the Stage or the Build
+   screen, above the dock, for a short while, with no name. */
+.brm .brm-wallcomment {
+  position: fixed; left: 50%; bottom: calc(var(--dock-h, 110px) + 24px); z-index: 40;
+  transform: translateX(-50%); width: min(880px, calc(100vw - 48px));
+  display: grid; gap: 6px; padding: 18px 24px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--brm-rule); border-left: 6px solid var(--primary); border-radius: 16px;
+  box-shadow: 0 18px 48px var(--brm-scrim);
+  animation: brm-wall-in 0.5s ease-out both;
+}
+.brm .brm-wallcomment-k { color: var(--primary); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; font-size: var(--brm-st-meta); }
+.brm .brm-wallcomment-t { font-family: var(--font-display); font-weight: 800; font-size: var(--brm-st-q); line-height: 1.2; overflow-wrap: anywhere; }
+@keyframes brm-wall-in { 0% { opacity: 0; transform: translate(-50%, 16px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .brm .brm-wallcomment { animation: none; } }
+.brm .brm-onwall { margin: 0; }
+
+/* "Choose this instead" at results; the one going to Claude says so. */
+.brm .brm-pick { justify-self: start; align-self: start; margin-top: 4px; }
+.brm span.brm-pick.is-on {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 4px 10px; border-radius: 999px;
+  font-size: var(--brm-t-label); font-weight: 700; color: var(--brm-success-text); background: var(--brm-tint-green);
+}
+
+/* ---- Claude has not heard this (UnheardNotice) ---------------------------
+   A direction waiting on a stopped Claude Code: the one notice in the
+   column with an edge, because nothing reaches Claude until the host acts. */
+.brm .brm-unheard { border-left: 4px solid var(--primary); display: grid; gap: 8px; margin-top: 0; }
+.brm .brm-unheard-t { margin: 0; line-height: 1.4; }
+.brm .brm-unheard code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--primary); }

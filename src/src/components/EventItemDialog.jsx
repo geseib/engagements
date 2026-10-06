@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import DeleteReasonField from './DeleteReasonField';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
@@ -112,6 +113,8 @@ function numbered(items) {
 
 export default function EventItemDialog({
   code, mode, type, item = null, items = [], sets = [], onClose, onSaved, onRemoved, onRefused,
+  /** The role this caller removes an item in (GET /events/{code} deleteAs); staff give a reason. */
+  deleteAs,
 }) {
   const editing = mode === 'edit';
   const unreadable = editing && Boolean(item && item.decryptFailed);
@@ -146,6 +149,8 @@ export default function EventItemDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [removeReason, setRemoveReason] = useState('');
+  const asStaff = deleteAs === 'platform-admin';
 
   /* THE SLIDES (a presentation only). `deckChange` is undefined while the
      host has not touched them, null once they chose Remove PDF, and the new
@@ -405,7 +410,7 @@ export default function EventItemDialog({
     setBusy(true);
     setError('');
     try {
-      await removeItem(code, item.itemId);
+      await (asStaff ? removeItem(code, item.itemId, { reason: removeReason.trim() }) : removeItem(code, item.itemId));
       onRemoved(item.itemId);
     } catch (err) {
       setError(err.message || 'The item was not removed.');
@@ -737,13 +742,29 @@ export default function EventItemDialog({
               <p>
                 {unreadable ? 'Remove this item from the agenda?' : `Remove “${item.title}” from the agenda?`} The times after it move up.
               </p>
+              {asStaff && (
+                <DeleteReasonField
+                  id="evb-remove-reason"
+                  value={removeReason}
+                  onChange={setRemoveReason}
+                  scope="evb"
+                inputClass="evb-input evb-textarea"
+                  hintClass="evb-dim"
+                />
+              )}
               <button type="button" className="evb-btn" onClick={() => setConfirmingRemove(false)} disabled={busy}>Keep it</button>
-              <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={remove} disabled={busy}>Remove</button>
+              <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={remove} disabled={busy || (asStaff && !removeReason.trim())}>Remove</button>
             </div>
           ) : (
             <>
               {editing && (
-                <button type="button" className="evb-btn evb-btn--ghostdanger" onClick={() => setConfirmingRemove(true)} disabled={busy}>
+                <button
+                  type="button"
+                  className="evb-btn evb-btn--ghostdanger"
+                  onClick={() => { setRemoveReason(''); setConfirmingRemove(true); }}
+                  disabled={busy || deleteAs === ''}
+                  title={deleteAs === '' ? 'Only the host who created this event, or an owner or admin of this team, can remove its items.' : undefined}
+                >
                   Remove from agenda
                 </button>
               )}
