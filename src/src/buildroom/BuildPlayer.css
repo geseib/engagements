@@ -1026,3 +1026,11 @@
 .bpl .bpl-shot { margin: 10px 0 0; }
 .bpl .bpl-story .bpl-pvfb { margin-top: 12px; }
 .bpl .bpl-pvnote .bpl-send { margin-top: 8px; }
+
+/* THE OPENING ON A PHONE (mockup O4): step N of 9, as a row of short bars.
+   --primary on --bg for the filled steps, --surface for the rest. */
+.bpl .bpl-opening { margin: 0 0 12px; }
+.bpl .bpl-opening-t { margin: 0 0 6px; }
+.bpl .bpl-opening-bar { display: flex; gap: 4px; }
+.bpl .bpl-opening-bar i { flex: 1; height: 4px; border-radius: 2px; background: var(--surface); }
+.bpl .bpl-opening-bar i.on { background: var(--primary); }

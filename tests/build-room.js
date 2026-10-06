@@ -1098,6 +1098,71 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(!raw.includes('Secret note for Claude'), 'the note is plaintext at rest');
   });
 
+  console.log('\nthe opening: frame the build with the room, then build (owner, 2026-10-06)');
+  await check('a new room starts in the opening; step 1 is What are we making?, with six kinds', async () => {
+    seed();
+    const st = await state();
+    assert.strictEqual(st.opening.phase, 'opening');
+    assert.strictEqual(st.opening.current, 'kind');
+    assert.deepStrictEqual(st.opening.steps.map((x) => x.key), ['kind', 'forWhom', 'problem', 'good', 'proof', 'never', 'firstBuild', 'tools', 'look']);
+    assert.strictEqual(st.opening.kinds.length, 6);
+    assert.strictEqual(st.opening.steps.find((x) => x.key === 'tools').host, true);
+    assert.strictEqual((await agentCall('GET', 'state')).body.opening.phase, 'opening', 'Claude sees the phase');
+  });
+  await check('deciding an opening step fills its brief line; a probe adds to it; Claude gets it as Keep in mind', async () => {
+    seed();
+    const kinds = (await state()).opening.kinds.map((k) => ({ title: k.title }));
+    const k = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'What are we making?', options: kinds, openingStep: 'kind' });
+    assert.strictEqual(k.body.ask.openingStep, 'kind');
+    assert.deepStrictEqual([k.body.ask.openingIndex, k.body.ask.openingOf], [1, 9]);
+    assert.strictEqual((await state()).opening.steps[0].status, 'asking');
+    await hostCall('POST', `asks/${k.body.ask.askId}`, { action: 'decide', direction: 'What are we making: A game', chosen: ['C'] });
+    let st = await state();
+    assert.strictEqual(st.brief.lines.kind, 'A game');
+    assert.strictEqual(st.opening.steps[0].status, 'done');
+    assert.strictEqual(st.opening.current, 'forWhom');
+    assert.deepStrictEqual(st.brief.keep, [], 'an opening answer fills its own line, not Keep in mind');
+    const inbox = (await agentCall('GET', 'inbox')).body.inbox;
+    assert.deepStrictEqual(inbox.map((d) => d.as), ['keep']);
+    // Who it is for, then a probe that adds to it.
+    const w = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Who is it for?', openingStep: 'forWhom' });
+    await hostCall('POST', `asks/${w.body.ask.askId}`, { action: 'decide', direction: 'Who is it for: two friends, one laptop' });
+    const p = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Who is it not for?', openingStep: 'forWhom', probe: true });
+    assert.strictEqual(p.body.ask.probe, true);
+    await hostCall('POST', `asks/${p.body.ask.askId}`, { action: 'decide', direction: 'Who is it not for: strangers online' });
+    st = await state();
+    assert.strictEqual(st.brief.forWhom, 'two friends, one laptop. Who is it not for: strangers online');
+  });
+  await check('the host answers a step, skips one, opens it again; Never becomes a Keep in mind rule', async () => {
+    seed();
+    const a = await hostCall('POST', 'opening/answer', { step: 'tools', text: 'Plain HTML and JavaScript, no framework' });
+    assert.strictEqual(a.status, 200, JSON.stringify(a.body));
+    assert.strictEqual(a.body.brief.lines.tools, 'Plain HTML and JavaScript, no framework');
+    assert.strictEqual((await agentCall('GET', 'inbox')).body.inbox[0].text, 'Any tools, frameworks, libraries or styles to use, or to avoid: Plain HTML and JavaScript, no framework');
+    await hostCall('POST', 'opening/answer', { step: 'never', text: 'Ask for an account' });
+    assert.deepStrictEqual((await state()).brief.keep.map((i) => i.text), ['Ask for an account']);
+    assert.strictEqual((await hostCall('POST', 'opening/skip', { step: 'kind' })).body.opening.steps[0].status, 'skipped');
+    assert.strictEqual((await hostCall('POST', 'opening/reopen', { step: 'kind' })).body.opening.steps[0].status, 'next');
+    assert.strictEqual((await hostCall('POST', 'opening/skip', { step: 'nope' })).status, 400);
+    assert.strictEqual((await agentCall('POST', 'opening/skip', { step: 'kind' })).status, 403);
+  });
+  await check('Start building ends the opening and sends Claude the whole brief as Do now', async () => {
+    seed();
+    await hostCall('POST', 'opening/answer', { step: 'problem', text: 'Board games take setup' });
+    await agentCall('GET', 'inbox');
+    const r = await hostCall('POST', 'opening/start', {});
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.strictEqual(r.body.opening.phase, 'building');
+    const d = (await agentCall('GET', 'inbox')).body.inbox[0];
+    assert.strictEqual(d.as, 'do-now');
+    assert.ok(/^The room has framed the build\. Plan 3 to 6 steps/.test(d.text) && /The problem today: Board games take setup/.test(d.text), d.text);
+  });
+  await check('a room that already has asks is building (rooms made before the opening)', async () => {
+    seed();
+    await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is it?' });
+    assert.strictEqual((await state()).opening.phase, 'building');
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

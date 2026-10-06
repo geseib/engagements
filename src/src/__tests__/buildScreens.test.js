@@ -287,3 +287,12 @@ describe('the host picks, and is told what that means (owner, 2026-10-06)', () =
     expect(pickVerdict(ask({ results: { total: 0, options: [] } }), 'A')).toMatchObject({ preferred: null, tied: [] });
   });
 });
+
+describe('the wall during the opening (owner, 2026-10-06)', () => {
+  const { stageModel } = require('../buildroom/buildScreens');
+  test('says the room is framing the build, not that Claude is building', () => {
+    const room = { playerCount: 4, agent: { connected: true }, opening: { phase: 'opening' } };
+    expect(stageModel(room, null).status).toBe('We are framing the build together. Claude is getting ready.');
+    expect(stageModel({ ...room, opening: { phase: 'building' } }, null).status).toBe('Claude is building. Send an idea from your phone any time.');
+  });
+});

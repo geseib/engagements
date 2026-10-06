@@ -146,7 +146,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -175,7 +175,8 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
   const saved = await put(ctx, row);
   // Keep in mind and Later stand: they join the room brief, which Claude
   // reads on every call until the host edits them away.
-  if (forAgent && ['keep', 'later'].includes(kind4)) {
+  // An opening step fills its own line of the brief instead (noBrief).
+  if (forAgent && !noBrief && ['keep', 'later'].includes(kind4)) {
     await addToBrief(ctx, kind4, { id: row.LogId, text, from: by === 'room' ? 'the room' : askId ? `ask ${Number(askId)}` : 'you', askId: askId || null, at: now });
   }
   return saved;
@@ -272,6 +273,7 @@ async function createAsk(ctx, role, body) {
     ...(v.claudeGets ? { ClaudeGets: v.claudeGets } : {}),
     ...(v.claudeNote ? { ClaudeNote: v.claudeNote } : {}),
     ...(v.fromQuestion ? { FromQuestion: v.fromQuestion } : {}),
+    ...(v.openingStep ? { OpeningStep: v.openingStep, ...(v.probe ? { Probe: true } : {}) } : {}),
     CreatedAt: now,
     ...(status === 'live' ? { OpenedAt: now } : {}),
   };
@@ -374,10 +376,18 @@ async function askAction(ctx, role, askId, body) {
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
       // As the host chose, else as the ready question's set says, else Do now.
-      const as = S.claudeGetsOf(b.as, S.claudeGetsOf(ask.ClaudeGets));
+      // An opening step is Keep in mind: it frames everything to come.
+      const as = S.claudeGetsOf(b.as, S.claudeGetsOf(ask.ClaudeGets, ask.OpeningStep ? 'keep' : 'do-now'));
       next.Decision.as = as;
       if (as === 'later') next.Decision.heldForLater = true;
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '' });
+      if (ask.OpeningStep) {
+        // A probe keeps its question ("Who is it not for: strangers online"),
+        // or its answer would read as the opposite of what the room said.
+        const answer = openingAnswer(ask, room, chosen, direction);
+        const brief = S.briefWithStep(room.state, ask.OpeningStep, ask.Probe ? S.questionAnswer(ask.Prompt, answer) : answer, { probe: Boolean(ask.Probe), askId, at: now });
+        await saveBrief(ctx, brief);
+      }
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '', noBrief: Boolean(ask.OpeningStep) });
     }
     await put(ctx, next);
     if (action === 'open' || action === 'reopen') await makeCurrent(ctx, room, askId, role);
@@ -707,6 +717,64 @@ async function editBrief(ctx, body) {
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { brief: next });
+}
+
+/**
+ * WHAT AN OPENING STEP'S DECISION SAYS, for its brief line: the chosen
+ * option(s) or idea(s), else the sentence the host wrote without its question.
+ */
+function openingAnswer(ask, room, chosen, direction) {
+  if (ask.Kind === 'choice' && chosen.length) {
+    const titles = (ask.Options || []).filter((o) => chosen.includes(o.label)).map((o) => o.title);
+    if (titles.length) return titles.join('; ');
+  }
+  if (ask.Kind === 'suggest' && chosen.length) {
+    const texts = room.resps.filter((x) => x.AskId === ask.AskId && chosen.includes(x.RespId)).map((x) => x.Text);
+    if (texts.length) return texts.join('; ');
+  }
+  const prefix = `${S.questionAnswer(ask.Prompt, 'x').slice(0, -1)}`;
+  return direction.startsWith(prefix) ? direction.slice(prefix.length).trim() : direction;
+}
+
+/**
+ * THE OPENING, BY HAND (owner, 2026-10-06): the host answers a step for the
+ * room (Tools and style above all), skips one, or opens it again; and Start
+ * building ends the opening, sending Claude the whole brief as Do now.
+ */
+async function openingAction(ctx, action, body) {
+  const b = body || {};
+  const room = await loadRoom(ctx);
+  const step = String(b.step || '');
+  const now = new Date().toISOString();
+  if (action === 'start') {
+    const brief = S.briefView(room.state);
+    const text = S.briefText(brief);
+    await touchState(ctx, { set: { Phase: 'building' } });
+    await logEntry(ctx, {
+      kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
+      text: `The room has framed the build. Plan 3 to 6 steps, post the plan with post_update (kind "milestone"), and start building.${text ? `\n\n${text}` : ''}`,
+    });
+    await logEntry(ctx, { kind: 'milestone', text: 'The room framed the build. Claude is building.', by: 'system' });
+  } else {
+    if (!S.OPENING_KEYS.includes(step)) return fail(400, `step must be one of ${S.OPENING_KEYS.join(', ')}`);
+    const def = S.OPENING_STEPS.find((x) => x.key === step);
+    if (action === 'answer') {
+      const text = S.cleanText(b.text, S.LIMITS.listItem);
+      if (!text) return fail(400, 'Write the answer');
+      await saveBrief(ctx, S.briefWithStep(room.state, step, text, { probe: b.probe === true, at: now }));
+      await logEntry(ctx, { kind: 'direction', by: 'host', forAgent: true, as: 'keep', noBrief: true, text: S.questionAnswer(def.question, text) });
+    } else if (action === 'skip' || action === 'reopen') {
+      const brief = S.briefView(room.state);
+      const steps = { ...brief.steps };
+      if (action === 'skip') steps[step] = 'skipped';
+      else delete steps[step];
+      await saveBrief(ctx, { ...brief, steps });
+    } else return fail(400, 'action must be answer, skip, reopen or start');
+  }
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { opening: S.openingView(after.state, after), brief: S.briefView(after.state) });
 }
 
 /**
@@ -1526,6 +1594,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'brief' && !b) return hostOnly() || editBrief(ctx, body);
   if (a === 'brief' && b === 'vote' && !c) return hostOnly() || laterToVote(ctx, body);
   if (a === 'brief' && b === 'later' && c && d === 'send') return hostOnly() || sendLater(ctx, c);
+  if (a === 'opening' && b && !c) return hostOnly() || openingAction(ctx, b, body);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);

@@ -57,10 +57,85 @@ const claudeGetsOf = (v, fallback = 'do-now') => {
  * room, never to the project's own memory.
  */
 const BRIEF_MAX_ITEMS = 30;
+
+/**
+ * THE OPENING (owner, 2026-10-06; docs/design/build-room-opening/PLAN.md):
+ * frame the build with the room before Claude builds. Nine steps in Amazon's
+ * working-backwards order, each filling one line of the brief; a guided path
+ * the host can skip; Tools and style the host answers by default.
+ */
+const OPENING_STEPS = Object.freeze([
+  { key: 'kind', label: 'Making', question: 'What are we making?', ask: 'choice' },
+  { key: 'forWhom', label: 'For', question: 'Who is it for? Name a person and the moment they need it.', ask: 'suggest', probes: ['Who else is it for?', 'Who is it not for?'] },
+  { key: 'problem', label: 'The problem', question: 'What problem do they have today?', ask: 'suggest', probes: ['What do they do instead today?', 'Why is that not good enough?'] },
+  { key: 'good', label: 'Good looks like', question: 'It is launch day. Write the headline.', ask: 'suggest', probes: ['What would they tell a friend?'] },
+  { key: 'proof', label: 'We will know', question: 'How will we know it worked?', ask: 'suggest', probes: ['What would we see, or count?'] },
+  { key: 'never', label: 'Never', question: 'What must it never do?', ask: 'suggest' },
+  { key: 'firstBuild', label: 'First build', question: 'What is the smallest version we could show today?', ask: 'suggest' },
+  { key: 'tools', label: 'Tools and style', question: 'Any tools, frameworks, libraries or styles to use, or to avoid?', ask: 'suggest', host: true },
+  { key: 'look', label: 'Look and feel', question: 'How should it look and feel?', ask: 'suggest' },
+]);
+const OPENING_KEYS = Object.freeze(OPENING_STEPS.map((x) => x.key));
+/** Step 1's list: six, so it fits the wheel. The host may edit it per session. */
+const OPENING_KINDS = Object.freeze([
+  { title: 'A website or page', detail: 'Something people visit' },
+  { title: 'An app', detail: 'On a phone, laptop or tablet' },
+  { title: 'A game', detail: 'Something to play' },
+  { title: 'A tool that saves time', detail: 'A script, an automation, a helper' },
+  { title: 'A document or guide', detail: 'A plan, a how-to, a proposal' },
+  { title: 'Figure something out', detail: 'Compare, test an idea, decide' },
+]);
+/** The brief's opening lines, beside Who it is for (forWhom) and Never (Keep in mind). */
+const BRIEF_LINES = Object.freeze(['kind', 'problem', 'good', 'proof', 'firstBuild', 'tools', 'look']);
+
 function briefView(state) {
   const b = (state && state.Brief) || {};
   const items = (list) => (Array.isArray(list) ? list : []).map((i) => ({ id: i.id, text: i.text || '', from: i.from || 'you', askId: i.askId || null, at: i.at || null }));
-  return { forWhom: b.forWhom || '', keep: items(b.keep), later: items(b.later) };
+  const lines = {};
+  for (const k of BRIEF_LINES) lines[k] = (b.lines && b.lines[k]) || '';
+  const steps = {};
+  for (const k of OPENING_KEYS) if (b.steps && ['done', 'skipped'].includes(b.steps[k])) steps[k] = b.steps[k];
+  return { forWhom: b.forWhom || '', keep: items(b.keep), later: items(b.later), lines, steps };
+}
+
+/**
+ * A decided opening step lands on its line: Who it is for, Never (a Keep in
+ * mind rule each), or one of BRIEF_LINES. A probe adds to the line.
+ */
+function briefWithStep(state, key, text, { probe = false, id = '', askId = null, at = null } = {}) {
+  const b = briefView(state);
+  const t = cleanText(text, LIMITS.listItem);
+  if (!t || !OPENING_KEYS.includes(key)) return b;
+  const join = (old) => (probe && old ? `${old}${/[.!?]$/.test(old) ? '' : '.'} ${t}` : t);
+  if (key === 'forWhom') b.forWhom = join(b.forWhom);
+  else if (key === 'never') {
+    if (!b.keep.some((i) => i.text === t)) b.keep = [...b.keep, { id: id || newId(), text: t, from: askId ? `ask ${Number(askId)}` : 'you', askId, at }].slice(-BRIEF_MAX_ITEMS);
+  } else b.lines = { ...b.lines, [key]: join(b.lines[key]) };
+  b.steps = { ...b.steps, [key]: 'done' };
+  return b;
+}
+
+/** The session's phase: an opening until the host starts building. Rooms made before it have asks, so they are building. */
+function phaseOf(state, room) {
+  if (state && ['opening', 'building'].includes(state.Phase)) return state.Phase;
+  return (room && room.asks && room.asks.length) || (state && state.Outcome) ? 'building' : 'opening';
+}
+
+/** The opening as the host, Claude and the phones see it. */
+function openingView(state, room) {
+  const brief = briefView(state);
+  const phase = phaseOf(state, room);
+  const open = (room.asks || []).filter((a) => a.OpeningStep && OPEN_STATUSES.concat(['results']).includes(a.Status));
+  const asking = new Set(open.map((a) => a.OpeningStep));
+  const valueOf = (k) => (k === 'forWhom' ? brief.forWhom : k === 'never' ? brief.keep.map((i) => i.text).join('; ') : brief.lines[k] || '');
+  const steps = OPENING_STEPS.map((st) => ({
+    ...st,
+    probes: st.probes || [],
+    value: valueOf(st.key),
+    status: asking.has(st.key) ? 'asking' : brief.steps[st.key] || 'next',
+  }));
+  const current = steps.find((st) => st.status === 'asking') || steps.find((st) => st.status === 'next') || null;
+  return { phase, steps, current: current ? current.key : null, kinds: OPENING_KINDS };
 }
 /** The brief with one item added to Keep in mind or Later (newest last; capped). */
 function briefWith(state, as, item) {
@@ -70,7 +145,7 @@ function briefWith(state, as, item) {
   b[list] = [...b[list], item].slice(-BRIEF_MAX_ITEMS);
   return b;
 }
-/** A host edit of the brief: `{forWhom?, keep?, later?}`, each list of `{id?, text}`. */
+/** A host edit of the brief: `{forWhom?, keep?, later?, lines?}`, each list of `{id?, text}`. */
 function normalizeBrief(state, body) {
   const b = body || {};
   const cur = briefView(state);
@@ -79,18 +154,30 @@ function normalizeBrief(state, body) {
       .map((i) => ({ ...(old.find((o) => o.id === i.id) || {}), id: i.id || newId(), text: cleanText(i.text, LIMITS.listItem) }))
       .filter((i) => i.text).slice(0, BRIEF_MAX_ITEMS)
     : old);
+  const lines = { ...cur.lines };
+  if (b.lines && typeof b.lines === 'object') for (const k of BRIEF_LINES) if (b.lines[k] !== undefined) lines[k] = cleanText(b.lines[k], LIMITS.listItem);
   return {
     forWhom: b.forWhom !== undefined ? cleanText(b.forWhom, LIMITS.listItem) : cur.forWhom,
     keep: list(b.keep, cur.keep),
     later: list(b.later, cur.later),
+    lines,
+    steps: cur.steps,
   };
 }
 /** The brief as Claude reads it, and as the plugin writes it to .engage/brief.md. */
 function briefText(brief) {
   const b = brief || { forWhom: '', keep: [], later: [] };
-  if (!b.forWhom && !b.keep.length && !b.later.length) return '';
+  const l = b.lines || {};
+  if (!b.forWhom && !b.keep.length && !b.later.length && !BRIEF_LINES.some((k) => l[k])) return '';
   const lines = ['THE ROOM BRIEF (the room\'s standing direction; apply it to everything you build)'];
+  if (l.kind) lines.push(`Making: ${l.kind}`);
   if (b.forWhom) lines.push(`Who it is for: ${b.forWhom}`);
+  if (l.problem) lines.push(`The problem today: ${l.problem}`);
+  if (l.good) lines.push(`Good looks like: ${l.good}`);
+  if (l.proof) lines.push(`We will know it worked when: ${l.proof}`);
+  if (l.firstBuild) lines.push(`First build: ${l.firstBuild}`);
+  if (l.tools) lines.push(`Tools and style: ${l.tools}`);
+  if (l.look) lines.push(`Look and feel: ${l.look}`);
   if (b.keep.length) lines.push('Keep in mind:', ...b.keep.map((i) => `  - ${i.text}`));
   if (b.later.length) lines.push('Later (not now; when you finish your current work, say which you would take next):', ...b.later.map((i) => `  - ${i.text}`));
   return lines.join('\n');
@@ -293,6 +380,8 @@ function normalizeAsk(body) {
     // Which ready question it came from (`<scope>:<setId>:<question sk>`), so the
     // host's library can say it was asked already (owner, 2026-10-06).
     fromQuestion: cleanText(b.fromQuestion, 200),
+    openingStep: OPENING_KEYS.includes(b.openingStep) ? b.openingStep : '',
+    probe: b.probe === true,
   };
   if (kind === 'choice') {
     const opts = cleanOptions(b.options);
@@ -498,6 +587,13 @@ function askView(ask, room, audience, me) {
   if (isHost && ask.ClaudeGets) out.claudeGets = ask.ClaudeGets;
   if (isHost && ask.ClaudeNote) out.claudeNote = ask.ClaudeNote;
   if (isHost && ask.FromQuestion) out.fromQuestion = ask.FromQuestion;
+  // An opening step (and whether it is a probe): phones see the step too, for "step 3 of 9".
+  if (ask.OpeningStep) {
+    out.openingStep = ask.OpeningStep;
+    out.openingIndex = OPENING_KEYS.indexOf(ask.OpeningStep) + 1;
+    out.openingOf = OPENING_KEYS.length;
+    if (ask.Probe) out.probe = true;
+  }
   if (ask.AskForMockups && isHost) {
     const m = mockupProgress(out);
     out.mockups = { asked: true, have: m.have, total: m.total, ready: ask.Status === 'proposed' && m.total > 0 && m.have === m.total };
@@ -730,6 +826,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     wallComment: isAgent ? null : wallCommentView(room.state),
     // Claude's copy has no Later list: it hears an item only when the host sends it.
     brief: isAgent ? { ...briefView(room.state), later: [] } : briefView(room.state),
+    opening: openingView(room.state, room),
     images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
@@ -924,6 +1021,6 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
+  WALL_COMMENT_MS, wallCommentView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

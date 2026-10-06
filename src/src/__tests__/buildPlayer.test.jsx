@@ -637,3 +637,17 @@ describe('Now · Ideas · History, on a phone or a laptop (step 7, C11)', () => 
     expect(screen.queryByRole('button', { name: /^Ideas/ })).toBeNull();
   });
 });
+
+describe('the opening on a phone (owner, 2026-10-06)', () => {
+  test('a question that frames the build says which step of the opening it is', async () => {
+    serve(baseView({ currentAskId: '003', current: ask({ askId: '003', kind: 'suggest', prompt: 'What problem do they have today?', openingStep: 'problem', openingIndex: 3, openingOf: 9 }) }));
+    await mount();
+    expect(await screen.findByText('Shaping the build · step 3 of 9')).toBeInTheDocument();
+  });
+  test('an ordinary question says nothing about the opening', async () => {
+    serve(baseView({ currentAskId: '003', current: ask({ askId: '003', kind: 'suggest', prompt: 'Which colour?' }) }));
+    await mount();
+    await screen.findByText('Which colour?');
+    expect(screen.queryByText(/Shaping the build/)).toBeNull();
+  });
+});

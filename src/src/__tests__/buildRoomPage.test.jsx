@@ -47,7 +47,8 @@ const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 /** HostState, computed by build-store.js from rows — never hand-shaped. */
 function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], logs = [], ideas = [], keys = [], activity = null } = {}) {
   const rows = [
-    { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), ...st },
+    // Building by default; the opening's tests pass st: { Phase: undefined } (owner, 2026-10-06).
+    { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...st },
     ...asks.map((a) => ({ SK: `BUILD#ASK#${a.AskId}`, Source: 'agent', CreatedAt: ago(600), ...a })),
     ...resps.map((r) => ({ SK: `BUILD#RESP#${r.AskId}#${r.RespId}`, Source: 'player', CreatedAt: ago(300), ...r })),
     ...answers.map((a) => ({ SK: `BUILD#ANS#${a.AskId}#${a.PlayerName}`, CreatedAt: ago(200), ...a })),
@@ -1680,5 +1681,68 @@ describe('the host picks by clicking an option, and confirms (owner, 2026-10-06)
     fireEvent.click(within(picks).getByRole('button', { name: 'B · Calm photo + calendar' }));
     const dialog = screen.getByRole('dialog', { name: 'Pick an alternate?' });
     expect(dialog.textContent).toMatch('The room preferred A · Bold banner (where the wheel landed)');
+  });
+});
+
+
+describe('the opening: frame the build with the room, then build (owner, 2026-10-06)', () => {
+  const opening = (st = {}, extra = {}) => hostState({ st: { Phase: undefined, ...st }, ...extra });
+
+  test('a new room opens on step 1, What are we making?, with the six kinds and the brief as the path', async () => {
+    await openRoom(opening());
+    const panel = screen.getByRole('region', { name: /^Opening · step 1 of 9/ });
+    expect(within(panel).getByDisplayValue('What are we making?')).toBeInTheDocument();
+    expect(within(panel).getByRole('list', { name: 'The kinds' }).textContent).toMatch('A gameSomething to play');
+    const path = screen.getByRole('region', { name: 'The opening: the build brief' });
+    expect(within(path).getAllByRole('listitem')).toHaveLength(9);
+    expect(within(path).getByRole('button', { name: /Tools and style.*You answer this one/ })).toBeInTheDocument();
+  });
+
+  test('Ask the room to pick opens a Choose ask tied to step 1', async () => {
+    await openRoom(opening());
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the room to pick' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks`));
+    expect(lastPost().body).toMatchObject({ kind: 'choice', prompt: 'What are we making?', openingStep: 'kind' });
+    expect(lastPost().body.options).toHaveLength(6);
+  });
+
+  test('Spin the wheel opens the ask and spins over it', async () => {
+    await openRoom(opening());
+    authFetch.mockImplementationOnce(async (url, opts = {}) => ({ ok: true, status: 201, json: async () => ({ ask: { askId: '001', options: [] } }) }));
+    fireEvent.click(screen.getByRole('button', { name: 'Spin the wheel' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'wheel' }));
+    expect(path(lastPost())).toBe(`games/${GAME}/build/asks/001`);
+  });
+
+  test('a step the host answers: Tools and style opens on the answer, Save posts it', async () => {
+    await openRoom(opening());
+    const pathList = screen.getByRole('region', { name: 'The opening: the build brief' });
+    fireEvent.click(within(pathList).getByRole('button', { name: /Tools and style/ }));
+    const panel = screen.getByRole('region', { name: /^Opening · step 8 of 9/ });
+    fireEvent.change(within(panel).getByLabelText('Your answer'), { target: { value: 'Plain HTML, no framework' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save the answer' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/answer`));
+    expect(lastPost().body).toEqual({ step: 'tools', text: 'Plain HTML, no framework' });
+  });
+
+  test('a done step shows its answer and its probes; Start building is always there', async () => {
+    await openRoom(opening({ Brief: { forWhom: 'Two friends, one laptop', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } }));
+    const pathList = screen.getByRole('region', { name: 'The opening: the build brief' });
+    expect(within(pathList).getByRole('button', { name: /Making.*A game/ })).toBeInTheDocument();
+    fireEvent.click(within(within(pathList).getByRole('group', { name: 'Probe For' })).getByRole('button', { name: 'Who is it not for?' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ kind: 'suggest', prompt: 'Who is it not for?', openingStep: 'forWhom', probe: true }));
+    expect(screen.getByRole('region', { name: /^Opening · step 3 of 9/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start building' })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Start building' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/start`));
+  });
+
+  test('the wall reads back the brief so far, with Start building', async () => {
+    await openRoom(opening({ Brief: { forWhom: 'Two friends', lines: { kind: 'A game', problem: 'Setup takes too long' }, steps: { kind: 'done', forWhom: 'done', problem: 'done' } } }));
+    fireEvent.keyDown(window, { key: '2' });
+    const wall = screen.getByRole('region', { name: 'The build brief' });
+    expect(wall.textContent).toMatch('MakingA game');
+    expect(wall.textContent).toMatch('TodaySetup takes too long');
+    expect(within(wall).getByRole('button', { name: 'Start building' })).toBeInTheDocument();
   });
 });

@@ -125,9 +125,27 @@ function Eyebrow({ word, askId, extra }) {
   );
 }
 
+/**
+ * THE OPENING ON A PHONE (owner, 2026-10-06; mockup O4): a question that
+ * frames the build says how far the room has got, so people know the
+ * questions lead somewhere.
+ */
+function OpeningProgress({ ask }) {
+  if (!ask.openingIndex || !ask.openingOf) return null;
+  return (
+    <div className="bpl-opening" aria-label={`Shaping the build, step ${ask.openingIndex} of ${ask.openingOf}`}>
+      <p className="plr-help bpl-opening-t">Shaping the build · step {ask.openingIndex} of {ask.openingOf}</p>
+      <div className="bpl-opening-bar" aria-hidden="true">
+        {Array.from({ length: ask.openingOf }, (_, i) => <i key={i} className={i < ask.openingIndex ? 'on' : ''} />)}
+      </div>
+    </div>
+  );
+}
+
 function AskHead({ ask, word, extra }) {
   return (
     <>
+      <OpeningProgress ask={ask} />
       <Eyebrow word={word} askId={ask.askId} extra={extra} />
       <h2 className="plr-q bpl-text">{ask.prompt}</h2>
       {ask.detail ? <p className="plr-help bpl-text bpl-askdetail">{ask.detail}</p> : null}

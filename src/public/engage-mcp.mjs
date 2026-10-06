@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.8.1';
+const VERSION = '1.9.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -153,9 +153,13 @@ async function api(method, path, body, signal) {
 
 let BRIEF = null;
 function briefText(b) {
-  if (!b || (!b.forWhom && !(b.keep || []).length && !(b.later || []).length)) return '';
+  const l = (b && b.lines) || {};
+  const named = [['kind', 'Making'], ['problem', 'The problem today'], ['good', 'Good looks like'], ['proof', 'We will know it worked when'], ['firstBuild', 'First build'], ['tools', 'Tools and style'], ['look', 'Look and feel']];
+  if (!b || (!b.forWhom && !(b.keep || []).length && !(b.later || []).length && !named.some(([k]) => l[k]))) return '';
   const lines = ['THE ROOM BRIEF (the room\'s standing direction; apply it to everything you build)'];
+  if (l.kind) lines.push(`Making: ${s(l.kind)}`);
   if (b.forWhom) lines.push(`Who it is for: ${s(b.forWhom)}`);
+  for (const [k, name] of named.slice(1)) if (l[k]) lines.push(`${name}: ${s(l[k])}`);
   if ((b.keep || []).length) lines.push('Keep in mind:', ...b.keep.map((i) => `  - ${s(i.text)}`));
   if ((b.later || []).length) lines.push('Later (not now; when you finish your current work, say which you would take next):', ...b.later.map((i) => `  - ${s(i.text)}`));
   return lines.join('\n');
@@ -363,6 +367,11 @@ function renderState(st) {
     for (const e of entries) lines.push(`  [${s(e.kind)}${e.by ? `/${e.by}` : ''}] ${trunc(e.text, 160)}`);
   }
   if (st.outcome && st.outcome.summary) lines.push('', `Wrap-up already posted: ${trunc(st.outcome.summary, 200)}`);
+  if (st.opening && st.opening.phase === 'opening') {
+    const steps = st.opening.steps || [];
+    lines.push('', 'PHASE: OPENING. The room is framing the build with the host. Do not write product code yet: prepare (the project folder and git), read the brief as it fills, and propose a probing question when an answer is thin (ask_room_for_ideas with forStep). The host presses Start building; you then get the whole brief as a direction.',
+      'Steps: ' + steps.map((x) => `${x.key} (${x.status})`).join(', '));
+  }
   if (briefText(st.brief)) lines.push('', briefText(st.brief));
   return lines.join('\n');
 }
@@ -522,6 +531,7 @@ const TOOLS = [
       properties: {
         question: str('The question, short and readable from the back of the room (ideally under 90 characters).', { minLength: 1, maxLength: 300 }),
         context: str('Optional one or two sentences of background shown under the question.', { maxLength: 1000 }),
+        forStep: { type: 'string', enum: ['kind', 'forWhom', 'problem', 'good', 'proof', 'never', 'firstBuild', 'tools', 'look'], description: 'During the opening only: the step this question probes (room_status lists them). Its answer joins that line of the build brief.' },
       },
       required: ['question'],
       additionalProperties: false,
@@ -985,7 +995,8 @@ const HANDLERS = {
   },
 
   async ask_room_for_ideas(args, ctx) {
-    const body = clean({ kind: 'suggest', prompt: reqStr(args, 'question'), detail: optStr(args, 'context') });
+    const step = optStr(args, 'forStep');
+    const body = clean({ kind: 'suggest', prompt: reqStr(args, 'question'), detail: optStr(args, 'context'), ...(step ? { openingStep: step, probe: true } : {}) });
     const res = await api('POST', 'asks', body, ctx.signal);
     return createdAskText(res.ask || {}, res.inbox,
       'The room will suggest ideas, vote on them, and the host will turn the best into a direction.');
@@ -1594,7 +1605,7 @@ function promptText(name, args) {
         'We are starting a Build Room session in Engage: a live room is watching on a projector and will help decide what we build.',
         '',
         '0. Follow the engage:build-room skill for this project: one commit per decision or milestone with the commit tool, README.md and DECISIONS.md kept current, and every server you start noted in .engage/servers.txt.',
-        '1. Call room_status. Read the goal, how many people are here, and anything already decided.',
+        '1. Call room_status. Read the goal, how many people are here, and anything already decided. If it says PHASE: OPENING, the room is still framing the build: set up the project, propose at most one probing question if an answer is thin (ask_room_for_ideas with forStep), then call wait_for_direction until the host presses Start building. Do steps 2 to 6 only after that.',
         '2. Restate the goal to me in one or two plain sentences.',
         '2b. Check for servers left running by an earlier session (for example lsof -iTCP -sTCP:LISTEN on macOS or Linux). Tell me about any; do not stop them unless I ask. Pick a port nothing else is using for this project.',
         '3. Propose a short build plan: 3–6 steps. Mark which steps are real decision points the room should weigh in on (look and feel, naming, which feature first) and which you will simply do.',
@@ -1744,6 +1755,7 @@ function promptText(name, args) {
 const INSTRUCTIONS = `Engage connects you to a live room of people through the host's Build Room session. The host's laptop is usually on a projector, the room follows along on their phones, and you are building something real with them.
 
 How to collaborate:
+- THE OPENING: a new room starts by framing the build (room_status says "PHASE: OPENING"). Then you prepare and listen: set up the project folder, write no product code, read the brief as each step lands, and when an answer is thin propose ONE probing question with ask_room_for_ideas and forStep (the step it probes; it lands on the host's screen for review). Wait with wait_for_direction. When the host presses Start building you get the whole brief as a direction: then plan, post the plan, and build.
 - NEVER ask a question in this terminal while connected (no interactive question menus, no "which did you mean?" prompts): the host is running the room from the projector and does not see this terminal, so the session stalls with the room waiting. Ask through Engage instead. When a decision is unclear (a typo, two readings), call ask_room_to_choose with the readings as options and a one-line context; it lands on the host's screen, and the host can answer for the room in one click. When the right reading is obvious, take it, say so in a post_update ("Reading 'sprint' as 'sprite': pixel-art sprites"), and keep building.
 - Ask the room only at real decision points: direction, look and feel, naming, priorities, "which of these?". Do the routine work yourself. A few good asks per session beat many small ones.
 - Keep every question short and plain: it is read from the back of a room on a projector. Put background in "context", not in the question.
@@ -2292,6 +2304,21 @@ skill is how you keep the project something they can open next week and understa
   \`.engage/servers.txt\`: the port, the command, and the process id if you have it.
 - Before starting another, check whether something is already listening on that port.
 - Do not stop servers you did not start.
+
+## The opening: frame it with the room, then build
+
+A new room starts in the opening (room_status says PHASE: OPENING). The host walks the
+room through nine steps: what we are making, who it is for, the problem today, what good
+looks like, how we will know, what it must never do, the first build, tools and style, and
+look and feel. Each decided step fills one line of the brief.
+
+- Prepare: the project folder and git are set up when you connect. Write no product code yet.
+- Read each brief line as it lands (room_status, or the brief that comes with a direction).
+- When an answer is thin, propose ONE probing question with ask_room_for_ideas and forStep
+  (for example, forStep "problem": "What do they do instead today?"). It lands on the host's
+  screen for review.
+- Then wait_for_direction. When the host presses Start building, you get the whole brief as
+  Do now: plan 3 to 6 steps, post the plan, and build.
 
 ## Questions go through Engage, never the terminal
 

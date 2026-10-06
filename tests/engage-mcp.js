@@ -58,6 +58,7 @@ let endedNext = false;
 // The four kinds and the brief (step 7c): what GET state hands over next.
 let stateInbox = [];
 let stateBrief;
+let stateOpening;
 // Claude's project folder, so the plugin writes .engage/brief.md somewhere harmless.
 const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'engage-mcp-'));
 fs.mkdirSync(path.join(PROJECT, '.engage'));
@@ -83,6 +84,7 @@ const server = http.createServer((req, res) => {
         ideas: [], outcome: null, rev: 7,
         inbox: stateInbox,
         ...(stateBrief ? { brief: stateBrief } : {}),
+        ...(stateOpening ? { opening: stateOpening } : {}),
       });
     }
     if (req.method === 'POST' && p === 'asks') {
@@ -343,6 +345,23 @@ const hardStop = setTimeout(() => {
     } finally {
       stateBrief = undefined;
     }
+  });
+  await check('the opening: room_status says PHASE: OPENING with the steps, and the brief carries its lines', async () => {
+    stateOpening = { phase: 'opening', current: 'problem', steps: [{ key: 'kind', status: 'done' }, { key: 'forWhom', status: 'done' }, { key: 'problem', status: 'asking' }] };
+    stateBrief = { forWhom: 'Two friends', keep: [], later: [], lines: { kind: 'A game', problem: 'Setup takes too long' } };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/PHASE: OPENING/.test(t) && /Do not write product code yet/.test(t) && /problem \(asking\)/.test(t), t);
+      assert.ok(/Making: A game/.test(t) && /The problem today: Setup takes too long/.test(t), t);
+    } finally {
+      stateOpening = undefined;
+      stateBrief = undefined;
+    }
+  });
+  await check('a probing question names its step (forStep), so its answer joins that line', async () => {
+    await mcp.request('tools/call', { name: 'ask_room_for_ideas', arguments: { question: 'What do they do instead today?', forStep: 'problem' } });
+    const posted = requests.filter((q) => q.method === 'POST' && /\/build\/asks$/.test(q.url)).pop();
+    assert.deepStrictEqual([posted.body.openingStep, posted.body.probe], ['problem', true]);
   });
   await check('post_update takes kind "answer"', async () => {
     const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'About an hour', kind: 'answer' } });

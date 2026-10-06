@@ -32,6 +32,7 @@ import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import { editableRows } from '../utils/questionRows';
 import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady } from './readyQuestions';
+import { OpeningPanel, BriefPath, WallBrief } from './BuildOpening';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
 import BuildWheel from './BuildWheel';
@@ -371,6 +372,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [pick, setPick] = useState(null); // {askId, id}
   // A pick waiting for the host to confirm it (owner, 2026-10-06): {ask, id}.
   const [confirmPick, setConfirmPick] = useState(null);
+  // The opening step the host chose in the brief (null: the next one).
+  const [openFocus, setOpenFocus] = useState(null);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
@@ -685,7 +688,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                   />
                 </div>
               ) : (
-                <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} />
+                room.opening && room.opening.phase === 'opening'
+                  ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => setScreen('stage')} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} />
               )}
             </>
           )}
@@ -725,6 +730,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
           <HistoryStack
             items={[
+              ...(room.opening && room.opening.phase === 'opening' ? [{
+                key: 'opening', label: 'The opening',
+                count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
+                body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
+              }] : []),
               { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
               { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
                 ? <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
@@ -1228,6 +1238,9 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     );
   } else if (current) {
     content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />;
+  } else if (room.opening && room.opening.phase === 'opening') {
+    // THE OPENING (O3): between steps, the wall reads back the brief so far.
+    content = <WallBrief room={room} busy={busy} run={run} api={api} host={!ended} />;
   } else {
     content = <IdleStage room={room} now={now} host={false} />;
   }

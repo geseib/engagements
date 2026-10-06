@@ -129,7 +129,9 @@ export function stageModel(room, current) {
   if (!current) {
     const agent = (room && room.agent) || {};
     const status = room && room.outcome && room.outcome.summary ? 'Here is what we built.'
-      : agent.connected || agent.listening ? 'Claude is building. Send an idea from your phone any time.'
+      // The opening (owner, 2026-10-06): the room frames the build first.
+      : room && room.opening && room.opening.phase === 'opening' ? 'We are framing the build together. Claude is getting ready.'
+        : agent.connected || agent.listening ? 'Claude is building. Send an idea from your phone any time.'
         : 'Waiting for Claude Code.';
     return { phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null }, status, primary: null };
   }
