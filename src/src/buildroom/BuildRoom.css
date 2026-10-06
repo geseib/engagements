@@ -622,3 +622,12 @@
   .brm .brm-histscreen { grid-template-columns: minmax(0, 1fr); }
   .brm .brm-screens { order: 3; }
 }
+
+/* The Stage screen: the ask sits on the regular stage (components/stage/Stage)
+   and reads at its ladder (--t-*, styles/stage.css), per display profile. */
+.brm .stage .brm-stage {
+  --brm-st-hero: var(--t-hero); --brm-st-q: var(--t-primary);
+  --brm-st-body: var(--t-body); --brm-st-meta: var(--t-meta);
+  background: transparent; border-color: transparent; padding: 0;
+}
+.brm .stage .brm-screen-n { margin-left: 6px; }

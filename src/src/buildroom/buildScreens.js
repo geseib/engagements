@@ -82,3 +82,42 @@ export function latestBuild(room) {
   const shot = shots.length ? shots[shots.length - 1] : null;
   return { link, shot };
 }
+
+const STAGE_KIND = Object.freeze({ suggest: 'Ideas', choice: 'Choose', rating: 'Rate' });
+
+/**
+ * THE STAGE SCREEN, as the regular host stage draws it (Rail, RoomMeter,
+ * Dock: components/stage/). Everything here is room-safe: a phase, a count,
+ * one sentence. `primary` is the dock's one move, the same key (Space) and
+ * place as Start Voting on the regular stage; deciding needs words, so at
+ * results the move is back to the Host screen.
+ */
+export function stageModel(room, current) {
+  const here = (room && room.playerCount) || 0;
+  const ended = Boolean(room && room.state === 'ENDED');
+  if (ended) {
+    return { phase: 'ENDED', context: { category: 'Build Room' }, meter: { heading: 'Took part', count: here, of: null }, status: 'This session has ended.', primary: null };
+  }
+  if (!current) {
+    const agent = (room && room.agent) || {};
+    const status = room && room.outcome && room.outcome.summary ? 'Here is what we built.'
+      : agent.connected || agent.listening ? 'Claude is building. Send an idea from your phone any time.'
+        : 'Waiting for Claude Code.';
+    return { phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null }, status, primary: null };
+  }
+  const n = Number(current.askId) || current.askId;
+  const context = { category: STAGE_KIND[current.kind] || 'Ask', round: n, noun: 'Ask' };
+  if (current.status === 'results') {
+    const total = (current.results && current.results.total) || current.answerCount || 0;
+    return { phase: 'RESULTS', context, meter: { heading: 'Answered', count: total, of: here }, status: 'Results', primary: { action: 'decide', label: 'Decide on Host' } };
+  }
+  if (current.status === 'voting') {
+    const voted = current.voteCount || 0;
+    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} have voted`, primary: { action: 'close', label: 'Close and show results' } };
+  }
+  const answered = current.answerCount || 0;
+  if (current.kind === 'suggest') {
+    return { phase: 'ASK', context, meter: { heading: 'Ideas', count: answered, of: null }, status: `${answered} ${answered === 1 ? 'idea' : 'ideas'} so far`, primary: { action: 'vote', label: 'Open voting' } };
+  }
+  return { phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: here }, status: `${answered} of ${here} have answered`, primary: { action: 'close', label: 'Close and show results' } };
+}

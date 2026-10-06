@@ -40,8 +40,13 @@ import {
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
-  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild,
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
 } from './buildScreens';
+import Stage from '../components/stage/Stage';
+import Rail from '../components/stage/Rail';
+import RoomMeter from '../components/stage/RoomMeter';
+import Dock from '../components/stage/Dock';
+import { loadProfile } from '../config/displayProfile';
 import {
   CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLook, EarlyLookDialog, RunCrewCodeSwitch, StageTabs, featuredShare,
 } from './BuildCrew';
@@ -548,6 +553,22 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   return (
     <ImageLoader.Provider value={loadImage}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}`} data-theme="dark">
+      {screen === 'stage' ? (
+        <BuildStage
+          room={room}
+          current={current}
+          crewOn={onCrew}
+          crew={crew}
+          onWall={onWall}
+          busy={busy}
+          ended={ended}
+          run={run}
+          api={api}
+          now={now}
+          onHost={() => setScreen('host')}
+        />
+      ) : (
+      <>
       <RoomHeader
         connection={connection}
         onReconnect={reconnect}
@@ -588,7 +609,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
       {screen === 'build' && <BuildScreen room={room} />}
       {screen === 'history' && <HistoryScreen room={room} />}
-      {(screen === 'host' || screen === 'stage') && (
+      {screen === 'host' && (
       <div className="brm-grid">
         <main className="brm-main">
           {host && firstRun && (
@@ -647,6 +668,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} />
         </aside>
       </div>
+      )}
+      </>
       )}
 
       {host && dialog === 'connect' && (
@@ -886,6 +909,92 @@ function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onRe
         )}
       </div>
     </header>
+  );
+}
+
+// ── The Stage screen ────────────────────────────────────────────────────────
+
+/**
+ * STAGE: what the room reads during an ask, drawn by the regular host stage's
+ * own parts (components/stage/: Stage, Rail, RoomMeter, Dock), so a Build Room
+ * ask looks and behaves like any other session on the projector: the same
+ * display profiles and fitter, the phase chip and join code in the rail, the
+ * count in the meter, one move in the dock on Space. The rail is this screen's
+ * header; HOST at the dock's edge (or 1, or P) goes back, as SESSION does on
+ * the regular stage. Everything on it is room-safe (stageModel); deciding needs
+ * words, so at results the move is back to the Host screen.
+ */
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost }) {
+  const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
+  const [qr, setQr] = useState(false);
+  const m = stageModel(room, current);
+  const waiting = waitingCount(room);
+  const move = !ended && m.primary ? m.primary : null;
+  const act = useCallback(() => {
+    if (!move || busy) return;
+    if (move.action === 'decide') { onHost(); return; }
+    run(() => api.askAction(current.askId, { action: move.action === 'vote' ? 'vote' : 'close' }));
+  }, [move, busy, onHost, run, api, current]);
+  // Space fires the dock's move: never while typing, and never when a focused
+  // control would take the Space itself.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('button, a, [role="button"], [role="dialog"]')) return;
+      e.preventDefault();
+      act();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [act]);
+  const body = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
+  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
+  let content;
+  if (crewOn) {
+    content = (
+      <>
+        {onWall && <EarlyLook key={onWall.shareId} share={onWall} crew={crew} host={false} stage />}
+        <CrewBoard crew={crew} host={false} now={now} busy={busy} run={run} api={api} onOpen={() => undefined} playerCount={room.playerCount} />
+      </>
+    );
+  } else if (current) {
+    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} />;
+  } else {
+    content = <IdleStage room={room} now={now} host={false} />;
+  }
+  return (
+    <>
+      <Stage
+        profile={profile}
+        phase={m.phase || ''}
+        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}` : 'idle', crewOn ? 'crew' : ''].join('|')}
+        rail={(
+          <Rail
+            phase={m.phase}
+            title={room.title || 'Build Room'}
+            context={m.context}
+            join={ended
+              ? { code: room.gameId, closed: true }
+              : { url: `${window.location.host}/play`, code: room.gameId, onPreview: () => undefined, onPreviewEnd: () => undefined, onPin: () => setQr(true) }}
+          />
+        )}
+        meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} />}
+        dock={(
+          <Dock status={m.status}>
+            {move && <button type="button" className="btn" disabled={busy} onClick={act}>{move.label}</button>}
+            {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
+            {move && <span className="kbd" aria-hidden="true">SPACE</span>}
+            <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
+              <span className="dock-more-lbl">HOST</span>
+              {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
+            </button>
+          </Dock>
+        )}
+      >
+        <div className="content"><div className="fitbox">{content}</div></div>
+      </Stage>
+      {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
+    </>
   );
 }
 

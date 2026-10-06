@@ -568,9 +568,11 @@ describe('the Stage screen (was Present mode)', () => {
     expect(screen.queryByText('Something rude')).toBeNull();
     expect(screen.queryByText('Ana')).toBeNull();
     expect(screen.queryByRole('region', { name: /Proposed ask/ })).toBeNull();
-    ['Close', 'Open voting', 'Discard', 'Hide', 'Wrap up', 'End session', 'Log'].forEach((name) => {
+    ['Close', 'Discard', 'Hide', 'Wrap up', 'End session', 'Log'].forEach((name) => {
       expect(screen.queryByRole('button', { name })).toBeNull();
     });
+    // The one move the room may see the host make: the dock's, as on the regular stage (C6).
+    expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Open voting' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Claude Code/ })).toBeNull();
     expect(screen.queryByText(stageHint({ status: 'live', kind: 'suggest' }))).toBeNull();
     // The wall still has the question, the suggestions and the timeline.
@@ -578,6 +580,8 @@ describe('the Stage screen (was Present mode)', () => {
     expect(within(stage).getByText('What would stop someone signing up?')).toBeInTheDocument();
     expect(within(stage).getByText('Not seeing open shifts')).toBeInTheDocument();
     expect(screen.queryByText('Which header should volunteers see first?')).toBeNull();
+    // The room's timeline lives on the History screen now.
+    fireEvent.keyDown(window, { key: '4' });
     expect(screen.getByText('Phones mostly')).toBeInTheDocument();
   });
 
@@ -590,7 +594,7 @@ describe('the Stage screen (was Present mode)', () => {
         { Kind: 'progress', Text: 'Header B in place', By: 'agent' },
       ],
     }));
-    fireEvent.click(screen.getByRole('button', { name: 'Stage' }));
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
     const tl = screen.getByRole('region', { name: 'Timeline' });
     const texts = within(tl).getAllByRole('listitem').map((li) => li.textContent);
     expect(texts.map((t) => ['Header B in place', 'Add a parking map', 'Use B with a bigger button'].find((x) => t.includes(x)))).toEqual(['Header B in place', 'Add a parking map', 'Use B with a bigger button']);
@@ -827,7 +831,8 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     await openRoom(busy());
     const pill = screen.getByRole('button', { name: 'Ask 3 · 3 of 4' });
     fireEvent.click(pill);
-    expect(screen.getByRole('button', { name: 'Stage' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'Current ask' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Host screen' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull();
   });
 
@@ -875,8 +880,8 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
 
   test('a screen the room sees carries no proposed ask, idea, note or session control', async () => {
     await openRoom(busy());
-    ['Stage', 'Build', 'History'].forEach((name) => {
-      fireEvent.click(screen.getByRole('button', { name }));
+    ['2', '3', '4'].forEach((key) => {
+      fireEvent.keyDown(window, { key });
       expect(screen.queryByText('Dark mode')).toBeNull();
       expect(screen.queryByText('Ask Dee about parking later')).toBeNull();
       expect(screen.queryByText('What would stop someone signing up?')).toBeNull();
@@ -901,6 +906,47 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
   test('the join code in the header shows the QR', async () => {
     await openRoom(busy());
     fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
+    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+  });
+});
+
+describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
+  const live = () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], answers: CHOICE_ANSWERS });
+
+  test('the rail: the phase, the ask, the join address and code; the meter: answered of here', async () => {
+    await openRoom(live());
+    fireEvent.keyDown(window, { key: '2' });
+    const rail = document.querySelector('header.rail');
+    expect(rail.textContent).toMatch(/Answering/);
+    expect(rail.textContent).toMatch(/Choose/);
+    expect(rail.textContent).toMatch(/Ask 3/);
+    expect(rail.textContent).toMatch(new RegExp(`JOIN.*${window.location.host}/play.*${GAME}`));
+    expect(document.querySelector('.dock .status').textContent).toBe('3 of 4 have answered');
+  });
+
+  test('Space closes the ask from the dock', async () => {
+    await openRoom(live());
+    fireEvent.keyDown(window, { key: '2' });
+    expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Close and show results' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: ' ' });
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`));
+    expect(lastPost().body).toEqual({ action: 'close' });
+  });
+
+  test('at results the move is back to the Host to decide; HOST at the dock\'s edge goes back too', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Decide on Host' }));
+    expect(screen.getByRole('region', { name: /Direction for Claude/ })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Host screen' }));
+    expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('the rail\'s join code shows the QR', async () => {
+    await openRoom(live());
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(screen.getByRole('button', { name: `Session code ${GAME}. Show the join QR code` }));
     expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
   });
 });

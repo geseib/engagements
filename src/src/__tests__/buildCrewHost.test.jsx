@@ -466,7 +466,8 @@ describe('the Stage screen (the wall; was Present mode)', () => {
     expect(within(look).getByText('Anonymous on the wall.')).toBeTruthy();
     expect(within(look).queryByRole('link')).toBeNull();
     expect(screen.queryByText('Parking map', { selector: '.brc-look-title' })).toBeNull();
-    // The timeline on the wall says who asked for help, not what.
+    // The timeline the room sees (now the History screen) says who asked for help, not what.
+    fireEvent.keyDown(window, { key: '4' });
     expect(screen.getByText('Ana asked for help')).toBeTruthy();
     expect(screen.queryByText('Where do shift times live?')).toBeNull();
   });
