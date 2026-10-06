@@ -1369,3 +1369,88 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     expect(lastPost().body).toEqual({ text: 'Check it on a small phone' });
   });
 });
+
+describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () => {
+  test('the composer\'s Send to Claude menu sends Keep in mind, saying what each kind does', async () => {
+    await openRoom(hostState());
+    fireEvent.change(screen.getByLabelText('Tell Claude, or log what the room said'), { target: { value: 'Has to work on old phones' } });
+    const composer = screen.getByRole('region', { name: 'Add something' });
+    fireEvent.click(within(composer).getByRole('button', { name: 'Send to Claude as' }));
+    const menu = within(composer).getByRole('group', { name: 'Send to Claude as' });
+    expect(menu.textContent).toMatch('Goes on the brief; Claude does not stop.');
+    fireEvent.click(within(menu).getByRole('button', { name: /^Keep in mind/ }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body).toEqual({ text: 'Has to work on old phones', as: 'keep' });
+  });
+
+  test('one click is still Do now, and sends no kind', async () => {
+    await openRoom(hostState());
+    fireEvent.change(screen.getByLabelText('Tell Claude, or log what the room said'), { target: { value: 'Bigger buttons' } });
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ text: 'Bigger buttons' }));
+  });
+
+  test('an idea goes to Claude as Later from its own menu', async () => {
+    await openRoom(hostState({ ideas: [{ PlayerName: 'Lee', Text: 'Sign up as a pair' }] }));
+    const q = screen.getByRole('region', { name: 'The queue' });
+    fireEvent.click(within(q).getByRole('button', { name: 'Send to Claude as' }));
+    fireEvent.click(within(within(q).getByRole('group', { name: 'Send to Claude as' })).getByRole('button', { name: /^Later/ }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'direct', as: 'later' }));
+  });
+
+  test('deciding a ready question: its kind is preselected with the set\'s note; changing it sends the kind', async () => {
+    const ask = { AskId: '006', Kind: 'rating', Prompt: 'How clear is the main screen?', Options: [], Status: 'results', Source: 'host', ClaudeGets: 'keep', ClaudeNote: 'Fix the reason given most often.' };
+    await openRoom(hostState({ st: { CurrentAskId: '006' }, asks: [ask], answers: [{ AskId: '006', PlayerName: 'Ana', Rating: 2 }] }));
+    const panel = screen.getByRole('region', { name: 'Direction for Claude' });
+    const kinds = within(panel).getByRole('radiogroup', { name: 'Claude gets it as' });
+    expect(within(kinds).getByRole('radio', { name: 'Keep in mind' })).toHaveAttribute('aria-checked', 'true');
+    expect(panel.textContent).toMatch('With it, from the set: "Fix the reason given most often."');
+    fireEvent.click(within(kinds).getByRole('radio', { name: 'Do now' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', as: 'do-now' }));
+  });
+
+  test('left as the set says, the decision sends no kind (the server uses the question\'s own)', async () => {
+    const ask = { AskId: '006', Kind: 'rating', Prompt: 'How clear?', Options: [], Status: 'results', Source: 'host', ClaudeGets: 'keep' };
+    await openRoom(hostState({ st: { CurrentAskId: '006' }, asks: [ask], answers: [{ AskId: '006', PlayerName: 'Ana', Rating: 4 }] }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Direction for Claude' })).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide' }));
+    expect(lastPost().body.as).toBeUndefined();
+  });
+
+  const BRIEF = {
+    forWhom: 'Busy volunteers',
+    keep: [{ id: 'k1', text: 'No account needed', from: 'ask 1' }],
+    later: [{ id: 'l1', text: 'Car park map', from: 'you' }, { id: 'l2', text: 'Sign up as a pair', from: 'the room' }],
+  };
+  const openBrief = () => fireEvent.click(screen.getByRole('button', { name: /^Room brief/ }));
+
+  test('the brief shows who it is for, Keep in mind and Later; remove and add edit it', async () => {
+    await openRoom(hostState({ st: { Brief: BRIEF } }));
+    expect(screen.getByRole('button', { name: /^Room brief · 4/ })).toBeInTheDocument();
+    openBrief();
+    const brief = screen.getByRole('region', { name: 'The room brief' });
+    expect(within(brief).getByLabelText('Who it is for').value).toBe('Busy volunteers');
+    expect(brief.textContent).toMatch('No account needed');
+    fireEvent.click(within(brief).getByRole('button', { name: 'Remove: Car park map' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/brief`));
+    expect(lastPost().body).toEqual({ later: [{ id: 'l2', text: 'Sign up as a pair' }] });
+    const add = within(brief).getByLabelText('Add to Keep in mind');
+    fireEvent.change(add, { target: { value: 'Plain words' } });
+    await waitFor(() => expect(within(brief).getAllByRole('button', { name: 'Add' })[0]).not.toBeDisabled());
+    fireEvent.click(within(brief).getAllByRole('button', { name: 'Add' })[0]);
+    await waitFor(() => expect(lastPost().body).toEqual({ keep: [{ id: 'k1', text: 'No account needed' }, { text: 'Plain words' }] }));
+  });
+
+  test('Put Later to a vote', async () => {
+    await openRoom(hostState({ st: { Brief: BRIEF } }));
+    openBrief();
+    fireEvent.click(screen.getByRole('button', { name: 'Put Later to a vote' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/brief/vote`));
+  });
+
+  test('the timeline says which kind went to Claude', async () => {
+    await openRoom(hostState({ logs: [{ Kind: 'direction', Text: 'Has to work on old phones', By: 'host', ForAgent: true, ForAgentAs: 'keep', DeliveredAt: ago(5) }] }));
+    expect(screen.getByText('Keep in mind · Claude has it')).toBeInTheDocument();
+  });
+});

@@ -520,10 +520,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *   summary, files and commit, and the PR link), buildComment (reactions
    *   and replies), buildReview (the host's Claude's review). The repo and
    *   base branch ride in buildState.Crew. */
-  buildState: Object.freeze(['Outcome', 'Crew', 'WallComment']),
-  buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel']),
+  buildState: Object.freeze(['Outcome', 'Crew', 'WallComment', 'Brief']),
+  buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel', 'ClaudeNote']),
   buildResponse: Object.freeze(['Text', 'Why']),
-  buildLog: Object.freeze(['Text', 'Detail', 'Link']),
+  buildLog: Object.freeze(['Text', 'Detail', 'Link', 'ClaudeNote']),
   buildIdea: Object.freeze(['Text']),
   buildImage: Object.freeze(['Caption']),
   buildBuilder: Object.freeze(['Note']),

@@ -31,10 +31,70 @@ const STATUSES = Object.freeze(['proposed', 'live', 'voting', 'results', 'decide
 const OPEN_STATUSES = Object.freeze(['live', 'voting']);
 
 const LOG_KINDS = Object.freeze([
-  'progress', 'milestone', 'showing', 'image', 'checkpoint', 'crew', 'base', 'help', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome',
+  'progress', 'milestone', 'showing', 'image', 'checkpoint', 'crew', 'base', 'help', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome', 'answer',
 ]);
-/** What Claude may post. Decisions and directions are the host's to write. */
-const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint']);
+/** What Claude may post. Decisions and directions are the host's to write. `answer` answers an Ask Claude. */
+const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint', 'answer']);
+
+/**
+ * WHAT CLAUDE GETS (step 7c, C14; owner, 2026-10-05: "yes, four kinds and the
+ * room brief"). Everything sent to Claude is one of four kinds:
+ *   do-now  the next thing to build; Claude stops and does it (the default)
+ *   keep    a rule or a fact for everything from now on; onto the brief
+ *   later   something to build, not now; onto the brief's Later list
+ *   ask     a question; Claude answers on the screen and keeps building
+ */
+const CLAUDE_GETS = Object.freeze(['do-now', 'keep', 'later', 'ask']);
+const claudeGetsOf = (v, fallback = 'do-now') => {
+  const k = String(v || '').trim().toLowerCase();
+  return CLAUDE_GETS.includes(k) ? k : fallback;
+};
+
+/**
+ * THE ROOM BRIEF (C14): who it is for, what to keep in mind, what is for
+ * later. Kept on BUILD#STATE (sealed with it), shown on the host's screen,
+ * sent to Claude whenever it changes and on room_status. It belongs to this
+ * room, never to the project's own memory.
+ */
+const BRIEF_MAX_ITEMS = 30;
+function briefView(state) {
+  const b = (state && state.Brief) || {};
+  const items = (list) => (Array.isArray(list) ? list : []).map((i) => ({ id: i.id, text: i.text || '', from: i.from || 'you', askId: i.askId || null, at: i.at || null }));
+  return { forWhom: b.forWhom || '', keep: items(b.keep), later: items(b.later) };
+}
+/** The brief with one item added to Keep in mind or Later (newest last; capped). */
+function briefWith(state, as, item) {
+  const b = briefView(state);
+  const list = as === 'keep' ? 'keep' : 'later';
+  if (b[list].some((i) => i.text === item.text)) return b;
+  b[list] = [...b[list], item].slice(-BRIEF_MAX_ITEMS);
+  return b;
+}
+/** A host edit of the brief: `{forWhom?, keep?, later?}`, each list of `{id?, text}`. */
+function normalizeBrief(state, body) {
+  const b = body || {};
+  const cur = briefView(state);
+  const list = (v, old) => (Array.isArray(v)
+    ? v.map((i) => (typeof i === 'string' ? { text: i } : (i || {})))
+      .map((i) => ({ ...(old.find((o) => o.id === i.id) || {}), id: i.id || newId(), text: cleanText(i.text, LIMITS.listItem) }))
+      .filter((i) => i.text).slice(0, BRIEF_MAX_ITEMS)
+    : old);
+  return {
+    forWhom: b.forWhom !== undefined ? cleanText(b.forWhom, LIMITS.listItem) : cur.forWhom,
+    keep: list(b.keep, cur.keep),
+    later: list(b.later, cur.later),
+  };
+}
+/** The brief as Claude reads it, and as the plugin writes it to .engage/brief.md. */
+function briefText(brief) {
+  const b = brief || { forWhom: '', keep: [], later: [] };
+  if (!b.forWhom && !b.keep.length && !b.later.length) return '';
+  const lines = ['THE ROOM BRIEF (the room\'s standing direction; apply it to everything you build)'];
+  if (b.forWhom) lines.push(`Who it is for: ${b.forWhom}`);
+  if (b.keep.length) lines.push('Keep in mind:', ...b.keep.map((i) => `  - ${i.text}`));
+  if (b.later.length) lines.push('Later (not now; when you finish your current work, say which you would take next):', ...b.later.map((i) => `  - ${i.text}`));
+  return lines.join('\n');
+}
 /** What the host may post by hand. */
 const HOST_LOG_KINDS = Object.freeze(['verbal', 'note', 'milestone', 'progress']);
 /** Never shown to the room, and never to Claude. */
@@ -227,6 +287,9 @@ function normalizeAsk(body) {
     options: [],
     scale: null,
     maxPicks: null,
+    // From a ready question (step 7b): what Claude gets when it is decided, and how to use it.
+    claudeGets: b.claudeGets !== undefined && b.claudeGets !== '' ? claudeGetsOf(b.claudeGets) : '',
+    claudeNote: cleanText(b.claudeNote, LIMITS.note),
   };
   if (kind === 'choice') {
     const opts = cleanOptions(b.options);
@@ -429,6 +492,8 @@ function askView(ask, room, audience, me) {
   // mockups. Ready when every option has a picture; it never opens by itself
   // unless the host said "Open next" (owner, 2026-10-05).
   if (ask.FromIdeas && ask.FromIdeas.length) out.fromIdeas = ask.FromIdeas;
+  if (isHost && ask.ClaudeGets) out.claudeGets = ask.ClaudeGets;
+  if (isHost && ask.ClaudeNote) out.claudeNote = ask.ClaudeNote;
   if (ask.AskForMockups && isHost) {
     const m = mockupProgress(out);
     out.mockups = { asked: true, have: m.have, total: m.total, ready: ask.Status === 'proposed' && m.total > 0 && m.have === m.total };
@@ -453,6 +518,7 @@ function askView(ask, room, audience, me) {
 function logView(r) {
   return {
     logId: r.LogId,
+    as: r.ForAgent ? claudeGetsOf(r.ForAgentAs) : null,
     kind: r.Kind,
     text: r.Text || '',
     detail: r.Detail || '',
@@ -654,6 +720,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     log: room.logs.filter((l) => !l.ForBuilder && !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
     ideas: isAgent ? [] : room.ideas.map(ideaView),
     wallComment: isAgent ? null : wallCommentView(room.state),
+    brief: briefView(room.state),
     images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
@@ -729,7 +796,9 @@ function inboxText(entry) {
   if (entry.Kind === 'decision') {
     // The question and the answer, and the host's note when they added one.
     // How it was decided stays on the decision (owner, 2026-10-06).
-    return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '');
+    return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '')
+      // How to use the answer, from a ready question's set (step 7b): never shown to the room.
+      + (entry.ClaudeNote ? `\n\nHow to use it: ${entry.ClaudeNote}` : '');
   }
   if (entry.Kind === 'idea') return `An idea from the room: ${entry.Text}`;
   if (entry.Kind === 'verbal') return `The room said: ${entry.Text}`;
@@ -843,6 +912,6 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
+  WALL_COMMENT_MS, wallCommentView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

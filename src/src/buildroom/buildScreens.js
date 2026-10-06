@@ -263,3 +263,18 @@ export const unheard = (room) => ((room && room.log) || []).filter((l) => l.forA
  * /engage:continue in Claude Code, so the host must be told.
  */
 export const agentStopped = (agent) => Boolean(agent && agent.lastSeenAt && !agent.connected && !agent.listening);
+
+/**
+ * WHAT CLAUDE GETS (step 7c, C14; owner, 2026-10-05): the four kinds of
+ * message, in the order the Send to Claude menu lists them. The server's
+ * CLAUDE_GETS (build-store.js) holds the same keys.
+ */
+export const CLAUDE_KINDS = Object.freeze([
+  { key: 'do-now', label: 'Do now', hint: 'The next thing to build. Claude stops and does it.' },
+  { key: 'keep', label: 'Keep in mind', hint: 'A rule or a fact for everything from now on. Goes on the brief; Claude does not stop.' },
+  { key: 'later', label: 'Later', hint: "Something to build, not now. Goes on the brief's Later list." },
+  { key: 'ask', label: 'Ask Claude', hint: 'A question. Claude answers on the screen and keeps building.' },
+]);
+export const claudeKindLabel = (key) => (CLAUDE_KINDS.find((k) => k.key === key) || CLAUDE_KINDS[0]).label;
+/** The body field for a kind: Do now is the default, so it sends nothing. */
+export const asField = (key) => (key && key !== 'do-now' ? { as: key } : {});

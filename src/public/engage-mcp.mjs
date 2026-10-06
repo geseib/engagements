@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.6.2';
+const VERSION = '1.7.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -141,7 +141,32 @@ async function api(method, path, body, signal) {
     throw new ApiError(res.status, String(msg), data);
   }
   if (data === null) throw new ApiError(res.status, 'Engage returned a response that is not JSON.');
+  if (data.brief) rememberBrief(data.brief);
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// The room brief (step 7c, C14): who it is for, Keep in mind, Later. Kept by
+// Engage, sent whenever it changes, and written to .engage/brief.md so it
+// survives a long session. It belongs to this room, never to CLAUDE.md.
+// ---------------------------------------------------------------------------
+
+let BRIEF = null;
+function briefText(b) {
+  if (!b || (!b.forWhom && !(b.keep || []).length && !(b.later || []).length)) return '';
+  const lines = ['THE ROOM BRIEF (the room\'s standing direction; apply it to everything you build)'];
+  if (b.forWhom) lines.push(`Who it is for: ${s(b.forWhom)}`);
+  if ((b.keep || []).length) lines.push('Keep in mind:', ...b.keep.map((i) => `  - ${s(i.text)}`));
+  if ((b.later || []).length) lines.push('Later (not now; when you finish your current work, say which you would take next):', ...b.later.map((i) => `  - ${s(i.text)}`));
+  return lines.join('\n');
+}
+function rememberBrief(b) {
+  BRIEF = b;
+  try {
+    const dir = pathJoin(projectDir(), '.engage');
+    if (!existsSync(dir)) return;
+    writeFileSync(pathJoin(dir, 'brief.md'), `${briefText(b) || 'The room brief is empty.'}\n`);
+  } catch { /* the brief still reaches Claude in the tool result */ }
 }
 
 function errorResult(e, tool) {
@@ -183,17 +208,33 @@ const KIND_NAMES = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate' };
 function s(v) { return v === undefined || v === null ? '' : String(v); }
 function trunc(v, n) { const t = s(v).replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
 
+/**
+ * WHAT CLAUDE GETS (step 7c, C14): each item says how to treat it. Do now
+ * keeps today's wording; Keep in mind and Later go on the brief; Ask Claude
+ * wants one answer on the screen.
+ */
+const KIND_TEXT = {
+  'do-now': (t) => t,
+  keep: (t) => `ADDED TO THE ROOM BRIEF (Keep in mind): ${t}\n    Apply it to everything you build from now on. You do not need to stop what you are doing.`,
+  later: (t) => `FOR LATER: ${t}\n    Do not start it now. It is on the brief's Later list; when you finish your current work, say which Later item you would take next.`,
+  ask: (t) => `THE ROOM ASKS YOU: ${t}\n    Answer in one post_update (kind "answer"), then carry on.`,
+};
 function renderInbox(inbox) {
   if (!Array.isArray(inbox) || !inbox.length) return '';
+  const kindOf = (d) => (KIND_TEXT[d.as] ? d.as : 'do-now');
+  const doNow = inbox.filter((d) => kindOf(d) === 'do-now');
   const lines = ['', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    `DIRECTION FROM THE ROOM (via the host)${inbox.length > 1 ? ` — ${inbox.length} items` : ''}:`];
+    `${doNow.length ? 'DIRECTION FROM THE ROOM (via the host)' : 'FROM THE ROOM (via the host)'}${inbox.length > 1 ? ` — ${inbox.length} items` : ''}:`];
   for (const d of inbox) {
     const tags = [d.from ? `from ${d.from}` : '', d.askId ? `re ask ${d.askId}` : '', d.shareId ? `re early look ${d.shareId}` : ''].filter(Boolean).join(', ');
-    lines.push(`  • ${s(d.text)}${tags ? `  (${tags})` : ''}`);
+    lines.push(`  • ${KIND_TEXT[kindOf(d)](s(d.text))}${tags ? `  (${tags})` : ''}`);
   }
-  lines.push('Act on this now: it is the host\'s word and takes priority over your current plan.',
-    'Fold it into what you are building, then post_update to say what you changed.',
-    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  if (doNow.length) {
+    lines.push('Act on the direction now: it is the host\'s word and takes priority over your current plan.',
+      'Fold it into what you are building, then post_update to say what you changed.');
+  }
+  if (inbox.some((d) => ['keep', 'later'].includes(kindOf(d))) && briefText(BRIEF)) lines.push('', briefText(BRIEF));
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   return lines.join('\n');
 }
 
@@ -317,6 +358,7 @@ function renderState(st) {
     for (const e of entries) lines.push(`  [${s(e.kind)}${e.by ? `/${e.by}` : ''}] ${trunc(e.text, 160)}`);
   }
   if (st.outcome && st.outcome.summary) lines.push('', `Wrap-up already posted: ${trunc(st.outcome.summary, 200)}`);
+  if (briefText(st.brief)) lines.push('', briefText(st.brief));
   return lines.join('\n');
 }
 
@@ -548,12 +590,12 @@ const TOOLS = [
   },
   {
     name: 'post_update',
-    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at.',
+    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at, "answer" to answer a question the room asked you.',
     inputSchema: {
       type: 'object',
       properties: {
         text: str('One short sentence for the wall, e.g. "Header B is in place with the bigger CTA".', { minLength: 1, maxLength: 300 }),
-        kind: { type: 'string', enum: ['progress', 'milestone', 'showing'], description: 'Default "progress".' },
+        kind: { type: 'string', enum: ['progress', 'milestone', 'showing', 'answer'], description: 'Default "progress". "answer" answers a question the room asked you (THE ROOM ASKS YOU).' },
         detail: str('Optional extra detail shown when the entry is expanded.', { maxLength: 2000 }),
         link: str('Optional PUBLIC http(s) link (e.g. a deployed preview).'),
       },
@@ -1051,7 +1093,7 @@ const HANDLERS = {
 
   async post_update(args, ctx) {
     const kind = args.kind === undefined || args.kind === null || args.kind === '' ? 'progress' : args.kind;
-    if (!['progress', 'milestone', 'showing'].includes(kind)) throw new InputError('"kind" must be progress, milestone or showing.');
+    if (!['progress', 'milestone', 'showing', 'answer'].includes(kind)) throw new InputError('"kind" must be progress, milestone, showing or answer.');
     const link = optStr(args, 'link');
     if (link && !/^https?:\/\//i.test(link)) throw new InputError('"link" must be an http(s) URL.');
     const body = clean({ kind, text: reqStr(args, 'text'), detail: optStr(args, 'detail'), link });
@@ -1159,7 +1201,11 @@ const HANDLERS = {
     return ok('Wrap-up saved. The room\'s report now shows the outcome' +
       `${body.built && body.built.length ? `, ${body.built.length} item${body.built.length === 1 ? '' : 's'} built` : ''}` +
       `${links && links.length ? `, ${links.length} link${links.length === 1 ? '' : 's'}` : ''}.` +
-      ' Post a final post_update with kind "milestone", then call wait_for_direction so the host can keep steering.' + warn, res.inbox);
+      ' Post a final post_update with kind "milestone".' +
+      (BRIEF && (BRIEF.keep || []).length
+        ? ' Then look at the room brief: in one post_update, say which Keep in mind items are worth keeping in the project for good (a product rule such as "no accounts", not a taste of the day). Write none of them into the project unless the host sends a direction saying which.'
+        : '') +
+      ' Then call wait_for_direction so the host can keep steering.' + warn, res.inbox);
   },
 
   // ── Crew mode: builders ──

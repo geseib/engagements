@@ -97,14 +97,19 @@ export function buildApi(gameId) {
     postLog: (body) => post('log', body),
     /** `{action:'edit'|'delete', text?, detail?}` → `{entry}` */
     logAction: (logId, body) => post(`log/${seg(logId)}`, body),
-    postDirection: (text) => post('directions', { text }),
+    /** A direction; `as` is keep, later or ask (step 7c), else Do now. */
+    postDirection: (text, as) => post('directions', { text, ...(as && as !== 'do-now' ? { as } : {}) }),
     /** The host removes a screenshot. */
     /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
     deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
     /** 'direct' | 'suggest' | 'acknowledge' | 'wall' | 'later' | 'dismiss' | 'restore' */
-    ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
+    ideaAction: (ideaId, action, extra = {}) => post(`ideas/${seg(ideaId)}`, { action, ...extra }),
     /** Queue it: the host's own idea, waiting in the queue (step 4). */
     queueIdea: (text) => post('ideas', { text }),
+    /** The room brief (step 7c): `{forWhom?, keep?, later?}` → `{brief}`. */
+    editBrief: (body) => post('brief', body),
+    /** The brief's Later list, to a Pick one vote. */
+    laterToVote: () => post('brief/vote', {}),
     /** `{ideaIds, prompt?, maxPicks?, open?, askForMockups?}` → `{ask}`: ticked ideas to a vote (step 4, C3). */
     askFromIdeas: (body) => post('asks-from-ideas', body),
     /** Acknowledge every new idea at once (owner, 2026-10-05). */

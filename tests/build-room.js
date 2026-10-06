@@ -979,6 +979,85 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(st.ideas.every((i) => i.status === 'new' && !i.promotedTo), JSON.stringify(st.ideas));
   });
 
+  console.log('\nwhat Claude gets: four kinds, and the room brief (step 7c)');
+  await check('Keep in mind and Later join the brief; Claude gets each with its kind, and the brief with it', async () => {
+    seed();
+    await hostCall('POST', 'directions', { text: 'Has to work on old phones', as: 'keep' });
+    await hostCall('POST', 'directions', { text: 'Let people sign up as a pair', as: 'later' });
+    await hostCall('POST', 'directions', { text: 'How long would reminder texts take?', as: 'ask' });
+    await hostCall('POST', 'directions', { text: 'Make the 13:00 row say full' });
+    const st = await state();
+    assert.deepStrictEqual(st.brief.keep.map((i) => i.text), ['Has to work on old phones']);
+    assert.deepStrictEqual(st.brief.later.map((i) => i.text), ['Let people sign up as a pair']);
+    // (Entries written in one millisecond sort by their random suffix, so compare by text.)
+    const kindOf = (list) => Object.fromEntries(list.map((x) => [x.text.replace(/^.*: /, ''), x.as]));
+    const want = { 'Has to work on old phones': 'keep', 'Let people sign up as a pair': 'later', 'How long would reminder texts take?': 'ask', 'Make the 13:00 row say full': 'do-now' };
+    assert.deepStrictEqual(kindOf(st.log.filter((l) => l.kind === 'direction')), want);
+    const r = await agentCall('GET', 'inbox');
+    assert.deepStrictEqual(kindOf(r.body.inbox), want);
+    assert.deepStrictEqual(r.body.brief.keep.map((i) => i.text), ['Has to work on old phones'], 'the brief rides along');
+    // Claude's own state carries the brief too.
+    assert.strictEqual((await agentCall('GET', 'state')).body.brief.later[0].text, 'Let people sign up as a pair');
+    // An unknown kind is Do now.
+    await hostCall('POST', 'directions', { text: 'Bigger buttons', as: 'whenever' });
+    assert.strictEqual((await agentCall('GET', 'inbox')).body.inbox[0].as, 'do-now');
+  });
+  await check('a ready question carries what Claude gets and its note; the decision goes as that kind', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Who is this for, in one sentence?', claudeGets: 'keep', claudeNote: 'Treat the winning answer as the audience.' });
+    assert.deepStrictEqual([c.body.ask.claudeGets, c.body.ask.claudeNote], ['keep', 'Treat the winning answer as the audience.']);
+    const p = await playCall('GET', 'state', priya);
+    assert.ok(!JSON.stringify(p.body).includes('Treat the winning answer'), 'the note is never shown to the room');
+    const d = await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'decide', direction: 'Who is this for: busy volunteers on an old phone' });
+    assert.strictEqual(d.body.ask.decision.as, undefined, 'the kind is the record\'s; the view does not need it');
+    const inbox = (await agentCall('GET', 'inbox')).body.inbox;
+    assert.strictEqual(inbox[0].as, 'keep');
+    assert.strictEqual(inbox[0].text, 'Who is this for: busy volunteers on an old phone\n\nHow to use it: Treat the winning answer as the audience.');
+    assert.deepStrictEqual((await state()).brief.keep.map((i) => i.text), ['Who is this for: busy volunteers on an old phone']);
+  });
+  await check('the host may send a decision as another kind', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How clear is it?', claudeGets: 'keep' });
+    await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'decide', direction: 'How clear is it: 2 out of 5', as: 'do-now' });
+    assert.strictEqual((await agentCall('GET', 'inbox')).body.inbox[0].as, 'do-now');
+    assert.deepStrictEqual((await state()).brief.keep, []);
+  });
+  await check('the host edits the brief, and puts Later to a vote', async () => {
+    seed();
+    await hostCall('POST', 'directions', { text: 'Car park map', as: 'later' });
+    await hostCall('POST', 'directions', { text: 'Sign up as a pair', as: 'later' });
+    const e = await hostCall('POST', 'brief', { forWhom: 'Busy volunteers, often on an old phone', keep: ['No account needed'] });
+    assert.strictEqual(e.status, 200, JSON.stringify(e.body));
+    const st = await state();
+    assert.strictEqual(st.brief.forWhom, 'Busy volunteers, often on an old phone');
+    assert.deepStrictEqual(st.brief.keep.map((i) => i.text), ['No account needed']);
+    assert.strictEqual(st.brief.later.length, 2, 'a list left out stays as it was');
+    assert.strictEqual((await agentCall('POST', 'brief', { forWhom: 'x' })).status, 403);
+    const v = await hostCall('POST', 'brief/vote', {});
+    assert.strictEqual(v.status, 201, JSON.stringify(v.body));
+    assert.deepStrictEqual([v.body.ask.status, v.body.ask.maxPicks], ['live', 1]);
+    assert.deepStrictEqual(v.body.ask.options.map((o) => o.title).sort(), ['Car park map', 'Sign up as a pair']);
+    seed();
+    assert.strictEqual((await hostCall('POST', 'brief/vote', {})).status, 400, 'nothing on the Later list');
+  });
+  await check('Claude may answer an Ask Claude on the timeline', async () => {
+    seed();
+    const r = await agentCall('POST', 'log', { kind: 'answer', text: 'Reminder texts: about an hour, with a provider account.' });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.strictEqual(r.body.entry.kind, 'answer');
+  });
+  await check('in a team\'s room the brief and a ready question\'s note are sealed at rest', async () => {
+    seed({ orgId: ORG });
+    const HOST_TEAM = { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG };
+    await hostCall('POST', 'directions', { text: 'Secret rule about payroll', as: 'keep' }, HOST_TEAM);
+    await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Q?', claudeNote: 'Secret note for Claude' }, HOST_TEAM);
+    const st = (await hostCall('GET', 'state', null, HOST_TEAM)).body;
+    assert.strictEqual(st.brief.keep[0].text, 'Secret rule about payroll');
+    const raw = JSON.stringify([...store.values()]);
+    assert.ok(!raw.includes('Secret rule about payroll'), 'the brief is plaintext at rest');
+    assert.ok(!raw.includes('Secret note for Claude'), 'the note is plaintext at rest');
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

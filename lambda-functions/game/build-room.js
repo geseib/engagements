@@ -146,7 +146,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   const row = {
@@ -163,9 +163,28 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(shareId ? { ShareId: shareId } : {}),
     ...(name ? { Name: name } : {}),
     ...(spoken ? { Spoken: true } : {}),
+    // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
+    ...(forAgent ? { ForAgentAs: S.claudeGetsOf(as) } : {}),
+    ...(forAgent && claudeNote ? { ClaudeNote: claudeNote } : {}),
     CreatedAt: now,
   };
-  return put(ctx, row);
+  const saved = await put(ctx, row);
+  // Keep in mind and Later stand: they join the room brief, which Claude
+  // reads on every call until the host edits them away.
+  if (forAgent && ['keep', 'later'].includes(S.claudeGetsOf(as))) {
+    await addToBrief(ctx, S.claudeGetsOf(as), { id: row.LogId, text, from: by === 'room' ? 'the room' : askId ? `ask ${Number(askId)}` : 'you', askId: askId || null, at: now });
+  }
+  return saved;
+}
+
+/** BUILD#STATE is written by UpdateItem, so the brief is sealed by hand. */
+async function saveBrief(ctx, brief) {
+  const value = ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { Brief: brief })).Brief : brief;
+  return touchState(ctx, { set: { Brief: value } });
+}
+async function addToBrief(ctx, as, item) {
+  const room = await loadRoom(ctx);
+  await saveBrief(ctx, S.briefWith(room.state, as, item));
 }
 
 const findAsk = (room, askId) => room.asks.find((a) => a.AskId === askId) || null;
@@ -246,6 +265,8 @@ async function createAsk(ctx, role, body) {
     ...(v.maxPicks ? { MaxPicks: v.maxPicks } : {}),
     Status: status,
     Source: role === 'agent' ? 'agent' : 'host',
+    ...(v.claudeGets ? { ClaudeGets: v.claudeGets } : {}),
+    ...(v.claudeNote ? { ClaudeNote: v.claudeNote } : {}),
     CreatedAt: now,
     ...(status === 'live' ? { OpenedAt: now } : {}),
   };
@@ -347,7 +368,10 @@ async function askAction(ctx, role, askId, body) {
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken });
+      // As the host chose, else as the ready question's set says, else Do now.
+      const as = S.claudeGetsOf(b.as, S.claudeGetsOf(ask.ClaudeGets));
+      next.Decision.as = as;
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '' });
     }
     await put(ctx, next);
     if (action === 'open' || action === 'reopen') await makeCurrent(ctx, room, askId, role);
@@ -525,6 +549,7 @@ async function postLog(ctx, role, body) {
     by: role === 'agent' ? 'agent' : 'host',
     // What the room said can go straight to Claude; a host note never does.
     forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
+    as: b.as,
   });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -593,7 +618,7 @@ async function editLog(ctx, logId, body) {
 async function postDirection(ctx, body) {
   const text = S.cleanText((body || {}).text, S.LIMITS.direction);
   if (!text) return fail(400, 'Write the direction');
-  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true });
+  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -636,7 +661,7 @@ async function ideaAction(ctx, ideaId, body) {
     await touchState(ctx, { set: { WallComment: ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { WallComment: comment })).WallComment : comment } });
   }
   if (action === 'direct' || action === 'suggest') {
-    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct' });
+    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -659,6 +684,43 @@ async function clearWall(ctx) {
   const rev = (await touchState(ctx, { set: { WallComment: null } })).Rev;
   await announce(ctx, rev);
   return reply(200, { ok: true });
+}
+
+/**
+ * THE HOST EDITS THE BRIEF (C14): who it is for, Keep in mind, Later. Claude
+ * is told, as a Keep in mind direction, so it re-reads the whole brief.
+ */
+async function editBrief(ctx, body) {
+  const room = await loadRoom(ctx);
+  const next = S.normalizeBrief(room.state, body);
+  await saveBrief(ctx, next);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { brief: next });
+}
+
+/**
+ * PUT LATER TO A VOTE (C14): the brief's Later items become a Pick one vote,
+ * open at once. Items stay on the list until the host removes them.
+ */
+async function laterToVote(ctx, body) {
+  const b = body || {};
+  const room = await loadRoom(ctx);
+  const brief = S.briefView(room.state);
+  const ids = Array.isArray(b.ids) && b.ids.length ? b.ids.map(String) : brief.later.map((i) => i.id);
+  const picked = ids.map((id) => brief.later.find((i) => i.id === id)).filter(Boolean);
+  const norm = S.voteFromIdeas(picked.map((i) => ({ Text: i.text })), { prompt: b.prompt || 'Which should Claude build next?' });
+  if (norm.error) return fail(400, norm.error.replace('Tick at least', 'The Later list needs at least').replace(' ideas to put to a vote', ' items to vote on'));
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const askId = S.pad3(st.AskSeq || 1);
+  const now = new Date().toISOString();
+  const v = norm.value;
+  await put(ctx, { SK: S.SK.ask(askId), AskId: askId, Kind: 'choice', Prompt: v.prompt, Detail: '', Options: v.options, MaxPicks: 1, Status: 'live', Source: 'host', CreatedAt: now, OpenedAt: now });
+  await makeCurrent(ctx, room, askId, 'host');
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { ask: S.askView(findAsk(after, askId), after, 'host') });
 }
 
 /**
@@ -866,7 +928,7 @@ async function takeInbox(ctx, role) {
         ConditionExpression: 'attribute_not_exists(DeliveredAt)',
         ExpressionAttributeValues: { ':now': now },
       }));
-      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt });
+      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), as: S.claudeGetsOf(d.ForAgentAs), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt });
     } catch (e) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
     }
@@ -1435,6 +1497,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
   if (a === 'ideas' && !b) return hostOnly() || hostIdea(ctx, body);
   if (a === 'asks-from-ideas' && !b) return hostOnly() || askFromIdeas(ctx, body);
+  if (a === 'brief' && !b) return hostOnly() || editBrief(ctx, body);
+  if (a === 'brief' && b === 'vote' && !c) return hostOnly() || laterToVote(ctx, body);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);
@@ -1653,6 +1717,11 @@ exports.handler = async (event) => {
       if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity' && !hookCheckpoint) {
         const inbox = await takeInbox(ctx, role);
         const parsed = JSON.parse(res.body || '{}');
+        // The brief rides along whenever it changed for Claude: a Keep in mind
+        // or a Later item in this delivery (the plugin rewrites .engage/brief.md).
+        if (role === 'agent' && !parsed.brief && inbox.some((d) => ['keep', 'later'].includes(d.as))) {
+          parsed.brief = S.briefView((await loadRoom(ctx)).state);
+        }
         res.body = JSON.stringify({ ...parsed, inbox });
         if (inbox.length) {
           const st = await touchState(ctx);

@@ -14,6 +14,8 @@ const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'src', 'public', 'engage-mcp.mjs');
@@ -52,6 +54,12 @@ const choiceAsk = (status) => ({
 });
 
 let inboxPolls = 0;
+// The four kinds and the brief (step 7c): what GET state hands over next.
+let stateInbox = [];
+let stateBrief;
+// Claude's project folder, so the plugin writes .engage/brief.md somewhere harmless.
+const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'engage-mcp-'));
+fs.mkdirSync(path.join(PROJECT, '.engage'));
 const server = http.createServer((req, res) => {
   let raw = '';
   req.on('data', c => { raw += c; });
@@ -71,7 +79,8 @@ const server = http.createServer((req, res) => {
         log: [{ logId: 'l1', kind: 'progress', text: 'Scaffolded the app', by: 'agent' },
           { logId: 'l2', kind: 'note', text: 'HOST SECRET NOTE', by: 'host' }],
         ideas: [], outcome: null, rev: 7,
-        inbox: [],
+        inbox: stateInbox,
+        ...(stateBrief ? { brief: stateBrief } : {}),
       });
     }
     if (req.method === 'POST' && p === 'asks') {
@@ -102,7 +111,7 @@ const server = http.createServer((req, res) => {
 
 function startChild(api) {
   const child = spawn(process.execPath, [SCRIPT], {
-    env: { ...process.env, ENGAGE_API: api, ENGAGE_KEY: KEY, ENGAGE_POLL_MS: '50' },
+    env: { ...process.env, ENGAGE_API: api, ENGAGE_KEY: KEY, ENGAGE_POLL_MS: '50', CLAUDE_PROJECT_DIR: PROJECT },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const pending = new Map();
@@ -292,6 +301,47 @@ const hardStop = setTimeout(() => {
     assert.ok(bad.result.isError && /not a PNG, JPEG or WebP/.test(bad.result.content[0].text));
     const missing = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'nope.png') } });
     assert.ok(missing.result.isError && /Take the screenshot first/.test(missing.result.content[0].text));
+  });
+  await check('the four kinds read as four kinds, and the brief comes with them and lands in .engage/brief.md', async () => {
+    stateInbox = [
+      { id: 'k1', text: 'Has to work on old phones', from: 'host', as: 'keep' },
+      { id: 'k2', text: 'Let people sign up as a pair', from: 'host', as: 'later' },
+      { id: 'k3', text: 'How long would reminder texts take?', from: 'host', as: 'ask' },
+      { id: 'k4', text: 'Make the 13:00 row say full', from: 'host', as: 'do-now' },
+    ];
+    stateBrief = { forWhom: 'Busy volunteers', keep: [{ id: 'k1', text: 'Has to work on old phones' }], later: [{ id: 'k2', text: 'Let people sign up as a pair' }] };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'check_directions', arguments: {} }));
+      assert.ok(/ADDED TO THE ROOM BRIEF \(Keep in mind\): Has to work on old phones/.test(t), t);
+      assert.ok(/You do not need to stop what you are doing/.test(t), t);
+      assert.ok(/FOR LATER: Let people sign up as a pair\n\s+Do not start it now/.test(t), t);
+      assert.ok(/THE ROOM ASKS YOU: How long would reminder texts take\?\n\s+Answer in one post_update \(kind "answer"\)/.test(t), t);
+      assert.ok(/DIRECTION FROM THE ROOM/.test(t) && /• Make the 13:00 row say full/.test(t), t);
+      assert.ok(/THE ROOM BRIEF/.test(t) && /Who it is for: Busy volunteers/.test(t), t);
+      const file = fs.readFileSync(path.join(PROJECT, '.engage', 'brief.md'), 'utf8');
+      assert.ok(/Keep in mind:\n  - Has to work on old phones/.test(file), file);
+      // Without a Do now, nothing says "act on this now".
+      stateInbox = [{ id: 'k5', text: 'Plain words only', from: 'host', as: 'keep' }];
+      const t2 = textOf(await mcp.request('tools/call', { name: 'check_directions', arguments: {} }));
+      assert.ok(!/Act on the direction now/.test(t2) && /FROM THE ROOM \(via the host\)/.test(t2), t2);
+    } finally {
+      stateInbox = [];
+      stateBrief = undefined;
+    }
+  });
+  await check('room_status prints the brief', async () => {
+    stateBrief = { forWhom: '', keep: [{ id: 'k1', text: 'No accounts' }], later: [] };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/THE ROOM BRIEF[\s\S]*Keep in mind:\n  - No accounts/.test(t), t);
+    } finally {
+      stateBrief = undefined;
+    }
+  });
+  await check('post_update takes kind "answer"', async () => {
+    const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'About an hour', kind: 'answer' } });
+    assert.ok(!r.result.isError, textOf(r));
+    assert.strictEqual(requests[requests.length - 1].body.kind, 'answer');
   });
   await check('a 401 becomes an isError result that explains the key', async () => {
     failNext401 = true;
