@@ -556,17 +556,46 @@ async function ideaAction(ctx, ideaId, body) {
     const id = S.newId();
     await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'idea', CreatedAt: now });
     status = 'promoted';
+  } else if (action === 'acknowledge' || action === 'wall') {
+    // ACKNOWLEDGE (owner, 2026-10-05): a comment worth hearing that is not a
+    // job for Claude ("I like the new buttons"). Off the host's list, nothing
+    // to Claude, nothing in the record; the phone sees "Seen by the host".
+    // WALL also puts it on the Stage for a short while, with no name.
+    status = 'acknowledged';
   } else if (action === 'dismiss') status = 'dismissed';
   else if (action === 'restore') status = 'new';
-  else return fail(400, 'action must be direct, suggest, dismiss or restore');
-  const next = { ...idea, Status: status, UpdatedAt: now };
+  else return fail(400, 'action must be direct, suggest, acknowledge, wall, dismiss or restore');
+  const next = { ...idea, Status: status, UpdatedAt: now, ...(action === 'wall' ? { WalledAt: now } : {}) };
+  if (action === 'restore') delete next.WalledAt;
   await put(ctx, next);
+  if (action === 'wall') {
+    const comment = { IdeaId: idea.IdeaId, Text: idea.Text, At: now };
+    await touchState(ctx, { set: { WallComment: ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { WallComment: comment })).WallComment : comment } });
+  }
   if (action === 'direct' || action === 'suggest') {
     await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct' });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { idea: S.ideaView(next) });
+}
+
+/** Acknowledge every new idea at once: a burst of reactions after Claude shows something. */
+async function acknowledgeAll(ctx) {
+  const room = await loadRoom(ctx);
+  const now = new Date().toISOString();
+  const fresh = room.ideas.filter((i) => (i.Status || 'new') === 'new');
+  for (const idea of fresh) await put(ctx, { ...idea, Status: 'acknowledged', UpdatedAt: now });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { acknowledged: fresh.length });
+}
+
+/** Take the room comment off the wall before its time is up. */
+async function clearWall(ctx) {
+  const rev = (await touchState(ctx, { set: { WallComment: null } })).Rev;
+  await announce(ctx, rev);
+  return reply(200, { ok: true });
 }
 
 async function postOutcome(ctx, role, body) {
@@ -1261,6 +1290,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'log' && !b) return postLog(ctx, role, body);
   if (a === 'log' && b) return hostOnly() || editLog(ctx, b, body);
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
+  if (a === 'ideas' && b === 'acknowledge-all' && !c) return hostOnly() || acknowledgeAll(ctx);
+  if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);

@@ -651,7 +651,7 @@
   color: var(--bpl-muted);
 }
 
-.bpl .bpl-status.bpl-status--promoted { color: var(--bpl-success-text); }
+.bpl .bpl-status.bpl-status--promoted, .bpl .bpl-status.bpl-status--acknowledged, .bpl .bpl-status.bpl-status--walled { color: var(--bpl-success-text); }
 
 /* Screenshots: a mockup on its option card, the finished product under What we built. */
 .bpl .bimg { margin: 10px 0 0; }

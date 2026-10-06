@@ -748,6 +748,72 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(!JSON.stringify([...store.values()]).includes('Shift map'), 'the wheel\'s slices are plaintext at rest');
   });
 
+  console.log('\nacknowledge, and a comment on the wall (owner, 2026-10-05)');
+  const sendIdea = async (who, text) => { await playCall('POST', 'idea', { ...who, text }); };
+  const ideaOf = async (text) => (await hostCall('GET', 'state')).body.ideas.find((i) => i.text === text);
+  await check('Acknowledge takes it off the list, tells Claude nothing, and the phone sees it was seen', async () => {
+    seed();
+    await sendIdea(priya, 'I like the look of the new buttons');
+    const idea = await ideaOf('I like the look of the new buttons');
+    const logsBefore = (await hostCall('GET', 'state')).body.log.length;
+    const r = await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'acknowledge' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.idea.status, 'acknowledged');
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.log.length, logsBefore, 'an acknowledged comment is not a record');
+    const inbox = await agentCall('GET', 'inbox');
+    assert.strictEqual(inbox.status, 200);
+    assert.ok(Array.isArray(inbox.body.inbox));
+    assert.ok(!JSON.stringify(inbox.body).includes('new buttons'), 'Claude was told about it');
+    const p = await playCall('GET', 'state', priya);
+    assert.deepStrictEqual(p.body.myIdeas.map((i) => [i.text, i.status, i.walled]), [['I like the look of the new buttons', 'acknowledged', false]]);
+  });
+  await check('Show on the wall acknowledges it and puts it, without a name, on the host\'s wall for a short while', async () => {
+    seed();
+    await sendIdea(marcus, 'The calendar reads really well');
+    const idea = await ideaOf('The calendar reads really well');
+    const r = await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'wall' });
+    assert.strictEqual(r.body.idea.status, 'acknowledged');
+    assert.strictEqual(r.body.idea.walled, true);
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.wallComment.text, 'The calendar reads really well');
+    assert.strictEqual(h.body.wallComment.ideaId, idea.ideaId);
+    assert.ok(!('playerName' in h.body.wallComment));
+    assert.strictEqual(S.WALL_COMMENT_MS, 20000);
+    // Claude and phones never get it.
+    const a = await agentCall('GET', 'state');
+    assert.strictEqual(a.body.wallComment, null);
+    const p = await playCall('GET', 'state', priya);
+    assert.ok(!('wallComment' in p.body));
+    assert.strictEqual((await playCall('GET', 'state', marcus)).body.myIdeas[0].walled, true);
+  });
+  await check('the host can take it down early', async () => {
+    const c = await hostCall('POST', 'ideas/wall/clear', {});
+    assert.strictEqual(c.status, 200);
+    assert.strictEqual((await hostCall('GET', 'state')).body.wallComment, null);
+  });
+  await check('Acknowledge all clears every new one at once, and restore brings one back', async () => {
+    seed();
+    await sendIdea(priya, 'Nice colours');
+    await sendIdea(marcus, 'Love the map');
+    const r = await hostCall('POST', 'ideas/acknowledge-all', {});
+    assert.strictEqual(r.body.acknowledged, 2);
+    const ideas = (await hostCall('GET', 'state')).body.ideas;
+    assert.deepStrictEqual(ideas.map((i) => i.status), ['acknowledged', 'acknowledged']);
+    const back = await hostCall('POST', `ideas/${ideas[0].ideaId}`, { action: 'restore' });
+    assert.strictEqual(back.body.idea.status, 'new');
+    assert.strictEqual((await agentCall('POST', 'ideas/acknowledge-all', {})).status, 403);
+  });
+  await check('in a team\'s room the comment on the wall is sealed at rest', async () => {
+    seed({ orgId: ORG });
+    const HOST_TEAM = { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG };
+    await sendIdea(priya, 'A secret compliment');
+    const idea = (await hostCall('GET', 'state', null, HOST_TEAM)).body.ideas[0];
+    await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'wall' }, HOST_TEAM);
+    assert.strictEqual((await hostCall('GET', 'state', null, HOST_TEAM)).body.wallComment.text, 'A secret compliment');
+    assert.ok(!JSON.stringify([...store.values()]).includes('A secret compliment'), 'the wall comment is plaintext at rest');
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

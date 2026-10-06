@@ -729,3 +729,20 @@
 .brm .brm-wheelstage .bwh { font-size: var(--brm-st-body); }
 .brm .brm-starter { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--brm-line-amber); border-radius: 10px; background: var(--brm-tint-amber-soft); }
 .brm .brm-starter .brm-row { margin-top: 2px; }
+
+/* A room comment on the wall (WallComment): over the Stage or the Build
+   screen, above the dock, for a short while, with no name. */
+.brm .brm-wallcomment {
+  position: fixed; left: 50%; bottom: calc(var(--dock-h, 110px) + 24px); z-index: 40;
+  transform: translateX(-50%); width: min(880px, calc(100vw - 48px));
+  display: grid; gap: 6px; padding: 18px 24px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--brm-rule); border-left: 6px solid var(--primary); border-radius: 16px;
+  box-shadow: 0 18px 48px var(--brm-scrim);
+  animation: brm-wall-in 0.5s ease-out both;
+}
+.brm .brm-wallcomment-k { color: var(--primary); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; font-size: var(--brm-st-meta); }
+.brm .brm-wallcomment-t { font-family: var(--font-display); font-weight: 800; font-size: var(--brm-st-q); line-height: 1.2; overflow-wrap: anywhere; }
+@keyframes brm-wall-in { 0% { opacity: 0; transform: translate(-50%, 16px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .brm .brm-wallcomment { animation: none; } }
+.brm .brm-onwall { margin: 0; }

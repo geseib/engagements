@@ -535,3 +535,16 @@ describe('the wheel on a phone (owner, 2026-10-05)', () => {
     expect(screen.getByText('The wheel picked B: Calm photo + calendar')).toBeInTheDocument();
   });
 });
+
+describe('a phone hears what happened to its comment (owner, 2026-10-05)', () => {
+  test('acknowledged reads "Seen by the host"; one on the wall reads "Shown on the wall"', async () => {
+    serve(baseView({ myIdeas: [
+      { ideaId: '1', text: 'Nice colours', status: 'acknowledged', walled: false, playerName: ME },
+      { ideaId: '2', text: 'The calendar reads well', status: 'acknowledged', walled: true, playerName: ME },
+    ] }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Send an idea to the host/ }));
+    expect(screen.getByText('Seen by the host')).toBeInTheDocument();
+    expect(screen.getByText('Shown on the wall')).toBeInTheDocument();
+  });
+});

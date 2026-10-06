@@ -1115,3 +1115,42 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
     expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+describe('acknowledge, and a comment on the wall (owner, 2026-10-05)', () => {
+  test('Acknowledge and Show on the wall each say what they do, and post', async () => {
+    await openRoom(hostState({ ideas: [{ PlayerName: 'Jordan', Text: 'I like the look of the new buttons' }] }));
+    const inbox = screen.getByRole('region', { name: /Ideas inbox/ });
+    const ack = within(inbox).getByRole('button', { name: 'Acknowledge' });
+    expect(ack.getAttribute('title')).toBe('Mark it as seen. Their phone says so; nothing goes to Claude.');
+    fireEvent.click(ack);
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'acknowledge' }));
+    const wall = within(inbox).getByRole('button', { name: 'Show on the wall' });
+    await waitFor(() => expect(wall).not.toBeDisabled());
+    fireEvent.click(wall);
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'wall' }));
+  });
+
+  test('two or more new: Acknowledge all clears them in one go', async () => {
+    await openRoom(hostState({ ideas: [{ PlayerName: 'Jordan', Text: 'Nice colours' }, { PlayerName: 'Dee', Text: 'Love the map' }] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Acknowledge all 2' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/ideas/acknowledge-all`));
+  });
+
+  test('while fresh, the comment is on the Stage with no name, and the Host can take it down', async () => {
+    await openRoom(hostState({ st: { WallComment: { IdeaId: '0-i0', Text: 'The calendar reads really well', At: ago(3) } } }));
+    const onWall = screen.getByText(/On the wall now:/).closest('.brm-onwall');
+    expect(onWall.textContent).toMatch('The calendar reads really well');
+    fireEvent.click(within(onWall).getByRole('button', { name: 'Take it down' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/ideas/wall/clear`));
+    fireEvent.keyDown(window, { key: '2' });
+    const banner = document.querySelector('.brm-wallcomment');
+    expect(banner.textContent).toBe('Someone in the room saidThe calendar reads really well');
+  });
+
+  test('after its time is up it is gone from every screen', async () => {
+    await openRoom(hostState({ st: { WallComment: { IdeaId: '0-i0', Text: 'Old news', At: ago(60) } } }));
+    expect(screen.queryByText(/On the wall now:/)).toBeNull();
+    fireEvent.keyDown(window, { key: '2' });
+    expect(document.querySelector('.brm-wallcomment')).toBeNull();
+  });
+});

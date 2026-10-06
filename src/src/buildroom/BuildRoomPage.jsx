@@ -611,7 +611,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
 
-      {screen === 'build' && <BuildScreen room={room} />}
+      {screen === 'build' && <BuildScreen room={room} now={now} />}
       {screen === 'history' && <HistoryScreen room={room} />}
       {screen === 'host' && (
       <div className="brm-host">
@@ -662,6 +662,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <h2 className="brm-h5" id="brm-waiting-h">
             Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
           </h2>
+          {freshWallComment(room, now) && (
+            <div className="brm-notice brm-row brm-gap brm-onwall" role="status">
+              <span><b>On the wall now:</b> &ldquo;{room.wallComment.text}&rdquo;</span>
+              <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.clearWall())}>Take it down</button>
+            </div>
+          )}
           {proposed.map((ask) => (
             <ReviewCard key={`${ask.askId}:${ask.status}`} ask={ask} busy={busy} ended={ended} run={run} api={api} connected={room.agent?.connected} />
           ))}
@@ -1085,6 +1091,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       >
         <div className="content"><div className="fitbox">{content}</div></div>
       </Stage>
+      <WallComment comment={freshWallComment(room, now)} />
       {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
     </>
   );
@@ -1100,10 +1107,11 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
  * newest screenshot and opens the running build in a new tab: the fallback
  * the design keeps anyway (C8).
  */
-function BuildScreen({ room }) {
+function BuildScreen({ room, now }) {
   const { link, shot } = latestBuild(room);
   return (
     <section className="brm-screenbody brm-buildscreen" aria-label="The build">
+      <WallComment comment={freshWallComment(room, now)} />
       <div className="brm-row">
         <h2 className="brm-q">What Claude has built so far</h2>
         {link && <span className="brm-push"><OpenLink href={link} label="Open the build" primary /></span>}
@@ -2150,6 +2158,9 @@ function Timeline({ log, host, busy, ended, run, api, deleteAs }) {
 
 // ── Ideas inbox (host only) ─────────────────────────────────────────────────
 
+/** What happened to a handled idea, in the host's words. */
+const HANDLED = { promoted: 'used', acknowledged: 'acknowledged', dismissed: 'dismissed' };
+
 function IdeasInbox({ ideas, current, busy, ended, run, api }) {
   const fresh = ideas.filter((i) => i.status === 'new');
   const handled = ideas.filter((i) => i.status !== 'new');
@@ -2159,6 +2170,14 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
     <section className="brm-inbox" aria-labelledby="brm-inbox-h">
       <h2 className="brm-h5" id="brm-inbox-h">Ideas inbox · {fresh.length} new <span className="brm-hostonly">host only</span></h2>
       {!fresh.length && <p className="brm-hint">Phones can send an idea at any time. They land here for you to triage.</p>}
+      {/* A burst of reactions after Claude shows something: clear them in one go. */}
+      {!ended && fresh.length >= 2 && (
+        <div className="brm-row brm-gap brm-ackall">
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" disabled={busy} title="Mark every new one as seen. Nothing goes to Claude." onClick={() => run(() => api.acknowledgeAll())}>
+            Acknowledge all {fresh.length}
+          </button>
+        </div>
+      )}
       {fresh.map((idea) => (
         <div className="brm-idea" key={idea.ideaId}>
           <div className="brm-idea-text">{idea.text}</div>
@@ -2166,6 +2185,11 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
           {!ended && (
             <div className="brm-idea-acts">
               <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act(idea, 'direct')}>Send to Claude</button>
+              {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude.
+                  The sender's phone says "Seen by the host"; WALL also puts it
+                  on the Stage for a short while, with no name. */}
+              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Show it on the Stage for 20 seconds, without a name. Nothing goes to Claude." onClick={() => act(idea, 'wall')}>Show on the wall</button>
+              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Mark it as seen. Their phone says so; nothing goes to Claude." onClick={() => act(idea, 'acknowledge')}>Acknowledge</button>
               <button type="button" className="brm-btn brm-btn--sm" disabled={busy || !canSuggest} title={canSuggest ? undefined : 'Open an Ideas ask first'} onClick={() => act(idea, 'suggest')}>Add to current ideas</button>
               <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => act(idea, 'dismiss')}>Dismiss</button>
             </div>
@@ -2178,8 +2202,8 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
           {handled.map((idea) => (
             <div className="brm-idea brm-idea--done" key={idea.ideaId}>
               <div className="brm-idea-text">{idea.text}</div>
-              <div className="brm-who">{idea.playerName} · {idea.status === 'dismissed' ? 'dismissed' : 'used'}</div>
-              {!ended && idea.status === 'dismissed' && (
+              <div className="brm-who">{idea.playerName} · {idea.walled ? 'on the wall' : HANDLED[idea.status] || idea.status}</div>
+              {!ended && ['dismissed', 'acknowledged'].includes(idea.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</button>
               )}
             </div>
@@ -2187,6 +2211,28 @@ function IdeasInbox({ ideas, current, busy, ended, run, api }) {
         </details>
       )}
     </section>
+  );
+}
+
+/**
+ * THE ROOM COMMENT ON THE WALL: one at a time, no name, for WALL_COMMENT_MS
+ * from when the host put it up (owner, 2026-10-05). Shown on the screens the
+ * room sees (Stage, Build); the host can take it down early from the Host.
+ */
+export const WALL_COMMENT_MS = 20 * 1000;
+export function freshWallComment(room, now) {
+  const w = room && room.wallComment;
+  if (!w || !w.text) return null;
+  const at = Date.parse(w.at || '');
+  return Number.isFinite(at) && now - at < WALL_COMMENT_MS ? w : null;
+}
+function WallComment({ comment }) {
+  if (!comment) return null;
+  return (
+    <div className="brm-wallcomment" role="status" key={comment.at}>
+      <span className="brm-wallcomment-k">Someone in the room said</span>
+      <q className="brm-wallcomment-t">{comment.text}</q>
+    </div>
   );
 }
 

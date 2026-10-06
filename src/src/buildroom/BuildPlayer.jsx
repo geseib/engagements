@@ -70,7 +70,9 @@ export const FEED_KINDS = Object.freeze({
 const DETAIL_KINDS = ['progress', 'showing', 'milestone'];
 const FEED_LENGTH = 8;
 
-const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', dismissed: 'Not used this time' };
+const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', dismissed: 'Not used this time' };
+/** What a phone says about its own idea; one shown on the wall says so (owner, 2026-10-05). */
+const ideaStatusText = (idea) => (idea.walled ? 'Shown on the wall' : IDEA_STATUS[idea.status] || IDEA_STATUS.new);
 
 export function isHttpUrl(value) {
   if (!value) return false;
@@ -784,7 +786,7 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) 
               {mine.map((idea) => (
                 <li key={idea.ideaId}>
                   <span className="bpl-text">{idea.text}</span>
-                  <span className={`bpl-status bpl-status--${idea.status || 'new'}`}>{IDEA_STATUS[idea.status] || IDEA_STATUS.new}</span>
+                  <span className={`bpl-status bpl-status--${idea.walled ? 'walled' : idea.status || 'new'}`}>{ideaStatusText(idea)}</span>
                 </li>
               ))}
             </ul>

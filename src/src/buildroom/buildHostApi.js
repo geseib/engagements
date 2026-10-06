@@ -103,6 +103,10 @@ export function buildApi(gameId) {
     deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
     /** 'direct' | 'suggest' | 'dismiss' | 'restore' */
     ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
+    /** Acknowledge every new idea at once (owner, 2026-10-05). */
+    acknowledgeAll: () => post('ideas/acknowledge-all'),
+    /** Take the room comment off the wall before its time is up. */
+    clearWall: () => post('ideas/wall/clear'),
     /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */
     saveOutcome: (body) => post('outcome', body),
     /** `{reviewAgentAsks?, agentName?}` → `{settings}` */

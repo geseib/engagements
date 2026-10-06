@@ -487,7 +487,21 @@ function optionImages(room, askId) {
 }
 
 function ideaView(r) {
-  return { ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null, aboutLogId: r.AboutLogId || null };
+  return {
+    ideaId: r.IdeaId, text: r.Text || '', playerName: r.PlayerName || '', status: r.Status || 'new', createdAt: r.CreatedAt || null, aboutLogId: r.AboutLogId || null,
+    walled: Boolean(r.WalledAt),
+  };
+}
+
+/**
+ * A ROOM COMMENT ON THE WALL (owner, 2026-10-05: "build acknowledge, show on
+ * wall too"). One at a time, anonymous, for a short while: the Stage shows it
+ * while it is fresh. The host's screen only; never Claude's, never a phone's.
+ */
+const WALL_COMMENT_MS = 20 * 1000;
+function wallCommentView(state) {
+  const w = state && state.WallComment;
+  return w && w.Text ? { ideaId: w.IdeaId || null, text: w.Text, at: w.At || null } : null;
 }
 
 function outcomeView(o) {
@@ -597,6 +611,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // crew entries beside them say what happened.
     log: room.logs.filter((l) => !l.ForBuilder && !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
     ideas: isAgent ? [] : room.ideas.map(ideaView),
+    wallComment: isAgent ? null : wallCommentView(room.state),
     images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
@@ -770,5 +785,6 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
+  WALL_COMMENT_MS, wallCommentView,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };
