@@ -1049,3 +1049,69 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
     expect(chip.getAttribute('title')).toBe('Claude Code is connected and working.');
   });
 });
+
+describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-05)', () => {
+  const TIE = [
+    { AskId: '003', PlayerName: 'Ana', Choice: ['A'] },
+    { AskId: '003', PlayerName: 'Priya', Choice: ['B'] },
+  ];
+  const WHEEL = (over = {}) => ({
+    Slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }],
+    Spinner: 'Dee', Armed: true, Spins: [], ...over,
+  });
+
+  test('an empty room starts with "What should we build?": the host lists options, or the room suggests', async () => {
+    await openRoom(hostState());
+    expect(screen.getByText('Start with the room: What should we build?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: "I'll list the options" }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    expect(within(dialog).getByLabelText(/Question/).value).toBe('What should we build?');
+  });
+
+  test('a tie offers the wheel or a revote; each is the host\'s call', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: TIE }));
+    const panel = screen.getByRole('region', { name: 'The wheel' });
+    expect(within(panel).getByText('A tie between A and B.')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Spin the wheel' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'wheel' }));
+    const again = within(panel).getByRole('button', { name: 'Vote again' });
+    await waitFor(() => expect(again).not.toBeDisabled());
+    fireEvent.click(again);
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'revote' }));
+  });
+
+  test('with the wheel up: the host can always spin, or hand it to someone else', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIE }));
+    const panel = screen.getByRole('region', { name: 'The wheel' });
+    expect(within(panel).getByText('Dee spins the wheel')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Spin it yourself' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'spin' }));
+    const pass = within(panel).getByRole('button', { name: 'Someone else spins' });
+    await waitFor(() => expect(pass).not.toBeDisabled());
+    fireEvent.click(pass);
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'pass' }));
+  });
+
+  test('where it landed fills in the direction, which the host can still change', async () => {
+    await openRoom(hostState({
+      st: { CurrentAskId: '003' },
+      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
+      answers: TIE,
+    }));
+    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('The wheel picked B: Calm photo + calendar.');
+    expect(screen.getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
+  });
+
+  test('on the Stage the wheel is the screen; Space spins, and deciding is back on the Host', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIE }));
+    fireEvent.keyDown(window, { key: '2' });
+    expect(screen.getByRole('region', { name: 'The wheel' })).toBeInTheDocument();
+    expect(document.querySelector('.dock .status').textContent).toBe('Dee spins the wheel');
+    fireEvent.keyDown(window, { key: ' ' });
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'spin' }));
+    const decide = screen.getByRole('button', { name: 'Decide on Host' });
+    await waitFor(() => expect(decide).not.toBeDisabled());
+    fireEvent.click(decide);
+    expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+});

@@ -109,7 +109,20 @@ export function stageModel(room, current) {
   const context = { category: STAGE_KIND[current.kind] || 'Ask', round: n, noun: 'Ask' };
   if (current.status === 'results') {
     const total = (current.results && current.results.total) || current.answerCount || 0;
-    return { phase: 'RESULTS', context, meter: { heading: 'Answered', count: total, of: here }, status: 'Results', primary: { action: 'decide', label: 'Decide on Host' } };
+    const meter = { heading: 'Answered', count: total, of: here };
+    const w = current.wheel;
+    if (w && !current.revotedAs) {
+      // THE WHEEL (owner, 2026-10-05): the host can always spin; a person in
+      // the room may have the turn. Deciding stays a step on the Host screen.
+      const status = w.landed ? 'The wheel has picked'
+        : w.spinner && w.armed ? `${w.spinner} spins the wheel` : 'Spin the wheel';
+      return {
+        phase: 'RESULTS', context, meter, status, wheel: true,
+        primary: { action: 'spin', label: w.landed ? 'Spin again' : 'Spin' },
+        secondary: { action: 'decide', label: 'Decide on Host' },
+      };
+    }
+    return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'decide', label: 'Decide on Host' } };
   }
   if (current.status === 'voting') {
     const voted = current.voteCount || 0;

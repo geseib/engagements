@@ -32,6 +32,7 @@ import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
+import BuildWheel from './BuildWheel';
 import {
   pluginInstallCommand,
   pluginConnectCommand,
@@ -177,6 +178,9 @@ const entryTone = (entry) => {
 
 /** The direction the decide panel starts with: the room's top answer, as a sentence. */
 export function defaultDirection(ask) {
+  const w = ask && ask.wheel;
+  const landed = w && w.landed ? (w.slices || []).find((x) => x.id === w.landed) : null;
+  if (landed) return `The wheel picked ${landed.label ? `${landed.label}: ` : ''}${landed.text}.`;
   const r = (ask && ask.results) || {};
   if (ask.kind === 'choice') {
     const top = [...(r.options || [])].sort((a, b) => b.count - a.count)[0];
@@ -644,7 +648,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                   <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host busy={busy} ended={ended} run={run} api={api} />
                 </div>
               ) : (
-                <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} />
+                <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} />
               )}
             </>
           )}
@@ -701,7 +705,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
     </div>
     </ImageLoader.Provider>
@@ -1008,11 +1012,12 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const m = stageModel(room, current);
   const waiting = waitingCount(room);
   const move = !ended && m.primary ? m.primary : null;
-  const act = useCallback(() => {
-    if (!move || busy) return;
-    if (move.action === 'decide') { onHost(); return; }
-    run(() => api.askAction(current.askId, { action: move.action === 'vote' ? 'vote' : 'close' }));
-  }, [move, busy, onHost, run, api, current]);
+  const doMove = useCallback((m) => {
+    if (!m || busy) return;
+    if (m.action === 'decide') { onHost(); return; }
+    run(() => api.askAction(current.askId, { action: m.action }));
+  }, [busy, onHost, run, api, current]);
+  const act = useCallback(() => doMove(move), [doMove, move]);
   // Space fires the dock's move: never while typing, and never when a focused
   // control would take the Space itself.
   useEffect(() => {
@@ -1035,6 +1040,14 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         <CrewBoard crew={crew} host={false} now={now} busy={busy} run={run} api={api} onOpen={() => undefined} playerCount={room.playerCount} />
       </>
     );
+  } else if (current && m.wheel) {
+    content = (
+      <section className="brm-stage brm-wheelstage" aria-label="The wheel">
+        <span className="brm-eyebrow"><b>The wheel</b> · Ask {Number(current.askId) || current.askId}</span>
+        <h2 className="brm-q">{current.prompt}</h2>
+        <BuildWheel wheel={current.wheel} size="lg" />
+      </section>
+    );
   } else if (current) {
     content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} />;
   } else {
@@ -1045,7 +1058,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       <Stage
         profile={profile}
         phase={m.phase || ''}
-        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}` : 'idle', crewOn ? 'crew' : ''].join('|')}
+        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}` : 'idle', crewOn ? 'crew' : ''].join('|')}
         rail={(
           <Rail
             phase={m.phase}
@@ -1059,6 +1072,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} />}
         dock={(
           <Dock status={m.status}>
+            {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
             {move && <button type="button" className="btn" disabled={busy} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
             {move && <span className="kbd" aria-hidden="true">SPACE</span>}
@@ -1406,13 +1420,61 @@ function AskStage({ ask, room, host, busy, ended, run, api }) {
         {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} />}
         {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
       </section>
+      {host && !ended && ask.status === 'results' && ask.kind !== 'rating' && (
+        <WheelPanel ask={ask} busy={busy} run={run} api={api} />
+      )}
       {host && !ended && ask.status === 'results' && (
-        <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} />
+        <DecidePanel key={`wheel:${ask.wheel ? ask.wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} />
       )}
       {host && !ended && answering && ['live', 'voting'].includes(ask.status) && (
         <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} />
       )}
     </>
+  );
+}
+
+/**
+ * THE WHEEL, OR A REVOTE (owner, 2026-10-05): "if a tie, it's either a wheel
+ * spin or revote, host's choice", and the wheel any time at results. A random
+ * person in the room spins it from their phone; the host can always spin;
+ * if the room groans, spin again or hand it to someone else. Where it lands
+ * fills in the direction below, which the host can still change.
+ */
+function WheelPanel({ ask, busy, run, api }) {
+  const tied = (ask.results && ask.results.tied) || [];
+  const act = (action, extra = {}) => run(() => api.askAction(ask.askId, { action, ...extra }));
+  const nameOf = (id) => {
+    if (ask.kind === 'choice') return id;
+    const r = ((ask.results && ask.results.ranked) || []).find((x) => x.respId === id);
+    return r ? `"${r.text}"` : id;
+  };
+  if (ask.revotedAs) {
+    return <p className="brm-notice">Voted again as ask {Number(ask.revotedAs) || ask.revotedAs}.</p>;
+  }
+  if (!ask.wheel) {
+    return (
+      <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
+        {tied.length >= 2 ? (
+          <p className="brm-notice"><b>A tie between {tied.map(nameOf).join(' and ')}.</b> Spin the wheel, or ask the room to vote again.</p>
+        ) : (
+          <p className="brm-hint">Let chance pick: the wheel holds every option.</p>
+        )}
+        <div className="brm-row brm-gap">
+          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={() => act('wheel')}>Spin the wheel</button>
+          {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={() => act('revote')}>Vote again</button>}
+        </div>
+        <p className="brm-hint">Someone in the room spins it from their phone. You can always spin it yourself.</p>
+      </section>
+    );
+  }
+  const w = ask.wheel;
+  return (
+    <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
+      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? 'Spin again' : 'Spin it yourself'} />
+      <div className="brm-row brm-gap brm-wheelacts">
+        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Pick someone else in the room to spin it" onClick={() => act('pass')}>Someone else spins</button>
+      </div>
+    </section>
   );
 }
 
@@ -1555,6 +1617,7 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
     : null;
   const [chosen, setChosen] = useState(() => {
     if (spoken) return [];
+    if (ask.wheel && ask.wheel.landed) return [ask.wheel.landed];
     if (topChoice) return [topChoice.label];
     if (ask.kind === 'suggest' && ask.results?.ranked?.[0]) return [ask.results.ranked[0].respId];
     return [];
@@ -1809,7 +1872,9 @@ const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
  * screen) or ask Claude to run it and send a screenshot. When Claude has
  * gone quiet, the Continue prompt is one click away.
  */
-function NowBuilding({ room, now, ended, busy, run, api, onShowBuild }) {
+export const STARTER_PROMPT = 'What should we build?';
+
+function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose }) {
   const [sent, setSent] = useState(false);
   if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
   const agent = room.agent || {};
@@ -1821,9 +1886,28 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild }) {
     : agent.listening ? 'Claude is listening for you.'
       : agent.connected ? 'Claude is building.'
         : 'Waiting for Claude Code.';
+  // A ROOM THAT BEGINS WITH AN ASK (owner, 2026-10-05): before anything is
+  // built, the room picks what to build. The host lists the options or the
+  // room suggests; a tie goes to the wheel or a revote (WheelPanel); and the
+  // host can pick one and send it to Claude at any point.
+  const starter = !ended && !(room.asks || []).length && onCompose;
   return (
     <section className="brm-panel brm-nowcard" aria-labelledby="brm-now-h">
       <h2 className="brm-h5" id="brm-now-h">Now</h2>
+      {starter && (
+        <div className="brm-starter">
+          <p className="brm-nowline">Start with the room: {STARTER_PROMPT}</p>
+          <p className="brm-hint">The room votes. A tie goes to the wheel, or to a revote. You can pick one and send it to Claude whenever you like.</p>
+          <div className="brm-row brm-gap">
+            <button type="button" className="brm-btn brm-btn--primary" onClick={() => onCompose('choice', { prompt: STARTER_PROMPT, detail: 'Pick the one you most want to see built today.' })}>
+              I&apos;ll list the options
+            </button>
+            <button type="button" className="brm-btn" onClick={() => onCompose('suggest', { prompt: STARTER_PROMPT, detail: 'Say what you would build, in a few words. Then everyone votes.' })}>
+              The room suggests
+            </button>
+          </div>
+        </div>
+      )}
       <p className="brm-nowline">{line}</p>
       {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
       {latest && (
@@ -2370,10 +2454,10 @@ function EndDialog({ api, run, busy, onClose }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, api, run, busy, onClose }) {
+export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
-  const [prompt, setPrompt] = useState('');
-  const [detail, setDetail] = useState('');
+  const [prompt, setPrompt] = useState(initialPrompt);
+  const [detail, setDetail] = useState(initialDetail);
   const [options, setOptions] = useState([{ title: '', url: '' }, { title: '', url: '' }]);
   const [low, setLow] = useState('');
   const [high, setHigh] = useState('');

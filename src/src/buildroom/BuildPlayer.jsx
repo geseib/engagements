@@ -3,7 +3,8 @@ import BuildImage, { ImageLoader } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
-import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback } from './buildPlayApi';
+import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin } from './buildPlayApi';
+import BuildWheel from './BuildWheel';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import './BuildPlayer.css';
 
@@ -161,6 +162,23 @@ function useSend(onResult) {
     return r;
   };
   return { busy, error, run };
+}
+
+/**
+ * THE WHEEL ON A PHONE (owner, 2026-10-05). Everyone sees it spin and land;
+ * the one phone the wheel picked gets the button. Where it lands is the
+ * server's, so this phone and the wall show the same answer.
+ */
+function PhoneWheel({ ask, api, onResult }) {
+  const { busy, error, run } = useSend(onResult);
+  const w = ask.wheel;
+  return (
+    <div className="bpl-wheel">
+      {w.mine && <p className="plr-help bpl-wheel-turn"><b>Your turn.</b> Spin the wheel for the room.</p>}
+      <BuildWheel wheel={w} size="md" onSpin={w.mine ? () => run(() => sendSpin(api, ask.askId)) : null} spinLabel="Spin the wheel" busy={busy} />
+      <ErrorLine error={error} />
+    </div>
+  );
 }
 
 function SuggestAsk({ ask, mine, api, onResult, shell }) {
@@ -932,6 +950,7 @@ export default function BuildPlayer({
           <Eyebrow word={decided ? 'Decided' : 'Results'} askId={ask.askId} />
           <h2 className="plr-q bpl-text">{ask.prompt}</h2>
           {decided ? <Decided decision={ask.decision} /> : null}
+          {ask.wheel ? <PhoneWheel ask={ask} api={api} onResult={onResult} /> : null}
           <Results ask={ask} mine={mine} />
           <Whys whys={ask.results && ask.results.whys} />
           {!decided ? <p className="plr-help">The host shapes this into Claude's next step.</p> : null}

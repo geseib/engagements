@@ -720,3 +720,12 @@
 .brm .brm-agentchip.is-quiet::before { background: var(--primary); }
 .brm button.brm-agentchip:hover, .brm button.brm-agentchip:focus-visible { background: var(--surface-2); }
 .brm button.brm-agentchip:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
+/* The wheel at results (WheelPanel; BuildWheel.css draws the wheel). */
+.brm .brm-wheelpanel { display: grid; gap: 10px; justify-items: stretch; }
+.brm .brm-wheelpanel .bwh { justify-self: center; }
+.brm .brm-wheelacts { justify-content: center; margin-top: 0; }
+.brm .brm-wheelstage { display: grid; justify-items: center; gap: 14px; text-align: center; }
+.brm .brm-wheelstage .bwh { font-size: var(--brm-st-body); }
+.brm .brm-starter { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--brm-line-amber); border-radius: 10px; background: var(--brm-tint-amber-soft); }
+.brm .brm-starter .brm-row { margin-top: 2px; }

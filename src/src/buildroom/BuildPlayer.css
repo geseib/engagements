@@ -974,3 +974,7 @@
 }
 
 .bpl .bpl-base-tx { margin: 4px 0 0; font-size: var(--plr-t-body); }
+
+/* The wheel on a phone (BuildWheel; its own sheet draws it). */
+.bpl .bpl-wheel { display: grid; justify-items: center; gap: 8px; margin: 12px 0 18px; }
+.bpl .bpl-wheel-turn { margin: 0; text-align: center; }

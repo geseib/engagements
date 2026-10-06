@@ -98,3 +98,24 @@ describe('the Stage screen, as the regular stage draws it', () => {
     expect(stageModel(room({ state: 'ENDED' }), { askId: '003', kind: 'choice', status: 'live' })).toMatchObject({ phase: 'ENDED', primary: null });
   });
 });
+
+describe('the Stage with the wheel up', () => {
+  const room = { playerCount: 18, agent: { connected: true } };
+  const results = (wheel) => ({ askId: '003', kind: 'choice', status: 'results', results: { total: 4 }, wheel });
+  test('someone has the turn; the host can always spin; deciding stays on the Host', () => {
+    expect(stageModel(room, results({ spinner: 'Dee', armed: true, landed: null, spins: [] }))).toMatchObject({
+      status: 'Dee spins the wheel', wheel: true,
+      primary: { action: 'spin', label: 'Spin' }, secondary: { action: 'decide', label: 'Decide on Host' },
+    });
+  });
+  test('landed: Spin again', () => {
+    expect(stageModel(room, results({ spinner: 'Dee', armed: false, landed: 'B', spins: [{}] }))).toMatchObject({
+      status: 'The wheel has picked', primary: { label: 'Spin again' },
+    });
+  });
+  test('after a revote, the old ask is plain results', () => {
+    expect(stageModel(room, { ...results({ spinner: null, armed: false, landed: null, spins: [] }), revotedAs: '004' })).toMatchObject({
+      status: 'Results', primary: { action: 'decide' },
+    });
+  });
+});

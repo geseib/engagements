@@ -386,7 +386,7 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: optionImages(room, ask.AskId)[o.label] || null })),
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null })),
     scale: ask.Scale || null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
@@ -429,6 +429,10 @@ function askView(ask, room, audience, me) {
       out.results = { total: t.total, rating: t.rating, whys: t.whys.map((w) => (isHost ? w : { label: w.label, text: w.text })) };
     }
   }
+  if (showResults && out.results && ask.Kind !== 'rating') out.results.tied = tiedIds(ask, room);
+  if (ask.Wheel) out.wheel = wheelView(ask.Wheel, me);
+  if (ask.RevotedAs) out.revotedAs = ask.RevotedAs;
+  if (ask.RevoteOf) out.revoteOf = ask.RevoteOf;
   if (ask.Decision) {
     out.decision = {
       direction: ask.Decision.direction || '',
@@ -676,7 +680,75 @@ function inboxText(entry) {
 const inboxFrom = (entry) => (entry.Kind === 'decision' ? 'decision' : entry.Kind === 'idea' ? 'idea' : 'host');
 
 /** The text a decision hands Claude when the host did not write one. */
+// ── The wheel (owner, 2026-10-05) ───────────────────────────────────────────
+//
+// At results the host may spin a wheel over the tied options (or all of
+// them): a random person in the room spins it from their phone, the host can
+// always spin, and the room can ask for a respin. WHERE IT LANDS IS DECIDED
+// HERE, ON THE SERVER, so the wall, every phone and the host animate to the
+// same answer. The slices copy the options' words, so `Wheel` is sealed with
+// the ask (tenant-crypto buildAsk).
+
+const WHEEL_MIN = 2;
+const WHEEL_MAX = 12;
+const WHEEL_KEEP_SPINS = 20;
+
+/** The options or suggestions sharing the top count (two or more, and above zero). */
+function tiedIds(ask, room) {
+  const t = tally(ask, room);
+  if (ask.Kind === 'choice') {
+    const top = Math.max(0, ...t.options.map((o) => o.count));
+    const tied = t.options.filter((o) => o.count === top && top > 0);
+    return tied.length >= 2 ? tied.map((o) => o.label) : [];
+  }
+  if (ask.Kind === 'suggest') {
+    const top = Math.max(0, ...t.ranked.map((r) => r.votes));
+    const tied = t.ranked.filter((r) => r.votes === top && top > 0);
+    return tied.length >= 2 ? tied.map((r) => r.respId) : [];
+  }
+  return [];
+}
+
+/** What goes on the wheel: the tied ones when `among` is 'tied', else every option (top suggestions). */
+function wheelSlices(ask, room, among) {
+  const t = tally(ask, room);
+  const tied = new Set(tiedIds(ask, room));
+  const keep = (id) => among !== 'tied' || tied.has(id);
+  if (ask.Kind === 'choice') {
+    return (ask.Options || []).filter((o) => keep(o.label))
+      .map((o) => ({ id: o.label, label: o.label, text: cleanText(o.title, 120) })).slice(0, WHEEL_MAX);
+  }
+  if (ask.Kind === 'suggest') {
+    return t.ranked.filter((r) => keep(r.respId))
+      .map((r) => ({ id: r.respId, label: '', text: cleanText(r.text, 120) })).slice(0, WHEEL_MAX);
+  }
+  return [];
+}
+
+/** The wheel as a screen sees it. `mine` is true on the phone whose turn it is to spin. */
+function wheelView(w, me) {
+  const spins = (w.Spins || []).map((x) => ({ spinId: x.SpinId, at: x.At, by: x.By, result: x.Result, turns: x.Turns }));
+  const last = spins[spins.length - 1] || null;
+  return {
+    slices: (w.Slices || []).map((x) => ({ id: x.id, label: x.label || '', text: x.text || '' })),
+    spinner: w.Spinner || null,
+    armed: Boolean(w.Armed),
+    spins,
+    landed: last ? last.result : null,
+    mine: Boolean(me && w.Spinner && w.Armed && me.playerName === w.Spinner),
+  };
+}
+
+/** The slice the wheel last landed on, or null. */
+function wheelLanded(ask) {
+  const w = ask && ask.Wheel;
+  const last = w && (w.Spins || [])[(w.Spins || []).length - 1];
+  return last ? (w.Slices || []).find((x) => x.id === last.Result) || null : null;
+}
+
 function defaultDirection(ask, room) {
+  const landed = wheelLanded(ask);
+  if (landed) return `The wheel picked ${landed.label ? `${landed.label}: ` : ''}${landed.text}`;
   const t = tally(ask, room);
   if (ask.Kind === 'choice') {
     const top = [...t.options].sort((a, b) => b.count - a.count)[0];
@@ -697,5 +769,6 @@ module.exports = {
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
+  WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

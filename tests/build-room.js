@@ -623,6 +623,131 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(h.body.log.some((l) => l.text === 'Secret verbal'));
   });
 
+  console.log('\nthe wheel and the revote (owner, 2026-10-05)');
+  const tie = async (auth) => {
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'What should we build?', options: ['Sign-up page', 'Shift map', 'Reminder texts'] }, auth);
+    const id = c.body.ask.askId;
+    await playCall('POST', 'respond', { ...priya, askId: id, choice: ['A'] });
+    await playCall('POST', 'respond', { ...marcus, askId: id, choice: ['B'] });
+    await hostCall('POST', `asks/${id}`, { action: 'close' }, auth);
+    return id;
+  };
+  seed();
+  let wid;
+  await check('a tie is named in the results, for the host and for phones', async () => {
+    wid = await tie();
+    const h = await hostCall('GET', 'state');
+    assert.deepStrictEqual(h.body.asks.find((a) => a.askId === wid).results.tied, ['A', 'B']);
+    const p = await playCall('GET', 'state', priya);
+    assert.deepStrictEqual(p.body.current.results.tied, ['A', 'B']);
+  });
+  await check('only the host sets up the wheel; it holds the tied options and a random person from the room spins', async () => {
+    assert.strictEqual((await agentCall('POST', `asks/${wid}`, { action: 'wheel' })).status, 403);
+    const r = await hostCall('POST', `asks/${wid}`, { action: 'wheel' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.body.ask.wheel.slices, [{ id: 'A', label: 'A', text: 'Sign-up page' }, { id: 'B', label: 'B', text: 'Shift map' }]);
+    assert.ok(['Priya', 'Marcus'].includes(r.body.ask.wheel.spinner));
+    assert.strictEqual(r.body.ask.wheel.armed, true);
+    assert.strictEqual(r.body.ask.wheel.landed, null);
+  });
+  await check('the spinner\'s phone gets the turn; the other phone cannot spin', async () => {
+    const h = await hostCall('GET', 'state');
+    const spinner = h.body.asks.find((a) => a.askId === wid).wheel.spinner;
+    const me = spinner === 'Priya' ? priya : marcus;
+    const other = spinner === 'Priya' ? marcus : priya;
+    assert.strictEqual((await playCall('GET', 'state', me)).body.current.wheel.mine, true);
+    assert.strictEqual((await playCall('GET', 'state', other)).body.current.wheel.mine, false);
+    assert.strictEqual((await playCall('POST', 'spin', { ...other, askId: wid })).status, 403);
+    assert.strictEqual((await playCall('POST', 'spin', { ...me, askId: wid })).status, 200);
+    // One spin per turn: the same phone cannot spin again.
+    assert.strictEqual((await playCall('POST', 'spin', { ...me, askId: wid })).status, 403);
+    const after = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === wid).wheel;
+    assert.ok(['A', 'B'].includes(after.landed));
+    assert.strictEqual(after.spins.length, 1);
+    assert.strictEqual(after.spins[0].by, spinner);
+    assert.ok(after.spins[0].turns >= 5 && after.spins[0].turns <= 7);
+    assert.strictEqual(after.armed, false);
+  });
+  await check('the host can always spin again; the room hears where it landed', async () => {
+    const r = await hostCall('POST', `asks/${wid}`, { action: 'spin' });
+    assert.strictEqual(r.body.ask.wheel.spins.length, 2);
+    assert.strictEqual(r.body.ask.wheel.spins[1].by, 'host');
+    const log = (await hostCall('GET', 'state')).body.log;
+    assert.ok(log.some((l) => /^The wheel landed on [AB]: /.test(l.text)));
+  });
+  await check('a respin by someone else picks another person and gives them the turn', async () => {
+    const before = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === wid).wheel.spinner;
+    const r = await hostCall('POST', `asks/${wid}`, { action: 'pass' });
+    assert.notStrictEqual(r.body.ask.wheel.spinner, before);
+    assert.strictEqual(r.body.ask.wheel.armed, true);
+  });
+  await check('deciding without words sends what the wheel picked', async () => {
+    const landed = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === wid).wheel;
+    const slice = landed.slices.find((x) => x.id === landed.landed);
+    const d = await hostCall('POST', `asks/${wid}`, { action: 'decide' });
+    assert.strictEqual(d.body.ask.decision.direction, `The wheel picked ${slice.label}: ${slice.text}`);
+    // Decided: no more spinning.
+    assert.strictEqual((await hostCall('POST', `asks/${wid}`, { action: 'spin' })).status, 409);
+  });
+  await check('no tie, the wheel holds every option; a rating has no wheel; an open ask has none yet', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Which?', options: ['One', 'Two', 'Three'] });
+    const id = c.body.ask.askId;
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'wheel' })).status, 409);
+    await hostCall('POST', `asks/${id}`, { action: 'close' });
+    const w = await hostCall('POST', `asks/${id}`, { action: 'wheel', spinner: 'host' });
+    assert.deepStrictEqual(w.body.ask.wheel.slices.map((x) => x.id), ['A', 'B', 'C']);
+    assert.strictEqual(w.body.ask.wheel.spinner, null);
+    const r = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How close?' });
+    await hostCall('POST', `asks/${r.body.ask.askId}`, { action: 'close' });
+    assert.strictEqual((await hostCall('POST', `asks/${r.body.ask.askId}`, { action: 'wheel' })).status, 400);
+  });
+  await check('a revote opens a new ask with only the tied options, letters and mockups kept', async () => {
+    seed();
+    const id = await tie();
+    const shot = await hostCall('POST', 'images', { askId: id, label: 'B', kind: 'mockup', data: PNG.toString('base64'), contentType: 'image/png' });
+    assert.strictEqual(shot.status, 201);
+    const r = await hostCall('POST', `asks/${id}`, { action: 'revote' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.ask.status, 'live');
+    assert.strictEqual(r.body.ask.revoteOf, id);
+    assert.deepStrictEqual(r.body.ask.options.map((o) => [o.label, o.title]), [['A', 'Sign-up page'], ['B', 'Shift map']]);
+    assert.strictEqual(r.body.ask.options[1].imageId, shot.body.image.imageId);
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.currentAskId, r.body.ask.askId);
+    assert.strictEqual(h.body.asks.find((a) => a.askId === id).revotedAs, r.body.ask.askId);
+    // A phone votes on the revote by its original letter.
+    assert.strictEqual((await playCall('POST', 'respond', { ...priya, askId: r.body.ask.askId, choice: ['B'] })).status, 200);
+  });
+  await check('an Ideas revote goes straight to voting on the tied suggestions, still anonymous and still not your own', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'What should we build?' });
+    const id = c.body.ask.askId;
+    await playCall('POST', 'respond', { ...priya, askId: id, text: 'A shift map' });
+    await playCall('POST', 'respond', { ...marcus, askId: id, text: 'Reminder texts' });
+    await hostCall('POST', `asks/${id}`, { action: 'vote' });
+    const p = (await playCall('GET', 'state', priya)).body.current.responses;
+    const m = (await playCall('GET', 'state', marcus)).body.current.responses;
+    await playCall('POST', 'vote', { ...priya, askId: id, respIds: [p.find((x) => !x.mine).respId] });
+    await playCall('POST', 'vote', { ...marcus, askId: id, respIds: [m.find((x) => !x.mine).respId] });
+    await hostCall('POST', `asks/${id}`, { action: 'close' });
+    const r = await hostCall('POST', `asks/${id}`, { action: 'revote' });
+    assert.strictEqual(r.body.ask.status, 'voting');
+    assert.deepStrictEqual(r.body.ask.responses.map((x) => x.text).sort(), ['A shift map', 'Reminder texts']);
+    const mine = (await playCall('GET', 'state', priya)).body.current.responses.find((x) => x.mine);
+    assert.strictEqual(mine.text, 'A shift map');
+    assert.strictEqual((await playCall('POST', 'vote', { ...priya, askId: r.body.ask.askId, respIds: [mine.respId] })).status, 400);
+  });
+  await check('in a team\'s room the wheel\'s words are sealed at rest', async () => {
+    seed({ orgId: ORG });
+    const HOST_TEAM = { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG };
+    const id = await tie(HOST_TEAM);
+    const w = await hostCall('POST', `asks/${id}`, { action: 'wheel' }, HOST_TEAM);
+    assert.strictEqual(w.status, 200);
+    assert.strictEqual(w.body.ask.wheel.slices[0].text, 'Sign-up page');
+    assert.ok(!JSON.stringify([...store.values()]).includes('Shift map'), 'the wheel\'s slices are plaintext at rest');
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

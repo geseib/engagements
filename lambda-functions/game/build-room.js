@@ -17,6 +17,7 @@
  * asking, writes, bumps the room's Rev and tells every connection
  * `buildChanged` so each page refetches (notify → refresh, as everywhere).
  */
+const crypto = require('crypto');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand,
@@ -281,6 +282,7 @@ async function askAction(ctx, role, askId, body) {
   const ask = findAsk(room, askId);
   if (!ask) return fail(404, `No ask ${askId}`);
   const action = String(b.action || '').toLowerCase();
+  if (WHEEL_ACTIONS.includes(action)) return wheelAction(ctx, role, room, ask, action, b);
   const now = new Date().toISOString();
   const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
 
@@ -326,6 +328,94 @@ async function askAction(ctx, role, askId, body) {
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host') });
+}
+
+// ── The wheel, and the revote (owner, 2026-10-05) ──────────────────────────
+//
+// "If a tie, it's either a wheel spin or revote: host's choice. A random
+// person spins, but the host can always spin. If the room groans, respin."
+// Both happen at results. The wheel lands where crypto.randomInt says, here,
+// so every screen shows the same answer; screens only animate to it.
+
+const WHEEL_ACTIONS = ['wheel', 'spin', 'pass', 'revote'];
+
+/** A random entry, or null. */
+const pickOne = (list) => (list.length ? list[crypto.randomInt(list.length)] : null);
+
+async function spinWheel(ctx, ask, by) {
+  const w = ask.Wheel;
+  const slice = w.Slices[crypto.randomInt(w.Slices.length)];
+  const now = new Date().toISOString();
+  const spin = { SpinId: S.newId(), At: now, By: by, Result: slice.id, Turns: 5 + crypto.randomInt(3) };
+  const spins = [...(w.Spins || []), spin].slice(-S.WHEEL_KEEP_SPINS);
+  await put(ctx, { ...ask, Wheel: { ...w, Spins: spins, Armed: false } });
+  await logEntry(ctx, {
+    kind: 'ask', by: 'system', askId: ask.AskId,
+    text: `The wheel landed on ${slice.label ? `${slice.label}: ` : ''}${slice.text}`,
+  });
+  return spin;
+}
+
+async function wheelAction(ctx, role, room, ask, action, b) {
+  if (role !== 'host') return fail(403, 'Only the host spins the wheel');
+  if (ask.Status !== 'results') return fail(409, 'Close the ask first: the wheel and a revote come after the results');
+  if (ask.Kind === 'rating') return fail(400, 'A rating has nothing to spin between');
+  const askId = ask.AskId;
+  const now = new Date().toISOString();
+
+  if (action === 'wheel') {
+    const tied = S.tiedIds(ask, room);
+    const among = b.among === 'all' || tied.length < 2 ? 'all' : 'tied';
+    const slices = S.wheelSlices(ask, room, among);
+    if (slices.length < S.WHEEL_MIN) return fail(409, 'The wheel needs at least two options');
+    const players = b.spinner === 'host' ? [] : await loadPlayers(ctx);
+    const spinner = pickOne(players);
+    await put(ctx, { ...ask, Wheel: { Slices: slices, Among: among, Spinner: spinner, Armed: Boolean(spinner), Spins: [], SetAt: now } });
+    await logEntry(ctx, { kind: 'ask', by: 'system', askId, text: spinner ? `Spin the wheel: ${spinner} spins` : 'Spin the wheel' });
+  } else if (action === 'spin') {
+    // The host can always spin, the first time and every respin.
+    if (!ask.Wheel) return fail(409, 'Set up the wheel first');
+    await spinWheel(ctx, ask, 'host');
+  } else if (action === 'pass') {
+    // A respin by somebody else in the room: a new random spinner, armed.
+    if (!ask.Wheel) return fail(409, 'Set up the wheel first');
+    const players = await loadPlayers(ctx);
+    const others = players.filter((p) => p !== ask.Wheel.Spinner);
+    const spinner = pickOne(others.length ? others : players);
+    if (!spinner) return fail(409, 'Nobody has joined to spin');
+    await put(ctx, { ...ask, Wheel: { ...ask.Wheel, Spinner: spinner, Armed: true } });
+    await logEntry(ctx, { kind: 'ask', by: 'system', askId, text: `Spin again: ${spinner} spins` });
+  } else {
+    // REVOTE: a new ask with only the tied options, which keep their letters
+    // and their mockups, opened at once.
+    const tied = S.tiedIds(ask, room);
+    if (tied.length < 2) return fail(409, 'There is no tie to revote');
+    const st = await touchState(ctx, { add: { AskSeq: 1 } });
+    const newId = S.pad3(st.AskSeq || 1);
+    const base = {
+      SK: S.SK.ask(newId), AskId: newId, Kind: ask.Kind, Prompt: ask.Prompt, Source: 'host', CreatedAt: now, OpenedAt: now, RevoteOf: askId, MaxPicks: 1,
+    };
+    if (ask.Kind === 'choice') {
+      const images = S.optionImages(room, askId);
+      const options = (ask.Options || []).filter((o) => tied.includes(o.label))
+        .map((o) => ({ ...o, ...(o.imageId || images[o.label] ? { imageId: o.imageId || images[o.label] } : {}) }));
+      await put(ctx, { ...base, Detail: `A tie between ${options.map((o) => o.label).join(' and ')}. Vote again.`, Options: options, Status: 'live' });
+    } else {
+      await put(ctx, { ...base, Detail: 'A tie. Vote again between these.', Options: [], Status: 'voting', VotingAt: now });
+      const resps = room.resps.filter((r) => r.AskId === askId && tied.includes(r.RespId));
+      for (const r of resps) {
+        const id = S.newId();
+        await put(ctx, { SK: S.SK.resp(newId, id), AskId: newId, RespId: id, Text: r.Text, PlayerName: r.PlayerName, Source: r.Source || 'player', CreatedAt: now });
+      }
+    }
+    await put(ctx, { ...ask, RevotedAs: newId });
+    await makeCurrent(ctx, await loadRoom(ctx), newId, role);
+  }
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  const next = action === 'revote' ? findAsk(after, after.state.CurrentAskId) : findAsk(after, askId);
+  return reply(200, { ask: S.askView(next, after, 'host') });
 }
 
 async function hostResponse(ctx, askId, respId, body) {
@@ -1293,6 +1383,12 @@ async function routePlay(ctx, method, parts, body, query) {
       if (!Number.isInteger(r) || r < 1 || r > 5) return fail(400, 'Rate from 1 to 5');
       await put(ctx, { SK: S.SK.ans(askId, me.playerName), AskId: askId, PlayerName: me.playerName, Rating: r, Why: S.cleanText(input.why, S.LIMITS.why), CreatedAt: now });
     }
+  } else if (a === 'spin') {
+    // The one phone the wheel picked, once per turn; the host can always spin.
+    const w = ask.Wheel;
+    if (!w || ask.Status !== 'results') return fail(409, 'There is no wheel to spin');
+    if (w.Spinner !== me.playerName || !w.Armed) return fail(403, 'It is not your turn to spin');
+    await spinWheel(ctx, ask, me.playerName);
   } else if (a === 'vote') {
     if (ask.Kind !== 'suggest' || ask.Status !== 'voting') return fail(409, 'Voting is not open for this question');
     const valid = new Map(room.resps.filter((r) => r.AskId === askId && !r.Hidden).map((r) => [r.RespId, r]));

@@ -1,0 +1,66 @@
+/* ==========================================================================
+   THE WHEEL (buildroom/BuildWheel.jsx). Scope `.bwh`; every selector rooted
+   there. It inherits its theme from the page it sits on (the Build Room host
+   and wall, and the phones, are all dusk), so its inks are tokens that read
+   on dusk and on the slice they sit on.
+
+   CONTRAST, MEASURED (__tests__/buildWheelPalette.test.js):
+     slice letters: --bg on --primary 8.86 · on --secondary 7.06 · on --success 6.66
+                    --text on --surface-2 10.20
+     the hub letter: --primary on --bg 8.86 · the caption --text on --bg 14.97
+   The slices take four tones that alternate; a last slice never repeats the
+   first (sliceTone), so no two neighbours share a colour.
+   ========================================================================== */
+
+.bwh {
+  --bwh-size: min(320px, 78vw);
+  --bwh-spin: 5.6s;
+  display: grid; justify-items: center; gap: 12px;
+}
+.bwh--sm { --bwh-size: min(240px, 70vw); }
+.bwh--lg { --bwh-size: min(50vh, 500px); }
+
+.bwh .bwh-svg {
+  width: var(--bwh-size); height: var(--bwh-size); overflow: visible;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.45));
+}
+.bwh .bwh-rim { fill: var(--primary-deep); }
+.bwh .bwh-rot { transition: transform var(--bwh-spin) cubic-bezier(0.12, 0.66, 0.1, 1); }
+.bwh .bwh-rot.is-still { transition: none; }
+
+.bwh .bwh-slice path { stroke: var(--bg); stroke-width: 1.5; }
+.bwh .bwh-slice--0 path { fill: var(--primary); }
+.bwh .bwh-slice--1 path { fill: var(--secondary); }
+.bwh .bwh-slice--2 path { fill: var(--success); }
+.bwh .bwh-slice--3 path { fill: var(--surface-2); }
+.bwh .bwh-slice text { fill: var(--bg); font-family: var(--font-display); }
+.bwh .bwh-slice--3 text { fill: var(--text); }
+.bwh .bwh-letter { font-size: 26px; font-weight: 800; }
+.bwh .bwh-word { font-size: 9px; font-weight: 700; font-family: var(--font-ui); }
+.bwh .bwh-word--radial { font-size: 10px; }
+
+/* Landed: the winner keeps its colour and gains an edge; the rest step back. */
+.bwh.is-landed .bwh-slice:not(.is-won) { opacity: 0.55; transition: opacity 0.6s ease; }
+.bwh .bwh-slice.is-won path { stroke: var(--text); stroke-width: 4; }
+
+.bwh .bwh-peg { fill: var(--text); }
+.bwh .bwh-hub { fill: var(--bg); stroke: var(--primary); stroke-width: 3; }
+.bwh .bwh-hubtext { fill: var(--primary); font-family: var(--font-display); font-weight: 800; font-size: 11px; letter-spacing: 0.08em; }
+.bwh .bwh-hubtext.is-letter { font-size: 22px; letter-spacing: 0; }
+.bwh .bwh-pointer { fill: var(--text); stroke: var(--bg); stroke-width: 2; stroke-linejoin: round; }
+
+.bwh .bwh-caption {
+  margin: 0; text-align: center; color: var(--text);
+  font-family: var(--font-display); font-weight: 800; font-size: 1.15em; line-height: 1.25; max-width: 32ch;
+}
+.bwh .bwh-spin {
+  min-height: 52px; padding: 12px 28px; border-radius: 999px; border: 0; cursor: pointer;
+  background: var(--primary); color: var(--bg);
+  font-family: var(--font-display); font-weight: 800; font-size: 19px; letter-spacing: 0.02em;
+}
+.bwh .bwh-spin:disabled { opacity: 0.55; cursor: not-allowed; }
+.bwh .bwh-spin:focus-visible { outline: 3px solid var(--secondary); outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bwh .bwh-rot { transition: none; }
+}

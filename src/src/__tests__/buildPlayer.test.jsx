@@ -501,3 +501,37 @@ describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
     expect(screen.queryByRole('region', { name: 'Feedback on the preview' })).toBeNull();
   });
 });
+
+describe('the wheel on a phone (owner, 2026-10-05)', () => {
+  const wheel = (over = {}) => ({
+    slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }],
+    spinner: 'Priya', armed: true, spins: [], landed: null, mine: true, ...over,
+  });
+  const results = (w) => baseView({
+    currentAskId: '003',
+    current: ask({ status: 'results', options: CHOICE_OPTS.slice(0, 2), results: { total: 2, options: [{ label: 'A', title: 'Bold banner', count: 1, pct: 50 }, { label: 'B', title: 'Calm photo + calendar', count: 1, pct: 50 }], whys: [], tied: ['A', 'B'] }, wheel: w }),
+  });
+
+  test('the phone the wheel picked gets the button, and spinning posts its turn', async () => {
+    serve(results(wheel()));
+    await mount();
+    expect(screen.getByText('Your turn.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Spin the wheel' }));
+    await waitFor(() => expect(posts('spin')).toHaveLength(1));
+    expect(posts('spin')[0].body).toEqual({ playerName: ME, clientId: CID, askId: '003' });
+  });
+
+  test('every other phone sees the wheel and who spins, with no button', async () => {
+    serve(results(wheel({ spinner: 'Dee', mine: false })));
+    await mount();
+    expect(screen.getByRole('img', { name: /A wheel of 2/ })).toBeInTheDocument();
+    expect(screen.getByText('Dee spins the wheel')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Spin the wheel' })).toBeNull();
+  });
+
+  test('a phone that opens after the spin sees where it landed', async () => {
+    serve(results(wheel({ armed: false, mine: false, spins: [{ spinId: 's1', at: '', by: 'Dee', result: 'B', turns: 5 }], landed: 'B' })));
+    await mount();
+    expect(screen.getByText('The wheel picked B: Calm photo + calendar')).toBeInTheDocument();
+  });
+});
