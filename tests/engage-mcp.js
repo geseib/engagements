@@ -170,6 +170,9 @@ const hardStop = setTimeout(() => {
     assert.ok(r.result.capabilities.tools && r.result.capabilities.prompts);
     assert.ok(typeof r.result.instructions === 'string' && r.result.instructions.length > 200);
     assert.ok(/wrap_up/.test(r.result.instructions) && /final/.test(r.result.instructions));
+    // Owner, 2026-10-06: a question asked in the terminal stalled room 6717.
+    assert.ok(/NEVER ask a question in this terminal/.test(r.result.instructions) && /ask_room_to_choose with the readings/.test(r.result.instructions));
+    assert.ok(/call commit/.test(r.result.instructions), 'the instructions name the commit tool');
   });
   await check('an unknown protocol version falls back to 2025-06-18', async () => {
     const r = await mcp.request('initialize', { protocolVersion: '1999-01-01' });
@@ -255,6 +258,7 @@ const hardStop = setTimeout(() => {
     assert.ok(requests.length >= 3, `polled ${requests.length} times`);
     assert.ok(requests.every(q => q.method === 'GET' && q.url === '/dev/games/4321/build/asks/003'));
     assert.ok(/THE ROOM DECIDED/.test(t) && /keep the logo from A/.test(t), t);
+    assert.ok(/never in this terminal/.test(t), 'a decision reminds Claude where questions go');
     // Decided: the decision, not the tally (owner, 2026-10-06: "Claude only needs question/answer").
     assert.ok(!/Light minimal: 3 \(60%\)/.test(t), t);
     assert.ok(mcp.notifications.some(n => n.method === 'notifications/progress' && n.params.progressToken === 'p1'));

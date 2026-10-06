@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.8.0';
+const VERSION = '1.8.1';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -306,6 +306,9 @@ function renderAsk(ask, { heading = true } = {}) {
   if (d && (ask.status === 'decided' || d.direction)) {
     lines.push('', 'THE ROOM DECIDED (final — build this):', `  ${s(d.direction) || '(no direction text)'}`);
     if (d.note) lines.push(`  Also from the room: ${s(d.note)}`);
+    // Owner, 2026-10-06: Claude asked "what does sprint mean?" in its terminal,
+    // which nobody in the room could see, and the session stalled.
+    lines.push('  If the decision is unclear, ask through Engage (ask_room_to_choose with the readings as options), never in this terminal: the host is not watching it.');
   }
   if (ask.status !== 'proposed' && ask.status !== 'decided') { lines.push(''); lines.push(renderResults(ask)); }
   return lines.join('\n');
@@ -1741,6 +1744,7 @@ function promptText(name, args) {
 const INSTRUCTIONS = `Engage connects you to a live room of people through the host's Build Room session. The host's laptop is usually on a projector, the room follows along on their phones, and you are building something real with them.
 
 How to collaborate:
+- NEVER ask a question in this terminal while connected (no interactive question menus, no "which did you mean?" prompts): the host is running the room from the projector and does not see this terminal, so the session stalls with the room waiting. Ask through Engage instead. When a decision is unclear (a typo, two readings), call ask_room_to_choose with the readings as options and a one-line context; it lands on the host's screen, and the host can answer for the room in one click. When the right reading is obvious, take it, say so in a post_update ("Reading 'sprint' as 'sprite': pixel-art sprites"), and keep building.
 - Ask the room only at real decision points: direction, look and feel, naming, priorities, "which of these?". Do the routine work yourself. A few good asks per session beat many small ones.
 - Keep every question short and plain: it is read from the back of a room on a projector. Put background in "context", not in the question.
 - Use ask_room_for_ideas for open questions, ask_room_to_choose for 2–6 concrete options, ask_room_to_rate for a 1–5 pulse on something you have shown.
@@ -1755,7 +1759,7 @@ How to collaborate:
 - Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here — the host opens them on this laptop, on the projector; phones only ever see public URLs.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
-- After you implement each decision, call checkpoint with a plain message ("Header B, as the room chose"). The work stays in git, step by step, and the room's timeline and report show each version.
+- After you implement each decision, call commit with a plain first line ("Add the calm header") and the decision's askId; it goes into DECISIONS.md and the room's timeline. Not after every edit: each turn is already kept as a hidden snapshot. The engage:build-room skill has the rules.
 - When you have nothing left to do — after wrap_up above all — call wait_for_direction and keep calling it. The host sees "Claude is listening" and can steer you from the Build Room screen.
 
 Crew mode (room_status says whether it is on, and which role you have):
@@ -2288,6 +2292,16 @@ skill is how you keep the project something they can open next week and understa
   \`.engage/servers.txt\`: the port, the command, and the process id if you have it.
 - Before starting another, check whether something is already listening on that port.
 - Do not stop servers you did not start.
+
+## Questions go through Engage, never the terminal
+
+The host is running the room from the projector and is not watching this terminal. A question
+asked here (an interactive menu, "which did you mean?") stalls the session while the host
+screen says Claude is waiting.
+
+- **Unclear decision** (a typo, two readings): call ask_room_to_choose with the readings as
+  options. It lands on the host's screen, and the host can answer for the room in one click.
+- **Obvious reading:** take it, say so in a post_update, and keep building.
 
 ## What the room sends you
 
