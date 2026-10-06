@@ -778,6 +778,44 @@ async function openingAction(ctx, action, body) {
 }
 
 /**
+ * CLAUDE DRAFTS THE BRIEF (owner, 2026-10-06): a headline, a short summary
+ * and plainer wording for any line, waiting for the host on the opening
+ * panel. BUILD#STATE is written by UpdateItem, so the draft is sealed by hand.
+ */
+async function draftBrief(ctx, body) {
+  const norm = S.normalizeDraft(body);
+  if (norm.error) return fail(400, norm.error);
+  const draft = { ...norm.value, at: new Date().toISOString() };
+  const value = ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { BriefDraft: draft })).BriefDraft : draft;
+  await touchState(ctx, { set: { BriefDraft: value } });
+  await logEntry(ctx, { kind: 'progress', text: 'Claude drafted the build brief for the host to look over', by: 'agent' });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { draft: S.draftView({ BriefDraft: draft }) });
+}
+
+/** The host uses Claude's draft (as edited) or dismisses it. */
+async function settleDraft(ctx, action, body) {
+  const room = await loadRoom(ctx);
+  if (!S.draftView(room.state)) return fail(404, 'There is no draft to settle');
+  if (action === 'accept') {
+    const norm = S.normalizeDraft(body);
+    if (norm.error) return fail(400, norm.error);
+    const d = norm.value;
+    const brief = S.briefView(room.state);
+    const lines = { ...brief.lines };
+    for (const k of S.BRIEF_LINES) if (d.lines[k]) lines[k] = d.lines[k];
+    await saveBrief(ctx, { ...brief, lines, forWhom: d.lines.forWhom || brief.forWhom, headline: d.headline, summary: d.summary });
+    await logEntry(ctx, { kind: 'direction', by: 'host', forAgent: true, as: 'keep', noBrief: true, text: `The build brief's headline: ${d.headline}${d.summary ? `. ${d.summary}` : ''}` });
+  }
+  await touchState(ctx, { set: { BriefDraft: null } });
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { brief: S.briefView(after.state), opening: S.openingView(after.state, after) });
+}
+
+/**
  * SEND NOW (owner, 2026-10-06): an item held For Claude, later goes to Claude
  * as Do now, and leaves the list.
  */
@@ -1594,6 +1632,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'brief' && !b) return hostOnly() || editBrief(ctx, body);
   if (a === 'brief' && b === 'vote' && !c) return hostOnly() || laterToVote(ctx, body);
   if (a === 'brief' && b === 'later' && c && d === 'send') return hostOnly() || sendLater(ctx, c);
+  if (a === 'brief' && b === 'draft' && !c) return role === 'agent' ? draftBrief(ctx, body) : fail(403, 'Claude drafts the brief; the host uses or dismisses it');
+  if (a === 'opening' && b === 'draft' && ['accept', 'dismiss'].includes(c)) return hostOnly() || settleDraft(ctx, c, body);
   if (a === 'opening' && b && !c) return hostOnly() || openingAction(ctx, b, body);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);

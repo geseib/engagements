@@ -1157,6 +1157,49 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(d.as, 'do-now');
     assert.ok(/^The room has framed the build\. Plan 3 to 6 steps/.test(d.text) && /The problem today: Board games take setup/.test(d.text), d.text);
   });
+  await check('Claude drafts the brief once who, the problem and good are known; the host edits it and uses it', async () => {
+    seed();
+    assert.strictEqual((await state()).opening.readyForDraft, false);
+    await hostCall('POST', 'opening/answer', { step: 'forWhom', text: 'Two friends, one laptop' });
+    await hostCall('POST', 'opening/answer', { step: 'problem', text: 'Board games take setup' });
+    await hostCall('POST', 'opening/answer', { step: 'good', text: 'Play in one tap' });
+    assert.strictEqual((await state()).opening.readyForDraft, true);
+    await agentCall('GET', 'inbox');
+    assert.strictEqual((await agentCall('POST', 'brief/draft', { summary: 'no headline' })).status, 400);
+    assert.strictEqual((await hostCall('POST', 'brief/draft', { headline: 'x' })).status, 403, 'only Claude drafts');
+    const d = await agentCall('POST', 'brief/draft', { headline: 'Connect four for two friends', summary: 'A quick game on one laptop, no accounts.', lines: { problem: 'Board games take setup, and online games want accounts.' } });
+    assert.strictEqual(d.status, 201, JSON.stringify(d.body));
+    let st = await state();
+    assert.strictEqual(st.briefDraft.headline, 'Connect four for two friends');
+    assert.strictEqual((await agentCall('GET', 'state')).body.briefDraft, null, 'Claude does not need its own draft back');
+    const u = await hostCall('POST', 'opening/draft/accept', { headline: 'Connect four, for two friends on one laptop', summary: 'A quick game on one laptop, no accounts.', lines: { problem: 'Board games take setup, and online games want accounts.' } });
+    assert.strictEqual(u.status, 200, JSON.stringify(u.body));
+    st = await state();
+    assert.strictEqual(st.brief.headline, 'Connect four, for two friends on one laptop');
+    assert.strictEqual(st.brief.lines.problem, 'Board games take setup, and online games want accounts.');
+    assert.strictEqual(st.briefDraft, null);
+    assert.strictEqual(st.opening.drafted, true);
+    const heard = (await agentCall('GET', 'inbox')).body.inbox;
+    assert.ok(heard.some((x) => /^The build brief's headline: Connect four, for two friends on one laptop/.test(x.text) && x.as === 'keep'), JSON.stringify(heard));
+    // The brief Claude builds from carries the headline.
+    await hostCall('POST', 'opening/start', {});
+    assert.ok(/Headline: Connect four, for two friends on one laptop/.test((await agentCall('GET', 'inbox')).body.inbox[0].text));
+  });
+  await check('the host may dismiss a draft; with none waiting there is nothing to settle', async () => {
+    seed();
+    await agentCall('POST', 'brief/draft', { headline: 'A draft' });
+    assert.strictEqual((await hostCall('POST', 'opening/draft/dismiss', {})).status, 200);
+    assert.strictEqual((await state()).briefDraft, null);
+    assert.strictEqual((await state()).brief.headline, '');
+    assert.strictEqual((await hostCall('POST', 'opening/draft/dismiss', {})).status, 404);
+  });
+  await check('in a team\'s room the draft is sealed at rest', async () => {
+    seed({ orgId: ORG });
+    await agentCall('POST', 'brief/draft', { headline: 'Secret headline about payroll' });
+    const HOST_TEAM = { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG };
+    assert.strictEqual((await hostCall('GET', 'state', null, HOST_TEAM)).body.briefDraft.headline, 'Secret headline about payroll');
+    assert.ok(!JSON.stringify([...store.values()]).includes('Secret headline about payroll'));
+  });
   await check('a room that already has asks is building (rooms made before the opening)', async () => {
     seed();
     await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is it?' });

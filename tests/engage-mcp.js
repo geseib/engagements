@@ -101,6 +101,9 @@ const server = http.createServer((req, res) => {
       inboxPolls++;
       return send(200, { inbox: inboxPolls >= 3 ? [{ id: 'd7', text: 'Make the button green', from: 'host', askId: null, createdAt: 'now' }] : [] });
     }
+    if (req.method === 'POST' && p === 'brief/draft') {
+      return send(201, { draft: { headline: rec.body.headline, summary: rec.body.summary || '', lines: {} }, inbox: [] });
+    }
     if (req.method === 'POST' && p === 'log') {
       return send(200, {
         entry: { logId: 'l9', kind: rec.body.kind, text: rec.body.text },
@@ -193,11 +196,11 @@ const hardStop = setTimeout(() => {
   });
 
   console.log('\n2. listings');
-  await check('tools/list has all twenty-five tools (fourteen room, eleven crew) with object schemas', async () => {
+  await check('tools/list has all twenty-six tools (fifteen room, eleven crew) with object schemas', async () => {
     const r = await mcp.request('tools/list', {});
     const names = r.result.tools.map(t => t.name).sort();
     assert.deepStrictEqual(names, ['announce_merge', 'ask_for_help', 'ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions', 'checkpoint',
-      'claim_task', 'comment_share', 'commit', 'connect', 'crew_status', 'get_results', 'get_share', 'post_update', 'propose_task', 'review_share', 'room_status',
+      'claim_task', 'comment_share', 'commit', 'connect', 'crew_status', 'draft_brief', 'get_results', 'get_share', 'post_update', 'propose_task', 'review_share', 'room_status',
       'share_image', 'share_pr', 'share_repo', 'share_work', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
     for (const t of r.result.tools) {
       assert.strictEqual(t.inputSchema.type, 'object', t.name);
@@ -357,6 +360,19 @@ const hardStop = setTimeout(() => {
       stateOpening = undefined;
       stateBrief = undefined;
     }
+  });
+  await check('once the room has said enough, room_status asks for a draft, and draft_brief posts it', async () => {
+    stateOpening = { phase: 'opening', readyForDraft: true, drafted: false, steps: [] };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/draft the one-page brief now with draft_brief/.test(t), t);
+    } finally {
+      stateOpening = undefined;
+    }
+    const r = await mcp.request('tools/call', { name: 'draft_brief', arguments: { headline: 'Connect four, for two friends', summary: 'A quick game.' } });
+    const posted = requests.filter((q) => q.method === 'POST' && /\/build\/brief\/draft$/.test(q.url)).pop();
+    assert.deepStrictEqual(posted.body, { headline: 'Connect four, for two friends', summary: 'A quick game.' });
+    assert.ok(!r.result.isError, textOf(r));
   });
   await check('a probing question names its step (forStep), so its answer joins that line', async () => {
     await mcp.request('tools/call', { name: 'ask_room_for_ideas', arguments: { question: 'What do they do instead today?', forStep: 'problem' } });

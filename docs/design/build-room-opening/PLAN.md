@@ -12,7 +12,7 @@ Owner, 2026-10-06:
 > should use. … once these questions are answered claude code goes from planning and prep
 > mode (room setup and organizing) to build mode. these could be in the plugin and skills."
 
-Status: **built 2026-10-06** (mockups: index.html, O1 to O4). Not yet built: Claude drafting the one-page brief for the host to edit (Claude probes; the wall shows the brief from the room's lines). The owner's answers: The owner's answers:
+Status: **built 2026-10-06** (mockups: index.html, O1 to O4), including Claude's draft of the brief (draft_brief: a headline, a summary and plainer line wording, which the host edits, then uses or dismisses). The owner's answers: The owner's answers:
 
 1. **Kinds:** no change asked for, so the proposed six stand, editable per session.
 2. **Order:** a guided path the host walks in order, and can skip.

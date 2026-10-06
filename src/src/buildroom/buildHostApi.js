@@ -114,6 +114,8 @@ export function buildApi(gameId) {
     sendLater: (id) => post(`brief/later/${seg(id)}/send`, {}),
     /** The opening (owner, 2026-10-06): 'answer' {step, text}, 'skip' / 'reopen' {step}, or 'start'. */
     openingAction: (action, body = {}) => post(`opening/${seg(action)}`, body),
+    /** Claude's draft of the brief: 'accept' {headline, summary, lines} (as edited) or 'dismiss'. */
+    settleDraft: (action, body = {}) => post(`opening/draft/${seg(action)}`, body),
     /**
      * READY QUESTIONS (step 7b, C13): every set this host can read, from the
      * session picker's own route; the library keeps those tagged build-room.

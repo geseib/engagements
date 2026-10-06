@@ -345,7 +345,7 @@ async function check(name, fn) {
     // The skill (owner, 2026-10-06): the conventions, written down where Claude Code loads them.
     const skill = fs.readFileSync(path.join(plug, 'skills', 'build-room', 'SKILL.md'), 'utf8');
     assert.ok(/^---\nname: build-room\ndescription: /.test(skill), skill.slice(0, 200));
-    for (const words of ['~/build-room/<name>', 'one per decision or milestone', 'no `--no-verify`', 'DECISIONS.md', '.engage/servers.txt', 'Ask me before stopping any of them', 'For Claude, later', 'Questions go through Engage, never the terminal', 'The opening: frame it with the room, then build']) {
+    for (const words of ['~/build-room/<name>', 'one per decision or milestone', 'no `--no-verify`', 'DECISIONS.md', '.engage/servers.txt', 'Ask me before stopping any of them', 'For Claude, later', 'Questions go through Engage, never the terminal', 'The opening: frame it with the room, then build', 'draft the one-page brief with draft_brief']) {
       assert.ok(skill.includes(words), `the skill says: ${words}`);
     }
     const wrap = fs.readFileSync(path.join(plug, 'commands', 'wrap-up.md'), 'utf8');

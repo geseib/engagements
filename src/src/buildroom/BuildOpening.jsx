@@ -131,6 +131,53 @@ function AskStep({ step, busy, run, api }) {
   );
 }
 
+const LINE_LABEL = { forWhom: 'For', kind: 'Making', problem: 'The problem', good: 'Good looks like', proof: 'We will know', firstBuild: 'First build', tools: 'Tools and style', look: 'Look and feel' };
+
+/**
+ * CLAUDE'S DRAFT OF THE BRIEF (owner, 2026-10-06): a headline, a short
+ * summary and plainer wording for some lines. Edit it, then use it (the
+ * lines left ticked replace the room's wording) or dismiss it.
+ */
+export function DraftCard({ room, busy, run, api }) {
+  const d = room.briefDraft;
+  const brief = room.brief || { lines: {} };
+  const [headline, setHeadline] = useState(d.headline);
+  const [summary, setSummary] = useState(d.summary || '');
+  const suggested = Object.entries(d.lines || {});
+  const [use, setUse] = useState(() => Object.fromEntries(suggested.map(([k]) => [k, true])));
+  const now = (k) => (k === 'forWhom' ? brief.forWhom : (brief.lines || {})[k]) || '';
+  const accept = () => run(() => api.settleDraft('accept', {
+    headline: headline.trim(), summary: summary.trim(),
+    lines: Object.fromEntries(suggested.filter(([k]) => use[k])),
+  }));
+  return (
+    <section className="brm-notice brm-draft" aria-label="Claude's draft of the brief">
+      <p className="brm-draft-h"><b>Claude drafted the brief</b> from what the room said. Edit it, then use it.</p>
+      <label className="brm-field"><span className="brm-lbl">Headline</span>
+        <input className="brm-input" value={headline} maxLength={120} onChange={(e) => setHeadline(e.target.value)} />
+      </label>
+      <label className="brm-field"><span className="brm-lbl">In short</span>
+        <textarea className="brm-input brm-ta brm-ta--sm" value={summary} maxLength={600} onChange={(e) => setSummary(e.target.value)} />
+      </label>
+      {suggested.length > 0 && (
+        <fieldset className="brm-draft-lines">
+          <legend className="brm-lbl">Plainer wording, line by line</legend>
+          {suggested.map(([k, v]) => (
+            <label key={k} className="brm-check brm-draft-line">
+              <input type="checkbox" checked={Boolean(use[k])} onChange={(e) => setUse((u) => ({ ...u, [k]: e.target.checked }))} />
+              <span><b>{LINE_LABEL[k] || k}:</b> {v}{now(k) ? <span className="brm-hint"> (was: {now(k)})</span> : null}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <div className="brm-row brm-gap">
+        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => run(() => api.settleDraft('dismiss'))}>Dismiss</button>
+        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !headline.trim()} onClick={accept}>Use this draft</button>
+      </div>
+    </section>
+  );
+}
+
 /**
  * THE OPENING PANEL (O1, O2): the Now card while the room frames the build
  * and nothing is being asked. The step, the ways to answer it, Skip, and
@@ -147,6 +194,7 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
         <h2 className="brm-h5 brm-op-phase" id="brm-opening-h">Opening{step ? ` · step ${n} of ${opening.steps.length}` : ''}</h2>
         <span className="brm-hint brm-push">Planning: Claude writes no code yet</span>
       </div>
+      {room.briefDraft && !ended && <DraftCard key={room.briefDraft.at || room.briefDraft.headline} room={room} busy={busy} run={run} api={api} />}
       {step ? (
         <>
           <p className="brm-nowline">{step.label}</p>
@@ -177,6 +225,12 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
       {!ended && (
         <div className="brm-op-start">
           <span>{doneCount(opening)} of {opening.steps.length} framed. Start building whenever you like; Claude gets the brief as it is.</span>
+          {opening.readyForDraft && !room.briefDraft && (
+            <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Claude writes a headline and a short summary from what the room said"
+              onClick={() => run(() => api.postDirection('Draft the one-page build brief now with draft_brief: a headline and two or three sentences, in the room\'s words.'))}>
+              {opening.drafted ? 'Ask Claude to redraft the brief' : 'Ask Claude to draft the brief'}
+            </button>
+          )}
           <button type="button" className="brm-btn brm-btn--sm" onClick={onShowWall}>Show the brief on the wall</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={start}>Start building</button>
         </div>
@@ -195,6 +249,12 @@ export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
   const probe = (step, question) => run(() => api.createAsk({ kind: 'suggest', prompt: question, detail: '', openingStep: step.key, probe: true }));
   return (
     <section className="brm-briefpath" aria-label="The opening: the build brief">
+      {(room.brief || {}).headline && (
+        <div className="brm-bp-head">
+          <b>{room.brief.headline}</b>
+          {room.brief.summary && <span>{room.brief.summary}</span>}
+        </div>
+      )}
       <p className="brm-hint">One line per step. Click a line to work on it; Claude reads each as it lands.</p>
       <ol className="brm-bp">
         {opening.steps.map((st) => (
@@ -231,7 +291,8 @@ export function WallBrief({ room, busy, run, api, host }) {
   return (
     <section className="brm-stage brm-wallbrief" aria-label="The build brief">
       <span className="brm-eyebrow"><b>The build brief</b>{room.opening && room.opening.phase === 'opening' ? ' · framing the build' : ''}</span>
-      <h2 className="brm-q">{room.title || 'What we are building'}</h2>
+      <h2 className="brm-q">{b.headline || room.title || 'What we are building'}</h2>
+      {b.summary && <p className="brm-detail brm-wb-summary">{b.summary}</p>}
       {rows.length ? (
         <dl className="brm-wb-lines">
           {rows.map(([k, v]) => (

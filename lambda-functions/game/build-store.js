@@ -95,7 +95,33 @@ function briefView(state) {
   for (const k of BRIEF_LINES) lines[k] = (b.lines && b.lines[k]) || '';
   const steps = {};
   for (const k of OPENING_KEYS) if (b.steps && ['done', 'skipped'].includes(b.steps[k])) steps[k] = b.steps[k];
-  return { forWhom: b.forWhom || '', keep: items(b.keep), later: items(b.later), lines, steps };
+  return { forWhom: b.forWhom || '', keep: items(b.keep), later: items(b.later), lines, steps, headline: b.headline || '', summary: b.summary || '' };
+}
+
+/**
+ * CLAUDE'S DRAFT OF THE BRIEF (owner, 2026-10-06: "build the Claude brief
+ * draft too"). Once the room has said who it is for, the problem and what
+ * good looks like, Claude drafts a headline, a short summary and, if it
+ * helps, plainer wording for any line. The host edits it, then uses it or
+ * dismisses it. Kept on BUILD#STATE (BriefDraft, sealed with it).
+ */
+const DRAFT_LIMITS = Object.freeze({ headline: 120, summary: 600 });
+function normalizeDraft(body) {
+  const b = body || {};
+  const headline = cleanText(b.headline, DRAFT_LIMITS.headline);
+  if (!headline) return { error: 'The draft needs a headline: one line, the promise of the thing, in the room\'s words.' };
+  const lines = {};
+  if (b.lines && typeof b.lines === 'object') {
+    for (const k of BRIEF_LINES.concat(['forWhom'])) {
+      const v = cleanText(b.lines[k], LIMITS.listItem);
+      if (v) lines[k] = v;
+    }
+  }
+  return { value: { headline, summary: cleanText(b.summary, DRAFT_LIMITS.summary), lines } };
+}
+function draftView(state) {
+  const d = state && state.BriefDraft;
+  return d && d.headline ? { headline: d.headline, summary: d.summary || '', lines: d.lines || {}, at: d.at || null } : null;
 }
 
 /**
@@ -135,7 +161,9 @@ function openingView(state, room) {
     status: asking.has(st.key) ? 'asking' : brief.steps[st.key] || 'next',
   }));
   const current = steps.find((st) => st.status === 'asking') || steps.find((st) => st.status === 'next') || null;
-  return { phase, steps, current: current ? current.key : null, kinds: OPENING_KINDS };
+  // Enough for Claude to draft the one page: who, the problem, and good.
+  const readyForDraft = Boolean(brief.forWhom && brief.lines.problem && brief.lines.good);
+  return { phase, steps, current: current ? current.key : null, kinds: OPENING_KINDS, readyForDraft, drafted: Boolean(brief.headline) };
 }
 /** The brief with one item added to Keep in mind or Later (newest last; capped). */
 function briefWith(state, as, item) {
@@ -162,14 +190,18 @@ function normalizeBrief(state, body) {
     later: list(b.later, cur.later),
     lines,
     steps: cur.steps,
+    headline: b.headline !== undefined ? cleanText(b.headline, DRAFT_LIMITS.headline) : cur.headline,
+    summary: b.summary !== undefined ? cleanText(b.summary, DRAFT_LIMITS.summary) : cur.summary,
   };
 }
 /** The brief as Claude reads it, and as the plugin writes it to .engage/brief.md. */
 function briefText(brief) {
   const b = brief || { forWhom: '', keep: [], later: [] };
   const l = b.lines || {};
-  if (!b.forWhom && !b.keep.length && !b.later.length && !BRIEF_LINES.some((k) => l[k])) return '';
+  if (!b.forWhom && !b.keep.length && !b.later.length && !b.headline && !BRIEF_LINES.some((k) => l[k])) return '';
   const lines = ['THE ROOM BRIEF (the room\'s standing direction; apply it to everything you build)'];
+  if (b.headline) lines.push(`Headline: ${b.headline}`);
+  if (b.summary) lines.push(`In short: ${b.summary}`);
   if (l.kind) lines.push(`Making: ${l.kind}`);
   if (b.forWhom) lines.push(`Who it is for: ${b.forWhom}`);
   if (l.problem) lines.push(`The problem today: ${l.problem}`);
@@ -827,6 +859,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // Claude's copy has no Later list: it hears an item only when the host sends it.
     brief: isAgent ? { ...briefView(room.state), later: [] } : briefView(room.state),
     opening: openingView(room.state, room),
+    briefDraft: isAgent ? null : draftView(room.state),
     images: room.images.map(imageView),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
@@ -1021,6 +1054,6 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
+  WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

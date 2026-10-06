@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -371,6 +371,9 @@ function renderState(st) {
     const steps = st.opening.steps || [];
     lines.push('', 'PHASE: OPENING. The room is framing the build with the host. Do not write product code yet: prepare (the project folder and git), read the brief as it fills, and propose a probing question when an answer is thin (ask_room_for_ideas with forStep). The host presses Start building; you then get the whole brief as a direction.',
       'Steps: ' + steps.map((x) => `${x.key} (${x.status})`).join(', '));
+    if (st.opening.readyForDraft && !st.opening.drafted) {
+      lines.push('The room has said who it is for, the problem and what good looks like: draft the one-page brief now with draft_brief (a headline and a short summary, in the room\'s words).');
+    }
   }
   if (briefText(st.brief)) lines.push('', briefText(st.brief));
   return lines.join('\n');
@@ -646,6 +649,24 @@ const TOOLS = [
         askId: str('Optional: the ask whose decision this commit builds (e.g. "007").', { maxLength: 10 }),
       },
       required: ['message'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'draft_brief',
+    description: 'During the opening, once the room has said who it is for, the problem and what good looks like (room_status says when): draft the one-page build brief for the host to look over. A headline (the promise of the thing, in the room\'s words), a 2-3 sentence summary, and optionally plainer wording for any brief line. Use only what the room said; invent nothing. The host edits it, then uses it or dismisses it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        headline: str('One line: the promise of the thing, e.g. "Connect four, for two friends on one laptop".', { minLength: 1, maxLength: 120 }),
+        summary: str('Two or three plain sentences: who it is for, the problem, what good looks like.', { maxLength: 600 }),
+        lines: {
+          type: 'object',
+          description: 'Optional: plainer wording for brief lines, by step (forWhom, problem, good, proof, firstBuild, tools, look, kind). Leave out any line that already reads well.',
+          additionalProperties: { type: 'string', maxLength: 300 },
+        },
+      },
+      required: ['headline'],
       additionalProperties: false,
     },
   },
@@ -1213,6 +1234,12 @@ const HANDLERS = {
     return ok(`${r.initialized ? 'Made this folder a git repository, then committed' : 'Committed'} ${r.files} changed file${r.files === 1 ? '' : 's'} as ${r.hash}: "${subject}"${askId ? `, with ask ${Number(askId)} in DECISIONS.md` : ''}. The room's timeline shows it. Never pushed.`, res.inbox);
   },
 
+  async draft_brief(args, ctx) {
+    const lines = args.lines && typeof args.lines === 'object' ? args.lines : undefined;
+    const res = await api('POST', 'brief/draft', clean({ headline: reqStr(args, 'headline'), summary: optStr(args, 'summary'), lines }), ctx.signal);
+    return ok(`Your draft of the build brief is on the host's screen: "${s((res.draft || {}).headline)}". The host edits it, then uses it or dismisses it. Keep waiting with wait_for_direction.`, res.inbox);
+  },
+
   /** The old name for commit, kept so earlier prompts still work. */
   async checkpoint(args, ctx) {
     return HANDLERS.commit(args, ctx);
@@ -1755,7 +1782,7 @@ function promptText(name, args) {
 const INSTRUCTIONS = `Engage connects you to a live room of people through the host's Build Room session. The host's laptop is usually on a projector, the room follows along on their phones, and you are building something real with them.
 
 How to collaborate:
-- THE OPENING: a new room starts by framing the build (room_status says "PHASE: OPENING"). Then you prepare and listen: set up the project folder, write no product code, read the brief as each step lands, and when an answer is thin propose ONE probing question with ask_room_for_ideas and forStep (the step it probes; it lands on the host's screen for review). Wait with wait_for_direction. When the host presses Start building you get the whole brief as a direction: then plan, post the plan, and build.
+- THE OPENING: a new room starts by framing the build (room_status says "PHASE: OPENING"). Then you prepare and listen: set up the project folder, write no product code, read the brief as each step lands, and when an answer is thin propose ONE probing question with ask_room_for_ideas and forStep (the step it probes; it lands on the host's screen for review). When room_status says the room has said enough, draft the one-page brief with draft_brief (a headline and a short summary, in the room's words; invent nothing). Wait with wait_for_direction. When the host presses Start building you get the whole brief as a direction: then plan, post the plan, and build.
 - NEVER ask a question in this terminal while connected (no interactive question menus, no "which did you mean?" prompts): the host is running the room from the projector and does not see this terminal, so the session stalls with the room waiting. Ask through Engage instead. When a decision is unclear (a typo, two readings), call ask_room_to_choose with the readings as options and a one-line context; it lands on the host's screen, and the host can answer for the room in one click. When the right reading is obvious, take it, say so in a post_update ("Reading 'sprint' as 'sprite': pixel-art sprites"), and keep building.
 - Ask the room only at real decision points: direction, look and feel, naming, priorities, "which of these?". Do the routine work yourself. A few good asks per session beat many small ones.
 - Keep every question short and plain: it is read from the back of a room on a projector. Put background in "context", not in the question.
@@ -2317,6 +2344,10 @@ look and feel. Each decided step fills one line of the brief.
 - When an answer is thin, propose ONE probing question with ask_room_for_ideas and forStep
   (for example, forStep "problem": "What do they do instead today?"). It lands on the host's
   screen for review.
+- Once the room has said who it is for, the problem and what good looks like (room_status
+  says so), draft the one-page brief with draft_brief: a headline (the promise of the thing)
+  and two or three sentences, in the room's words. Invent nothing. The host edits it, then
+  uses it or dismisses it.
 - Then wait_for_direction. When the host presses Start building, you get the whole brief as
   Do now: plan 3 to 6 steps, post the plan, and build.
 

@@ -1746,3 +1746,46 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
     expect(within(wall).getByRole('button', { name: 'Start building' })).toBeInTheDocument();
   });
 });
+
+describe('Claude drafts the brief; the host edits it and uses it (owner, 2026-10-06)', () => {
+  const READY = { forWhom: 'Two friends', lines: { kind: 'A game', problem: 'Board games take setup', good: 'Play in one tap' }, steps: { kind: 'done', forWhom: 'done', problem: 'done', good: 'done' } };
+  const room = (st = {}) => hostState({ st: { Phase: undefined, Brief: READY, ...st } });
+
+  test('once who, the problem and good are known, the host can ask Claude for a draft', async () => {
+    await openRoom(room());
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Claude to draft the brief' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body.text).toMatch(/^Draft the one-page build brief now with draft_brief/);
+  });
+
+  test('the draft: edit the headline, untick a line, use it', async () => {
+    await openRoom(room({ BriefDraft: { headline: 'Connect four for two friends', summary: 'A quick game, no accounts.', lines: { problem: 'Board games take setup; online games want accounts.', good: 'Play in one tap, on any laptop.' }, at: ago(5) } }));
+    const draft = screen.getByRole('region', { name: "Claude's draft of the brief" });
+    expect(draft.textContent).toMatch('(was: Board games take setup)');
+    fireEvent.change(within(draft).getByLabelText('Headline'), { target: { value: 'Connect four, for two friends on one laptop' } });
+    fireEvent.click(within(draft).getByRole('checkbox', { name: /Good looks like/ }));
+    fireEvent.click(within(draft).getByRole('button', { name: 'Use this draft' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/draft/accept`));
+    expect(lastPost().body).toEqual({
+      headline: 'Connect four, for two friends on one laptop', summary: 'A quick game, no accounts.',
+      lines: { problem: 'Board games take setup; online games want accounts.' },
+    });
+    expect(screen.queryByRole('button', { name: 'Ask Claude to draft the brief' })).toBeNull();
+  });
+
+  test('Dismiss throws the draft away', async () => {
+    await openRoom(room({ BriefDraft: { headline: 'A draft', summary: '', lines: {}, at: ago(5) } }));
+    fireEvent.click(within(screen.getByRole('region', { name: "Claude's draft of the brief" })).getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/draft/dismiss`));
+  });
+
+  test('a used headline leads the wall and the path', async () => {
+    await openRoom(room({ Brief: { ...READY, headline: 'Connect four, for two friends on one laptop', summary: 'A quick game, no accounts.' } }));
+    expect(screen.getByRole('region', { name: 'The opening: the build brief' }).textContent).toMatch('Connect four, for two friends on one laptopA quick game, no accounts.');
+    expect(screen.getByRole('button', { name: 'Ask Claude to redraft the brief' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: '2' });
+    const wall = screen.getByRole('region', { name: 'The build brief' });
+    expect(within(wall).getByRole('heading', { name: 'Connect four, for two friends on one laptop' })).toBeInTheDocument();
+    expect(wall.textContent).toMatch('A quick game, no accounts.');
+  });
+});
