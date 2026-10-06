@@ -778,7 +778,9 @@
 }
 .brm .brm-qtick { width: 18px; height: 18px; accent-color: var(--primary); flex: none; }
 .brm .brm-qidea.is-ticked { outline: 2px solid var(--primary); outline-offset: -2px; }
-.brm .brm-idea-acts .brm-more-panel { min-width: 260px; }
+/* Menus on an idea open under their own button, rightward, so they stay in the
+   column (a menu opening leftward from a left-hand button ran off its edge). */
+.brm .brm-idea-acts .brm-more-panel { min-width: 260px; left: 0; right: auto; }
 /* C3b: a waiting vote shows a tile per option, its mockup as Claude attaches it. */
 .brm .brm-mocktiles { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .brm .brm-mocktiles li { display: grid; gap: 6px; align-content: start; min-width: 0; }
@@ -791,10 +793,13 @@
 .brm .brm-mocktile-t { font-size: var(--brm-t-label); overflow-wrap: anywhere; }
 
 /* ---- Send to Claude, in four kinds (step 7c, C14) ----------------------- */
-.brm .brm-split { display: inline-flex; align-items: stretch; }
+/* The menu hangs from the whole split button, opening rightward from its left
+   edge (owner, 2026-10-06: it opened off screen to the left). */
+.brm .brm-split { display: inline-flex; align-items: stretch; position: relative; }
+.brm .brm-split > .brm-more { position: static; }
 .brm .brm-split > .brm-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .brm .brm-split .brm-split-caret { border-top-left-radius: 0; border-bottom-left-radius: 0; padding-left: 6px; padding-right: 6px; margin-left: 1px; }
-.brm .brm-split .brm-more-panel { min-width: 300px; }
+.brm .brm-split .brm-more-panel { min-width: 300px; left: 0; right: auto; }
 .brm .brm-kindopt { display: grid; gap: 2px; text-align: left; white-space: normal; }
 .brm .brm-kindopt span { color: var(--muted); font-weight: 400; }
 .brm .brm-seg--kinds { flex-wrap: wrap; margin-bottom: 4px; }

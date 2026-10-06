@@ -891,7 +891,10 @@ const DECISION_METHODS = Object.freeze(['vote', 'wheel', 'host', 'spoken']);
 const ratingAnswer = (avg) => (avg === null || avg === undefined || avg === '' ? '' : `${avg} out of 5 (5 is great, 1 needs work)`);
 const RATING_MEANING = '(5 is great, 1 needs work)';
 /** A rating decision always says what its numbers mean, even after the host rewrites it. */
-const withRatingMeaning = (kind, direction) => (kind !== 'rating' || !direction || /needs work/i.test(direction) ? direction : `${direction} ${RATING_MEANING}`);
+// Only when the sentence carries a score: "add dark mode" is a direction, not a
+// rating, and must not grow a bracket about a scale (owner, 2026-10-06).
+const carriesScore = (text) => /\b[1-5](\.\d+)?\b|out of 5/i.test(text);
+const withRatingMeaning = (kind, direction) => (kind !== 'rating' || !direction || /needs work/i.test(direction) || !carriesScore(direction) ? direction : `${direction} ${RATING_MEANING}`);
 
 function defaultDirection(ask, room) {
   const landed = wheelLanded(ask);

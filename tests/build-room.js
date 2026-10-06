@@ -1033,6 +1033,10 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     seed();
     const c = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How clear is it?', claudeGets: 'keep' });
     await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'decide', direction: 'How clear is it: 2 out of 5', as: 'do-now' });
+    // Words without a score are a direction, and get no bracket about the scale.
+    const c2 = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is the colour?' });
+    const d2 = await hostCall('POST', `asks/${c2.body.ask.askId}`, { action: 'decide', direction: 'add dark mode' });
+    assert.strictEqual(d2.body.ask.decision.direction, 'add dark mode');
     assert.strictEqual((await agentCall('GET', 'inbox')).body.inbox[0].as, 'do-now');
     assert.deepStrictEqual((await state()).brief.keep, []);
   });
