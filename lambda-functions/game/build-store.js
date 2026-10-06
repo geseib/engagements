@@ -440,6 +440,7 @@ function askView(ask, room, audience, me) {
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
       sentToAgent: ask.Decision.sendToAgent !== false,
       spoken: Boolean(ask.Decision.spoken),
+      method: ask.Decision.method || (ask.Decision.spoken ? 'spoken' : 'vote'),
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -685,8 +686,9 @@ function pendingForBuilder(room, name) {
 /** The words Claude receives for one entry. */
 function inboxText(entry) {
   if (entry.Kind === 'decision') {
-    return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '')
-      + (entry.Spoken ? '\n\nThe room answered out loud; the host recorded it. There are no phone votes behind it.' : '');
+    // The question and the answer, and the host's note when they added one.
+    // How it was decided stays on the decision (owner, 2026-10-06).
+    return entry.Text + (entry.Detail ? `\n\nAlso from the room: ${entry.Detail}` : '');
   }
   if (entry.Kind === 'idea') return `An idea from the room: ${entry.Text}`;
   if (entry.Kind === 'verbal') return `The room said: ${entry.Text}`;
@@ -761,17 +763,27 @@ function wheelLanded(ask) {
   return last ? (w.Slices || []).find((x) => x.id === last.Result) || null : null;
 }
 
+/**
+ * WHAT CLAUDE IS TOLD IS THE QUESTION AND THE ANSWER (owner, 2026-10-06:
+ * "Claude only needs question/answer: What should the background color be:
+ * blue"). How the room got there (a vote, the wheel, the host's pick, said out
+ * loud) is recorded on the decision (`method`) and never sent to Claude.
+ */
+const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
+const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
+const DECISION_METHODS = Object.freeze(['vote', 'wheel', 'host', 'spoken']);
+
 function defaultDirection(ask, room) {
   const landed = wheelLanded(ask);
-  if (landed) return `The wheel picked ${landed.label ? `${landed.label}: ` : ''}${landed.text}`;
+  if (landed) return questionAnswer(ask.Prompt, landed.text);
   const t = tally(ask, room);
   if (ask.Kind === 'choice') {
     const top = [...t.options].sort((a, b) => b.count - a.count)[0];
-    return top ? `The room chose ${top.label}: ${top.title}` : '';
+    return top && top.count ? questionAnswer(ask.Prompt, top.title) : '';
   }
-  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : `The room rated this ${t.rating.avg} out of 5`;
+  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : questionAnswer(ask.Prompt, `${t.rating.avg} out of 5`);
   const top = t.ranked[0];
-  return top ? `The room's top idea: ${top.text}` : '';
+  return top ? questionAnswer(ask.Prompt, top.text) : '';
 }
 
 module.exports = {
@@ -785,6 +797,6 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView,
+  WALL_COMMENT_MS, wallCommentView, questionAnswer, DECISION_METHODS,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

@@ -746,3 +746,10 @@
 @keyframes brm-wall-in { 0% { opacity: 0; transform: translate(-50%, 16px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
 @media (prefers-reduced-motion: reduce) { .brm .brm-wallcomment { animation: none; } }
 .brm .brm-onwall { margin: 0; }
+
+/* "Choose this instead" at results; the one going to Claude says so. */
+.brm .brm-pick { justify-self: start; align-self: start; margin-top: 4px; }
+.brm span.brm-pick.is-on {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 4px 10px; border-radius: 999px;
+  font-size: var(--brm-t-label); font-weight: 700; color: var(--brm-success-text); background: var(--brm-tint-green);
+}

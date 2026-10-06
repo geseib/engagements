@@ -3,6 +3,7 @@
  */
 import {
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
+  decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod,
 } from '../buildroom/buildScreens';
 
 describe('the screens', () => {
@@ -128,5 +129,40 @@ describe('the wheel instead of a vote (owner, 2026-10-06)', () => {
     expect(stageModel(room, { askId: '1', kind: 'suggest', status: 'live', answerCount: 2 }).secondary).toEqual({ action: 'wheel', label: 'Spin the wheel instead' });
     expect(stageModel(room, { askId: '1', kind: 'suggest', status: 'voting', voteCount: 3 }).secondary.action).toBe('wheel');
     expect(stageModel(room, { askId: '1', kind: 'rating', status: 'live', answerCount: 3 }).secondary).toBeUndefined();
+  });
+});
+
+describe('deciding: the winner by default, any other on a click (owner, 2026-10-06)', () => {
+  const choose = (counts, wheel) => ({
+    kind: 'choice', status: 'results', prompt: 'What should we build?',
+    options: [{ label: 'A', title: 'Bold banner' }, { label: 'B', title: 'Calm photo' }, { label: 'C', title: 'Dark' }],
+    results: { options: counts.map((count, i) => ({ label: 'ABC'[i], count })) },
+    ...(wheel ? { wheel } : {}),
+  });
+  test('the single top answer is the default; a tie has none; the wheel\'s landing wins', () => {
+    expect(winnerOf(choose([1, 3, 0]))).toBe('B');
+    expect(winnerOf(choose([2, 2, 0]))).toBeNull();
+    expect(winnerOf(choose([0, 0, 0]))).toBeNull();
+    expect(winnerOf(choose([2, 2, 0], { landed: 'A' }))).toBe('A');
+  });
+  test('the sentence for each pick is the question and the answer (owner, 2026-10-06)', () => {
+    expect(directionFor(choose([1, 3, 0]), 'B')).toBe('What should we build: Calm photo');
+    expect(directionFor(choose([1, 3, 0]), 'C')).toBe('What should we build: Dark');
+    expect(directionFor(choose([2, 2, 0], { landed: 'A' }), 'A')).toBe('What should we build: Bold banner');
+    const ideas = { kind: 'suggest', prompt: 'What should the background color be?', results: { ranked: [{ respId: 'r1', text: 'blue', votes: 4 }, { respId: 'r2', text: 'green', votes: 1 }] } };
+    expect(decisionChoices(ideas).map((c) => c.id)).toEqual(['r1', 'r2']);
+    expect(directionFor(ideas, 'r1')).toBe('What should the background color be: blue');
+    expect(directionFor(ideas, 'r2')).toBe('What should the background color be: green');
+    expect(questionAnswer('Which?', 'B')).toBe('Which: B');
+  });
+  test('how it was decided: the vote, the wheel, the host, or said out loud', () => {
+    expect(decisionMethod(choose([1, 3, 0]), ['B'], false)).toBe('vote');
+    expect(decisionMethod(choose([1, 3, 0]), ['C'], false)).toBe('host');
+    expect(decisionMethod(choose([2, 2, 0], { landed: 'A' }), ['A'], false)).toBe('wheel');
+    expect(decisionMethod(choose([0, 0, 0]), ['A'], true)).toBe('spoken');
+  });
+  test('on the Stage the winning vote is the button', () => {
+    expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]) }).primary).toEqual({ action: 'decide', label: 'Go with B' });
+    expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([2, 2, 0]) }).primary.label).toBe('Decide on Host');
   });
 });

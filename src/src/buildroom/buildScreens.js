@@ -122,7 +122,11 @@ export function stageModel(room, current) {
         secondary: { action: 'decide', label: 'Decide on Host' },
       };
     }
-    return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'decide', label: 'Decide on Host' } };
+    // The winning vote is the button (owner, 2026-10-06); a tie decides on the Host.
+    const win = winnerOf(current);
+    const pick = win ? decisionChoices(current).find((c) => c.id === win) : null;
+    const label = pick ? (pick.label ? `Go with ${pick.label}` : 'Go with the top idea') : 'Decide on Host';
+    return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'decide', label } };
   }
   // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06): wherever the room could
   // vote between options, the host may let the wheel pick instead.
@@ -143,3 +147,66 @@ export function stageModel(room, current) {
     primary: { action: 'close', label: 'Close and show results' }, ...(current.kind === 'choice' ? { secondary: instead } : {}),
   };
 }
+
+// ── Deciding (owner, 2026-10-06) ────────────────────────────────────────────
+//
+// "When the host decides, by default the winning vote is the button, and it
+// takes you to the direction for Claude with the text already there; or you
+// click another submission ('choose this idea instead') and the alternate
+// text is in the box; and the host can change their mind and reclick one of
+// the choices, and the text is swapped." These are the shared rules.
+
+/** The options a decision can pick between: Choose options, or Ideas suggestions. */
+export function decisionChoices(ask) {
+  const r = (ask && ask.results) || {};
+  if (ask && ask.kind === 'choice') {
+    return (ask.options || []).map((o) => {
+      const res = (r.options || []).find((x) => x.label === o.label) || { count: 0 };
+      return { id: o.label, label: o.label, text: o.title, count: res.count || 0 };
+    });
+  }
+  if (ask && ask.kind === 'suggest') {
+    return (r.ranked || []).map((x) => ({ id: x.respId, label: '', text: x.text, count: x.votes || 0 }));
+  }
+  return [];
+}
+
+/**
+ * The default pick: where the wheel landed, else the single top answer.
+ * A tie (two or more sharing the top count) has no default: the host spins,
+ * revotes, or picks one.
+ */
+export function winnerOf(ask) {
+  const w = ask && ask.wheel;
+  if (w && w.landed) return w.landed;
+  const choices = decisionChoices(ask);
+  const top = Math.max(0, ...choices.map((c) => c.count));
+  if (!top) return null;
+  const leaders = choices.filter((c) => c.count === top);
+  return leaders.length === 1 ? leaders[0].id : null;
+}
+
+/**
+ * WHAT CLAUDE IS TOLD IS THE QUESTION AND THE ANSWER (owner, 2026-10-06):
+ * "What should the background color be: blue". The same on the server
+ * (build-store.js questionAnswer).
+ */
+export const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
+export const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
+
+/** The sentence Claude gets for a pick, however it was picked. */
+export function directionFor(ask, id) {
+  const pick = decisionChoices(ask).find((c) => c.id === id);
+  return pick ? questionAnswer(ask.prompt, pick.text) : '';
+}
+
+/** How a decision was made, for the record; never sent to Claude. */
+export function decisionMethod(ask, chosen, spoken) {
+  if (spoken) return 'spoken';
+  const w = ask && ask.wheel;
+  if (w && w.landed && chosen.length === 1 && chosen[0] === w.landed) return 'wheel';
+  const win = winnerOf(ask);
+  if (!chosen.length || (win && chosen.length === 1 && chosen[0] === win)) return 'vote';
+  return 'host';
+}
+export const METHOD_WORDS = Object.freeze({ vote: 'by vote', wheel: 'by the wheel', host: "the host's pick", spoken: 'said out loud' });

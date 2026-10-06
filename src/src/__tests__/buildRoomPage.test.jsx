@@ -186,18 +186,18 @@ describe('each ask status', () => {
     expect(within(screen.getByTestId('brm-previews-missing')).queryByRole('button')).toBeNull();
   });
 
-  test('proposed: answer for the room — pick what they said, Claude gets it as said out loud', async () => {
+  test('proposed: answer for the room — pick what they said; Claude gets the question and the answer', async () => {
     await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));
     fireEvent.click(screen.getByRole('button', { name: 'Answer for the room' }));
     const panel = screen.getByRole('region', { name: 'Answer for the room' });
     const send = within(panel).getByRole('button', { name: /Send to Claude/ });
     expect(send).toBeDisabled(); // nothing picked, nothing written yet
     fireEvent.click(within(panel).getByRole('button', { name: 'B · Calm photo + calendar' }));
-    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('The room chose B: Calm photo + calendar (said out loud).');
+    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('Which header should volunteers see first: Calm photo + calendar');
     fireEvent.click(send);
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`));
     expect(lastPost().body).toEqual({
-      action: 'decide', direction: 'The room chose B: Calm photo + calendar (said out loud).', chosen: ['B'], note: '', sendToAgent: true, spoken: true,
+      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], note: '', sendToAgent: true, spoken: true, method: 'spoken',
     });
   });
 
@@ -209,7 +209,7 @@ describe('each ask status', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Answer for the room' }));
     const panel = screen.getByRole('region', { name: 'Answer for the room' });
     fireEvent.click(within(panel).getByRole('button', { name: '4' }));
-    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('The room rated this 4 out of 5 (said out loud).');
+    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('How close is this: 4 out of 5');
     // Typing in the sentence stops it following the picks.
     fireEvent.change(within(panel).getByLabelText('Direction for Claude'), { target: { value: 'Four out of five: keep going, bigger dates.' } });
     fireEvent.click(within(panel).getByRole('button', { name: '5 · There' }));
@@ -278,16 +278,16 @@ describe('each ask status', () => {
     expect(within(reasons).getByText('Dates first')).toBeInTheDocument();
     expect(within(reasons).getByText('Sam')).toBeInTheDocument();
     const box = screen.getByRole('textbox', { name: 'Direction for Claude' });
-    expect(box.value).toBe('Go with B: Calm photo + calendar.');
+    expect(box.value).toBe('Which header should volunteers see first: Calm photo + calendar');
 
     fireEvent.click(screen.getByRole('button', { name: /Big button/ }));
-    expect(box.value).toBe('Go with B: Calm photo + calendar. Big button');
+    expect(box.value).toBe('Which header should volunteers see first: Calm photo + calendar. Big button');
 
     fireEvent.click(within(screen.getByRole('region', { name: 'Direction for Claude' })).getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide' }));
     expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`);
     expect(lastPost().body).toEqual({
-      action: 'decide', direction: 'Go with B: Calm photo + calendar. Big button', chosen: ['B'], note: '', sendToAgent: true,
+      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar. Big button', chosen: ['B'], note: '', sendToAgent: true, method: 'vote',
     });
   });
 
@@ -309,7 +309,7 @@ describe('each ask status', () => {
     }));
     expect(screen.getByText('3.5')).toBeInTheDocument();
     expect(within(screen.getByText('Reasons').closest('div')).getByText('Warmer colours please')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('The room rated this 3.5 out of 5.');
+    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How close is this: 3.5 out of 5');
   });
 
   test('between asks: Claude is building, with the latest decision and the ticker', async () => {
@@ -868,11 +868,11 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
 
   test('History: the room\'s timeline and decisions, no host note, nothing to edit', async () => {
     await openRoom(hostState({
-      asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'Go with B: Calm photo + calendar.' }, DecidedAt: ago(60) }],
+      asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'Which header should volunteers see first: Calm photo + calendar' }, DecidedAt: ago(60) }],
       logs: [{ Kind: 'note', Text: 'Ask Dee about parking later', By: 'host' }, { Kind: 'progress', Text: 'Header B in place', By: 'agent' }],
     }));
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
-    expect(screen.getByText('Go with B: Calm photo + calendar.')).toBeInTheDocument();
+    expect(screen.getByText('Which header should volunteers see first: Calm photo + calendar')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Timeline' })).getByText('Header B in place')).toBeInTheDocument();
     expect(screen.queryByText('Ask Dee about parking later')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull();
@@ -934,11 +934,11 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     expect(lastPost().body).toEqual({ action: 'close' });
   });
 
-  test('at results the move is back to the Host to decide; HOST at the dock\'s edge goes back too', async () => {
+  test('at results the winning vote is the button, back to the Host to decide; HOST at the dock\'s edge goes back too', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(screen.getByRole('button', { name: 'Decide on Host' }));
-    expect(screen.getByRole('region', { name: /Direction for Claude/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Go with B' }));
+    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Calm photo + calendar');
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(screen.getByRole('button', { name: 'Host screen' }));
     expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
@@ -1098,7 +1098,7 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
       asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
       answers: TIE,
     }));
-    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('The wheel picked B: Calm photo + calendar.');
+    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Calm photo + calendar');
     expect(screen.getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
   });
 
@@ -1167,5 +1167,63 @@ describe('the wheel whenever the room could vote (owner, 2026-10-06)', () => {
     await waitFor(() => expect(instead).not.toBeDisabled());
     fireEvent.click(instead);
     await waitFor(() => expect(calls.filter((c) => c.method === 'POST' && c.body && c.body.action === 'wheel')).toHaveLength(2));
+  });
+});
+
+describe('deciding: the winner by default, or choose another (owner, 2026-10-06)', () => {
+  const results = () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS });
+
+  test('on the Host the winner is going to Claude; choosing another swaps the sentence, and back again', async () => {
+    await openRoom(results());
+    const box = () => screen.getByRole('textbox', { name: 'Direction for Claude' });
+    expect(box().value).toBe('Which header should volunteers see first: Calm photo + calendar');
+    const now = screen.getByRole('region', { name: 'Current ask' });
+    expect(within(now).getByText('Going to Claude')).toBeInTheDocument();
+    fireEvent.click(within(now).getByRole('button', { name: 'Choose this instead' }));
+    expect(box().value).toBe('Which header should volunteers see first: Bold banner');
+    // Changed their mind: the winner offers itself again.
+    fireEvent.click(within(now).getByRole('button', { name: 'Choose this instead' }));
+    expect(box().value).toBe('Which header should volunteers see first: Calm photo + calendar');
+    fireEvent.click(within(screen.getByRole('region', { name: 'Direction for Claude' })).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], method: 'vote' }));
+  });
+
+  test('on the Stage, choosing another goes to the Host with its sentence in the box', async () => {
+    await openRoom(results());
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose this instead' }));
+    expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Bold banner');
+  });
+
+  test('an Ideas ask: the top idea by default, any other idea on a click', async () => {
+    await openRoom(hostState({
+      st: { CurrentAskId: '004' },
+      asks: [{ ...IDEAS_ASK, Status: 'results' }],
+      resps: IDEAS_RESPS,
+      votes: [{ AskId: '004', PlayerName: 'Sam', RespIds: ['r2'] }],
+    }));
+    const box = () => screen.getByRole('textbox', { name: 'Direction for Claude' });
+    expect(box().value).toBe('What would stop someone signing up: Not seeing open shifts');
+    fireEvent.click(screen.getByRole('button', { name: 'Choose this idea instead' }));
+    expect(box().value).toBe('What would stop someone signing up: Having to make an account');
+  });
+});
+
+describe('the decision records how it was made; Claude gets the question and the answer (owner, 2026-10-06)', () => {
+  test('choosing another option records the host\'s pick', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Current ask' })).getByRole('button', { name: 'Choose this instead' }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Direction for Claude' })).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ direction: 'Which header should volunteers see first: Bold banner', chosen: ['A'], method: 'host' }));
+  });
+
+  test('History shows how each decision was made', async () => {
+    await openRoom(hostState({ asks: [
+      { ...CHOICE, Status: 'decided', DecidedAt: ago(60), Decision: { direction: 'Which header should volunteers see first: Bold banner', chosen: ['A'], method: 'wheel' } },
+    ] }));
+    fireEvent.keyDown(window, { key: '4' });
+    const decided = screen.getByRole('heading', { name: 'Decided so far' }).closest('section');
+    expect(decided.textContent).toMatch('Which header should volunteers see first: Bold banner · by the wheel');
   });
 });

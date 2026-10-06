@@ -304,14 +304,23 @@ async function askAction(ctx, role, askId, body) {
     if (action === 'decide') {
       const direction = S.cleanText(b.direction, S.LIMITS.direction) || S.defaultDirection(ask, room);
       if (!direction) return fail(400, 'Write the direction for Claude (nobody has answered yet)');
-      const chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
+      let chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
       const note = S.cleanText(b.note, S.LIMITS.note);
       const sendToAgent = b.sendToAgent !== false;
       // Answered FOR the room: people said it out loud and the host recorded
       // it. Claude and the report are told, so nobody reads "0 answered" as
       // the room having no view.
       const spoken = b.spoken === true;
-      next.Decision = { direction, chosen, note, sendToAgent, ...(spoken ? { spoken: true } : {}) };
+      // HOW IT WAS DECIDED, kept for the record and the History, never sent
+      // to Claude (owner, 2026-10-06): the room's vote, the wheel, the host's
+      // own pick, or what the room said out loud.
+      const landed = S.wheelLanded(ask);
+      // No words and no pick, after a spin: the wheel's slice is the choice.
+      if (!chosen.length && landed && !S.cleanText(b.direction, S.LIMITS.direction)) chosen = [landed.id];
+      const method = spoken ? 'spoken'
+        : S.DECISION_METHODS.includes(b.method) ? b.method
+          : landed && chosen.length === 1 && chosen[0] === landed.id ? 'wheel' : 'vote';
+      next.Decision = { direction, chosen, note, sendToAgent, method, ...(spoken ? { spoken: true } : {}) };
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).

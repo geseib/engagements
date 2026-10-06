@@ -41,7 +41,8 @@ import {
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
-  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
+  questionAnswer, decisionMethod, METHOD_WORDS,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -178,20 +179,21 @@ const entryTone = (entry) => {
 
 /** The direction the decide panel starts with: the room's top answer, as a sentence. */
 export function defaultDirection(ask) {
+  // The question and the answer (owner, 2026-10-06).
   const w = ask && ask.wheel;
   const landed = w && w.landed ? (w.slices || []).find((x) => x.id === w.landed) : null;
-  if (landed) return `The wheel picked ${landed.label ? `${landed.label}: ` : ''}${landed.text}.`;
+  if (landed) return questionAnswer(ask.prompt, landed.text);
   const r = (ask && ask.results) || {};
   if (ask.kind === 'choice') {
     const top = [...(r.options || [])].sort((a, b) => b.count - a.count)[0];
-    return top && top.count ? `Go with ${top.label}: ${top.title}.` : '';
+    return top && top.count ? questionAnswer(ask.prompt, top.title) : '';
   }
   if (ask.kind === 'rating') {
     return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
-      ? `The room rated this ${r.rating.avg} out of 5.` : '';
+      ? questionAnswer(ask.prompt, `${r.rating.avg} out of 5`) : '';
   }
   const top = (r.ranked || [])[0];
-  return top ? `The room's top idea: ${top.text}` : '';
+  return top ? questionAnswer(ask.prompt, top.text) : '';
 }
 
 /** What the host can fold into the direction with one click. */
@@ -360,6 +362,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     setScreenState(next);
   }, []);
   const [view, setView] = useState(initialView);
+  // WHICH ANSWER GOES TO CLAUDE (owner, 2026-10-06): the winner unless the
+  // host picks another ("choose this instead"), on the Stage or the Host.
+  const [pick, setPick] = useState(null); // {askId, id}
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
@@ -570,6 +575,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           api={api}
           now={now}
           onHost={() => setScreen('host')}
+          pickId={pick && current && pick.askId === current.askId ? pick.id : null}
+          onPick={(id) => { if (current) setPick({ askId: current.askId, id }); setScreen('host'); }}
         />
       ) : (
       <>
@@ -645,7 +652,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             <>
               {current ? (
                 <div className="brm-now">
-                  <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host busy={busy} ended={ended} run={run} api={api} />
+                  <AskStage
+                    key={`${current.askId}:${current.status}`}
+                    ask={current} room={room} host busy={busy} ended={ended} run={run} api={api}
+                    pickId={pick && pick.askId === current.askId ? pick.id : null}
+                    onPick={(id) => setPick({ askId: current.askId, id })}
+                  />
                 </div>
               ) : (
                 <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} />
@@ -1012,7 +1024,7 @@ function HistoryStack({ items }) {
  * the regular stage. Everything on it is room-safe (stageModel); deciding needs
  * words, so at results the move is back to the Host screen.
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   const m = stageModel(room, current);
@@ -1020,9 +1032,10 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
     if (!m || busy) return;
-    if (m.action === 'decide') { onHost(); return; }
+    // The dock's "Go with B" is the winner: back to the Host with its sentence.
+    if (m.action === 'decide') { onPick(null); return; }
     run(() => api.askAction(current.askId, { action: m.action }));
-  }, [busy, onHost, run, api, current]);
+  }, [busy, onPick, run, api, current]);
   const act = useCallback(() => doMove(move), [doMove, move]);
   // Space fires the dock's move: never while typing, and never when a focused
   // control would take the Space itself.
@@ -1055,7 +1068,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       </section>
     );
   } else if (current) {
-    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} />;
+    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />;
   } else {
     content = <IdleStage room={room} now={now} host={false} />;
   }
@@ -1144,7 +1157,12 @@ function HistoryScreen({ room }) {
           <h2 className="brm-h" id="brm-decided-h">Decided so far</h2>
           {decided.length ? (
             <ol className="brm-list brm-decided">
-              {decided.map((a) => <li key={a.askId}>{a.decision.direction || a.prompt}</li>)}
+              {decided.map((a) => (
+                <li key={a.askId}>
+                  {a.decision.direction || a.prompt}
+                  {a.decision.method && <span className="brm-muted brm-small">{` · ${METHOD_WORDS[a.decision.method] || a.decision.method}`}</span>}
+                </li>
+              ))}
             </ol>
           ) : (
             <p className="brm-hint">Nothing decided yet.</p>
@@ -1368,7 +1386,7 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
 
 // ── The current ask ─────────────────────────────────────────────────────────
 
-function AskStage({ ask, room, host, busy, ended, run, api }) {
+function AskStage({ ask, room, host, busy, ended, run, api, pickId = null, onPick = null }) {
   const [editing, setEditing] = useState(false);
   const [answering, setAnswering] = useState(false);
   const [prompt, setPrompt] = useState(ask.prompt);
@@ -1427,16 +1445,16 @@ function AskStage({ ask, room, host, busy, ended, run, api }) {
           </>
         )}
 
-        {ask.kind === 'choice' && <ChoiceBoard ask={ask} />}
+        {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} />}
         {ask.kind === 'rating' && <RatingBoard ask={ask} />}
-        {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} />}
+        {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />}
         {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
       </section>
       {host && !ended && ask.status === 'results' && ask.kind !== 'rating' && (
         <WheelPanel ask={ask} busy={busy} run={run} api={api} />
       )}
       {host && !ended && ask.status === 'results' && (
-        <DecidePanel key={`wheel:${ask.wheel ? ask.wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} />
+        <DecidePanel key={`wheel:${ask.wheel ? ask.wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} pickId={pickId} />
       )}
       {host && !ended && answering && ['live', 'voting'].includes(ask.status) && (
         <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} />
@@ -1490,7 +1508,21 @@ function WheelPanel({ ask, busy, run, api }) {
   );
 }
 
-function ChoiceBoard({ ask }) {
+/**
+ * "CHOOSE THIS INSTEAD" (owner, 2026-10-06), at results: the answer going to
+ * Claude says so; every other one offers itself. On the Stage a click goes to
+ * the Host with that answer's sentence in the direction; on the Host it swaps
+ * the sentence in place, as often as the host changes their mind.
+ */
+function PickButton({ id, current, onPick, idea = false }) {
+  if (current && id === current) return <span className="brm-pick is-on">Going to Claude</span>;
+  const label = `Choose this${idea ? ' idea' : ''}${current ? ' instead' : ''}`;
+  return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>{label}</button>;
+}
+
+function ChoiceBoard({ ask, pickId = null, onPick = null }) {
+  const picking = Boolean(onPick) && ask.status === 'results';
+  const current = picking ? pickId || winnerOf(ask) : null;
   const opts = (ask.results && ask.results.options) || [];
   const lead = Math.max(0, ...opts.map((o) => o.count));
   return (
@@ -1510,6 +1542,7 @@ function ChoiceBoard({ ask }) {
             <BuildImage imageId={o.imageId} alt={`Choice ${o.label}: ${o.title}`} className="brm-shot brm-shot--opt" />
             <div className="brm-bar" aria-hidden="true"><span style={{ width: `${r.pct}%` }} /></div>
             <div className="brm-count"><b>{r.count}</b> {r.pct}%</div>
+            {picking && <PickButton id={o.label} current={current} onPick={onPick} />}
           </div>
         );
       })}
@@ -1539,8 +1572,10 @@ function RatingBoard({ ask }) {
   );
 }
 
-function SuggestBoard({ ask, host, busy, ended, run, api }) {
+function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick = null }) {
   const [said, setSaid] = useState('');
+  const picking = Boolean(onPick) && ask.status === 'results';
+  const current = picking ? pickId || winnerOf(ask) : null;
   const all = ask.responses || [];
   const shown = host ? all : all.filter((r) => !r.hidden);
   const counting = ask.status !== 'live';
@@ -1566,6 +1601,7 @@ function SuggestBoard({ ask, host, busy, ended, run, api }) {
               </span>
             )}
             {host && <span className="brm-who">{r.source === 'host' ? 'from the room, out loud' : r.playerName}{r.hidden ? ' · hidden' : ''}</span>}
+            {picking && !r.hidden && <PickButton id={r.respId} current={current} onPick={onPick} idea />}
             {host && !ended && (
               <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.responseAction(ask.askId, r.respId, { action: r.hidden ? 'show' : 'hide' }))}>
                 {r.hidden ? 'Show' : 'Hide'}
@@ -1609,16 +1645,21 @@ function Whys({ ask, host }) {
  * instead of tapping): built from what the host picked, edited freely after.
  */
 export function spokenDirection(ask, chosen) {
+  // The question and the answer, as for a vote: that it was said out loud is
+  // recorded on the decision, not told to Claude (owner, 2026-10-06).
   if (ask.kind === 'choice') {
-    const picked = (ask.options || []).filter((o) => chosen.includes(o.label)).map((o) => `${o.label}: ${o.title}`);
-    return picked.length ? `The room chose ${picked.join(' and ')} (said out loud).` : '';
+    const picked = (ask.options || []).filter((o) => chosen.includes(o.label)).map((o) => o.title);
+    return picked.length ? questionAnswer(ask.prompt, picked.join(' and ')) : '';
   }
-  if (ask.kind === 'rating') return chosen[0] ? `The room rated this ${chosen[0]} out of 5 (said out loud).` : '';
+  if (ask.kind === 'rating') return chosen[0] ? questionAnswer(ask.prompt, `${chosen[0]} out of 5`) : '';
   return '';
 }
 
-function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide }) {
-  const [direction, setDirection] = useState(() => (spoken ? '' : defaultDirection(ask)));
+function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide, pickId = null }) {
+  const [direction, setDirection] = useState(() => {
+    if (spoken) return '';
+    return pickId ? directionFor(ask, pickId) : defaultDirection(ask);
+  });
   const [edited, setEdited] = useState(false);
   const [note, setNote] = useState('');
   const [send, setSend] = useState(true);
@@ -1629,11 +1670,23 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
     : null;
   const [chosen, setChosen] = useState(() => {
     if (spoken) return [];
+    if (pickId) return [pickId];
     if (ask.wheel && ask.wheel.landed) return [ask.wheel.landed];
     if (topChoice) return [topChoice.label];
     if (ask.kind === 'suggest' && ask.results?.ranked?.[0]) return [ask.results.ranked[0].respId];
     return [];
   });
+  // A pick above ("choose this instead") swaps the sentence and the choice,
+  // as often as the host changes their mind (owner, 2026-10-06).
+  const firstPick = useRef(true);
+  useEffect(() => {
+    if (firstPick.current) { firstPick.current = false; return; }
+    if (spoken || !pickId) return;
+    setDirection(directionFor(ask, pickId));
+    setChosen([pickId]);
+    setFolded(new Set());
+    setEdited(false);
+  }, [pickId]); // eslint-disable-line react-hooks/exhaustive-deps
   // In spoken mode the sentence follows the picks until the host types in it.
   const pick = (next) => {
     setChosen(next);
@@ -1659,6 +1712,7 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
     if (beforeDecide) await beforeDecide();
     return api.askAction(ask.askId, {
       action: 'decide', direction: direction.trim(), chosen, note: note.trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
+      method: decisionMethod(ask, chosen, spoken),
     });
   });
   const total = ask.results?.total || 0;

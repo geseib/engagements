@@ -282,18 +282,20 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     // With nobody answering, a direction is still required.
     assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'decide', chosen: ['4'], spoken: true })).status, 400);
     const d = await hostCall('POST', `asks/${id}`, {
-      action: 'decide', direction: 'The room rated this 4 out of 5 (said out loud).', chosen: ['4'], note: 'Wants the dates bigger', spoken: true,
+      action: 'decide', direction: 'How close is this: 4 out of 5', chosen: ['4'], note: 'Wants the dates bigger', spoken: true,
     });
     assert.strictEqual(d.status, 200, JSON.stringify(d.body));
     assert.strictEqual(d.body.ask.status, 'decided');
     assert.strictEqual(d.body.ask.decision.spoken, true);
+    assert.strictEqual(d.body.ask.decision.method, 'spoken');
     assert.ok(!d.body.ask.openedAt, 'it never opened to the phones');
     const r = await agentCall('GET', `asks/${id}`);
     assert.strictEqual(r.body.ask.decision.spoken, true);
     const mine = r.body.inbox.filter((x) => x.askId === id);
     assert.strictEqual(mine.length, 1);
-    assert.strictEqual(mine[0].text, 'The room rated this 4 out of 5 (said out loud).\n\nAlso from the room: Wants the dates bigger'
-      + '\n\nThe room answered out loud; the host recorded it. There are no phone votes behind it.');
+    // Claude gets the question and the answer (and the host's note); how it
+    // was decided is the record's, not Claude's (owner, 2026-10-06).
+    assert.strictEqual(mine[0].text, 'How close is this: 4 out of 5\n\nAlso from the room: Wants the dates bigger');
   });
 
   await check('a phone never sees the host\'s decision note: no direction entries, no decision detail', async () => {
@@ -308,6 +310,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
 
   console.log('\nIdeas: suggest, vote, rank');
   let ideasId;
+  const QIDEAS = 'What stops someone signing up';
   await check('with review off, Claude\'s Ideas ask goes straight to the room', async () => {
     await hostCall('POST', 'settings', { reviewAgentAsks: false });
     const r = await agentCall('POST', 'asks', { kind: 'suggest', prompt: 'What stops someone signing up?' });
@@ -346,7 +349,8 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.deepStrictEqual(p.body.current.results.ranked.slice(0, 2).map((r) => [r.text, r.votes]), [['Not sure teens can come', 2], ['No idea where to park', 1]]);
     assert.ok(!p.body.current.results.ranked.some((r) => r.text === 'two'));
     const d = await hostCall('POST', `asks/${ideasId}`, { action: 'decide' });
-    assert.strictEqual(d.body.ask.decision.direction, 'The room\'s top idea: Not sure teens can come');
+    assert.strictEqual(d.body.ask.decision.direction, `${QIDEAS}: Not sure teens can come`);
+    assert.strictEqual(d.body.ask.decision.method, 'vote');
   });
 
   console.log('\ntimeline, ideas inbox, wrap-up');
@@ -686,9 +690,17 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const landed = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === wid).wheel;
     const slice = landed.slices.find((x) => x.id === landed.landed);
     const d = await hostCall('POST', `asks/${wid}`, { action: 'decide' });
-    assert.strictEqual(d.body.ask.decision.direction, `The wheel picked ${slice.label}: ${slice.text}`);
+    assert.strictEqual(d.body.ask.decision.direction, `What should we build: ${slice.text}`);
+    assert.strictEqual(d.body.ask.decision.method, 'wheel');
     // Decided: no more spinning.
     assert.strictEqual((await hostCall('POST', `asks/${wid}`, { action: 'spin' })).status, 409);
+    // The host's own pick is recorded as theirs.
+    seed();
+    const id2 = await tie();
+    const h = await hostCall('POST', `asks/${id2}`, { action: 'decide', direction: 'What should we build: Reminder texts', chosen: ['C'], method: 'host' });
+    assert.strictEqual(h.body.ask.decision.method, 'host');
+    const inbox = (await agentCall('GET', 'inbox')).body.inbox;
+    assert.deepStrictEqual(inbox.map((x) => x.text), ['What should we build: Reminder texts']);
   });
   await check('the wheel instead of a vote: an open ask closes and the wheel holds every option', async () => {
     seed();
