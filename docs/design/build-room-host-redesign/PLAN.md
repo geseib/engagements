@@ -91,18 +91,20 @@ A push to `dev` deploys; push finished steps only (CLAUDE.md).
 - New in the backend:
   - a host-created idea (`Source: 'host'`) for Queue it;
   - an idea status `later`;
-  - `POST build/asks-from-ideas` (`{ ideaIds, kind: choice|rating, maxPicks, prompt, open, askForMockups, openWhenReady }`),
-    defaulting to `kind: choice`, `maxPicks: 1` (Pick one) and `openWhenReady: true` (owner, 2026-10-05),
+  - `POST build/asks-from-ideas` (`{ ideaIds, kind: choice|rating, maxPicks, prompt, open, askForMockups }`),
+    defaulting to `kind: choice`, `maxPicks: 1` (Pick one, owner 2026-10-05),
     which creates the ask and marks the ideas promoted.
     - With `askForMockups`, the ask is created **proposed**, so the room cannot see it,
       and today's "make a mockup of each, attach it to its option" direction is posted to
       Claude. The vote waits in the queue as Claude's `share_image` calls fill each
       option (C3b).
-    - With `openWhenReady`, the server opens the ask when the last option receives its
-      picture. That check lives in the image upload handler, so it works with the host
-      page closed.
+    - When every option has a picture, `hostView` marks the item **Ready**. It never
+      opens by itself (owner, 2026-10-05).
+    - **Open next** (`action: 'openNext'`) stores the ask as next. Closing the current ask
+      opens it, and the host is told. This is the only automatic opening, and the host
+      asked for it.
     - The host can still Open now (options without a picture show their words only),
-      Edit, or Cancel. Cancel returns the ideas to the queue as new.
+      Close the current ask and open this, Edit, or Cancel. Cancel returns the ideas to the queue as new.
   - Each is tested in `tests/build-room.js`, including the delete and authorisation
     rules.
 - The page:
@@ -142,6 +144,31 @@ A push to `dev` deploys; push finished steps only (CLAUDE.md).
 - Preview feedback moves onto its picture.
 - "In a vote now" and "Sent to Claude" idea states join `IDEA_STATUS`.
 - **Mockups:** C11.
+
+**7b. Ready questions (C13, C15).**
+- Seed a platform set "Build Room starters" (Call and Answer, tagged `build-room`, topic
+  `business-work`, categories Start / While building / Before wrapping up) through the
+  normal upload path.
+- Add two optional question fields, `ClaudeGets` and `ClaudeNote`, in
+  `upload-questions.js` and `edit-question-set.js`. `ClaudeNote` goes in the
+  tenant-crypto question field list.
+- The set editor shows an "In a Build Room" section when the set carries `build-room`.
+- A pure `buildAskFromQuestion(question, set)` maps a question to `{kind, prompt, detail,
+  options, lowLabel, highLabel, claudeGets, claudeNote}`, or to `null` with a reason. It
+  is unit-tested on every poll kind.
+- The Ask the room dialog lists sets from `GET /question-sets` with
+  `tags.includes('build-room')`, and reads questions by scope and id.
+
+**7c. What Claude gets (C14).**
+- Log rows gain `ForAgentAs`: do-now, keep, later or ask.
+- `hostView` and the agent view return `brief: { forWhom, keep[], later[] }`, built from
+  the rows plus host edits (a `BUILD#BRIEF` row).
+- Plugin: `renderInbox` renders the four kinds with the texts on C14, and `room_status`
+  prints the brief. The plugin writes `.engage/brief.md` on change.
+  - `post_update` gains `kind: 'answer'`.
+  - Bump `VERSION` and the pin in `tests/engage-plugin-version.js`.
+- Wrap-up: the `wrap-up` prompt asks Claude to propose brief items worth keeping. The
+  host picks, and Claude writes only those.
 
 **8. People, and polish.**
 - The People tab with counts (scores only after the owner's answer; `scores.html`).

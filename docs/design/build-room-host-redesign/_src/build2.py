@@ -28,6 +28,9 @@ PAGES = [
     ('c10-artifacts.html', 'C10', 'History: artifacts'),
     ('c11-phones.html', 'C11', 'Phones'),
     ('c12-wrapped.html', 'C12', 'Wrapped and ended'),
+    ('c13-library.html', 'C13', 'Ask the room: the question library'),
+    ('c14-claude-gets.html', 'C14', 'What Claude gets, and the room brief'),
+    ('c15-set-editor.html', 'C15', 'Making a set Build Room ready'),
 ]
 
 
@@ -190,8 +193,7 @@ def p_c3():
 <ul class="list"><li><span class="L" style="width:26px;height:26px;font-size:15px;border-radius:6px">A</span><span class="grow">Text a reminder the day before</span><span class="who">Dee</span></li><li><span class="L L--b" style="width:26px;height:26px;font-size:15px;border-radius:6px">B</span><span class="grow">Put the address and a map link at the top</span><span class="who">Jo</span></li><li><span class="L L--c" style="width:26px;height:26px;font-size:15px;border-radius:6px">C</span><span class="grow">Let people sign up as a pair</span><span class="who">Lee</span></li></ul>
 <p class="hint">Names are not shown to the room. When you decide, the winner goes to Claude as a direction and each idea is marked as used or not.</p>
 <div class="row"><span class="switch on"><i></i>Ask Claude for a quick mockup of each first</span></div>
-<div class="inline-note">The vote waits in your queue, hidden from the room, until the mockups are in. Claude is connected, so it starts now.</div>
-<div class="row"><span class="switch on"><i></i>Open it to the room as soon as all 3 are in</span></div>
+<div class="inline-note">The vote waits in your queue, hidden from the room, until Claude has made the mockups. Meanwhile you can ask the room other things. When they are in, the vote is marked Ready and you open it.</div>
 <div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Ask Claude for 3 mockups</span></div></div>'''
     modal_off = modal.replace('<div class="row"><span class="switch on"><i></i>Ask Claude for a quick mockup of each first</span></div>', '<div class="row"><span class="switch"><i></i>Ask Claude for a quick mockup of each first</span></div>')
     modal_off = modal_off[:modal_off.index('<div class="inline-note">The vote waits')] + '<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--ghost push">Save as a draft</span><span class="btn btn--primary">Open to the room</span></div></div>'
@@ -210,7 +212,7 @@ def q_vote(state):
         thumbs = ('<figure><img src="img/choice-a.svg" alt=""><figcaption><b>A</b> Text a reminder the day before</figcaption></figure>'
                   '<figure><span class="thumb--none" style="display:grid;place-items:center;aspect-ratio:640/336;border:1px dashed var(--m-rule);border-radius:7px;color:var(--muted);font-size:13px">Claude is making it</span><figcaption><b>B</b> Address and map link at the top</figcaption></figure>'
                   '<figure><span class="thumb--none" style="display:grid;place-items:center;aspect-ratio:640/336;border:1px dashed var(--m-rule);border-radius:7px;color:var(--muted);font-size:13px">Waiting</span><figcaption><b>C</b> Sign up as a pair</figcaption></figure>')
-        note = '<div class="hint">Opens to the room by itself when all 3 are in. The room cannot see it yet.</div>'
+        note = '<div class="hint">The room cannot see it yet. It is marked Ready when all 3 are in; you open it.</div>'
         acts = '<span class="btn btn--sm btn--ghost">Open now, without the rest</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--danger-text)">Cancel the vote</span>'
         cls = ' is-wait'
     else:
@@ -218,8 +220,8 @@ def q_vote(state):
         thumbs = ('<figure><img src="img/choice-a.svg" alt=""><figcaption><b>A</b> Text a reminder the day before</figcaption></figure>'
                   '<figure><img src="img/choice-b.svg" alt=""><figcaption><b>B</b> Address and map link at the top</figcaption></figure>'
                   '<figure><img src="img/preview.svg" alt="" style="aspect-ratio:640/336;object-fit:cover;object-position:top"><figcaption><b>C</b> Sign up as a pair</figcaption></figure>')
-        note = '<div class="hint">Open-by-itself is on by default; this host turned it off for this vote, so it waits. Check the pictures, then open it.</div>'
-        acts = '<span class="btn btn--sm btn--primary">Open to the room</span><span class="btn btn--sm">Answer for the room</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--danger-text)">Discard</span>'
+        note = '<div class="hint">Ask 5 is still open. Open next puts this vote on the room\'s screens as soon as you close ask 5.</div>'
+        acts = '<span class="btn btn--sm btn--primary">Open next</span><span class="btn btn--sm">Close ask 5 and open this</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--danger-text)">Discard</span>'
         cls = ' is-wait'
     return (f'<div class="q-item{cls}"><div class="q-top"><span class="srcdot srcdot--you">Y</span><span class="src">Your vote, from 3 ideas</span>{top}</div>'
             f'<div class="q-text q-text--big">Which should Claude build next?</div>'
@@ -233,18 +235,26 @@ def now_mockups():
 <div class="row"><span class="btn">Show the build</span><span class="hint" style="margin-left:auto">Stage shows: Claude is building</span></div></div>'''
 
 
+def now_rate(n=7):
+    return f'''<div class="now now--live"><div class="colh"><h2>Now</h2><span class="chip chip--amber">Rate · Ask 5</span><span class="hint" style="margin-left:auto">from Build Room starters</span></div>
+<p class="nq">How close is this to something you would use?</p>
+<div class="mini"><div class="r"><span class="L" style="background:var(--surface-2);color:var(--text)">4</span><span>Average so far</span><span class="tr"><span style="width:72%"></span></span><b>3.6</b></div></div>
+<div class="row"><b>{n} of 18</b><span class="hint">answered</span><span class="hint" style="margin-left:auto">Claude gets it as: Keep in mind</span></div>
+<div class="row"><span class="btn btn--primary">Close and show results</span><span class="btn">Answer for the room</span><span class="btn btn--ghost">Edit</span></div></div>'''
+
+
 def p_c3b():
-    waiting = host_screen(now_mockups(), queue_col([q_vote('waiting'), Q_SAM], 3, more='+ 1 more'), header=hdr(queue=3, claude='Claude is making mockups'))
+    waiting = host_screen(now_rate(7), queue_col([q_vote('waiting'), Q_SAM], 3, more='+ 1 more'), header=hdr(queue=3, ask='Ask 5 · 7 of 18', claude='Claude is making mockups'))
     waiting = waiting[:-6] + pin(1, 466, 84) + pin(2, 466, 330) + pin(3, 2, 52) + '</div>'
-    ready = host_screen(now_building(), queue_col([q_vote('ready'), Q_SAM], 3, more='+ 1 more'), header=hdr(queue=3))
+    ready = host_screen(now_rate(15), queue_col([q_vote('ready'), Q_SAM], 3, more='+ 1 more'), header=hdr(queue=3, ask='Ask 5 · 15 of 18'))
     ready = ready[:-6] + pin(4, 466, 84) + '</div>'
-    page('c3b-mockups.html', 'Host screen: the vote waits for its mockups',
-         'What happens after "Ask Claude for 3 mockups". Top: Claude has sent one of three; the vote sits at the top of the queue, hidden from the room. Bottom: all three are in.',
+    page('c3b-mockups.html', 'Host screen: the vote waits in the queue while Claude makes mockups',
+         'After "Ask Claude for 3 mockups" the vote goes into the queue, hidden from the room, and the host carries on: here the room is answering a starter question (ask 5) meanwhile. Top: one mockup of three is in. Bottom: all three are in while ask 5 is still open.',
          [waiting, ready],
          [(1, 'The vote is a proposed ask with empty pictures', 'It behaves like one of Claude\'s proposed asks today: the room cannot see it, each option fills in as Claude calls share_image with its askId and letter, and the card counts "1 of 3".'),
-          (2, 'Three ways out while it waits', '<b>Open now, without the rest</b> if Claude is slow or the room is ready (options without a picture show their words only, as today). <b>Edit</b> the question or the options. <b>Cancel the vote</b>: the ideas go back to the queue.'),
-          (3, 'The room is not left staring', 'The Stage keeps showing Claude at work, and Now says what it is doing: making the mockups.'),
-          (4, 'Ready: it opens itself (the default), or waits', 'Open-by-itself is on by default (owner, 2026-10-05). The last picture opens the vote and the ask pill appears in the header (and the room\'s screen can jump to Stage, owner question 3). Turned off for a vote, the card turns green and waits for the host, as drawn here.')])
+          (2, 'Ways out while it waits', '<b>Open now, without the rest</b> if Claude is slow (options without a picture show their words only, as today). <b>Edit</b> the question or the options. <b>Cancel the vote</b>: the ideas go back to the queue.'),
+          (3, 'The host keeps the room busy', 'Nothing waits on Claude: the host asks other things, here a starter question from the library (C13).'),
+          (4, 'Ready never interrupts', 'When all the pictures are in, the card turns green and says Ready. It never opens by itself. While another ask is open the host can choose <b>Open next</b> (it opens the moment ask 5 is closed) or <b>Close ask 5 and open this</b>.')])
 
 
 def now_live():
@@ -394,6 +404,137 @@ def p_c12():
          [(1, 'The wrap-up is the end of the story', 'Today\'s WrappedStage content (summary, built, next steps, the demo link) moves into History\'s side column. The report is drawn from the same entries.')])
 
 
+# ── C13 the question library ───────────────────────────────────────────────
+
+LIB = [
+    ('Start', [
+        ('Ideas', 'Who is this for, in one sentence?', 'Keep in mind'),
+        ('Ideas', 'What does done look like by the end of today?', 'Keep in mind'),
+        ('Ideas', 'What must it never do?', 'Keep in mind'),
+        ('Ideas', 'It is launch day. Write the headline.', 'Keep in mind')]),
+    ('While building', [
+        ('Rate', 'How close is this to something you would use?', 'Keep in mind'),
+        ('Ideas', 'What would stop someone using it?', 'Do now'),
+        ('Ideas', 'What should we cut?', 'Do now'),
+        ('Choose', 'Which should Claude build next? (from the Later list)', 'Do now')]),
+    ('Before wrapping up', [
+        ('Ideas', 'A month from now nobody uses it. Why?', 'Later'),
+        ('Rate', 'Would you use this tomorrow?', 'Keep in mind')]),
+]
+
+
+def p_c13():
+    rows = ''
+    for grp, qs in LIB:
+        rows += f'<div class="h3" style="margin:8px 0 2px">{grp}</div><ul class="list">'
+        for i, (kind, q, gets) in enumerate(qs):
+            sel = ' style="background:var(--m-tint-amber);border-radius:8px;padding-left:8px"' if q.startswith('What would stop') else ''
+            chip = {'Ideas': 'chip--blue', 'Rate': 'chip--green', 'Choose': 'chip--amber'}[kind]
+            rows += f'<li{sel}><span class="chip {chip}" style="width:62px;justify-content:center">{kind}</span><span class="grow ell">{q}</span><span class="who">{gets}</span></li>'
+        rows += '</ul>'
+    modal = f'''<div class="scrim" style="bottom:0;z-index:60"></div><div style="position:absolute;z-index:61;left:50%;top:76px;transform:translateX(-50%);width:1180px;height:790px;background:var(--m-drawer);border:1px solid var(--m-rule);border-radius:14px;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 30px 70px rgba(0,0,0,.5)">
+<div class="row" style="padding:16px 20px;border-bottom:1px solid var(--m-rule)"><h3 style="margin:0;font:800 19px/1.2 var(--font-ui)">Ask the room</h3><span class="hint">Start from a ready question, or write your own</span><span class="x push" style="width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted)">×</span></div>
+<div style="display:grid;grid-template-columns:1fr 470px;min-height:0">
+<div style="padding:14px 20px;overflow:hidden;border-right:1px solid var(--m-rule);display:flex;flex-direction:column;gap:8px">
+<div class="row"><input class="in" style="flex:1" placeholder="Search ready questions"><span class="flt is-on">Build Room starters · Engage</span><span class="flt">Discovery · your team</span><span class="flt">Write my own</span></div>
+{rows}</div>
+<div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+<div class="row"><span class="chip chip--blue">Ideas</span><span class="hint">from Build Room starters · a Call and Answer set</span></div>
+<label><span class="lbl">Question for the room</span><input class="in" value="What would stop someone using it?"></label>
+<label><span class="lbl">Context (optional)</span><textarea class="ta" style="min-height:52px">Think of the busiest volunteer you know, on an old phone.</textarea></label>
+<div><span class="lbl">When it is decided, Claude gets it as</span><div class="row"><span class="fold is-in">Do now</span><span class="fold">Keep in mind</span><span class="fold">Later</span><span class="fold">Ask Claude</span></div>
+<p class="hint" style="margin-top:6px">Do now: the winning answer goes to Claude as the next thing to build. The rest go on the brief's Later list.</p></div>
+<label><span class="lbl">Note for Claude (from the set, editable)</span><textarea class="ta" style="min-height:52px">Fix the top answer first. Say in one line what you changed.</textarea></label>
+<div class="row" style="margin-top:auto"><span class="btn btn--ghost">Back</span><span class="btn btn--ghost push">Queue it</span><span class="btn btn--primary">Open to the room</span></div></div></div>
+<div class="row" style="padding:10px 20px;border-top:1px solid var(--m-rule)"><span class="hint">Ready questions come from any Call and Answer or Poll set tagged build-room. Rate questions use a 1 to 5 scale; Choose up to 6 options.</span></div></div>'''
+    s2 = host_screen(now_building(), queue_col([Q_DEE, Q_SAM], 3), extra=modal)
+    s2 = s2[:-6] + pin(1, 150, 150) + pin(2, 150, 230) + pin(3, 820, 330) + pin(4, 820, 450) + '</div>'
+    page('c13-library.html', 'Ask the room: the question library',
+         'Every "Ask the room" (the composer, a queue item, the empty Now card) opens here. Left: ready questions from sets tagged build-room, grouped by when in a session they help. Right: the chosen one, editable, with what Claude gets when it is decided.',
+         [s2],
+         [(1, 'Ordinary question sets, tagged build-room', 'A Call and Answer question becomes an Ideas ask (everyone answers, then votes: the same shape). A Poll rating question on a 1 to 5 scale becomes a Rate ask; a Poll choice question with up to 6 options becomes Choose. Anything else in a set is not shown here. Sets come from the Engage library and from the host\'s team, as on the regular host shelf.'),
+          (2, 'Grouped by when they help', 'The set\'s categories do the grouping (Start, While building, Before wrapping up), so a team can add its own groups without new fields.'),
+          (3, 'Thinking tools, not just polls', 'Some starters borrow from known methods: the launch-day headline is Amazon\'s "working backwards", and "a month from now nobody uses it" is Gary Klein\'s pre-mortem. Each says where it comes from in the set, and nowhere on the wall.'),
+          (4, 'The question carries how Claude should use the answer', 'Each ready question stores a default for what Claude gets (C14) and a short note for Claude. The host can change both before opening.')])
+
+
+# ── C14 what Claude gets ───────────────────────────────────────────────────
+
+def p_c14():
+    menu = '''<div style="position:absolute;z-index:62;left:494px;top:330px;width:360px;background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.5);padding:6px">
+<div class="list" style="padding:0 6px">
+<div style="padding:8px 4px;border-bottom:1px solid var(--m-rule)"><b>Do now</b><div class="hint">The next thing to build. Claude stops and does it.</div></div>
+<div style="padding:8px 4px;border-bottom:1px solid var(--m-rule);background:var(--m-tint-amber);border-radius:6px"><b>Keep in mind</b><div class="hint">A rule or a fact for everything from now on. Goes on the brief; Claude does not stop.</div></div>
+<div style="padding:8px 4px;border-bottom:1px solid var(--m-rule)"><b>Later</b><div class="hint">Something to build, not now. Goes on the brief's Later list.</div></div>
+<div style="padding:8px 4px"><b>Ask Claude</b><div class="hint">A question. Claude answers on the screen and keeps building.</div></div></div></div>'''
+    q_send = Q_SAM.replace('<span class="btn btn--sm">Send to Claude</span>', '<span class="split"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm" style="border-color:var(--primary)">▾</span></span>', 1)
+    brief = '''<section class="col"><div class="tabs" style="padding:0"><span class="tab">History</span><span class="tab">People</span><span class="tab is-on">Claude</span></div>
+<div class="row"><span class="h3">The room brief</span><span class="hint push">Claude reads it on every call</span></div>
+<div class="card" style="gap:6px"><span class="lbl" style="margin:0">Who it is for</span><div>Busy volunteers, often on an old phone</div></div>
+<div class="card" style="gap:6px"><span class="lbl" style="margin:0">Keep in mind · 3</span><ul class="list"><li><span class="grow">No account needed to sign up</span><span class="who">Ask 1</span></li><li><span class="grow">Has to work on old phones</span><span class="who">the room said</span></li><li><span class="grow">Plain words, no jargon</span><span class="who">you</span></li></ul></div>
+<div class="card" style="gap:6px"><span class="lbl" style="margin:0">Later · 2</span><ul class="list"><li><span class="grow">Let people sign up as a pair</span><span class="who">Lee</span></li><li><span class="grow">Car park map</span><span class="who">you</span></li></ul><div class="row"><span class="btn btn--sm">Put Later to a vote</span></div></div>
+<div class="row"><span class="btn btn--sm btn--ghost">Edit the brief</span><span class="hint push">Saved for next time: offered at wrap-up</span></div></section>'''
+    s2 = host_screen(now_building(), queue_col([q_send, Q_DEE], 3), right=brief, extra=menu)
+    s2 = s2[:-6] + pin(1, 860, 330) + pin(2, 1018, 84) + pin(3, 1018, 560) + '</div>'
+    term = '''<div class="idx" style="padding-top:0"><h2>What Claude sees for each kind (the plugin's text in its terminal)</h2>
+<table class="cmp"><tr><th style="width:14%">Kind</th><th>Shown to Claude</th><th style="width:26%">Where it lives</th></tr>
+<tr><td><b>Do now</b></td><td><code>DIRECTION FROM THE ROOM (via the host): The 13:00 row should say full, in red. Act on this now: it is the host's word and takes priority over your current plan.</code> (today's text, unchanged)</td><td>History; delivered once</td></tr>
+<tr><td><b>Keep in mind</b></td><td><code>ADDED TO THE ROOM BRIEF (Keep in mind): Has to work on old phones. Apply it to everything you build from now on. You do not need to stop what you are doing.</code></td><td>The room brief, returned by room_status and repeated whenever it changes; the plugin also writes it to .engage/brief.md so it survives a long session</td></tr>
+<tr><td><b>Later</b></td><td><code>FOR LATER: Let people sign up as a pair. Do not start it now. It is on the brief's Later list; when you finish your current work, say which Later item you would take next.</code></td><td>The brief's Later list, until it is done, voted on or removed</td></tr>
+<tr><td><b>Ask Claude</b></td><td><code>THE ROOM ASKS YOU: How long would reminder texts take? Answer in one post_update (kind "answer"), then carry on.</code></td><td>History, question and answer together; the answer shows on the Stage ticker</td></tr></table>
+<h2>Why a room brief and not Claude Code's own memory</h2>
+<p>Claude Code's memory files (CLAUDE.md, auto memory) outlive the session and apply to everyone who opens the project. A room's preferences from one afternoon should not quietly become permanent rules for the repo. So the brief belongs to the Build Room, lives in Engage, is visible and editable on the host screen, and Claude re-reads it on every call. At wrap-up Claude offers the brief items worth keeping (for example "no accounts" is a product rule; "the room liked green" is not), and the host chooses which, if any, Claude writes into the project (a decisions file or CLAUDE.md).</p>
+<h2>The best things to share with Claude</h2>
+<table class="cmp"><tr><th style="width:24%">Information</th><th>Why it helps Claude</th><th style="width:16%">Kind</th></tr>
+<tr><td><b>Who it is for</b></td><td>Every screen choice gets easier: reading level, device, how much time people have.</td><td>Keep in mind</td></tr>
+<tr><td><b>What done looks like</b></td><td>Claude can tell when to stop polishing and wrap up.</td><td>Keep in mind</td></tr>
+<tr><td><b>Rules: must and never</b></td><td>Saves rework: no accounts, works offline, no new dependencies.</td><td>Keep in mind</td></tr>
+<tr><td><b>The room's choice, with its reasons</b></td><td>The reasons let Claude get the details right, not just the headline.</td><td>Do now</td></tr>
+<tr><td><b>What is broken or confusing</b></td><td>Specific feedback on what Claude showed, tied to its screenshot.</td><td>Do now</td></tr>
+<tr><td><b>Ideas worth keeping</b></td><td>A backlog Claude can propose from when it is free, instead of guessing.</td><td>Later</td></tr>
+<tr><td><b>Questions about cost or effort</b></td><td>The room decides better knowing what is quick and what is not.</td><td>Ask Claude</td></tr>
+<tr><td><b>A 1 to 5 pulse with its reasons</b></td><td>Tells Claude whether to keep polishing or move on.</td><td>Keep in mind</td></tr></table>
+<p>Not worth sending: raw vote counts without the host's sentence (today's rule, kept: the direction decides), names of who said what, and anything the room said in confidence.</p></div>'''
+    page('c14-claude-gets.html', 'What Claude gets, and the room brief',
+         'Today everything sent to Claude says "act on this now". Four kinds instead, chosen from the Send to Claude menu on any queue item, the composer, or a decision; and a room brief that holds the standing ones.',
+         [s2],
+         [(1, 'Four kinds of message', '<b>Do now</b> (today\'s direction, still the default), <b>Keep in mind</b>, <b>Later</b>, <b>Ask Claude</b>. The split button keeps one click for Do now; the menu is for the other three.'),
+          (2, 'The room brief', 'Who it is for, the standing rules, and the Later list. Decisions with Keep in mind land here; so do items the host adds. Claude reads it on every call, so a rule made at 10:20 still holds at 11:40.'),
+          (3, 'Later feeds the next vote', 'The Later list can go straight to the room as a Pick one vote (C3), which closes the loop: ideas, kept for later, voted on, built.')],
+         after=term)
+
+
+# ── C15 the set editor ─────────────────────────────────────────────────────
+
+def p_c15():
+    body = '''<div style="padding:22px 28px;display:flex;flex-direction:column;gap:14px;min-height:0;overflow:hidden">
+<div class="row"><span class="hint">Question sets</span><span class="hint">/</span><b style="font:800 22px/1.2 var(--font-display)">Build Room starters</b><span class="chip">Call and Answer</span><span class="chip chip--amber">build-room</span><span class="chip">business-work</span><span class="btn btn--sm btn--ghost push">Edit set details</span></div>
+<p class="hint" style="font-size:15px">Short questions that help a room steer a build. Tagged build-room, so the Build Room's Ask the room lists them.</p>
+<table class="tbl" style="font-size:15px"><colgroup><col style="width:150px"><col><col style="width:110px"><col style="width:150px"><col style="width:70px"></colgroup>
+<thead><tr><th>Category</th><th>Question</th><th>In a Build Room</th><th>Claude gets</th><th></th></tr></thead><tbody>
+<tr><td>Start</td><td>Who is this for, in one sentence?</td><td>Ideas</td><td>Keep in mind</td><td><span class="btn btn--sm btn--ghost">Edit</span></td></tr>
+<tr><td>Start</td><td>What must it never do?</td><td>Ideas</td><td>Keep in mind</td><td><span class="btn btn--sm btn--ghost">Edit</span></td></tr>
+<tr style="background:var(--m-tint-amber)"><td>While building</td><td>What would stop someone using it?</td><td>Ideas</td><td>Do now</td><td><span class="btn btn--sm">Close</span></td></tr></tbody></table>
+<div class="card" style="gap:12px;border-color:var(--m-line-amber)">
+<label><span class="lbl">Question</span><input class="in" value="What would stop someone using it?"></label>
+<label><span class="lbl">Detail (shown under the question)</span><input class="in" value="Think of the busiest volunteer you know, on an old phone."></label>
+<div class="h3" style="margin-top:4px">In a Build Room</div>
+<div class="row"><span class="lbl" style="margin:0;width:200px">Asked as</span><span class="chip chip--blue">Ideas</span><span class="hint">Call and Answer questions are always Ideas: everyone answers, then votes.</span></div>
+<div class="row"><span class="lbl" style="margin:0;width:200px">When decided, Claude gets it as</span><span class="fold is-in">Do now</span><span class="fold">Keep in mind</span><span class="fold">Later</span><span class="fold">Ask Claude</span></div>
+<label><span class="lbl">Note for Claude</span><textarea class="ta" style="min-height:48px">Fix the top answer first. Say in one line what you changed.</textarea></label>
+<label><span class="lbl">Where it comes from (shown to the host only)</span><input class="in" value=""></label>
+<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Save question</span></div></div>
+<div class="inline-note">In a Poll set tagged build-room, a 1 to 5 rating is asked as Rate and a choice of up to 6 options as Choose. A question that cannot be asked in a Build Room (a 1 to 10 scale, ranking, yes or no, free text) says so here and is left out of the list.</div>
+</div>'''
+    s2 = f'<div class="scr2" style="grid-template-rows:1fr">{body}</div>'
+    page('c15-set-editor.html', 'Making a set Build Room ready',
+         'In the admin console\'s question set editor (the shipped .qsets screen, drawn here only in outline). A set becomes Build Room ready with one tag; each question gains an "In a Build Room" section.',
+         [s2],
+         [(1, 'One tag, no new set type', 'build-room is an ordinary set tag (lowercase, up to 12 per set, edited in SetTopicField). The set stays a Call and Answer or Poll set and still plays as one in a regular session.'),
+          (2, 'Two new question fields', '<b>Claude gets</b> (do-now, keep, later, ask; default do-now) and <b>Note for Claude</b>. In a team\'s set the note is encrypted like the other question text (tenant-crypto). Neither field matters outside a Build Room.'),
+          (3, 'Asked as is derived, never typed', 'From the set type and the question kind, so it cannot disagree with the question.')])
+
+
 def p_c0():
     after = '''<div class="idx" style="padding-top:0">
 <h2>Where things come from, where they go</h2>
@@ -436,7 +577,9 @@ def p_index():
 <li><b>One queue</b> for everything that needs a decision. Each item has the same routes: ask the room, send to Claude, decide yourself, later.</li>
 <li><b>One composer</b> for everything the host types.</li>
 <li><b>One History</b> of decisions and actions, with the artifacts inline. It is shown to the room, on phones and in the report.</li>
-<li><b>Four screens</b> in one header: Host, Stage, Build (the live product) and History. Choosing what the room looks at replaces hiding controls.</li></ul></div>
+<li><b>Four screens</b> in one header: Host, Stage, Build (the live product) and History. Choosing what the room looks at replaces hiding controls.</li>
+<li><b>Ready questions</b> from Call and Answer and Poll sets tagged build-room (C13, C15).</li>
+<li><b>Four kinds of message to Claude</b> (Do now, Keep in mind, Later, Ask Claude) and a room brief Claude reads on every call (C14).</li></ul></div>
 <p>What carries over from the first pass: the Stage screen is the first pass's stage, the dock's one next move, the notices tiers (<a href="notices.html">Notices</a>, now with the projector rule on C0) and the scoring options (<a href="scores.html">Scores</a>).</p>
 <p>What the first pass got wrong:
 <ul style="color:var(--muted);max-width:86ch;line-height:1.6">
@@ -448,6 +591,6 @@ def p_index():
     page('index.html', 'Build Room host redesign', 'Second pass: one queue, one History, four screens.', [], after=after)
 
 
-for fn in [p_index, p_c0, p_c1, p_c2, p_c3, p_c3b, p_c4, p_c5, p_c6, p_c7, p_c8, p_c9, p_c10, p_c11, p_c12]:
+for fn in [p_index, p_c0, p_c1, p_c2, p_c3, p_c3b, p_c4, p_c5, p_c6, p_c7, p_c8, p_c9, p_c10, p_c11, p_c12, p_c13, p_c14, p_c15]:
     fn()
 print('built', len(PAGES), 'second-pass pages')

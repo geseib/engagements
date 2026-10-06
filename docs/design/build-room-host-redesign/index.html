@@ -26,6 +26,9 @@
 <a href="c10-artifacts.html">C10 History: artifacts</a>
 <a href="c11-phones.html">C11 Phones</a>
 <a href="c12-wrapped.html">C12 Wrapped and ended</a>
+<a href="c13-library.html">C13 Ask the room: the question library</a>
+<a href="c14-claude-gets.html">C14 What Claude gets, and the room brief</a>
+<a href="c15-set-editor.html">C15 Making a set Build Room ready</a>
 <span class="sp"></span><a href="first-pass.html">First pass</a><a href="notices.html">Notices</a><a href="scores.html">Scores</a></nav>
 <div class="pg-title"><h1>Build Room host redesign</h1><p>Second pass: one queue, one History, four screens.</p></div>
 <div class="idx">
@@ -42,14 +45,16 @@
 <li><b>One queue</b> for everything that needs a decision. Each item has the same routes: ask the room, send to Claude, decide yourself, later.</li>
 <li><b>One composer</b> for everything the host types.</li>
 <li><b>One History</b> of decisions and actions, with the artifacts inline. It is shown to the room, on phones and in the report.</li>
-<li><b>Four screens</b> in one header: Host, Stage, Build (the live product) and History. Choosing what the room looks at replaces hiding controls.</li></ul></div>
+<li><b>Four screens</b> in one header: Host, Stage, Build (the live product) and History. Choosing what the room looks at replaces hiding controls.</li>
+<li><b>Ready questions</b> from Call and Answer and Poll sets tagged build-room (C13, C15).</li>
+<li><b>Four kinds of message to Claude</b> (Do now, Keep in mind, Later, Ask Claude) and a room brief Claude reads on every call (C14).</li></ul></div>
 <p>What carries over from the first pass: the Stage screen is the first pass's stage, the dock's one next move, the notices tiers (<a href="notices.html">Notices</a>, now with the projector rule on C0) and the scoring options (<a href="scores.html">Scores</a>).</p>
 <p>What the first pass got wrong:
 <ul style="color:var(--muted);max-width:86ch;line-height:1.6">
 <li>It kept ideas and Claude's asks in two places (an Ideas tab and an Asks tab).</li>
 <li>It hid History in a Record tab.</li>
 <li>It treated Present as a way to hide things rather than as a choice of what to show.</li></ul></p>
-<h2>Every screen</h2><div class="cards"><a href="c0-model.html"><i>C0</i><b>The model</b></a><a href="c1-host.html"><i>C1</i><b>Host: Claude is building</b></a><a href="c2-claude-asks.html"><i>C2</i><b>Host: Claude proposes</b></a><a href="c3-to-a-vote.html"><i>C3</i><b>Host: ideas to a vote</b></a><a href="c3b-mockups.html"><i>C3b</i><b>Host: the vote waits for mockups</b></a><a href="c4-live.html"><i>C4</i><b>Host: the room is answering</b></a><a href="c5-decide.html"><i>C5</i><b>Host: results and direction</b></a><a href="c6-stage.html"><i>C6</i><b>Stage screen</b></a><a href="c7-build.html"><i>C7</i><b>Build screen</b></a><a href="c8-build-blocked.html"><i>C8</i><b>Build screen, blocked</b></a><a href="c9-history.html"><i>C9</i><b>History screen</b></a><a href="c10-artifacts.html"><i>C10</i><b>History: artifacts</b></a><a href="c11-phones.html"><i>C11</i><b>Phones</b></a><a href="c12-wrapped.html"><i>C12</i><b>Wrapped and ended</b></a></div>
+<h2>Every screen</h2><div class="cards"><a href="c0-model.html"><i>C0</i><b>The model</b></a><a href="c1-host.html"><i>C1</i><b>Host: Claude is building</b></a><a href="c2-claude-asks.html"><i>C2</i><b>Host: Claude proposes</b></a><a href="c3-to-a-vote.html"><i>C3</i><b>Host: ideas to a vote</b></a><a href="c3b-mockups.html"><i>C3b</i><b>Host: the vote waits for mockups</b></a><a href="c4-live.html"><i>C4</i><b>Host: the room is answering</b></a><a href="c5-decide.html"><i>C5</i><b>Host: results and direction</b></a><a href="c6-stage.html"><i>C6</i><b>Stage screen</b></a><a href="c7-build.html"><i>C7</i><b>Build screen</b></a><a href="c8-build-blocked.html"><i>C8</i><b>Build screen, blocked</b></a><a href="c9-history.html"><i>C9</i><b>History screen</b></a><a href="c10-artifacts.html"><i>C10</i><b>History: artifacts</b></a><a href="c11-phones.html"><i>C11</i><b>Phones</b></a><a href="c12-wrapped.html"><i>C12</i><b>Wrapped and ended</b></a><a href="c13-library.html"><i>C13</i><b>Ask the room: the question library</b></a><a href="c14-claude-gets.html"><i>C14</i><b>What Claude gets, and the room brief</b></a><a href="c15-set-editor.html"><i>C15</i><b>Making a set Build Room ready</b></a></div>
 <h2>How to view</h2><p>From the repo root, <code>python3 -m http.server 8131 --directory docs/design</code>, then <code>http://localhost:8131/build-room-host-redesign/</code>. Add <code>#s1</code> to a page for the screen alone. Rebuild with <code>python3 docs/design/build-room-host-redesign/_src/build2.py</code>.</p></div>
 <script src="mock.js"></script>
 </body>

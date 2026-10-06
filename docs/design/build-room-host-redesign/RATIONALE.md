@@ -82,7 +82,7 @@ Every item has the same routes:
 Tick several items to route them together. The main use is "put these three ideas to a
 vote". With "mockups first" on, the dialog's button reads **Ask Claude for 3 mockups**,
 not Open. The vote waits in the queue, hidden from the room, while Claude fills each
-option, and then it opens by itself or waits for the host (C3b).
+option, the host runs other asks meanwhile, and when it is Ready the host opens it (C3b).
 
 **Now.** One card: what Claude or the room is doing at this moment. While Claude builds
 it shows the live activity, with Show the build and Preview the work. While an ask is live
@@ -204,7 +204,7 @@ good / Needs a change") moves onto the preview it is about.
 | Host's own queue items | — | a host-created idea (Source host) |
 | Send to Claude from any item | ideas (`direct`), the log (`forAgent`) | the same for feedback and host notes |
 | Put ideas to a vote | an idea can join an open Ideas ask (`suggest`) | create a Choose or Rate ask from selected ideas and mark them promoted |
-| Mockups before the vote | a proposed ask can ask Claude for mockups; `share_image` fills each option | the vote is created proposed and waits; optional open-when-all-are-in, done on the server (C3b) |
+| Mockups before the vote | a proposed ask can ask Claude for mockups; `share_image` fills each option | the vote is created proposed and waits; Ready when every option has a picture; Open next queues it behind the open ask (C3b) |
 | History chain | idea `promoted`; decision `chosen`; delivery `deliveredAt`; feedback `AboutLogId` | a `RelatesTo` on log rows, so idea → ask → decision → showing can be drawn |
 | Four screens | Present toggle; the stage | the header, the Build frame, the History screen |
 | Phone History tab | images and log already in `publicView` | the tab and gallery; "In a vote now" and "Sent to Claude" idea states |
@@ -249,13 +249,98 @@ rule to option 2: an idea put to a vote by the host +2, and +5 if it wins.
 | Wrapped stage | The History screen's closing side column (C12) |
 | Dialogs: Connect, Wrap up, Crew, Early look, End, Compose | Unchanged; Compose also opens from "Ask the room" |
 
+
+## 10b. Ready questions, and what Claude gets (owner, 2026-10-05, third note)
+
+> "it would also be nice if we had pre-canned questions that the host could pick from …
+> from call and answer or poll question sets … store them as such … tag as build rooms
+> ready … this data could be sent to Claude as either apply now or store memory or
+> something more appropriate. think what would be the best types of info to share"
+
+### The question library (C13, C15)
+
+**Where they live.** Ready questions are ordinary question sets, Call and Answer or Poll,
+carrying the set tag `build-room`.
+- Tags are already an editable set field: lowercase kebab-case, up to 12 per set
+  (`shared/tags.js`, `SetTopicField.jsx`), plaintext even in a team's set.
+- A ready set still plays as itself in a regular session.
+- `GET /question-sets` already returns tags for every readable scope, and the host page
+  already filters by tag in the browser (`setCarriesTag`). The Build Room does the same.
+  No server-side tag query is needed.
+- Questions come from `GET /question-sets/{setId}/questions`, which decrypts a team's
+  set. The set must be addressed by scope and id, because a bare id reads as the platform
+  library (the game-set-pair rule).
+
+**How a question becomes an ask.**
+
+| In the set | In the Build Room |
+|---|---|
+| A Call and Answer question | **Ideas**: everyone answers, then votes, which is the same shape |
+| A Poll `rating` on a 1–5 scale | **Rate** (the Build Room's scale is fixed at 1–5) |
+| A Poll `choice` with up to 6 options of up to 120 characters | **Choose** |
+| Anything else (1–10 scales, rank, yes/no, text) | Left out of the list, and the set editor says why |
+
+**Grouping** comes from the set's categories. The starters use Start, While building and
+Before wrapping up, so a team can add its own groups with no new field.
+
+**Two new per-question fields**, which matter only in a Build Room:
+- `ClaudeGets`: do-now, keep, later or ask; default do-now.
+- `ClaudeNote`: a short note on how Claude should use the answer. In a team's set it is
+  encrypted like the other question text (`tenant-crypto.js`).
+
+"Asked as" is derived from the set type and the question kind, never typed.
+
+**A starter set** ("Build Room starters", platform library, tagged `build-room`) ships
+with about ten questions. Two borrow from named methods:
+- the launch-day headline is Amazon's "working backwards";
+- "a month from now nobody uses it. Why?" is Gary Klein's pre-mortem.
+
+Their source is recorded for the host only, never on the wall.
+
+### What Claude gets (C14)
+
+Today every message to Claude is rendered as "DIRECTION FROM THE ROOM … Act on this now:
+it is the host's word and takes priority over your current plan" (`renderInbox`,
+`engage-mcp.mjs`). That is right for a change and wrong for a rule, a backlog item or a
+question. There are four kinds instead:
+
+| Kind | Use it for | What Claude is told | Where it lives |
+|---|---|---|---|
+| **Do now** (default) | the next thing to build | today's text, unchanged | History |
+| **Keep in mind** | a rule, a preference, or a fact about who it is for | "Apply it to everything from now on. You do not need to stop." | the room brief |
+| **Later** | something worth building, not now | "Do not start it. When you finish, say which Later item you would take next." | the brief's Later list |
+| **Ask Claude** | a question about effort, cost or feasibility | "Answer in one post_update (kind answer), then carry on." | History, question and answer together |
+
+**The room brief** holds three things: who it is for, the Keep in mind rules, and the
+Later list.
+- `room_status` returns it, and every tool result repeats it when it changes.
+- The plugin mirrors it to `.engage/brief.md`, so a rule set at 10:20 still holds at
+  11:40 after Claude's context has been compacted.
+- The host sees and edits it in the Host screen's Claude tab.
+- The Later list can go straight to a Pick one vote.
+
+**Why not Claude Code's own memory?** CLAUDE.md and auto memory outlive the session and
+apply to everyone who opens the project. One afternoon's preferences should not quietly
+become permanent rules for a repo. At wrap-up, Claude offers the brief items worth
+keeping, and the host chooses which, if any, Claude writes into the project.
+
+**The best things to share** are listed with reasons on C14: who it is for, what done
+looks like, must and never rules, the room's choice with its reasons, specific feedback
+on what Claude showed, ideas worth keeping, effort questions, and a 1–5 pulse with its
+reasons. Not worth sending: raw counts without the host's sentence, names, and anything
+said in confidence.
+
 ## 11. Owner rulings so far (2026-10-05)
 
-- **Mockups before a vote: auto-open is on by default.** With "mockups first", the vote
-  opens to the room by itself when the last picture arrives. The host can turn it off per
-  vote in the dialog (C3b shows that case).
+- **Mockups before a vote: the vote waits in the queue until Claude is ready**, and the
+  host carries on asking the room other things meanwhile. When the pictures are in it is
+  marked Ready and never opens by itself. While another ask is open the host chooses
+  **Open next** or **Close ask N and open this** (C3b). (An earlier note here said
+  "auto-open on by default"; the owner corrected it the same day.)
 - **The default vote is Pick one (A, B, C).** Pick up to 2 and Rate each stay available in
   the dialog.
+- **Ready questions are stored as Call and Answer or Poll sets, tagged as Build Room
+  ready.** The tag is `build-room` (§10b).
 
 ## 12. Questions for the owner
 
@@ -266,6 +351,12 @@ rule to option 2: an idea put to a vote by the host +2, and +5 if it wins.
    ask's text and names be hidden until hovered?
 3. **Switching screens for the host.** When an ask opens, should the room's view switch to
    Stage by itself? And when the host sends a direction, should it go back to Build?
+8. **Ready questions.** Is the tag `build-room` the right marker, and should the platform
+   library ship the "Build Room starters" set (C13, C15)?
+9. **What Claude gets.** Four kinds (Do now, Keep in mind, Later, Ask Claude) and a room
+   brief kept in Engage rather than Claude Code's memory, with an offer at wrap-up to
+   save the lasting rules into the project. Right split?
+
 4. ~~**Putting ideas to a vote.**~~ Answered by the owner, 2026-10-05: **Pick one (A/B/C)
    is the default**; Pick up to 2 and Rate each stay as choices in the dialog.
 5. **The Build screen.** Is it fine that it needs a one-time browser permission and does

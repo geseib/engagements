@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C15 Making a set Build Room ready · Build Room host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="v2.css">
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Second pass</b>
+<a href="index.html">Overview</a>
+<a href="c0-model.html">C0 The model</a>
+<a href="c1-host.html">C1 Host: Claude is building</a>
+<a href="c2-claude-asks.html">C2 Host: Claude proposes</a>
+<a href="c3-to-a-vote.html">C3 Host: ideas to a vote</a>
+<a href="c3b-mockups.html">C3b Host: the vote waits for mockups</a>
+<a href="c4-live.html">C4 Host: the room is answering</a>
+<a href="c5-decide.html">C5 Host: results and direction</a>
+<a href="c6-stage.html">C6 Stage screen</a>
+<a href="c7-build.html">C7 Build screen</a>
+<a href="c8-build-blocked.html">C8 Build screen, blocked</a>
+<a href="c9-history.html">C9 History screen</a>
+<a href="c10-artifacts.html">C10 History: artifacts</a>
+<a href="c11-phones.html">C11 Phones</a>
+<a href="c12-wrapped.html">C12 Wrapped and ended</a>
+<a href="c13-library.html">C13 Ask the room: the question library</a>
+<a href="c14-claude-gets.html">C14 What Claude gets, and the room brief</a>
+<a class="here" href="c15-set-editor.html">C15 Making a set Build Room ready</a>
+<span class="sp"></span><a href="first-pass.html">First pass</a><a href="notices.html">Notices</a><a href="scores.html">Scores</a></nav>
+<div class="pg-title"><h1>C15 · Making a set Build Room ready</h1><p>In the admin console's question set editor (the shipped .qsets screen, drawn here only in outline). A set becomes Build Room ready with one tag; each question gains an "In a Build Room" section.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:1fr"><div style="padding:22px 28px;display:flex;flex-direction:column;gap:14px;min-height:0;overflow:hidden">
+<div class="row"><span class="hint">Question sets</span><span class="hint">/</span><b style="font:800 22px/1.2 var(--font-display)">Build Room starters</b><span class="chip">Call and Answer</span><span class="chip chip--amber">build-room</span><span class="chip">business-work</span><span class="btn btn--sm btn--ghost push">Edit set details</span></div>
+<p class="hint" style="font-size:15px">Short questions that help a room steer a build. Tagged build-room, so the Build Room's Ask the room lists them.</p>
+<table class="tbl" style="font-size:15px"><colgroup><col style="width:150px"><col><col style="width:110px"><col style="width:150px"><col style="width:70px"></colgroup>
+<thead><tr><th>Category</th><th>Question</th><th>In a Build Room</th><th>Claude gets</th><th></th></tr></thead><tbody>
+<tr><td>Start</td><td>Who is this for, in one sentence?</td><td>Ideas</td><td>Keep in mind</td><td><span class="btn btn--sm btn--ghost">Edit</span></td></tr>
+<tr><td>Start</td><td>What must it never do?</td><td>Ideas</td><td>Keep in mind</td><td><span class="btn btn--sm btn--ghost">Edit</span></td></tr>
+<tr style="background:var(--m-tint-amber)"><td>While building</td><td>What would stop someone using it?</td><td>Ideas</td><td>Do now</td><td><span class="btn btn--sm">Close</span></td></tr></tbody></table>
+<div class="card" style="gap:12px;border-color:var(--m-line-amber)">
+<label><span class="lbl">Question</span><input class="in" value="What would stop someone using it?"></label>
+<label><span class="lbl">Detail (shown under the question)</span><input class="in" value="Think of the busiest volunteer you know, on an old phone."></label>
+<div class="h3" style="margin-top:4px">In a Build Room</div>
+<div class="row"><span class="lbl" style="margin:0;width:200px">Asked as</span><span class="chip chip--blue">Ideas</span><span class="hint">Call and Answer questions are always Ideas: everyone answers, then votes.</span></div>
+<div class="row"><span class="lbl" style="margin:0;width:200px">When decided, Claude gets it as</span><span class="fold is-in">Do now</span><span class="fold">Keep in mind</span><span class="fold">Later</span><span class="fold">Ask Claude</span></div>
+<label><span class="lbl">Note for Claude</span><textarea class="ta" style="min-height:48px">Fix the top answer first. Say in one line what you changed.</textarea></label>
+<label><span class="lbl">Where it comes from (shown to the host only)</span><input class="in" value=""></label>
+<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Save question</span></div></div>
+<div class="inline-note">In a Poll set tagged build-room, a 1 to 5 rating is asked as Rate and a choice of up to 6 options as Choose. A question that cannot be asked in a Build Room (a 1 to 10 scale, ranking, yes or no, free text) says so here and is left out of the list.</div>
+</div></div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>One tag, no new set type</h3><p>build-room is an ordinary set tag (lowercase, up to 12 per set, edited in SetTopicField). The set stays a Call and Answer or Poll set and still plays as one in a regular session.</p></div>
+<div class="note"><h3><b class="n">2</b>Two new question fields</h3><p><b>Claude gets</b> (do-now, keep, later, ask; default do-now) and <b>Note for Claude</b>. In a team's set the note is encrypted like the other question text (tenant-crypto). Neither field matters outside a Build Room.</p></div>
+<div class="note"><h3><b class="n">3</b>Asked as is derived, never typed</h3><p>From the set type and the question kind, so it cannot disagree with the question.</p></div>
+</div>
+
+<script src="mock.js"></script>
+</body>
+</html>
