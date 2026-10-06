@@ -6,9 +6,11 @@
  *                                    the ideas inbox, Connect Claude Code
  *   /build?gameId=NNNN&view=report → the report (BuildReport.jsx)
  *
- * The same page is the wall (Present mode, the P key, hides every host-only
- * control, the ideas inbox, host notes, names and the key) and the host's
- * phone remote (one column under 900px).
+ * FOUR SCREENS (owner, 2026-10-05; docs/design/build-room-host-redesign):
+ * Host is the host's working screen; Stage, Build and History are made to be
+ * shown to the room, and render nothing host-only (no controls, ideas inbox,
+ * host notes, names or the key). Keys 1-4 pick one; P flips between Host and
+ * the last screen the room saw. One column under 900px, for a phone.
  *
  * LIVE. A host WebSocket (ticketed, as GameHostPage's) refetches GET
  * build/state on every `buildChanged`; an 8s poll is the fallback, because a
@@ -37,6 +39,9 @@ import {
   apiBase, buildApi, createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
 import './BuildRoom.css';
+import {
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild,
+} from './buildScreens';
 import {
   CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLook, EarlyLookDialog, RunCrewCodeSwitch, StageTabs, featuredShare,
 } from './BuildCrew';
@@ -337,7 +342,14 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [present, setPresent] = useState(false);
+  // FOUR SCREENS (owner, 2026-10-05). Host is the host's; Stage, Build and
+  // History are shown to the room. `lastShown` is where P goes back to.
+  const [screen, setScreenState] = useState('host');
+  const lastShown = useRef(null);
+  const setScreen = useCallback((next) => {
+    if (isProjected(next)) lastShown.current = next;
+    setScreenState(next);
+  }, []);
   const [view, setView] = useState(initialView);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
@@ -459,16 +471,26 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     };
   }, [api, gameId, refresh]);
 
-  // P toggles Present, unless somebody is typing.
+  // 1-4 pick a screen; P flips between Host and the last screen the room saw.
+  // Never while somebody is typing, never with a modifier, never inside a dialog.
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key !== 'p' && e.key !== 'P') return;
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
-      setPresent((p) => !p);
+      if (e.target && e.target.closest && e.target.closest('[role="dialog"]')) return;
+      if (e.key === 'p' || e.key === 'P') {
+        setScreenState((cur) => {
+          const next = togglePresent(cur, lastShown.current);
+          if (isProjected(next)) lastShown.current = next;
+          return next;
+        });
+        return;
+      }
+      const picked = screenForKey(e.key);
+      if (picked) setScreen(picked);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [setScreen]);
 
   /** Every host action: one at a time, the server's sentence on failure, then refetch. */
   const run = useCallback(async (fn) => {
@@ -511,6 +533,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
   if (view === 'report') return <ImageLoader.Provider value={loadImage}><BuildReport state={room} onBack={() => goView('room')} /></ImageLoader.Provider>;
 
+  const present = isProjected(screen);
   const host = !present;
   const ended = room.state === 'ENDED';
   const asks = room.asks || [];
@@ -531,8 +554,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         room={room}
         now={now}
         host={host}
-        present={present}
-        onPresent={() => setPresent((p) => !p)}
+        screen={screen}
+        onScreen={setScreen}
         onConnect={() => setDialog('connect')}
         onWrap={() => setDialog('wrap')}
         onReport={() => goView('report')}
@@ -563,6 +586,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
 
+      {screen === 'build' && <BuildScreen room={room} />}
+      {screen === 'history' && <HistoryScreen room={room} />}
+      {(screen === 'host' || screen === 'stage') && (
       <div className="brm-grid">
         <main className="brm-main">
           {host && firstRun && (
@@ -621,6 +647,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <Timeline log={room.log || []} host={host} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} />
         </aside>
       </div>
+      )}
 
       {host && dialog === 'connect' && (
         <ConnectPanel room={room} gameId={gameId} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
@@ -749,48 +776,185 @@ export function ConnectionChip({ connection = 'live', onReconnect }) {
   );
 }
 
-function RoomHeader({ room, now, host, present, onPresent, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
+/**
+ * THE SESSION MENU (owner, 2026-10-05: "too much to take in"). The header's
+ * once-a-session controls live here, out of the room's sight: Connect Claude
+ * Code, the crew, Auto, Wrap up, Report, End session. A pick that opens a
+ * dialog closes the menu; a switch leaves it open. A click inside a dialog
+ * the menu opened (Run crew code asks first) is not "outside".
+ */
+function SessionMenu({ children }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (ref.current && ref.current.contains(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('[role="dialog"]')) return;
+      setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <div className="brm-more" ref={ref}>
+      <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        More <Icon name="CaretDown" size={14} />
+      </button>
+      {open && (
+        <div className="brm-more-panel" role="group" aria-label="Session">
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * THE HEADER, the same on all four screens: the title, the screens, the open
+ * ask, Claude's status, the join code. On the Host screen it adds the live
+ * connection and the session menu; on a screen the room sees, nothing in it
+ * is host-only (the Host tab's count is a number, never content).
+ */
+function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
+  const waiting = waitingCount(room);
+  const pill = askPill(room);
+  const [qr, setQr] = useState(false);
+  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
+  const pick = (close, fn) => () => { close(); fn(); };
   return (
     <header className="brm-hbar">
       <div className="brm-hbar-title">
         <span className="brm-t" title={room.title}>{room.title || 'Build Room'}</span>
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
       </div>
+      <nav className="brm-screens" aria-label="Screens">
+        {SCREENS.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            className={`brm-screen${screen === s.key ? ' is-on' : ''}`}
+            aria-pressed={screen === s.key}
+            title={`${s.label} (${s.shortcut})`}
+            onClick={() => onScreen(s.key)}
+          >
+            {s.label}
+            {s.key === 'host' && waiting > 0 && <span className="brm-screen-n">{waiting}<span className="brm-sr"> waiting</span></span>}
+          </button>
+        ))}
+      </nav>
+      {pill && (
+        <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => onScreen('stage')}>
+          {pill.text}
+        </button>
+      )}
       <div className="brm-hbar-tools">
-        <span className="brm-codewrap"><span className="brm-muted brm-small">Join code</span> <span className="brm-code">{room.gameId}</span></span>
-        <span className="brm-chip">{room.playerCount || 0} joined</span>
         <AgentChip agent={room.agent} now={now} />
         {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
-        {host && !ended && <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />}
-        {host && (
-          <>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onConnect}>
-              <Icon name="Lock" size={14} /> Connect Claude Code
-            </button>
-            {crew && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
-            {!ended && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onCrew}>
-                <Icon name="UsersThree" size={14} /> {crew ? 'Crew' : 'Open to a crew'}
-              </button>
-            )}
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onWrap}>Wrap up</button>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onReport}>
-              <Icon name="FileText" size={14} /> Report
-            </button>
-            {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={onEnd}>End session</button>}
-          </>
-        )}
-        <button
-          type="button"
-          className={`brm-btn brm-btn--sm brm-btn--ghost${present ? ' is-on' : ''}`}
-          onClick={onPresent}
-          aria-pressed={present}
-          title="Present mode hides every host-only control (P)"
-        >
-          <Icon name="Monitor" size={14} /> {present ? 'Exit present' : 'Present'}
+        <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => setQr(true)}>
+          <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
         </button>
+        <span className="brm-chip">{room.playerCount || 0} joined</span>
+        {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
+        {host && (
+          <SessionMenu>
+            {(close) => (
+              <>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onConnect)}>
+                  <Icon name="Lock" size={14} /> Connect Claude Code
+                </button>
+                {!ended && (
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onCrew)}>
+                    <Icon name="UsersThree" size={14} /> {crew ? 'Crew' : 'Open to a crew'}
+                  </button>
+                )}
+                {crew && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
+                {!ended && <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onWrap)}>Wrap up</button>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onReport)}>
+                  <Icon name="FileText" size={14} /> Report
+                </button>
+                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(close, onEnd)}>End session</button>}
+              </>
+            )}
+          </SessionMenu>
+        )}
       </div>
     </header>
+  );
+}
+
+// ── The Build and History screens ───────────────────────────────────────────
+
+/**
+ * BUILD: what Claude has built so far (owner, 2026-10-05: "present is really
+ * switching to the local live view of the development server"). Showing the
+ * running page inside Engage waits on a browser check (PLAN step 0: an https
+ * page could not frame localhost in Chromium 152), so this screen shows the
+ * newest screenshot and opens the running build in a new tab: the fallback
+ * the design keeps anyway (C8).
+ */
+function BuildScreen({ room }) {
+  const { link, shot } = latestBuild(room);
+  return (
+    <section className="brm-screenbody brm-buildscreen" aria-label="The build">
+      <div className="brm-row">
+        <h2 className="brm-q">What Claude has built so far</h2>
+        {link && <span className="brm-push"><OpenLink href={link} label="Open the build" primary /></span>}
+      </div>
+      {shot ? (
+        <BuildImage imageId={shot.imageId} caption={shot.caption} className="brm-shot brm-shot--build" />
+      ) : (
+        <div className="brm-empty">Nothing to show yet. When Claude previews the work, its newest screenshot appears here.</div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * HISTORY: the room's story so far, to look back on together. The decisions,
+ * the timeline as the wall shows it (no host notes, no idea authors), and
+ * every screenshot. Nothing here edits; the Host screen does that.
+ */
+function HistoryScreen({ room }) {
+  const decided = (room.asks || [])
+    .filter((a) => a.status === 'decided' && a.decision)
+    .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
+  const images = (room.images || []).slice().reverse();
+  const noop = () => undefined;
+  return (
+    <div className="brm-screenbody brm-histscreen">
+      <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />
+      <div className="brm-histside">
+        <section className="brm-panel" aria-labelledby="brm-decided-h">
+          <h2 className="brm-h" id="brm-decided-h">Decided so far</h2>
+          {decided.length ? (
+            <ol className="brm-list brm-decided">
+              {decided.map((a) => <li key={a.askId}>{a.decision.direction || a.prompt}</li>)}
+            </ol>
+          ) : (
+            <p className="brm-hint">Nothing decided yet.</p>
+          )}
+        </section>
+        <section className="brm-panel" aria-labelledby="brm-artifacts-h">
+          <h2 className="brm-h" id="brm-artifacts-h">Screenshots</h2>
+          {images.length ? (
+            <div className="brm-shotgrid">
+              {images.map((im) => (
+                <BuildImage key={im.imageId} imageId={im.imageId} caption={im.caption || (im.label ? `Choice ${im.label}` : '')} className="brm-shot brm-shot--grid" />
+              ))}
+            </div>
+          ) : (
+            <p className="brm-hint">Claude&apos;s screenshots collect here as it works.</p>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }
 

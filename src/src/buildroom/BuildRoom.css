@@ -571,3 +571,54 @@
 .brm .brm-auto { display: inline-flex; align-items: center; gap: 6px; font-size: var(--brm-t-floor); font-weight: 700; color: var(--muted); cursor: pointer; }
 .brm .brm-auto.is-on { color: var(--primary); }
 .brm .brm-auto input { accent-color: var(--primary); }
+
+/* ---- the four screens (owner, 2026-10-05; docs/design/build-room-host-redesign) ----
+   Host is the host's; Stage, Build and History are shown to the room. The
+   header carries the screens, the open ask, the join code and, on Host only,
+   the session menu. Tokens and tints only; contrast as the pairings above. */
+.brm .brm-screens {
+  display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--brm-rule);
+}
+.brm .brm-screen {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  border: 0; border-radius: 7px; background: transparent; cursor: pointer;
+  font: 700 var(--brm-t-label)/1 var(--font-ui); color: var(--muted);
+}
+.brm .brm-screen:hover { color: var(--text); }
+.brm .brm-screen.is-on { background: var(--surface-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--primary); }
+.brm .brm-screen:focus-visible, .brm .brm-askpill:focus-visible, .brm .brm-codebtn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-screen-n {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 10px; background: var(--primary); color: var(--bg); font-size: var(--brm-t-floor); font-weight: 800;
+}
+.brm .brm-askpill {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--brm-line-amber); background: var(--brm-tint-amber);
+  color: var(--primary); font: 700 var(--brm-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.brm .brm-askpill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.brm .brm-askpill.is-results { color: var(--brm-success-text); background: var(--brm-tint-green); border-color: transparent; }
+.brm .brm-codebtn { border: 1px solid transparent; border-radius: 8px; background: transparent; padding: 2px 6px; color: inherit; cursor: pointer; }
+.brm .brm-codebtn:hover { border-color: var(--brm-line-amber); }
+.brm .brm-more { position: relative; }
+.brm .brm-more-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 260px;
+  display: grid; gap: 6px; padding: 10px;
+  background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px;
+  box-shadow: 0 16px 40px var(--brm-scrim);
+}
+.brm .brm-more-panel .brm-btn { justify-content: flex-start; width: 100%; }
+
+/* A screen the room sees, below the header. */
+.brm .brm-screenbody { padding: 16px; display: grid; gap: 16px; }
+.brm .brm-buildscreen .brm-q { margin: 0; }
+.brm .brm-shot--build img { max-height: calc(100vh - 220px); object-fit: contain; object-position: top; }
+.brm .brm-histscreen { grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); align-items: start; }
+.brm .brm-histside { display: grid; gap: 16px; min-width: 0; }
+.brm .brm-decided { font-size: var(--brm-st-meta); }
+
+@media (max-width: 900px) {
+  .brm .brm-histscreen { grid-template-columns: minmax(0, 1fr); }
+  .brm .brm-screens { order: 3; }
+}
