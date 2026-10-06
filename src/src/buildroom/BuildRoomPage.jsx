@@ -1054,6 +1054,10 @@ function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onRe
                 )}
                 {crew && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
                 {!ended && <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />}
+                {/* BACK TO THE OPENING (owner, 2026-10-06): Start building can be undone; nothing in the brief is lost. */}
+                {!ended && room.opening && room.opening.phase === 'building' && (
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={pick(close, () => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
+                )}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onWrap)}>Wrap up</button>
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onReport)}>
                   <Icon name="FileText" size={14} /> Report
@@ -1240,7 +1244,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />;
   } else if (room.opening && room.opening.phase === 'opening') {
     // THE OPENING (O3): between steps, the wall reads back the brief so far.
-    content = <WallBrief room={room} busy={busy} run={run} api={api} host={!ended} />;
+    content = <WallBrief room={room} />;
   } else {
     content = <IdleStage room={room} now={now} host={false} />;
   }
@@ -2290,10 +2294,20 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose 
   // built, the room picks what to build. The host lists the options or the
   // room suggests; a tie goes to the wheel or a revote (WheelPanel); and the
   // host can pick one and send it to Claude at any point.
-  const starter = !ended && !(room.asks || []).length && onCompose;
+  // Just out of the opening, before any building ask: the way back is right here.
+  const framed = room.opening && room.opening.phase === 'building'
+    && (room.opening.steps || []).some((x) => ['done', 'skipped'].includes(x.status))
+    && !(room.asks || []).some((x) => !x.openingStep);
+  const starter = !ended && !framed && !(room.asks || []).some((x) => !x.openingStep) && onCompose;
   return (
     <section className="brm-panel brm-nowcard" aria-labelledby="brm-now-h">
       <h2 className="brm-h5" id="brm-now-h">Now</h2>
+      {framed && !ended && (
+        <div className="brm-notice brm-row brm-gap" data-testid="brm-backtoopening">
+          <span>The opening is over and Claude has the brief. Pressed Start building too soon?</span>
+          <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.openingAction('resume', {}))}>Back to the opening</button>
+        </div>
+      )}
       {starter && (
         <div className="brm-starter">
           <p className="brm-nowline">Start with the room: {STARTER_PROMPT}</p>

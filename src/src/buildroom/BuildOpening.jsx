@@ -9,6 +9,8 @@
  * OPENING_KINDS) on room.opening, so the page and Claude read the same list.
  */
 import React, { useState } from 'react';
+import Modal from '../components/Modal';
+import Icon from '../components/Icon';
 import { questionAnswer } from './buildScreens';
 
 const stepOf = (opening, key) => (opening.steps || []).find((x) => x.key === key) || null;
@@ -179,6 +181,34 @@ export function DraftCard({ room, busy, run, api }) {
 }
 
 /**
+ * START BUILDING, CONFIRMED (owner, 2026-10-06: a stray click on the Stage
+ * ended the opening). Says how far the opening got, and that the host can
+ * come back to it.
+ */
+export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
+  const n = doneCount(opening);
+  const of = (opening.steps || []).length;
+  const start = async () => {
+    const ok = await run(() => api.openingAction('start', {}));
+    if (ok !== undefined) onClose();
+  };
+  return (
+    <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-startbuild-title">
+      <div className="brm-dh">
+        <h2 className="brm-h" id="brm-startbuild-title">Start building?</h2>
+        <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
+      </div>
+      <p>{n} of {of} steps are framed. Claude gets the brief as it is now and starts planning and building.</p>
+      <p className="brm-hint">Nothing is lost: Back to the opening (in More) returns to these steps, and tells Claude to pause.</p>
+      <div className="brm-row brm-gap">
+        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep framing</button>
+        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={start}>Start building</button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
  * THE OPENING PANEL (O1, O2): the Now card while the room frames the build
  * and nothing is being asked. The step, the ways to answer it, Skip, and
  * Start building.
@@ -187,7 +217,7 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
   const opening = room.opening || { steps: [] };
   const step = focusStep(opening, focus);
   const n = step ? opening.steps.indexOf(step) + 1 : opening.steps.length;
-  const start = () => run(() => api.openingAction('start', {}));
+  const [confirming, setConfirming] = useState(false);
   return (
     <section className="brm-panel brm-nowcard brm-opening" aria-labelledby="brm-opening-h">
       <div className="brm-row brm-gap">
@@ -232,9 +262,10 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
             </button>
           )}
           <button type="button" className="brm-btn brm-btn--sm" onClick={onShowWall}>Show the brief on the wall</button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={start}>Start building</button>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => setConfirming(true)}>Start building</button>
         </div>
       )}
+      {confirming && <StartBuildingConfirm opening={opening} busy={busy} run={run} api={api} onClose={() => setConfirming(false)} />}
     </section>
   );
 }
@@ -280,7 +311,7 @@ export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
  * THE BUILD BRIEF ON THE WALL (O3): what the room decided, read back like the
  * start of a press release, before Claude builds.
  */
-export function WallBrief({ room, busy, run, api, host }) {
+export function WallBrief({ room }) {
   const b = room.brief || { lines: {}, keep: [] };
   const l = b.lines || {};
   const never = (b.keep || []).map((i) => i.text).join('; ');
@@ -300,11 +331,8 @@ export function WallBrief({ room, busy, run, api, host }) {
           ))}
         </dl>
       ) : <p className="brm-detail">The room's answers appear here as each step is decided.</p>}
-      {host && room.opening && room.opening.phase === 'opening' && (
-        <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={() => run(() => api.openingAction('start', {}))}>Start building</button>
-        </div>
-      )}
+      {/* No Start building here: the wall is the room's, and a stray click
+          ended an opening (owner, 2026-10-06). The host starts from Host. */}
     </section>
   );
 }

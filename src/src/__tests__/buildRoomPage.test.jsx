@@ -1734,16 +1734,32 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
     expect(screen.getByRole('region', { name: /^Opening · step 3 of 9/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start building' })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Start building' }));
+    // It asks first, and says how far the opening got (owner, 2026-10-06).
+    const confirm = screen.getByRole('dialog', { name: 'Start building?' });
+    expect(confirm.textContent).toMatch('2 of 9 steps are framed.');
+    expect(confirm.textContent).toMatch('Nothing is lost: Back to the opening');
+    expect(posts().some((c) => c.url.endsWith('/opening/start'))).toBe(false);
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Start building' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/start`));
   });
 
-  test('the wall reads back the brief so far, with Start building', async () => {
+  test('the wall reads back the brief so far, and has no Start building (a stray click ended an opening)', async () => {
     await openRoom(opening({ Brief: { forWhom: 'Two friends', lines: { kind: 'A game', problem: 'Setup takes too long' }, steps: { kind: 'done', forWhom: 'done', problem: 'done' } } }));
     fireEvent.keyDown(window, { key: '2' });
     const wall = screen.getByRole('region', { name: 'The build brief' });
     expect(wall.textContent).toMatch('MakingA game');
     expect(wall.textContent).toMatch('TodaySetup takes too long');
-    expect(within(wall).getByRole('button', { name: 'Start building' })).toBeInTheDocument();
+    expect(within(wall).queryByRole('button', { name: 'Start building' })).toBeNull();
+  });
+
+  test('just after Start building, the Now card and More both offer Back to the opening', async () => {
+    await openRoom(hostState({ st: { Phase: 'building', Brief: { forWhom: 'Two friends', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } } }));
+    const back = screen.getByTestId('brm-backtoopening');
+    expect(back.textContent).toMatch('Pressed Start building too soon?');
+    fireEvent.click(within(back).getByRole('button', { name: 'Back to the opening' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/resume`));
+    openMore();
+    expect(screen.getByRole('group', { name: 'Session' }).textContent).toMatch('Back to the opening');
   });
 });
 

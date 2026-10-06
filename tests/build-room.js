@@ -1200,6 +1200,22 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await hostCall('GET', 'state', null, HOST_TEAM)).body.briefDraft.headline, 'Secret headline about payroll');
     assert.ok(!JSON.stringify([...store.values()]).includes('Secret headline about payroll'));
   });
+  await check('Back to the opening after Start building: nothing is lost, and Claude is told to pause', async () => {
+    seed();
+    await hostCall('POST', 'opening/answer', { step: 'problem', text: 'Board games take setup' });
+    await hostCall('POST', 'opening/start', {});
+    await agentCall('GET', 'inbox');
+    assert.strictEqual((await state()).opening.phase, 'building');
+    const r = await hostCall('POST', 'opening/resume', {});
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const st = await state();
+    assert.strictEqual(st.opening.phase, 'opening');
+    assert.strictEqual(st.brief.lines.problem, 'Board games take setup');
+    assert.strictEqual(st.opening.steps.find((x) => x.key === 'problem').status, 'done');
+    const d = (await agentCall('GET', 'inbox')).body.inbox[0];
+    assert.ok(/^The host has gone back to the opening/.test(d.text) && d.as === 'do-now', d.text);
+    assert.strictEqual((await agentCall('POST', 'opening/resume', {})).status, 403);
+  });
   await check('a room that already has asks is building (rooms made before the opening)', async () => {
     seed();
     await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is it?' });

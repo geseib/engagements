@@ -755,6 +755,16 @@ async function openingAction(ctx, action, body) {
       text: `The room has framed the build. Plan 3 to 6 steps, post the plan with post_update (kind "milestone"), and start building.${text ? `\n\n${text}` : ''}`,
     });
     await logEntry(ctx, { kind: 'milestone', text: 'The room framed the build. Claude is building.', by: 'system' });
+  } else if (action === 'resume') {
+    // BACK TO THE OPENING (owner, 2026-10-06: Start building was pressed by
+    // mistake and "the opening questioning was lost"). Nothing was lost: the
+    // brief and its steps stay. Claude is told to pause.
+    await touchState(ctx, { set: { Phase: 'opening' } });
+    await logEntry(ctx, {
+      kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
+      text: 'The host has gone back to the opening to frame the build further. Pause building: finish or set aside what you are doing, write no new product code, and wait with wait_for_direction until the host presses Start building again.',
+    });
+    await logEntry(ctx, { kind: 'milestone', text: 'Back to the opening: the room is framing the build further.', by: 'system' });
   } else {
     if (!S.OPENING_KEYS.includes(step)) return fail(400, `step must be one of ${S.OPENING_KEYS.join(', ')}`);
     const def = S.OPENING_STEPS.find((x) => x.key === step);
@@ -769,7 +779,7 @@ async function openingAction(ctx, action, body) {
       if (action === 'skip') steps[step] = 'skipped';
       else delete steps[step];
       await saveBrief(ctx, { ...brief, steps });
-    } else return fail(400, 'action must be answer, skip, reopen or start');
+    } else return fail(400, 'action must be answer, skip, reopen, start or resume');
   }
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
