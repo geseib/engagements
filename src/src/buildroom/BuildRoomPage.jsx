@@ -46,7 +46,7 @@ import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
   questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, claudeKindLabel, asField,
-  roomStory, filterStory, artifactsOf,
+  roomStory, filterStory, artifactsOf, pickVerdict,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -369,6 +369,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // WHICH ANSWER GOES TO CLAUDE (owner, 2026-10-06): the winner unless the
   // host picks another ("choose this instead"), on the Stage or the Host.
   const [pick, setPick] = useState(null); // {askId, id}
+  // A pick waiting for the host to confirm it (owner, 2026-10-06): {ask, id}.
+  const [confirmPick, setConfirmPick] = useState(null);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
@@ -580,7 +582,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           now={now}
           onHost={() => setScreen('host')}
           pickId={pick && current && pick.askId === current.askId ? pick.id : null}
-          onPick={(id) => { if (current) setPick({ askId: current.askId, id }); setScreen('host'); }}
+          onPick={(id) => {
+            // The dock's "Go with B" is the room's own choice: no question.
+            if (id === null || !current) { if (current) setPick({ askId: current.askId, id }); setScreen('host'); return; }
+            setConfirmPick({ ask: current, id });
+          }}
         />
       ) : (
       <>
@@ -675,7 +681,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                     key={`${current.askId}:${current.status}`}
                     ask={current} room={room} host busy={busy} ended={ended} run={run} api={api}
                     pickId={pick && pick.askId === current.askId ? pick.id : null}
-                    onPick={(id) => setPick({ askId: current.askId, id })}
+                    onPick={(id) => setConfirmPick({ ask: current, id })}
                   />
                 </div>
               ) : (
@@ -744,6 +750,23 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {host && openShare && (
         <EarlyLookDialog key={openShare.shareId} share={openShare} crew={crew} busy={busy} run={run} api={api} onClose={() => setOpenShareId(null)} />
+      )}
+      {confirmPick && (
+        <PickConfirm
+          ask={confirmPick.ask} id={confirmPick.id} busy={busy}
+          onClose={() => setConfirmPick(null)}
+          onConfirm={async () => {
+            const { ask, id } = confirmPick;
+            // Picking while the room is still answering closes the vote first.
+            if (['live', 'voting'].includes(ask.status)) {
+              const ok = await run(() => api.askAction(ask.askId, { action: 'close' }));
+              if (ok === undefined) return;
+            }
+            setConfirmPick(null);
+            setPick({ askId: ask.askId, id });
+            setScreen('host');
+          }}
+        />
       )}
       {host && dialog === 'end' && (
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
@@ -1190,6 +1213,17 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         <span className="brm-eyebrow"><b>The wheel</b> · Ask {Number(current.askId) || current.askId}</span>
         <h2 className="brm-q">{current.prompt}</h2>
         <BuildWheel wheel={current.wheel} size="lg" />
+        {/* SAME GOES FOR SPIN (owner, 2026-10-06): after it lands, the host may
+            take the wheel's pick or an alternate, with the same question. */}
+        {!ended && current.wheel.landed && (
+          <div className="brm-wheelpicks" role="group" aria-label="Pick">
+            {(current.wheel.slices || []).map((sl) => (
+              <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' brm-btn--primary' : ''}`} onClick={() => onPick(sl.id)}>
+                {sl.label ? `${sl.label} · ` : ''}{sl.text}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     );
   } else if (current) {
@@ -1737,15 +1771,54 @@ function WheelPanel({ ask, busy, run, api }) {
  * the Host with that answer's sentence in the direction; on the Host it swaps
  * the sentence in place, as often as the host changes their mind.
  */
-function PickButton({ id, current, onPick, idea = false }) {
+function PickButton({ id, current, onPick, idea = false, open = false }) {
+  if (open) return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>Pick this</button>;
   if (current && id === current) return <span className="brm-pick is-on">Going to Claude</span>;
   const label = `Choose this${idea ? ' idea' : ''}${current ? ' instead' : ''}`;
   return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>{label}</button>;
 }
 
+/** A click on an option card picks it, unless the click was on a link or button inside it. */
+const cardPick = (onPick, id) => (e) => {
+  if (e.target && e.target.closest && e.target.closest('a, button, input, textarea')) return;
+  onPick(id);
+};
+
+/**
+ * THE HOST'S PICK, CONFIRMED (owner, 2026-10-06: "it asks if you want to pick
+ * the preferred choice of the room ... or an alternate one (not the room's
+ * preference). same goes for spin. ask the host to confirm and let them know
+ * they have picked an alternate choice"). On the Host screen and the Stage.
+ */
+export function PickConfirm({ ask, id, busy, onConfirm, onClose }) {
+  const v = pickVerdict(ask, id);
+  const name = (c) => (c ? `${c.label ? `${c.label} · ` : ''}${c.text}` : '');
+  const short = (c) => (c && c.label ? c.label : 'this one');
+  const open = ['live', 'voting'].includes(ask.status);
+  const why = v.by === 'wheel' ? 'where the wheel landed' : v.preferred ? `the room's pick, ${v.preferred.count} of ${v.total}` : '';
+  let body;
+  if (v.isPreferred) body = `${name(v.pick)} is ${why}.`;
+  else if (v.preferred) body = `The room preferred ${name(v.preferred)} (${why}). You are picking ${name(v.pick)} instead. It is recorded as your pick, not the room's.`;
+  else body = `${v.tied.length ? `The room is tied between ${v.tied.join(' and ')}.` : 'The room has not voted yet.'} You are picking ${name(v.pick)}. It is recorded as your pick.`;
+  return (
+    <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-pick-title">
+      <DialogHead id="brm-pick-title" title={v.isPreferred ? "Go with the room's choice?" : 'Pick an alternate?'} onClose={onClose} />
+      <p data-testid="brm-pick-body">{body}</p>
+      {open && <p className="brm-hint">This closes the vote.</p>}
+      <div className="brm-row brm-gap">
+        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onConfirm}>
+          {v.isPreferred ? `Go with ${short(v.pick)}` : `Yes, pick ${short(v.pick)} instead`}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function ChoiceBoard({ ask, pickId = null, onPick = null }) {
-  const picking = Boolean(onPick) && ask.status === 'results';
-  const current = picking ? pickId || winnerOf(ask) : null;
+  const open = ['live', 'voting'].includes(ask.status);
+  const picking = Boolean(onPick) && (open || ask.status === 'results');
+  const current = picking && !open ? pickId || winnerOf(ask) : null;
   const opts = (ask.results && ask.results.options) || [];
   const lead = Math.max(0, ...opts.map((o) => o.count));
   return (
@@ -1753,7 +1826,7 @@ function ChoiceBoard({ ask, pickId = null, onPick = null }) {
       {(ask.options || []).map((o, i) => {
         const r = opts.find((x) => x.label === o.label) || { count: 0, pct: 0 };
         return (
-          <div key={o.label} className={`brm-choice brm-choice--${i % 3}${lead && r.count === lead ? ' is-lead' : ''}`}>
+          <div key={o.label} className={`brm-choice brm-choice--${i % 3}${lead && r.count === lead ? ' is-lead' : ''}${picking ? ' is-pickable' : ''}`} onClick={picking ? cardPick(onPick, o.label) : undefined} title={picking ? `Pick ${o.label}` : undefined}>
             <div className="brm-choice-head">
               <span className="brm-big" aria-hidden="true">{o.label}</span>
               <div className="brm-choice-text">
@@ -1765,7 +1838,7 @@ function ChoiceBoard({ ask, pickId = null, onPick = null }) {
             <BuildImage imageId={o.imageId} alt={`Choice ${o.label}: ${o.title}`} className="brm-shot brm-shot--opt" />
             <div className="brm-bar" aria-hidden="true"><span style={{ width: `${r.pct}%` }} /></div>
             <div className="brm-count"><b>{r.count}</b> {r.pct}%</div>
-            {picking && <PickButton id={o.label} current={current} onPick={onPick} />}
+            {picking && <PickButton id={o.label} current={current} onPick={onPick} open={open} />}
           </div>
         );
       })}
@@ -1797,8 +1870,10 @@ function RatingBoard({ ask }) {
 
 function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick = null }) {
   const [said, setSaid] = useState('');
-  const picking = Boolean(onPick) && ask.status === 'results';
-  const current = picking ? pickId || winnerOf(ask) : null;
+  // Ideas are picked once the room votes on them (voting), or at results.
+  const open = ask.status === 'voting';
+  const picking = Boolean(onPick) && (open || ask.status === 'results');
+  const current = picking && !open ? pickId || winnerOf(ask) : null;
   const all = ask.responses || [];
   const shown = host ? all : all.filter((r) => !r.hidden);
   const counting = ask.status !== 'live';
@@ -1815,7 +1890,7 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
       {!sorted.length && <div className="brm-empty">Suggestions appear here as phones send them. Anonymous on the wall.</div>}
       <ul className="brm-sugs">
         {sorted.map((r) => (
-          <li key={r.respId} className={`brm-sug${r.hidden ? ' is-hidden' : ''}`}>
+          <li key={r.respId} className={`brm-sug${r.hidden ? ' is-hidden' : ''}${picking && !r.hidden ? ' is-pickable' : ''}`} onClick={picking && !r.hidden ? cardPick(onPick, r.respId) : undefined}>
             <span className="brm-sug-text">{r.text}</span>
             {counting && (
               <span className="brm-sug-votes">
@@ -1824,7 +1899,7 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
               </span>
             )}
             {host && <span className="brm-who">{r.source === 'host' ? 'from the room, out loud' : r.playerName}{r.hidden ? ' · hidden' : ''}</span>}
-            {picking && !r.hidden && <PickButton id={r.respId} current={current} onPick={onPick} idea />}
+            {picking && !r.hidden && <PickButton id={r.respId} current={current} onPick={onPick} idea open={open} />}
             {host && !ended && (
               <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.responseAction(ask.askId, r.respId, { action: r.hidden ? 'show' : 'hide' }))}>
                 {r.hidden ? 'Show' : 'Hide'}
@@ -1879,6 +1954,9 @@ export function spokenDirection(ask, chosen) {
 }
 
 function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide, pickId = null }) {
+  // An alternate to the room's choice says so where the host sends it.
+  const verdict = !spoken && pickId ? pickVerdict(ask, pickId) : null;
+  const alternate = verdict && !verdict.isPreferred && verdict.preferred ? verdict : null;
   const [direction, setDirection] = useState(() => {
     if (spoken) return '';
     return pickId ? directionFor(ask, pickId) : defaultDirection(ask);
@@ -1950,6 +2028,11 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
       <p className="brm-sub">{spoken
         ? 'For when people talk instead of tapping. Pick what the room said; Claude builds from the sentence below and is told it was said out loud.'
         : `Claude builds from this sentence, not from the counts. Edit it freely. ${total} of ${playerCount || 0} answered.`}</p>
+      {alternate && (
+        <div className="brm-notice" role="status" data-testid="brm-alternate">
+          <b>You picked an alternate.</b> The room preferred {alternate.preferred.label ? `${alternate.preferred.label} · ` : ''}{alternate.preferred.text}{alternate.by === 'wheel' ? ' (where the wheel landed)' : ''}. This goes on the record as your pick.
+        </div>
+      )}
       {spoken && ask.kind === 'rating' && (
         <div className="brm-field">
           <span className="brm-lbl">The room&apos;s rating</span>

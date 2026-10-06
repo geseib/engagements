@@ -263,3 +263,27 @@ describe('the room\'s story (step 5, C9 and C11)', () => {
     ]);
   });
 });
+
+describe('the host picks, and is told what that means (owner, 2026-10-06)', () => {
+  const { pickVerdict } = require('../buildroom/buildScreens');
+  const ask = (over = {}) => ({
+    kind: 'choice',
+    options: [{ label: 'A', title: 'Bold' }, { label: 'B', title: 'Calm' }, { label: 'C', title: 'Pair' }],
+    results: { total: 14, options: [{ label: 'A', count: 3 }, { label: 'B', count: 9 }, { label: 'C', count: 2 }] },
+    ...over,
+  });
+  test('the room\'s top pick is the preferred one; anything else is an alternate', () => {
+    expect(pickVerdict(ask(), 'B')).toMatchObject({ isPreferred: true, by: 'vote', preferred: { label: 'B', count: 9 }, total: 14 });
+    expect(pickVerdict(ask(), 'C')).toMatchObject({ isPreferred: false, by: 'vote', preferred: { label: 'B' }, pick: { label: 'C', text: 'Pair' } });
+  });
+  test('after a spin, the wheel\'s landing is the preferred one', () => {
+    const spun = ask({ wheel: { landed: 'A', slices: [] } });
+    expect(pickVerdict(spun, 'A')).toMatchObject({ isPreferred: true, by: 'wheel' });
+    expect(pickVerdict(spun, 'B')).toMatchObject({ isPreferred: false, by: 'wheel', preferred: { label: 'A' } });
+  });
+  test('a tie, or no votes yet: no preferred choice', () => {
+    const tie = ask({ results: { total: 4, options: [{ label: 'A', count: 2 }, { label: 'B', count: 2 }, { label: 'C', count: 0 }] } });
+    expect(pickVerdict(tie, 'C')).toMatchObject({ isPreferred: false, preferred: null, tied: ['A', 'B'] });
+    expect(pickVerdict(ask({ results: { total: 0, options: [] } }), 'A')).toMatchObject({ preferred: null, tied: [] });
+  });
+});

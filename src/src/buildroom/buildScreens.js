@@ -248,6 +248,30 @@ export function decisionMethod(ask, chosen, spoken) {
   if (!chosen.length || (win && chosen.length === 1 && chosen[0] === win)) return 'vote';
   return 'host';
 }
+/**
+ * THE HOST PICKS, AND IS TOLD WHAT THAT MEANS (owner, 2026-10-06: "click on
+ * one and it asks if you want to pick the preferred choice of the room ... or
+ * an alternate one (not the room's preference); same goes for spin").
+ * `{ isPreferred, preferred: {id, label, text, count}|null, by: 'wheel'|'vote'|null,
+ *    tied: [labels], total, pick: {id, label, text, count} }`
+ */
+export function pickVerdict(ask, id) {
+  const choices = decisionChoices(ask);
+  const pick = choices.find((c) => c.id === id) || null;
+  const w = ask && ask.wheel;
+  const total = (ask && ask.results && ask.results.total) || choices.reduce((n, c) => n + c.count, 0);
+  if (w && w.landed) {
+    const landed = choices.find((c) => c.id === w.landed) || null;
+    return { pick, preferred: landed, by: 'wheel', tied: [], total, isPreferred: Boolean(landed && landed.id === id) };
+  }
+  const top = Math.max(0, ...choices.map((c) => c.count));
+  const leaders = top ? choices.filter((c) => c.count === top) : [];
+  if (leaders.length === 1) {
+    return { pick, preferred: leaders[0], by: 'vote', tied: [], total, isPreferred: leaders[0].id === id };
+  }
+  return { pick, preferred: null, by: null, tied: leaders.map((c) => c.label || c.text), total, isPreferred: false };
+}
+
 export const METHOD_WORDS = Object.freeze({ vote: 'by vote', wheel: 'by the wheel', host: "the host's pick", spoken: 'said out loud' });
 
 /**

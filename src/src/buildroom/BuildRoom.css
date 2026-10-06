@@ -867,3 +867,8 @@
   .brm .brm-histscreen .brm-histside { grid-column: auto; grid-row: auto; order: -1; }
   .brm .brm-story-it { grid-template-columns: max-content 12px minmax(0, 1fr); }
 }
+
+/* ---- The host picks by clicking an option (owner, 2026-10-06) ----------- */
+.brm .brm-choice.is-pickable, .brm .brm-sug.is-pickable { cursor: pointer; }
+.brm .brm-choice.is-pickable:hover, .brm .brm-sug.is-pickable:hover { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-wheelpicks { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; }
