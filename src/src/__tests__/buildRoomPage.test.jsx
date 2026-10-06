@@ -1517,7 +1517,28 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     expect(lastPost().body).toEqual({
       kind: 'suggest', prompt: 'Who is this for, really?', detail: 'Name a real kind of person.',
       claudeGets: 'keep', claudeNote: 'Treat the winning answer as the audience.',
+      fromQuestion: 'platform:br-starters:c001#001',
     });
+  });
+
+  test('a question the room was asked says so, by where it came from or by its words, and can be asked again', async () => {
+    await openRoom(hostState({
+      asks: [
+        { AskId: '002', Kind: 'suggest', Prompt: 'Who is this for, in one sentence?', Options: [], Status: 'decided', Source: 'host', FromQuestion: 'platform:br-starters:c001#001' },
+        { AskId: '005', Kind: 'suggest', Prompt: 'what should we cut?', Options: [], Status: 'results', Source: 'host' },
+        { AskId: '006', Kind: 'suggest', Prompt: 'Who is this not for?', Options: [], Status: 'proposed', Source: 'host' },
+      ],
+    }));
+    withLibrary();
+    const dialog = await openAsk();
+    const lib = within(dialog).getByRole('complementary', { name: 'Ready questions' });
+    expect(within(lib).getByRole('button', { name: /Who is this for, in one sentence\?/ }).textContent).toMatch('Asked · ask 2');
+    expect(within(lib).getByRole('button', { name: /What should we cut\?/ }).textContent).toMatch('Asked · ask 5');
+    expect(lib.textContent).toMatch('2 of 2 asked in this room');
+    fireEvent.click(within(lib).getByRole('button', { name: /Who is this for, in one sentence\?/ }));
+    expect(dialog.textContent).toMatch('You asked this in ask 2. Ask again if the work has changed since.');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ prompt: 'Who is this for, in one sentence?', fromQuestion: 'platform:br-starters:c001#001' }));
   });
 
   test('no ready set: the library says how to make one, and the form works as before', async () => {

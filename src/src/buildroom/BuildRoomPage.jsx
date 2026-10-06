@@ -733,7 +733,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
     </div>
     </ImageLoader.Provider>
@@ -2925,7 +2925,26 @@ function EndDialog({ api, run, busy, onClose }) {
  * the set's note for Claude. A set it cannot reach, or no ready set at all,
  * leaves the library empty and the form as it always was.
  */
-function ReadyLibrary({ api, selectedKey, onPick }) {
+/**
+ * ASKED ALREADY (owner, 2026-10-06: "pick a question likely 1 at a time and
+ * then mark it as asked ... they might reask based on changes in the work,
+ * but at least they are aware it was asked"). An ask the room saw counts; a
+ * draft or a discarded one does not. Matched by the ready question it came
+ * from, or, for an ask made before that was recorded, by its words.
+ */
+const ROOM_SAW = ['live', 'voting', 'results', 'decided'];
+export function askedIndex(asks) {
+  const byKey = new Map();
+  const byWords = new Map();
+  for (const a of asks || []) {
+    if (!ROOM_SAW.includes(a.status)) continue;
+    if (a.fromQuestion) byKey.set(a.fromQuestion, a.askId);
+    byWords.set(String(a.prompt || '').trim().toLowerCase(), a.askId);
+  }
+  return (key, prompt) => byKey.get(key) || byWords.get(String(prompt || '').trim().toLowerCase()) || null;
+}
+
+function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   const [sets, setSets] = useState(null);
   const [active, setActive] = useState('');
   const [loaded, setLoaded] = useState({});
@@ -2969,7 +2988,8 @@ function ReadyLibrary({ api, selectedKey, onPick }) {
       </aside>
     );
   }
-  const items = loaded[active] || null;
+  const askedIn = askedIndex(asks);
+  const items = loaded[active] ? loaded[active].map((it) => ({ ...it, askedIn: askedIn(it.key, it.ask.prompt) })) : null;
   const q = query.trim().toLowerCase();
   const shown = (items || []).filter((it) => (category === 'all' || it.category === category) && (!q || it.ask.prompt.toLowerCase().includes(q)));
   const cats = [...new Set((items || []).map((it) => it.category))];
@@ -2994,15 +3014,18 @@ function ReadyLibrary({ api, selectedKey, onPick }) {
       )}
       {items === null && <p className="brm-hint">Loading…</p>}
       {items && !shown.length && <p className="brm-hint">No ready question matches.</p>}
+      {items && items.length > 0 && <p className="brm-hint">{items.filter((it) => it.askedIn).length} of {items.length} asked in this room</p>}
       <div className="brm-lib-list">
         {groupReady(shown).map((g) => (
           <section key={g.category} aria-label={g.category}>
             <h3 className="brm-h5">{g.category}</h3>
             {g.items.map((it) => (
-              <button key={it.key} type="button" className={`brm-lib-q${selectedKey === it.key ? ' is-on' : ''}`} aria-pressed={selectedKey === it.key} onClick={() => onPick(it)}>
+              <button key={it.key} type="button" className={`brm-lib-q${selectedKey === it.key ? ' is-on' : ''}${it.askedIn ? ' is-asked' : ''}`} aria-pressed={selectedKey === it.key} onClick={() => onPick(it)}>
                 <span className="brm-chip">{ASKED_AS[it.ask.kind]}</span>
                 <span className="brm-lib-t">{it.ask.prompt}</span>
-                <span className="brm-who">{claudeKindLabel(it.ask.claudeGets)}</span>
+                {it.askedIn
+                  ? <span className="brm-chip brm-chip--live">Asked · ask {askNumber(it.askedIn)}</span>
+                  : <span className="brm-who">{claudeKindLabel(it.ask.claudeGets)}</span>}
               </button>
             ))}
           </section>
@@ -3012,7 +3035,7 @@ function ReadyLibrary({ api, selectedKey, onPick }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', api, run, busy, onClose }) {
+export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
   const [prompt, setPrompt] = useState(initialPrompt);
   const [detail, setDetail] = useState(initialDetail);
@@ -3050,6 +3073,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
       ...(kind === 'choice' && from && from.ask.maxPicks > 1 ? { maxPicks: from.ask.maxPicks } : {}),
       ...(from || claudeGets !== 'do-now' ? { claudeGets } : {}),
       ...(claudeNote.trim() ? { claudeNote: claudeNote.trim() } : {}),
+      ...(from ? { fromQuestion: from.key } : {}),
       ...(draft ? { draft: true } : {}),
     };
     const ok = await run(() => api.createAsk(body));
@@ -3060,7 +3084,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
       <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
       <div className="brm-libgrid">
-        <ReadyLibrary api={api} selectedKey={from ? from.key : ''} onPick={pickReady} />
+        <ReadyLibrary api={api} asks={asks} selectedKey={from ? from.key : ''} onPick={pickReady} />
         <form onSubmit={submit}>
           <div className="brm-row brm-gap">
             <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">
@@ -3070,6 +3094,9 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
             </div>
             {from && <span className="brm-hint brm-push">from {from.setName} · {from.category}</span>}
           </div>
+          {from && from.askedIn && (
+            <p className="brm-notice" role="status">You asked this in ask {askNumber(from.askedIn)}. Ask again if the work has changed since.</p>
+          )}
           <label className="brm-field"><span className="brm-lbl">Question (shown big on the wall)</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
           <label className="brm-field"><span className="brm-lbl">Context (optional)</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} /></label>
           {kind === 'choice' && (

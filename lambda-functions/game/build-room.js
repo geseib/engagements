@@ -267,6 +267,7 @@ async function createAsk(ctx, role, body) {
     Source: role === 'agent' ? 'agent' : 'host',
     ...(v.claudeGets ? { ClaudeGets: v.claudeGets } : {}),
     ...(v.claudeNote ? { ClaudeNote: v.claudeNote } : {}),
+    ...(v.fromQuestion ? { FromQuestion: v.fromQuestion } : {}),
     CreatedAt: now,
     ...(status === 'live' ? { OpenedAt: now } : {}),
   };

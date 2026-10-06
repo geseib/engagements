@@ -290,6 +290,9 @@ function normalizeAsk(body) {
     // From a ready question (step 7b): what Claude gets when it is decided, and how to use it.
     claudeGets: b.claudeGets !== undefined && b.claudeGets !== '' ? claudeGetsOf(b.claudeGets) : '',
     claudeNote: cleanText(b.claudeNote, LIMITS.note),
+    // Which ready question it came from (`<scope>:<setId>:<question sk>`), so the
+    // host's library can say it was asked already (owner, 2026-10-06).
+    fromQuestion: cleanText(b.fromQuestion, 200),
   };
   if (kind === 'choice') {
     const opts = cleanOptions(b.options);
@@ -494,6 +497,7 @@ function askView(ask, room, audience, me) {
   if (ask.FromIdeas && ask.FromIdeas.length) out.fromIdeas = ask.FromIdeas;
   if (isHost && ask.ClaudeGets) out.claudeGets = ask.ClaudeGets;
   if (isHost && ask.ClaudeNote) out.claudeNote = ask.ClaudeNote;
+  if (isHost && ask.FromQuestion) out.fromQuestion = ask.FromQuestion;
   if (ask.AskForMockups && isHost) {
     const m = mockupProgress(out);
     out.mockups = { asked: true, have: m.have, total: m.total, ready: ask.Status === 'proposed' && m.total > 0 && m.have === m.total };

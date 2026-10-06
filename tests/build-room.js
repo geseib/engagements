@@ -1006,6 +1006,12 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     seed();
     const c = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Who is this for, in one sentence?', claudeGets: 'keep', claudeNote: 'Treat the winning answer as the audience.' });
     assert.deepStrictEqual([c.body.ask.claudeGets, c.body.ask.claudeNote], ['keep', 'Treat the winning answer as the audience.']);
+    // No fromQuestion sent: none recorded. A ready question records where it came from.
+    assert.strictEqual(c.body.ask.fromQuestion, undefined);
+    const r2 = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'What should we cut?', fromQuestion: 'platform:buildroomstarters:c004#001' });
+    assert.strictEqual(r2.body.ask.fromQuestion, 'platform:buildroomstarters:c004#001');
+    assert.ok(!JSON.stringify((await playCall('GET', 'state', priya)).body).includes('buildroomstarters'), 'phones never see it');
+    await hostCall('POST', `asks/${r2.body.ask.askId}`, { action: 'discard' });
     const p = await playCall('GET', 'state', priya);
     assert.ok(!JSON.stringify(p.body).includes('Treat the winning answer'), 'the note is never shown to the room');
     const d = await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'decide', direction: 'Who is this for: busy volunteers on an old phone' });

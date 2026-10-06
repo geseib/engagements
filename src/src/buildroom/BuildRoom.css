@@ -828,3 +828,5 @@
   .brm .brm-libgrid { grid-template-columns: 1fr; }
   .brm .brm-lib { max-height: 40vh; }
 }
+/* A ready question the room has been asked already: still there to ask again. */
+.brm .brm-lib-q.is-asked .brm-lib-t { color: var(--muted); }
