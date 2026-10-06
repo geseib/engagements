@@ -209,10 +209,10 @@ describe('each ask status', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Answer for the room' }));
     const panel = screen.getByRole('region', { name: 'Answer for the room' });
     fireEvent.click(within(panel).getByRole('button', { name: '4' }));
-    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('How close is this: 4 out of 5');
+    expect(within(panel).getByLabelText('Direction for Claude').value).toBe('How close is this: 4 out of 5 (5 is great, 1 needs work)');
     // Typing in the sentence stops it following the picks.
     fireEvent.change(within(panel).getByLabelText('Direction for Claude'), { target: { value: 'Four out of five: keep going, bigger dates.' } });
-    fireEvent.click(within(panel).getByRole('button', { name: '5 · There' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '5 · Great' }));
     expect(within(panel).getByLabelText('Direction for Claude').value).toBe('Four out of five: keep going, bigger dates.');
     fireEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('region', { name: 'Answer for the room' })).toBeNull();
@@ -309,7 +309,7 @@ describe('each ask status', () => {
     }));
     expect(screen.getByText('3.5')).toBeInTheDocument();
     expect(within(screen.getByText('Reasons').closest('div')).getByText('Warmer colours please')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How close is this: 3.5 out of 5');
+    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How close is this: 3.5 out of 5 (5 is great, 1 needs work)');
   });
 
   test('between asks: Claude is building, with the latest decision and the ticker', async () => {

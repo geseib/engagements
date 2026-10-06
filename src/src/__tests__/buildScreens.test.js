@@ -3,7 +3,7 @@
  */
 import {
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
-  decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod,
+  decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
 } from '../buildroom/buildScreens';
 
 describe('the screens', () => {
@@ -164,5 +164,15 @@ describe('deciding: the winner by default, any other on a click (owner, 2026-10-
   test('on the Stage the winning vote is the button', () => {
     expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]) }).primary).toEqual({ action: 'decide', label: 'Go with B' });
     expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([2, 2, 0]) }).primary.label).toBe('Decide on Host');
+  });
+});
+
+describe('the fixed rating scale (owner, 2026-10-06)', () => {
+  test('1 needs work, 5 is great, and a rating answer says so', () => {
+    expect(RATING_SCALE).toEqual({ min: 1, max: 5, lowLabel: 'Needs work', highLabel: 'Great' });
+    expect(ratingAnswer(4.2)).toBe('4.2 out of 5 (5 is great, 1 needs work)');
+    expect(ratingAnswer(null)).toBe('');
+    expect(questionAnswer('How close is this?', ratingAnswer('4'))).toBe('How close is this: 4 out of 5 (5 is great, 1 needs work)');
+    expect([1, 3, 5].map(ratingStep)).toEqual(['1 · Needs work', '3', '5 · Great']);
   });
 });

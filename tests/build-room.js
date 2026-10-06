@@ -279,6 +279,8 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const c = await agentCall('POST', 'asks', { kind: 'rating', prompt: 'How close is this?', lowLabel: 'Far', highLabel: 'There' });
     const id = c.body.ask.askId;
     assert.strictEqual(c.body.ask.status, 'proposed');
+    // One fixed scale (owner, 2026-10-06): labels sent by Claude are ignored.
+    assert.deepStrictEqual(c.body.ask.scale, { min: 1, max: 5, lowLabel: 'Needs work', highLabel: 'Great' });
     // With nobody answering, a direction is still required.
     assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'decide', chosen: ['4'], spoken: true })).status, 400);
     const d = await hostCall('POST', `asks/${id}`, {
@@ -295,7 +297,9 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(mine.length, 1);
     // Claude gets the question and the answer (and the host's note); how it
     // was decided is the record's, not Claude's (owner, 2026-10-06).
-    assert.strictEqual(mine[0].text, 'How close is this: 4 out of 5\n\nAlso from the room: Wants the dates bigger');
+    // A rating says what its number means, even when the host wrote the words.
+    assert.strictEqual(mine[0].text, 'How close is this: 4 out of 5 (5 is great, 1 needs work)\n\nAlso from the room: Wants the dates bigger');
+    assert.strictEqual(d.body.ask.decision.direction, 'How close is this: 4 out of 5 (5 is great, 1 needs work)');
   });
 
   await check('a phone never sees the host\'s decision note: no direction entries, no decision detail', async () => {

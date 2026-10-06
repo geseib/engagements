@@ -302,7 +302,8 @@ async function askAction(ctx, role, askId, body) {
     if (action === 'close') next.ClosedAt = now;
     if (action === 'discard') next.DiscardedAt = now;
     if (action === 'decide') {
-      const direction = S.cleanText(b.direction, S.LIMITS.direction) || S.defaultDirection(ask, room);
+      // A rating always carries its meaning: 5 is great, 1 needs work (owner, 2026-10-06).
+      const direction = S.withRatingMeaning(ask.Kind, S.cleanText(b.direction, S.LIMITS.direction) || S.defaultDirection(ask, room));
       if (!direction) return fail(400, 'Write the direction for Claude (nobody has answered yet)');
       let chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
       const note = S.cleanText(b.note, S.LIMITS.note);

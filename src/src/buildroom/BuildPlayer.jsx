@@ -5,6 +5,7 @@ import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
 import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
+import { RATING_SCALE } from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import './BuildPlayer.css';
 
@@ -347,7 +348,6 @@ function RatingAsk({ ask, mine, api, onResult, shell }) {
   const [value, setValue] = useState(() => (sent && sent.rating) || null);
   const [why, setWhy] = useState(() => (sent && sent.why) || '');
   const { busy, error, run } = useSend(onResult);
-  const scale = ask.scale || {};
   const unchanged = Boolean(sent) && sent.rating === value && (sent.why || '') === why.trim();
 
   const submit = () => {
@@ -377,7 +377,7 @@ function RatingAsk({ ask, mine, api, onResult, shell }) {
       <>
         <AskHead ask={ask} word={KIND_WORD.rating} />
         <RatingInput
-          question={{ scale: '1-5', lowLabel: scale.lowLabel || '', highLabel: scale.highLabel || '' }}
+          question={{ scale: '1-5', lowLabel: RATING_SCALE.lowLabel, highLabel: RATING_SCALE.highLabel }}
           value={value}
           onChange={setValue}
         />

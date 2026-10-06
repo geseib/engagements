@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.6.0';
+const VERSION = '1.6.1';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -224,7 +224,7 @@ function renderResults(ask) {
     const sc = ask.scale || {};
     const avg = typeof rt.avg === 'number' ? rt.avg.toFixed(1) : '—';
     lines.push(`Results: average ${avg} / ${sc.max || 5} from ${rt.count || 0} rating${rt.count === 1 ? '' : 's'}` +
-      (sc.lowLabel || sc.highLabel ? `  (1 = ${s(sc.lowLabel) || 'low'}, ${sc.max || 5} = ${s(sc.highLabel) || 'high'})` : ''));
+      `  (1 = ${s(sc.lowLabel) || 'Needs work'}, ${sc.max || 5} = ${s(sc.highLabel) || 'Great'})`);
     if (Array.isArray(rt.dist)) lines.push('  ' + rt.dist.map((n, i) => `${i + 1}: ${n}`).join('   '));
   } else {
     const ranked = Array.isArray(r.ranked) ? r.ranked : [];
@@ -512,14 +512,12 @@ const TOOLS = [
   },
   {
     name: 'ask_room_to_rate',
-    description: 'Take a quick 1–5 pulse from the room, e.g. "How close is this to what we want?". Use to check direction after showing something, not for choosing between options. Returns an askId; then call wait_for_room.',
+    description: 'Take a quick 1–5 pulse from the room, e.g. "How close is this to what we want?". The scale is fixed: 1 needs work, 5 is great. Use to check direction after showing something, not for choosing between options. Returns an askId; then call wait_for_room.',
     inputSchema: {
       type: 'object',
       properties: {
         question: str('The question, short and readable on a projector.', { minLength: 1, maxLength: 300 }),
         context: str('Optional background shown under the question.', { maxLength: 1000 }),
-        lowLabel: str('Optional label for 1, e.g. "Way off".', { maxLength: 60 }),
-        highLabel: str('Optional label for 5, e.g. "Nailed it".', { maxLength: 60 }),
       },
       required: ['question'],
       additionalProperties: false,
@@ -977,10 +975,9 @@ const HANDLERS = {
   async ask_room_to_rate(args, ctx) {
     const body = clean({
       kind: 'rating', prompt: reqStr(args, 'question'), detail: optStr(args, 'context'),
-      lowLabel: optStr(args, 'lowLabel'), highLabel: optStr(args, 'highLabel'),
     });
     const res = await api('POST', 'asks', body, ctx.signal);
-    return createdAskText(res.ask || {}, res.inbox, 'The room will rate 1–5 and can add a short "why".');
+    return createdAskText(res.ask || {}, res.inbox, 'The room will rate 1–5 (1 needs work, 5 is great) and can add a short "why".');
   },
 
   async wait_for_room(args, ctx) {

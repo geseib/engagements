@@ -19,6 +19,13 @@ const crypto = require('crypto');
 const GAME_TYPE_BUILD = 'build';
 
 const KINDS = Object.freeze(['suggest', 'choice', 'rating']);
+/**
+ * Every Rate ask uses one fixed scale (owner, 2026-10-06): 1 needs work, 5 is
+ * great. Hosts and Claude cannot relabel it, so a 4 always means the same
+ * thing in the room, in the log and to Claude. Rows written with custom
+ * labels read as this scale.
+ */
+const RATING_SCALE = Object.freeze({ min: 1, max: 5, lowLabel: 'Needs work', highLabel: 'Great' });
 const STATUSES = Object.freeze(['proposed', 'live', 'voting', 'results', 'decided', 'discarded']);
 /** Statuses in which the room is answering right now. */
 const OPEN_STATUSES = Object.freeze(['live', 'voting']);
@@ -228,14 +235,7 @@ function normalizeAsk(body) {
     const mp = Number(b.maxPicks);
     value.maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, value.options.length) : 1;
   }
-  if (kind === 'rating') {
-    value.scale = {
-      min: 1,
-      max: 5,
-      lowLabel: cleanText(b.lowLabel, LIMITS.scaleLabel),
-      highLabel: cleanText(b.highLabel, LIMITS.scaleLabel),
-    };
-  }
+  if (kind === 'rating') value.scale = { ...RATING_SCALE };
   if (kind === 'suggest') {
     const mp = Number(b.maxPicks);
     value.maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, 5) : DEFAULT_MAX_PICKS;
@@ -259,13 +259,6 @@ function applyEdit(ask, body, { answered }) {
     if (opts.error) return opts;
     next.Options = opts.value;
     next.MaxPicks = Math.min(next.MaxPicks || 1, opts.value.length);
-  }
-  if (ask.Kind === 'rating' && (b.lowLabel !== undefined || b.highLabel !== undefined)) {
-    next.Scale = {
-      ...(ask.Scale || { min: 1, max: 5 }),
-      ...(b.lowLabel !== undefined ? { lowLabel: cleanText(b.lowLabel, LIMITS.scaleLabel) } : {}),
-      ...(b.highLabel !== undefined ? { highLabel: cleanText(b.highLabel, LIMITS.scaleLabel) } : {}),
-    };
   }
   return { value: next };
 }
@@ -387,7 +380,7 @@ function askView(ask, room, audience, me) {
     status: ask.Status,
     source: ask.Source || 'host',
     options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null })),
-    scale: ask.Scale || null,
+    scale: ask.Kind === 'rating' ? RATING_SCALE : null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
     openedAt: ask.OpenedAt || null,
@@ -772,6 +765,11 @@ function wheelLanded(ask) {
 const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
 const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
 const DECISION_METHODS = Object.freeze(['vote', 'wheel', 'host', 'spoken']);
+/** A rating answer that carries its own meaning, so Claude and the log read it right. */
+const ratingAnswer = (avg) => (avg === null || avg === undefined || avg === '' ? '' : `${avg} out of 5 (5 is great, 1 needs work)`);
+const RATING_MEANING = '(5 is great, 1 needs work)';
+/** A rating decision always says what its numbers mean, even after the host rewrites it. */
+const withRatingMeaning = (kind, direction) => (kind !== 'rating' || !direction || /needs work/i.test(direction) ? direction : `${direction} ${RATING_MEANING}`);
 
 function defaultDirection(ask, room) {
   const landed = wheelLanded(ask);
@@ -781,7 +779,7 @@ function defaultDirection(ask, room) {
     const top = [...t.options].sort((a, b) => b.count - a.count)[0];
     return top && top.count ? questionAnswer(ask.Prompt, top.title) : '';
   }
-  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : questionAnswer(ask.Prompt, `${t.rating.avg} out of 5`);
+  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : questionAnswer(ask.Prompt, ratingAnswer(t.rating.avg));
   const top = t.ranked[0];
   return top ? questionAnswer(ask.Prompt, top.text) : '';
 }
@@ -797,6 +795,6 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView, questionAnswer, DECISION_METHODS,
+  WALL_COMMENT_MS, wallCommentView, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

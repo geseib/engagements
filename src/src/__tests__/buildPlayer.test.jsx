@@ -237,15 +237,15 @@ describe('Choose (choice)', () => {
 });
 
 describe('Rate (rating)', () => {
-  test('1–5 with the end labels, POST rating + why', async () => {
+  test('1–5 on the fixed scale (old custom labels ignored), POST rating + why', async () => {
     serve(baseView({
       currentAskId: '005',
       current: ask({ askId: '005', kind: 'rating', prompt: 'How close is this?', scale: { min: 1, max: 5, lowLabel: 'Far off', highLabel: 'Nailed it' } }),
     }));
     await mount();
     await screen.findByText('How close is this?');
-    expect(screen.getByText('1 · Far off')).toBeInTheDocument();
-    expect(screen.getByText('5 · Nailed it')).toBeInTheDocument();
+    expect(screen.getByText('1 · Needs work')).toBeInTheDocument();
+    expect(screen.getByText('5 · Great')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: '4 of 5' }));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Rate 4' })); });
     expect(posts('respond')[0].body).toEqual({ playerName: ME, clientId: CID, askId: '005', rating: 4, why: '' });

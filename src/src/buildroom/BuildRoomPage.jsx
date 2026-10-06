@@ -42,7 +42,7 @@ import {
 import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
-  questionAnswer, decisionMethod, METHOD_WORDS,
+  questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -190,7 +190,7 @@ export function defaultDirection(ask) {
   }
   if (ask.kind === 'rating') {
     return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
-      ? questionAnswer(ask.prompt, `${r.rating.avg} out of 5`) : '';
+      ? questionAnswer(ask.prompt, ratingAnswer(r.rating.avg)) : '';
   }
   const top = (r.ranked || [])[0];
   return top ? questionAnswer(ask.prompt, top.text) : '';
@@ -1227,20 +1227,16 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
   const [prompt, setPrompt] = useState(ask.prompt);
   const [detail, setDetail] = useState(ask.detail || '');
   const [options, setOptions] = useState(() => (ask.options || []).map((o) => ({ ...o })));
-  const [low, setLow] = useState(ask.scale?.lowLabel || '');
-  const [high, setHigh] = useState(ask.scale?.highLabel || '');
 
   const optionsDirty = JSON.stringify(options.map(({ title, detail: d, url }) => [title, d, url]))
     !== JSON.stringify((ask.options || []).map(({ title, detail: d, url }) => [title, d, url]));
-  const dirty = prompt !== ask.prompt || detail !== (ask.detail || '') || optionsDirty
-    || low !== (ask.scale?.lowLabel || '') || high !== (ask.scale?.highLabel || '');
+  const dirty = prompt !== ask.prompt || detail !== (ask.detail || '') || optionsDirty;
 
   const editBody = () => ({
     action: 'edit',
     prompt,
     detail,
     ...(ask.kind === 'choice' ? { options: options.map(({ title, detail: d, url }) => ({ title, detail: d, url })) } : {}),
-    ...(ask.kind === 'rating' ? { lowLabel: low, highLabel: high } : {}),
   });
 
   const save = () => run(() => api.askAction(ask.askId, editBody()));
@@ -1298,7 +1294,7 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
           ))}
         </ul>
       )}
-      {ask.kind === 'rating' && (low || high) && <p className="brm-hint">1 means {low || '…'} · 5 means {high || '…'}</p>}
+      {ask.kind === 'rating' && <p className="brm-hint">1 means {RATING_SCALE.lowLabel.toLowerCase()} · 5 means {RATING_SCALE.highLabel.toLowerCase()}</p>}
       {missing.length > 0 && !ended && (
         <div className="brm-notice brm-row brm-gap" role="status" data-testid="brm-previews-missing">
           {askedMockups ? (
@@ -1353,12 +1349,6 @@ function ReviewCard({ ask, busy, ended, run, api, connected }) {
               </button>
             )}
             <div className="brm-notice"><b>Letters are fixed.</b> Claude stamps &quot;Choice A&quot;, &quot;Choice B&quot; on its mockups, so renaming an option keeps its letter.</div>
-          </div>
-        )}
-        {ask.kind === 'rating' && (
-          <div className="brm-two">
-            <label className="brm-field"><span className="brm-lbl">1 means</span><input className="brm-input" value={low} maxLength={40} onChange={(e) => setLow(e.target.value)} /></label>
-            <label className="brm-field"><span className="brm-lbl">5 means</span><input className="brm-input" value={high} maxLength={40} onChange={(e) => setHigh(e.target.value)} /></label>
           </div>
         )}
         </div>
@@ -1562,7 +1552,7 @@ function RatingBoard({ ask }) {
       <div className="brm-dist">
         {[1, 2, 3, 4, 5].map((n) => (
           <div className="brm-distrow" key={n}>
-            <span className="brm-distn">{n}{n === 1 && ask.scale?.lowLabel ? ` · ${ask.scale.lowLabel}` : ''}{n === 5 && ask.scale?.highLabel ? ` · ${ask.scale.highLabel}` : ''}</span>
+            <span className="brm-distn">{ratingStep(n)}</span>
             <div className="brm-bar"><span style={{ width: `${((rating.dist || [])[n - 1] || 0) / max * 100}%` }} /></div>
             <span className="brm-distc">{(rating.dist || [])[n - 1] || 0}</span>
           </div>
@@ -1651,7 +1641,7 @@ export function spokenDirection(ask, chosen) {
     const picked = (ask.options || []).filter((o) => chosen.includes(o.label)).map((o) => o.title);
     return picked.length ? questionAnswer(ask.prompt, picked.join(' and ')) : '';
   }
-  if (ask.kind === 'rating') return chosen[0] ? questionAnswer(ask.prompt, `${chosen[0]} out of 5`) : '';
+  if (ask.kind === 'rating') return chosen[0] ? questionAnswer(ask.prompt, ratingAnswer(chosen[0])) : '';
   return '';
 }
 
@@ -1729,7 +1719,7 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
           <div className="brm-foldchips">
             {[1, 2, 3, 4, 5].map((n) => (
               <button key={n} type="button" className={`brm-fold${chosen[0] === String(n) ? ' is-in' : ''}`} aria-pressed={chosen[0] === String(n)} onClick={() => pick([String(n)])}>
-                {n}{n === 1 && ask.scale?.lowLabel ? ` · ${ask.scale.lowLabel}` : ''}{n === 5 && ask.scale?.highLabel ? ` · ${ask.scale.highLabel}` : ''}
+                {ratingStep(n)}
               </button>
             ))}
           </div>
@@ -2563,8 +2553,6 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
   const [prompt, setPrompt] = useState(initialPrompt);
   const [detail, setDetail] = useState(initialDetail);
   const [options, setOptions] = useState([{ title: '', url: '' }, { title: '', url: '' }]);
-  const [low, setLow] = useState('');
-  const [high, setHigh] = useState('');
   const [draft, setDraft] = useState(false);
   const dirty = Boolean(prompt || detail || options.some((o) => o.title));
   const requestClose = () => {
@@ -2581,7 +2569,6 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
       prompt: prompt.trim(),
       detail: detail.trim(),
       ...(kind === 'choice' ? { options: filled.map((o) => ({ title: o.title.trim(), url: o.url.trim() })) } : {}),
-      ...(kind === 'rating' ? { lowLabel: low.trim(), highLabel: high.trim() } : {}),
       ...(draft ? { draft: true } : {}),
     };
     const ok = await run(() => api.createAsk(body));
@@ -2617,12 +2604,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
             {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
           </div>
         )}
-        {kind === 'rating' && (
-          <div className="brm-two">
-            <label className="brm-field"><span className="brm-lbl">1 means</span><input className="brm-input" value={low} maxLength={40} onChange={(e) => setLow(e.target.value)} /></label>
-            <label className="brm-field"><span className="brm-lbl">5 means</span><input className="brm-input" value={high} maxLength={40} onChange={(e) => setHigh(e.target.value)} /></label>
-          </div>
-        )}
+        {kind === 'rating' && <p className="brm-hint">The room rates 1 to 5: 1 means needs work, 5 means great.</p>}
         <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Save as a draft; don&apos;t open it yet</label>
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>

@@ -194,6 +194,17 @@ export function winnerOf(ask) {
 export const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
 export const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
 
+/**
+ * Every Rate ask uses one fixed scale (owner, 2026-10-06), the server's
+ * RATING_SCALE: 1 needs work, 5 is great. A rating sent to Claude carries that
+ * meaning in its own words, so "4 out of 5" can never be misread.
+ */
+export const RATING_SCALE = Object.freeze({ min: 1, max: 5, lowLabel: 'Needs work', highLabel: 'Great' });
+export const RATING_MEANING = '(5 is great, 1 needs work)';
+export const ratingAnswer = (n) => (n === null || n === undefined || n === '' ? '' : `${n} out of 5 ${RATING_MEANING}`);
+/** "1 · Needs work", "3", "5 · Great". */
+export const ratingStep = (n) => (n === 1 ? `1 · ${RATING_SCALE.lowLabel}` : n === 5 ? `5 · ${RATING_SCALE.highLabel}` : String(n));
+
 /** The sentence Claude gets for a pick, however it was picked. */
 export function directionFor(ask, id) {
   const pick = decisionChoices(ask).find((c) => c.id === id);
