@@ -31,6 +31,7 @@ const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { toAll, toHosts } = require('./survey-broadcast');
 const S = require('./build-store');
 const C = require('./build-crew');
+const LAN = require('./build-lan');
 
 // S3 is loaded lazily: most calls never touch an image, and tests stub it.
 let s3client = null;
@@ -1596,6 +1597,58 @@ async function postActivity(ctx, body) {
   return reply(200, { activity: items });
 }
 
+/**
+ * WI-FI SHARE (docs/design/build-room-lan-share/PLAN.md §3). The row is
+ * written with UpdateItem so the host's switch and the plugin's report never
+ * overwrite each other's fields. Sealed fields are encrypted by hand, as the
+ * brief draft is.
+ */
+async function updateLan(ctx, set) {
+  const sealed = ctx.orgId ? await encryptItem(ctx.orgId, 'buildLan', set) : set;
+  const names = { '#ttl': 'ttl' };
+  const values = { ':ttl': ctx.ttl };
+  const sets = ['#ttl = :ttl'];
+  Object.entries(sealed).forEach(([k, v], i) => { names[`#f${i}`] = k; values[`:f${i}`] = v; sets.push(`#f${i} = :f${i}`); });
+  await db.send(new UpdateCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN }, UpdateExpression: `SET ${sets.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+}
+
+/** The host's switch: `{on}` turns sharing on or off; `{dismissOffer}` hides the one-time offer. */
+async function hostShare(ctx, body) {
+  const b = body || {};
+  const now = new Date().toISOString();
+  if (b.dismissOffer === true) await updateLan(ctx, { OfferDismissedAt: now });
+  if (typeof b.on === 'boolean') {
+    if (b.on && (await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
+    await updateLan(ctx, { Wanted: b.on, WantedAt: now, OfferDismissedAt: now });
+    await logEntry(ctx, { kind: 'note', by: 'host', text: b.on ? 'You shared the build on this Wi-Fi' : 'You stopped sharing the build on this Wi-Fi' });
+  }
+  const room = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true }) });
+}
+
+/** The plugin's report, every 4 to 15 seconds. Answers what to open. */
+async function shareReport(ctx, body) {
+  const norm = LAN.normalizeReport(body);
+  if (norm.error) return fail(400, norm.error);
+  const now = new Date().toISOString();
+  const room = await loadRoom(ctx);
+  const before = room.lan || {};
+  const v = norm.value;
+  const set = { ...v, ReportedAt: now };
+  if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
+  await updateLan(ctx, set);
+  const changed = ['Status', 'Key', 'Open', 'Error'].some((k) => before[k] !== v[k])
+    || JSON.stringify(before.Map || []) !== JSON.stringify(v.Map);
+  if (changed) {
+    const rev = (await touchState(ctx)).Rev;
+    await announce(ctx, rev);
+  }
+  const ended = (await sessionState(ctx)) === 'ENDED';
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets: LAN.lanTargets(room) });
+}
+
 async function routeHost(ctx, role, method, parts, body, event, query) {
   const [a, b, c, d] = parts;
   const hostOnly = () => (role === 'host' ? null : fail(403, 'Only the host can do that'));
@@ -1625,9 +1678,13 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   }
   if (method !== 'POST') return fail(404, 'Not found');
 
+  // Before the ended check: an ended session still answers the plugin (wanted: false).
+  if (a === 'share' && b === 'report' && !c) return role === 'agent' ? shareReport(ctx, body) : fail(403, 'Only Claude Code reports the Wi-Fi share');
+
   const ended = (await sessionState(ctx)) === 'ENDED';
   if (ended && !(a === 'outcome' || (a === 'log' && b))) return fail(409, 'This session has ended');
 
+  if (a === 'share' && !b) return hostOnly() || hostShare(ctx, body);
   if (a === 'activity' && !b) return role === 'agent' ? postActivity(ctx, body) : fail(403, 'Only Claude reports its activity');
   if (a === 'asks' && !b) return createAsk(ctx, role, body);
   if (a === 'asks' && b && !c) return hostOnly() || askAction(ctx, role, b, body);
@@ -1845,7 +1902,10 @@ exports.handler = async (event) => {
     const role = hostOrAgent(event, ctx);
     if (!role) return fail(404, 'Session not found');
     if (role === 'agent' || role === 'builder') {
-      await agentTouch(ctx, event, role);
+      // The Wi-Fi share report comes from the plugin's background loop: it
+      // neither counts as Claude being seen nor takes Claude's inbox.
+      const shareReportCall = parts[0] === 'share' && parts[1] === 'report';
+      if (!shareReportCall) await agentTouch(ctx, event, role);
       const res = role === 'builder'
         ? await routeBuilder(ctx, method, parts, body, event.queryStringParameters || {})
         : await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
@@ -1860,7 +1920,7 @@ exports.handler = async (event) => {
       // 2026-10-06). The checkpoint TOOL marks itself `fromTool`; a checkpoint
       // without it (any plugin's hook) leaves the inbox for the next real call.
       const hookCheckpoint = parts[0] === 'log' && body && body.kind === 'checkpoint' && body.fromTool !== true;
-      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity' && !hookCheckpoint) {
+      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity' && !hookCheckpoint && !shareReportCall) {
         const inbox = await takeInbox(ctx, role);
         const parsed = JSON.parse(res.body || '{}');
         // The brief rides along whenever it changed for Claude: a Keep in mind

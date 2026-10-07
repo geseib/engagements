@@ -533,6 +533,9 @@ const ENCRYPTED_FIELDS = Object.freeze({
   buildReview: Object.freeze(['Does', 'Fits', 'Risk', 'Suggestions', 'TestsSummary']),
   // Claude's live activity lines ("Edited payroll.js"): the team's content too.
   buildActivity: Object.freeze(['Items']),
+  // The Wi-Fi share (build-lan.js): the local and Wi-Fi addresses, the key
+  // that opens the gateway, and the plugin's last error.
+  buildLan: Object.freeze(['Map', 'Key', 'Error']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

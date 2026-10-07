@@ -15,6 +15,7 @@
  * capped, every URL must be http(s), and the views never carry markup.
  */
 const crypto = require('crypto');
+const LAN = require('./build-lan');
 
 const GAME_TYPE_BUILD = 'build';
 
@@ -305,6 +306,7 @@ const timeKey = (iso) => `${String(Date.parse(iso) || Date.now()).padStart(13, '
 const SK = Object.freeze({
   state: 'BUILD#STATE',
   activity: 'BUILD#ACTIVITY',
+  lan: LAN.SK_LAN,
   ask: (askId) => `BUILD#ASK#${askId}`,
   resp: (askId, respId) => `BUILD#RESP#${askId}#${respId}`,
   ans: (askId, player) => `BUILD#ANS#${askId}#${player}`,
@@ -340,6 +342,7 @@ const imageKey = (gameId, imageId) => `builds/${gameId}/${imageId}`;
 function entityForSk(sk) {
   if (sk === SK.state) return 'buildState';
   if (sk === SK.activity) return 'buildActivity';
+  if (sk === SK.lan) return 'buildLan';
   if (sk.startsWith('BUILD#ASK#')) return 'buildAsk';
   if (sk.startsWith('BUILD#RESP#') || sk.startsWith('BUILD#ANS#')) return 'buildResponse';
   if (sk.startsWith('BUILD#LOG#')) return 'buildLog';
@@ -480,13 +483,14 @@ function transition(ask, action) {
 /** Sort every BUILD# row into its kind. Rows must already be decrypted. */
 function roomFromRows(rows) {
   const room = {
-    state: null, activity: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
+    state: null, activity: null, lan: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
     builders: [], tasks: [], shares: [], comments: [], reviews: [],
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
     if (sk === SK.state) room.state = r;
     else if (sk === SK.activity) room.activity = r;
+    else if (sk === SK.lan) room.lan = r;
     else if (sk.startsWith('BUILD#ASK#')) room.asks.push(r);
     else if (sk.startsWith('BUILD#RESP#')) room.resps.push(r);
     else if (sk.startsWith('BUILD#ANS#')) room.answers.push(r);
@@ -848,6 +852,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     settings: settingsOf(room.state),
     agent: agentStatus(room.state, room.keys, now),
     activity: activityView(room.activity),
+    lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent }),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
     // Host notes are the host's own; Claude never sees them.
@@ -868,6 +873,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
 
 /** What a phone sees. */
 function publicView({ gameId, meta, sessionState, room, players, me, now }) {
+  const lanLink = LAN.lanTranslator(room.lan, now);
+  const forRoom = (u) => (u && !isLocalUrl(u) ? u : (u ? lanLink(u) : ''));
   const currentAskId = (room.state && room.state.CurrentAskId) || null;
   const visibleAsks = room.asks.filter((a) => !['proposed', 'discarded'].includes(a.Status));
   const current = currentAskId ? room.asks.find((a) => a.AskId === currentAskId && OPEN_STATUSES.concat(['results', 'decided']).includes(a.Status)) : null;
@@ -888,7 +895,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     state: sessionState || null,
     playerCount: players.length,
     currentAskId: current ? current.AskId : null,
-    current: current ? publicAsk(askView(current, room, 'public', me)) : null,
+    current: current ? publicAsk(askView(current, room, 'public', me), forRoom) : null,
     decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision).map((a) => ({
       askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.direction || '', decidedAt: a.DecidedAt || null,
     })),
@@ -898,10 +905,11 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // note or the idea's author.
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
       .map(({ forAgent, deliveredAt, as, held, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
-      .map((l) => ({ ...l, link: publicUrl(l.link) })),
+      .map((l) => ({ ...l, link: forRoom(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
     images: room.images.map(imageView),
-    outcome: publicOutcome(outcomeView(room.state && room.state.Outcome)),
+    outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forRoom),
+    lan: LAN.lanPublicView(room, now),
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
     mine,
     rev: (room.state && room.state.Rev) || 0,
@@ -909,11 +917,11 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
 }
 
 /** A phone's copy of an ask: a preview it cannot open is not offered. */
-function publicAsk(ask) {
-  return { ...ask, options: ask.options.map((o) => ({ ...o, url: publicUrl(o.url) })) };
+function publicAsk(ask, forRoom = publicUrl) {
+  return { ...ask, options: ask.options.map((o) => ({ ...o, url: forRoom(o.url) })) };
 }
-function publicOutcome(o) {
-  return o ? { ...o, links: o.links.filter((l) => !isLocalUrl(l.url)) } : o;
+function publicOutcome(o, forRoom = publicUrl) {
+  return o ? { ...o, links: o.links.map((l) => ({ ...l, url: forRoom(l.url) })).filter((l) => l.url) } : o;
 }
 
 /**

@@ -1222,6 +1222,103 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await state()).opening.phase, 'building');
   });
 
+  console.log('\nWi-Fi share (docs/design/build-room-lan-share/PLAN.md §3)');
+  const report = (body) => agentCall('POST', 'share/report', body);
+  const LIVE = (over = {}) => ({ status: 'live', key: 'abcdefghijklmnopqrstuv', open: 2, map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }], ...over });
+
+  await check('off by default: the plugin is told not wanted, and is given the local addresses Claude showed', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/' });
+    const r = await report({ status: 'off' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.body, { wanted: false, targets: ['http://localhost:5173'] });
+  });
+  await check('a report never takes Claude\'s inbox and never marks Claude as seen', async () => {
+    seed();
+    await hostCall('POST', 'directions', { text: 'Make the counters bigger' });
+    const r = await report({ status: 'off' });
+    assert.strictEqual(r.body.inbox, undefined);
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || {};
+    assert.strictEqual(st.AgentSeenAt, undefined);
+    const next = await agentCall('GET', 'inbox');
+    assert.ok(next.body.inbox.some((d) => /bigger/.test(d.text)), 'the direction is still waiting for Claude');
+  });
+  await check('only the host turns it on; Claude cannot, and a participant cannot', async () => {
+    seed();
+    assert.strictEqual((await agentCall('POST', 'share', { on: true })).status, 403);
+    const r = await hostCall('POST', 'share', { on: true });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.lan.status, 'starting');
+    assert.strictEqual((await report({ status: 'off' })).body.wanted, true);
+  });
+  await check('live: participants get the Wi-Fi link with the key; off: they get nothing, at once', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/b' });
+    await hostCall('POST', 'share', { on: true });
+    await report(LIVE());
+    let v = (await playCall('GET', 'state', priya)).body;
+    assert.strictEqual(v.lan.open, 'http://192.168.1.20:4900/b?k=abcdefghijklmnopqrstuv');
+    assert.ok(v.log.some((l) => l.link === 'http://192.168.1.20:4900/b?k=abcdefghijklmnopqrstuv'));
+    await hostCall('POST', 'share', { on: false });
+    v = (await playCall('GET', 'state', priya)).body;
+    assert.strictEqual(v.lan, null);
+    assert.ok(!JSON.stringify(v).includes('192.168.1.20'));
+  });
+  await check('the host sees each address with its link and the count; Claude sees no key', async () => {
+    seed();
+    await hostCall('POST', 'share', { on: true });
+    await report(LIVE());
+    const host = (await hostCall('GET', 'state')).body.lan;
+    assert.strictEqual(host.status, 'live');
+    assert.strictEqual(host.open, 2);
+    assert.ok(host.map[0].link.includes('k=abcdefghijklmnopqrstuv'));
+    const agent = (await agentCall('GET', 'state')).body;
+    assert.ok(!JSON.stringify(agent.lan).includes('abcdefghijklmnopqrstuv'));
+  });
+  await check('a stale report counts as off for participants', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await hostCall('POST', 'share', { on: true });
+    await report(LIVE());
+    const k = key(`GAME#${GAME}`, 'BUILD#LAN');
+    store.set(k, { ...store.get(k), ReportedAt: new Date(Date.now() - 60000).toISOString() });
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.lan, null);
+  });
+  await check('an ended session is never wanted, and cannot be turned on', async () => {
+    seed();
+    await hostCall('POST', 'share', { on: true });
+    put({ PK: `GAME#${GAME}`, SK: 'STATE', State: 'ENDED' });
+    assert.strictEqual((await report({ status: 'off' })).body.wanted, false);
+    assert.strictEqual((await hostCall('POST', 'share', { on: true })).status, 409);
+  });
+  await check('dismissing the offer is remembered', async () => {
+    seed();
+    await hostCall('POST', 'share', { dismissOffer: true });
+    assert.strictEqual((await hostCall('GET', 'state')).body.lan.offerDismissed, true);
+  });
+  await check('a team room seals the map, the key and the error at rest, and still hands out a working link', async () => {
+    seed({ orgId: ORG });
+    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    const on = await hostCall('POST', 'share', { on: true }, { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG });
+    assert.strictEqual(on.status, 200, JSON.stringify(on.body));
+    await report(LIVE());
+    const raw = store.get(key(`GAME#${GAME}`, 'BUILD#LAN'));
+    assert.ok(!JSON.stringify(raw).includes('abcdefghijklmnopqrstuv'), 'the key is sealed');
+    assert.ok(!JSON.stringify(raw).includes('192.168.1.20'), 'the map is sealed');
+    const v = (await playCall('GET', 'state', priya)).body;
+    assert.strictEqual(v.lan.open, 'http://192.168.1.20:4900/?k=abcdefghijklmnopqrstuv');
+  });
+  await check('a change in what the plugin reports is announced; the same report again is not', async () => {
+    seed();
+    await hostCall('POST', 'share', { on: true });
+    sent = [];
+    await report(LIVE());
+    assert.ok(sent.some((m) => m.message.type === 'buildChanged'));
+    sent = [];
+    await report(LIVE());
+    assert.ok(!sent.some((m) => m.message.type === 'buildChanged'));
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);
