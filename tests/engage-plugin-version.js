@@ -19,7 +19,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const PIN = { version: '1.10.0', sha256: '5712d0bf843374f1e32b9652d389e34d745e24e89cf87f14951364dac99bc2ad' };
+const PIN = { version: '1.11.0', sha256: 'e51b8f55c74570d8d204cb92d44cf02f46182bc1d3d9610859c2bc71a0fdb5ee' };
 
 const text = fs.readFileSync(path.join(__dirname, '..', 'src', 'public', 'engage-mcp.mjs'), 'utf8');
 const version = (text.match(/const VERSION = '([^']+)';/) || [])[1];

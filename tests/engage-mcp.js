@@ -59,6 +59,7 @@ let endedNext = false;
 let stateInbox = [];
 let stateBrief;
 let stateOpening;
+let stateLan;
 // Claude's project folder, so the plugin writes .engage/brief.md somewhere harmless.
 const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'engage-mcp-'));
 fs.mkdirSync(path.join(PROJECT, '.engage'));
@@ -85,6 +86,7 @@ const server = http.createServer((req, res) => {
         inbox: stateInbox,
         ...(stateBrief ? { brief: stateBrief } : {}),
         ...(stateOpening ? { opening: stateOpening } : {}),
+        ...(stateLan ? { lan: stateLan } : {}),
       });
     }
     if (req.method === 'POST' && p === 'asks') {
@@ -347,6 +349,17 @@ const hardStop = setTimeout(() => {
       assert.ok(/THE ROOM BRIEF[\s\S]*Keep in mind:\n  - No accounts/.test(t), t);
     } finally {
       stateBrief = undefined;
+    }
+  });
+  await check('room_status tells Claude the build is shared on Wi-Fi, and says nothing when it is not', async () => {
+    const quiet = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+    assert.ok(!/SHARING ON WI-FI/.test(quiet), quiet);
+    stateLan = { status: 'live', map: [], open: 2 };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/SHARING ON WI-FI/.test(t) && /laptops, tablets and phones/.test(t) && /never --host 0\.0\.0\.0/.test(t), t);
+    } finally {
+      stateLan = undefined;
     }
   });
   await check('the opening: room_status says PHASE: OPENING with the steps, and the brief carries its lines', async () => {

@@ -22,7 +22,10 @@
 
 import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync, readdirSync, rmSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
+import { randomBytes } from 'node:crypto';
+import http from 'node:http';
+import net from 'node:net';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -31,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -367,6 +370,9 @@ function renderState(st) {
     for (const e of entries) lines.push(`  [${s(e.kind)}${e.by ? `/${e.by}` : ''}] ${trunc(e.text, 160)}`);
   }
   if (st.outcome && st.outcome.summary) lines.push('', `Wrap-up already posted: ${trunc(st.outcome.summary, 200)}`);
+  if (st.lan && st.lan.status === 'live') {
+    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths.');
+  }
   if (st.opening && st.opening.phase === 'opening') {
     const steps = st.opening.steps || [];
     lines.push('', 'PHASE: OPENING. The room is framing the build with the host. Do not write product code yet: prepare (the project folder and git), read the brief as it fills, and propose a probing question when an answer is thin (ask_room_for_ideas with forStep). The host presses Start building; you then get the whole brief as a direction.',
@@ -558,7 +564,7 @@ const TOOLS = [
             properties: {
               title: str('Short name for the option, e.g. "Bold dark hero".', { minLength: 1, maxLength: 120 }),
               description: str('Optional one-line description.', { maxLength: 500 }),
-              url: str('The URL of this variant, as THIS project\'s server prints it (e.g. http://localhost:<port>/a). ALWAYS set it when the variant is running: the host gets an "Open A" button on the big screen. Local URLs are fine (only the host\'s laptop opens them; phones see public URLs only).'),
+              url: str('The URL of this variant, as THIS project\'s server prints it (e.g. http://localhost:<port>/a). ALWAYS set it when the variant is running: the host gets an "Open A" button on the big screen. Local URLs are fine (the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too).'),
             },
             required: ['title'],
             additionalProperties: false,
@@ -1796,7 +1802,8 @@ How to collaborate:
 - Text you send is shown to the room as plain text. Only include public http(s) links people can open; never secrets, keys or private paths.
 - Show, don't just tell: screenshot each mockup and share_image it onto its Choose option (askId + label), so phones see it too; before wrap_up, share_image one or two screenshots of the finished product with kind "final" for the report.
 - Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
-- Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here — the host opens them on this laptop, on the projector; phones only ever see public URLs.
+- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
+- Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here: the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too, on their laptops, tablets and phones.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
 - After you implement each decision, call commit with a plain first line ("Add the calm header") and the decision's askId; it goes into DECISIONS.md and the room's timeline. Not after every edit: each turn is already kept as a hidden snapshot. The engage:build-room skill has the rules.
 - When you have nothing left to do — after wrap_up above all — call wait_for_direction and keep calling it. The host sees "Claude is listening" and can steer you from the Build Room screen.
@@ -1890,6 +1897,199 @@ async function linkWarnings(urls, opts) {
     if (w) out.push(w);
   }
   return out.length ? `\n\nCHECK THESE LINKS:\n- ${out.join('\n- ')}` : '';
+}
+
+// ---------------------------------------------------------------------------
+// THE WI-FI SHARE (owner, 2026-10-07; docs/design/build-room-lan-share/PLAN.md)
+// ---------------------------------------------------------------------------
+//
+// While the host's switch is on, a small gateway puts the app Claude is
+// running on this laptop's Wi-Fi address, so the room's laptops, tablets and
+// phones can open it. The app itself stays on localhost. The gateway:
+//   - binds the Wi-Fi IPv4 address only (never 0.0.0.0);
+//   - opens one port per local address Engage lists (the ones Claude showed),
+//     and only for a server running in THIS project's folder;
+//   - refuses anything without the key (?k=) or its cookie, and never shows
+//     the app to a refused request (pages, redirects and upgrades alike);
+//   - tells the app it is being opened on localhost (Host, Origin), so a dev
+//     server that checks its host (Vite does) serves it;
+//   - pipes websocket upgrades, so hot reload reaches every device.
+// Nothing here writes to stdout: that is the MCP stream. Log with log().
+
+const LAN_FAST_MS = Math.max(50, Number(process.env.ENGAGE_LAN_FAST_MS) || 4000);
+const LAN_IDLE_MS = Math.max(50, Number(process.env.ENGAGE_LAN_IDLE_MS) || 15000);
+const LAN_PORT = Math.max(1024, Number(process.env.ENGAGE_LAN_PORT) || 4900);
+const LAN_MAX = 4;
+const LAN_COOKIE = 'engage_lan';
+const LAN_SEEN_MS = 5 * 60 * 1000;
+const LOOPBACK_RE = /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?|[^.]+\.localhost)$/i;
+const PRIVATE_V4_RE = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+
+const lan = { key: '', gateways: new Map(), seen: new Map(), error: '' };
+
+/** This laptop's Wi-Fi address: en0 first on macOS, then any private IPv4. */
+function lanAddress() {
+  if (process.env.ENGAGE_LAN_ADDRESS) return process.env.ENGAGE_LAN_ADDRESS;
+  const all = networkInterfaces();
+  const names = Object.keys(all).sort((a, b) => (a === 'en0' ? -1 : b === 'en0' ? 1 : 0));
+  for (const name of names) {
+    for (const ni of all[name] || []) {
+      const v4 = ni.family === 'IPv4' || ni.family === 4;
+      if (v4 && !ni.internal && PRIVATE_V4_RE.test(ni.address)) return ni.address;
+    }
+  }
+  return '';
+}
+
+const cookiesOf = (header) => String(header || '').split(';').map((s) => s.trim()).filter(Boolean);
+const hasKey = (req) => Boolean(lan.key) && cookiesOf(req.headers.cookie).includes(`${LAN_COOKIE}=${lan.key}`);
+const withoutOurCookie = (header) => cookiesOf(header).filter((c) => !c.startsWith(`${LAN_COOKIE}=`)).join('; ');
+
+const LOCKED_PAGE = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+  '<title>Engage Build Room</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.5rem;color:#1B2942">' +
+  '<h1 style="font-size:1.6rem">Open this from the Build Room</h1>' +
+  '<p>This build is only for people in the room. Join the session on your laptop, tablet or phone and press Open the build.</p>' +
+  '<p>If you were in the room, the host may have turned sharing off.</p></body>';
+
+/** Headers for the app: it is being opened on localhost. */
+function forwardHeaders(req, target) {
+  const h = { ...req.headers, host: target.host };
+  if (h.origin) h.origin = target.origin;
+  if (h.referer) h.referer = h.referer.replace(/^https?:\/\/[^/]+/, target.origin);
+  const cookie = withoutOurCookie(h.cookie);
+  if (cookie) h.cookie = cookie; else delete h.cookie;
+  return h;
+}
+
+function openGateway(local, port, address) {
+  const target = new URL(local);
+  const lanOrigin = `http://${address}:${port}`;
+  const sockets = new Set();
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, lanOrigin);
+    if (lan.key && url.searchParams.get('k') === lan.key) {
+      url.searchParams.delete('k');
+      res.writeHead(302, {
+        'Set-Cookie': `${LAN_COOKIE}=${lan.key}; HttpOnly; SameSite=Lax; Path=/`,
+        Location: `${url.pathname}${url.search}`,
+        'Cache-Control': 'no-store',
+      });
+      return res.end();
+    }
+    if (!hasKey(req)) {
+      res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(LOCKED_PAGE);
+    }
+    lan.seen.set(req.socket.remoteAddress || '', Date.now());
+    const up = http.request({ host: target.hostname, port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target) }, (upRes) => {
+      const headers = { ...upRes.headers };
+      if (headers.location && headers.location.startsWith(target.origin)) headers.location = lanOrigin + headers.location.slice(target.origin.length);
+      res.writeHead(upRes.statusCode || 502, headers);
+      upRes.pipe(res);
+    });
+    up.on('error', () => {
+      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('The app is not answering on the host\'s laptop right now. Try again in a moment.');
+    });
+    req.on('aborted', () => up.destroy());
+    req.pipe(up);
+  });
+  server.on('connection', (s) => { sockets.add(s); s.on('close', () => sockets.delete(s)); s.on('error', () => {}); });
+  server.on('upgrade', (req, socket, head) => {
+    if (!hasKey(req)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+    lan.seen.set(socket.remoteAddress || '', Date.now());
+    const upstream = net.connect(Number(target.port), target.hostname, () => {
+      const h = forwardHeaders(req, target);
+      const lines = [`${req.method} ${req.url} HTTP/1.1`, ...Object.entries(h).map(([k, v]) => `${k}: ${v}`), '', ''];
+      upstream.write(lines.join('\r\n'));
+      if (head && head.length) upstream.write(head);
+      upstream.pipe(socket); socket.pipe(upstream);
+    });
+    const kill = () => { socket.destroy(); upstream.destroy(); };
+    upstream.on('error', kill); socket.on('error', kill);
+    upstream.on('close', kill); socket.on('close', kill);
+  });
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, address, () => resolve({ local, lan: lanOrigin, server, sockets }));
+  });
+}
+
+function closeGateway(g) {
+  g.server.close();
+  for (const s of g.sockets) s.destroy();
+}
+
+function closeAllGateways() {
+  for (const g of lan.gateways.values()) closeGateway(g);
+  lan.gateways.clear();
+  lan.key = '';
+  lan.seen.clear();
+}
+
+/** Bring the open gateways in line with what Engage asked for. */
+async function syncGateways(wanted, targets) {
+  if (!wanted) { closeAllGateways(); lan.error = ''; return 'off'; }
+  const address = lanAddress();
+  if (!address) { closeAllGateways(); lan.error = 'No Wi-Fi address on this laptop. It may be on a wired network only, or offline.'; return 'failed'; }
+  const wantedLocals = (targets || []).filter((t) => { try { return LOOPBACK_RE.test(new URL(t).hostname); } catch { return false; } }).slice(0, LAN_MAX);
+  // Not this project's server (an earlier session's still running): never open it.
+  const ours = wantedLocals.filter((t) => {
+    const owner = listenerDir(Number(new URL(t).port));
+    return !owner || owner === '/' || within(owner, projectDir()) || within(projectDir(), owner);
+  });
+  if (!ours.length) { closeAllGateways(); lan.error = 'Claude has not shown anything running on this laptop yet.'; return 'failed'; }
+  // An address Engage no longer lists closes (its port and its open sockets).
+  for (const [local, g] of [...lan.gateways]) {
+    if (!ours.includes(local)) { closeGateway(g); lan.gateways.delete(local); }
+  }
+  if (!lan.key) lan.key = randomBytes(16).toString('base64url');
+  const used = new Set([...lan.gateways.values()].map((g) => Number(new URL(g.lan).port)));
+  for (const local of ours) {
+    if (lan.gateways.has(local)) continue;
+    let opened = null;
+    for (let port = LAN_PORT; port < LAN_PORT + 20 && !opened; port += 1) {
+      if (used.has(port)) continue;
+      try { opened = await openGateway(local, port, address); used.add(port); } catch (e) { if (e && e.code !== 'EADDRINUSE') { lan.error = `Could not open a port on the Wi-Fi (${e.code || e.message}).`; break; } }
+    }
+    if (opened) lan.gateways.set(local, opened);
+  }
+  if (!lan.gateways.size) { lan.key = ''; lan.error = lan.error || `Every port from ${LAN_PORT} is in use on this laptop.`; return 'failed'; }
+  lan.error = '';
+  return 'live';
+}
+
+function lanOpenCount() {
+  const now = Date.now();
+  for (const [ip, at] of lan.seen) if (now - at > LAN_SEEN_MS) lan.seen.delete(ip);
+  return lan.seen.size;
+}
+
+/** One round: report what is open, read back what the host wants. */
+let lanStatusNow = 'off';
+async function lanRound() {
+  try {
+    reloadConfig();
+    if (CONFIG.problems.length || !existsSync(sessionFile())) return;
+    const report = {
+      status: lanStatusNow,
+      map: [...lan.gateways.values()].map((g) => ({ local: g.local, lan: g.lan })),
+      key: lanStatusNow === 'live' ? lan.key : '',
+      open: lanOpenCount(),
+      error: lan.error,
+    };
+    const answer = await api('POST', 'share/report', report, AbortSignal.timeout(8000));
+    lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || []);
+  } catch (e) {
+    log('wi-fi share round failed:', e && e.message);
+  }
+}
+
+function lanLoop() {
+  lanRound().finally(() => {
+    const t = setTimeout(lanLoop, lanStatusNow === 'off' ? LAN_IDLE_MS : LAN_FAST_MS);
+    if (t.unref) t.unref();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -2331,6 +2531,7 @@ skill is how you keep the project something they can open next week and understa
   \`.engage/servers.txt\`: the port, the command, and the process id if you have it.
 - Before starting another, check whether something is already listening on that port.
 - Do not stop servers you did not start.
+- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
 
 ## The opening: frame it with the room, then build
 
@@ -2628,6 +2829,11 @@ if (CLI === 'activity') {
 // The live-activity pump, only while running as Claude's MCP server.
 if (!CLI) {
   const t = setInterval(pumpActivity, ACTIVITY_MS);
+  if (t.unref) t.unref();
+}
+// The Wi-Fi share's report loop, only while running as Claude's MCP server.
+if (!CLI) {
+  const t = setTimeout(lanLoop, Math.min(LAN_IDLE_MS, 2000));
   if (t.unref) t.unref();
 }
 
