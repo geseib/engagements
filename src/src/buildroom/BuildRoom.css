@@ -927,8 +927,8 @@
   font: 600 var(--brm-t-label)/1 var(--font-ui); white-space: nowrap; cursor: pointer;
 }
 .brm .brm-wifi::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.brm .brm-wifi--starting, .brm .brm-wifi--quiet { color: var(--primary); border-color: var(--brm-line-amber); background: var(--brm-tint-amber); }
-.brm .brm-wifi--starting::before, .brm .brm-wifi--quiet::before { background: var(--primary); }
+.brm .brm-wifi--starting, .brm .brm-wifi--waiting, .brm .brm-wifi--quiet { color: var(--primary); border-color: var(--brm-line-amber); background: var(--brm-tint-amber); }
+.brm .brm-wifi--starting::before, .brm .brm-wifi--waiting::before, .brm .brm-wifi--quiet::before { background: var(--primary); }
 .brm .brm-wifi--on { color: var(--brm-success-text); border-color: var(--brm-tint-green); background: var(--brm-tint-green); }
 .brm .brm-wifi--on::before { background: var(--success); }
 .brm .brm-wifi--failed { color: var(--danger-text); border-color: var(--brm-line-red); background: var(--brm-tint-red); }

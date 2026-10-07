@@ -48,7 +48,11 @@ function isPrivateLanUrl(url) {
   return false;
 }
 
-/** Every local address Claude has shown, oldest first: the plugin opens these. */
+/**
+ * The local addresses the plugin opens: the MAX_TARGETS most recently shown
+ * distinct ones, oldest first. "Shown" order is the agent's log links, then ask
+ * options, then outcome links; an address shown again counts as newest.
+ */
 function lanTargets(room) {
   const r = room || {};
   const urls = [];
@@ -56,14 +60,13 @@ function lanTargets(room) {
   for (const a of r.asks || []) for (const o of a.Options || []) if (o && o.url) urls.push(o.url);
   const outcome = r.state && r.state.Outcome;
   for (const l of (outcome && outcome.links) || []) if (l && l.url) urls.push(l.url);
-  const seen = [];
-  for (const u of urls) {
-    if (!isLoopbackUrl(u)) continue;
-    const origin = hostOf(u).origin;
-    if (!seen.includes(origin)) seen.push(origin);
-    if (seen.length === MAX_TARGETS) break;
+  const kept = [];
+  for (let i = urls.length - 1; i >= 0 && kept.length < MAX_TARGETS; i -= 1) {
+    if (!isLoopbackUrl(urls[i])) continue;
+    const origin = hostOf(urls[i]).origin;
+    if (!kept.includes(origin)) kept.push(origin);
   }
-  return seen;
+  return kept.reverse();
 }
 
 function normalizeReport(body) {
@@ -137,6 +140,7 @@ function lanHostView(row, now, { withKey: showKey = false } = {}) {
     liveSince: status === 'live' ? r.LiveSince || null : null,
     offerDismissed: Boolean(r.OfferDismissedAt),
     reportedAt: r.ReportedAt || null,
+    wantedAt: r.WantedAt || null,
   };
 }
 

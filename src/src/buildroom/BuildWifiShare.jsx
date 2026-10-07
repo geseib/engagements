@@ -79,6 +79,9 @@ export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall 
       {s.state === 'failed' && (
         <div className="brm-wifipanel-err"><b>It didn&apos;t start.</b> {lan.error}</div>
       )}
+      {s.state === 'waiting' && (
+        <div className="brm-wifipanel-warn"><b>Claude Code has not answered.</b> Update the Engage plugin from Connect Claude Code, then restart Claude Code in the project folder.</div>
+      )}
       {s.state === 'quiet' && (
         <>
           <div className="brm-wifipanel-warn">
@@ -110,7 +113,7 @@ export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall 
       <div className="brm-wifipanel-foot">
         {s.state === 'failed'
           ? <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>Try again</button>
-          : <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={!on || s.state === 'starting' || !map.length} onClick={onShowWall}>Show the QR on the wall</button>}
+          : <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={!on || s.state === 'starting' || s.state === 'waiting' || !map.length} onClick={onShowWall}>Show the QR on the wall</button>}
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onClose}>Done</button>
       </div>
     </div>

@@ -11,6 +11,16 @@ describe('wifiState: the chip says what is happening, in words', () => {
   test('starting', () => {
     expect(wifiState({ wanted: true, status: 'starting' }, NOW).label).toBe('Wi-Fi · Starting…');
   });
+  test('starting for more than 25 s with no answer from Claude Code: waiting', () => {
+    const waiting = { state: 'waiting', label: 'Wi-Fi · Waiting for Claude Code', open: 0 };
+    expect(wifiState({ wanted: true, status: 'starting', wantedAt: ago(20000), reportedAt: null }, NOW).state).toBe('starting');
+    expect(wifiState({ wanted: true, status: 'starting', wantedAt: ago(30000), reportedAt: null }, NOW)).toEqual(waiting);
+    // a report older than the switch is no answer to it; a newer one is
+    expect(wifiState({ wanted: true, status: 'starting', wantedAt: ago(30000), reportedAt: ago(40000) }, NOW)).toEqual(waiting);
+    expect(wifiState({ wanted: true, status: 'starting', wantedAt: ago(30000), reportedAt: ago(5000) }, NOW).state).toBe('starting');
+    // now may be a number
+    expect(wifiState({ wanted: true, status: 'starting', wantedAt: ago(30000) }, Date.parse(NOW)).state).toBe('waiting');
+  });
   test('on, with how many devices', () => {
     expect(wifiState({ wanted: true, status: 'live', open: 9, liveSince: ago(600000) }, NOW)).toEqual({ state: 'on', label: 'Wi-Fi · On · 9 open', open: 9 });
   });

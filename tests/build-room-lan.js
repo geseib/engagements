@@ -19,7 +19,7 @@ const liveRow = (over = {}) => ({
 });
 
 console.log('\nbuild-lan: targets');
-check('only loopback addresses, in the order Claude showed them, deduped, at most 4', () => {
+check('only loopback addresses, deduped, at most 4 (the newest four, oldest first)', () => {
   const room = {
     logs: [
       { By: 'agent', Link: 'http://localhost:5173/' },
@@ -30,7 +30,25 @@ check('only loopback addresses, in the order Claude showed them, deduped, at mos
     asks: [{ Options: [{ url: 'http://127.0.0.1:5174/a' }, { url: 'http://192.168.1.5:3000/' }] }],
     state: { Outcome: { links: [{ url: 'http://localhost:6000/' }, { url: 'http://localhost:6001/' }, { url: 'http://localhost:6002/' }] } },
   };
-  assert.deepStrictEqual(L.lanTargets(room), ['http://localhost:5173', 'http://127.0.0.1:5174', 'http://localhost:6000', 'http://localhost:6001']);
+  assert.deepStrictEqual(L.lanTargets(room), ['http://127.0.0.1:5174', 'http://localhost:6000', 'http://localhost:6001', 'http://localhost:6002']);
+});
+check('past four addresses, the four most recently shown are the targets, oldest first', () => {
+  const room = { logs: [1, 2, 3, 4, 5].map((n) => ({ By: 'agent', Link: `http://localhost:${5170 + n}/` })), asks: [], state: null };
+  assert.deepStrictEqual(L.lanTargets(room), ['http://localhost:5172', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175']);
+  // showing an old address again makes it recent
+  room.logs.push({ By: 'agent', Link: 'http://localhost:5171/' });
+  assert.deepStrictEqual(L.lanTargets(room), ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5171']);
+});
+check('a report shaped exactly as the plugin builds it keeps both entries', () => {
+  const r = L.normalizeReport({ status: 'live', key: 'abcdefghijklmnopqrstuv', open: 2, error: '', map: [
+    { local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' },
+    { local: 'http://[::1]:5174', lan: 'http://192.168.1.20:4901' },
+  ] });
+  assert.ok(r.value, JSON.stringify(r));
+  assert.deepStrictEqual(r.value.Map, [
+    { local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' },
+    { local: 'http://[::1]:5174', lan: 'http://192.168.1.20:4901' },
+  ]);
 });
 check('a room with nothing shown has no targets', () => {
   assert.deepStrictEqual(L.lanTargets({ logs: [], asks: [], state: null }), []);

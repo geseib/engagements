@@ -52,6 +52,14 @@ test("didn't start: the reason, and Try again", () => {
   expect(api.share).toHaveBeenCalledWith({ on: true });
 });
 
+test('waiting: the chip and the panel say Claude Code has not answered and what to do', () => {
+  const waiting = { wanted: true, status: 'starting', wantedAt: '2026-10-07T11:59:00.000Z', reportedAt: null, map: [] };
+  render(<WifiChip lan={waiting} now={NOW} onOpen={() => {}} open={false} />);
+  expect(screen.getByRole('button', { name: 'Wi-Fi · Waiting for Claude Code' })).toHaveClass('brm-wifi--waiting');
+  render(<WifiPanel lan={waiting} now={NOW} busy={false} run={runNow} api={{ share: jest.fn() }} onClose={() => {}} onShowWall={() => {}} />);
+  expect(screen.getByRole('dialog').textContent).toContain('Claude Code has not answered. Update the Engage plugin from Connect Claude Code, then restart Claude Code in the project folder.');
+});
+
 test('the offer turns it on, or is dismissed for the session', () => {
   const api = { share: jest.fn().mockResolvedValue({}) };
   render(<WifiOffer busy={false} run={runNow} api={api} />);

@@ -1226,12 +1226,34 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   const report = (body) => agentCall('POST', 'share/report', body);
   const LIVE = (over = {}) => ({ status: 'live', key: 'abcdefghijklmnopqrstuv', open: 2, map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }], ...over });
 
-  await check('off by default: the plugin is told not wanted, and is given the local addresses Claude showed', async () => {
+  await check('off by default: the plugin is told not wanted and given no addresses (nothing to open)', async () => {
     seed();
     await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/' });
     const r = await report({ status: 'off' });
     assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual(r.body, { wanted: false, targets: ['http://localhost:5173'] });
+    assert.deepStrictEqual(r.body, { wanted: false, targets: [] });
+  });
+  await check('once the host wants it, the plugin is given the local addresses Claude showed', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/' });
+    await hostCall('POST', 'share', { on: true });
+    const r = await report({ status: 'off' });
+    assert.deepStrictEqual(r.body, { wanted: true, targets: ['http://localhost:5173'] });
+  });
+  await check('off then quickly on: participants are never handed the old key', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await hostCall('POST', 'share', { on: true });
+    await report(LIVE());
+    await hostCall('POST', 'share', { on: false });
+    await hostCall('POST', 'share', { on: true });
+    let v = (await playCall('GET', 'state', priya)).body;
+    assert.strictEqual(v.lan, null);
+    assert.ok(!JSON.stringify(v).includes('abcdefghijklmnopqrstuv'));
+    assert.strictEqual((await hostCall('GET', 'state')).body.lan.status, 'starting');
+    await report(LIVE({ key: 'bbbbbbbbbbbbbbbbbbbbbb' }));
+    v = (await playCall('GET', 'state', priya)).body;
+    assert.strictEqual(v.lan.open, 'http://192.168.1.20:4900/?k=bbbbbbbbbbbbbbbbbbbbbb');
   });
   await check('a report never takes Claude\'s inbox and never marks Claude as seen', async () => {
     seed();

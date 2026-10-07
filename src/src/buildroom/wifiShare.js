@@ -4,6 +4,8 @@
  * `lan` is the server's lanHostView (lambda-functions/game/build-lan.js).
  */
 export const QUIET_AFTER_MS = 2 * 60 * 1000;
+/** Switched on this long ago with no answer from the plugin: it is old or not running. */
+export const WAITING_AFTER_MS = 25 * 1000;
 
 const LOOPBACK = /^(localhost|[^.]+\.localhost|127\.\d+\.\d+\.\d+|\[::1\]|::1)$/i;
 function isLoopback(url) {
@@ -14,7 +16,14 @@ export function wifiState(lan, now) {
   const l = lan || {};
   if (!l.wanted || l.status === 'off' || !l.status) return { state: 'off', label: 'Wi-Fi · Off', open: 0 };
   if (l.status === 'failed') return { state: 'failed', label: "Wi-Fi · Didn't start", open: 0 };
-  if (l.status !== 'live') return { state: 'starting', label: 'Wi-Fi · Starting…', open: 0 };
+  if (l.status !== 'live') {
+    const wantedAt = l.wantedAt ? Date.parse(l.wantedAt) : NaN;
+    const answered = l.reportedAt && !(wantedAt && Date.parse(l.reportedAt) < wantedAt);
+    if (wantedAt && !answered && new Date(now).getTime() - wantedAt > WAITING_AFTER_MS) {
+      return { state: 'waiting', label: 'Wi-Fi · Waiting for Claude Code', open: 0 };
+    }
+    return { state: 'starting', label: 'Wi-Fi · Starting…', open: 0 };
+  }
   const open = Number(l.open) || 0;
   const since = l.liveSince ? new Date(now).getTime() - Date.parse(l.liveSince) : 0;
   if (open === 0 && since >= QUIET_AFTER_MS) return { state: 'quiet', label: 'Wi-Fi · On · none open yet', open: 0 };

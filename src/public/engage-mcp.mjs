@@ -1923,9 +1923,11 @@ const LAN_LOST_MS = Math.max(100, Number(process.env.ENGAGE_LAN_LOST_MS) || 3000
 const LAN_MAX = 4;
 const LAN_COOKIE = 'engage_lan';
 const LAN_SEEN_MS = 5 * 60 * 1000;
-const LOOPBACK_RE = /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?|[^.]+\.localhost)$/i;
 // Only a name that is certainly this laptop: not x.localhost (the OS resolver
 // decides that one), only localhost, a valid 127.x.x.x, or ::1.
+// `localhost` can resolve to ::1 first; on Node 18 nothing falls back to 127.0.0.1
+// unless asked, so an app bound on IPv4 only would answer 502.
+const lanFamily = (target) => (/^localhost$/i.test(target.hostname) ? { autoSelectFamily: true } : {});
 const lanTargetHost = (hostname) => /^(localhost|\[::1\])$/i.test(hostname) ||
   (/^127(\.\d{1,3}){3}$/.test(hostname) && hostname.split('.').every((o) => Number(o) <= 255));
 /** URL hostnames wrap IPv6 in brackets; sockets want them bare. */
@@ -1989,7 +1991,7 @@ function openGateway(local, port, address) {
       return res.end(LOCKED_PAGE);
     }
     lan.seen.set(req.socket.remoteAddress || '', Date.now());
-    const up = http.request({ host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target) }, (upRes) => {
+    const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target) }, (upRes) => {
       const headers = { ...upRes.headers };
       const loc = headers.location;
       if (loc && loc.startsWith(target.origin) && (loc.length === target.origin.length || /[/?#]/.test(loc[target.origin.length]))) headers.location = lanOrigin + loc.slice(target.origin.length);
@@ -2007,7 +2009,7 @@ function openGateway(local, port, address) {
   server.on('upgrade', (req, socket, head) => {
     if (!hasKey(req)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
     lan.seen.set(socket.remoteAddress || '', Date.now());
-    const upstream = net.connect(Number(target.port), bareHost(target.hostname), () => {
+    const upstream = net.connect({ ...lanFamily(target), port: Number(target.port), host: bareHost(target.hostname) }, () => {
       const h = forwardHeaders(req, target);
       const lines = [`${req.method} ${req.url} HTTP/1.1`, ...Object.entries(h).map(([k, v]) => `${k}: ${v}`), '', ''];
       upstream.write(lines.join('\r\n'));
@@ -2048,7 +2050,9 @@ async function syncGateways(wanted, targets) {
   if (!address) { closeAllGateways(); lan.error = 'No Wi-Fi address on this laptop. It may be on a wired network only, or offline.'; return 'failed'; }
   const wantedLocals = (targets || []).filter((t) => { try { return lanTargetHost(new URL(t).hostname); } catch { return false; } }).slice(0, LAN_MAX);
   // Not this project's server (an earlier session's still running): never open it.
+  // Folder check only for addresses not already open: it shells out to lsof.
   const ours = wantedLocals.filter((t) => {
+    if (lan.gateways.has(t)) return true;
     const owner = listenerDir(Number(new URL(t).port));
     return !owner || owner === '/' || within(owner, projectDir()) || within(projectDir(), owner);
   });

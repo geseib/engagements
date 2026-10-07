@@ -1619,7 +1619,10 @@ async function hostShare(ctx, body) {
   if (b.dismissOffer === true) await updateLan(ctx, { OfferDismissedAt: now });
   if (typeof b.on === 'boolean') {
     if (b.on && (await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
-    await updateLan(ctx, { Wanted: b.on, WantedAt: now, OfferDismissedAt: now });
+    // The plugin closes its gateways on a switch either way, so the old key and
+    // map are dead: clear them, and the row reads 'starting' until the plugin's
+    // next live report brings its new key.
+    await updateLan(ctx, { Wanted: b.on, WantedAt: now, OfferDismissedAt: now, Status: 'off', Key: '', Map: [], Open: 0, Error: '' });
     await logEntry(ctx, { kind: 'note', by: 'host', text: b.on ? 'You shared the build on this Wi-Fi' : 'You stopped sharing the build on this Wi-Fi' });
   }
   const room = await loadRoom(ctx);
@@ -1636,8 +1639,8 @@ async function shareReport(ctx, body) {
   const norm = LAN.normalizeReport(body);
   if (norm.error) return fail(400, norm.error);
   const now = new Date().toISOString();
-  const room = await loadRoom(ctx);
-  const before = room.lan || {};
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+  const before = res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildLan', res.Item) : res.Item) : {};
   const v = norm.value;
   const set = { ...v, ReportedAt: now };
   if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
@@ -1649,7 +1652,9 @@ async function shareReport(ctx, body) {
     await announce(ctx, rev);
   }
   const ended = (await sessionState(ctx)) === 'ENDED';
-  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets: LAN.lanTargets(room) });
+  // Targets matter only while sharing is wanted: skip reading the room otherwise.
+  const targets = before.Wanted ? LAN.lanTargets(await loadRoom(ctx)) : [];
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets });
 }
 
 async function routeHost(ctx, role, method, parts, body, event, query) {
