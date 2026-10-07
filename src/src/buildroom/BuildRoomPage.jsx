@@ -36,6 +36,7 @@ import { OpeningPanel, BriefPath, WallBrief } from './BuildOpening';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
 import BuildWheel from './BuildWheel';
+import { useKeepOnScreen } from './keepOnScreen';
 import { WifiChip, WifiPanel, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
 import { shouldOfferWifi, wifiState } from './wifiShare';
 import {
@@ -978,6 +979,8 @@ export function ConnectionChip({ connection = 'live', onReconnect }) {
 function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLabel, buttonClass = 'brm-btn brm-btn--sm brm-btn--ghost' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const panelRef = useRef(null);
+  useKeepOnScreen(panelRef, open);
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
@@ -999,7 +1002,7 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
         {label}{label ? ' ' : ''}<Icon name="CaretDown" size={14} />
       </button>
       {open && (
-        <div className="brm-more-panel" role="group" aria-label={groupLabel}>
+        <div className="brm-more-panel" role="group" aria-label={groupLabel} ref={panelRef}>
           {children(() => setOpen(false))}
         </div>
       )}

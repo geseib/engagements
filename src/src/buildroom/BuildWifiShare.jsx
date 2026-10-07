@@ -5,12 +5,13 @@
  * wall and on the Build screen. Copy names laptops, tablets and phones, never
  * phones alone (owner, 2026-10-07).
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
 import { copyText } from '../utils/copyText';
 import { wifiState } from './wifiShare';
+import { useKeepOnScreen } from './keepOnScreen';
 
 const LOOPBACK = /^(localhost|[^.]+\.localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i;
 const originOf = (u) => {
@@ -58,8 +59,10 @@ export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall 
   const s = wifiState(lan, now);
   const on = Boolean(lan && lan.wanted);
   const map = (lan && lan.map) || [];
+  const panelRef = useRef(null);
+  useKeepOnScreen(panelRef, true);
   return (
-    <div className="brm-wifipanel" role="dialog" aria-label="Share on this Wi-Fi">
+    <div className="brm-wifipanel" role="dialog" aria-label="Share on this Wi-Fi" ref={panelRef}>
       <div className="brm-wifipanel-top">
         <h3>Share on this Wi-Fi</h3>
         <label className={`brm-auto${on ? ' is-on' : ''}`}>
