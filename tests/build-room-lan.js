@@ -57,6 +57,25 @@ check('off needs no key; the error is plain text, trimmed to 200', () => {
   assert.strictEqual(r.value.Key, '');
   assert.strictEqual(r.value.Error.length, 200);
 });
+check('IPv4 prefix validation: 127.evil.com, 10.evil.com, 192.168.evil.com are not valid', () => {
+  assert.strictEqual(L.isLoopbackUrl('http://127.evil.com:5173'), false);
+  assert.strictEqual(L.isPrivateLanUrl('http://10.evil.com:4900'), false);
+  assert.strictEqual(L.isPrivateLanUrl('http://192.168.evil.com:4900'), false);
+  assert.strictEqual(L.isPrivateLanUrl('http://300.168.1.1'), false);
+});
+check('IPv6 and .localhost are loopback; valid IPv4 ranges are private', () => {
+  assert.strictEqual(L.isLoopbackUrl('http://[::1]:5173'), true);
+  assert.strictEqual(L.isLoopbackUrl('http://app.localhost:5173'), true);
+  assert.strictEqual(L.isPrivateLanUrl('http://10.0.0.1:4900'), true);
+  assert.strictEqual(L.isPrivateLanUrl('http://192.168.1.100:4900'), true);
+  assert.strictEqual(L.isPrivateLanUrl('http://172.16.0.1:4900'), true);
+  assert.strictEqual(L.isPrivateLanUrl('http://172.31.255.255:4900'), true);
+});
+check('unvalidated key on failed status is rejected', () => {
+  const r = L.normalizeReport({ status: 'failed', key: 'not a key!!', error: 'some error' });
+  assert.strictEqual(r.value.Key, '');
+  assert.strictEqual(r.value.Status, 'failed');
+});
 
 console.log('\nbuild-lan: status');
 check('off when not wanted, whatever the plugin last said', () => {

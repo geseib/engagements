@@ -18,18 +18,34 @@ const KEY_RE = /^[A-Za-z0-9_-]{20,64}$/;
 
 const hostOf = (url) => { try { return new URL(String(url)); } catch (e) { return null; } };
 
+/** Validate that a string is a valid IPv4 address (four octets 0-255). */
+function isValidIpv4(addr) {
+  const parts = addr.split('.');
+  if (parts.length !== 4) return false;
+  return parts.every(part => {
+    const n = Number(part);
+    return Number.isInteger(n) && n >= 0 && n <= 255;
+  });
+}
+
 function isLoopbackUrl(url) {
   const u = hostOf(url);
   if (!u || !['http:', 'https:'].includes(u.protocol)) return false;
   const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  return h === 'localhost' || h.endsWith('.localhost') || h === '::1' || /^127\./.test(h);
+  if (h === 'localhost' || h.endsWith('.localhost') || h === '::1') return true;
+  // IPv4 loopback: 127.x.y.z where x, y, z are valid octets
+  return /^127\./.test(h) && isValidIpv4(h);
 }
 
 function isPrivateLanUrl(url) {
   const u = hostOf(url);
   if (!u || u.protocol !== 'http:') return false;
   const h = u.hostname;
-  return /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+  // Check IPv4 ranges with full octet validation
+  if (/^10\./.test(h) && isValidIpv4(h)) return true;
+  if (/^192\.168\./.test(h) && isValidIpv4(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h) && isValidIpv4(h)) return true;
+  return false;
 }
 
 /** Every local address Claude has shown, oldest first: the plugin opens these. */
@@ -63,7 +79,8 @@ function normalizeReport(body) {
     .slice(0, MAX_TARGETS)
     .map((m) => ({ local: hostOf(m.local).origin, lan: hostOf(m.lan).origin }));
   const error = String(b.error || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-  return { value: { Status: status, Map: map, Key: status === 'off' ? '' : key, Open: open, Error: error } };
+  const validKey = status === 'off' ? '' : (KEY_RE.test(key) ? key : '');
+  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error } };
 }
 
 function lanStatus(row, now) {
