@@ -37,10 +37,13 @@ async function until(fn, ms = 6000) {
 // what it saw, echoes raw bytes after an upgrade.
 const APP_SOURCE = `
 const http = require('http');
+const HOST = process.argv[2] || '127.0.0.1';
+const expectHost = (port) => (HOST === '::1' ? '[::1]:' : 'localhost:') + port;
 const app = http.createServer((req, res) => {
   const port = app.address().port;
   console.log('SEEN ' + JSON.stringify({ url: req.url, host: req.headers.host, origin: req.headers.origin, cookie: req.headers.cookie || '' }));
-  if (req.headers.host !== 'localhost:' + port) { res.writeHead(403); return res.end('Blocked request. This host is not allowed.'); }
+  if (req.headers.host !== expectHost(port)) { res.writeHead(403); return res.end('Blocked request. This host is not allowed.'); }
+  if (req.url === '/near') { res.writeHead(302, { Location: 'http://localhost:' + port + '0/x' }); return res.end(); }
   if (req.url === '/go') { res.writeHead(302, { Location: 'http://localhost:' + port + '/there' }); return res.end(); }
   res.writeHead(200, { 'Content-Type': 'text/html' });
   res.end('<h1>Four in a row</h1>');
@@ -50,12 +53,14 @@ app.on('upgrade', (req, socket) => {
   socket.on('data', (d) => socket.write(d));
   socket.on('error', () => {});
 });
-app.listen(0, '127.0.0.1', () => console.log('PORT ' + app.address().port));
+app.on('error', () => console.log('FAIL'));
+app.listen(0, HOST, () => console.log('PORT ' + app.address().port));
 `;
 
 const seen = [];
 let appPort = 0;
 let wanted = false;
+let apiDown = false;
 let targets = [];
 const reports = [];
 const api = http.createServer((req, res) => {
@@ -64,6 +69,7 @@ const api = http.createServer((req, res) => {
   req.on('end', () => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url.endsWith('/build/share/report')) {
+      if (apiDown) { res.statusCode = 500; return res.end('{"error":"down"}'); }
       reports.push(JSON.parse(body));
       return res.end(JSON.stringify({ wanted, targets }));
     }
@@ -88,22 +94,31 @@ function get(url, headers = {}) {
   fs.writeFileSync(path.join(dir, '.engage', 'session.json'), JSON.stringify({ key: KEY, api: `http://127.0.0.1:${api.address().port}/` }));
   fs.writeFileSync(path.join(dir, 'app.js'), APP_SOURCE);
 
-  const appProc = spawn(process.execPath, ['app.js'], { cwd: dir, stdio: ['ignore', 'pipe', 'inherit'] });
-  let out = '';
-  appProc.stdout.on('data', (d) => {
-    out += d.toString();
-    let nl;
-    while ((nl = out.indexOf('\n')) !== -1) {
-      const line = out.slice(0, nl); out = out.slice(nl + 1);
-      if (line.startsWith('PORT ')) appPort = Number(line.slice(5));
-      else if (line.startsWith('SEEN ')) seen.push(JSON.parse(line.slice(5)));
-    }
-  });
-  await until(() => appPort);
+  const procs = [];
+  function startApp(host) {
+    const proc = spawn(process.execPath, ['app.js', host], { cwd: dir, stdio: ['ignore', 'pipe', 'inherit'] });
+    procs.push(proc);
+    const me = { port: 0, failed: false };
+    let out = '';
+    proc.stdout.on('data', (d) => {
+      out += d.toString();
+      let nl;
+      while ((nl = out.indexOf('\n')) !== -1) {
+        const line = out.slice(0, nl); out = out.slice(nl + 1);
+        if (line.startsWith('PORT ')) me.port = Number(line.slice(5));
+        else if (line === 'FAIL') me.failed = true;
+        else if (line.startsWith('SEEN ')) seen.push(JSON.parse(line.slice(5)));
+      }
+    });
+    return me;
+  }
+  const main = startApp('127.0.0.1');
+  await until(() => main.port);
+  appPort = main.port;
   const appOrigin = `http://localhost:${appPort}`;
 
   const base = 47000 + Math.floor(Math.random() * 1000);
-  const env = { ...process.env, CLAUDE_PROJECT_DIR: dir, ENGAGE_LAN_ADDRESS: '127.0.0.1', ENGAGE_LAN_PORT: String(base), ENGAGE_LAN_FAST_MS: '100', ENGAGE_LAN_IDLE_MS: '100', ENGAGE_ACTIVITY_MS: '60000' };
+  const env = { ...process.env, CLAUDE_PROJECT_DIR: dir, ENGAGE_LAN_ADDRESS: '127.0.0.1', ENGAGE_LAN_PORT: String(base), ENGAGE_LAN_FAST_MS: '100', ENGAGE_LAN_IDLE_MS: '100', ENGAGE_LAN_LOST_MS: '600', ENGAGE_ACTIVITY_MS: '60000' };
   delete env.ENGAGE_KEY; delete env.ENGAGE_API;
   const child = spawn(process.execPath, [SCRIPT], { cwd: dir, env, stdio: ['pipe', 'pipe', 'pipe'] });
   let childOut = '';
@@ -232,12 +247,50 @@ function get(url, headers = {}) {
     await sleep(400);
     assert.strictEqual(lastReport().map.length, 1);
   });
+  await check('a key holder cannot be bounced to another site through the redirect', async () => {
+    const r = await get(`${gw}/.//evil.com/x?k=${lastReport().key}`);
+    assert.strictEqual(r.status, 302);
+    assert.strictEqual(r.headers.location, '/evil.com/x');
+    const r2 = await get(`${gw}///evil.com/y?k=${lastReport().key}`);
+    assert.ok(!r2.headers.location.startsWith('//'), r2.headers.location);
+  });
+  await check('a redirect to a different port that merely starts with the app\'s origin is left alone', async () => {
+    const c = (await get(`${gw}/?k=${lastReport().key}`)).headers['set-cookie'][0].split(';')[0];
+    const r = await get(`${gw}/near`, { Cookie: c });
+    assert.strictEqual(r.headers.location, `http://localhost:${appPort}0/x`);
+  });
+  await check('x.localhost is never forwarded to, even with nothing listening on it', async () => {
+    targets = [appOrigin, `http://foo.localhost:${appPort}`, 'http://127.0.0.999:80'];
+    await sleep(400);
+    assert.deepStrictEqual(lastReport().map.map((m) => m.local), [appOrigin]);
+  });
+  await check('an app on [::1] is reached (brackets stripped)', async () => {
+    const v6 = startApp('::1');
+    await until(() => v6.port || v6.failed);
+    if (v6.failed) { console.log('        (skipped: this machine cannot bind ::1)'); return; }
+    targets = [appOrigin, `http://[::1]:${v6.port}`];
+    await until(() => lastReport().map.length === 2);
+    const lanV6 = lastReport().map.find((m) => m.local.includes('::1')).lan;
+    const c = (await get(`${gw}/?k=${lastReport().key}`)).headers['set-cookie'][0].split(';')[0];
+    const r = await get(`${lanV6}/`, { Cookie: c });
+    assert.strictEqual(r.status, 200);
+    assert.match(r.body, /Four in a row/);
+    targets = [appOrigin];
+  });
   await check('the plugin wrote nothing to stdout (that is the MCP stream)', async () => {
     assert.strictEqual(childOut, '');
   });
 
+  await check('lost contact with Engage: the door closes by itself, it does not stay open', async () => {
+    const live = (await get(`${gw}/?k=${lastReport().key}`));
+    assert.strictEqual(live.status, 302);
+    apiDown = true;
+    await until(async () => { try { await get(`${gw}/`); return false; } catch { return true; } }, 4000);
+    apiDown = false;
+  });
+
   child.kill();
-  appProc.kill();
+  for (const pr of procs) pr.kill();
   api.close();
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();

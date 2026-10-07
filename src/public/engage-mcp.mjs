@@ -1919,13 +1919,20 @@ async function linkWarnings(urls, opts) {
 const LAN_FAST_MS = Math.max(50, Number(process.env.ENGAGE_LAN_FAST_MS) || 4000);
 const LAN_IDLE_MS = Math.max(50, Number(process.env.ENGAGE_LAN_IDLE_MS) || 15000);
 const LAN_PORT = Math.max(1024, Number(process.env.ENGAGE_LAN_PORT) || 4900);
+const LAN_LOST_MS = Math.max(100, Number(process.env.ENGAGE_LAN_LOST_MS) || 30000);
 const LAN_MAX = 4;
 const LAN_COOKIE = 'engage_lan';
 const LAN_SEEN_MS = 5 * 60 * 1000;
 const LOOPBACK_RE = /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?|[^.]+\.localhost)$/i;
+// Only a name that is certainly this laptop: not x.localhost (the OS resolver
+// decides that one), only localhost, a valid 127.x.x.x, or ::1.
+const lanTargetHost = (hostname) => /^(localhost|\[::1\])$/i.test(hostname) ||
+  (/^127(\.\d{1,3}){3}$/.test(hostname) && hostname.split('.').every((o) => Number(o) <= 255));
+/** URL hostnames wrap IPv6 in brackets; sockets want them bare. */
+const bareHost = (hostname) => hostname.replace(/^\[|\]$/g, '');
 const PRIVATE_V4_RE = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
-const lan = { key: '', gateways: new Map(), seen: new Map(), error: '' };
+const lan = { key: '', gateways: new Map(), seen: new Map(), error: '', lastAnswerAt: Date.now() };
 
 /** This laptop's Wi-Fi address: en0 first on macOS, then any private IPv4. */
 function lanAddress() {
@@ -1966,12 +1973,13 @@ function openGateway(local, port, address) {
   const lanOrigin = `http://${address}:${port}`;
   const sockets = new Set();
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, lanOrigin);
+    // '//evil.com/x' must read as a path, not as another host.
+    const url = new URL(req.url.replace(/^\/+/, '/'), lanOrigin);
     if (lan.key && url.searchParams.get('k') === lan.key) {
       url.searchParams.delete('k');
       res.writeHead(302, {
         'Set-Cookie': `${LAN_COOKIE}=${lan.key}; HttpOnly; SameSite=Lax; Path=/`,
-        Location: `${url.pathname}${url.search}`,
+        Location: `${url.pathname.replace(/^\/+/, '/')}${url.search}`,
         'Cache-Control': 'no-store',
       });
       return res.end();
@@ -1981,9 +1989,10 @@ function openGateway(local, port, address) {
       return res.end(LOCKED_PAGE);
     }
     lan.seen.set(req.socket.remoteAddress || '', Date.now());
-    const up = http.request({ host: target.hostname, port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target) }, (upRes) => {
+    const up = http.request({ host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target) }, (upRes) => {
       const headers = { ...upRes.headers };
-      if (headers.location && headers.location.startsWith(target.origin)) headers.location = lanOrigin + headers.location.slice(target.origin.length);
+      const loc = headers.location;
+      if (loc && loc.startsWith(target.origin) && (loc.length === target.origin.length || /[/?#]/.test(loc[target.origin.length]))) headers.location = lanOrigin + loc.slice(target.origin.length);
       res.writeHead(upRes.statusCode || 502, headers);
       upRes.pipe(res);
     });
@@ -1998,7 +2007,7 @@ function openGateway(local, port, address) {
   server.on('upgrade', (req, socket, head) => {
     if (!hasKey(req)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
     lan.seen.set(socket.remoteAddress || '', Date.now());
-    const upstream = net.connect(Number(target.port), target.hostname, () => {
+    const upstream = net.connect(Number(target.port), bareHost(target.hostname), () => {
       const h = forwardHeaders(req, target);
       const lines = [`${req.method} ${req.url} HTTP/1.1`, ...Object.entries(h).map(([k, v]) => `${k}: ${v}`), '', ''];
       upstream.write(lines.join('\r\n'));
@@ -2011,7 +2020,12 @@ function openGateway(local, port, address) {
   });
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, address, () => resolve({ local, lan: lanOrigin, server, sockets }));
+    server.listen(port, address, () => {
+      // listen succeeded: the one-shot reject is spent, and an unhandled
+      // server 'error' later would crash the plugin (and Claude's tools).
+      server.on('error', (e) => log('wi-fi gateway error:', e && e.message));
+      resolve({ local, lan: lanOrigin, server, sockets });
+    });
   });
 }
 
@@ -2032,7 +2046,7 @@ async function syncGateways(wanted, targets) {
   if (!wanted) { closeAllGateways(); lan.error = ''; return 'off'; }
   const address = lanAddress();
   if (!address) { closeAllGateways(); lan.error = 'No Wi-Fi address on this laptop. It may be on a wired network only, or offline.'; return 'failed'; }
-  const wantedLocals = (targets || []).filter((t) => { try { return LOOPBACK_RE.test(new URL(t).hostname); } catch { return false; } }).slice(0, LAN_MAX);
+  const wantedLocals = (targets || []).filter((t) => { try { return lanTargetHost(new URL(t).hostname); } catch { return false; } }).slice(0, LAN_MAX);
   // Not this project's server (an earlier session's still running): never open it.
   const ours = wantedLocals.filter((t) => {
     const owner = listenerDir(Number(new URL(t).port));
@@ -2070,7 +2084,11 @@ let lanStatusNow = 'off';
 async function lanRound() {
   try {
     reloadConfig();
-    if (CONFIG.problems.length || !existsSync(sessionFile())) return;
+    if (CONFIG.problems.length || !existsSync(sessionFile())) {
+      // No way to hear the host press Off: the door must not stay open.
+      closeAllGateways(); lan.error = ''; lanStatusNow = 'off';
+      return;
+    }
     const report = {
       status: lanStatusNow,
       map: [...lan.gateways.values()].map((g) => ({ local: g.local, lan: g.lan })),
@@ -2079,9 +2097,15 @@ async function lanRound() {
       error: lan.error,
     };
     const answer = await api('POST', 'share/report', report, AbortSignal.timeout(8000));
+    lan.lastAnswerAt = Date.now();
     lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || []);
   } catch (e) {
     log('wi-fi share round failed:', e && e.message);
+    // Engage has not answered for too long: fail closed, not open.
+    if (Date.now() - lan.lastAnswerAt > LAN_LOST_MS && (lan.gateways.size || lan.key)) {
+      closeAllGateways(); lan.error = ''; lanStatusNow = 'off';
+      log('wi-fi share closed: no answer from Engage');
+    }
   }
 }
 
