@@ -421,6 +421,39 @@ describe('send an idea', () => {
   });
 });
 
+describe('Open the build (Wi-Fi share)', () => {
+  const OPEN = 'http://192.168.1.20:4900/?k=KEY';
+  const SHOWING = { logId: 'L9', kind: 'showing', text: 'Header B is live', createdAt: '2026-10-04T12:00:00.000Z', link: 'http://localhost:5173/' };
+
+  test('shown while sharing is live, opens in a new tab, says same Wi-Fi', async () => {
+    serve(baseView({ lan: { open: OPEN } }));
+    await mount();
+    const link = await screen.findByRole('link', { name: 'Open the build' });
+    expect(link).toHaveAttribute('href', OPEN);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByText('Works on the same Wi-Fi as the host')).toBeInTheDocument();
+  });
+
+  test('absent when sharing is off', async () => {
+    serve(baseView({ lan: null }));
+    await mount();
+    await screen.findByRole('button', { name: /Send an idea to the host/ });
+    expect(screen.queryByRole('link', { name: 'Open the build' })).toBeNull();
+  });
+
+  test('the preview note asks to try it first only while sharing is live', async () => {
+    serve(baseView({ log: [SHOWING], lan: { open: OPEN } }));
+    const first = await mount();
+    expect(await screen.findByText('Try it, then say what you think.')).toBeInTheDocument();
+    first.unmount();
+    serve(baseView({ log: [SHOWING], lan: null }));
+    await mount();
+    await screen.findByRole('button', { name: 'Look and say what you think' });
+    expect(screen.queryByText('Try it, then say what you think.')).toBeNull();
+  });
+});
+
 describe('guidance', () => {
   const intro = /You're helping build\s*Food bank sign-up\s*with Claude Code\. Answer when a question appears; send ideas any time\./;
 

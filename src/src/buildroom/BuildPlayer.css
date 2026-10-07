@@ -1027,6 +1027,26 @@
 .bpl .bpl-story .bpl-pvfb { margin-top: 12px; }
 .bpl .bpl-pvnote .bpl-send { margin-top: 8px; }
 
+/* OPEN THE BUILD (mockup L5): the top of Now, full width, in the success tint. */
+.bpl .bpl-open {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--bpl-good-edge);
+  border-radius: 12px;
+  background: var(--bpl-good-tint);
+}
+.bpl .bpl-open .bpl-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  margin: 0;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+}
+.bpl .bpl-open .bpl-open-note { margin: 8px 0 0; text-align: center; }
+
 /* THE OPENING ON A PHONE (mockup O4): step N of 9, as a row of short bars.
    --primary on --bg for the filled steps, --surface for the rest. */
 .bpl .bpl-opening { margin: 0 0 12px; }

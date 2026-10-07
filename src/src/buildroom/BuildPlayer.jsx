@@ -1022,9 +1022,16 @@ export default function BuildPlayer({
      picture in History), and the way to send an idea. */
   const nowExtras = isEnded ? null : (
     <>
+      {view.lan && view.lan.open && (
+        <section className="bpl-open" aria-label="Open the build">
+          <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer">Open the build</a>
+          <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
+        </section>
+      )}
       {preview && !previewSent && (
         <section className="bpl-ideas bpl-pvnote" aria-label="Claude is showing something">
           <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
+          {view.lan && view.lan.open && <p className="plr-help">Try it, then say what you think.</p>}
           <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('history')}>Look and say what you think</button>
         </section>
       )}
