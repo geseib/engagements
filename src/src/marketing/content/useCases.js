@@ -15,8 +15,23 @@
 /** @type {UseCase[]} */
 export const USE_CASES = [
   {
+    id: 'build-room',
+    kicker: '01 · Build Room',
+    title: 'Build software with the people who will use it',
+    setType: {
+      kind: 'Build Room',
+      detail: 'a shared session connected to a Claude Code project.',
+    },
+    before: 'Requirements pass from meeting notes to a developer. The team sees the result days later, after the choices are hard to change.',
+    after: 'The room suggests, votes and tests while Claude Code builds. The host carries each decision into the project, and History keeps the reasons with the work.',
+    actions: [
+      { label: 'See the Build Room', href: '/build-room' },
+      { label: 'Create a host account', href: '/auth?mode=register', primary: true },
+    ],
+  },
+  {
     id: 'offsite',
-    kicker: '01 · Strategy offsite',
+    kicker: '02 · Strategy offsite',
     title: 'Two days, forty opinions, one plan',
     setType: {
       kind: 'call and answer',
@@ -31,7 +46,7 @@ export const USE_CASES = [
   },
   {
     id: 'retro',
-    kicker: '02 · Retrospective',
+    kicker: '03 · Retrospective',
     title: 'What we stop, start and keep',
     setType: {
       kind: 'call and answer',
@@ -46,7 +61,7 @@ export const USE_CASES = [
   },
   {
     id: 'decision',
-    kicker: '03 · Decision workshop',
+    kicker: '04 · Decision workshop',
     title: 'Three options, one room, a record of why',
     setType: {
       kind: 'call and answer',
@@ -61,7 +76,7 @@ export const USE_CASES = [
   },
   {
     id: 'warmup',
-    kicker: '04 · Team trivia warm-up',
+    kicker: '05 · Team trivia warm-up',
     title: 'Ten minutes that wake the room up',
     setType: {
       kind: 'trivia',
@@ -78,8 +93,8 @@ export const USE_CASES = [
 
 export const USE_CASES_PAGE = {
   kicker: 'Use cases',
-  title: 'Four sessions people actually run.',
-  lead: 'Each one is the same product with a different set of questions. The difference is the material you bring.',
+  title: 'Five sessions people actually run.',
+  lead: 'Bring a problem, a project or your own material. The room helps decide what happens next.',
   cta: {
     title: 'Bring the material. We will draft the questions.',
     primary: 'Create a host account',

@@ -140,6 +140,21 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section className="mk-build-teaser" aria-labelledby="mk-build-teaser-title">
+          <div className="mk-shell mk-build-teaser-in">
+            <div className="mk-build-teaser-copy">
+              <p className="mk-kicker">New · Build Room</p>
+              <h2 id="mk-build-teaser-title" className="mk-title">Let the room guide what Claude Code builds.</h2>
+              <p className="mk-lead">Ask the people who will use it. Put the choices on the Stage. Send the decision to Claude Code, then share the working result while everyone is still together.</p>
+              <a className="mk-btn mk-btn-primary" href="/build-room">See the Build Room</a>
+            </div>
+            <a className="mk-build-teaser-art" href="/build-room" aria-label="See the Build Room">
+              <img src="/assets/marketing/engage-build-room-poster.jpg" alt="The Build Room Stage beside a working project built by Claude Code" loading="lazy" />
+              <span>Ask → Decide → Build → Test → Remember</span>
+            </a>
+          </div>
+        </section>
+
         <section id="modes" className="mk-section mk-section--b">
           <div className="mk-shell">
             <div className="mk-section-head">

@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import HowItWorksPage from '../marketing/HowItWorksPage';
 import UseCasesPage from '../marketing/UseCasesPage';
+import BuildRoomPage from '../marketing/BuildRoomPage';
 import ReportsPage from '../marketing/ReportsPage';
 import { HOW_STEPS } from '../marketing/content/howItWorks';
 import { USE_CASES } from '../marketing/content/useCases';
@@ -59,8 +60,9 @@ test("headings descend without a skip: h1, then every step's own h2", () => {
   }
 });
 
-test('four use cases, each naming the kind of set it runs on and ending at a door', () => {
-  expect(USE_CASES).toHaveLength(4);
+test('five use cases lead with the Build Room and each names its format', () => {
+  expect(USE_CASES).toHaveLength(5);
+  expect(USE_CASES[0].id).toBe('build-room');
   render(<UseCasesPage />);
   for (const c of USE_CASES) {
     const heading = screen.getByRole('heading', { name: c.title });
@@ -68,6 +70,18 @@ test('four use cases, each naming the kind of set it runs on and ending at a doo
     expect(within(article).getByText(c.setType.kind, { selector: 'b' })).toBeInTheDocument();
   }
   expect(screen.getAllByRole('link', { name: /create a host account/i }).length).toBeGreaterThanOrEqual(2);
+});
+
+test('the Build Room page explains the room-to-code loop and embeds the accessible film', () => {
+  const { container } = render(<BuildRoomPage />);
+  expect(screen.getByRole('heading', { level: 1, name: /build software with the people who will use it/i })).toBeInTheDocument();
+  expect(screen.getByText(/Ask → Decide → Build → Test → Remember/i)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /shape and prototype a new product/i })).toBeInTheDocument();
+  const video = container.querySelector('video');
+  expect(video).toHaveAttribute('poster', '/assets/marketing/engage-build-room-poster.jpg');
+  expect(video.querySelector('source')).toHaveAttribute('src', '/assets/marketing/engage-build-room.mp4');
+  expect(video.querySelector('track[kind="captions"]')).toHaveAttribute('src', '/assets/marketing/engage-build-room.vtt');
+  expect(screen.getByRole('link', { name: /read the build room transcript/i })).toHaveAttribute('href', '/assets/marketing/engage-build-room-transcript.html');
 });
 
 test('each use case is an article labelled by its own heading', () => {

@@ -175,7 +175,7 @@ describe('the on-page sample report never claims to be a real session', () => {
     // Not a defect: this is the owner's personally-vouched-for usage claim,
     // not a claim about an on-page artifact's authenticity, which is why it
     // stays out of the REAL_CLAIM scan above.
-    expect(useCasesModule.USE_CASES_PAGE.title).toBe('Four sessions people actually run.');
+    expect(useCasesModule.USE_CASES_PAGE.title).toBe('Five sessions people actually run.');
   });
 });
 
