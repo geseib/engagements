@@ -1628,6 +1628,9 @@ async function hostShare(ctx, body) {
   return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true }) });
 }
 
+/** Map entries compared field by field: a stored map's key order is not promised. */
+const sameMap = (x, y) => x.length === y.length && x.every((m, i) => m.local === y[i].local && m.lan === y[i].lan);
+
 /** The plugin's report, every 4 to 15 seconds. Answers what to open. */
 async function shareReport(ctx, body) {
   const norm = LAN.normalizeReport(body);
@@ -1640,7 +1643,7 @@ async function shareReport(ctx, body) {
   if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
   await updateLan(ctx, set);
   const changed = ['Status', 'Key', 'Open', 'Error'].some((k) => before[k] !== v[k])
-    || JSON.stringify(before.Map || []) !== JSON.stringify(v.Map);
+    || !sameMap(before.Map || [], v.Map);
   if (changed) {
     const rev = (await touchState(ctx)).Rev;
     await announce(ctx, rev);

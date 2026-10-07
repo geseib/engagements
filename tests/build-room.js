@@ -1284,6 +1284,17 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     store.set(k, { ...store.get(k), ReportedAt: new Date(Date.now() - 60000).toISOString() });
     assert.strictEqual((await playCall('GET', 'state', priya)).body.lan, null);
   });
+  await check('map key order in storage does not make a repeat report look changed', async () => {
+    seed();
+    await hostCall('POST', 'share', { on: true });
+    await report(LIVE());
+    const k = key(`GAME#${GAME}`, 'BUILD#LAN');
+    const row = store.get(k);
+    store.set(k, { ...row, Map: row.Map.map((m) => ({ lan: m.lan, local: m.local })) });
+    sent = [];
+    await report(LIVE());
+    assert.ok(!sent.some((m) => m.message.type === 'buildChanged'));
+  });
   await check('an ended session is never wanted, and cannot be turned on', async () => {
     seed();
     await hostCall('POST', 'share', { on: true });
