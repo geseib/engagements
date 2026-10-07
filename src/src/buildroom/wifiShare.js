@@ -16,7 +16,7 @@ export function wifiState(lan, now) {
   if (l.status === 'failed') return { state: 'failed', label: "Wi-Fi · Didn't start", open: 0 };
   if (l.status !== 'live') return { state: 'starting', label: 'Wi-Fi · Starting…', open: 0 };
   const open = Number(l.open) || 0;
-  const since = l.liveSince ? Date.parse(now) - Date.parse(l.liveSince) : 0;
+  const since = l.liveSince ? new Date(now).getTime() - Date.parse(l.liveSince) : 0;
   if (open === 0 && since >= QUIET_AFTER_MS) return { state: 'quiet', label: 'Wi-Fi · On · none open yet', open: 0 };
   return { state: 'on', label: `Wi-Fi · On · ${open} open`, open };
 }

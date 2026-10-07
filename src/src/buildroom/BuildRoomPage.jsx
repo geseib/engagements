@@ -36,6 +36,8 @@ import { OpeningPanel, BriefPath, WallBrief } from './BuildOpening';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
 import BuildWheel from './BuildWheel';
+import { WifiChip, WifiPanel, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
+import { shouldOfferWifi, wifiState } from './wifiShare';
 import {
   pluginInstallCommand,
   pluginConnectCommand, projectSlug, cleanFolder, startCommand,
@@ -378,6 +380,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
   const [openShareId, setOpenShareId] = useState(null);
+  const [wallQr, setWallQr] = useState(false);
   const now = useNow(5000);
 
   // ── THE CONNECTION (owner, 2026-10-04) ────────────────────────────────
@@ -559,6 +562,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const present = isProjected(screen);
   const host = !present;
   const ended = room.state === 'ENDED';
+  // The Wi-Fi QR on the wall sits on the Stage, which has no header of its own.
+  const wifiSharing = ['on', 'quiet'].includes(wifiState(room.lan, now).state);
+  const wallQrLink = wallQr && wifiSharing ? wifiLink(room) : '';
   const asks = room.asks || [];
   const proposed = asks.filter((a) => a.status === 'proposed');
   const current = asks.find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status)) || null;
@@ -601,6 +607,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         host={host}
         screen={screen}
         onScreen={setScreen}
+        onWifiWall={() => { setScreen('stage'); setWallQr(true); }}
         onConnect={() => setDialog('connect')}
         onWrap={() => setDialog('wrap')}
         onReport={() => goView('report')}
@@ -678,6 +685,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           ) : (
             <>
+              {!ended && shouldOfferWifi(room) && <WifiOffer busy={busy} run={run} api={api} />}
               {current ? (
                 <div className="brm-now">
                   <AskStage
@@ -784,6 +792,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {host && dialog && dialog.compose && (
         <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
+      {wallQrLink && <WallBuildQr link={wallQrLink} onClose={() => setWallQr(false)} />}
     </div>
     </ImageLoader.Provider>
   );
@@ -1000,10 +1009,29 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
  * connection and the session menu; on a screen the room sees, nothing in it
  * is host-only (the Host tab's count is a number, never content).
  */
-function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
+function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
   const waiting = waitingCount(room);
   const pill = askPill(room);
   const [qr, setQr] = useState(false);
+  const [wifiOpen, setWifiOpen] = useState(false);
+  const wifiRef = useRef(null);
+  // The panel is a popover: Escape or a click outside puts it away.
+  useEffect(() => {
+    if (!wifiOpen) return undefined;
+    const onDown = (e) => {
+      if (wifiRef.current && wifiRef.current.contains(e.target)) return;
+      setWifiOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setWifiOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [wifiOpen]);
+  // The Stage has no header, so the chip is on the host's screens only.
+  const showWifi = host && !ended;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   const pick = (close, fn) => () => { close(); fn(); };
   return (
@@ -1033,6 +1061,22 @@ function RoomHeader({ room, now, host, screen, onScreen, onConnect, onWrap, onRe
         </button>
       )}
       <div className="brm-hbar-tools">
+        {showWifi && (
+          <div className="brm-wifiwrap" ref={wifiRef}>
+            <WifiChip lan={room.lan} now={now} open={wifiOpen} onOpen={() => setWifiOpen((o) => !o)} />
+            {wifiOpen && (
+              <WifiPanel
+                lan={room.lan}
+                now={now}
+                busy={busy}
+                run={run}
+                api={api}
+                onClose={() => setWifiOpen(false)}
+                onShowWall={() => { setWifiOpen(false); onWifiWall(); }}
+              />
+            )}
+          </div>
+        )}
         <AgentChip agent={room.agent} now={now} />
         {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
         <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => setQr(true)}>
@@ -1298,6 +1342,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
  */
 function BuildScreen({ room, now }) {
   const { link, shot } = latestBuild(room);
+  const shareLink = ['on', 'quiet'].includes(wifiState(room.lan, now).state) ? wifiLink(room) : '';
   return (
     <section className="brm-screenbody brm-buildscreen" aria-label="The build">
       <WallComment comment={freshWallComment(room, now)} />
@@ -1310,6 +1355,7 @@ function BuildScreen({ room, now }) {
       ) : (
         <div className="brm-empty">Nothing to show yet. When Claude previews the work, its newest screenshot appears here.</div>
       )}
+      <BuildScreenQr link={shareLink} />
     </section>
   );
 }
@@ -2982,6 +3028,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
               <CopyButton text={install} label="Copy" />
               <span className="brm-hint">Run it in a terminal. It installs the plugin if it is missing, updates it if it is out of date, or tells you you&apos;re all set. Needs Node 18 or later.</span>
             </div>
+            <p className="brm-hint">If your Mac asks whether node may accept incoming connections, click Allow. That is how the room&apos;s phones, laptops and tablets on this Wi-Fi reach the build.</p>
           </div>
         </li>
 
