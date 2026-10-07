@@ -76,7 +76,11 @@ async function openCreateForm(page) {
 test('the deployed bundle is the one with today’s work in it', async ({ page }) => {
   // rejects: running this whole file against a tier that never got the deploy
   // and reading the absences as regressions.
-  const body = await (await page.request.get(`${BASE}/bundle.js`)).text();
+  // The bundle's name carries its content hash, so read it from index.html.
+  const html = await (await page.request.get(`${BASE}/`)).text();
+  const src = (html.match(/<script[^>]+src="(\/static\/js\/main\.[^"]+\.js)"/) || [])[1];
+  expect(src, `${BASE}/ names no hashed bundle in index.html`).toBeTruthy();
+  const body = await (await page.request.get(`${BASE}${src}`)).text();
   for (const marker of ['Set roughly', 'qsets-route', 'Review the generation', 'questionSetScope']) {
     // A BOOLEAN, NOT `toContain`. Failing `toContain` against a 3.5MB bundle
     // prints the whole bundle, which buries the one sentence that matters.

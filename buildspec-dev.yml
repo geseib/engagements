@@ -147,7 +147,24 @@ phases:
 
       - echo "Deploying frontend to S3..."
       - BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`FrontendBucketName`].OutputValue' --output text)
-      - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
+      # CACHE HEADERS. Webpack names every script under static/js/ by its
+      # content hash, so those objects never change: immutable for a year.
+      # Everything else keeps its name across deploys (index.html, config.js,
+      # tier-favicon.js, engage-mcp.mjs, images) and is no-cache: the browser
+      # revalidates by ETag on each load and gets a 304 when nothing changed.
+      # Without these headers a browser ran the previous bundle for an unknown
+      # time after a deploy (seen on dev 2026-10-07).
+      # static/ goes up FIRST, so the new index.html never names a file that
+      # is not there yet. `cp`, not `sync`, so every object gets its header.
+      - aws s3 cp dist/static/ s3://$BUCKET_NAME/static/ --recursive --cache-control "public, max-age=31536000, immutable"
+      - aws s3 cp dist/ s3://$BUCKET_NAME/ --recursive --exclude "static/*" --cache-control "no-cache"
+      # The --delete pass prunes files a build no longer emits. It never
+      # touches static/: a tab opened before this deploy still lazy-loads its
+      # own old chunks from there. The two legacy names stay for the same
+      # reason: an index.html cached before cache headers existed still asks
+      # for /bundle.js, and a 404 there comes back as index.html (the SPA
+      # error rule) and a blank page.
+      - aws s3 sync dist/ s3://$BUCKET_NAME/ --delete --exclude "static/*" --exclude "bundle.js" --exclude "*.bundle.js" --exclude "bundle.js.LICENSE.txt" --exclude "*.bundle.js.LICENSE.txt"
 
       - echo "Invalidating CloudFront cache..."
       - DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text)
