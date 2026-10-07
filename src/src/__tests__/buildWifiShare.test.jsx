@@ -82,3 +82,16 @@ test('the wall QR has a real X and a Close at the bottom', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(onClose).toHaveBeenCalledTimes(2);
 });
+
+test('the panel says it in the mockup\'s two sentences', () => {
+  render(<WifiPanel lan={LIVE} now={NOW} busy={false} run={runNow} api={{ share: jest.fn() }} onClose={() => {}} onShowWall={() => {}} />);
+  expect(screen.getByText(/Turn it off at any time\. Everyone loses it at once\./)).toBeInTheDocument();
+});
+
+test('none open yet: a QR to test it yourself, and what to do if it fails', () => {
+  const quiet = { ...LIVE, open: 0, liveSince: '2026-10-07T11:55:00.000Z' };
+  render(<WifiPanel lan={quiet} link="http://192.168.1.20:4900/?k=KEY" now={NOW} busy={false} run={runNow} api={{ share: jest.fn() }} onClose={() => {}} onShowWall={() => {}} />);
+  expect(screen.getByText(/scan the QR below/)).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /test the build on another device/ })).toBeInTheDocument();
+  expect(screen.getByText(/this Wi-Fi will not work for the room\. Use screenshots, as before\./)).toBeInTheDocument();
+});

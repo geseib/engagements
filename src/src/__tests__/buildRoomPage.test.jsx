@@ -155,6 +155,29 @@ describe('loading and live updates', () => {
   });
 });
 
+describe('the Wi-Fi QR on the wall', () => {
+  const lan = (status) => ({
+    wanted: status !== 'off', status, open: 2, liveSince: ago(30), offerDismissed: true,
+    map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900', link: 'http://192.168.1.20:4900/?k=KEY' }],
+  });
+  const push = async (status) => {
+    const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
+    current = { ...hostState(), lan: lan(status) };
+    await act(async () => { handler({ gameId: GAME, rev: 9 }); });
+  };
+
+  test('a QR left up does not come back when sharing is switched off and on again', async () => {
+    await openRoom({ ...hostState(), lan: lan('live') });
+    fireEvent.click(screen.getByTestId('brm-wifi'));
+    fireEvent.click(screen.getByRole('button', { name: 'Show the QR on the wall' }));
+    expect(screen.getByRole('dialog', { name: 'Open the build yourself' })).toBeInTheDocument();
+    await push('off');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Open the build yourself' })).toBeNull());
+    await push('live');
+    expect(screen.queryByRole('dialog', { name: 'Open the build yourself' })).toBeNull();
+  });
+});
+
 describe('each ask status', () => {
   test('proposed: a review card the room cannot see, with Open and Discard', async () => {
     await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));

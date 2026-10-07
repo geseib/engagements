@@ -382,6 +382,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [openShareId, setOpenShareId] = useState(null);
   const [wallQr, setWallQr] = useState(false);
   const now = useNow(5000);
+  // The wall QR is put away the moment sharing stops or the session ends, so
+  // it cannot come back on the projector when sharing next turns on.
+  const sharingNow = Boolean(room) && ['on', 'quiet'].includes(wifiState(room.lan, now).state);
+  const endedNow = Boolean(room) && room.state === 'ENDED';
+  useEffect(() => { if (!sharingNow || endedNow) setWallQr(false); }, [sharingNow, endedNow]);
 
   // ── THE CONNECTION (owner, 2026-10-04) ────────────────────────────────
   // After a long wait the laptop sleeps, the socket gives up after five
@@ -563,8 +568,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const host = !present;
   const ended = room.state === 'ENDED';
   // The Wi-Fi QR on the wall sits on the Stage, which has no header of its own.
-  const wifiSharing = ['on', 'quiet'].includes(wifiState(room.lan, now).state);
-  const wallQrLink = wallQr && wifiSharing ? wifiLink(room) : '';
+  const wallQrLink = wallQr && sharingNow ? wifiLink(room) : '';
   const asks = room.asks || [];
   const proposed = asks.filter((a) => a.status === 'proposed');
   const current = asks.find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status)) || null;
@@ -1067,6 +1071,7 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
             {wifiOpen && (
               <WifiPanel
                 lan={room.lan}
+                link={wifiLink(room)}
                 now={now}
                 busy={busy}
                 run={run}

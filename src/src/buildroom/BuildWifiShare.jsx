@@ -54,7 +54,7 @@ function CopyLink({ link }) {
   );
 }
 
-export function WifiPanel({ lan, now, busy, run, api, onClose, onShowWall }) {
+export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall }) {
   const s = wifiState(lan, now);
   const on = Boolean(lan && lan.wanted);
   const map = (lan && lan.map) || [];
@@ -75,7 +75,7 @@ export function WifiPanel({ lan, now, busy, run, api, onClose, onShowWall }) {
         </label>
         <button type="button" className="brm-wifipanel-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
       </div>
-      <p className="brm-wifipanel-say">Anyone on this Wi-Fi with the link can open the app Claude is running, on a phone, laptop or tablet. Turn it off at any time and everyone loses it at once.</p>
+      <p className="brm-wifipanel-say">Anyone on this Wi-Fi with the link can open the app Claude is running, on a phone, laptop or tablet. Turn it off at any time. Everyone loses it at once.</p>
       {s.state === 'failed' && (
         <div className="brm-wifipanel-err"><b>It didn&apos;t start.</b> {lan.error}</div>
       )}
@@ -84,7 +84,13 @@ export function WifiPanel({ lan, now, busy, run, api, onClose, onShowWall }) {
           <div className="brm-wifipanel-warn">
             <b>None open yet.</b> It has been on for 2 minutes and no device has opened it. Some Wi-Fi networks (hotels, conferences, guest networks) keep devices apart, so nobody else can reach this laptop.
           </div>
-          <p className="brm-wifipanel-say">Check that everyone is on the same Wi-Fi as this laptop: phones and tablets not on mobile data, laptops not on a work VPN. Try it yourself on another device first.</p>
+          <p className="brm-wifipanel-say">Check that everyone is on the same Wi-Fi as this laptop: phones and tablets not on mobile data, laptops not on a work VPN. Try it yourself on another device first: scan the QR below.</p>
+          {link && (
+            <div className="brm-wifipanel-test">
+              <div className="brm-buildqr-qr" role="img" aria-label="QR code to test the build on another device"><QRCodeSVG value={link} size={96} level="M" includeMargin={false} /></div>
+              <p className="brm-wifipanel-say">Scan to open the build. If your own device cannot open it either, this Wi-Fi will not work for the room. Use screenshots, as before.</p>
+            </div>
+          )}
         </>
       )}
       {s.state === 'on' && (
