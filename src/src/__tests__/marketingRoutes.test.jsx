@@ -20,6 +20,7 @@ jest.mock('../components/SharedReportPage', () => () => <div data-testid="shared
 jest.mock('../marketing/HomePage', () => () => <div data-testid="home-page" />);
 jest.mock('../marketing/HowItWorksPage', () => () => <div data-testid="how-page" />);
 jest.mock('../marketing/UseCasesPage', () => () => <div data-testid="cases-page" />);
+jest.mock('../marketing/BuildRoomPage', () => () => <div data-testid="build-room-page" />);
 jest.mock('../marketing/ReportsPage', () => () => <div data-testid="reports-page" />);
 jest.mock('../marketing/HelpPage', () => () => <div data-testid="help-page" />);
 
@@ -35,6 +36,7 @@ const PUBLIC = [
   ['/join', 'root-page'],
   ['/how-it-works', 'how-page'],
   ['/use-cases', 'cases-page'],
+  ['/build-room', 'build-room-page'],
   ['/reports', 'reports-page'],
   ['/help', 'help-page'],
   ['/help/host/host-quick-start', 'help-page'],

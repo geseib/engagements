@@ -227,13 +227,16 @@ describe('the front page, refreshed (2026-09-22)', () => {
     expect(document.querySelector('.mk-root')).toHaveClass('mk-home');
   });
 
-  test('kickers survive only at the two ends of the climb: #top and #summit', () => {
+  test('kickers mark the hero, the new Build Room teaser and the report', () => {
     render(<HomePage />);
     const kickers = [...document.querySelectorAll('.mk-kicker')];
-    expect(kickers).toHaveLength(2);
-    expect(kickers.map((k) => k.closest('section').id)).toEqual(['top', 'summit']);
-    // Plain labels since 2026-09-25; the ridge scene still draws the climb.
-    expect(kickers.map((k) => k.textContent)).toEqual(['For offsites, workshops and retros', 'The report']);
+    expect(kickers).toHaveLength(3);
+    expect(kickers.map((k) => k.closest('section').id || null)).toEqual(['top', null, 'summit']);
+    expect(kickers.map((k) => k.textContent)).toEqual([
+      'For offsites, workshops and retros',
+      'New · Build Room',
+      'The report',
+    ]);
   });
 
   test('the scaffold tells are gone: no 01/02/03 numerals, no problem cards, no flow cards', () => {
