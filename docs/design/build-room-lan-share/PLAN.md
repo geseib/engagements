@@ -10,9 +10,7 @@ Owner, 2026-10-07:
 > "to me LAN doesnt have the same issue. in that at least im in a limited exposure to just people
 > on my network. ... for now lets do local lan so. we test the concept."
 
-Status: **design agreed 2026-10-07 (sections 1 to 5 below, each approved in chat); spec awaiting
-the owner's review.** Mockups come before any code. Ideas set aside for later are in
-[LATER.md](LATER.md).
+Status: **built and pushed to dev at `57fece1e` (2026-10-07)**, plugin 1.11.0. The real-network check (section 5) is waiting for the owner. Build plan: `docs/superpowers/plans/2026-10-07-build-room-wifi-share.md`. Owner, 2026-10-07: only ending the session closes the gateway; wrap-up leaves it on. Ideas set aside for later are in [LATER.md](LATER.md).
 
 This is the first of four pieces the owner named on 2026-10-07. The other three are also in LATER.md:
 the contribution record, several rooms from one starter, and teams in phases.
