@@ -73,7 +73,7 @@ const server = http.createServer((req, res) => {
     if (failNext401) { failNext401 = false; return send(401, { error: 'Key revoked' }); }
     if (endedNext) { endedNext = false; return send(409, { error: 'This session has ended' }); }
     const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '');
-    if (req.method === 'GET' && p === 'state') {
+    if (req.method === 'GET' && (p === 'state' || p === 'state?kickoff=1')) {
       return send(200, {
         gameId: '4321', title: 'Launch site', goal: 'Build a landing page for the meetup', state: 'STARTED',
         players: ['Ana', 'Bo'], playerCount: 2, settings: { reviewAgentAsks: true },
@@ -360,6 +360,36 @@ const hardStop = setTimeout(() => {
       assert.ok(/SHARING ON WI-FI/.test(t) && /laptops, tablets and phones/.test(t) && /never --host 0\.0\.0\.0/.test(t), t);
     } finally {
       stateLan = undefined;
+    }
+  });
+  await check('room_status with kickoff tells Engage (Connect step 4); without it, it does not', async () => {
+    const before = requests.length;
+    await mcp.request('tools/call', { name: 'room_status', arguments: { kickoff: true } });
+    await mcp.request('tools/call', { name: 'room_status', arguments: {} });
+    const urls = requests.slice(before).map((q) => q.url);
+    assert.ok(urls.some((u) => u.endsWith('/build/state?kickoff=1')), urls.join(' '));
+    assert.ok(urls.some((u) => u.endsWith('/build/state')), urls.join(' '));
+  });
+  await check('the kickoff prompt has Claude call room_status with kickoff', async () => {
+    const r = await mcp.request('prompts/get', { name: 'kickoff', arguments: {} });
+    assert.ok(/room_status with kickoff true/.test(r.result.messages[0].content.text), r.result.messages[0].content.text);
+  });
+  await check('while the room has not chosen what to make, room_status says the title and goal are only a name', async () => {
+    stateOpening = { phase: 'opening', current: 'kind', steps: [{ key: 'kind', status: 'next' }, { key: 'forWhom', status: 'next' }] };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/WHAT TO BUILD: THE ROOM DECIDES/.test(t) && /only its name/.test(t) && /do not plan, scaffold or build from them/.test(t), t);
+    } finally {
+      stateOpening = undefined;
+    }
+  });
+  await check('once the host has set what to make, the line is not there', async () => {
+    stateOpening = { phase: 'opening', current: 'forWhom', steps: [{ key: 'kind', status: 'done' }, { key: 'forWhom', status: 'next' }] };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(!/THE ROOM DECIDES/.test(t), t);
+    } finally {
+      stateOpening = undefined;
     }
   });
   await check('the opening: room_status says PHASE: OPENING with the steps, and the brief carries its lines', async () => {

@@ -1222,6 +1222,48 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await state()).opening.phase, 'building');
   });
 
+  console.log('\nKick off (owner, 2026-10-07: step 4 of Connect turns green once kickoff has run)');
+  const agentState = (query) => handler({
+    routeKey: 'GET /games/{gameId}/build/{proxy+}',
+    requestContext: { http: { method: 'GET' }, authorizer: { lambda: agentCtx() } },
+    pathParameters: { gameId: GAME, proxy: 'state' },
+    queryStringParameters: query,
+  }).then((r) => ({ status: r.statusCode, body: JSON.parse(r.body) }));
+  await check('room_status with kickoff records when Claude kicked off, once, and the host sees it', async () => {
+    seed();
+    assert.strictEqual((await hostCall('GET', 'state')).body.agent.kickedOffAt, null);
+    await agentState({});
+    assert.strictEqual((await hostCall('GET', 'state')).body.agent.kickedOffAt, null, 'an ordinary room_status is not a kickoff');
+    sent = [];
+    assert.strictEqual((await agentState({ kickoff: '1' })).status, 200);
+    const first = (await hostCall('GET', 'state')).body.agent.kickedOffAt;
+    assert.ok(first, 'kickedOffAt is set');
+    assert.ok(sent.some((m) => m.message.type === 'buildChanged'), 'the host is told');
+    await agentState({ kickoff: '1' });
+    assert.strictEqual((await hostCall('GET', 'state')).body.agent.kickedOffAt, first, 'the first kickoff time is kept');
+  });
+  await check('only Claude can record a kickoff: the host\'s own state read ignores the flag', async () => {
+    seed();
+    await handler({
+      routeKey: 'GET /games/{gameId}/build/{proxy+}',
+      requestContext: { http: { method: 'GET' }, authorizer: { lambda: HOST } },
+      pathParameters: { gameId: GAME, proxy: 'state' },
+      queryStringParameters: { kickoff: '1' },
+    });
+    assert.strictEqual((await hostCall('GET', 'state')).body.agent.kickedOffAt, null);
+  });
+  await check('the host sees when Claude last listened, for older plugins that never send kickoff', async () => {
+    seed();
+    assert.strictEqual((await hostCall('GET', 'state')).body.agent.listenedAt, null);
+    await handler({
+      routeKey: 'GET /games/{gameId}/build/{proxy+}',
+      requestContext: { http: { method: 'GET' }, authorizer: { lambda: agentCtx() } },
+      pathParameters: { gameId: GAME, proxy: 'inbox' },
+      queryStringParameters: { listening: '1' },
+    });
+    assert.ok((await hostCall('GET', 'state')).body.agent.listenedAt);
+  });
+
   console.log('\nWi-Fi share (docs/design/build-room-lan-share/PLAN.md §3)');
   const report = (body) => agentCall('POST', 'share/report', body);
   const LIVE = (over = {}) => ({ status: 'live', key: 'abcdefghijklmnopqrstuv', open: 2, map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }], ...over });

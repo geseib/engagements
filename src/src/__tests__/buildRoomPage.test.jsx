@@ -544,6 +544,27 @@ describe('Connect Claude Code', () => {
     expect(screen.getByTestId('brm-share-repo').textContent).toBe('/engage:share-repo');
   });
 
+  test('step 4, Kick off: waiting once Claude connects, done once Claude kicked off', () => {
+    const fourth = () => document.querySelectorAll('.brm-steps--connect > li')[3];
+    const { unmount } = panel({ agent: { lastSeenAt: ago(5) } });
+    expect(fourth().className).toContain('is-wait');
+    unmount();
+    const r2 = panel({ agent: { lastSeenAt: ago(5), kickedOffAt: ago(3) } });
+    expect(fourth().className).toContain('is-done');
+    expect(screen.getByText('Claude has kicked off.')).toBeInTheDocument();
+    r2.unmount();
+  });
+
+  test('step 4 with an older plugin: done once Claude has posted to the room or listened', () => {
+    const fourth = () => document.querySelectorAll('.brm-steps--connect > li')[3];
+    const r1 = panel({ agent: { lastSeenAt: ago(5), listenedAt: ago(4) } });
+    expect(fourth().className).toContain('is-done');
+    r1.unmount();
+    const r2 = panel({ agent: { lastSeenAt: ago(5) }, log: [{ logId: 'l1', kind: 'progress', text: 'Set up the folder', by: 'agent' }] });
+    expect(fourth().className).toContain('is-done');
+    r2.unmount();
+  });
+
   test('with Claude connected on a live key, minting again warns that it disconnects', async () => {
     const mintKey = jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' }));
     panel({ agent: { lastSeenAt: ago(5), key: { keyId: 'k1', createdAt: ago(600) } } }, { mintKey });
@@ -726,6 +747,44 @@ describe('create', () => {
       eventTitle: 'Food bank', engagementInfo: 'Pick a shift fast', gameType: 'build', visibility: 'private', accessCode: 'beans',
     });
     expect(calls[1]).toMatchObject({ url: `${API}games/5150/start`, method: 'POST' });
+  });
+
+  test('the room decides by default: no goal needed, and Claude is told the title is only a name', async () => {
+    calls = [];
+    authFetch.mockImplementation(async (url, opts = {}) => {
+      calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
+      if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
+      return res({});
+    });
+    const navigate = jest.fn();
+    render(<BuildCreate navigate={navigate} />);
+    expect(screen.getByRole('radio', { name: /The room decides/ })).toBeChecked();
+    expect(screen.getByText(/The title is only the session's name/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Monday build' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create room' }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/build?gameId=5150'));
+    expect(calls.some((c) => /opening\/answer/.test(c.url))).toBe(false);
+  });
+
+  test("I've set the goal: the goal is required, and it answers What are we making? for the room", async () => {
+    calls = [];
+    authFetch.mockImplementation(async (url, opts = {}) => {
+      calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
+      if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
+      return res({});
+    });
+    const navigate = jest.fn();
+    render(<BuildCreate navigate={navigate} />);
+    fireEvent.click(screen.getByRole('radio', { name: /I've set the goal/ }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Food bank' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create room' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Write the goal, or let the room decide.');
+    expect(navigate).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/Goal/), { target: { value: 'A one-page shift sign-up' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create room' }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/build?gameId=5150'));
+    const answer = calls.find((c) => c.url === `${API}games/5150/build/opening/answer`);
+    expect(answer && answer.body).toEqual({ step: 'kind', text: 'A one-page shift sign-up' });
   });
 
   test('switching review off saves the setting after create', async () => {

@@ -1041,6 +1041,13 @@ async function agentTouch(ctx, event, role) {
  * every few seconds while it waits, and a broadcast per poll would have every
  * page refetching constantly. Only the moment it STARTS listening is announced.
  */
+async function markKickedOff(ctx) {
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: 'KickedOffAt' }));
+  if (res && res.Item && res.Item.KickedOffAt) return;
+  const st = await touchState(ctx, { set: { KickedOffAt: new Date().toISOString() } });
+  await announce(ctx, st.Rev);
+}
+
 async function markListening(ctx) {
   const now = new Date().toISOString();
   const res = await db.send(new UpdateCommand({
@@ -1663,6 +1670,10 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'crew') return routeCrew(ctx, role, method, parts, body, query);
 
   if (method === 'GET' && a === 'state' && !b) {
+    // KICK OFF (owner, 2026-10-07): /engage:kickoff has Claude call
+    // room_status with kickoff, so the Connect panel's step 4 can turn green.
+    // The first time is kept.
+    if (role === 'agent' && query && query.kickoff === '1') await markKickedOff(ctx);
     const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
     // The role the host's screen would delete a screenshot or an entry in
     // (the owner's delete rule, 2026-10-04): it asks staff for a reason.

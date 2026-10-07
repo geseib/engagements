@@ -286,6 +286,9 @@ export default function BuildRoomPage() {
 export function BuildCreate({ navigate = (url) => window.location.assign(url), initialTitle = '' }) {
   const [title, setTitle] = useState(initialTitle);
   const [goal, setGoal] = useState('');
+  // WHO DECIDES WHAT TO BUILD (owner, 2026-10-07): the room, unless the host
+  // has set the goal. Set, it answers the opening's "What are we making?".
+  const [decides, setDecides] = useState('room');
   const [visibility, setVisibility] = useState('public');
   const [accessCode, setAccessCode] = useState('');
   const [review, setReview] = useState(true);
@@ -295,11 +298,15 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
   const submit = async (event) => {
     event.preventDefault();
     if (!title.trim()) { setError('Give the room a title.'); return; }
+    if (decides === 'host' && !goal.trim()) { setError('Write the goal, or let the room decide.'); return; }
     if (visibility === 'private' && !accessCode.trim()) { setError('A private room needs an access code.'); return; }
     setBusy(true);
     setError('');
     try {
       const gameId = await createBuildSession({ title, goal, visibility, accessCode });
+      if (decides === 'host') {
+        try { await buildApi(gameId).openingAction('answer', { step: 'kind', text: goal.trim() }); } catch (e) { /* the host can answer it in the room */ }
+      }
       if (!review) {
         try { await buildApi(gameId).saveSettings({ reviewAgentAsks: false }); } catch (e) { /* the room can switch it */ }
       }
@@ -322,10 +329,18 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
           <span className="brm-lbl">Title</span>
           <input className="brm-input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="Volunteer sign-up for the food bank" />
         </label>
+        <fieldset className="brm-field brm-fieldset">
+          <legend className="brm-lbl">What to build</legend>
+          <label className="brm-check"><input type="radio" name="brm-decides" checked={decides === 'room'} onChange={() => setDecides('room')} /> The room decides</label>
+          <label className="brm-check"><input type="radio" name="brm-decides" checked={decides === 'host'} onChange={() => setDecides('host')} /> I&apos;ve set the goal</label>
+          <span className="brm-hint">{decides === 'room'
+            ? 'The title is only the session\'s name. The room picks what to make in the opening, and Claude waits for it.'
+            : 'Claude builds toward your goal. The opening starts from who it is for.'}</span>
+        </fieldset>
         <label className="brm-field">
-          <span className="brm-lbl">Goal: what should exist when we&apos;re done?</span>
+          <span className="brm-lbl">{decides === 'room' ? 'Goal (optional): a starting idea for the room' : 'Goal: what should exist when we\'re done?'}</span>
           <textarea className="brm-input brm-ta" value={goal} maxLength={2000} onChange={(e) => setGoal(e.target.value)} placeholder="A one-page site where a volunteer can pick a shift in under a minute, on a phone." />
-          <span className="brm-hint">Claude reads this first. It shows on the wall and at the top of the report.</span>
+          <span className="brm-hint">It shows on the wall and at the top of the report.</span>
         </label>
         <fieldset className="brm-field brm-fieldset">
           <legend className="brm-lbl">Who can join</legend>
@@ -2988,6 +3003,10 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   const agent = room.agent || {};
   const liveKey = agent.key;
   const connected = Boolean(agent.lastSeenAt);
+  // STEP 4 (owner, 2026-10-07): green once Claude ran /engage:kickoff. An
+  // older plugin never says so; it counts once Claude has posted to the room
+  // or listened for the host.
+  const kickedOff = Boolean(agent.kickedOffAt) || (connected && (Boolean(agent.listenedAt) || (room.log || []).some((l) => l.by === 'agent')));
   const crew = Boolean(room.crew && room.crew.enabled);
   const command = minted ? connectCommand({ origin: window.location.origin, api: apiBase(), key: minted.key }) : '';
   const install = pluginInstallCommand({ origin: window.location.origin, api: apiBase() });
@@ -3100,10 +3119,11 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
           </div>
         </li>
 
-        <li className={step(false, connected)}>
+        <li className={step(kickedOff, connected && !kickedOff)}>
           <span className="brm-n">4</span>
           <div className="brm-step-body">
             <span className="brm-step-title">Kick off</span>
+            {kickedOff && <span className="brm-hint">Claude has kicked off.</span>}
             <pre className="brm-cmd" data-testid="brm-kickoff">{kickoff}</pre>
             <div className="brm-row brm-gap">
               <CopyButton text={kickoff} label="Copy" />

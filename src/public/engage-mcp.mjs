@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -332,6 +332,12 @@ function renderState(st) {
   const lines = [];
   lines.push(`Engage Build Room · session ${s(st.gameId) || CONFIG.gameId}${st.title ? ` — ${s(st.title)}` : ''}`);
   lines.push(`Goal: ${s(st.goal) || '(no goal set)'}`);
+  // THE ROOM DECIDES (owner, 2026-10-07): until the room (or the host) has
+  // answered "What are we making?", a title and goal are only a name.
+  const kindStep = st.opening && st.opening.phase === 'opening' && (st.opening.steps || []).find((x) => x.key === 'kind');
+  if (kindStep && kindStep.status !== 'done' && kindStep.status !== 'skipped') {
+    lines.push('WHAT TO BUILD: THE ROOM DECIDES. The session\'s title and goal are only its name for now, not the brief: do not plan, scaffold or build from them. The room chooses what to make in the opening (step 1, What are we making?); wait for it.');
+  }
   const n = typeof st.playerCount === 'number' ? st.playerCount : (st.players || []).length;
   lines.push(`Room: ${n} player${n === 1 ? '' : 's'} joined${st.state ? ` · session ${s(st.state)}` : ''}` +
     (st.settings && typeof st.settings.reviewAgentAsks === 'boolean'
@@ -530,7 +536,11 @@ const TOOLS = [
   {
     name: 'room_status',
     description: 'Read the Engage Build Room: the goal, how many people are in the room, the current ask and its status, recent decisions and the recent timeline. Call this at the start of a session and whenever you need to re-orient. Also delivers any pending directions from the host.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { kickoff: { type: 'boolean', description: 'true only when starting the session with the kickoff steps (/engage:kickoff): the host\'s Connect panel then shows the session has kicked off.' } },
+      additionalProperties: false,
+    },
   },
   {
     name: 'ask_room_for_ideas',
@@ -1016,8 +1026,8 @@ const CREW_TOOLS = new Set(['crew_status', 'claim_task', 'share_work', 'share_pr
 const PATCH_MAX_BYTES = 300 * 1024;
 
 const HANDLERS = {
-  async room_status(_args, ctx) {
-    const st = await api('GET', 'state', undefined, ctx.signal);
+  async room_status(args, ctx) {
+    const st = await api('GET', args && args.kickoff === true ? 'state?kickoff=1' : 'state', undefined, ctx.signal);
     return ok(renderState(st), st.inbox);
   },
 
@@ -1638,7 +1648,7 @@ function promptText(name, args) {
         'We are starting a Build Room session in Engage: a live room is watching on a projector and will help decide what we build.',
         '',
         '0. Follow the engage:build-room skill for this project: one commit per decision or milestone with the commit tool, README.md and DECISIONS.md kept current, and every server you start noted in .engage/servers.txt.',
-        '1. Call room_status. Read the goal, how many people are here, and anything already decided. If it says PHASE: OPENING, the room is still framing the build: set up the project, propose at most one probing question if an answer is thin (ask_room_for_ideas with forStep), then call wait_for_direction until the host presses Start building. Do steps 2 to 6 only after that.',
+        '1. Call room_status with kickoff true. Read the goal, how many people are here, and anything already decided. If it says PHASE: OPENING, the room is still framing the build: set up the project, propose at most one probing question if an answer is thin (ask_room_for_ideas with forStep), then call wait_for_direction until the host presses Start building. Do steps 2 to 6 only after that.',
         '2. Restate the goal to me in one or two plain sentences.',
         '2b. Check for servers left running by an earlier session (for example lsof -iTCP -sTCP:LISTEN on macOS or Linux). Tell me about any; do not stop them unless I ask. Pick a port nothing else is using for this project.',
         '3. Propose a short build plan: 3–6 steps. Mark which steps are real decision points the room should weigh in on (look and feel, naming, which feature first) and which you will simply do.',

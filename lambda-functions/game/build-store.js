@@ -794,6 +794,11 @@ function agentStatus(stateRow, keys, now) {
     connected: Number.isFinite(seen) && Date.parse(now) - seen < AGENT_ACTIVE_MS,
     listening: Number.isFinite(heard) && Date.parse(now) - heard < AGENT_LISTENING_MS,
     lastSeenAt: s.AgentSeenAt || null,
+    // CONNECT STEP 4 (owner, 2026-10-07): when Claude ran /engage:kickoff
+    // (room_status with kickoff), and, for older plugins that never say so,
+    // when it last listened for the host.
+    kickedOffAt: s.KickedOffAt || null,
+    listenedAt: s.AgentListeningAt || null,
     name: s.AgentName || 'Claude Code',
     key: live ? { keyId: live.KeyId, label: live.Label || '', createdAt: live.CreatedAt || null, lastUsedAt: live.LastUsedAt || null } : null,
   };
