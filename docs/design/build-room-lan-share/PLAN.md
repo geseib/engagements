@@ -22,7 +22,7 @@ the contribution record, several rooms from one starter, and teams in phases.
 | Area | Today | The problem |
 |---|---|---|
 | Where the app runs | Claude starts the project's dev server on the host's laptop, on `localhost`. | Only the laptop can open it. |
-| What phones are given | `isLocalUrl` / `publicUrl` in `lambda-functions/game/build-store.js` drop every `localhost`, `127.*`, `10.*`, `172.16-31.*`, `192.168.*` and `.local` link before a phone sees it: the `showing` link, a variant's url, the wrap-up demo link. | The people building it never get to touch it. They judge it from a screenshot or the projector. |
+| What participants are given | `isLocalUrl` / `publicUrl` in `lambda-functions/game/build-store.js` drop every `localhost`, `127.*`, `10.*`, `172.16-31.*`, `192.168.*` and `.local` link before a participant's device sees it: the `showing` link, a variant's url, the wrap-up demo link. | The people building it never get to touch it. They judge it from a screenshot or the projector. |
 | The wall's Build screen | The newest screenshot and "Open the build" for the laptop. | An https page cannot frame `http://localhost` (measured in Chromium 152, 2026-10-05), so there is no live view. |
 
 ## The decisions
@@ -44,10 +44,10 @@ the contribution record, several rooms from one starter, and teams in phases.
 3. Engage tells the plugin. The plugin starts the gateway on the laptop's Wi-Fi address, makes a
    key, and reports the links back.
 4. The gateway forwards to the app Claude is showing. Hot reload and websockets pass through, so
-   phones update as Claude edits.
-5. Phones get **Open the build** (a new tab), with "Works on the same Wi-Fi as the host" under it.
+   participants' screens update as Claude edits.
+5. Participants get **Open the build** (a new tab) on whatever they brought: a laptop, tablet or phone, with "Works on the same Wi-Fi as the host" under it.
    The wall can show a QR code. It cannot embed the app (https cannot frame http).
-6. The host sees whether it works: the gateway counts the phones that opened it, and Engage shows
+6. The host sees whether it works: the gateway counts the devices that opened it, and Engage shows
    "9 open". None after two minutes suggests the Wi-Fi keeps devices apart.
 7. Off means off. The host's switch, wrap-up, and the session ending all close the ports.
 
@@ -70,13 +70,13 @@ warn about.
 **The lock.**
 - The key is 128 random bits (`crypto.randomBytes(16)`, base64url, about 22 characters). It is
   not the room's join code, which is short and on the wall.
-- A new key every time sharing is turned on. Turning it off and on again locks out every phone
+- A new key every time sharing is turned on. Turning it off and on again locks out every device
   that had the old one.
 - A request carrying `?k=<key>` gets a cookie (`engage_lan`, `HttpOnly`, `SameSite=Lax`,
   `Path=/`) and a redirect to the same address without `k`. Cookies are shared across ports
   on one host, so one unlock covers every gateway port.
 - A request with neither the key nor the cookie gets a plain 403 page: "Open this from the Build
-  Room on your phone." Nothing from the app is served.
+  Room on your phone, laptop or tablet." Nothing from the app is served.
 - The gateway strips its own cookie and the `k` parameter before forwarding.
 
 **Forwarding.**
@@ -87,7 +87,7 @@ warn about.
   address.
 - Websocket upgrades are piped both ways (`net` sockets), so Vite's hot reload works.
 - Response bodies are never rewritten. A page that hard-codes `http://localhost:<other port>` will
-  break on a phone; Claude is told how to avoid that (below).
+  break on a participant's device; Claude is told how to avoid that (below).
 
 **Talking to Engage.** Each 4-second round of the existing activity pump (`pumpActivity`, which
 today posts only when there is activity) also reports the share state, and reads back whether the
@@ -101,15 +101,16 @@ host wants it on:
   (the chip reads "Starting…" meanwhile), and turning it off up to 4.
 
 **What Claude is told** (room_status, the instructions, the `engage:build-room` skill):
-- "Sharing on Wi-Fi is ON: phones open your app through Engage's gateway. Route backend calls
+- "Sharing on Wi-Fi is ON: the room opens your app through Engage's gateway. Route backend calls
   through your dev server (`/api` proxied to the backend) instead of calling another port from
-  the page, or that part will not work on a phone."
+  the page, or that part will not work on anyone else's device. People use laptops,
+  tablets and phones, so make it work at every width."
 - Start servers on `localhost` as before. Never use `--host 0.0.0.0` for the room; the gateway
   does that job.
 
 **The macOS firewall.** The first time, macOS may ask "Do you want the application node to accept
 incoming network connections?" The Connect panel's checklist gains one line: "If your Mac asks
-whether node may accept incoming connections, click Allow. That is how phones on this Wi-Fi reach
+whether node may accept incoming connections, click Allow. That is how the room's phones, laptops and tablets on this Wi-Fi reach
 the build."
 
 ## 3. The server (`lambda-functions/game/build-room.js`, `build-store.js`)
@@ -122,7 +123,7 @@ the build."
 | `Status` | `off`, `starting`, `live`, `failed`. |
 | `Map` | Local address to Wi-Fi address, as the plugin reported it. |
 | `Key` | The current key. |
-| `Open` | Phones seen in the last 5 minutes. |
+| `Open` | Devices seen in the last 5 minutes (distinct cookies). |
 | `Error` | The plugin's last error, in plain words ("No Wi-Fi address on this laptop"). |
 | `ReportedAt` | When the plugin last reported. |
 | `FirstOfferedAt` | When the Now card offered it, so it is offered once. |
@@ -136,15 +137,15 @@ the build."
 - The plugin's report rides on its existing agent call (`POST build/activity`), and the answer
   carries `wanted`. That route still never hands over Claude's inbox.
 
-**Phones.** One change, in `publicUrl` and `publicOutcome`. When `Share.Status` is `live` and
+**Participants' views.** One change, in `publicUrl` and `publicOutcome`. When `Share.Status` is `live` and
 `ReportedAt` is under 30 seconds old, a local link whose origin is in `Map` is **translated** to its
 Wi-Fi address with `?k=<key>` added. Every other case is exactly today's behaviour: the link is
 dropped. This covers the `showing` link, a variant's url and the wrap-up demo link with no other
 change.
 
-**Off is immediate on the server.** When the host turns it off, phones stop being given links in
+**Off is immediate on the server.** When the host turns it off, participants stop being given links in
 the very next view. The plugin closes the ports within a round. A plugin that stops reporting for
-30 seconds counts as off for phones too.
+30 seconds counts as off for participants too.
 
 **Ended or wrapped up** sets `Wanted` false.
 
@@ -159,21 +160,27 @@ Mockups first, in `docs/design/build-room-lan-share/`, for the owner to see befo
   line: "Anyone on this Wi-Fi with the link can open the app Claude is running. Turn it off at any
   time."
 - **The offer, once:** the first time Claude shows a running app (a `showing` entry or a variant
-  url that is local), the Now card asks "Let the room open it on their phones?" with the switch.
+  url that is local), the Now card asks "Let the room open it themselves?" with the switch.
   Dismissed, it is not offered again.
-- **No phones yet:** on, live, and 0 open after 2 minutes, the chip reads "On · no phones yet" and
+- **None open yet:** on, live, and 0 open after 2 minutes, the chip reads "On · none open yet" and
   the panel says "This Wi-Fi may keep devices apart. Check everyone is on the same network as this
   laptop."
 - **The Build screen:** as today, plus the Wi-Fi QR while sharing is live.
 
-**The wall (Stage).** "Open it on your phone" with a big QR, shown when the host presses Show the
+**The wall (Stage).** "Open the build yourself" (on your phone, laptop or tablet) with a big QR, shown when the host presses Show the
 QR on the wall, reusing the join-QR modal's sizing. No embedded frame.
 
-**Phones (`BuildPlayer.jsx`)**
+**Participants (`BuildPlayer.jsx`, on laptops, tablets and phones)**
+
+Owner, 2026-10-07: "one thing we dont want to assume is phones only. participants will have laptops,
+tablets and phones." Every line of copy says what it means for all three, and the real-network test
+uses all three. A laptop on a work VPN often cannot reach a private address, so the "none open yet"
+advice names it.
+
 - **Now tab:** **Open the build** whenever sharing is live. It opens the newest app Claude showed,
   in a new tab, with "Works on the same Wi-Fi as the host" under it.
 - Everywhere else (ticker links, a variant's Open A, the wrap-up demo link) needs no new UI: the
-  server now hands phones a working link.
+  server now hands participants a working link.
 - **Looks good / Needs a change** already sits on the newest preview; people can now try it first.
 
 ## 5. Testing
@@ -193,33 +200,33 @@ QR on the wall, reusing the join-QR modal's sizing. No embedded frame.
 
 **The server** (`tests/build-room.js`):
 - `publicUrl` translates only while live and fresh, and drops the link exactly as today otherwise;
-- off takes effect in the next phone view;
+- off takes effect in the next participant view;
 - a stale report (over 30 seconds) counts as off;
 - ended and wrapped-up rooms force it off and refuse `on`;
 - `Share` is sealed in a team room, and the key is not in any log entry.
 
 **The screens** (`buildRoomPage.test.jsx`, `buildPlayer.test.jsx`, `buildScreens.test.js`): the
-chip's states, the one-time offer, "no phones yet" after 2 minutes, the phone's button only while
+chip's states, the one-time offer, "none open yet" after 2 minutes, the participant's button only while
 live.
 
 **The plugin.** Bump `VERSION` and the pin in `tests/engage-plugin-version.js`. Extend
 `tests/engage-mcp.js` for the report-and-switch round and the room_status line.
 
-**On a real network, before calling it done.** The owner's laptop and two phones on the same
+**On a real network, before calling it done.** The owner's laptop plus a second laptop, a tablet and a phone on the same
 Wi-Fi, a Vite app Claude builds in a room on dev:
-- phones open it from the button and from the wall QR;
-- an edit by Claude reaches the phones by hot reload;
+- each opens it from the button, and the tablet and phone from the wall QR too;
+- an edit by Claude reaches all three by hot reload;
 - a second variant on another port opens from its Open B;
-- turned off, the phones' next load fails and the button is gone.
+- turned off, every next load fails and the button is gone.
 
-Then one try on a guest network, to see "no phones yet".
+Then one try on a guest network, to see "none open yet".
 
 **The gates:** 286 backend suites, 444 frontend suites, lint at 0 errors (10 warnings), `npm run
 build`, `node tests/build-room-copy.js`.
 
 ## Out of scope here
 
-- Reaching phones that are not on the host's Wi-Fi (a tunnel, a hosted preview): LATER.md.
+- Reaching anyone who is not on the host's Wi-Fi (a tunnel, a hosted preview): LATER.md.
 - https on the Wi-Fi, and so a live frame on the wall: LATER.md.
 - Crew builders' own laptops: their apps stay on their machines; they share through screenshots as
   today.
