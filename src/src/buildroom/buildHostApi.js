@@ -133,6 +133,8 @@ export function buildApi(gameId) {
     saveOutcome: (body) => post('outcome', body),
     /** `{reviewAgentAsks?, agentName?}` → `{settings}` */
     saveSettings: (body) => post('settings', body),
+    /** The Wi-Fi share: `{on}` or `{dismissOffer: true}` → `{lan}` */
+    share: (body) => post('share', body),
     /** → `{key, keyId}`. The key is shown once. */
     mintKey: (label) => post('keys', label ? { label } : {}),
     revokeKey: (keyId) => post(`keys/${seg(keyId)}/revoke`),
