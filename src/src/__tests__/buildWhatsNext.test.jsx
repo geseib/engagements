@@ -1,0 +1,91 @@
+/**
+ * WHAT'S NEXT AND DECIDED — buildroom/BuildWhatsNext.jsx
+ * (docs/design/build-room-host-flow H1, H5; build-room-combine-and-stage P1, P2).
+ *
+ * Between asks the host sees Claude's line and the moves, most likely first,
+ * the lead one focused; the right column lists every decided ask with a tick,
+ * and the ticked ones combine into one prompt the host edits.
+ */
+import React from 'react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import { WhatsNext, DecidedList, decidedAnswer } from '../buildroom/BuildWhatsNext';
+
+const NOW = Date.parse('2026-10-07T15:00:00.000Z');
+const decided = [
+  { askId: '001', prompt: 'What are we building?', status: 'decided', decidedAt: '2026-10-07T14:30:00Z', decision: { direction: 'An app', method: 'vote' } },
+  { askId: '002', prompt: 'Who is it for?', status: 'decided', decidedAt: '2026-10-07T14:40:00Z', decision: { direction: 'Who is it for: Everyone', method: 'host' } },
+];
+
+test('What\'s next: the lead move is focused and says what it does', () => {
+  const onMove = jest.fn();
+  render(<WhatsNext room={{ asks: decided, ideas: [], agent: { connected: true }, log: [] }} now={NOW} ticked={new Set(['001', '002'])} onMove={onMove} />);
+  const lead = screen.getByRole('button', { name: 'Combine' });
+  expect(document.activeElement).toBe(lead);
+  expect(lead).toHaveAttribute('data-next-primary');
+  fireEvent.click(lead);
+  expect(onMove).toHaveBeenCalledWith('combine');
+  expect(screen.getByText('Claude is ready for the next step')).toBeInTheDocument();
+  expect(screen.getByText('Combine 2 decided answers')).toBeInTheDocument();
+});
+
+test('What\'s next: every move is one row, and only the lead is the primary', () => {
+  const onMove = jest.fn();
+  render(<WhatsNext room={{ asks: [], ideas: [], agent: { connected: true }, log: [] }} now={NOW} ticked={new Set()} onMove={onMove} />);
+  const list = screen.getByRole('list', { name: "What's next" });
+  expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+  expect(screen.getByRole('button', { name: 'Ask it' })).toHaveAttribute('data-next-primary');
+  expect(screen.getByRole('button', { name: 'New ask' })).not.toHaveAttribute('data-next-primary');
+  fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+  expect(onMove).toHaveBeenCalledWith('tell');
+});
+
+test('What\'s next never takes the focus from a box the host is typing in', () => {
+  const box = document.createElement('textarea');
+  document.body.appendChild(box);
+  box.focus();
+  render(<WhatsNext room={{ asks: [], ideas: [], agent: { connected: true }, log: [] }} now={NOW} ticked={new Set()} onMove={jest.fn()} />);
+  expect(document.activeElement).toBe(box);
+  box.remove();
+});
+
+test('Decided: one row per decided ask with a tick; the bar adds the ticked ones', () => {
+  const setTicked = jest.fn();
+  const onCombine = jest.fn();
+  render(<DecidedList asks={decided} ticked={new Set(['001'])} setTicked={setTicked} used={{}} onCombine={onCombine} />);
+  expect(screen.getByRole('checkbox', { name: /What are we building/ })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: /Who is it for/ })).not.toBeChecked();
+  expect(screen.getByText('Everyone')).toBeInTheDocument();
+  expect(screen.getByText('Ask 1 · What are we building?')).toBeInTheDocument();
+  expect(screen.getByText('By vote')).toBeInTheDocument();
+  expect(screen.getByText("The host's pick")).toBeInTheDocument();
+  expect(screen.getByText('1 ticked')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Add to the prompt' }));
+  expect(onCombine).toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('checkbox', { name: /Who is it for/ }));
+  expect([...setTicked.mock.calls[0][0]].sort()).toEqual(['001', '002']);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+  expect(setTicked.mock.calls[1][0].size).toBe(0);
+});
+
+test('Decided: no bar while nothing is ticked, and oldest first', () => {
+  render(<DecidedList asks={[...decided].reverse()} ticked={new Set()} setTicked={jest.fn()} used={{}} onCombine={jest.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Add to the prompt' })).toBeNull();
+  const boxes = screen.getAllByRole('checkbox');
+  expect(boxes[0]).toHaveAccessibleName(/What are we building/);
+});
+
+test('a used answer says In a prompt', () => {
+  render(<DecidedList asks={decided} ticked={new Set()} setTicked={jest.fn()} used={{ '001': '2026-10-07T14:41:00Z' }} onCombine={jest.fn()} />);
+  expect(screen.getByText(/In a prompt · \d{1,2}:\d{2}/)).toBeInTheDocument();
+});
+
+test('an empty Decided says so', () => {
+  render(<DecidedList asks={[]} ticked={new Set()} setTicked={jest.fn()} used={{}} onCombine={jest.fn()} />);
+  expect(screen.getByText(/Nothing decided yet/)).toBeInTheDocument();
+});
+
+test('decidedAnswer: the answer alone, never the question again', () => {
+  expect(decidedAnswer(decided[0])).toBe('An app');
+  expect(decidedAnswer(decided[1])).toBe('Everyone');
+  expect(decidedAnswer({ prompt: 'Name the app', decision: { direction: 'Summit' } })).toBe('Summit');
+});

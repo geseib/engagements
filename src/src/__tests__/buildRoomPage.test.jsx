@@ -357,8 +357,9 @@ describe('each ask status', () => {
         { Kind: 'showing', Text: 'Header B is live', By: 'agent', Link: 'http://localhost:5173/' },
       ],
     }));
-    // The Host screen's Now card carries the latest decision (C1)...
-    expect(within(screen.getByRole('region', { name: 'Now' })).getByText('Go with B, keep A\'s logo')).toBeInTheDocument();
+    // The Host screen's Decided carries the latest decision (host-flow H1; it was the Now card's)...
+    expect(within(screen.getByRole('button', { name: /^Decided · 1/ }).closest('.brm-stackitem')).getByText('Go with B, keep A\'s logo')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Now' })).queryByText('Go with B, keep A\'s logo')).toBeNull();
     // ...and the room sees one headline, from the one rule, on the Stage screen.
     fireEvent.keyDown(window, { key: '2' });
     const stage = screen.getByRole('region', { name: 'Claude' });
@@ -1219,13 +1220,17 @@ describe('the review card leads with what the room would see (C2)', () => {
 });
 
 describe('timeline, asks and screenshots: one open at a time (owner, 2026-10-05)', () => {
-  test('the Timeline starts open; opening Asks closes it; one is always open', async () => {
+  test('Decided starts open while building (host-flow H1); opening Asks closes it; one is always open', async () => {
     await openRoom(hostState({
       asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'Go with B.' }, DecidedAt: ago(60) }],
       logs: [{ Kind: 'progress', Text: 'Shift list renders', By: 'agent' }],
     }));
     const head = (name) => screen.getByRole('button', { name: new RegExp(`^${name} · `) });
+    expect(head('Decided')).toHaveAttribute('aria-expanded', 'true');
+    expect(head('Timeline')).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(head('Timeline'));
     expect(head('Timeline')).toHaveAttribute('aria-expanded', 'true');
+    expect(head('Decided')).toHaveAttribute('aria-expanded', 'false');
     expect(head('Asks')).toHaveAttribute('aria-expanded', 'false');
     expect(head('Screenshots')).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('region', { name: 'Timeline' })).toBeInTheDocument();
@@ -2003,5 +2008,95 @@ describe('Claude drafts the brief; the host edits it and uses it (owner, 2026-10
     const wall = screen.getByRole('region', { name: 'The build brief' });
     expect(within(wall).getByRole('heading', { name: 'Connect four, for two friends on one laptop' })).toBeInTheDocument();
     expect(wall.textContent).toMatch('A quick game, no accounts.');
+  });
+});
+
+describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stage P1, P2)", () => {
+  const BUILT = { ...CHOICE, AskId: '001', Prompt: 'What are we building?', Status: 'decided', DecidedAt: ago(600), Decision: { direction: 'An app', method: 'vote' } };
+  const WHO = { ...CHOICE, AskId: '002', Prompt: 'Who is it for?', Status: 'decided', DecidedAt: ago(300), Decision: { direction: 'Who is it for: Everyone', method: 'host' } };
+  const decidedRoom = () => hostState({ asks: [WHO, BUILT] });
+  const decidedSection = () => screen.getByRole('button', { name: /^Decided/ }).closest('.brm-stackitem');
+  const composer = () => screen.getByLabelText('Tell Claude, or log what the room said');
+
+  test('between asks the Now column says what Claude is doing and leads What\'s next, focused', async () => {
+    await openRoom(decidedRoom());
+    const now = screen.getByRole('region', { name: 'Now' });
+    expect(within(now).getByRole('list', { name: "What's next" })).toBeInTheDocument();
+    expect(within(now).getByRole('button', { name: 'Ask it' })).toHaveAttribute('data-next-primary');
+    await waitFor(() => expect(document.activeElement).toBe(within(now).getByRole('button', { name: 'Ask it' })));
+  });
+
+  test('tick both in Decided, Add to the prompt, and the Composer holds the combined lines', async () => {
+    await openRoom(decidedRoom());
+    const dec = decidedSection();
+    expect(dec.querySelector('[aria-expanded="true"]')).not.toBeNull();
+    fireEvent.click(within(dec).getByRole('checkbox', { name: /What are we building/ }));
+    fireEvent.click(within(dec).getByRole('checkbox', { name: /Who is it for/ }));
+    fireEvent.click(within(dec).getByRole('button', { name: 'Add to the prompt' }));
+    expect(composer().value).toBe('What are we building? An app\nWho is it for? Everyone');
+    expect(document.activeElement).toBe(composer());
+    expect(composer().selectionStart).toBe(composer().value.length);
+    expect(within(decidedSection()).getAllByText(/In a prompt · \d{1,2}:\d{2}/)).toHaveLength(2);
+    expect(within(decidedSection()).getByRole('checkbox', { name: /What are we building/ })).not.toBeChecked();
+  });
+
+  test('Combine goes under what the host already typed, after a blank line', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.change(composer(), { target: { value: 'Build this as our first version:' } });
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /What are we building/ }));
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /Who is it for/ }));
+    // The Combine move leads What's next once answers are ticked.
+    const now = screen.getByRole('region', { name: 'Now' });
+    fireEvent.click(within(now).getByRole('button', { name: 'Combine' }));
+    expect(composer().value).toBe('Build this as our first version:\n\nWhat are we building? An app\nWho is it for? Everyone');
+    // The lead move changes with the ticks gone, and the cursor still lands in the Composer.
+    expect(document.activeElement).toBe(composer());
+  });
+
+  test('the ticks in Decided survive a refetch', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /Who is it for/ }));
+    const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
+    const before = calls.length;
+    await act(async () => { handler({}); });
+    await waitFor(() => expect(calls.length).toBeGreaterThan(before));
+    expect(within(decidedSection()).getByRole('checkbox', { name: /Who is it for/ })).toBeChecked();
+  });
+
+  test('a refetch never takes the focus from the Composer', async () => {
+    await openRoom(decidedRoom());
+    composer().focus();
+    fireEvent.change(composer(), { target: { value: 'Half a thought' } });
+    const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
+    current = hostState({ asks: [WHO, BUILT], ideas: [{ Text: 'Dark mode' }, { Text: 'A share button' }] });
+    await act(async () => { handler({}); });
+    await screen.findByRole('button', { name: 'To a vote' });
+    expect(document.activeElement).toBe(composer());
+    expect(composer().value).toBe('Half a thought');
+  });
+
+  test('To a vote puts the new ideas to the room', async () => {
+    serve(hostState({ asks: [WHO, BUILT], ideas: [{ Text: 'Dark mode' }, { Text: 'A share button' }] }));
+    window.history.pushState({}, '', `/build?gameId=${GAME}`);
+    render(<BuildRoomPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'To a vote' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Dark mode')).toBeInTheDocument();
+    expect(within(dialog).getByText('A share button')).toBeInTheDocument();
+  });
+
+  test('New ask opens Ask the room; Write puts the cursor in the Composer', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+    expect(document.activeElement).toBe(composer());
+    fireEvent.click(screen.getByRole('button', { name: 'New ask' }));
+    expect(screen.getByRole('dialog', { name: 'Ask the room' })).toBeInTheDocument();
+  });
+
+  test('Ask it opens Ask the room on its question library', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.click(screen.getByRole('button', { name: 'Ask it' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    expect(within(dialog).getByRole('complementary', { name: 'Ready questions' })).toBeInTheDocument();
   });
 });

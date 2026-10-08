@@ -1051,3 +1051,51 @@
   .brm .brm-path-head { flex-wrap: wrap; }
   .brm .brm-path-s { max-width: none; flex-basis: 100%; text-align: left; padding-left: 36px; }
 }
+
+/* ---- between asks: What's next and Decided (BuildWhatsNext.jsx;
+   docs/design/build-room-host-flow H1, H5, build-room-combine-and-stage P1, P2) ----
+   Claude's line on one row (the dot is the Stage's colour for the same
+   state), then one row per move, the lead on the amber line with the primary
+   ring while it has focus. Decided rows tick the way queue ideas do. */
+.brm .brm-wnext { display: grid; gap: 10px; min-width: 0; }
+.brm .brm-wnext .brm-h5 { margin: 0; }
+.brm .brm-claudeline {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 12px 14px;
+  border: 1px solid var(--brm-rule); border-radius: 12px; background: var(--surface);
+  font-size: var(--brm-t-body); line-height: 1.35;
+}
+.brm .brm-claudeline-t { flex: 1 1 14em; min-width: 0; font-size: var(--brm-t-label); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-cdot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--muted); }
+.brm .brm-cdot--building { background: var(--secondary); }
+.brm .brm-cdot--waiting { background: var(--primary); }
+.brm .brm-wnlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-wn {
+  display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 10px 14px; border: 1px solid var(--brm-rule); border-radius: 12px; background: var(--surface);
+}
+.brm .brm-wn.is-lead { border-color: var(--brm-line-amber); background: var(--brm-tint-amber-soft); }
+.brm .brm-wn-ic {
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--primary); font-size: var(--brm-t-body); font-weight: 800; line-height: 1;
+}
+.brm .brm-wn-t { display: grid; gap: 2px; min-width: 0; }
+.brm .brm-wn-t b { font-size: var(--brm-t-body); overflow-wrap: anywhere; }
+.brm .brm-wn-t span { font-size: var(--brm-t-label); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-wnext [data-next-primary]:focus { outline: 3px solid var(--secondary); outline-offset: 3px; }
+.brm .brm-decided { display: grid; gap: 8px; }
+.brm .brm-declist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-dec {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start;
+  padding: 9px 12px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--surface);
+}
+.brm .brm-dec .brm-qtick { margin: 2px 0 0; }
+.brm .brm-dec.is-ticked { border-color: var(--primary); }
+.brm .brm-dec-t { grid-column: 2; min-width: 0; }
+.brm .brm-dec-q { margin: 0; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-dec-a { margin: 2px 0 0; font-size: var(--brm-t-body); overflow-wrap: anywhere; }
+.brm .brm-dec-how { margin: 2px 0 0; font-size: var(--brm-t-floor); color: var(--muted); }
+.brm .brm-decided .brm-qbulk { margin: 0; }
+@media (max-width: 560px) {
+  .brm .brm-wn { grid-template-columns: 36px minmax(0, 1fr); }
+  .brm .brm-wn .brm-btn { grid-column: 2; justify-self: start; }
+}

@@ -38,6 +38,7 @@ import BuildImage, { ImageLoader } from './BuildImage';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
 import { AskPath } from './BuildAskPath';
+import { WhatsNext, DecidedList, decidedAsks } from './BuildWhatsNext';
 import { isTypingTarget, dialogOpen } from './useNextFocus';
 import { WifiChip, WifiPanel, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
 import { shouldOfferWifi, wifiState } from './wifiShare';
@@ -52,7 +53,7 @@ import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
   questionAnswer, claudeState, latestDecisionLine, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, claudeKindLabel, asField,
-  roomStory, filterStory, artifactsOf, pickVerdict,
+  roomStory, filterStory, artifactsOf, pickVerdict, combineText,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -403,6 +404,16 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [drafts, setDrafts] = useState({});
   // The opening step the host chose in the brief (null: the next one).
   const [openFocus, setOpenFocus] = useState(null);
+  // BETWEEN ASKS (owner, 2026-10-07; host-flow H1, combine P1/P2). The
+  // Composer's words live here so Combine can fill them; the Decided ticks
+  // and when each answer went into a prompt are this session's only (never
+  // saved), so a refetch keeps them. `composeFocus` counts the times the
+  // cursor is sent to the Composer; `voteIdeas` is What's next's vote dialog.
+  const [composeText, setComposeText] = useState('');
+  const [composeFocus, setComposeFocus] = useState(0);
+  const [ticked, setTicked] = useState(() => new Set());
+  const [used, setUsed] = useState({});
+  const [voteIdeas, setVoteIdeas] = useState(null);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
@@ -671,6 +682,32 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const onCrew = Boolean(crew) && stage === 'crew';
   const openShare = crew && openShareId ? (crew.shares || []).find((x) => x.shareId === openShareId) || null : null;
   const onWall = onCrew && present ? featuredShare(crew) : null;
+  // The ticks that still name a decided ask (a tick outlives a refetch, never the ask).
+  const decidedNow = decidedAsks(asks);
+  const tickedNow = new Set(decidedNow.filter((a) => ticked.has(a.askId)).map((a) => a.askId));
+  /**
+   * COMBINE (P2): the ticked answers, oldest first, go under whatever the host
+   * has typed, after a blank line, and nothing typed is lost. They are marked
+   * "In a prompt", the ticks clear, and the cursor waits at the end.
+   */
+  const combine = () => {
+    const chosen = decidedNow.filter((a) => tickedNow.has(a.askId));
+    if (!chosen.length) return;
+    const lines = combineText(chosen);
+    setComposeText((t) => (String(t).trim() ? `${String(t).replace(/\s+$/, '')}\n\n${lines}` : lines));
+    const at = new Date().toISOString();
+    setUsed((u) => ({ ...u, ...Object.fromEntries(chosen.map((a) => [a.askId, at])) }));
+    setTicked(new Set());
+    setComposeFocus((n) => n + 1);
+  };
+  /** What's next's moves (whatsNextMoves' keys). */
+  const onMove = (key) => {
+    if (key === 'combine') combine();
+    else if (key === 'tell') setComposeFocus((n) => n + 1);
+    else if (key === 'new-ask') setDialog({ compose: 'suggest' });
+    else if (key === 'starter') setDialog({ compose: 'suggest', library: true });
+    else if (key === 'vote-ideas') setVoteIdeas((room.ideas || []).filter((i) => i.status === 'new').slice(0, 6));
+  };
 
   return (
     <ImageLoader.Provider value={loadImage}>
@@ -816,12 +853,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ) : (
                 room.opening && room.opening.phase === 'opening'
                   ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => setScreen('stage')} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} onMove={onMove} />
               )}
             </>
           )}
 
-          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} />}
+          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} focusKey={composeFocus} />}
         </main>
 
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
@@ -861,6 +898,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                 count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
                 body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
               }] : []),
+              // DECIDED (P1): every decided ask with a tick, to combine into one prompt.
+              { key: 'decided', label: 'Decided', count: decidedNow.length, skip: !decidedNow.length, body: <DecidedList asks={asks} ticked={tickedNow} setTicked={setTicked} used={used} onCombine={combine} ended={ended} /> },
               { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
               { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
                 ? <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
@@ -908,7 +947,14 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} library={Boolean(dialog.library)} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+      )}
+      {host && voteIdeas && voteIdeas.length >= 2 && (
+        <VoteFromIdeasDialog
+          ideas={voteIdeas} connected={Boolean(room.agent && room.agent.connected)} openAsk={openAskOf(room)} busy={busy} run={run} api={api}
+          onClose={() => setVoteIdeas(null)}
+          onDone={() => setVoteIdeas(null)}
+        />
       )}
       {wallQrLink && <WallBuildQr link={wallQrLink} onClose={() => setWallQr(false)} />}
     </div>
@@ -1317,7 +1363,12 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
 }
 
 function HistoryStack({ items }) {
-  const [open, setOpen] = useState(items[0].key);
+  // The first item opens, unless it has nothing in it yet (`skip`: an empty
+  // Decided); an item that has gone (The opening, once building starts) opens
+  // the first one again.
+  const first = () => (items.find((it) => !it.skip) || items[0]).key;
+  const [chosen, setOpen] = useState(first);
+  const open = items.some((it) => it.key === chosen) ? chosen : first();
   return (
     <div className="brm-stack">
       {items.map((it) => {
@@ -2419,21 +2470,20 @@ const PREVIEW_PROMPT = PROMPT_CARDS.find((c) => c.name === 'preview');
 const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
 
 /**
- * NOW, BETWEEN ASKS (C1): what Claude is doing, the latest decision, and the
- * two things the host does with the build: show it to the room (the Build
+ * NOW, BETWEEN ASKS (C1; host-flow H1, H5): Claude's line and What's next,
+ * the host's moves most likely first with the lead one focused; then the two
+ * things the host does with the build: show it to the room (the Build
  * screen) or ask Claude to run it and send a screenshot. When Claude has
- * gone quiet, the Continue prompt is one click away.
+ * gone quiet, the Continue prompt is one click away. The latest decision is
+ * in the right column's Decided now, with every other one.
  */
 export const STARTER_PROMPT = 'What should we build?';
 
-function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose }) {
+function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose, ticked = null, onMove = null }) {
   const [sent, setSent] = useState(false);
   if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
   const agent = room.agent || {};
   const quiet = !(agent.listening || agent.connected);
-  const decided = (room.asks || []).filter((a) => a.status === 'decided' && a.decision)
-    .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
-  const latest = decided[decided.length - 1] || null;
   const line = ended ? 'This session has ended.' : claudeState(room, now).headline;
   // A ROOM THAT BEGINS WITH AN ASK (owner, 2026-10-05): before anything is
   // built, the room picks what to build. The host lists the options or the
@@ -2444,6 +2494,8 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose 
     && (room.opening.steps || []).some((x) => ['done', 'skipped'].includes(x.status))
     && !(room.asks || []).some((x) => !x.openingStep);
   const starter = !ended && !framed && !(room.asks || []).some((x) => !x.openingStep) && onCompose;
+  // WHAT'S NEXT (H1): between asks, once the room has something to build on.
+  const whatsNext = !ended && !starter && onMove;
   return (
     <section className="brm-panel brm-nowcard" aria-labelledby="brm-now-h">
       <h2 className="brm-h5" id="brm-now-h">Now</h2>
@@ -2467,14 +2519,10 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose 
           </div>
         </div>
       )}
-      <p className="brm-nowline">{line}</p>
+      {whatsNext
+        ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} onMove={onMove} />
+        : <p className="brm-nowline">{line}</p>}
       {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
-      {latest && (
-        <div className="brm-latest">
-          <div className="brm-kind">Latest decision · Ask {askNumber(latest.askId)}</div>
-          <div className="brm-tx">{latest.decision.direction}</div>
-        </div>
-      )}
       {!ended && (
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn" onClick={onShowBuild} title="Show the room the build (3)">
@@ -2544,9 +2592,18 @@ function SendToClaude({ onSend, busy, disabled = false, small = false, primary =
  *                   a milestone; "Also tell Claude" sends it too
  *   Ask the room    Ideas, Choose or Rate (the Ask the room dialog)
  */
-function Composer({ agent, busy, run, api, onCompose }) {
-  const [text, setText] = useState('');
+function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 0 }) {
   const [said, setSaid] = useState('');
+  const box = useRef(null);
+  // What's next's Combine and Write send the cursor here, at the end of the words.
+  useEffect(() => {
+    const el = box.current;
+    if (!focusKey || !el) return;
+    el.focus();
+    const end = el.value.length;
+    if (typeof el.setSelectionRange === 'function') el.setSelectionRange(end, end);
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }, [focusKey]);
   const [logKind, setLogKind] = useState('verbal');
   const [alsoTell, setAlsoTell] = useState(false);
   const words = text.trim();
@@ -2573,6 +2630,7 @@ function Composer({ agent, busy, run, api, onCompose }) {
       <form onSubmit={tell}>
         <label className="brm-sr" htmlFor="brm-compose">Tell Claude, or log what the room said</label>
         <textarea
+          ref={box}
           id="brm-compose"
           className="brm-input brm-ta brm-ta--sm"
           placeholder="An idea, what the room said out loud, or a note for Claude"
@@ -3352,8 +3410,16 @@ export function askedIndex(asks) {
   return (key, prompt) => byKey.get(key) || byWords.get(String(prompt || '').trim().toLowerCase()) || null;
 }
 
-function ReadyLibrary({ api, asks, selectedKey, onPick }) {
+function ReadyLibrary({ api, asks, selectedKey, onPick, autoFocus = false }) {
   const [sets, setSets] = useState(null);
+  // Opened from What's next's starter move: the cursor starts in the library.
+  const search = useRef(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!autoFocus || focused.current || !search.current) return;
+    focused.current = true;
+    search.current.focus();
+  });
   const [active, setActive] = useState('');
   const [loaded, setLoaded] = useState({});
   const [query, setQuery] = useState('');
@@ -3403,7 +3469,7 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   const cats = [...new Set((items || []).map((it) => it.category))];
   return (
     <aside className="brm-lib" aria-label="Ready questions">
-      <input className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <input ref={search} className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
       {sets.length > 1 && (
         <div className="brm-qfilters" role="group" aria-label="Ready sets">
           {sets.map((st) => (
@@ -3443,7 +3509,7 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], api, run, busy, onClose }) {
+export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', library = false, asks = [], api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
   const [prompt, setPrompt] = useState(initialPrompt);
   const [detail, setDetail] = useState(initialDetail);
@@ -3492,7 +3558,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
       <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
       <div className="brm-libgrid">
-        <ReadyLibrary api={api} asks={asks} selectedKey={from ? from.key : ''} onPick={pickReady} />
+        <ReadyLibrary api={api} asks={asks} selectedKey={from ? from.key : ''} onPick={pickReady} autoFocus={library} />
         <form onSubmit={submit}>
           <div className="brm-row brm-gap">
             <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">
