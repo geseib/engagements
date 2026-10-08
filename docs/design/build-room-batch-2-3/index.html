@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: one primary, one vocabulary · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* Batches 2 and 3 of docs/design/ux-consistency-review-2026-10-08/review.md,
+   with the owner's rulings of 2026-10-08 on F3 and F8. Extends v2.css. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .notes{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.ico{display:inline-block;width:1em;height:1em;vertical-align:-.15em;flex:none}
+
+/* Today / After comparisons of the Now column. */
+.cmp{display:flex;gap:36px;align-items:flex-start}
+.side{display:flex;flex-direction:column;gap:10px}
+.tag{align-self:flex-start;font:800 13px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;padding:7px 11px;border-radius:999px;border:1px solid var(--m-rule);color:var(--muted)}
+.tag--after{color:var(--m-success-text);border-color:rgba(79,178,134,.5);background:var(--m-tint-green)}
+.tag--before{color:var(--danger-text);border-color:rgba(229,100,94,.45);background:var(--m-tint-red)}
+.nowcol{position:relative;width:600px;height:640px;background:var(--bg);border:1px solid var(--m-rule);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.nowcol--auto{height:auto;min-height:640px}
+
+.st{border:1px solid var(--m-rule);border-radius:12px;background:var(--surface);flex:none}
+.st .sh{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:10px 14px}
+.st .n{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:800 13px/1 var(--font-ui);border:2px solid var(--muted);color:var(--muted)}
+.st .t{font:700 15px/1.2 var(--font-ui)}
+.st .s{font-size:13px;color:var(--muted);text-align:right}
+.st.done .n{background:var(--success);border-color:var(--success);color:var(--bg)}
+.st.done .t{color:var(--muted);font-weight:600}
+.st.done .s{color:var(--text)}
+.st.next{opacity:.5}
+.st.cur{border-color:var(--m-line-amber);box-shadow:0 0 0 1px var(--m-line-amber)}
+.st.cur .n{border-color:var(--primary);background:var(--primary);color:var(--bg)}
+.st .sb{padding:4px 16px 14px 54px;display:flex;flex-direction:column;gap:12px}
+/* AFTER: the open step takes the room left by the folded ones, so its action row always lands at the same height. */
+.st.cur.fill{flex:1;display:flex;flex-direction:column;min-height:0}
+.st.cur.fill .sb{flex:1;min-height:0;padding-bottom:0}
+.board{flex:1;min-height:0;padding:4px;margin:-4px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.arow{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;margin:0 -16px 0 -54px;padding:12px 16px;border-top:1px solid var(--m-rule);background:#16233A;border-radius:0 0 12px 12px}
+.arow .say{flex:0 0 100%;min-width:0;font-size:13px;color:var(--muted)}
+.arow .say b{color:var(--text);font-weight:700}
+.arow .say.ok{color:var(--m-success-text)}
+.then{margin:auto 0 0;font-size:13px;color:var(--muted);padding-bottom:10px}
+.pinline{position:absolute;left:-2px;right:-2px;border-top:2px dashed var(--secondary);pointer-events:none}
+.pinline span{position:absolute;right:8px;top:-24px;font:700 12px/1 var(--font-ui);color:var(--secondary);background:var(--bg);padding:4px 6px;border-radius:5px}
+
+.focusbtn{outline:3px solid var(--secondary);outline-offset:3px}
+.spacehint{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.spacehint kbd{font:700 11px/1 var(--font-ui);border:1px solid var(--m-rule);border-radius:4px;padding:3px 6px;color:var(--text)}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:grid;grid-template-columns:28px 1fr 110px 30px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--m-rule);border-radius:10px}
+.opt.win{border-color:rgba(79,178,134,.6);background:var(--m-tint-green)}
+.opt.tie{border-color:var(--m-line-amber)}
+.opt .L{width:28px;height:28px;font-size:15px;border-radius:7px}
+.opt .tr{height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.opt .tr span{display:block;height:100%;background:var(--primary)}
+.opt b{text-align:right}
+.dir{min-height:84px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:15px;line-height:1.45}
+.seg{display:flex;gap:4px;background:var(--bg);border:1px solid var(--m-rule);border-radius:10px;padding:3px;width:max-content}
+.seg span{padding:6px 10px;border-radius:7px;font-size:13px;color:var(--muted)}
+.seg span.on{background:var(--surface-2);color:var(--text);font-weight:700}
+.seg span.gone{text-decoration:line-through;color:var(--danger-text)}
+.wheelmini{display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg)}
+.wheelmini .w{width:64px;height:64px;border-radius:50%;background:conic-gradient(var(--primary) 0 50%,var(--secondary) 50% 100%);border:3px solid var(--surface-2)}
+.btn--out{background:transparent;border-color:rgba(244,237,228,.35)}
+.btn--gd{background:transparent;color:var(--danger-text);border-color:transparent}
+
+/* Host composer */
+.composer{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;flex:none}
+.composer h3{margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.composer .ta{min-height:52px}
+.sel{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:1px solid var(--m-rule);border-radius:8px;font-size:13px;color:var(--text);background:var(--bg)}
+.split{display:inline-flex}
+.split .btn:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
+.split .btn:last-child{border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid rgba(155,168,190,.3);padding:8px 9px}
+
+/* Header: Main menu, left of the title. */
+.mm{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 11px 0 9px;border-radius:8px;border:1px solid transparent;color:var(--text);font:600 14px/1 var(--font-ui);white-space:nowrap;flex:none}
+.mm .ico{font-size:18px;color:var(--muted)}
+.mm--hl{border-color:var(--secondary);box-shadow:0 0 0 2px var(--m-tint-blue)}
+.hsep{width:1px;height:26px;background:var(--m-rule);flex:none}
+.livebtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--m-rule);font:600 14px/1 var(--font-ui);color:var(--text);white-space:nowrap}
+.livebtn .ico{color:var(--muted)}
+.hstrip{width:1440px;border-radius:10px;overflow:hidden;border:1px solid var(--m-rule)}
+.hstrip .hdr{height:60px}
+.bar2x{display:flex;align-items:center;gap:10px;padding:10px 18px;background:var(--m-tint-amber);border-bottom:1px solid var(--m-line-amber);font-size:14px}
+
+/* Stage dock, after. */
+.dock .status .live{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font:600 16px/1 var(--font-ui);color:var(--secondary)}
+.dockhint{flex:none;font-size:16px;color:var(--muted)}
+.dockhint b{color:var(--text);font-weight:700}
+.dbtn .ico{font-size:26px}
+.res{display:grid;grid-template-columns:1fr 320px;gap:40px;padding:30px 44px 20px;min-height:0}
+.res .q{font:800 46px/1.08 var(--font-display);margin:0 0 20px}
+.rrow{display:grid;grid-template-columns:52px 1fr 120px;gap:18px;align-items:center;margin-bottom:16px}
+.rrow .L{width:52px;height:52px;font-size:28px;border-radius:12px}
+.rrow .t{font-size:26px}
+.rrow .tr{height:18px;border-radius:9px;background:var(--surface-2);overflow:hidden;margin-top:8px}
+.rrow .tr span{display:block;height:100%;background:var(--primary)}
+.rrow b{font:800 40px/1 var(--font-display);text-align:right}
+.rrow.win2 .tr span{background:var(--success)}
+.dockstrip{width:1440px;display:flex;flex-direction:column;gap:12px}
+.dockstrip .lab{font:700 14px/1 var(--font-ui);color:var(--muted);margin:6px 0 -4px 4px}
+.dockstrip .dock{border:1px solid var(--m-rule);border-radius:10px}
+
+/* Windows over a screen */
+.dim{position:absolute;inset:60px 0 0 0;background:rgba(6,11,21,.72);z-index:30}
+.wnd{position:absolute;z-index:40;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--m-rule);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.5);display:flex;flex-direction:column}
+.wnd .wh{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--m-rule)}
+.wnd .wh h3{margin:0;font:800 22px/1.2 var(--font-display)}
+.wnd .wh .eb{font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.wnd .x{margin-left:auto;width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:9px;color:var(--muted);font-weight:800}
+.wnd .wb{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.wnd .wf{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid var(--m-rule)}
+.opts2{display:flex;flex-direction:column;gap:8px}
+.opt2{display:grid;grid-template-columns:28px 1fr 60px;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg)}
+.opt2.on{border-color:var(--secondary);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--bg)}
+.opt2 .L{width:28px;height:28px;font-size:15px;border-radius:7px}
+.dirbox{min-height:70px;border:1px solid var(--secondary);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:15px;line-height:1.45}
+
+/* The Later list */
+.later{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;display:flex;flex-direction:column}
+.later .lh{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--m-rule)}
+.later .lh h3{margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--text)}
+.later .lh .count{font:800 13px/1 var(--font-ui);color:var(--primary)}
+.li{position:relative;display:grid;grid-template-columns:20px 1fr;gap:10px;padding:12px 14px;border-bottom:1px solid var(--m-rule)}
+.li:last-child{border-bottom:0}
+.li .box{margin-top:3px}
+.li .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.li .who{font-size:12px;color:var(--muted)}
+.li .tx{font-size:16px;line-height:1.35;margin:6px 0 8px}
+.li .acts{display:flex;align-items:center;gap:6px}
+.kind{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.kind--room{color:var(--secondary);background:var(--m-tint-blue);border:1px solid rgba(124,167,230,.55)}
+.kind--dir{color:var(--primary);background:var(--m-tint-amber);border:1px solid var(--m-line-amber)}
+.lfoot{position:relative;display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--m-rule);background:#16233A;border-radius:0 0 12px 12px}
+.flowl{display:grid;grid-template-columns:1fr 70px 1fr;gap:0;align-items:center}
+.flowl .srcs{display:flex;flex-direction:column;gap:10px}
+.flowl .bx{background:var(--surface);border:1px solid var(--m-rule);border-radius:10px;padding:10px 12px;font-size:14px}
+.flowl .bx b{display:block}
+.flowl .bx span{color:var(--muted);font-size:13px}
+.flowl .ar{display:grid;place-items:center;color:var(--primary);font:800 30px/1 var(--font-ui)}
+.flowl .big{border:2px solid var(--primary);background:linear-gradient(var(--m-tint-amber),var(--m-tint-amber)),var(--surface);padding:14px 16px}
+.flowl .big b{font:800 22px/1.2 var(--font-display)}
+
+/* 375px header: drawn at real size, not scaled, so it can be measured. */
+.narrow-wrap{padding:8px 20px 0;display:flex;gap:30px;flex-wrap:wrap;align-items:flex-start}
+.narrow{width:375px;background:var(--bg);border:1px solid var(--m-rule);border-radius:12px;overflow:hidden}
+.nh{background:#0C1628;border-bottom:1px solid var(--m-rule);padding:8px 16px;display:flex;flex-direction:column;gap:8px}
+.nh .r1{display:flex;align-items:center;gap:8px;min-width:0}
+.nh .r1 .mm{height:36px;padding:0 9px 0 7px}
+.nh .ttl{flex:1;min-width:0;font:800 15px/1.2 var(--font-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nh .join{flex:none;font-size:12px;color:var(--muted);white-space:nowrap}
+.nh .join b{font:800 17px/1 var(--font-display);color:var(--primary);letter-spacing:.04em}
+.nh .menu{width:36px;height:36px;flex:none}
+.nh .views{display:grid;grid-template-columns:repeat(4,1fr);width:100%}
+.nh .view{justify-content:center;padding:0 4px;font-size:13px;height:36px}
+.nbody{padding:14px 16px;color:var(--muted);font-size:14px}
+.measure{font:600 13px/1.5 var(--font-ui);color:var(--muted);background:var(--surface);border:1px solid var(--m-rule);border-radius:10px;padding:10px 12px;max-width:520px}
+.measure b{color:var(--text)}
+
+/* Vocabulary table */
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:14px}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.4}
+.vt td.old{color:var(--danger-text)}
+.vt td.new{font-weight:700}
+.vt td.where{color:var(--muted);font-size:13px}
+.vt td.where code{font-size:12px}
+.vt tr.grp td{background:var(--surface);font:800 13px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--primary);padding:12px}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5}
+.qs li b{color:var(--text)}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · batches 2 and 3</b>
+<a href="#b1">B1 Ask path, step by step</a><a href="#b2">B2 Host screen: one primary</a><a href="#b3">B3 Stage at results</a><a href="#b4">B4 The Later list</a><a href="#b5">B5 Main menu</a><a href="#b6">B6 The words</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="../ux-consistency-review-2026-10-08/review.md">The review</a><a href="../build-room-host-flow/index.html">Host flow</a><a href="../build-room-history-and-stage-decide/index.html">Stage decide</a></nav>
+<div class="pg-title"><h1>One main button, always in the same place, with the same words on every screen</h1>
+<p>Batches 2 and 3 of the consistency review (F1, F2, F3, F8, F11, F12, F16, F27), with the owner's rulings of 2026-10-08. <b>F3:</b> sending the room's clear winner is one press, with "Change before sending" beside it, on the Host screen and the Stage alike. <b>F8:</b> one list, called Later, holds room ideas and directions held back for Claude. The rules these screens follow: the main button is the last one on the right of its row; the row sits at the bottom of the open step; only one main (orange) button shows on the Host screen; one icon for Send (the paper plane), used on every Send; the words in B6 and no others.</p></div>
+
+<!-- ===================================================================== B1 -->
+<div class="sec" id="b1"><h2>B1 · The Host ask path, step by step</h2>
+<p>Each step as it is today and after. Today the main button opens the row on the left for Collect and Settle, then jumps to the right for Send, and the row rides up and down with the size of the vote board. After: the main button is always last on the right; the less likely moves sit to its left; the left end of the row holds the Space hint, which a confirmation replaces after a press (P2). The open step fills the column, so its row sits on the dashed line on every step, whatever the board above it.</p></div>
+
+<div class="frame-h" id="b1a"><h2>B1a · Collect: the room is choosing</h2>
+<p>"Close and show results" becomes "Show results". "Spin instead" becomes "Spin the wheel".</p></div>
+<div class="fit"><div class="fit-box"><div class="cmp">
+<div class="side"><span class="tag tag--before">Today</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51 · Choose</span></div></div>
+<div class="st cur"><div class="sh"><span class="n">2</span><span class="t">The room is choosing</span><span class="s">7 of 12</span></div>
+<div class="sb">
+<div class="opts">
+<div class="opt"><span class="L">A</span><span>Calm and clear</span><span class="tr"><span style="width:43%"></span></span><b>3</b></div>
+<div class="opt"><span class="L L--b">B</span><span>Playful</span><span class="tr"><span style="width:57%"></span></span><b>4</b></div>
+</div>
+<div class="row"><span class="btn btn--primary focusbtn">Close and show results</span><span class="btn btn--ghost">Answer for the room</span><span class="btn btn--ghost">Spin instead</span><span class="spacehint" style="margin-left:auto"><kbd>Space</kbd></span></div>
+</div></div>
+<div class="st next"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s"></span></div></div>
+<div class="st next"><div class="sh"><span class="n">4</span><span class="t">Send to Claude</span><span class="s"></span></div></div>
+</div></div>
+<div class="side"><span class="tag tag--after">After</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51 · Choose</span></div></div>
+<div class="st cur fill"><div class="sh"><span class="n">2</span><span class="t">The room is choosing</span><span class="s">7 of 12</span></div>
+<div class="sb">
+<div class="board"><div class="opts">
+<div class="opt"><span class="L">A</span><span>Calm and clear</span><span class="tr"><span style="width:43%"></span></span><b>3</b></div>
+<div class="opt"><span class="L L--b">B</span><span>Playful</span><span class="tr"><span style="width:57%"></span></span><b>4</b></div>
+</div><p class="then">Next: 3 Settle · 4 Send to Claude</p></div>
+<div class="arow"><span class="say">Press <b>Space</b> to show results</span><span class="btn btn--ghost">Answer for the room</span><span class="btn">Spin the wheel</span><span class="btn btn--primary focusbtn">Show results</span></div>
+</div></div>
+<div class="pinline"><span>action row: this height on every step</span></div>
+</div></div>
+</div><span class="pin" style="left:1212px;top:612px">1</span><span class="pin" style="left:604px;top:566px">2</span></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Main button last, on the right</h3><p>The same order as the Stage dock and every dialog footer: ghost moves, then secondary moves, then the one main move. An ideas ask reads <b>Close without a vote · Answer for the room · Open voting</b>.</p></div>
+<div class="note"><h3><b class="n">2</b>The row stays put</h3><p>The open step runs to the bottom of the column. Finished steps fold above it; steps still to come are named in one line above the row ("Next: 3 Settle · 4 Send to Claude") instead of boxes below it. So the row is at the bottom of the column on every step, whether the board has two options or six. A long board scrolls inside the step; the row never scrolls away.</p></div>
+<div class="note"><h3><b class="n">3</b>The hint is words</h3><p>"Press Space to show results", as on the Stage, in place of a key cap that reads like a button. After a press, the same slot says what happened ("Results are up").</p></div>
+</div>
+
+<div class="frame-h" id="b1b"><h2>B1b · Settle with a clear winner: one press sends it</h2>
+<p>Owner, F3: "Go with B" then "Send to Claude" becomes one button, <b>Send B to Claude</b>, which picks B and sends the written direction as Do now (or as the kind the ask was set up with). <b>Change before sending</b> sits beside it and opens step 4.</p></div>
+<div class="fit"><div class="fit-box"><div class="cmp">
+<div class="side"><span class="tag tag--before">Today</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">11 of 12 voted</span></div></div>
+<div class="st cur"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s">B leads, 7 to 4</span></div>
+<div class="sb">
+<div class="opts">
+<div class="opt"><span class="L">A</span><span>Calm and clear</span><span class="tr"><span style="width:36%"></span></span><b>4</b></div>
+<div class="opt win"><span class="L L--b">B</span><span>Playful</span><span class="tr"><span style="width:64%"></span></span><b>7</b></div>
+</div>
+<div class="row"><span class="btn btn--primary focusbtn">Go with B</span><span class="btn">Spin the wheel</span><span class="spacehint" style="margin-left:auto"><kbd>Space</kbd></span></div>
+<p class="hint">Or click another option to pick it instead; you will be asked first.</p>
+</div></div>
+<div class="st next"><div class="sh"><span class="n">4</span><span class="t">Send to Claude</span><span class="s">a second press</span></div></div>
+</div></div>
+<div class="side"><span class="tag tag--after">After</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">11 of 12 voted</span></div></div>
+<div class="st cur fill"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s">B leads, 7 to 4</span></div>
+<div class="sb">
+<div class="board"><div class="opts">
+<div class="opt"><span class="L">A</span><span>Calm and clear</span><span class="tr"><span style="width:36%"></span></span><b>4</b></div>
+<div class="opt win"><span class="L L--b">B</span><span>Playful</span><span class="tr"><span style="width:64%"></span></span><b>7</b></div>
+</div>
+<p class="hint">Claude will be told: "How should it look and feel? Playful." Click A to pick it instead; you will be asked first.</p><p class="then">Next: 4 Change before sending</p></div>
+<div class="arow"><span class="say">Press <b>Space</b> to send, as Do now</span><span class="btn">Spin the wheel</span><span class="btn">Change before sending</span><span class="btn btn--primary focusbtn"><i data-i="send"></i>Send B to Claude</span></div>
+</div></div>
+<div class="pinline"><span>same height as Collect</span></div>
+</div></div>
+</div><span class="pin" style="left:1212px;top:612px">1</span><span class="pin" style="left:604px;top:236px">2</span></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>One press, and the edit beside it</h3><p><b>Send B to Claude</b> sends at once. The ask leaves the path, the row's left slot says "Sent to Claude as Do now: … Playful." and What's next takes over. <b>Change before sending</b> opens step 4 (B1d) with the direction written and the cursor in it.</p></div>
+<div class="note"><h3><b class="n">2</b>What gets sent is shown before the press</h3><p>One line under the board says exactly what Claude will be told, so one press is never a surprise. Ideas asks read "Send the top idea to Claude"; ratings "Send 3.4 to Claude".</p></div>
+<div class="note"><h3><b class="n">3</b>Picking another option</h3><p>Clicking A asks first, as today, then opens step 4 with A chosen and its own direction. Nothing is sent until the host presses Send A to Claude there.</p></div>
+</div>
+
+<div class="frame-h" id="b1c"><h2>B1c · Settle with a tie or no votes, and after the wheel</h2>
+<p>A tie or no votes: the wheel leads, as today. "Vote again" becomes <b>Ask again</b> (P3). When the wheel lands, the row is the winner row again: Spin again, Change before sending, Send B to Claude.</p></div>
+<div class="fit"><div class="fit-box"><div class="cmp">
+<div class="side"><span class="tag tag--before">Today · tie</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">10 of 12 voted</span></div></div>
+<div class="st cur"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s">Tied, 5 to 5</span></div>
+<div class="sb">
+<div class="opts">
+<div class="opt tie"><span class="L">A</span><span>Calm and clear</span><span class="tr"><span style="width:50%"></span></span><b>5</b></div>
+<div class="opt tie"><span class="L L--b">B</span><span>Playful</span><span class="tr"><span style="width:50%"></span></span><b>5</b></div>
+</div>
+<div class="row"><span class="btn btn--primary focusbtn">Spin the wheel</span><span class="btn btn--ghost">Vote again</span><span class="spacehint" style="margin-left:auto"><kbd>Space</kbd></span></div>
+<p class="hint">Or click an option to pick it yourself.</p>
+</div></div>
+<div class="st next"><div class="sh"><span class="n">4</span><span class="t">Send to Claude</span><span class="s"></span></div></div>
+</div></div>
+<div class="side"><span class="tag tag--after">After · tie</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">10 of 12 voted</span></div></div>
+<div class="st cur fill"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s">Tied, 5 to 5</span></div>
+<div class="sb">
+<div class="board"><div class="opts">
+<div class="opt tie"><span class="L">A</span><span>Calm and clear</span><span class="tr"><span style="width:50%"></span></span><b>5</b></div>
+<div class="opt tie"><span class="L L--b">B</span><span>Playful</span><span class="tr"><span style="width:50%"></span></span><b>5</b></div>
+</div>
+<p class="hint">Or click an option to pick it yourself.</p><p class="then">Next: 4 Change before sending</p></div>
+<div class="arow"><span class="say">Press <b>Space</b> to spin</span><span class="btn" title="A new vote between A and B only">Ask again</span><span class="btn btn--primary focusbtn">Spin the wheel</span></div>
+</div></div>
+<div class="pinline"><span>same height</span></div>
+</div></div>
+<div class="side"><span class="tag tag--after">After · the wheel landed</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">10 of 12 voted</span></div></div>
+<div class="st cur fill"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s">The wheel landed on B</span></div>
+<div class="sb">
+<div class="board">
+<div class="wheelmini"><span class="w"></span><div><b>B · Playful</b><p class="hint">Spun once. The room saw it land on the Stage.</p></div></div>
+<p class="hint">Claude will be told: "How should it look and feel? Playful."</p><p class="then">Next: 4 Change before sending</p></div>
+<div class="arow"><span class="say">Press <b>Space</b> to send</span><span class="btn">Spin again</span><span class="btn">Change before sending</span><span class="btn btn--primary focusbtn"><i data-i="send"></i>Send B to Claude</span></div>
+</div></div>
+<div class="pinline"><span>same height</span></div>
+</div></div>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>The wheel has two words</h3><p><b>Spin the wheel</b> before it turns, <b>Spin again</b> after it lands. Nothing else: not Spin, Spin instead, or Spin the wheel instead.</p></div>
+<div class="note"><h3><b class="n">2</b>While the wheel turns</h3><p>The main button reads "The wheel is turning…" and is disabled, as today; it never gives the result away early. It stays in the same place.</p></div>
+</div>
+
+<div class="frame-h" id="b1d"><h2>B1d · Change before sending</h2>
+<p>Step 4 opens only when the host asks for it. Its main button carries the same words as Settle's, so the host presses the same thing either way. "Save for later" puts it on the Later list (B4). "Later" is no longer one of the kinds, because it is a list, not a way Claude takes a direction.</p></div>
+<div class="fit"><div class="fit-box"><div class="cmp">
+<div class="side"><span class="tag tag--before">Today</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">11 of 12 voted</span></div></div>
+<div class="st done"><div class="sh"><span class="n">3</span><span class="t">Going with B</span><span class="s">The room's choice, 7 to 4</span></div></div>
+<div class="st cur"><div class="sh"><span class="n">4</span><span class="t">Send to Claude</span><span class="s"></span></div>
+<div class="sb">
+<div class="dir">How should it look and feel? Playful. Keep the numbers big enough to read from the back.</div>
+<div class="row"><span class="hint">Claude gets it as</span><div class="seg"><span class="on">Do now</span><span>Keep in mind</span><span>For Claude, later</span><span>Ask Claude</span></div></div>
+<div class="row"><span class="hint">Send to Claude</span><span class="chip chip--green">On</span></div>
+<div class="row"><span class="btn btn--ghost">Record only</span><span class="btn btn--primary" style="margin-left:auto">Send to Claude <i data-i="arrow"></i></span></div>
+</div></div>
+</div></div>
+<div class="side"><span class="tag tag--after">After</span>
+<div class="nowcol">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">11 of 12 voted</span></div></div>
+<div class="st done"><div class="sh"><span class="n">3</span><span class="t">Settle: B</span><span class="s">The room's choice, 7 to 4</span></div></div>
+<div class="st cur fill"><div class="sh"><span class="n">4</span><span class="t">Change before sending</span><span class="s"></span></div>
+<div class="sb">
+<div class="board">
+<div class="dir focusbtn">How should it look and feel? Playful. Keep the numbers big enough to read from the back.</div>
+<div class="row"><span class="hint">Claude gets it as</span><div class="seg"><span class="on">Do now</span><span>Keep in mind</span><span>Ask Claude</span></div></div>
+<p class="hint">Do now: the next thing to build. Claude stops and does it.</p>
+</div>
+<div class="arow"><span class="say">Ctrl Enter sends</span><span class="btn btn--ghost">Record only</span><span class="btn">Save for later</span><span class="btn btn--primary"><i data-i="send"></i>Send B to Claude</span></div>
+</div></div>
+<div class="pinline"><span>same height</span></div>
+</div></div>
+</div><span class="pin" style="left:604px;top:330px">1</span><span class="pin" style="left:1212px;top:612px">2</span></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Three kinds, not four</h3><p>Do now, Keep in mind, Ask Claude. Holding something back is the <b>Save for later</b> button, here and everywhere. The extra on/off switch that was also called "Send to Claude" goes; <b>Record only</b> does that job.</p></div>
+<div class="note"><h3><b class="n">2</b>The same main button, the same place</h3><p>Send B to Claude, with the paper plane, at the right end of the row, on the dashed line. The arrow icon is gone. A spoken answer reads "Send to Claude", because there is no letter.</p></div>
+</div>
+
+<!-- ===================================================================== B2 -->
+<div class="sec" id="b2"><h2>B2 · The Host screen: one main button on screen</h2>
+<p>Today two orange buttons show at once: the step's, and the composer's Send to Claude, which is always orange. After: the step's (or What's next lead's) button is the only orange one. The composer's Send is an outline button with the same paper plane, and Ctrl Enter sends from the box. Every other button on the screen (queue, Later, Decided) is secondary or ghost.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="askpill askpill--results">Ask 4 · results</span><span class="sp" style="flex:1"></span><span class="livebtn">Open the build<i data-i="out"></i></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host" style="grid-template-columns:600px 1fr 340px">
+<section class="col">
+<div class="nowcol" style="width:auto;height:auto;flex:1;border:0;padding:0;background:transparent">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">11 of 12 voted</span></div></div>
+<div class="st cur fill"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s">B leads, 7 to 4</span></div>
+<div class="sb">
+<div class="board"><div class="opts">
+<div class="opt"><span class="L">A</span><span>Calm and clear</span><span class="tr"><span style="width:36%"></span></span><b>4</b></div>
+<div class="opt win"><span class="L L--b">B</span><span>Playful</span><span class="tr"><span style="width:64%"></span></span><b>7</b></div>
+</div><p class="hint">Claude will be told: "How should it look and feel? Playful."</p><p class="then">Next: 4 Change before sending</p></div>
+<div class="arow"><span class="say">Press <b>Space</b> to send, as Do now</span><span class="btn">Spin the wheel</span><span class="btn">Change before sending</span><span class="btn btn--primary focusbtn"><i data-i="send"></i>Send B to Claude</span></div>
+</div></div>
+</div>
+<div class="composer"><h3>Add something</h3>
+<div class="ta">An idea, what the room said out loud, or a note for Claude</div>
+<div class="row"><span class="sel">Room said ▾</span><span class="btn btn--ghost">Log it</span><span class="btn">Save for later</span><span class="split push"><span class="btn btn--out"><i data-i="send"></i>Send to Claude</span><span class="btn btn--out">▾</span></span></div>
+<div class="row"><span class="hint">Ask the room</span><span class="btn btn--sm">Ideas</span><span class="btn btn--sm">Choose</span><span class="btn btn--sm">Rate</span><span class="hint push">Ctrl Enter sends</span></div>
+</div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">2</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Priya</span><span class="chip">Idea</span><span class="meta push">2:53</span></div><div class="q-text">Show it as a stack of $100 bills next to a person</div>
+<div class="q-acts"><span class="btn btn--sm btn--ghost">Seen</span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude</span></div></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Marcus</span><span class="chip">Idea</span><span class="meta push">2:54</span></div><div class="q-text">A slider: your salary vs. a billionaire's hour</div>
+<div class="q-acts"><span class="btn btn--sm btn--ghost">Seen</span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude</span></div></div>
+<div class="later"><div class="lh"><h3>Later</h3><span class="count">3</span><span class="hint push">2 ideas · 1 direction</span></div></div>
+</section>
+<section class="col"><div class="acc" style="display:flex;flex-direction:column;gap:6px">
+<div class="q-item" style="padding:10px 12px"><b>Claude is doing</b><span class="hint">Edited DotGrid.jsx · 2:52</span></div>
+<div class="q-item" style="padding:10px 12px"><b>Decided · 3</b><span class="hint">Tick to combine</span></div>
+<div class="q-item" style="padding:10px 12px"><b>Timeline · 16</b></div>
+</div></section>
+</div>
+<span class="pin" style="left:520px;top:430px">1</span><span class="pin" style="left:520px;top:690px">2</span><span class="pin" style="left:962px;top:206px">3</span><span class="pin" style="left:6px;top:14px">4</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>The one orange button</h3><p>Exactly one <code>brm-btn--primary</code> on the Host screen: the open step's, or What's next's lead when no ask is open. Space presses that one. A test counts them in every state.</p></div>
+<div class="note"><h3><b class="n">2</b>The composer's Send is outline</h3><p>Same words, same paper plane, same split menu (Do now, Keep in mind, Ask Claude), never orange while a step or a What's next lead shows, which is every live moment. "Queue it" becomes <b>Save for later</b>.</p></div>
+<div class="note"><h3><b class="n">3</b>Queue and Later are secondary</h3><p>"Park" becomes <b>Save for later</b>; the Later list's "Send now" (orange today) becomes a secondary <b>Send to Claude now</b>. "Put to a vote" in the tick bar is secondary too.</p></div>
+<div class="note"><h3><b class="n">4</b>Main menu, top left</h3><p>See B5.</p></div>
+</div>
+
+<!-- ===================================================================== B3 -->
+<div class="sec" id="b3"><h2>B3 · The Stage at results: the same words as the Host</h2>
+<p>The Stage dock uses the Host's labels: <b>Send B to Claude</b> (one press), <b>Change before sending</b> (the window), and "Press Space to send". "Open the live build ↗" leaves the button row: it becomes a small link under the dock's status line, so nothing on the right competes with the main button.</p></div>
+<div class="fit"><div class="fit-box"><div class="dockstrip">
+<span class="lab">Today</span>
+<footer class="dock"><div class="status">B leads, 7 to 4</div><span class="dbtn dbtn--ghost">Edit</span><span class="dbtn dbtn--primary">To Claude: B</span><span class="dockhint">Press <b>Space</b> to send</span><span class="dbtn dbtn--ghost">Open the live build ↗</span><span class="more">HOST</span></footer>
+<span class="lab">After</span>
+<footer class="dock"><div class="status">B leads, 7 to 4<br><span class="live"><i data-i="out"></i>Open the build in a new tab</span></div><span class="dbtn dbtn--ghost">Change before sending</span><span class="dbtn dbtn--primary"><i data-i="send"></i>Send B to Claude</span><span class="dockhint">Press <b>Space</b> to send</span><span class="more">HOST</span></footer>
+</div></div></div>
+
+<div class="frame-h" id="b3a"><h2>B3a · The Stage, after</h2></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="res">
+<div>
+<div class="eyebrow" style="margin-bottom:10px">Results <span>· Ask 4</span></div>
+<h2 class="q">How should it look and feel?</h2>
+<div class="rrow"><span class="L">A</span><div><span class="t">Calm and clear</span><div class="tr"><span style="width:36%"></span></div></div><b>4</b></div>
+<div class="rrow win2"><span class="L L--b">B</span><div><span class="t">Playful</span><div class="tr"><span style="width:64%"></span></div></div><b>7</b></div>
+</div>
+<aside class="meter"><span class="lbl">Voted</span><span class="big">11<small> / 12</small></span></aside>
+</div>
+<footer class="dock"><div class="status">B leads, 7 to 4<br><span class="live"><i data-i="out"></i>Open the build in a new tab</span></div><span class="dbtn dbtn--ghost">Change before sending</span><span class="dbtn dbtn--primary"><i data-i="send"></i>Send B to Claude</span><span class="dockhint">Press <b>Space</b> to send</span><span class="more">HOST</span></footer>
+</div>
+<span class="pin" style="left:292px;top:856px">1</span><span class="pin" style="left:610px;top:770px">2</span><span class="pin" style="left:1000px;top:770px">3</span>
+</div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>The build link, demoted</h3><p>16px link text in the status area with the open-in-a-new-tab icon, no border, no button height. It says where it goes. Shown only when Claude has the app running.</p></div>
+<div class="note"><h3><b class="n">2</b>Change before sending</h3><p>Was "Edit". Opens the window below, titled with the same words.</p></div>
+<div class="note"><h3><b class="n">3</b>Send B to Claude</h3><p>Was "To Claude: B". Same action as the Host's Settle button: picks B and sends it as Do now.</p></div>
+</div>
+
+<div class="frame-h" id="b3b"><h2>B3b · The other dock moments, same words</h2></div>
+<div class="fit"><div class="fit-box"><div class="dockstrip">
+<span class="lab">The room is choosing</span>
+<footer class="dock"><div class="status">7 of 12 have voted</div><span class="dbtn dbtn--ghost">Spin the wheel</span><span class="dbtn dbtn--primary">Show results</span><span class="dockhint">Press <b>Space</b> to show results</span><span class="more">HOST</span></footer>
+<span class="lab">Ideas are coming in</span>
+<footer class="dock"><div class="status">5 ideas so far</div><span class="dbtn dbtn--ghost">Spin the wheel</span><span class="dbtn dbtn--primary">Open voting</span><span class="dockhint">Press <b>Space</b> to open voting</span><span class="more">HOST</span></footer>
+<span class="lab">A tie</span>
+<footer class="dock"><div class="status">Tied, 5 to 5</div><span class="dbtn dbtn--ghost">Change before sending</span><span class="dbtn dbtn--primary">Spin the wheel</span><span class="dockhint">Press <b>Space</b> to spin</span><span class="more">HOST</span></footer>
+<span class="lab">The wheel landed</span>
+<footer class="dock"><div class="status">The wheel landed on B</div><span class="dbtn dbtn--ghost">Spin again</span><span class="dbtn dbtn--primary"><i data-i="send"></i>Send B to Claude</span><span class="dockhint">Press <b>Space</b> to send</span><span class="more">HOST</span></footer>
+<span class="lab">A rating</span>
+<footer class="dock"><div class="status">Average 3.4 from 10</div><span class="dbtn dbtn--ghost">Change before sending</span><span class="dbtn dbtn--primary"><i data-i="send"></i>Send 3.4 to Claude</span><span class="dockhint">Press <b>Space</b> to send</span><span class="more">HOST</span></footer>
+<span class="lab">Mockups to compare</span>
+<footer class="dock"><div class="status">Mockups ready · the host opens the vote</div><span class="dbtn dbtn--primary">Open voting</span><span class="dockhint">Press <b>Space</b> to open voting</span><span class="more">HOST</span></footer>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Spin the wheel is a secondary on the dock</h3><p>As on the Host's Collect row. On a tie it is the main move, as on the Host's Settle row, and Change before sending sits beside it so the host can pick one themselves.</p></div>
+<div class="note"><h3><b class="n">2</b>"Open the vote" becomes Open voting</h3><p>One phrase for the move from ideas, or from mockups, to a vote.</p></div>
+</div>
+
+<div class="frame-h" id="b3c"><h2>B3c · Change before sending, over the Stage</h2>
+<p>Was titled "Send to Claude" and opened by "Edit". Footer: the way out on the left, the main button on the right, Save for later next to it. "Re-ask…" becomes "Ask again…". The Discard confirm is batch 5 (no window inside a window), so it is only placed here.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="res"><div><h2 class="q">How should it look and feel?</h2></div></div>
+<footer class="dock"><div class="status">B leads, 7 to 4</div></footer>
+<div class="dim"></div>
+<div class="wnd" style="top:90px;width:820px">
+<div class="wh"><div><div class="eb">Ask 4 · results</div><h3>Change before sending</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<div class="opts2">
+<div class="opt2"><span class="L">A</span><span>Calm and clear · <span class="btn--link btn">view mockup</span></span><b>4</b></div>
+<div class="opt2 on"><span class="L L--b">B</span><span>Playful · the room's choice · <span class="btn--link btn">view mockup</span></span><b>7</b></div>
+</div>
+<div class="dirbox">How should it look and feel? Playful. Keep the numbers big enough to read from the back.</div>
+<div class="row"><span class="hint">Claude gets it as</span><div class="seg"><span class="on">Do now</span><span>Keep in mind</span><span>Ask Claude</span></div></div>
+</div>
+<div class="wf"><span class="btn btn--ghost">Close</span><span class="btn btn--gd">Discard</span><span class="btn btn--ghost">Ask again…</span><span class="btn push">Save for later</span><span class="btn btn--primary"><i data-i="send"></i>Send B to Claude</span></div>
+<span class="pin" style="left:-14px;bottom:18px">1</span><span class="pin" style="right:-14px;bottom:18px">2</span>
+</div>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Way out on the left</h3><p>Close (and the X) leave the results as they are. Discard and Ask again… sit with it, quieter.</p></div>
+<div class="note"><h3><b class="n">2</b>The main button follows the pick</h3><p>Click A and it reads Send A to Claude. Save for later puts the written direction on the Later list (B4) and closes the ask as decided.</p></div>
+</div>
+
+<!-- ===================================================================== B4 -->
+<div class="sec" id="b4"><h2>B4 · One list, called Later</h2>
+<p>Owner, F8: one list holds both the room's ideas the host is not using yet and directions held back from Claude. Every way of holding something back is one button, <b>Save for later</b>, and it always lands here. Each item says what it is, and has the same three moves.</p></div>
+<div class="fit"><div class="fit-box" style="width:1440px"><div class="flowl">
+<div class="srcs">
+<div class="bx"><b>Waiting for you: a room idea → Save for later</b><span>was "Park" (Host queue)</span></div>
+<div class="bx"><b>Composer → Save for later</b><span>was "Queue it" (the host's own words)</span></div>
+<div class="bx"><b>Change before sending → Save for later</b><span>was the "For Claude, later" kind (Host step 4)</span></div>
+<div class="bx"><b>Stage window → Save for later</b><span>same words as today (B3c)</span></div>
+</div>
+<div class="ar">→</div>
+<div class="bx big"><b>Later</b><span>One list on the Host screen, under Waiting for you. Claude hears nothing from it until the host sends an item. The room sees nothing of it on the Stage.</span></div>
+</div></div></div>
+
+<div class="frame-h" id="b4a"><h2>B4a · The Later list on the Host screen</h2></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="livebtn">Open the build<i data-i="out"></i></span><span class="dotline dotline--claude">Claude is ready for the next step</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host" style="grid-template-columns:450px 1fr 340px">
+<section class="col">
+<div class="colh"><h2>What's next</h2><span class="spacehint push">Press Space to do the first</span></div>
+<div class="q-item" style="border-color:var(--m-line-amber)"><div class="row"><div><b>Put 2 ideas from Later to a vote</b><p class="hint">Priya's and Marcus's, saved during Ask 4</p></div><span class="btn btn--sm btn--primary focusbtn push">Open voting</span></div></div>
+<div class="q-item"><div class="row"><div><b>Ask the room something new</b><p class="hint">Ideas, a choice, or a 1 to 5 rating</p></div><span class="btn btn--sm push">New ask</span></div></div>
+</section>
+<section class="col">
+<div class="colh"><h2>Waiting for you</h2><span class="count">1</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Dana</span><span class="chip">Idea</span><span class="meta push">3:02</span></div><div class="q-text">Let people type their own salary in</div>
+<div class="q-acts"><span class="btn btn--sm btn--ghost">Seen</span><span class="btn btn--sm focusbtn">Save for later</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude</span></div><span class="pin" style="right:-14px;top:50%">1</span></div>
+<div class="later">
+<div class="lh"><h3>Later</h3><span class="count">4</span><span class="hint push">Claude has not heard these</span></div>
+<div class="li"><span class="pin" style="right:-14px;top:8px">2</span><span class="pin" style="right:-14px;bottom:8px">3</span><span class="box on"></span><div><div class="top"><span class="kind kind--room">Idea from the room</span><span class="who">Priya · 2:53</span></div><p class="tx">Show it as a stack of $100 bills next to a person</p>
+<div class="acts"><span class="btn btn--sm btn--gd">Remove</span><span class="btn btn--sm push">Ask the room</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude now</span></div></div></div>
+<div class="li"><span class="box on"></span><div><div class="top"><span class="kind kind--room">Idea from the room</span><span class="who">Marcus · 2:54</span></div><p class="tx">A slider: your salary vs. a billionaire's hour</p>
+<div class="acts"><span class="btn btn--sm btn--gd">Remove</span><span class="btn btn--sm push">Ask the room</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude now</span></div></div></div>
+<div class="li"><span class="box"></span><div><div class="top"><span class="kind kind--dir">Direction for Claude</span><span class="who">You · from Ask 3 · 2:47</span></div><p class="tx">Who is it for? Everyone. Add a share button once the numbers work.</p>
+<div class="acts"><span class="btn btn--sm btn--gd">Remove</span><span class="btn btn--sm push">Ask the room</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude now</span></div></div></div>
+<div class="li"><span class="box"></span><div><div class="top"><span class="kind kind--dir">Direction for Claude</span><span class="who">You · typed · 2:58</span></div><p class="tx">Use the brand orange for the billionaire side only.</p>
+<div class="acts"><span class="btn btn--sm btn--gd">Remove</span><span class="btn btn--sm push">Ask the room</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude now</span></div></div></div>
+<div class="lfoot"><span class="pin" style="right:-14px;top:8px">4</span><b style="font-size:14px">2 ticked</b><span class="btn btn--sm">Put to a vote</span><span class="btn btn--sm btn--link push">Clear</span></div>
+</div>
+</section>
+<section class="col"><div style="display:flex;flex-direction:column;gap:6px">
+<div class="q-item" style="padding:10px 12px"><b>Decided · 4</b><span class="hint">Tick to combine</span></div>
+<div class="q-item" style="padding:10px 12px"><b>Timeline · 18</b></div>
+<div class="q-item" style="padding:10px 12px"><b>Screenshots · 3</b></div>
+</div></section>
+</div>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Save for later, from the queue</h3><p>The idea moves from Waiting for you to Later. Its author's device says "The host saved your idea for later." (phone, laptop or tablet alike).</p></div>
+<div class="note"><h3><b class="n">2</b>Each item says what it is</h3><p><b>Idea from the room</b> (blue, with who sent it) or <b>Direction for Claude</b> (amber, with where it came from: an ask, or typed). Oldest first. One list, so nothing turns up somewhere the host did not expect.</p></div>
+<div class="note"><h3><b class="n">3</b>Three moves, the same on every item</h3><p><b>Send to Claude now</b> (as Do now; the paper plane), <b>Ask the room</b> (opens the Ask the room window with the words filled in), <b>Remove</b> (quiet, left; the row's left slot offers Undo until the next action). All secondary: the one orange button stays with What's next.</p></div>
+<div class="note"><h3><b class="n">4</b>Several at once</h3><p>Tick two to six and Put to a vote: a Choose ask with each as an option. What's next leads with it when two or more room ideas are waiting in Later.</p></div>
+</div>
+<div class="notes" style="padding-top:0">
+<div class="note"><h3>On the Stage</h3><p>Nothing. Later is the host's working list. Directions in it may be half-formed, and ideas in it have not been chosen.</p></div>
+<div class="note"><h3>In History</h3><p>An item shows up only when it leaves Later: "Claude was told … (saved for later at 2:47)" when sent, or as the new ask when put to the room. Removed items never appear.</p></div>
+</div>
+
+<!-- ===================================================================== B5 -->
+<div class="sec" id="b5"><h2>B5 · Main menu: one name, one place</h2>
+<p>Today the way out is inside the ··· menu, in the wrapped bar as "Main menu" and in the ended bar as "Back to the main menu". After: <b>Main menu</b> with the house icon, at the far left of the header, left of the title, on every host screen (Host, Build, History) and in every state. The bars no longer carry it. The Stage has no header; its way back is HOST in the dock, as today.</p></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;flex-direction:column;gap:14px;width:1440px">
+<span class="tag tag--before">Today</span>
+<div class="hstrip"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="askpill">Ask 4 · 7 of 12</span><span class="sp" style="flex:1"></span><span class="livebtn">Open the live build ↗</span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 joined</span><span class="menu">···</span></header>
+<div class="bar2x">Claude has wrapped up. Look over the report, then end the session when the room is done.<span class="btn btn--sm push">Report</span><span class="btn btn--sm btn--danger">End session</span><span class="btn btn--sm btn--ghost">Main menu</span></div></div>
+<span class="tag tag--after">After</span>
+<div class="hstrip"><header class="hdr"><span class="mm mm--hl"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="askpill">Ask 4 · 7 of 12</span><span class="sp" style="flex:1"></span><span class="livebtn">Open the build<i data-i="out"></i></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="bar2x">Claude has wrapped up. Look over the report, then end the session when the room is done.<span class="btn btn--sm push">Report</span><span class="btn btn--sm btn--danger">End session</span></div></div>
+</div><span class="pin" style="left:4px;top:200px">1</span></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Always there, always the same</h3><p>Ghost style (P3), house icon, the words "Main menu". Leaving does not end the session. The host can come back from the main menu's session list, so it needs no confirm. "Main menu" is removed from the ··· menu.</p></div>
+<div class="note"><h3>Open the build</h3><p>The header's live-build button reads "Open the build" with the open-in-a-new-tab icon; the hover text gives the address. Disabled with "Claude hasn't started the app yet" until it has (batch 1, F5).</p></div>
+</div>
+
+<div class="frame-h" id="b5n"><h2>B5a · At 375px</h2>
+<p>Drawn at real size, not scaled. Two rows: Main menu, the title and ···; then the four screens. At this width the join code (with its QR), the ask pill, Open the build, Wi-Fi and Claude's status move into ···, so the title keeps room to be read. Main menu keeps its word, not just the icon: the exit is the one control that must never be guessed.</p></div>
+<div class="narrow-wrap">
+<div class="narrow" id="n375">
+<div class="nh">
+<div class="r1"><span class="mm"><i data-i="house"></i>Main menu</span><span class="ttl">Billions, made human</span><span class="menu">···</span></div>
+<div class="views"><span class="view is-on">Host</span><span class="view">Stage</span><span class="view">Build</span><span class="view">History</span></div>
+</div>
+<div class="nbody">The Host screen, one column, below.</div>
+</div>
+<div class="measure" id="measure">Measuring…</div>
+</div>
+
+<!-- ===================================================================== B6 -->
+<div class="sec" id="b6"><h2>B6 · The words: the contract for implementation</h2>
+<p>Old words on the left are removed everywhere in the Build Room. The new word is exact (sentence case). Put them in one constants file, <code>buildroom/words.js</code>, and read them from there. A test fails if an old word appears in <code>src/src/buildroom</code>.</p>
+<table class="vt">
+<thead><tr><th>Old</th><th>New</th><th>Style</th><th>Where (today)</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">Moving an ask on</td></tr>
+<tr><td class="old">Close and show results · Show Results</td><td class="new">Show results</td><td>primary</td><td class="where"><code>BuildAskPath.jsx:176</code>; Stage <code>buildScreens.js:259, 270</code></td></tr>
+<tr><td class="old">Open the vote</td><td class="new">Open voting</td><td>primary</td><td class="where">Stage <code>buildScreens.js:215</code>; What's next <code>:609</code></td></tr>
+<tr><td class="old">Go with B · Go with the top idea · Go with the average · Go with the wheel's pick (Host) · To Claude: B · To Claude: 3.4 (Stage)</td><td class="new">Send B to Claude · Send the top idea to Claude · Send 3.4 to Claude</td><td>primary, paper plane. One press: picks and sends as Do now (or the ask's preset kind)</td><td class="where"><code>BuildAskPath.jsx:206, 212, 219</code>; <code>buildScreens.js:244, 251</code></td></tr>
+<tr><td class="old">Edit (Stage results) · window title "Send to Claude"</td><td class="new">Change before sending</td><td>secondary on the Host row, ghost on the dock; window title</td><td class="where"><code>buildScreens.js:234, 240</code>; <code>BuildStageDecide.jsx:153</code>; Host step 4 title</td></tr>
+<tr><td class="old">Send to Claude (step 4, with an arrow)</td><td class="new">Send B to Claude (Send to Claude for a spoken answer)</td><td>primary, paper plane</td><td class="where"><code>BuildRoomPage.jsx:2386-2388</code>; <code>BuildStageDecide.jsx:203</code></td></tr>
+<tr><td class="old">Re-ask… · Vote again</td><td class="new">Ask again… (opens the edit) · Ask again (a tie: a new vote between the tied options)</td><td>ghost in a footer, secondary in a row</td><td class="where"><code>BuildStageDecide.jsx:202</code>; <code>BuildAskPath.jsx:228</code></td></tr>
+<tr><td class="old">"Send to Claude" on/off switch</td><td class="new">(removed; Record only does it)</td><td>—</td><td class="where"><code>BuildRoomPage.jsx:2357-2389</code></td></tr>
+<tr class="grp"><td colspan="4">The wheel</td></tr>
+<tr><td class="old">Spin · Spin instead · Spin the wheel instead</td><td class="new">Spin the wheel</td><td>secondary; primary on a tie</td><td class="where"><code>buildScreens.js:233, 256</code>; <code>BuildAskPath.jsx:180</code></td></tr>
+<tr><td class="old">—</td><td class="new">Spin again</td><td>secondary</td><td class="where">after it lands, Host and Stage</td></tr>
+<tr class="grp"><td colspan="4">Holding back: one list, Later</td></tr>
+<tr><td class="old">Queue it · Park · For Claude, later (kind) · Save for later</td><td class="new">Save for later</td><td>secondary</td><td class="where">Composer <code>BuildRoomPage.jsx:2776</code>; Queue <code>:3033, 3136</code>; kinds <code>buildScreens.js:438</code>; <code>BuildStageDecide.jsx:204</code></td></tr>
+<tr><td class="old">For Claude, later · Parked (two lists)</td><td class="new">Later (one list)</td><td>list heading</td><td class="where"><code>BuildRoomPage.jsx:2961, 3068</code></td></tr>
+<tr><td class="old">Send now (orange)</td><td class="new">Send to Claude now</td><td>secondary, paper plane</td><td class="where"><code>BuildRoomPage.jsx:2969</code></td></tr>
+<tr><td class="old">Remove · Dismiss (in the lists)</td><td class="new">Remove (Undo in the row until the next action)</td><td>ghostdanger</td><td class="where"><code>BuildRoomPage.jsx:2970, 3076, 3139</code></td></tr>
+<tr><td class="old">—</td><td class="new">Ask the room</td><td>secondary</td><td class="where">each Later item (new)</td></tr>
+<tr><td class="old">Kinds: Do now · Keep in mind · For Claude, later · Ask Claude</td><td class="new">Do now · Keep in mind · Ask Claude</td><td>segment / split menu</td><td class="where"><code>buildScreens.js:435-439</code></td></tr>
+<tr class="grp"><td colspan="4">Sending, the way out, the build</td></tr>
+<tr><td class="old">Send to Claude with <code>ArrowRight</code>, with no icon, or with the icon dropped when small</td><td class="new">Send to Claude, always with <code>PaperPlaneTilt</code></td><td>primary or secondary per P1</td><td class="where"><code>BuildRoomPage.jsx:2672, 2388</code>; <code>BuildStageDecide.jsx:203</code>; queue rows</td></tr>
+<tr><td class="old">Composer Send, always orange</td><td class="new">Send to Claude, outline</td><td>secondary while a step or a What's next lead shows</td><td class="where"><code>BuildRoomPage.jsx:2775</code></td></tr>
+<tr><td class="old">Main menu (in ···) · Back to the main menu · Main menu (wrapped bar)</td><td class="new">Main menu</td><td>ghost, <code>House</code> icon, header far left</td><td class="where"><code>BuildRoomPage.jsx:793, 803, 1298-1301</code></td></tr>
+<tr><td class="old">Open the live build ↗</td><td class="new">Open the build (Host header) · Open the build in a new tab (Stage dock link)</td><td><code>ArrowSquareOut</code>; a link on the Stage, not a dock button</td><td class="where"><code>BuildRoomPage.jsx:1215-1217, 1582</code></td></tr>
+<tr><td class="old"><kbd>Space</kbd> key cap in rows</td><td class="new">Press Space to … (show results, open voting, spin, send)</td><td>muted words, left end of the action row</td><td class="where"><code>BuildAskPath.jsx:95</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="qs" id="qs"><h2 style="font:800 26px/1.2 var(--font-display);margin:0">Open questions for the owner</h2>
+<ol>
+<li><b>Later is a list, not a kind.</b> These mockups drop "Later" from "Claude gets it as", leaving Do now, Keep in mind and Ask Claude; holding back is only the Save for later button. Is that right, or should the kind stay too?</li>
+<li><b>The author of a saved idea.</b> Should their phone, laptop or tablet say "The host saved your idea for later", or say nothing until the idea is used?</li>
+<li><b>Tie wording.</b> P3 retires "Vote again" for "Ask again". On a tie it means a new vote between the tied options only. Is "Ask again" clear enough there, or is this the one place to keep "Vote again"?</li>
+</ol></div>
+
+<script>
+/* Icons: one per verb (Phosphor shapes, drawn inline). */
+(function () {
+  var P = {
+    send: '<path d="M21 3 3 10.2l7.3 2.6L13 20z"/><path d="m10.3 12.8 4.4-4.4"/>',
+    house: '<path d="M4 10.5 12 4l8 6.5V20h-5.5v-5.5h-5V20H4z"/>',
+    out: '<path d="M14 4h6v6"/><path d="m20 4-8.5 8.5"/><path d="M18 14v5H5V6h5"/>',
+    arrow: '<path d="M4 12h15"/><path d="m13 6 6 6-6 6"/>'
+  };
+  document.querySelectorAll('i[data-i]').forEach(function (el) {
+    el.outerHTML = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P[el.getAttribute('data-i')] + '</svg>';
+  });
+  /* Measure the 375px header: every child inside the 375 box, nothing under 12px. */
+  function measure() {
+    var box = document.getElementById('n375'), out = document.getElementById('measure');
+    if (!box || !out) return;
+    var b = box.getBoundingClientRect(), worst = 0, small = 999;
+    box.querySelectorAll('.nh *').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      worst = Math.max(worst, r.right - b.right, b.left - r.left);
+      if (el.childNodes.length && [].some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.textContent.trim(); })) {
+        small = Math.min(small, parseFloat(getComputedStyle(el).fontSize));
+      }
+    });
+    var t = box.querySelector('.ttl');
+    out.innerHTML = 'Measured live: box <b>' + Math.round(b.width) + 'px</b> wide; widest overflow <b>' + Math.max(0, Math.round(worst)) + 'px</b>; ' +
+      'smallest text <b>' + small + 'px</b>; title gets <b>' + Math.round(t.getBoundingClientRect().width) + 'px</b> (ellipsis past that); ' +
+      'Main menu button <b>' + Math.round(box.querySelector('.mm').getBoundingClientRect().width) + '×' + Math.round(box.querySelector('.mm').getBoundingClientRect().height) + 'px</b>.';
+  }
+  window.addEventListener('load', measure);
+  document.querySelectorAll('.pinline').forEach(function (pl) {
+    var a = pl.parentNode.querySelector('.arow');
+    if (a) pl.style.top = a.offsetTop + 'px';
+  });
+})();
+</script>
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>
