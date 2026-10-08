@@ -206,9 +206,9 @@ describe('deciding: the winner by default, any other on a click (owner, 2026-10-
     const m = stageModel({ playerCount: 3 }, { askId: '4', kind: 'suggest', status: 'results', results: { total: 3, ranked: [{ respId: 'r1', text: 'One', votes: 3 }, { respId: 'r2', text: 'Two', votes: 1 }] } });
     expect(m.primary.label).toBe('To Claude: the top idea');
   });
-  test('decideBody is the one body: as only when it differs from the question\'s own kind', () => {
+  test('decideBody is the one body: `as` is always said when sending', () => {
     const ask = choose([1, 3, 0]);
-    expect(decideBody(ask, { direction: ' go ', chosen: ['B'], as: 'do-now' })).toEqual({ action: 'decide', direction: 'go', chosen: ['B'], note: '', sendToAgent: true, method: 'vote' });
+    expect(decideBody(ask, { direction: ' go ', chosen: ['B'], as: 'do-now' })).toEqual({ action: 'decide', direction: 'go', chosen: ['B'], note: '', sendToAgent: true, method: 'vote', as: 'do-now' });
     expect(decideBody(ask, { direction: 'go', chosen: ['B'], as: 'later' })).toMatchObject({ as: 'later', sendToAgent: true });
     expect(roomChoice(ask)).toMatchObject({ chosen: ['B'] });
   });
@@ -483,6 +483,14 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
   });
   test('ticked answers lead when fewer than two ideas wait', () => {
     expect(whatsNextMoves(room(), { ticked: 3 })[0]).toMatchObject({ key: 'combine', count: 3, button: 'Combine' });
+  });
+  test('M1: a waiting question of Claude\'s leads; no Claude connected leads over everything', () => {
+    const asks = [{ askId: '006', kind: 'choice', status: 'proposed', prompt: 'Which header?', options: [{ label: 'A' }, { label: 'B' }] }];
+    const m = whatsNextMoves(room({ asks }));
+    expect(m[0]).toMatchObject({ key: 'open-proposed', askId: '006', title: "Open Claude's question", button: 'Open it' });
+    expect(whatsNextMoves(room({ asks, agent: { connected: false } }))[0]).toMatchObject({ key: 'connect', button: 'Connect' });
+    expect(whatsNextMoves(room({ agent: { key: 'k1' } })).map((x) => x.key)).not.toContain('connect');
+    expect(whatsNextMoves(room()).find((x) => x.key === 'tell').hint).toBe('Do now, keep in mind, or ask Claude');
   });
   test('otherwise the starter questions lead, and combine is not offered with nothing ticked', () => {
     const m = whatsNextMoves(room(), { ticked: 0 });

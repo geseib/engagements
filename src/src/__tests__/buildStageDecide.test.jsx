@@ -102,7 +102,7 @@ describe('R3: the Stage at results', () => {
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(lastPost().url).toBe(`${API}games/${GAME}/build/asks/004`);
     expect(lastPost().body).toEqual({
-      action: 'decide', direction: `${PROMPT.replace(/[\s?]+$/, '')}: Playful`, chosen: ['B'], note: '', sendToAgent: true, method: 'vote',
+      action: 'decide', direction: `${PROMPT.replace(/[\s?]+$/, '')}: Playful`, chosen: ['B'], note: '', sendToAgent: true, method: 'vote', as: 'do-now',
     });
     // The same ask decided from the Host screen's panel sends the very same body.
     fireEvent.keyDown(window, { key: '1' });

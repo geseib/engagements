@@ -59,7 +59,7 @@ import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, roomChoice,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
-  queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
+  queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
@@ -621,7 +621,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const onSent = useCallback(({ as, send, direction }) => {
     const short = direction.length > 80 ? `${direction.slice(0, 80).trimEnd()}…` : direction;
     if (!send) setSent(`Recorded in the timeline: ${short}`);
-    else if (as === 'later') setSent(`${W.saveLater.replace('Save', 'Saved')}: ${short}`);
+    else if (as === 'later') setSent(`${W.savedLater}: ${short}`);
     else setSent(`Sent to Claude as ${claudeKindLabel(as)}: ${short}`);
   }, []);
 
@@ -713,13 +713,18 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     setTicked(new Set());
     setComposeFocus((n) => n + 1);
   };
+  const moveAsk = () => whatsNextMoves(room).find((m) => m.key === 'open-proposed') || null;
   /** What's next's moves (whatsNextMoves' keys). */
   const onMove = (key) => {
     if (key === 'combine') combine();
     else if (key === 'tell') setComposeFocus((n) => n + 1);
     else if (key === 'new-ask') setDialog({ compose: 'suggest' });
     else if (key === 'starter') setDialog({ compose: 'suggest', library: true });
-    else if (key === 'vote-mockups') {
+    else if (key === 'connect') setDialog('connect');
+    else if (key === 'open-proposed') {
+      const ask = moveAsk(key);
+      if (ask) run(() => api.askAction(ask.askId, { action: 'open' }));
+    } else if (key === 'vote-mockups') {
       const looks = mockupsReady(room);
       if (looks) run(() => api.askAction(looks.ask.askId, { action: 'open' }));
     } else if (key === 'vote-ideas') setVoteIdeas((room.ideas || []).filter((i) => i.status === 'new').slice(0, VOTE_IDEAS_MAX));
@@ -865,7 +870,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           )}
 
-          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} focusKey={composeFocus} leadShows={Boolean(current) || (!onCrew && !(room.opening && room.opening.phase === 'opening'))} />}
+          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} focusKey={composeFocus} leadShows />}
         </main>
 
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
@@ -1524,7 +1529,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     if (m.action === 'edit') { if (editable) setEditing(true); return; }
     if (m.action === 'to-claude') {
       const { chosen, direction } = roomChoice(current);
-      run(() => api.askAction(current.askId, decideBody(current, { direction, chosen, as: current.claudeGets || 'do-now' })));
+      run(() => api.askAction(current.askId, decideBody(current, { direction, chosen, as: defaultKind(current) })));
       return;
     }
     run(() => api.askAction(m.askId || current.askId, { action: m.action }));
@@ -2312,7 +2317,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
   // WHAT CLAUDE GETS (step 7c): as the ready question's set says, else Do now.
   // Later is a list, never a kind (owner, 2026-10-08): a set that says `later` starts at Do now.
   const [as, setAs] = useState(() => {
-    const first = (draft && draft.as) || ask.claudeGets || 'do-now';
+    const first = (draft && draft.as) || defaultKind(ask);
     return first === 'later' ? 'do-now' : first;
   });
   const inflight = useRef(false);
@@ -2464,11 +2469,11 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
         </div>
         <span className="brm-hint">{(HOST_KINDS.find((k) => k.key === as) || HOST_KINDS[0]).hint}{ask.claudeNote ? ` With it, from the set: "${ask.claudeNote}"` : ''}</span>
       </div>
-      <ActionRow pinned={next} hint={next ? <span title={W.ctrlEnterTitle}>{W.ctrlEnterSends}</span> : ''}>
+      <ActionRow pinned={next} space={next} hint={next ? <span title={W.ctrlEnterTitle}>{W.ctrlEnterSends}</span> : ''}>
         {onCancel && <button type="button" className="brm-btn brm-btn--ghost" onClick={onCancel}>Cancel</button>}
         <button type="button" className="brm-btn brm-btn--ghost" disabled={cannot} onClick={() => decide({ send: false })}>{W.recordOnly}</button>
         <button type="button" className="brm-btn" disabled={cannot} onClick={() => decide({ kind: 'later' })}>{W.saveLater}</button>
-        <button type="button" className="brm-btn brm-btn--primary" data-next-primary={next || undefined} data-no-space={next || undefined} disabled={cannot} onClick={() => decide()}>
+        <button type="button" className={`brm-btn${next ? ' brm-btn--primary' : ''}`} data-next-primary={next || undefined} data-no-space={next || undefined} disabled={cannot} onClick={() => decide()}>
           <Icon name="PaperPlaneTilt" size={16} /> {sendLabel}
         </button>
       </ActionRow>
@@ -2796,8 +2801,14 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 
   // QUEUE IT (step 4, C1): the host's own idea, waiting in the queue for later.
   const queue = async () => {
     if (!words) return;
-    const ok = await run(() => api.queueIdea(words));
-    if (ok !== undefined) { setText(''); setSaid('Saved for later.'); }
+    // On the Later list, not just in the queue: the idea is made, then parked.
+    const ok = await run(async () => {
+      const made = await api.queueIdea(words);
+      const id = made && made.idea && made.idea.ideaId;
+      if (id) await api.ideaAction(id, 'later');
+      return made;
+    });
+    if (ok !== undefined) { setText(''); setSaid(`${W.savedLater}.`); }
   };
   const log = async () => {
     if (!words) return;

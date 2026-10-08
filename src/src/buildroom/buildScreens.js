@@ -398,6 +398,9 @@ export function roomChoice(ask) {
   return win ? { chosen: [win], direction: directionFor(ask, win) } : { chosen: [], direction: '' };
 }
 
+/** How a decision goes to Claude when the host does not choose: the set's kind, else Keep in mind for an opening step, else Do now. The server's rule (build-room.js decide). */
+export const defaultKind = (ask) => (ask && ask.claudeGets) || (ask && ask.openingStep ? 'keep' : 'do-now');
+
 /**
  * THE BODY OF A DECISION, one builder for every place that decides (the Host
  * screen's panel, the Stage's To Claude and its Edit window). `as` goes only
@@ -407,7 +410,8 @@ export function decideBody(ask, { direction, chosen, note = '', send = true, as,
   return {
     action: 'decide', direction: String(direction || '').trim(), chosen, note: String(note || '').trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
     method: decisionMethod(ask, chosen, spoken),
-    ...(send && as && as !== (ask.claudeGets || 'do-now') ? { as } : {}),
+    // Always said when sending, so the line the host read can never disagree with the server's default.
+    ...(send ? { as: as || defaultKind(ask) } : {}),
   };
 }
 
@@ -633,6 +637,12 @@ export function whatsNextMoves(room, { ticked = 0 } = {}) {
       hint: `${lettersLine(looks.images.map((i) => i.label))} ${looks.images.length === 1 ? 'is' : 'are'} ready to compare`, button: 'Open the vote',
     });
   }
+  // CLAUDE'S OWN QUESTION is waiting to be opened (not one still waiting on its mockups).
+  const waiting = room && !framing && !(room.outcome && room.outcome.summary)
+    ? ((room.asks || []).find((a) => a.status === 'proposed' && !(looks && a.askId === looks.ask.askId) && !(a.mockups && !a.mockups.ready)) || null) : null;
+  if (waiting) {
+    moves.push({ key: 'open-proposed', askId: waiting.askId, title: "Open Claude's question", hint: String(waiting.prompt || '').slice(0, 80), button: 'Open it' });
+  }
   if (ideas.length >= 2) {
     // The dialog takes six at most; the title says what it will do.
     const n = Math.min(ideas.length, VOTE_IDEAS_MAX);
@@ -644,7 +654,11 @@ export function whatsNextMoves(room, { ticked = 0 } = {}) {
   if (ticked > 0) moves.push({ key: 'combine', count: ticked, title: `Combine ${ticked} decided ${ticked === 1 ? 'answer' : 'answers'}`, hint: 'Into one prompt you can edit before Claude gets it', button: 'Combine' });
   moves.push({ key: 'starter', title: 'Ask the room a starter question', hint: 'From the question library', button: 'Ask it' });
   moves.push({ key: 'new-ask', title: 'Ask the room something new', hint: 'Ideas, a choice, or a 1 to 5 rating', button: 'New ask' });
-  moves.push({ key: 'tell', title: 'Tell Claude', hint: 'Do now, keep in mind, later, or ask Claude', button: 'Write' });
+  moves.push({ key: 'tell', title: 'Tell Claude', hint: 'Do now, keep in mind, or ask Claude', button: 'Write' });
+  // Nothing runs without Claude: with none connected, that is the first move.
+  if (room && room.agent && !room.agent.key && !room.agent.connected && !framing) {
+    moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing gets built until Claude Code is connected', button: 'Connect' });
+  }
   return moves;
 }
 

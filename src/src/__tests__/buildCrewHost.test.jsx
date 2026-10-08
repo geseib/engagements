@@ -163,6 +163,14 @@ beforeEach(() => {
 });
 afterEach(() => window.confirm.mockRestore());
 
+describe('one orange button on the crew stage (batch 2-3)', () => {
+  test('the crew board and the Host screen together show exactly one primary', async () => {
+    await openCrew();
+    const n = [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')].filter((b) => !b.closest('[role="dialog"], .brm-modal'));
+    expect(n.map((b) => b.textContent.trim())).toHaveLength(1);
+  });
+});
+
 describe('opening the room to a crew', () => {
   test('crew mode off: no stage tabs, no switch; the header offers Open to a crew', async () => {
     await openRoom(hostState({ crew: null, builders: [], tasks: [], shares: [], comments: [], reviews: [] }));

@@ -29,6 +29,7 @@ describe('words.js', () => {
     expect(W.openBuild).toBe('Open the build');
     expect(W.openBuildTab).toBe('Open the build in a new tab');
     expect(W.spaceTo('show results')).toBe('Press Space to show results');
+    expect(W.savedLater).toBe('Saved for later');
   });
 
   test('Later is not a kind', () => {

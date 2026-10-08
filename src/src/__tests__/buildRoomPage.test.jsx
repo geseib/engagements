@@ -107,6 +107,7 @@ function serve(state) {
     if (method === 'GET' && url.endsWith('/build/state')) return res(current);
     if (url.endsWith('/build/keys')) return res({ key: `eng_${GAME}_${'k'.repeat(43)}`, keyId: 'abc123def456' }, true, 201);
     if (url.endsWith('/host-ticket')) return res({ ticket: 't' });
+    if (method === 'POST' && url.endsWith('/build/ideas')) return res({ idea: { ideaId: '9-x9', status: 'new' } }, true, 201);
     return res({ ok: true, ask: {}, entry: {}, idea: {} });
   });
 }
@@ -229,7 +230,7 @@ describe('each ask status', () => {
     fireEvent.click(send);
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`));
     expect(lastPost().body).toEqual({
-      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], note: '', sendToAgent: true, spoken: true, method: 'spoken',
+      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], note: '', sendToAgent: true, spoken: true, method: 'spoken', as: 'do-now',
     });
   });
 
@@ -321,7 +322,7 @@ describe('each ask status', () => {
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide' }));
     expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`);
     expect(lastPost().body).toEqual({
-      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar. Big button', chosen: ['B'], note: '', sendToAgent: true, method: 'vote',
+      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar. Big button', chosen: ['B'], note: '', sendToAgent: true, method: 'vote', as: 'do-now',
     });
   });
 
@@ -1709,8 +1710,8 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     await openRoom(hostState());
     fireEvent.change(screen.getByLabelText('Tell Claude, or log what the room said'), { target: { value: 'Check it on a small phone' } });
     fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Save for later' }));
-    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/ideas`));
-    expect(lastPost().body).toEqual({ text: 'Check it on a small phone' });
+    await waitFor(() => expect(posts().map((c) => c.body)).toEqual([{ text: 'Check it on a small phone' }, { action: 'later' }]));
+    expect(path(posts()[0])).toBe(`games/${GAME}/build/ideas`);
   });
 });
 
@@ -1757,13 +1758,13 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', as: 'do-now' }));
   });
 
-  test('left as the set says, the decision sends no kind (the server uses the question\'s own)', async () => {
+  test('left as the set says, the decision says that kind out loud (fix round 1: no silent default)', async () => {
     const ask = { AskId: '006', Kind: 'rating', Prompt: 'How clear?', Options: [], Status: 'results', Source: 'host', ClaudeGets: 'keep' };
     await openRoom(hostState({ st: { CurrentAskId: '006' }, asks: [ask], answers: [{ AskId: '006', PlayerName: 'Ana', Rating: 4 }] }));
-    // One press at Settle carries the question's own kind: no `as`, the server uses it.
+    // One press at Settle says the question's own kind in the body, so the line the host read cannot disagree.
     fireEvent.click(screen.getByRole('button', { name: 'Send 4 to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide' }));
-    expect(lastPost().body.as).toBeUndefined();
+    expect(lastPost().body.as).toBe('keep');
   });
 
   const BRIEF = {
@@ -2340,7 +2341,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     space();
     await waitFor(() => expect(decides()).toHaveLength(1));
     expect(decides()[0].body).toEqual({
-      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], note: '', sendToAgent: true, method: 'vote',
+      action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], note: '', sendToAgent: true, method: 'vote', as: 'do-now',
     });
     expect(path(decides()[0])).toBe(`games/${GAME}/build/asks/003`);
   });
@@ -2407,6 +2408,9 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     'a wheel that landed': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED }),
     'results of a rating': () => hostState({ st: { CurrentAskId: '005' }, asks: [{ AskId: '005', Kind: 'rating', Prompt: 'How close?', Options: [], Status: 'results' }], answers: [{ AskId: '005', PlayerName: 'Ana', Rating: 4 }] }),
     'a proposed ask waiting': () => hostState({ asks: [{ ...CHOICE, Status: 'proposed' }], ideas: [{ PlayerName: 'Jordan', Text: 'A map link' }] }),
+    'the opening': () => hostState({ st: { Phase: undefined } }),
+    'the opening with a step done': () => hostState({ st: { Phase: undefined, Brief: { forWhom: 'Two friends', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } } }),
+    'a first run, nothing yet': () => hostState({ st: { AgentSeenAt: undefined } }),
     'a live ask with a proposed one waiting': () => hostState({ st: { CurrentAskId: '004' }, asks: [{ ...IDEAS_ASK, Status: 'live' }, { ...CHOICE, Status: 'proposed' }], resps: IDEAS_RESPS }),
   };
   test.each(Object.keys(states))('exactly one orange button on the Host screen: %s', async (name) => {
@@ -2426,6 +2430,27 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     fireEvent.click(screen.getByRole('button', { name: 'Answer for the room' }));
     expect(oranges()).toHaveLength(1);
     expect(oranges()[0].textContent).toMatch('Send to Claude');
+  });
+
+  test('a proposed ask being answered for the room adds no second orange', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Answer for the room' }));
+    expect(oranges()).toHaveLength(1);
+  });
+
+  test('I5: Save for later in the Composer makes the idea Later, not just queued', async () => {
+    await openRoom(hostState());
+    fireEvent.change(screen.getByLabelText('Tell Claude, or log what the room said'), { target: { value: 'Check it on a small phone' } });
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Save for later' }));
+    await waitFor(() => expect(posts().map((c) => [path(c), c.body])).toEqual([
+      [`games/${GAME}/build/ideas`, { text: 'Check it on a small phone' }],
+      [`games/${GAME}/build/ideas/9-x9`, { action: 'later' }],
+    ]));
+  });
+
+  test('M5: What\'s next, Tell Claude, does not mention later', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'decided', DecidedAt: ago(240), Decision: { direction: 'Go', chosen: ['B'], note: '' } }], answers: CHOICE_ANSWERS }));
+    expect(screen.getByText('Do now, keep in mind, or ask Claude')).toBeInTheDocument();
   });
 
   test('the Composer\'s Send is outline while a step shows, and orange only when nothing else leads', async () => {

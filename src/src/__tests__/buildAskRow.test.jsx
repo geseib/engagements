@@ -7,7 +7,7 @@
 import React from 'react';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { AskPath } from '../buildroom/BuildAskPath';
-import { settleSend, HOST_KINDS } from '../buildroom/buildScreens';
+import { settleSend, HOST_KINDS, defaultKind, decideBody } from '../buildroom/buildScreens';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn(), getAuthToken: jest.fn(async () => 'id-token') }));
 jest.mock('../WebSocketClient', () => ({ __esModule: true, default: {} }));
@@ -21,7 +21,7 @@ const api = () => ({ askAction: jest.fn(() => Promise.resolve({})) });
 const mount = (ask, props = {}) => render(
   <AskPath ask={ask} room={room} busy={props.busy || false} ended={false} run={(fn) => fn()} api={props.api || api()}
     pickId={props.pickId || null} onPick={props.onPick || jest.fn()} answering={props.answering || false}
-    setAnswering={props.setAnswering || jest.fn()} onSent={props.onSent} />,
+    setAnswering={props.setAnswering || jest.fn()} onSent={props.onSent} draft={props.draft || null} />,
 );
 const row = () => document.querySelector('.brm-arow');
 const rowButtons = () => within(row()).getAllByRole('button').map((b) => b.textContent.trim());
@@ -75,7 +75,7 @@ describe('Settle with a clear winner sends in one press', () => {
 
   test('a line under the board names exactly what Claude will be told', () => {
     mount({ ...base, status: 'results', results: won });
-    expect(screen.getByText('Claude will be told, as Do now: “How should it look and feel: Playful”')).toBeInTheDocument();
+    expect(screen.getByText('Claude will be told, as Do now: "How should it look and feel: Playful"')).toBeInTheDocument();
     expect(screen.getByText('Next: 4 Change before sending')).toBeInTheDocument();
   });
 
@@ -92,7 +92,7 @@ describe('Settle with a clear winner sends in one press', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' })); });
     expect(a.askAction).toHaveBeenCalledTimes(1);
     expect(a.askAction).toHaveBeenCalledWith('004', {
-      action: 'decide', direction: 'How should it look and feel: Playful', chosen: ['B'], note: '', sendToAgent: true, method: 'vote',
+      action: 'decide', direction: 'How should it look and feel: Playful', chosen: ['B'], note: '', sendToAgent: true, method: 'vote', as: 'do-now',
     });
     expect(onSent).toHaveBeenCalledWith({ as: 'do-now', send: true, direction: 'How should it look and feel: Playful' });
   });
@@ -120,6 +120,67 @@ describe('Settle with a clear winner sends in one press', () => {
     unmount();
     mount({ ...base, kind: 'suggest', options: [], status: 'results', results: { total: 3, ranked: [{ respId: 'r2', text: 'Not seeing open shifts', votes: 2 }, { respId: 'r1', text: 'Account', votes: 1 }] } });
     expect(primaryOf().textContent.trim()).toBe('Send the top idea to Claude');
+  });
+});
+
+describe('what one press sends is always what the line says (fix round 1)', () => {
+  const winner = { ...base, status: 'results', results: won };
+
+  test('I1: a preset of Later does not send as Do now: the primary is Save for later', async () => {
+    const a = api();
+    const onSent = jest.fn();
+    mount({ ...winner, claudeGets: 'later' }, { api: a, onSent });
+    expect(rowButtons()).toEqual(['Spin the wheel', 'Change before sending', 'Save for later']);
+    expect(primaryOf()).toHaveAttribute('data-next-primary');
+    expect(within(row()).getByText('Press Space to save for later')).toBeInTheDocument();
+    expect(screen.getByText('Goes on your Later list: "How should it look and feel: Playful". Claude hears nothing until you send it.')).toBeInTheDocument();
+    await act(async () => { fireEvent.click(primaryOf()); });
+    expect(a.askAction).toHaveBeenCalledWith('004', expect.objectContaining({ action: 'decide', chosen: ['B'], sendToAgent: true, as: 'later' }));
+    expect(onSent).toHaveBeenCalledWith({ as: 'later', send: true, direction: 'How should it look and feel: Playful' });
+  });
+
+  test('I2: an opening-step question is Keep in mind: the line says so and the body carries it', async () => {
+    const a = api();
+    mount({ ...winner, openingStep: 'kind' }, { api: a });
+    expect(screen.getByText(/^Claude will be told, as Keep in mind:/)).toBeInTheDocument();
+    expect(within(row()).getByText('Press Space to send, as Keep in mind')).toBeInTheDocument();
+    await act(async () => { fireEvent.click(primaryOf()); });
+    expect(a.askAction.mock.calls[0][1]).toMatchObject({ as: 'keep' });
+    expect(defaultKind({ openingStep: 'kind' })).toBe('keep');
+    expect(defaultKind({ claudeGets: 'ask', openingStep: 'kind' })).toBe('ask');
+    expect(defaultKind({})).toBe('do-now');
+  });
+
+  test('I2: decideBody always carries `as` when sending, and none when only recording', () => {
+    expect(decideBody(base, { direction: 'x', chosen: [] })).toMatchObject({ as: 'do-now' });
+    expect(decideBody({ ...base, claudeGets: 'keep' }, { direction: 'x', chosen: [] })).toMatchObject({ as: 'keep' });
+    expect(decideBody(base, { direction: 'x', chosen: [], send: false })).not.toHaveProperty('as');
+  });
+
+  test('I3: one press honours a kept draft for this pick: its words and its kind', async () => {
+    const a = api();
+    const draft = { direction: 'Playful, big numbers', as: 'keep', chosen: ['B'], pickId: 'B', spoken: false };
+    mount(winner, { api: a, draft });
+    expect(screen.getByText('Claude will be told, as Keep in mind: "Playful, big numbers"')).toBeInTheDocument();
+    await act(async () => { fireEvent.click(primaryOf()); });
+    expect(a.askAction).toHaveBeenCalledWith('004', expect.objectContaining({ direction: 'Playful, big numbers', chosen: ['B'], as: 'keep' }));
+  });
+
+  test('I3: a draft for another pick, a spoken one, or an empty one is ignored', () => {
+    const d = { direction: 'Old', as: 'keep', chosen: ['A'], pickId: 'A', spoken: false };
+    const { unmount } = mount(winner, { draft: d });
+    expect(screen.getByText(/"How should it look and feel: Playful"/)).toBeInTheDocument();
+    unmount();
+    mount(winner, { draft: { ...d, pickId: 'B', direction: '   ' } });
+    expect(screen.getByText(/"How should it look and feel: Playful"/)).toBeInTheDocument();
+  });
+
+  test('M3: the set\'s note rides on the line; M4: an Ask Claude kind reads as a question', () => {
+    const { unmount } = mount({ ...winner, claudeNote: 'Fix the most common reason.' });
+    expect(screen.getByText('Claude will be told, as Do now: "How should it look and feel: Playful" With it, from the set: "Fix the most common reason."')).toBeInTheDocument();
+    unmount();
+    mount({ ...winner, claudeGets: 'ask' });
+    expect(screen.getByText('Claude will be asked about: "How should it look and feel: Playful"')).toBeInTheDocument();
   });
 });
 

@@ -19,7 +19,7 @@ import Icon from '../components/Icon';
 import { whatsNextMoves, claudeState, combineLine, METHOD_WORDS } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 
-const MOVE_ICON = { 'vote-mockups': 'Image', starter: 'Question', 'new-ask': 'Plus', tell: 'ChatCircleText' };
+const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', starter: 'Question', 'new-ask': 'Plus', tell: 'ChatCircleText' };
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');

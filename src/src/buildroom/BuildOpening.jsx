@@ -263,7 +263,7 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
             </button>
           )}
           <button type="button" className="brm-btn brm-btn--sm" onClick={onShowWall}>Show the brief on the wall</button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => setConfirming(true)}>Start building</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => setConfirming(true)}>Start building</button>
         </div>
       )}
       {confirming && <StartBuildingConfirm opening={opening} busy={busy} run={run} api={api} onClose={() => setConfirming(false)} />}

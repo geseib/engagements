@@ -7,10 +7,11 @@
  */
 import React from 'react';
 
-export default function ActionRow({ hint = '', pinned = true, children }) {
+export default function ActionRow({ hint = '', pinned = true, space = false, children }) {
   return (
     <div className={`brm-arow${pinned ? ' is-pinned' : ''}`}>
-      <span className="brm-say" role="status">{hint}</span>
+      {/* A Space or Ctrl Enter hint means nothing on a phone or tablet: CSS hides it on a coarse pointer. */}
+      <span className={`brm-say${space ? ' is-keys' : ''}`} role="status">{hint}</span>
       {children}
     </div>
   );

@@ -55,7 +55,13 @@ export const W = Object.freeze({
   votingOpen: 'Voting is open',
   votingAgain: 'The room is voting again',
   /** The line under the Settle board: exactly what Claude will be told. */
-  told: (kind, direction) => `Claude will be told, as ${kind}: \u201c${direction}\u201d`,
+  told: (key, label, direction, note = '') => {
+    const lead = key === 'ask' ? `Claude will be asked about: "${direction}"` : `Claude will be told, as ${label}: "${direction}"`;
+    return note ? `${lead} With it, from the set: "${note}"` : lead;
+  },
+  /** A question whose set says Later: the press saves it, nothing goes to Claude. */
+  toldLater: (direction, note = '') => `Goes on your Later list: "${direction}". Claude hears nothing until you send it.${note ? ` With it, from the set: "${note}"` : ''}`,
+  savedLater: 'Saved for later',
   /** The steps still to come, as one line. */
   nextSteps: (names) => `Next: ${names.join(' \u00b7 ')}`,
   pickRoomChoice: "Pick the room's choice?",
