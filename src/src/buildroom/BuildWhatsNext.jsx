@@ -121,7 +121,7 @@ export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, end
       {!ended && live.length > 0 && (
         <div className="brm-qbulk" role="group" aria-label="Ticked answers">
           <b>{live.length} ticked</b>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" onClick={onCombine}>Add to the prompt</button>
+          <button type="button" className="brm-btn brm-btn--sm" onClick={onCombine}>Add to the prompt</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked(new Set())}>Clear</button>
         </div>
       )}

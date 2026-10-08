@@ -106,8 +106,8 @@ describe('R3: the Stage at results', () => {
     });
     // The same ask decided from the Host screen's panel sends the very same body.
     fireEvent.keyDown(window, { key: '1' });
-    fireEvent.click(within(screen.getByRole('list', { name: 'This ask' })).getByRole('button', { name: 'Go with B' }));
-    fireEvent.click(within(screen.getByRole('region', { name: 'Direction for Claude' })).getByRole('button', { name: /Send to Claude/ }));
+    // One press at Settle sends the same body (B1b).
+    fireEvent.click(within(screen.getByRole('list', { name: 'This ask' })).getByRole('button', { name: 'Send B to Claude' }));
     await waitFor(() => expect(posts()).toHaveLength(2));
     expect(posts()[1].body).toEqual(posts()[0].body);
   });

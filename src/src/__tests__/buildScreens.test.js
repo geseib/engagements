@@ -100,7 +100,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
       context: { category: 'Choose', round: 3, noun: 'Ask' },
       meter: { heading: 'Answered', count: 5, of: 18 },
       status: '5 of 18 have answered',
-      primary: { action: 'close', label: 'Close and show results' },
+      primary: { action: 'close', label: 'Show results' },
       secondary: { action: 'wheel', label: 'Spin the wheel' },
     });
   });

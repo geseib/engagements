@@ -4,9 +4,9 @@
  * they likely should be going next"; docs/design/build-room-host-flow H2-H4).
  *
  *   1 Ask        done once it is live; opens to Edit wording and Discard
- *   2 Collect    the room answers; Close and show results (or Open voting)
- *   3 Settle     go with the room's choice, spin, vote again, or pick
- *   4 Send       the direction for Claude, the cursor already in it
+ *   2 Collect    the room answers; Show results (or Open voting)
+ *   3 Settle     Send B to Claude in one press, or spin, vote again, or pick
+ *   4 Change before sending   the direction and the kind, the cursor in it
  *
  * A done step folds to one line (askPathSummaries), the open step has one
  * primary move marked `data-next-primary`, and the steps still to come are
@@ -14,10 +14,13 @@
  * Focus follows the step (useNextFocus); Space on the Host screen presses the
  * primary (BuildRoom's key handler).
  */
-import React, { useRef, useState } from 'react';
-import { askPathStep, askPathSummaries, winnerOf, decisionChoices } from './buildScreens';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  askPathStep, askPathSummaries, winnerOf, decisionChoices, settleSend, decideBody, claudeKindLabel,
+} from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 import { W } from './words';
+import ActionRow from './BuildActionRow';
 import { AskStage, WheelPanel, DecidePanel, KIND_LABEL } from './BuildRoomPage';
 
 const ORDER = ['ask', 'collect', 'settle', 'send'];
@@ -94,8 +97,6 @@ function Step({ n, state, title, summary, open, onToggle, children }) {
   );
 }
 
-const SpaceHint = () => <span className="brm-spacehint" aria-hidden="true"><kbd>Space</kbd></span>;
-
 /** The Ask step, opened: the wording, Edit wording and Discard. */
 function AskWording({ ask, busy, run, api }) {
   const [editing, setEditing] = useState(false);
@@ -112,7 +113,7 @@ function AskWording({ ask, busy, run, api }) {
         <label className="brm-field"><span className="brm-lbl">Context</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} /></label>
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { setEditing(false); setPrompt(ask.prompt); setDetail(ask.detail || ''); }}>Cancel</button>
-          <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim()} onClick={save}>Save wording</button>
+          <button type="button" className="brm-btn brm-push" disabled={busy || !prompt.trim()} onClick={save}>Save wording</button>
         </div>
       </div>
     );
@@ -128,14 +129,26 @@ function AskWording({ ask, busy, run, api }) {
   );
 }
 
+
+/** A Later kind is a list; a question set that says `later` sends as Do now from the buttons. */
+const sendKind = (ask) => (!ask.claudeGets || ask.claudeGets === 'later' ? 'do-now' : ask.claudeGets);
+
 /**
  * `draft` / `onDraft` (Review Focus 2): BuildRoom keeps what the host typed in
- * Send for each ask, so another ask opening does not lose it. A draft is used
- * only for the same pick (or the same spoken answer) it was written for.
+ * Change before sending for each ask, so another ask opening does not lose it.
+ * A draft is used only for the same pick (or the same spoken answer) it was
+ * written for.
  */
 export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPick, answering = false, setAnswering, onSent, draft = null, onDraft }) {
   const ref = useRef(null);
   const [opened, setOpened] = useState(null); // a done step opened by a click
+  const [said, setSaid] = useState(''); // a confirmation, in the row's hint slot
+  useEffect(() => {
+    if (!said) return undefined;
+    const t = setTimeout(() => setSaid(''), 4000);
+    return () => clearTimeout(t);
+  }, [said]);
+  const sending = useRef(false); // one send at a time, however fast the presses
   const step = askPathStep(ask, { pickId, answering });
   const sums = askPathSummaries(ask, { pickId, playerCount: room.playerCount });
   const at = ORDER.indexOf(step);
@@ -143,7 +156,11 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     const i = ORDER.indexOf(name);
     return i < at ? 'done' : i === at ? 'now' : 'next';
   };
-  const act = (action) => run(() => api.askAction(ask.askId, { action }));
+  const act = (action, confirmation = '') => async () => {
+    const out = await run(() => api.askAction(ask.askId, { action }));
+    if (out !== undefined && confirmation) setSaid(confirmation);
+    return out;
+  };
   const tied = (ask.results && ask.results.tied) || [];
   const wheel = ask.wheel && !ask.revotedAs ? ask.wheel : null;
   // WHERE IT LANDED IS HELD BACK until the wheel stops: the move is not offered
@@ -162,6 +179,9 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   const toggle = (name) => () => setOpened((o) => (o === name ? null : name));
   const host = !ended;
   const board = <AskStage ask={ask} host busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={host ? onPick : null} pathMode />;
+  const then = (names) => <p className="brm-then">{W.nextSteps(names)}</p>;
+  const kind = sendKind(ask);
+  const kindName = claudeKindLabel(kind);
 
   // ── 2 Collect ──
   let collectBody = null;
@@ -170,79 +190,105 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     collectBody = (
       <>
         {board}
+        {then(['3 Settle', '4 Send to Claude'])}
         {host && (
-          <div className="brm-path-row">
-            {ideasOpen
-              ? <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => act('vote')}>Open voting</button>
-              : <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => act('close')}>Close and show results</button>}
+          <ActionRow hint={said || W.spaceTo(ideasOpen ? 'open voting' : 'show results')}>
+            {ideasOpen && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={act('close', W.resultsUp)}>Close without a vote</button>}
             <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
             {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
             {canSpinInstead(ask) && (
-              <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title="Close it and let the wheel pick from every option" onClick={() => act('wheel')}>{W.spin}</button>
+              <button type="button" className="brm-btn" disabled={busy} title="Close it and let the wheel pick from every option" onClick={act('wheel')}>{W.spin}</button>
             )}
-            {ideasOpen && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => act('close')}>Close without a vote</button>}
-            <SpaceHint />
-          </div>
+            {ideasOpen
+              ? <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('vote', W.votingOpen)}>{W.openVoting}</button>
+              : <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('close', W.resultsUp)}>{W.showResults}</button>}
+          </ActionRow>
         )}
       </>
     );
   } else if (host && ask.status === 'results') {
     collectBody = (
       <div className="brm-path-row">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => act('reopen')}>Reopen</button>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={act('reopen')}>Reopen</button>
         <span className="brm-hint">Opens it to the room again.</span>
       </div>
     );
   }
 
   // ── 3 Settle ──
+  // ONE PRESS SENDS (owner, 2026-10-08, F3): the room's pick, its sentence, the
+  // question's own kind. The line under the board says what goes first.
+  const move = !wheel || wheel.landed ? settleSend(ask) : null;
+  const sendWinner = async () => {
+    if (!move || sending.current) return undefined;
+    sending.current = true;
+    try {
+      const out = await run(() => api.askAction(ask.askId, decideBody(ask, { direction: move.direction, chosen: move.chosen, as: kind })));
+      if (out !== undefined && onSent) onSent({ as: kind, send: true, direction: move.direction });
+      return out;
+    } finally { sending.current = false; }
+  };
   let settleBody = null;
   if (stateOf('settle') === 'now') {
-    let moves = null;
+    let row = null;
+    const change = (id) => <button type="button" className="brm-btn" disabled={busy || turning} onClick={() => onPick(id, { confirmed: true })}>{W.change}</button>;
     if (host && wheel && wheel.landed) {
-      // Where it landed is the room's way on (H3); Spin again stays on the wheel.
-      const landed = decisionChoices(ask).find((c) => c.id === wheel.landed);
-      moves = (
-        <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || turning} onClick={() => onPick(wheel.landed, { confirmed: true })}>
-          {turning ? 'The wheel is turning…' : (landed && landed.label ? `Go with ${landed.label}` : "Go with the wheel's pick")}
-        </button>
+      // Where it landed is the room's way on (H3); Spin again is the row's.
+      row = (
+        <ActionRow hint={turning ? '' : said || W.spaceTo(`send, as ${kindName}`)}>
+          <button type="button" className="brm-btn" disabled={busy || turning} onClick={act('spin')}>{W.spinAgain}</button>
+          {change(wheel.landed)}
+          <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || turning || !move || !move.direction} onClick={sendWinner}>
+            {turning ? 'The wheel is turning…' : (move ? move.button : W.sendPlain)}
+          </button>
+        </ActionRow>
       );
     } else if (host && !wheel && !ask.revotedAs) {
       if (ask.kind === 'rating') {
-        moves = avg !== null
-          ? <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => onPick(String(avg), { confirmed: true })}>Go with the average</button>
-          : <><span className="brm-hint">Nobody has rated it yet.</span><button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => act('reopen')}>Reopen</button></>;
+        row = avg !== null
+          ? (
+            <ActionRow hint={said || W.spaceTo(`send, as ${kindName}`)}>
+              {change(String(avg))}
+              <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || !move} onClick={sendWinner}>{move ? move.button : W.sendPlain}</button>
+            </ActionRow>
+          )
+          : (
+            <ActionRow hint="Nobody has rated it yet.">
+              <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('reopen')}>Reopen</button>
+            </ActionRow>
+          );
       } else if (win) {
-        const pick = decisionChoices(ask).find((c) => c.id === win);
-        moves = (
-          <>
-            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => onPick(win, { confirmed: true })}>
-              {pick && pick.label ? `Go with ${pick.label}` : 'Go with the top idea'}
-            </button>
-            <button type="button" className="brm-btn" disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
-          </>
+        row = (
+          <ActionRow hint={said || W.spaceTo(`send, as ${kindName}`)}>
+            <button type="button" className="brm-btn" disabled={busy} onClick={act('wheel')}>{W.spin}</button>
+            {change(win)}
+            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || !move || !move.direction} onClick={sendWinner}>{move ? move.button : W.sendPlain}</button>
+          </ActionRow>
         );
       } else {
-        moves = (
-          <>
-            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
-            {tied.length >= 2 && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => act('revote')}>{W.voteAgain}</button>}
-          </>
+        row = (
+          <ActionRow hint={said || W.spaceTo('spin the wheel')}>
+            {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={act('revote', W.votingAgain)}>{W.voteAgain}</button>}
+            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('wheel')}>{W.spin}</button>
+          </ActionRow>
         );
       }
     }
+    const told = host && move && move.direction && !turning ? <p className="brm-hint brm-told">{W.told(kindName, move.direction)}</p> : null;
     settleBody = (
       <>
         {board}
-        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary={!(wheel && wheel.landed)} onSettled={setSettledSpin} />}
-        {moves && <div className="brm-path-row">{moves}<SpaceHint /></div>}
+        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary={!(wheel && wheel.landed)} spinInRow={Boolean(wheel && wheel.landed)} onSettled={setSettledSpin} />}
+        {told}
         {host && !wheel && ask.kind !== 'rating' && (
           <p className="brm-hint">
-            {win ? 'Or click another option to pick it instead; you will be asked first.'
+            {win ? 'Click another option to pick it instead; you will be asked first.'
               : tied.length >= 2 ? 'Spin the wheel, ask the room to vote again, or click an option to pick it.'
                 : 'Let chance pick, or click an option to pick it yourself.'}
           </p>
         )}
+        {then(['4 Change before sending'])}
+        {row}
       </>
     );
   } else if (stateOf('settle') === 'done' && host && !answering) {
@@ -257,7 +303,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     );
   }
 
-  // ── 4 Send ──
+  // ── 4 Change before sending ──
   let sendBody = null;
   if (stateOf('send') === 'now' && host) {
     const sent = (out) => onSent && onSent(out);
@@ -268,13 +314,13 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
       : <DecidePanel key={`wheel:${wheel ? wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} pickId={ask.kind === 'rating' ? null : pickId} next onSent={sent} draft={forThis} onDraft={keep} />;
   }
 
-  let settleTitle = 'Settle: go with the room, spin or pick';
-  if (stateOf('settle') === 'now') settleTitle = 'Settle';
-  else if (stateOf('settle') === 'done') {
+  let settleTitle = 'Settle';
+  if (stateOf('settle') === 'done') {
     if (answering) settleTitle = 'You answer for the room';
     else if (ask.kind === 'rating') settleTitle = `Going with the average, ${avg !== null ? avg : pickId} out of 5`;
     else settleTitle = settleSummary(ask, pickId, sums) || 'Settled';
   }
+  const shown = (name) => stateOf(name) !== 'next';
 
   return (
     <ol className="brm-path" aria-label="This ask" ref={ref}>
@@ -282,17 +328,23 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
         open={opened === 'ask'} onToggle={host ? toggle('ask') : null}>
         {host && <AskWording key={ask.prompt} ask={ask} busy={busy} run={run} api={api} />}
       </Step>
-      <Step n={2} state={stateOf('collect')} title={collectTitle(ask, stateOf('collect') === 'done' && !answering)} summary={sums.collect}
-        open={opened === 'collect'} onToggle={collectBody ? toggle('collect') : null}>
-        {collectBody}
-      </Step>
-      <Step n={3} state={stateOf('settle')} title={settleTitle} summary={stateOf('settle') === 'now' ? settleLine(ask) : ''}
-        open={opened === 'settle'} onToggle={settleBody ? toggle('settle') : null}>
-        {settleBody}
-      </Step>
-      <Step n={4} state={stateOf('send')} title="Send to Claude">
-        {sendBody}
-      </Step>
+      {shown('collect') && (
+        <Step n={2} state={stateOf('collect')} title={collectTitle(ask, stateOf('collect') === 'done' && !answering)} summary={sums.collect}
+          open={opened === 'collect'} onToggle={collectBody ? toggle('collect') : null}>
+          {collectBody}
+        </Step>
+      )}
+      {shown('settle') && (
+        <Step n={3} state={stateOf('settle')} title={settleTitle} summary={stateOf('settle') === 'now' ? settleLine(ask) : ''}
+          open={opened === 'settle'} onToggle={settleBody ? toggle('settle') : null}>
+          {settleBody}
+        </Step>
+      )}
+      {shown('send') && (
+        <Step n={4} state={stateOf('send')} title={answering ? W.sendPlain : W.change}>
+          {sendBody}
+        </Step>
+      )}
     </ol>
   );
 }

@@ -65,8 +65,9 @@ function prefersStill() {
  * `onSpin`, when given, draws the Spin button (the host, or the phone whose
  * turn it is); `spinLabel` names it. `spinPrimary` marks it as the Host
  * screen's next move (useNextFocus: focus lands on it, Space presses it).
+ * `spinSecondary` draws it as an outline: another button on that screen is the main one.
  */
-export default function BuildWheel({ wheel, onSpin = null, spinLabel = W.spin, busy = false, size = 'md', spinPrimary = false, onSettled = null }) {
+export default function BuildWheel({ wheel, onSpin = null, spinLabel = W.spin, busy = false, size = 'md', spinPrimary = false, spinSecondary = false, onSettled = null }) {
   const slices = (wheel && wheel.slices) || [];
   const n = slices.length;
   const spins = (wheel && wheel.spins) || [];
@@ -162,7 +163,7 @@ export default function BuildWheel({ wheel, onSpin = null, spinLabel = W.spin, b
       </svg>
       <p className="bwh-caption" role="status" aria-live="polite">{caption}</p>
       {onSpin && (
-        <button type="button" className="bwh-spin" data-next-primary={spinPrimary || undefined} disabled={busy || moving} onClick={onSpin}>{spinLabel}</button>
+        <button type="button" className={`bwh-spin${spinSecondary ? ' bwh-spin--sec' : ''}`} data-next-primary={spinPrimary || undefined} disabled={busy || moving} onClick={onSpin}>{spinLabel}</button>
       )}
     </div>
   );

@@ -257,7 +257,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
   const instead = { action: 'wheel', label: W.spin };
   if (current.status === 'voting') {
     const voted = current.voteCount || 0;
-    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} have voted`, primary: { action: 'close', label: 'Close and show results' }, secondary: instead };
+    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} have voted`, primary: { action: 'close', label: W.showResults }, secondary: instead };
   }
   const answered = current.answerCount || 0;
   if (current.kind === 'suggest') {
@@ -268,7 +268,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
   }
   return {
     phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: here }, status: `${answered} of ${here} have answered`,
-    primary: { action: 'close', label: 'Close and show results' }, ...(current.kind === 'choice' ? { secondary: instead } : {}),
+    primary: { action: 'close', label: W.showResults }, ...(current.kind === 'choice' ? { secondary: instead } : {}),
   };
 }
 
@@ -411,6 +411,27 @@ export function decideBody(ask, { direction, chosen, note = '', send = true, as,
   };
 }
 
+/**
+ * WHAT ONE PRESS AT SETTLE SENDS (B1b): the room's pick (or where the wheel
+ * landed), its sentence, and the button that says so. Null when there is no
+ * pick yet (a tie, no votes, a rating nobody gave).
+ */
+export function settleSend(ask) {
+  if (!ask) return null;
+  if (ask.kind === 'rating') {
+    const r = ask.results && ask.results.rating;
+    if (!r || r.avg === null || r.avg === undefined) return null;
+    return { id: String(r.avg), chosen: [], direction: defaultDirection(ask), button: W.send(r.avg) };
+  }
+  const id = winnerOf(ask);
+  if (!id) return null;
+  const direction = directionFor(ask, id);
+  const pick = decisionChoices(ask).find((c) => c.id === id);
+  const spun = Boolean(ask.wheel && ask.wheel.landed);
+  const button = pick && pick.label ? W.send(pick.label) : spun ? W.sendPlain : W.sendTopIdea;
+  return { id, chosen: [id], direction, button };
+}
+
 export const METHOD_WORDS = Object.freeze({ vote: 'by vote', wheel: 'by the wheel', host: "the host's pick", spoken: 'said out loud' });
 
 /**
@@ -439,6 +460,8 @@ export const CLAUDE_KINDS = Object.freeze([
   { key: 'later', label: 'For Claude, later', hint: 'Waits in your For Claude, later list. Claude hears nothing until you send it.' },
   { key: 'ask', label: 'Ask Claude', hint: 'A question. Claude answers on the screen and keeps building.' },
 ]);
+/** The kinds the host may choose: Later is a list, never a way Claude takes a direction. */
+export const HOST_KINDS = Object.freeze(CLAUDE_KINDS.filter((k) => k.key !== 'later'));
 export const claudeKindLabel = (key) => (CLAUDE_KINDS.find((k) => k.key === key) || CLAUDE_KINDS[0]).label;
 /** The body field for a kind: Do now is the default, so it sends nothing. */
 export const asField = (key) => (key && key !== 'do-now' ? { as: key } : {});

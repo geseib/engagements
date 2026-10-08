@@ -48,6 +48,18 @@ export const W = Object.freeze({
   openBuildTab: 'Open the build in a new tab',
   /** "Press Space to show results" — muted words at the left of an action row. */
   spaceTo: (what) => `Press Space to ${what}`,
+  ctrlEnterSends: 'Ctrl Enter sends',
+  ctrlEnterTitle: 'Ctrl Enter, or Cmd Enter on a Mac, sends it',
+  /** The confirmations that replace the hint after a press. */
+  resultsUp: 'Results are up',
+  votingOpen: 'Voting is open',
+  votingAgain: 'The room is voting again',
+  /** The line under the Settle board: exactly what Claude will be told. */
+  told: (kind, direction) => `Claude will be told, as ${kind}: \u201c${direction}\u201d`,
+  /** The steps still to come, as one line. */
+  nextSteps: (names) => `Next: ${names.join(' \u00b7 ')}`,
+  pickRoomChoice: "Pick the room's choice?",
+  pick: (label) => `Pick ${label}`,
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */
@@ -68,10 +80,10 @@ export const RETIRED = Object.freeze([
   { word: 'Spin the wheel instead', enforced: true },
   { word: 'Back to the main menu', enforced: true },
   // Task 2: the Host ask path and the Composer
-  { word: 'Close and show results', enforced: false, task: 2 },
-  { word: 'Show Results', enforced: false, task: 2 },
-  { word: 'Go with', prefix: true, enforced: false, task: 2 },
-  { word: 'Queue it', enforced: false, task: 2 },
+  { word: 'Close and show results', enforced: true, task: 2 },
+  { word: 'Show Results', enforced: true, task: 2 },
+  { word: 'Go with', prefix: true, enforced: true, task: 2 },
+  { word: 'Queue it', enforced: true, task: 2 },
   // Task 3: the Stage
   { word: 'Open the vote', enforced: false, task: 3 },
   { word: 'To Claude:', prefix: true, enforced: false, task: 3 },

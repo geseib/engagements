@@ -129,7 +129,7 @@ export function WifiOffer({ busy, run, api }) {
       <p className="brm-wifioffer-t">Let the room open it themselves?</p>
       <p className="brm-wifioffer-s">Anyone in the room on this laptop&apos;s Wi-Fi can open the app Claude is running, on a phone, laptop or tablet. You can turn it off at any time.</p>
       <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>Share on this Wi-Fi</button>
+        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>Share on this Wi-Fi</button>
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.share({ dismissOffer: true }))}>Not now</button>
       </div>
     </section>

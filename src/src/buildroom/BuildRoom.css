@@ -1048,6 +1048,19 @@
   border: 1px solid var(--brm-rule); border-radius: 4px; padding: 3px 6px; color: var(--text);
 }
 .brm .brm-path-keys { margin: 0; }
+/* THE ACTION ROW (batch 2-3, B1): the hint at the left, ghosts, secondaries,
+   then the one primary, right-most. Pinned to the bottom of the open step. */
+.brm .brm-path-step.is-now .brm-path-body { display: flex; flex-direction: column; }
+.brm .brm-path-step.is-now .brm-path-body > * + * { margin-top: 12px; }
+.brm .brm-then { margin: 0; font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-told { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.brm .brm-arow {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
+  padding-top: 10px; border-top: 1px solid var(--brm-rule); background: var(--surface); min-width: 0;
+}
+.brm .brm-arow.is-pinned { position: sticky; bottom: 0; margin-top: auto; z-index: 1; }
+.brm .brm-say { flex: 1 1 auto; min-width: 0; margin-right: auto; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-arow > .brm-btn { flex: none; }
 /* "Sent to Claude as Do now: ..." for six seconds after a decision goes. */
 .brm .brm-sentline {
   margin: 0; padding: 10px 14px; border-radius: 10px; font-size: var(--brm-t-body); color: var(--text);

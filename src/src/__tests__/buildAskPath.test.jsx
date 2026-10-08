@@ -24,14 +24,13 @@ const won = { total: 11, options: [{ label: 'A', count: 4 }, { label: 'B', count
 
 afterEach(() => { document.body.innerHTML = ''; });
 
-test('Collect: four steps, Ask folded, Close and show results focused', () => {
+test('Collect: Ask folded, Show results focused, the steps to come one line', () => {
   mount({ ...base, status: 'live', results: { total: 7, options: [{ label: 'A', count: 3 }, { label: 'B', count: 4 }] } });
   const steps = screen.getAllByRole('listitem');
-  expect(steps).toHaveLength(4);
+  expect(steps).toHaveLength(2);
   expect(steps[0].className).toContain('is-done');
   expect(steps[1].className).toContain('is-now');
-  expect(steps[2].className).toContain('is-next');
-  const primary = screen.getByRole('button', { name: 'Close and show results' });
+  const primary = screen.getByRole('button', { name: 'Show results' });
   expect(primary).toHaveAttribute('data-next-primary');
   expect(document.activeElement).toBe(primary);
 });
@@ -39,7 +38,7 @@ test('Collect: four steps, Ask folded, Close and show results focused', () => {
 test('Collect: Answer for the room and Spin the wheel sit beside the primary; each does its thing', () => {
   const a = api();
   mount({ ...base, status: 'live', results: { total: 7, options: [] } }, { api: a });
-  fireEvent.click(screen.getByRole('button', { name: 'Close and show results' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
   expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'close' });
   fireEvent.click(screen.getByRole('button', { name: 'Spin the wheel' }));
   expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'wheel' });
@@ -52,12 +51,11 @@ test('Collect on an Ideas ask still taking ideas: Open voting is the primary', (
   expect(document.activeElement).toBe(primary);
 });
 
-test('Settle with a winner: Go with B is focused; pressing it picks B', () => {
+test('Settle with a winner: Send B to Claude is focused; Change before sending picks B', () => {
   const onPick = jest.fn();
   mount({ ...base, status: 'results', results: won }, { onPick });
-  const go = screen.getByRole('button', { name: 'Go with B' });
-  expect(document.activeElement).toBe(go);
-  fireEvent.click(go);
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send B to Claude' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Change before sending' }));
   expect(onPick).toHaveBeenCalledWith('B', { confirmed: true });
 });
 
@@ -74,33 +72,32 @@ test('Settle with a tie: Spin the wheel is the focused move, Vote again beside i
   expect(screen.getByRole('button', { name: 'Vote again' })).toBeInTheDocument();
 });
 
-test('Settle on a rating: Go with the average', () => {
+test('Settle on a rating: Send 3.5 to Claude; Change before sending carries the average', () => {
   const onPick = jest.fn();
   mount({ ...base, kind: 'rating', options: [], status: 'results', results: { total: 2, rating: { avg: 3.5, count: 2, dist: [0, 0, 1, 1, 0] } } }, { onPick });
-  const go = screen.getByRole('button', { name: 'Go with the average' });
-  expect(document.activeElement).toBe(go);
-  fireEvent.click(go);
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send 3.5 to Claude' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Change before sending' }));
   expect(onPick).toHaveBeenCalledWith('3.5', { confirmed: true });
 });
 
-test('Send: Settle folds to what was chosen; the cursor is in the direction; Send is the primary', () => {
+test('Change before sending: Settle folds to what was chosen; the cursor is in the direction; Send is the primary', () => {
   mount({ ...base, status: 'results', results: won }, { pickId: 'B' });
   expect(screen.getByText("Going with B, the room's choice, 7 to 4")).toBeInTheDocument();
   expect(document.activeElement.tagName).toBe('TEXTAREA');
-  expect(screen.getByRole('button', { name: /Send to Claude/ })).toHaveAttribute('data-next-primary');
+  expect(screen.getByRole('button', { name: 'Send B to Claude' })).toHaveAttribute('data-next-primary');
 });
 
 const landedA = { landed: 'A', spins: [{ landed: 'A' }], slices: [{ id: 'A', text: 'Calm' }, { id: 'B', text: 'Playful' }] };
 
-test('the wheel landed: Settle stays open with the wheel, and Go with A is the move', () => {
+test('the wheel landed: Settle stays open with the wheel, and Send A to Claude is the move', () => {
   const onPick = jest.fn();
   mount({ ...base, status: 'results', results: won, wheel: landedA }, { onPick });
   expect(screen.getAllByRole('listitem')[2].className).toContain('is-now');
   expect(screen.getByRole('region', { name: 'The wheel' })).toBeInTheDocument();
-  const go = screen.getByRole('button', { name: 'Go with A' });
+  const go = screen.getByRole('button', { name: 'Send A to Claude' });
   expect(go).toHaveAttribute('data-next-primary');
   expect(document.activeElement).toBe(go);
-  fireEvent.click(go);
+  fireEvent.click(screen.getByRole('button', { name: 'Change before sending' }));
   expect(onPick).toHaveBeenCalledWith('A', { confirmed: true });
 });
 
@@ -110,13 +107,12 @@ test('going with where the wheel landed: Settle says so and Send opens with its 
   expect(document.activeElement.value).toBe('How should it look and feel: Calm');
 });
 
-test('Send: Space is never bound to Send; only Ctrl or Cmd Enter sends', () => {
+test('Change before sending: Space is never bound to Send; only Ctrl or Cmd Enter sends', () => {
   mount({ ...base, status: 'results', results: won }, { pickId: 'B' });
-  const send = screen.getByRole('button', { name: /Send to Claude/ });
+  const send = screen.getByRole('button', { name: 'Send B to Claude' });
   expect(send).toHaveAttribute('data-no-space');
-  expect(screen.getByText('Ctrl Enter, or Cmd Enter on a Mac, sends it.')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('switch', { name: 'Send to Claude' }));
-  expect(screen.getByText('Ctrl Enter, or Cmd Enter on a Mac, records it.')).toBeInTheDocument();
+  expect(screen.getByText('Ctrl Enter sends')).toBeInTheDocument();
+  expect(screen.queryByRole('switch')).toBeNull();
 });
 
 test('a pick on a tie: the folded Settle still offers Spin the wheel and Vote again', () => {
@@ -209,7 +205,7 @@ test('a step whose move is disabled while busy is focused once it is ready', () 
   const { rerender } = render(<AskPath ask={ask} busy {...props} />);
   rerender(<AskPath ask={{ ...ask, status: 'results', results: won }} busy {...props} />);
   rerender(<AskPath ask={{ ...ask, status: 'results', results: won }} busy={false} {...props} />);
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go with B' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send B to Claude' }));
 });
 
 test('Answer for the room jumps to Send; Cancel returns to Collect', () => {
@@ -223,7 +219,7 @@ test('answering: Send holds the spoken panel, and its Cancel goes back', () => {
   const setAnswering = jest.fn();
   mount({ ...base, status: 'live', results: { total: 2, options: [] } }, { setAnswering, answering: true });
   const steps = screen.getAllByRole('listitem');
-  expect(steps[3].className).toContain('is-now');
+  expect(steps[steps.length - 1].className).toContain('is-now');
   expect(screen.getByRole('region', { name: 'Answer for the room' })).toBeInTheDocument();
   expect(document.activeElement.tagName).toBe('TEXTAREA');
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -248,7 +244,7 @@ test('the folded Ask opens to Edit wording and Discard; the folded Collect to Re
 
 test('an ended session shows the path with no moves', () => {
   render(<AskPath ask={{ ...base, status: 'results', results: won }} room={room} busy={false} ended run={(fn) => fn()} api={api()} pickId={null} onPick={jest.fn()} answering={false} setAnswering={jest.fn()} />);
-  expect(screen.getAllByRole('listitem')).toHaveLength(4);
+  expect(screen.getAllByRole('listitem')).toHaveLength(3);
   expect(document.querySelector('[data-next-primary]')).toBeNull();
 });
 
