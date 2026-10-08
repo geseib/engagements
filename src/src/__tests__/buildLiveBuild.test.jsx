@@ -90,7 +90,7 @@ describe('the live build', () => {
     await open([base, SHOWING]);
     for (const key of ['1', '3', '4']) {
       fireEvent.keyDown(window, { key });
-      const link = screen.getAllByRole('link', { name: 'Open the live build ↗' })[0];
+      const link = screen.getAllByRole('link', { name: 'Open the build' })[0];
       expect(link).toHaveAttribute('href', 'http://localhost:5173/');
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('title', 'Opens in a new tab');
@@ -100,13 +100,13 @@ describe('the live build', () => {
 
   test('with no link yet it is there, disabled, and says why', async () => {
     await open([base]);
-    const b = screen.getByRole('button', { name: 'Open the live build ↗' });
+    const b = screen.getByRole('button', { name: 'Open the build' });
     expect(b).toBeDisabled();
     expect(b).toHaveAttribute('title', "Claude hasn't started the app yet");
   });
 
-  test('the Stage dock carries it too, once there is a link', async () => {
+  test('the Stage dock carries it too, as a small link under the status, once there is a link', async () => {
     await open([base, SHOWING], '2');
-    expect(within(document.querySelector('footer.dock')).getByRole('link', { name: 'Open the live build ↗' })).toHaveAttribute('href', 'http://localhost:5173/');
+    expect(within(document.querySelector('footer.dock')).getByRole('link', { name: 'Open the build in a new tab' })).toHaveAttribute('href', 'http://localhost:5173/');
   });
 });

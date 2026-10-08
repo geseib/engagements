@@ -192,6 +192,18 @@ export function latestDecisionLine(room) {
  * place as Start Voting on the regular stage. At results the host decides on
  * the Stage: `to-claude` sends the room's choice, `edit` opens the send window.
  */
+/**
+ * THE STAGE'S SEND, the Host's Settle button as a dock move: the same words and
+ * the same rule (settleSend, defaultKind). A set that says Later saves instead
+ * of sending, on both screens. Null when there is no pick to send.
+ */
+function stageSend(ask) {
+  const move = settleSend(ask);
+  if (!move) return null;
+  const { label, verb } = settleWords(ask, defaultKind(ask));
+  return { action: 'to-claude', label, verb };
+}
+
 export function stageModel(room, current, now = Date.now(), { crewOn = false } = {}) {
   const here = (room && room.playerCount) || 0;
   const ended = Boolean(room && room.state === 'ENDED');
@@ -213,7 +225,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
       return {
         phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null },
         status: 'Mockups ready \u00b7 the host opens the vote',
-        primary: { action: 'open', label: 'Open the vote', askId: looks.ask.askId },
+        primary: { action: 'open', label: W.openVoting, askId: looks.ask.askId },
       };
     }
     return { phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null }, status, primary: null };
@@ -224,33 +236,42 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
     const total = (current.results && current.results.total) || current.answerCount || 0;
     const meter = { heading: 'Answered', count: total, of: here };
     const w = current.wheel;
+    const change = { action: 'edit', label: W.change };
     if (w && !current.revotedAs) {
       // THE WHEEL (owner, 2026-10-05): the host can always spin; a person in
-      // the room may have the turn. Edit opens the send window over the Stage.
+      // the room may have the turn. Landed, the pick goes in one press, as on
+      // the Host (B3b); until then Change before sending opens the window.
       const status = w.landed ? 'The wheel has picked'
         : w.spinner && w.armed ? `${w.spinner} spins the wheel` : W.spin;
+      const landedSend = w.landed ? stageSend(current) : null;
+      if (landedSend) {
+        return {
+          phase: 'RESULTS', context, meter, status, wheel: true,
+          primary: landedSend, secondary: { action: 'spin', label: W.spinAgain },
+        };
+      }
       return {
         phase: 'RESULTS', context, meter, status, wheel: true,
         primary: { action: 'spin', label: w.landed ? W.spinAgain : W.spin },
-        secondary: { action: 'edit', label: 'Edit' },
+        secondary: change,
       };
     }
-    // DECIDING ON THE STAGE (owner, 2026-10-08): the room's choice goes to
-    // Claude from here, and Edit opens the send window over the Stage. A tie,
-    // or no votes, has no choice to send: Edit leads.
-    const edit = { action: 'edit', label: 'Edit' };
+    // DECIDING ON THE STAGE (owner, 2026-10-08): the same words and the same
+    // press as the Host's Settle row (B3). A tie, or no votes, has nothing to
+    // send: Spin the wheel leads, as on the Host, with Change before sending
+    // beside it. A rating nobody gave has only the change.
     if (current.kind === 'rating') {
-      const avg = current.results && current.results.rating ? current.results.rating.avg : null;
-      if (avg === null || avg === undefined) return { phase: 'RESULTS', context, meter, status: 'Results', primary: edit };
-      return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'to-claude', label: `To Claude: ${avg}` }, secondary: edit };
+      const send = stageSend(current);
+      return send
+        ? { phase: 'RESULTS', context, meter, status: 'Results', primary: send, secondary: change }
+        : { phase: 'RESULTS', context, meter, status: 'Results', primary: change };
     }
-    const win = winnerOf(current);
-    const pick = win ? decisionChoices(current).find((c) => c.id === win) : null;
-    if (!pick) return { phase: 'RESULTS', context, meter, status: 'Results', primary: edit };
-    return {
-      phase: 'RESULTS', context, meter, status: 'Results',
-      primary: { action: 'to-claude', label: `To Claude: ${pick.label || 'the top idea'}` }, secondary: edit,
-    };
+    const send = stageSend(current);
+    if (send) return { phase: 'RESULTS', context, meter, status: 'Results', primary: send, secondary: change };
+    if (decisionChoices(current).length && !current.revotedAs) {
+      return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'wheel', label: W.spin }, secondary: change };
+    }
+    return { phase: 'RESULTS', context, meter, status: 'Results', primary: change };
   }
   // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06): wherever the room could
   // vote between options, the host may let the wheel pick instead.
@@ -263,7 +284,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
   if (current.kind === 'suggest') {
     return {
       phase: 'ASK', context, meter: { heading: 'Ideas', count: answered, of: null }, status: `${answered} ${answered === 1 ? 'idea' : 'ideas'} so far`,
-      primary: { action: 'vote', label: 'Open voting' }, ...(answered >= 2 ? { secondary: instead } : {}),
+      primary: { action: 'vote', label: W.openVoting }, ...(answered >= 2 ? { secondary: instead } : {}),
     };
   }
   return {
@@ -434,6 +455,17 @@ export function settleSend(ask) {
   const spun = Boolean(ask.wheel && ask.wheel.landed);
   const button = pick && pick.label ? W.send(pick.label) : spun ? W.sendPlain : W.sendTopIdea;
   return { id, chosen: [id], direction, button };
+}
+
+/**
+ * THE WORDS OF THE ONE SETTLE PRESS, shared by the Host's row and the Stage's
+ * dock: the button (Save for later when the kind is `later`, else the pick's
+ * own Send B to Claude) and the verb Space does.
+ */
+export function settleWords(ask, kind) {
+  const move = settleSend(ask);
+  const held = kind === 'later';
+  return { held, label: held ? W.saveLater : (move ? move.button : W.sendPlain), verb: held ? 'save for later' : 'send' };
 }
 
 export const METHOD_WORDS = Object.freeze({ vote: 'by vote', wheel: 'by the wheel', host: "the host's pick", spoken: 'said out loud' });
@@ -634,7 +666,7 @@ export function whatsNextMoves(room, { ticked = 0 } = {}) {
   if (looks) {
     moves.push({
       key: 'vote-mockups', askId: looks.ask.askId, title: "Open the vote on Claude's mockups",
-      hint: `${lettersLine(looks.images.map((i) => i.label))} ${looks.images.length === 1 ? 'is' : 'are'} ready to compare`, button: 'Open the vote',
+      hint: `${lettersLine(looks.images.map((i) => i.label))} ${looks.images.length === 1 ? 'is' : 'are'} ready to compare`, button: W.openVoting,
     });
   }
   // CLAUDE'S OWN QUESTION is waiting to be opened (not one still waiting on its mockups).

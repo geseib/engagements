@@ -27,7 +27,7 @@ export function backLabelFor(from, askId) {
   if (from === 'history') return askId ? `Back to Ask ${askNo(askId)}` : 'Back to History';
   if (from === 'build') return 'Back to the build';
   if (from === 'stage') return 'Back to the Stage';
-  if (from === 'stage-edit') return 'Back to Send to Claude';
+  if (from === 'stage-edit') return 'Back to Change before sending';
   return 'Back to the Host screen';
 }
 

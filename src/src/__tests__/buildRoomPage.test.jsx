@@ -1084,7 +1084,7 @@ describe('S4: the Stage says there are mockups to look at', () => {
     await openRoom(hostState({ asks: [READY] }));
     expect(screen.getByText("Open the vote on Claude's mockups")).toBeInTheDocument();
     expect(screen.getByText('A and B are ready to compare')).toBeInTheDocument();
-    const btn = screen.getByRole('button', { name: 'Open the vote' });
+    const btn = screen.getByRole('button', { name: 'Open voting' });
     expect(btn).toHaveAttribute('data-next-primary');
     fireEvent.click(btn);
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/005`));
@@ -1101,7 +1101,7 @@ describe('S4: the Stage says there are mockups to look at', () => {
     expect(stage.textContent).toMatch('Calm');
     expect(stage.textContent).toMatch('Playful');
     expect(document.querySelector('.dock .status').textContent).toBe('Mockups ready \u00b7 the host opens the vote');
-    expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Open the vote' })).toBeInTheDocument();
+    expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Open voting' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/005`));
     expect(lastPost().body).toEqual({ action: 'open' });
@@ -1147,7 +1147,7 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
   test('at results the winning vote goes to Claude from the Stage; HOST at the dock\'s edge goes back to the Host', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(screen.getByRole('button', { name: 'To Claude: B' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], direction: 'Which header should volunteers see first: Calm photo + calendar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Host screen' }));
     expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
@@ -1225,8 +1225,8 @@ describe('the ask as four steps, and Space on the Host screen (owner, 2026-10-07
     const WHEEL = { Slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }], Spinner: 'Dee', Armed: true, Spins: [] };
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL }], answers: TIE }));
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    const win = screen.getByRole('dialog', { name: 'Send to Claude' });
+    fireEvent.click(screen.getByRole('button', { name: 'Change before sending' }));
+    const win = screen.getByRole('dialog', { name: 'Change before sending' });
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('');
     expect(within(win).getByRole('button', { name: 'Send to Claude' })).toBeDisabled();
   });
@@ -1458,10 +1458,10 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
     expect(document.querySelector('.dock .status').textContent).toBe('Dee spins the wheel');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'spin' }));
-    const edit = screen.getByRole('button', { name: 'Edit' });
+    const edit = screen.getByRole('button', { name: 'Change before sending' });
     await waitFor(() => expect(edit).not.toBeDisabled());
     fireEvent.click(edit);
-    expect(screen.getByRole('dialog', { name: 'Send to Claude' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Change before sending' })).toBeInTheDocument();
   });
 });
 
@@ -1551,7 +1551,7 @@ describe('deciding: the winner by default, or choose another (owner, 2026-10-06)
     await openRoom(results());
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(screen.getByRole('button', { name: 'Choose this instead' }));
-    const win = screen.getByRole('dialog', { name: 'Send to Claude' });
+    const win = screen.getByRole('dialog', { name: 'Change before sending' });
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Bold banner');
   });
 
@@ -1638,7 +1638,7 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     fireEvent.click(within(bar).getByRole('button', { name: 'Put 3 to a vote' }));
     const dialog = screen.getByRole('dialog', { name: 'Put 3 ideas to a vote' });
     expect(within(dialog).getByRole('radio', { name: 'Pick one (A, B, C)' })).toHaveAttribute('aria-checked', 'true');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Open the vote' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open voting' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks-from-ideas`));
     expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1', '2-i2'], prompt: 'Which should Claude build next?', maxPicks: 1, open: true });
   });
@@ -1970,7 +1970,7 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     asNarrow(false);
     await openRoom(hostState());
     expect(within(header()).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
-    expect(within(header()).getByText(/Open the live build/)).toBeInTheDocument();
+    expect(within(header()).getByText(/Open the build/)).toBeInTheDocument();
   });
 
   test('375px: Main menu stays; the join code, live build, Wi-Fi and Claude status move into the more menu', async () => {
@@ -1979,11 +1979,11 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     const h = header();
     expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
     expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
-    expect(within(h).queryByText(/Open the live build/)).toBeNull();
+    expect(within(h).queryByText(/Open the build/)).toBeNull();
     openMore();
     const menu = screen.getByRole('group', { name: 'Session' });
     expect(within(menu).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
-    expect(within(menu).getByText(/Open the live build/)).toBeInTheDocument();
+    expect(within(menu).getByText(/Open the build/)).toBeInTheDocument();
     expect(menu.querySelector('.brm-wifi')).not.toBeNull();
     expect(menu.querySelector('.brm-agentchip')).not.toBeNull();
   });
@@ -2024,7 +2024,7 @@ describe('the host picks by clicking an option, and confirms (owner, 2026-10-06)
     fireEvent.keyDown(window, { key: '2' });
     const picks = screen.getByRole('group', { name: 'Pick' });
     fireEvent.click(within(picks).getByRole('button', { name: 'B · Calm photo + calendar' }));
-    const dialog = screen.getByRole('dialog', { name: 'Send to Claude' });
+    const dialog = screen.getByRole('dialog', { name: 'Change before sending' });
     expect(within(dialog).getByTestId('brm-alternate').textContent).toMatch('The room preferred A · Bold banner (where the wheel landed)');
   });
 });

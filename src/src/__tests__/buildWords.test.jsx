@@ -25,7 +25,6 @@ describe('words.js', () => {
     expect(W.undo).toBe('Undo');
     expect(W.askRoom).toBe('Ask the room');
     expect(W.mainMenu).toBe('Main menu');
-    expect(W.liveBuild).toBe('Open the live build ↗');
     expect(W.openBuild).toBe('Open the build');
     expect(W.openBuildTab).toBe('Open the build in a new tab');
     expect(W.spaceTo('show results')).toBe('Press Space to show results');

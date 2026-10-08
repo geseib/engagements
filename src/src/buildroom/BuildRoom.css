@@ -1211,6 +1211,10 @@
 
 /* The live build, always in the header (and the Stage dock); the viewer's full-size link. */
 .brm .brm-livebuild { white-space: nowrap; }
+/* The Stage's way to the running build (B3): a small link under the dock status, never a button. */
+.brm .dock .status .brm-dockbuild { display: block; margin-top: 2px; font-size: max(var(--floor, 12px), calc(var(--t-body, 16px) * .8)); font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; white-space: nowrap; }
+.brm .dock .status .brm-dockbuild:hover { color: var(--text); }
+.brm .dock .status .brm-dockbuild svg { vertical-align: -2px; }
 .brm .brm-livebuild[aria-disabled="true"], .brm .brm-livebuild:disabled { opacity: .55; cursor: not-allowed; }
 .brm .brm-viewer-full { color: var(--secondary); font-weight: 600; text-decoration: underline; }
 

@@ -81,15 +81,18 @@ async function openStage(r = baseRows()) {
 }
 const dock = () => within(document.querySelector('footer.dock'));
 const openEdit = async () => {
-  fireEvent.click(dock().getByRole('button', { name: 'Edit' }));
-  return screen.findByRole('dialog', { name: 'Send to Claude' });
+  fireEvent.click(dock().getByRole('button', { name: 'Change before sending' }));
+  return screen.findByRole('dialog', { name: 'Change before sending' });
 };
 
 describe('R3: the Stage at results', () => {
-  test('To Claude: B leads, Edit sits beside it, and the hint is words with no key cap', async () => {
+  test('Send B to Claude leads, Change before sending sits beside it, and the hint is words with no key cap', async () => {
     await openStage();
-    expect(dock().getByRole('button', { name: 'To Claude: B' })).toBeInTheDocument();
-    expect(dock().getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeInTheDocument();
+    expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
+    // Same order as the Host: the change is to the left of the main button.
+    const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.trim());
+    expect(names.indexOf('Change before sending')).toBeLessThan(names.indexOf('Send B to Claude'));
     const hint = document.querySelector('.dock .brm-dockhint');
     expect(hint.textContent).toBe('Press Space to send');
     expect(hint.querySelector('b').textContent).toBe('Space');
@@ -98,7 +101,7 @@ describe('R3: the Stage at results', () => {
 
   test('To Claude posts the body the Host panel posts: the room\'s choice, its sentence, as Do now', async () => {
     await openStage();
-    fireEvent.click(dock().getByRole('button', { name: 'To Claude: B' }));
+    fireEvent.click(dock().getByRole('button', { name: 'Send B to Claude' }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(lastPost().url).toBe(`${API}games/${GAME}/build/asks/004`);
     expect(lastPost().body).toEqual({
@@ -130,22 +133,68 @@ describe('R3: the Stage at results', () => {
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'] }));
   });
 
-  test('a tie has no To Claude: Edit leads, and its hint says edit', async () => {
+  test('a tie has nothing to send: Spin the wheel leads, Change before sending beside it, as on the Host', async () => {
     await openStage(baseRows(ASK, TIE));
-    expect(dock().queryByRole('button', { name: /^To Claude/ })).toBeNull();
-    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to edit');
+    expect(dock().queryByRole('button', { name: /to Claude$/ })).toBeNull();
+    expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
+    expect(dock().getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
+    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to spin');
+  });
+
+  test('a set that says Later: the same button as the Host, Save for later, and nothing goes to Claude', async () => {
+    await openStage(baseRows({ ...ASK, ClaudeGets: 'later' }));
+    expect(dock().queryByRole('button', { name: 'Send B to Claude' })).toBeNull();
+    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to save for later');
+    fireEvent.click(dock().getByRole('button', { name: 'Save for later' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], as: 'later' }));
+    // The Host's Settle button for the same ask says the same.
+    fireEvent.keyDown(window, { key: '1' });
+    expect(within(screen.getByRole('list', { name: 'This ask' })).getByRole('button', { name: 'Save for later' })).toBeInTheDocument();
+  });
+
+  test('the live build is a small link under the status, not a button in the row', async () => {
+    const post = { SK: 'BUILD#LOG#0000000000001#s1', LogId: '1-s1', Kind: 'showing', Text: 'Header is live', Link: 'http://localhost:5173/', By: 'agent', CreatedAt: ago(90) };
+    await openStage([...baseRows(), post]);
+    const footer = document.querySelector('footer.dock');
+    const link = within(footer).getByRole('link', { name: /Open the build in a new tab/ });
+    expect(link).toHaveAttribute('href', 'http://localhost:5173/');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.closest('.status')).not.toBeNull();
+    expect(link.className).not.toMatch(/\bbtn\b|brm-btn/);
+    expect(within(footer).queryByRole('button', { name: /live build/i })).toBeNull();
+  });
+
+  test.each([
+    ['a winner', () => baseRows()],
+    ['a tie', () => baseRows(ASK, TIE)],
+    ['the room choosing', () => baseRows({ ...ASK, Status: 'live' }, [])],
+    ['voting', () => baseRows({ ...ASK, Status: 'voting' }, WIN)],
+  ])('one orange on the Stage dock: %s', async (name, mk) => {
+    await openStage(mk());
+    const dockBtns = [...document.querySelectorAll('footer.dock button')].filter((b) => !b.classList.contains('dock-more'));
+    expect(dockBtns.filter((b) => !b.classList.contains('ghost') && !b.classList.contains('dock-more'))).toHaveLength(1);
+  });
+
+  test('the wheel landed: Send B to Claude leads and Spin again sits beside it', async () => {
+    const tie = [vote('Ana', 'B'), vote('Sam', 'A')];
+    const wheel = { Slices: [{ id: 'A', label: 'A', text: 'Calm and clear' }, { id: 'B', label: 'B', text: 'Playful' }], Spinner: 'Dee', Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] };
+    await openStage(baseRows({ ...ASK, Wheel: wheel }, tie));
+    // A wheel already still on arrival is settled.
+    await waitFor(() => expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeEnabled());
+    expect(dock().getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
+    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to send');
   });
 
   test('a rating sends its average', async () => {
     const rating = { ...ASK, Kind: 'rating', Options: [], Prompt: 'How was the demo?' };
     const answers = ['Ana', 'Sam'].map((n, i) => ({ SK: `BUILD#ANS#004#${n}`, AskId: '004', PlayerName: n, Rating: i ? 5 : 4, CreatedAt: ago(500) }));
     await openStage(baseRows(rating, answers));
-    fireEvent.click(dock().getByRole('button', { name: 'To Claude: 4.5' }));
+    fireEvent.click(dock().getByRole('button', { name: 'Send 4.5 to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: [], sendToAgent: true }));
   });
 });
 
-describe('R4: the Edit window', () => {
+describe('R4: the Change before sending window', () => {
   test('Edit opens the window over the Stage with the room\'s choice picked and its sentence in the box', async () => {
     await openStage();
     const win = await openEdit();
@@ -160,17 +209,29 @@ describe('R4: the Edit window', () => {
     fireEvent.click(within(win).getByRole('button', { name: /Calm and clear/ }));
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How should it look and feel: Calm and clear');
     expect(within(win).getByTestId('brm-alternate')).toBeInTheDocument();
-    fireEvent.click(within(win).getByRole('button', { name: 'Send to Claude' }));
+    // The main button follows the pick.
+    fireEvent.click(within(win).getByRole('button', { name: 'Send A to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['A'], method: 'host', direction: 'How should it look and feel: Calm and clear' }));
+  });
+
+  test('the title, the three kinds with no Later, and the footer in the Host\'s order', async () => {
+    await openStage();
+    const win = await openEdit();
+    expect(within(win).getByRole('heading', { name: 'Change before sending' })).toBeInTheDocument();
+    expect(within(win).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Do now', 'Keep in mind', 'Ask Claude']);
+    const foot = [...win.querySelectorAll('.brm-sd-foot > button')].map((b) => b.textContent.trim());
+    expect(foot).toEqual(['Close', 'Discard', 'Ask again…', 'Save for later', 'Send B to Claude']);
+    expect(win.querySelectorAll('.brm-sd-foot .brm-btn--primary')).toHaveLength(1);
+    expect(win.querySelector('.brm-sd-foot .brm-btn--primary').textContent.trim()).toBe('Send B to Claude');
   });
 
   test('Send to Claude posts the kind chosen; Save for later posts kind later', async () => {
     await openStage();
     let win = await openEdit();
     fireEvent.click(within(win).getByRole('radio', { name: 'Keep in mind' }));
-    fireEvent.click(within(win).getByRole('button', { name: 'Send to Claude' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Send B to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', as: 'keep', sendToAgent: true }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Send to Claude' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change before sending' })).toBeNull());
     win = await openEdit();
     fireEvent.click(within(win).getByRole('button', { name: 'Save for later' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', as: 'later' }));
@@ -193,13 +254,13 @@ describe('R4: the Edit window', () => {
     await openStage();
     let win = await openEdit();
     fireEvent.click(within(win).getByRole('button', { name: 'Close this window' }));
-    expect(screen.queryByRole('dialog', { name: 'Send to Claude' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Change before sending' })).toBeNull();
     win = await openEdit();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: 'Send to Claude' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Change before sending' })).toBeNull();
     win = await openEdit();
     fireEvent.click(within(win).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('dialog', { name: 'Send to Claude' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Change before sending' })).toBeNull();
     expect(posts()).toHaveLength(0);
   });
 
@@ -212,9 +273,9 @@ describe('R4: the Edit window', () => {
     const viewer = await screen.findByRole('dialog', { name: /mockup viewer/i });
     // The window stays mounted behind it.
     expect(screen.getByRole('textbox', { name: 'Direction for Claude' })).toBeInTheDocument();
-    fireEvent.click(within(viewer).getByRole('button', { name: 'Back to Send to Claude' }));
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Back to Change before sending' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /mockup viewer/i })).toBeNull());
-    const back = screen.getByRole('dialog', { name: 'Send to Claude' });
+    const back = screen.getByRole('dialog', { name: 'Change before sending' });
     expect(within(back).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Calm, with big dates');
     expect(within(back).getByRole('button', { name: /Calm and clear/ })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -226,7 +287,7 @@ describe('R4: the Edit window', () => {
     await screen.findByRole('dialog', { name: /mockup viewer/i });
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /mockup viewer/i })).toBeNull());
-    expect(screen.getByRole('dialog', { name: 'Send to Claude' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Change before sending' })).toBeInTheDocument();
   });
 
   test('an ask without pictures has no view mockup link', async () => {
@@ -234,7 +295,7 @@ describe('R4: the Edit window', () => {
     await openStage(baseRows(plain));
     const win = await openEdit();
     expect(within(win).queryByRole('button', { name: /View mockup/ })).toBeNull();
-    expect(within(win).getByRole('button', { name: 'Send to Claude' })).toBeInTheDocument();
+    expect(within(win).getByRole('button', { name: 'Send B to Claude' })).toBeInTheDocument();
   });
 
   test('Ideas and ratings open the window too', async () => {
@@ -255,7 +316,7 @@ describe('R4: the Edit window', () => {
     const win = await openEdit();
     fireEvent.change(within(win).getByRole('textbox', { name: 'Direction for Claude' }), { target: { value: 'My words' } });
     failNext = 'The server is down';
-    fireEvent.click(within(win).getByRole('button', { name: 'Send to Claude' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Send B to Claude' }));
     expect(await within(win).findByRole('alert')).toHaveTextContent(/did not send/i);
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('My words');
   });
@@ -265,7 +326,7 @@ describe('R5: Re-ask', () => {
   const reaskForm = async () => {
     await openStage();
     const win = await openEdit();
-    fireEvent.click(within(win).getByRole('button', { name: 'Re-ask…' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Ask again…' }));
     return screen.findByRole('dialog', { name: 'Ask the room again' });
   };
 
@@ -276,18 +337,18 @@ describe('R5: Re-ask', () => {
     expect(within(form).getByLabelText('Option B').value).toBe('Playful');
   });
 
-  test('Back to Send to Claude keeps the pick, the typed words and the edits', async () => {
+  test('Back to Change before sending keeps the pick, the typed words and the edits', async () => {
     await openStage();
     let win = await openEdit();
     fireEvent.click(within(win).getByRole('button', { name: /Calm and clear/ }));
     fireEvent.change(within(win).getByRole('textbox', { name: 'Direction for Claude' }), { target: { value: 'Typed words' } });
-    fireEvent.click(within(win).getByRole('button', { name: 'Re-ask…' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Ask again…' }));
     let form = await screen.findByRole('dialog', { name: 'Ask the room again' });
     fireEvent.change(within(form).getByLabelText('Question'), { target: { value: 'Edited question' } });
-    fireEvent.click(within(form).getByRole('button', { name: /Back to Send to Claude/ }));
-    win = await screen.findByRole('dialog', { name: 'Send to Claude' });
+    fireEvent.click(within(form).getByRole('button', { name: /Back to Change before sending/ }));
+    win = await screen.findByRole('dialog', { name: 'Change before sending' });
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Typed words');
-    fireEvent.click(within(win).getByRole('button', { name: 'Re-ask…' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Ask again…' }));
     form = await screen.findByRole('dialog', { name: 'Ask the room again' });
     expect(within(form).getByLabelText('Question').value).toBe('Edited question');
   });
@@ -322,7 +383,7 @@ describe('review fixes', () => {
   test('a click on an option at results opens the window with that pick, not the Host screen', async () => {
     await openStage();
     fireEvent.click(screen.getByTitle('Pick A'));
-    const win = await screen.findByRole('dialog', { name: 'Send to Claude' });
+    const win = await screen.findByRole('dialog', { name: 'Change before sending' });
     expect(within(win).getByRole('button', { name: /Calm and clear/ })).toHaveAttribute('aria-pressed', 'true');
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How should it look and feel: Calm and clear');
     expect(within(win).getByTestId('brm-alternate')).toBeInTheDocument();
@@ -335,7 +396,7 @@ describe('review fixes', () => {
     await openStage(baseRows({ ...ASK, Wheel: wheel }, tie));
     fireEvent.transitionEnd(document.querySelector('.bwh-rot'));
     fireEvent.click(await screen.findByRole('button', { name: /Calm and clear/ }));
-    const win = await screen.findByRole('dialog', { name: 'Send to Claude' });
+    const win = await screen.findByRole('dialog', { name: 'Change before sending' });
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How should it look and feel: Calm and clear');
   });
 
@@ -348,22 +409,22 @@ describe('review fixes', () => {
     await screen.findByText('Volunteer sign-up');
     fireEvent.click(screen.getByRole('tab', { name: /The crew/ }));
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(await within(document.querySelector('footer.dock')).findByRole('button', { name: 'Edit' }));
-    expect(screen.queryByRole('dialog', { name: 'Send to Claude' })).toBeNull();
+    fireEvent.click(await within(document.querySelector('footer.dock')).findByRole('button', { name: 'Change before sending' }));
+    expect(screen.queryByRole('dialog', { name: 'Change before sending' })).toBeNull();
   });
 
   test('a failed send is said once: in the window, not also in the page banner', async () => {
     await openStage();
     const win = await openEdit();
     failNext = 'The server is down';
-    fireEvent.click(within(win).getByRole('button', { name: 'Send to Claude' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Send B to Claude' }));
     await within(win).findByRole('alert');
     expect(screen.getAllByRole('alert')).toHaveLength(1);
   });
 
   test('Space with a dock button focused is the button\'s own press: one send, not two', async () => {
     await openStage();
-    const btn = dock().getByRole('button', { name: 'To Claude: B' });
+    const btn = dock().getByRole('button', { name: 'Send B to Claude' });
     btn.focus();
     fireEvent.keyDown(btn, { key: ' ' });
     expect(posts()).toHaveLength(0);
@@ -374,7 +435,7 @@ describe('review fixes', () => {
   test('re-asking a revote ask drops the "A tie" line and keeps a real detail', async () => {
     await openStage(baseRows({ ...ASK, Detail: 'A tie between A and B.' }, TIE));
     let win = await openEdit();
-    fireEvent.click(within(win).getByRole('button', { name: 'Re-ask…' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Ask again…' }));
     let form = await screen.findByRole('dialog', { name: 'Ask the room again' });
     expect(within(form).getByLabelText('Context (optional)').value).toBe('');
     fireEvent.click(within(form).getByRole('button', { name: 'Ask again' }));
@@ -385,7 +446,7 @@ describe('review fixes', () => {
   test('a real detail goes with the re-ask, and the form says pictures stay with their option', async () => {
     await openStage(baseRows({ ...ASK, Detail: 'Both run on the laptop.' }));
     const win = await openEdit();
-    fireEvent.click(within(win).getByRole('button', { name: 'Re-ask…' }));
+    fireEvent.click(within(win).getByRole('button', { name: 'Ask again…' }));
     const form = await screen.findByRole('dialog', { name: 'Ask the room again' });
     expect(within(form).getByText('Pictures stay with their option.')).toBeInTheDocument();
     fireEvent.click(within(form).getByRole('button', { name: 'Ask again' }));

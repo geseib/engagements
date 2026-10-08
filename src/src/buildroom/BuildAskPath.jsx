@@ -16,7 +16,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  askPathStep, askPathSummaries, winnerOf, decisionChoices, settleSend, decideBody, claudeKindLabel, defaultKind,
+  askPathStep, askPathSummaries, winnerOf, decisionChoices, settleSend, settleWords, decideBody, claudeKindLabel, defaultKind,
 } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 import { W } from './words';
@@ -220,7 +220,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   const kind = kept && kept.as ? kept.as : defaultKind(ask);
   const held = kind === 'later'; // a set that says Later: the press saves it, nothing goes to Claude
   const kindName = claudeKindLabel(kind);
-  const sendLabel = held ? W.saveLater : (move ? move.button : W.sendPlain);
+  const sendLabel = settleWords(ask, kind).label;
   const spaceWords = W.spaceTo(held ? 'save for later' : `send, as ${kindName}`);
   const sendWinner = async () => {
     if (!move || sending.current) return undefined;

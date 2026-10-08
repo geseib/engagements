@@ -1217,9 +1217,9 @@ function liveBuildLink(room, now) {
 function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild', onPick }) {
   const href = safeHref(link);
   if (!href) {
-    return <button type="button" className={className} disabled title="Claude hasn't started the app yet">{W.liveBuild}</button>;
+    return <button type="button" className={className} disabled title="Claude hasn't started the app yet">{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></button>;
   }
-  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={onPick}>{W.liveBuild}</a>;
+  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={onPick}>{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></a>;
 }
 
 /** True at 480px and narrower. No matchMedia (jsdom, an old browser) reads as wide. */
@@ -1478,11 +1478,11 @@ function HistoryStack({ items }) {
 
 /** The dock hint's verb: what Space does for the move beside it. */
 function hintVerb(move) {
-  if (move.action === 'to-claude') return 'send';
-  if (move.action === 'close') return 'close';
-  if (move.action === 'spin') return 'spin';
-  if (move.action === 'open' || move.action === 'vote') return move.action === 'vote' ? 'open voting' : 'open the vote';
-  if (move.action === 'edit') return 'edit';
+  if (move.action === 'to-claude') return move.verb || 'send';
+  if (move.action === 'close') return 'show results';
+  if (move.action === 'spin' || move.action === 'wheel') return 'spin';
+  if (move.action === 'open' || move.action === 'vote') return 'open voting';
+  if (move.action === 'edit') return 'change before sending';
   return 'go';
 }
 
@@ -1524,6 +1524,8 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
     if (!m || busy) return;
+    // A pick waits for the wheel to stop, as the Host's button does.
+    if (m.action === 'to-claude' && wheelTurning) return;
     // EDIT opens the send window here; TO CLAUDE sends the room's choice with
     // its own sentence, as the Host's panel would (owner, 2026-10-08).
     if (m.action === 'edit') { if (editable) setEditing(true); return; }
@@ -1533,7 +1535,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       return;
     }
     run(() => api.askAction(m.askId || current.askId, { action: m.action }));
-  }, [busy, run, api, current, editable]);
+  }, [busy, run, api, current, editable, wheelTurning]);
   const act = useCallback(() => doMove(move), [doMove, move]);
   // Space fires the dock's move: never while typing, and never when a focused
   // control would take the Space itself.
@@ -1614,12 +1616,18 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         )}
         meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} waiting={joinedWaiting} />}
         dock={(
-          <Dock status={m.status}>
+          <Dock status={liveLink ? (
+            <>
+              {m.status}
+              {/* A small link, not a button: it must never compete with the main button. */}
+              {safeHref(liveLink) && <a className="brm-dockbuild" href={safeHref(liveLink)} target="_blank" rel="noopener noreferrer" title="Opens in a new tab"><Icon name="ArrowSquareOut" size={14} /> {W.openBuildTab}</a>}
+            </>
+          ) : m.status}
+          >
             {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
-            {move && <button type="button" className="btn" disabled={busy} onClick={act}>{move.label}</button>}
+            {move && <button type="button" className="btn" disabled={busy || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
             {move && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
-            {liveLink && <LiveBuildButton link={liveLink} className="btn ghost brm-livebuild" />}
             <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
               <span className="dock-more-lbl">HOST</span>
               {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
@@ -3260,7 +3268,7 @@ export function VoteFromIdeasDialog({ ideas, connected, openAsk, busy, run, api,
           <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</button>
         ) : (
           <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !prompt.trim()} onClick={() => send({ open: true })}>
-            {openAsk ? `Close ask ${askNumber(openAsk.askId)} and open the vote` : 'Open the vote'}
+            {openAsk ? `Close ask ${askNumber(openAsk.askId)} and open the vote` : W.openVoting}
           </button>
         )}
       </div>

@@ -111,7 +111,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
     expect(stageModel(room(), { askId: '004', kind: 'suggest', status: 'voting', voteCount: 7 }))
       .toMatchObject({ phase: 'VOTE', meter: { heading: 'Voted', count: 7, of: 18 }, primary: { action: 'close' } });
     expect(stageModel(room(), { askId: '004', kind: 'rating', status: 'results', results: { total: 15 } }))
-      .toMatchObject({ phase: 'RESULTS', meter: { count: 15, of: 18 }, primary: { action: 'edit', label: 'Edit' } });
+      .toMatchObject({ phase: 'RESULTS', meter: { count: 15, of: 18 }, primary: { action: 'edit', label: 'Change before sending' } });
   });
 
   test('between asks: no chip, who is here, and what Claude is doing, in room-safe words', () => {
@@ -131,12 +131,13 @@ describe('the Stage with the wheel up', () => {
   test('someone has the turn; the host can always spin; deciding stays on the Host', () => {
     expect(stageModel(room, results({ spinner: 'Dee', armed: true, landed: null, spins: [] }))).toMatchObject({
       status: 'Dee spins the wheel', wheel: true,
-      primary: { action: 'spin', label: 'Spin the wheel' }, secondary: { action: 'edit', label: 'Edit' },
+      primary: { action: 'spin', label: 'Spin the wheel' }, secondary: { action: 'edit', label: 'Change before sending' },
     });
   });
-  test('landed: Spin again', () => {
-    expect(stageModel(room, results({ spinner: 'Dee', armed: false, landed: 'B', spins: [{}] }))).toMatchObject({
-      status: 'The wheel has picked', primary: { label: 'Spin again' },
+  test('landed: Send B to Claude leads and Spin again sits beside it, as on the Host', () => {
+    const ask = { ...results({ spinner: 'Dee', armed: false, landed: 'B', spins: [{}] }), options: [{ label: 'A', title: 'One' }, { label: 'B', title: 'Two' }], results: { total: 4, options: [{ label: 'A', count: 2 }, { label: 'B', count: 2 }] } };
+    expect(stageModel(room, ask)).toMatchObject({
+      status: 'The wheel has picked', primary: { action: 'to-claude', label: 'Send B to Claude' }, secondary: { action: 'spin', label: 'Spin again' },
     });
   });
   test('after a revote, the old ask is plain results', () => {
@@ -187,24 +188,28 @@ describe('deciding: the winner by default, any other on a click (owner, 2026-10-
   });
   test('on the Stage the winning vote goes to Claude, and Edit sits beside it', () => {
     const m = stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]) });
-    expect(m.primary).toEqual({ action: 'to-claude', label: 'To Claude: B' });
-    expect(m.secondary).toEqual({ action: 'edit', label: 'Edit' });
+    expect(m.primary).toEqual({ action: 'to-claude', label: 'Send B to Claude', verb: 'send' });
+    expect(m.secondary).toEqual({ action: 'edit', label: 'Change before sending' });
   });
-  test('a tie or no votes has nothing to send: Edit leads and To Claude is not offered', () => {
+  test('a set that says Later: the primary saves, with the Host\'s label', () => {
+    const m = stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]), claudeGets: 'later' });
+    expect(m.primary).toEqual({ action: 'to-claude', label: 'Save for later', verb: 'save for later' });
+  });
+  test('a tie or no votes has nothing to send: Spin the wheel leads and Change before sending sits beside it', () => {
     for (const ask of [choose([2, 2, 0]), choose([0, 0, 0])]) {
       const m = stageModel({ playerCount: 3 }, { askId: '3', ...ask });
-      expect(m.primary).toEqual({ action: 'edit', label: 'Edit' });
-      expect(m.secondary).toBeUndefined();
+      expect(m.primary).toEqual({ action: 'wheel', label: 'Spin the wheel' });
+      expect(m.secondary).toEqual({ action: 'edit', label: 'Change before sending' });
     }
   });
   test('a rating sends its average; no ratings yet has none to send', () => {
     const rated = stageModel({ playerCount: 3 }, { askId: '5', kind: 'rating', status: 'results', results: { total: 3, rating: { avg: 4.2, count: 3, dist: [0, 0, 0, 2, 1] } } });
-    expect(rated.primary).toEqual({ action: 'to-claude', label: 'To Claude: 4.2' });
-    expect(rated.secondary).toEqual({ action: 'edit', label: 'Edit' });
+    expect(rated.primary).toEqual({ action: 'to-claude', label: 'Send 4.2 to Claude', verb: 'send' });
+    expect(rated.secondary).toEqual({ action: 'edit', label: 'Change before sending' });
   });
   test('the ideas winner reads as the top idea', () => {
     const m = stageModel({ playerCount: 3 }, { askId: '4', kind: 'suggest', status: 'results', results: { total: 3, ranked: [{ respId: 'r1', text: 'One', votes: 3 }, { respId: 'r2', text: 'Two', votes: 1 }] } });
-    expect(m.primary.label).toBe('To Claude: the top idea');
+    expect(m.primary.label).toBe('Send the top idea to Claude');
   });
   test('decideBody is the one body: `as` is always said when sending', () => {
     const ask = choose([1, 3, 0]);
@@ -465,7 +470,7 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
     const ideas = [{ ideaId: 'i1', status: 'new' }, { ideaId: 'i2', status: 'new' }];
     const m = whatsNextMoves(room({ asks, ideas }));
     expect(m.map((x) => x.key)).toEqual(['vote-mockups', 'vote-ideas', 'starter', 'new-ask', 'tell']);
-    expect(m[0]).toEqual({ key: 'vote-mockups', askId: '005', title: "Open the vote on Claude's mockups", hint: 'A and B are ready to compare', button: 'Open the vote' });
+    expect(m[0]).toEqual({ key: 'vote-mockups', askId: '005', title: "Open the vote on Claude's mockups", hint: 'A and B are ready to compare', button: 'Open voting' });
     expect(whatsNextMoves(room({ asks, opening: { phase: 'opening' } })).map((x) => x.key)).not.toContain('vote-mockups');
     expect(whatsNextMoves(room({ asks, outcome: { summary: 'Done.' } })).map((x) => x.key)).not.toContain('vote-mockups');
     expect(whatsNextMoves(room()).map((x) => x.key)).not.toContain('vote-mockups');
@@ -552,7 +557,7 @@ describe('S4: the stage says the mockups are ready', () => {
   test('stageModel offers Open the vote with the ask id', () => {
     const m = stageModel(ready, null, Date.now());
     expect(m.status).toBe('Mockups ready \u00b7 the host opens the vote');
-    expect(m.primary).toEqual({ action: 'open', label: 'Open the vote', askId: '005' });
+    expect(m.primary).toEqual({ action: 'open', label: 'Open voting', askId: '005' });
   });
   test('not while the opening frames the build, nor on the crew board', () => {
     const framing = { ...ready, opening: { phase: 'opening' } };

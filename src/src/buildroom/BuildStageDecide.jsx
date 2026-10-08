@@ -3,7 +3,7 @@
  *
  * The Send to Claude panel as a window over the Stage: switch the pick, look at
  * a mockup, edit the words, choose how Claude gets it, then Send, Save for
- * later, Re-ask or Discard. Re-ask turns the same window into the question,
+ * later, Ask again or Discard. Ask again turns the same window into the question,
  * filled in from this ask; Back returns to the send panel with everything
  * kept. X and Esc close without changing anything.
  *
@@ -15,8 +15,9 @@ import React, { useContext, useState } from 'react';
 import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import { ViewerContext } from './MockupViewer';
+import { W } from './words';
 import {
-  CLAUDE_KINDS, decideBody, decisionChoices, directionFor, pickVerdict, roomChoice,
+  HOST_KINDS, defaultKind, decideBody, decisionChoices, directionFor, pickVerdict, roomChoice,
 } from './buildScreens';
 
 const askNo = (askId) => Number(askId) || askId;
@@ -41,7 +42,8 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   // Opened by a click on an option or a wheel slice: that pick, and its sentence.
   const [pick, setPick] = useState(initialPick || room);
   const [direction, setDirection] = useState(initialPick ? directionFor(ask, initialPick) : start.direction);
-  const [as, setAs] = useState(ask.claudeGets || 'do-now');
+  // The three kinds; a set that says Later is not one of them (Save for later is the button).
+  const [as, setAs] = useState(() => { const k = defaultKind(ask); return k === 'later' ? 'do-now' : k; });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(() => reaskStart(ask));
@@ -92,8 +94,19 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   };
   const setOpt = (i, patch) => setForm((f) => ({ ...f, options: f.options.map((o, j) => (j === i ? { ...o, ...patch } : o)) }));
 
-  const sendLabel = CLAUDE_KINDS.find((k) => k.key === as);
+  const sendLabel = HOST_KINDS.find((k) => k.key === as) || HOST_KINDS[0];
   const cannot = busy || !direction.trim();
+  // The main button follows the pick, in the Host's words.
+  const sendWords = (() => {
+    if (ask.kind === 'rating') {
+      const a = ask.results && ask.results.rating && ask.results.rating.avg;
+      return a !== null && a !== undefined ? W.send(a) : W.sendPlain;
+    }
+    const c = choices.find((x) => x.id === pick);
+    if (!c) return W.sendPlain;
+    if (c.label) return W.send(c.label);
+    return pick === room ? W.sendTopIdea : W.sendPlain;
+  })();
   const pictured = (id) => (ask.kind === 'choice' ? (ask.options || []).find((o) => o.label === id && o.imageId) : null);
 
   if (mode === 'reask') {
@@ -101,7 +114,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
       <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sd" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-sd-title">
         <div className="brm-pa-head">
           <div>
-            <div className="brm-pa-eb">Ask {askNo(ask.askId)} · re-ask</div>
+            <div className="brm-pa-eb">Ask {askNo(ask.askId)} · ask again</div>
             <h2 className="brm-pa-q" id="brm-sd-title">Ask the room again</h2>
           </div>
           <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
@@ -139,7 +152,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
         </div>
         <div className="brm-sd-foot">
           <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { setError(''); setMode('send'); }}>
-            <Icon name="ArrowLeft" size={14} /> Back to Send to Claude
+            <Icon name="ArrowLeft" size={14} /> {`Back to ${W.change}`}
           </button>
           <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !reaskReady} onClick={askAgain}>Ask again</button>
         </div>
@@ -152,7 +165,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
       <div className="brm-pa-head">
         <div>
           <div className="brm-pa-eb">Ask {askNo(ask.askId)} · results</div>
-          <h2 className="brm-pa-q" id="brm-sd-title">Send to Claude</h2>
+          <h2 className="brm-pa-q" id="brm-sd-title">{W.change}</h2>
         </div>
         <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
       </div>
@@ -189,7 +202,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
         <div className="brm-field">
           <span className="brm-lbl">Claude gets it as</span>
           <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="Claude gets it as">
-            {CLAUDE_KINDS.map((k) => (
+            {HOST_KINDS.map((k) => (
               <button key={k.key} type="button" role="radio" aria-checked={as === k.key} className={`brm-segbtn${as === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => setAs(k.key)}>{k.label}</button>
             ))}
           </div>
@@ -198,11 +211,11 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
         {error && <p className="brm-alert" role="alert">{error}</p>}
       </div>
       <div className="brm-sd-foot">
-        <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} onClick={() => setConfirmDiscard(true)}>Discard</button>
-        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setMode('reask')}>Re-ask…</button>
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
-        <button type="button" className="brm-btn brm-push" disabled={cannot} onClick={() => decide('later')}>Save for later</button>
-        <button type="button" className="brm-btn brm-btn--primary" disabled={cannot} onClick={() => decide(as)}><Icon name="PaperPlaneTilt" size={16} /> Send to Claude</button>
+        <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} onClick={() => setConfirmDiscard(true)}>Discard</button>
+        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setMode('reask')}>{W.askAgainEllipsis}</button>
+        <button type="button" className="brm-btn brm-push" disabled={cannot} onClick={() => decide('later')}>{W.saveLater}</button>
+        <button type="button" className="brm-btn brm-btn--primary" disabled={cannot} onClick={() => decide(as)}><Icon name="PaperPlaneTilt" size={16} /> {sendWords}</button>
       </div>
       {confirmDiscard && (
         <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={() => setConfirmDiscard(false)} closeOnBackdrop={false} labelledBy="brm-sd-discard">
