@@ -59,8 +59,10 @@ export function useNextFocus(containerRef, stepKey) {
     const active = document.activeElement;
     // Ticking in Decided can change the lead; it never pulls the focus away.
     const inDecided = Boolean(active && active.closest && active.closest('.brm-decided'));
-    if (isTypingTarget(active) || inDecided) { pending.current = false; afterDialog.current = false; return; }
+    // A dialog first: typing INSIDE one (Enter in its Question box) defers the
+    // step, it never cancels it. Typing anywhere else does cancel.
     if (dialogOpen()) { afterDialog.current = true; return; }
+    if (isTypingTarget(active) || inDecided) { pending.current = false; afterDialog.current = false; return; }
     const container = containerRef.current;
     const el = nextTarget(container);
     if (!el || el.disabled) return; // not ready yet: try again on the next render

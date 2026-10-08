@@ -1423,8 +1423,9 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
       answers: TIE,
     });
     await act(async () => { handler({}); });
-    const go = await screen.findByRole('button', { name: 'Go with B' });
+    const go = await screen.findByRole('button', { name: 'The wheel is turning…' });
     expect(go).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /Go with B/ })).toBeNull();
     expect(document.activeElement).not.toBe(go);
     fireEvent.keyDown(window, { key: ' ' });
     expect(lastPost() && lastPost().body && lastPost().body.action).not.toBe('decide');

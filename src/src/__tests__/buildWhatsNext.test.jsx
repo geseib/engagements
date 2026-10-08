@@ -164,6 +164,20 @@ describe('useNextFocus: a step that arrives under a dialog still gets the focus 
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close and show results' }));
     opener.remove();
   });
+  test('typing inside the dialog (Enter in its Question box) defers, never cancels', () => {
+    const modal = document.createElement('div');
+    modal.className = 'brm-modal';
+    const input = document.createElement('input');
+    input.type = 'text';
+    modal.appendChild(input);
+    document.body.appendChild(modal);
+    input.focus();
+    const { rerender } = render(<Step stepKey="c" />);
+    expect(document.activeElement).toBe(input);
+    modal.remove();
+    rerender(<Step stepKey="c" />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close and show results' }));
+  });
   test('but never while the host is typing', () => {
     const box = document.createElement('textarea');
     document.body.appendChild(box);

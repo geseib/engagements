@@ -203,7 +203,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
       const landed = decisionChoices(ask).find((c) => c.id === wheel.landed);
       moves = (
         <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || turning} onClick={() => onPick(wheel.landed, { confirmed: true })}>
-          {landed && landed.label ? `Go with ${landed.label}` : "Go with the wheel's pick"}
+          {turning ? 'The wheel is turning…' : (landed && landed.label ? `Go with ${landed.label}` : "Go with the wheel's pick")}
         </button>
       );
     } else if (host && !wheel && !ask.revotedAs) {
