@@ -5,7 +5,7 @@ import {
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
   queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
-  askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords,
+  askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords, decideBody, roomChoice,
 } from '../buildroom/buildScreens';
 
 describe('the screens', () => {
@@ -111,7 +111,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
     expect(stageModel(room(), { askId: '004', kind: 'suggest', status: 'voting', voteCount: 7 }))
       .toMatchObject({ phase: 'VOTE', meter: { heading: 'Voted', count: 7, of: 18 }, primary: { action: 'close' } });
     expect(stageModel(room(), { askId: '004', kind: 'rating', status: 'results', results: { total: 15 } }))
-      .toMatchObject({ phase: 'RESULTS', meter: { count: 15, of: 18 }, primary: { action: 'decide', label: 'Decide on Host' } });
+      .toMatchObject({ phase: 'RESULTS', meter: { count: 15, of: 18 }, primary: { action: 'edit', label: 'Edit' } });
   });
 
   test('between asks: no chip, who is here, and what Claude is doing, in room-safe words', () => {
@@ -131,7 +131,7 @@ describe('the Stage with the wheel up', () => {
   test('someone has the turn; the host can always spin; deciding stays on the Host', () => {
     expect(stageModel(room, results({ spinner: 'Dee', armed: true, landed: null, spins: [] }))).toMatchObject({
       status: 'Dee spins the wheel', wheel: true,
-      primary: { action: 'spin', label: 'Spin' }, secondary: { action: 'decide', label: 'Decide on Host' },
+      primary: { action: 'spin', label: 'Spin' }, secondary: { action: 'edit', label: 'Edit' },
     });
   });
   test('landed: Spin again', () => {
@@ -141,7 +141,7 @@ describe('the Stage with the wheel up', () => {
   });
   test('after a revote, the old ask is plain results', () => {
     expect(stageModel(room, { ...results({ spinner: null, armed: false, landed: null, spins: [] }), revotedAs: '004' })).toMatchObject({
-      status: 'Results', primary: { action: 'decide' },
+      status: 'Results', primary: { action: 'edit' },
     });
   });
 });
@@ -185,9 +185,32 @@ describe('deciding: the winner by default, any other on a click (owner, 2026-10-
     expect(decisionMethod(choose([2, 2, 0], { landed: 'A' }), ['A'], false)).toBe('wheel');
     expect(decisionMethod(choose([0, 0, 0]), ['A'], true)).toBe('spoken');
   });
-  test('on the Stage the winning vote is the button', () => {
-    expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]) }).primary).toEqual({ action: 'decide', label: 'Go with B' });
-    expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([2, 2, 0]) }).primary.label).toBe('Decide on Host');
+  test('on the Stage the winning vote goes to Claude, and Edit sits beside it', () => {
+    const m = stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]) });
+    expect(m.primary).toEqual({ action: 'to-claude', label: 'To Claude: B' });
+    expect(m.secondary).toEqual({ action: 'edit', label: 'Edit' });
+  });
+  test('a tie or no votes has nothing to send: Edit leads and To Claude is not offered', () => {
+    for (const ask of [choose([2, 2, 0]), choose([0, 0, 0])]) {
+      const m = stageModel({ playerCount: 3 }, { askId: '3', ...ask });
+      expect(m.primary).toEqual({ action: 'edit', label: 'Edit' });
+      expect(m.secondary).toBeUndefined();
+    }
+  });
+  test('a rating sends its average; no ratings yet has none to send', () => {
+    const rated = stageModel({ playerCount: 3 }, { askId: '5', kind: 'rating', status: 'results', results: { total: 3, rating: { avg: 4.2, count: 3, dist: [0, 0, 0, 2, 1] } } });
+    expect(rated.primary).toEqual({ action: 'to-claude', label: 'To Claude: 4.2' });
+    expect(rated.secondary).toEqual({ action: 'edit', label: 'Edit' });
+  });
+  test('the ideas winner reads as the top idea', () => {
+    const m = stageModel({ playerCount: 3 }, { askId: '4', kind: 'suggest', status: 'results', results: { total: 3, ranked: [{ respId: 'r1', text: 'One', votes: 3 }, { respId: 'r2', text: 'Two', votes: 1 }] } });
+    expect(m.primary.label).toBe('To Claude: the top idea');
+  });
+  test('decideBody is the one body: as only when it differs from the question\'s own kind', () => {
+    const ask = choose([1, 3, 0]);
+    expect(decideBody(ask, { direction: ' go ', chosen: ['B'], as: 'do-now' })).toEqual({ action: 'decide', direction: 'go', chosen: ['B'], note: '', sendToAgent: true, method: 'vote' });
+    expect(decideBody(ask, { direction: 'go', chosen: ['B'], as: 'later' })).toMatchObject({ as: 'later', sendToAgent: true });
+    expect(roomChoice(ask)).toMatchObject({ chosen: ['B'] });
   });
 });
 

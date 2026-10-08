@@ -231,14 +231,25 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
       return {
         phase: 'RESULTS', context, meter, status, wheel: true,
         primary: { action: 'spin', label: w.landed ? 'Spin again' : 'Spin' },
-        secondary: { action: 'decide', label: 'Decide on Host' },
+        secondary: { action: 'edit', label: 'Edit' },
       };
     }
-    // The winning vote is the button (owner, 2026-10-06); a tie decides on the Host.
+    // DECIDING ON THE STAGE (owner, 2026-10-08): the room's choice goes to
+    // Claude from here, and Edit opens the send window over the Stage. A tie,
+    // or no votes, has no choice to send: Edit leads.
+    const edit = { action: 'edit', label: 'Edit' };
+    if (current.kind === 'rating') {
+      const avg = current.results && current.results.rating ? current.results.rating.avg : null;
+      if (avg === null || avg === undefined) return { phase: 'RESULTS', context, meter, status: 'Results', primary: edit };
+      return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'to-claude', label: `To Claude: ${avg}` }, secondary: edit };
+    }
     const win = winnerOf(current);
     const pick = win ? decisionChoices(current).find((c) => c.id === win) : null;
-    const label = pick ? (pick.label ? `Go with ${pick.label}` : 'Go with the top idea') : 'Decide on Host';
-    return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'decide', label } };
+    if (!pick) return { phase: 'RESULTS', context, meter, status: 'Results', primary: edit };
+    return {
+      phase: 'RESULTS', context, meter, status: 'Results',
+      primary: { action: 'to-claude', label: `To Claude: ${pick.label || 'the top idea'}` }, secondary: edit,
+    };
   }
   // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06): wherever the room could
   // vote between options, the host may let the wheel pick instead.
@@ -354,6 +365,49 @@ export function pickVerdict(ask, id) {
     return { pick, preferred: leaders[0], by: 'vote', tied: [], total, isPreferred: leaders[0].id === id };
   }
   return { pick, preferred: null, by: null, tied: leaders.map((c) => c.label || c.text), total, isPreferred: false };
+}
+
+/** The direction the decide panel starts with: the room's top answer, as a sentence. */
+export function defaultDirection(ask) {
+  // The question and the answer (owner, 2026-10-06).
+  const w = ask && ask.wheel;
+  const landed = w && w.landed ? (w.slices || []).find((x) => x.id === w.landed) : null;
+  if (landed) return questionAnswer(ask.prompt, landed.text);
+  const r = (ask && ask.results) || {};
+  if (ask.kind === 'choice') {
+    const top = [...(r.options || [])].sort((a, b) => b.count - a.count)[0];
+    return top && top.count ? questionAnswer(ask.prompt, top.title) : '';
+  }
+  if (ask.kind === 'rating') {
+    return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
+      ? questionAnswer(ask.prompt, ratingAnswer(r.rating.avg)) : '';
+  }
+  const top = (r.ranked || [])[0];
+  return top ? questionAnswer(ask.prompt, top.text) : '';
+}
+
+/**
+ * The room's choice and the sentence for it. A tie, or no votes, has no choice:
+ * nothing picked and no sentence until the host picks one. A rating has no
+ * options to pick; its sentence is the average.
+ */
+export function roomChoice(ask) {
+  if (ask && ask.kind === 'rating') return { chosen: [], direction: defaultDirection(ask) };
+  const win = winnerOf(ask);
+  return win ? { chosen: [win], direction: directionFor(ask, win) } : { chosen: [], direction: '' };
+}
+
+/**
+ * THE BODY OF A DECISION, one builder for every place that decides (the Host
+ * screen's panel, the Stage's To Claude and its Edit window). `as` goes only
+ * when it differs from the question's own kind: the server's default.
+ */
+export function decideBody(ask, { direction, chosen, note = '', send = true, as, spoken = false }) {
+  return {
+    action: 'decide', direction: String(direction || '').trim(), chosen, note: String(note || '').trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
+    method: decisionMethod(ask, chosen, spoken),
+    ...(send && as && as !== (ask.claudeGets || 'do-now') ? { as } : {}),
+  };
 }
 
 export const METHOD_WORDS = Object.freeze({ vote: 'by vote', wheel: 'by the wheel', host: "the host's pick", spoken: 'said out loud' });

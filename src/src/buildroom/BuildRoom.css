@@ -1173,3 +1173,24 @@
   .brm .brm-viewer-main { padding: 12px 8px; }
   .brm .brm-viewer-arrow { width: 40px; height: 40px; opacity: .85; }
 }
+
+/* ---- deciding on the Stage (R3 hint, R4 window, R5 re-ask) -------------- */
+/* The dock's Space hint is words, not a key cap: muted, no box. Build Room only. */
+.brm .brm-dockhint { flex: none; color: var(--muted); font-size: max(var(--floor, 12px), calc(var(--t-body, 16px) * .8)); font-weight: 600; background: none; border: 0; padding: 0; white-space: nowrap; }
+.brm .brm-dockhint b { color: var(--text); font-weight: 800; }
+.brm .brm-modal--sd { width: min(720px, 100%); display: grid; gap: 14px; max-height: calc(100vh - 32px); overflow: auto; }
+.brm .brm-sd-body { display: grid; gap: 14px; min-width: 0; }
+.brm .brm-sd-q { margin: 0; font-size: var(--brm-t-body); font-weight: 700; overflow-wrap: anywhere; }
+.brm .brm-sd-opts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-sd-opt { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--bg); }
+.brm .brm-sd-opt.is-on { border: 2px solid var(--primary); padding: 5px 9px; }
+.brm .brm-sd-pick { display: flex; align-items: center; gap: 10px; min-height: 40px; background: none; border: 0; color: var(--text); font: 600 var(--brm-t-body)/1.2 var(--font-ui); text-align: left; cursor: pointer; min-width: 0; }
+.brm .brm-sd-pick:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 6px; }
+.brm .brm-sd-t { overflow-wrap: anywhere; }
+.brm .brm-sd-n { font-variant-numeric: tabular-nums; }
+.brm .brm-sd-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 480px) {
+  .brm .brm-modal--sd { padding: 16px; }
+  .brm .brm-sd-opt { grid-template-columns: minmax(0, 1fr) auto; }
+  .brm .brm-sd-opt .brm-btn--link { grid-column: 1; justify-self: start; }
+}

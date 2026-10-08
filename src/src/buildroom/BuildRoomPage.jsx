@@ -42,6 +42,7 @@ import { useKeepOnScreen } from './keepOnScreen';
 import { AskPath } from './BuildAskPath';
 import { WhatsNext, DecidedList, decidedAsks } from './BuildWhatsNext';
 import { isTypingTarget, dialogOpen } from './useNextFocus';
+import BuildStageDecide from './BuildStageDecide';
 import { useRosterMode, rosterRevealFor } from '../hooks/useRosterReveal';
 import { joinedRoster } from '../config/anonymity';
 import { WifiChip, WifiPanel, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
@@ -54,7 +55,7 @@ import {
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
-  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, roomChoice,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
@@ -198,25 +199,6 @@ const entryTone = (entry) => {
   if (entry.by === 'system') return 'ask';
   return 'host';
 };
-
-/** The direction the decide panel starts with: the room's top answer, as a sentence. */
-export function defaultDirection(ask) {
-  // The question and the answer (owner, 2026-10-06).
-  const w = ask && ask.wheel;
-  const landed = w && w.landed ? (w.slices || []).find((x) => x.id === w.landed) : null;
-  if (landed) return questionAnswer(ask.prompt, landed.text);
-  const r = (ask && ask.results) || {};
-  if (ask.kind === 'choice') {
-    const top = [...(r.options || [])].sort((a, b) => b.count - a.count)[0];
-    return top && top.count ? questionAnswer(ask.prompt, top.title) : '';
-  }
-  if (ask.kind === 'rating') {
-    return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
-      ? questionAnswer(ask.prompt, ratingAnswer(r.rating.avg)) : '';
-  }
-  const top = (r.ranked || [])[0];
-  return top ? questionAnswer(ask.prompt, top.text) : '';
-}
 
 /** What the host can fold into the direction with one click. */
 export function foldSources(ask) {
@@ -1441,10 +1423,25 @@ function HistoryStack({ items }) {
  * the regular stage. Everything on it is room-safe (stageModel); deciding needs
  * words, so at results the move is back to the Host screen.
  */
+/** The dock hint's verb: what Space does for the move beside it. */
+function hintVerb(move) {
+  if (move.action === 'to-claude') return 'send';
+  if (move.action === 'close') return 'close';
+  if (move.action === 'spin') return 'spin';
+  if (move.action === 'open' || move.action === 'vote') return move.action === 'vote' ? 'open voting' : 'open the vote';
+  if (move.action === 'edit') return 'edit';
+  return 'go';
+}
+
 function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   const m = stageModel(room, current, now, { crewOn });
+  const [editing, setEditing] = useState(false);
+  // The window belongs to one ask at results: it goes when that ask moves on.
+  const editable = Boolean(current && current.status === 'results' && !ended && !crewOn);
+  const editKey = current ? `${current.askId}:${current.status}` : '';
+  useEffect(() => { setEditing(false); }, [editKey]);
   // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
   const spinsOf = (current && current.wheel && current.wheel.spins) || [];
   const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
@@ -1454,10 +1451,16 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
     if (!m || busy) return;
-    // The dock's "Go with B" is the winner: back to the Host with its sentence.
-    if (m.action === 'decide') { onPick(null); return; }
+    // EDIT opens the send window here; TO CLAUDE sends the room's choice with
+    // its own sentence, as the Host's panel would (owner, 2026-10-08).
+    if (m.action === 'edit') { setEditing(true); return; }
+    if (m.action === 'to-claude') {
+      const { chosen, direction } = roomChoice(current);
+      run(() => api.askAction(current.askId, decideBody(current, { direction, chosen, as: current.claudeGets || 'do-now' })));
+      return;
+    }
     run(() => api.askAction(m.askId || current.askId, { action: m.action }));
-  }, [busy, onPick, run, api, current]);
+  }, [busy, run, api, current]);
   const act = useCallback(() => doMove(move), [doMove, move]);
   // Space fires the dock's move: never while typing, and never when a focused
   // control would take the Space itself.
@@ -1542,7 +1545,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
             {move && <button type="button" className="btn" disabled={busy} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
-            {move && <span className="kbd" aria-hidden="true">SPACE</span>}
+            {move && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
             <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
               <span className="dock-more-lbl">HOST</span>
               {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
@@ -1553,6 +1556,9 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         <div className="content"><div className="fitbox">{content}</div></div>
       </Stage>
       <WallComment comment={freshWallComment(room, now)} />
+      {editing && editable && (
+        <BuildStageDecide key={current.askId} ask={current} busy={busy} run={run} api={api} onClose={() => setEditing(false)} />
+      )}
       {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
     </>
   );
@@ -2295,12 +2301,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
     const said = direction.trim();
     const out = await run(async () => {
       if (beforeDecide) await beforeDecide();
-      return api.askAction(ask.askId, {
-        action: 'decide', direction: said, chosen, note: note.trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
-        method: decisionMethod(ask, chosen, spoken),
-        // Only when the host changed it: the server's default is the question's own kind.
-        ...(send && as !== (ask.claudeGets || 'do-now') ? { as } : {}),
-      });
+      return api.askAction(ask.askId, decideBody(ask, { direction: said, chosen, note, send, as, spoken }));
     });
     if (out !== undefined && onSent) onSent({ as, send, direction: said });
     return out;

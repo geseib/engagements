@@ -1139,12 +1139,11 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     dlg.remove();
   });
 
-  test('at results the winning vote is the button, back to the Host to decide; HOST at the dock\'s edge goes back too', async () => {
+  test('at results the winning vote goes to Claude from the Stage; HOST at the dock\'s edge goes back to the Host', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(screen.getByRole('button', { name: 'Go with B' }));
-    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Calm photo + calendar');
-    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(screen.getByRole('button', { name: 'To Claude: B' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], direction: 'Which header should volunteers see first: Calm photo + calendar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Host screen' }));
     expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -1216,14 +1215,15 @@ describe('the ask as four steps, and Space on the Host screen (owner, 2026-10-07
     expect(screen.queryByText(/You had an unsent direction/)).toBeNull();
   });
 
-  test('Decide on Host while the wheel is still spinning picks nothing: the Host opens on Settle', async () => {
-    const TIE = [{ AskId: '003', PlayerName: 'Ana', Choice: ['A'] }, { AskId: '003', PlayerName: 'Priya', Choice: ['B'] }, { AskId: '003', PlayerName: 'Sam', Choice: ['B'] }];
+  test('Edit while the wheel has not landed opens the window with no pick: nothing is sent until the host picks', async () => {
+    const TIE = [{ AskId: '003', PlayerName: 'Ana', Choice: ['A'] }, { AskId: '003', PlayerName: 'Priya', Choice: ['B'] }, { AskId: '003', PlayerName: 'Sam', Choice: ['B'] }, { AskId: '003', PlayerName: 'Dee', Choice: ['A'] }];
     const WHEEL = { Slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }], Spinner: 'Dee', Armed: true, Spins: [] };
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL }], answers: TIE }));
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(screen.getByRole('button', { name: 'Decide on Host' }));
-    expect(screen.getAllByRole('listitem').filter((li) => li.className.includes('brm-path-step'))[2].className).toContain('is-now');
-    expect(screen.queryByRole('textbox', { name: 'Direction for Claude' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const win = screen.getByRole('dialog', { name: 'Send to Claude' });
+    expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('');
+    expect(within(win).getByRole('button', { name: 'Send to Claude' })).toBeDisabled();
   });
 
   test('after it is sent, the Now column says what Claude got', async () => {
@@ -1447,17 +1447,17 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go with B' })));
   });
 
-  test('on the Stage the wheel is the screen; Space spins, and deciding is back on the Host', async () => {
+  test('on the Stage the wheel is the screen; Space spins, and Edit opens the send window', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIE }));
     fireEvent.keyDown(window, { key: '2' });
     expect(screen.getByRole('region', { name: 'The wheel' })).toBeInTheDocument();
     expect(document.querySelector('.dock .status').textContent).toBe('Dee spins the wheel');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'spin' }));
-    const decide = screen.getByRole('button', { name: 'Decide on Host' });
-    await waitFor(() => expect(decide).not.toBeDisabled());
-    fireEvent.click(decide);
-    expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).not.toBeDisabled());
+    fireEvent.click(edit);
+    expect(screen.getByRole('dialog', { name: 'Send to Claude' })).toBeInTheDocument();
   });
 });
 
