@@ -652,6 +652,22 @@ function Outcome({ outcome, images = [] }) {
   );
 }
 
+/**
+ * A link as a participant reads it. A Wi-Fi share link carries the gateway's
+ * key (?k=); it opens with it, but the key is not text to show on a screen
+ * the room can see. Any other link reads exactly as it is.
+ */
+export function linkText(url) {
+  try {
+    const u = new URL(String(url));
+    if (!u.searchParams.has('k')) return String(url);
+    u.searchParams.delete('k');
+    return u.toString().replace(/\/$/, '');
+  } catch (e) {
+    return String(url);
+  }
+}
+
 function Feed({ view, showGoal = true, skipAskId = null }) {
   const crew = view.crew && view.crew.enabled ? view.crew : null;
   // The newest base move is the notice above the ticker; said once, not twice.
@@ -694,7 +710,7 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
               <span className="bpl-tx bpl-text">{e.text}</span>
               {DETAIL_KINDS.includes(e.kind) && e.detail ? <span className="bpl-dt bpl-text">{e.detail}</span> : null}
               {isHttpUrl(e.link) ? (
-                <a className="bpl-link bpl-lnk" href={e.link} target="_blank" rel="noopener noreferrer">{e.link}</a>
+                <a className="bpl-link bpl-lnk" href={e.link} target="_blank" rel="noopener noreferrer">{linkText(e.link)}</a>
               ) : null}
             </li>
           ))}
@@ -860,7 +876,7 @@ function HistoryTab({ view, api, onResult }) {
               <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
               {it.mine ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
               {it.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={it.text} className="bpl-shot" />)}
-              {isHttpUrl(it.link) ? <a className="bpl-link bpl-lnk" href={it.link} target="_blank" rel="noopener noreferrer">{it.link}</a> : null}
+              {isHttpUrl(it.link) ? <a className="bpl-link bpl-lnk" href={it.link} target="_blank" rel="noopener noreferrer">{linkText(it.link)}</a> : null}
               {preview && it.type === 'showed' && it.id === preview.logId && view.state !== 'ENDED' && (
                 <PreviewFeedback key={preview.logId} api={api} preview={preview} sent={previewSent} onResult={onResult} />
               )}
@@ -1020,14 +1036,16 @@ export default function BuildPlayer({
   const otherTab = shownTab === 'ideas' ? ideasTab : shownTab === 'history' ? <HistoryTab view={view} api={api} onResult={onResult} /> : null;
   /* On Now: a word when Claude shows something new (the feedback is on its
      picture in History), and the way to send an idea. */
+  /* OPEN THE BUILD, at the top of Now (mockup L5): the first thing a
+     participant sees while the host shares the build on this Wi-Fi. */
+  const openBuild = !isEnded && view.lan && view.lan.open ? (
+    <section className="bpl-open" aria-label="Open the build">
+      <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer">Open the build</a>
+      <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
+    </section>
+  ) : null;
   const nowExtras = isEnded ? null : (
     <>
-      {view.lan && view.lan.open && (
-        <section className="bpl-open" aria-label="Open the build">
-          <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer">Open the build</a>
-          <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
-        </section>
-      )}
       {preview && !previewSent && (
         <section className="bpl-ideas bpl-pvnote" aria-label="Claude is showing something">
           <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
@@ -1079,7 +1097,7 @@ export default function BuildPlayer({
   /* The ask screens draw their own shell (they own the dock); the Now extras
      ride under every one of them. Keyed by ask AND status, so a refetch keeps
      a draft and a new ask or phase starts clean. */
-  const askShell = (props) => page({ ...props, body: <>{intro}{props.body}{nowExtras}{crew}</> });
+  const askShell = (props) => page({ ...props, body: <>{intro}{openBuild}{props.body}{nowExtras}{crew}</> });
   const kids = { ask, mine, api, onResult, shell: askShell };
 
   if (ask && ask.status === 'live') {
@@ -1098,6 +1116,7 @@ export default function BuildPlayer({
       body: (
         <>
           {intro}
+          {openBuild}
           <Eyebrow word={decided ? 'Decided' : 'Results'} askId={ask.askId} />
           <h2 className="plr-q bpl-text">{ask.prompt}</h2>
           {decided ? <Decided decision={ask.decision} /> : null}
@@ -1120,6 +1139,7 @@ export default function BuildPlayer({
     body: (
       <>
         {intro}
+        {openBuild}
         <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
         <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
         {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}

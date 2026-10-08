@@ -435,6 +435,27 @@ describe('Open the build (Wi-Fi share)', () => {
     expect(screen.getByText('Works on the same Wi-Fi as the host')).toBeInTheDocument();
   });
 
+  test('at the top of the Now tab, above Watch the build (mockup L5)', async () => {
+    serve(baseView({ log: [SHOWING], lan: { open: OPEN } }));
+    const { container } = await mount();
+    const link = await screen.findByRole('link', { name: 'Open the build' });
+    const feed = container.querySelector('.bpl-feed');
+    expect(feed).not.toBeNull();
+    // eslint-disable-next-line no-bitwise
+    expect(link.compareDocumentPosition(feed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('a Wi-Fi link in the timeline shows without its key, and still opens with it', async () => {
+    const shared = { ...SHOWING, link: OPEN };
+    serve(baseView({ log: [shared], lan: { open: OPEN } }));
+    const { container } = await mount();
+    await screen.findByRole('link', { name: 'Open the build' });
+    const tickerLink = container.querySelector('.bpl-feed .bpl-lnk');
+    expect(tickerLink).toHaveAttribute('href', OPEN);
+    expect(tickerLink.textContent).not.toMatch(/k=/);
+    expect(tickerLink.textContent).toContain('192.168.1.20:4900');
+  });
+
   test('absent when sharing is off', async () => {
     serve(baseView({ lan: null }));
     await mount();
