@@ -54,6 +54,8 @@ export default function MockupViewer({ ask, startLabel, backLabel, onBack }) {
   }, [go]);
 
   const downX = useRef(null);
+  // Nothing to look at (the ask has no pictured option): go back rather than show a blank screen.
+  useEffect(() => { if (!here) onBack(); }, [here, onBack]);
   if (!here) return null;
   return (
     <Modal overlayClassName="brm-viewer" contentClassName="brm-viewer-in" onClose={onBack} closeOnBackdrop={false} label="Mockup viewer">

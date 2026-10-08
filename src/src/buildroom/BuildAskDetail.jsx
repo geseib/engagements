@@ -6,7 +6,7 @@
  * Read-only: nothing here changes the decision. Room-safe, like all of
  * History: no player names, no host notes, no ClaudeNote.
  *
- * `entry` is the decision's timeline entry, which knows the kind it went as.
+ * `entry` and `held` come from the page (the sending row; the For Claude, later list).
  * A picture opens the mockup viewer (onViewMockup(label)); the viewer's Back
  * returns here, because this window stays open behind it.
  */
@@ -51,7 +51,7 @@ function ChoiceCards({ ask, onViewMockup }) {
               <b className="brm-pa-title">{o.title}</b>
               <b className="brm-pa-count">{count}</b>
               <span className="brm-pa-bar" aria-hidden="true"><span style={{ width: `${Math.round((count / top) * 100)}%` }} /></span>
-              {picked && <span className="brm-pa-tag">{pickWords(ask, count, others.length ? Math.max(...others) : 0)}</span>}
+              {picked && <span className="brm-pa-tag">{pickWords(ask, count, res.length >= 2 ? Math.max(...others) : null)}</span>}
             </div>
           </div>
         );
@@ -99,14 +99,15 @@ function RatingSummary({ ask }) {
   );
 }
 
-export default function AskDetail({ ask, entry = null, onClose, onViewMockup }) {
+export default function AskDetail({ ask, entry = null, held = false, onClose, onViewMockup }) {
   const d = ask.decision || {};
-  const held = (Boolean(d.heldForLater) && !d.deliveredAt) || Boolean(entry && entry.held);
   const recordedOnly = d.sentToAgent === false;
   const chain = decisionChain(ask);
-  // The decision's log entry carries the kind it was sent as (the ask view does not).
-  const as = (entry && entry.as) || d.as || '';
-  const kindLine = as ? claudeKindLabel(as) : '';
+  // `entry` is the row that told Claude (the newest for this ask that went to it),
+  // else the decision's own row; it knows the kind and the time. `held` is the page's
+  // own For Claude, later list: held until it is sent, however the row reads.
+  const kindLine = !held && entry && entry.as ? claudeKindLabel(entry.as) : '';
+  const sentAt = (entry && entry.createdAt) || ask.decidedAt || d.decidedAt;
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--ask" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-pa-q">
       <div className="brm-pa-head">
@@ -128,7 +129,7 @@ export default function AskDetail({ ask, entry = null, onClose, onViewMockup }) 
           {d.direction && <p className="brm-pa-dir">{`"${d.direction}"`}</p>}
           {!recordedOnly && (
             <span className="brm-pa-meta">
-              {[kindLine, held ? '' : `sent ${clockOf(ask.decidedAt || d.decidedAt)}`, !held && d.deliveredAt ? 'Claude has it' : ''].filter(Boolean).join(' · ')}
+              {[kindLine, held ? '' : `sent ${clockOf(sentAt)}`, !held && d.deliveredAt ? 'Claude has it' : ''].filter(Boolean).join(' · ')}
             </span>
           )}
         </div>

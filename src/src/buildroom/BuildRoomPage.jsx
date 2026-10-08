@@ -147,6 +147,12 @@ export const slashCommand = (name) => `/mcp__engage__${name}`;
 export const pluginCommand = (name) => `/engage:${name}`;
 
 const askNumber = (askId) => Number(askId) || askId;
+/** The row that told Claude about an ask: the newest that went to it (a sent-later direction), else the decision's own. */
+const toldEntry = (room, askId) => {
+  const rows = ((room && room.log) || []).filter((l) => l.askId === askId);
+  const sent = rows.filter((l) => l.forAgent);
+  return sent.length ? sent[sent.length - 1] : rows.filter((l) => l.kind === 'decision').pop() || null;
+};
 const askById = (room, askId) => ((room && room.asks) || []).find((a) => a.askId === askId) || null;
 
 export function clockTime(iso) {
@@ -401,7 +407,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // place exactly as it was.
   const [detailAskId, setDetailAskId] = useState(null);
   const [viewer, setViewer] = useState(null); // {askId, label, from, backLabel}
-  const openViewer = useCallback((askId, label, from = 'host') => setViewer({ askId, label, from, backLabel: backLabelFor(from, askId) }), []);
+  const openViewer = useCallback((askId, label, from = 'host') => {
+    const a = askById(room, askId);
+    if (!a || !(a.options || []).some((o) => o.imageId)) return;
+    setViewer({ askId, label, from, backLabel: backLabelFor(from, askId) });
+  }, [room]);
   const closeViewer = useCallback(() => setViewer(null), []);
   // A pick waiting for the host to confirm it (owner, 2026-10-06): {ask, id}.
   const [confirmPick, setConfirmPick] = useState(null);
@@ -558,6 +568,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
       if (e.target && e.target.closest && e.target.closest('[role="dialog"]')) return;
+      if (dialogOpen()) return;
       if (e.key === 'p' || e.key === 'P') {
         setScreenState((cur) => {
           const next = togglePresent(cur, lastShown.current);
@@ -974,10 +985,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {wallQrLink && <WallBuildQr link={wallQrLink} onClose={() => setWallQr(false)} />}
       {detailAskId && askById(room, detailAskId) && (
-        <AskDetail ask={askById(room, detailAskId)} entry={[...(room.log || [])].reverse().find((l) => l.kind === 'decision' && l.askId === detailAskId) || null} onClose={() => setDetailAskId(null)} onViewMockup={(label) => openViewer(detailAskId, label, 'history')} />
+        <AskDetail ask={askById(room, detailAskId)} entry={toldEntry(room, detailAskId)} held={((room.brief && room.brief.later) || []).some((i) => i.askId === detailAskId)} onClose={() => setDetailAskId(null)} onViewMockup={(label) => openViewer(detailAskId, label, 'history')} />
       )}
       {viewer && askById(room, viewer.askId) && (
-        <MockupViewer ask={askById(room, viewer.askId)} startLabel={viewer.label} backLabel={viewer.backLabel} onBack={closeViewer} />
+        <MockupViewer key={`${viewer.askId}:${viewer.label}:${viewer.from}`} ask={askById(room, viewer.askId)} startLabel={viewer.label} backLabel={viewer.backLabel} onBack={closeViewer} />
       )}
     </div>
     </ViewerContext.Provider>
@@ -1454,6 +1465,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     const onKey = (e) => {
       if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
       if (e.target && e.target.closest && e.target.closest('button, a, [role="button"], [role="dialog"]')) return;
+      if (dialogOpen()) return;
       e.preventDefault();
       act();
     };
@@ -1561,7 +1573,7 @@ function BuildScreen({ room, now }) {
   const openViewer = useContext(ViewerContext);
   // A newest screenshot that is a choice ask's option opens the viewer (R2).
   const shotAsk = shot && shot.askId ? askById(room, shot.askId) : null;
-  const shotOpt = shotAsk && shotAsk.kind === 'choice' ? (shotAsk.options || []).find((o) => o.label === shot.label && o.imageId === shot.imageId) : null;
+  const shotOpt = shotAsk && shotAsk.kind === 'choice' ? (shotAsk.options || []).find((o) => o.label === shot.label) : null;
   const shareLink = ['on', 'quiet'].includes(wifiState(room.lan, now).state) ? wifiLink(room) : '';
   return (
     <section className="brm-screenbody brm-buildscreen" aria-label="The build">

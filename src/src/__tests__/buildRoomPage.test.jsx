@@ -1126,6 +1126,19 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     expect(lastPost().body).toEqual({ action: 'close' });
   });
 
+  test('Space does nothing while a dialog is open', async () => {
+    await openRoom(live());
+    fireEvent.keyDown(window, { key: '2' });
+    const dlg = document.createElement('div');
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+    document.body.appendChild(dlg);
+    const before = posts().length;
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(posts().length).toBe(before);
+    dlg.remove();
+  });
+
   test('at results the winning vote is the button, back to the Host to decide; HOST at the dock\'s edge goes back too', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
     fireEvent.keyDown(window, { key: '2' });

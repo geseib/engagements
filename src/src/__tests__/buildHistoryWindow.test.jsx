@@ -37,6 +37,7 @@ const ASK = {
 const rows = [
   { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building' },
   ASK,
+  { SK: 'BUILD#LOG#0000000000001#d1', LogId: '1-d1', Kind: 'decision', Text: 'How should it look and feel: Playful', By: 'host', AskId: '004', ForAgent: true, ForAgentAs: 'do-now', CreatedAt: ago(300) },
   { SK: 'BUILD#ANS#004#Ana', AskId: '004', PlayerName: 'Ana', Choice: ['B'], Why: '', CreatedAt: ago(500) },
   { SK: 'BUILD#ANS#004#Priya', AskId: '004', PlayerName: 'Priya', Choice: ['B'], Why: '', CreatedAt: ago(500) },
   { SK: 'BUILD#ANS#004#Sam', AskId: '004', PlayerName: 'Sam', Choice: ['A'], Why: '', CreatedAt: ago(500) },
@@ -71,6 +72,7 @@ test('a decided item opens its window; a picture opens the viewer; Back leaves t
   fireEvent.click(within(story).getByRole('button', { name: 'Open Ask 4' }));
   const win = await screen.findByRole('dialog', { name: /How should it look and feel\?/ });
   expect(within(win).getByText("Picked · the room's choice, 2 to 1")).toBeInTheDocument();
+  expect(within(win).getByText(/^Do now · sent /)).toBeInTheDocument();
   fireEvent.click(await within(win).findByRole('button', { name: /Look closer: Choice A/ }));
   const viewer = await screen.findByRole('dialog', { name: /mockup viewer/i });
   expect(within(viewer).getByRole('button', { name: /Back to Ask 4/ })).toBeInTheDocument();
@@ -91,4 +93,36 @@ test('Esc in the viewer goes Back only; a second Esc closes the window', async (
   expect(screen.getByRole('dialog', { name: /How should it look and feel\?/ })).toBeInTheDocument();
   fireEvent.keyDown(document, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog', { name: /How should it look and feel\?/ })).toBeNull());
+});
+
+test('with a window open, 1-4 do not switch screens', async () => {
+  await openHistory();
+  fireEvent.click(within(screen.getByRole('heading', { name: 'Decided so far' }).closest('section')).getByRole('button', { name: /How should it look/ }));
+  await screen.findByRole('dialog', { name: /How should it look and feel\?/ });
+  fireEvent.keyDown(window, { key: '1' });
+  expect(screen.getByRole('heading', { name: 'Decided so far' })).toBeInTheDocument();
+});
+
+describe('the Host screen opens the viewer', () => {
+  const proposed = { ...ASK, Status: 'proposed', DecidedAt: undefined, Decision: undefined, AskForMockups: true };
+  const live = { ...ASK, Status: 'live', DecidedAt: undefined, Decision: undefined };
+  const openHost = async (askRow, current) => {
+    rows.splice(0, rows.length, { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...(current ? { CurrentAskId: '004' } : {}) }, askRow);
+    window.history.pushState({}, '', `/build?gameId=${GAME}`);
+    render(<BuildRoomPage />);
+    await screen.findByText('Volunteer sign-up');
+  };
+  test('the queue\'s waiting-vote tile', async () => {
+    await openHost(proposed, false);
+    fireEvent.click(await screen.findByRole('button', { name: /Look closer: Choice B/ }));
+    const viewer = await screen.findByRole('dialog', { name: /mockup viewer/i });
+    expect(within(viewer).getByRole('button', { name: /Back to the Host screen/ })).toBeInTheDocument();
+    expect(within(viewer).getByRole('tab', { selected: true }).textContent).toMatch(/^B/);
+  });
+  test('the path\'s option tile', async () => {
+    await openHost(live, true);
+    fireEvent.click(await screen.findByRole('button', { name: /Look closer: Choice A/ }));
+    const viewer = await screen.findByRole('dialog', { name: /mockup viewer/i });
+    expect(within(viewer).getByRole('button', { name: /Back to the Host screen/ })).toBeInTheDocument();
+  });
 });
