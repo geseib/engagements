@@ -393,10 +393,13 @@ describe('askPathStep: where the host is in one ask', () => {
   test('results with nothing picked is Settle', () => {
     expect(askPathStep(ask({ status: 'results' }))).toBe('settle');
   });
-  test('a pick, a landed wheel, or answering for the room is Send', () => {
+  test('a pick, or answering for the room, is Send', () => {
     expect(askPathStep(ask({ status: 'results' }), { pickId: 'B' })).toBe('send');
-    expect(askPathStep(ask({ status: 'results', wheel: { landed: 'A', spins: [{ landed: 'A' }] } }))).toBe('send');
+    expect(askPathStep(ask({ status: 'results', wheel: { landed: 'A', spins: [{ landed: 'A' }] } }), { pickId: 'A' })).toBe('send');
     expect(askPathStep(ask({ status: 'live' }), { answering: true })).toBe('send');
+  });
+  test('a landed wheel with nothing picked is still Settle: the host goes with it, or spins again (H3)', () => {
+    expect(askPathStep(ask({ status: 'results', wheel: { landed: 'A', spins: [{ landed: 'A' }] } }))).toBe('settle');
   });
 });
 

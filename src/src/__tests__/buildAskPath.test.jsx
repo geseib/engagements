@@ -19,7 +19,7 @@ const base = { askId: '004', kind: 'choice', prompt: 'How should it look and fee
   options: [{ label: 'A', title: 'Calm' }, { label: 'B', title: 'Playful' }] };
 const room = { playerCount: 12, asks: [], log: [] };
 const api = () => ({ askAction: jest.fn(() => Promise.resolve({})) });
-const mount = (ask, props = {}) => render(<AskPath ask={ask} room={room} busy={false} ended={false} run={(fn) => fn()} api={props.api || api()} pickId={props.pickId || null} onPick={props.onPick || jest.fn()} answering={props.answering || false} setAnswering={props.setAnswering || jest.fn()} onSent={props.onSent} />);
+const mount = (ask, props = {}) => render(<AskPath ask={ask} room={room} busy={false} ended={false} run={(fn) => fn()} api={props.api || api()} pickId={props.pickId || null} onPick={props.onPick || jest.fn()} answering={props.answering || false} setAnswering={props.setAnswering || jest.fn()} onSent={props.onSent} draft={props.draft} onDraft={props.onDraft} />);
 const won = { total: 11, options: [{ label: 'A', count: 4 }, { label: 'B', count: 7 }] };
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -90,10 +90,65 @@ test('Send: Settle folds to what was chosen; the cursor is in the direction; Sen
   expect(screen.getByRole('button', { name: /Send to Claude/ })).toHaveAttribute('data-next-primary');
 });
 
-test('the wheel landed: Settle says so and Send opens with its pick', () => {
-  mount({ ...base, status: 'results', results: won, wheel: { landed: 'A', spins: [{ landed: 'A' }], slices: [{ id: 'A', text: 'Calm' }, { id: 'B', text: 'Playful' }] } });
+const landedA = { landed: 'A', spins: [{ landed: 'A' }], slices: [{ id: 'A', text: 'Calm' }, { id: 'B', text: 'Playful' }] };
+
+test('the wheel landed: Settle stays open with the wheel, and Go with A is the move', () => {
+  const onPick = jest.fn();
+  mount({ ...base, status: 'results', results: won, wheel: landedA }, { onPick });
+  expect(screen.getAllByRole('listitem')[2].className).toContain('is-now');
+  expect(screen.getByRole('region', { name: 'The wheel' })).toBeInTheDocument();
+  const go = screen.getByRole('button', { name: 'Go with A' });
+  expect(go).toHaveAttribute('data-next-primary');
+  expect(document.activeElement).toBe(go);
+  fireEvent.click(go);
+  expect(onPick).toHaveBeenCalledWith('A', { confirmed: true });
+});
+
+test('going with where the wheel landed: Settle says so and Send opens with its pick', () => {
+  mount({ ...base, status: 'results', results: won, wheel: landedA }, { pickId: 'A' });
   expect(screen.getByText('The wheel picked A')).toBeInTheDocument();
   expect(document.activeElement.value).toBe('How should it look and feel: Calm');
+});
+
+test('Send: Space is never bound to Send; only Ctrl or Cmd Enter sends', () => {
+  mount({ ...base, status: 'results', results: won }, { pickId: 'B' });
+  const send = screen.getByRole('button', { name: /Send to Claude/ });
+  expect(send).toHaveAttribute('data-no-space');
+  expect(screen.getByText('Ctrl Enter, or Cmd Enter on a Mac, sends it.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('switch', { name: 'Send to Claude' }));
+  expect(screen.getByText('Ctrl Enter, or Cmd Enter on a Mac, records it.')).toBeInTheDocument();
+});
+
+test('a pick on a tie: the folded Settle still offers Spin the wheel and Vote again', () => {
+  mount({ ...base, status: 'results', results: { total: 8, tied: ['A', 'B'], options: [{ label: 'A', count: 4 }, { label: 'B', count: 4 }] } }, { pickId: 'A' });
+  fireEvent.click(screen.getByRole('button', { name: /Going with A, your pick/ }));
+  expect(screen.getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Vote again' })).toBeInTheDocument();
+});
+
+test('a live Ideas ask with fewer than two ideas has no Spin instead (as the Stage dock)', () => {
+  const ideas = { ...base, kind: 'suggest', options: [], status: 'live', results: { total: 1 } };
+  const { unmount } = mount({ ...ideas, answerCount: 1, responses: [{ respId: 'r1', text: 'One' }] });
+  expect(screen.queryByRole('button', { name: 'Spin instead' })).toBeNull();
+  unmount();
+  mount({ ...ideas, answerCount: 2, responses: [{ respId: 'r1', text: 'One' }, { respId: 'r2', text: 'Two' }] });
+  expect(screen.getByRole('button', { name: 'Spin instead' })).toBeInTheDocument();
+});
+
+test('a draft: typing reports it, and a draft for the same pick is where Send starts', () => {
+  const onDraft = jest.fn();
+  const { unmount } = mount({ ...base, status: 'results', results: won }, { pickId: 'B', onDraft });
+  fireEvent.change(document.activeElement, { target: { value: 'Playful, big numbers' } });
+  expect(onDraft).toHaveBeenLastCalledWith(expect.objectContaining({ direction: 'Playful, big numbers', as: 'do-now', pickId: 'B', spoken: false }));
+  unmount();
+  mount({ ...base, status: 'results', results: won }, { pickId: 'B', draft: { direction: 'Playful, big numbers', as: 'keep', chosen: ['B'], pickId: 'B', spoken: false } });
+  expect(document.activeElement.value).toBe('Playful, big numbers');
+  expect(screen.getByRole('radio', { name: 'Keep in mind' })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('a draft for another pick is not used', () => {
+  mount({ ...base, status: 'results', results: won }, { pickId: 'B', draft: { direction: 'Old', as: 'do-now', chosen: ['A'], pickId: 'A', spoken: false } });
+  expect(document.activeElement.value).toBe('How should it look and feel: Playful');
 });
 
 test('Send: Ctrl+Enter in the direction sends it, and the sent line is reported', async () => {

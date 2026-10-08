@@ -490,7 +490,8 @@ export function askPathStep(ask, { pickId = null, answering = false } = {}) {
   if (!ask) return 'collect';
   if (answering) return 'send';
   if (['live', 'voting'].includes(ask.status)) return 'collect';
-  if (pickId || (ask.wheel && ask.wheel.landed)) return 'send';
+  // A landed wheel is still Settle (H3): the host goes with it, or spins again.
+  if (pickId) return 'send';
   return 'settle';
 }
 

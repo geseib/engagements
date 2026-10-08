@@ -394,8 +394,13 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [confirmPick, setConfirmPick] = useState(null);
   // The host answers for the room (the path's Send step, spoken), and the
   // line that says what Claude was just sent (owner, 2026-10-07).
-  const [answering, setAnswering] = useState(false);
+  // Answering is held for one ask in one status (`askId:status`), so a new
+  // ask never inherits it, not even for one frame.
+  const [answeringKey, setAnsweringKey] = useState('');
   const [sent, setSent] = useState('');
+  // UNSENT DIRECTIONS, KEPT PER ASK (Review Focus 2): what the host typed in
+  // Send survives another ask opening. {askId: {direction, as, chosen, pickId, spoken}}.
+  const [drafts, setDrafts] = useState({});
   // The opening step the host chose in the brief (null: the next one).
   const [openFocus, setOpenFocus] = useState(null);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
@@ -555,7 +560,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       if (e.target && e.target.closest && e.target.closest('button, a, input, select, textarea, label, [role="button"], [role="radio"], [role="switch"], [role="dialog"]')) return;
       if (dialogOpen()) return;
       const b = document.querySelector('.brm-host [data-next-primary]');
-      if (b && !b.disabled) { e.preventDefault(); b.click(); }
+      // Send to Claude is never one key away (ruling 2026-10-07): Ctrl/Cmd+Enter sends.
+      if (b && !b.disabled && !b.hasAttribute('data-no-space')) { e.preventDefault(); b.click(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -567,9 +573,20 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const curAsk = room ? (room.asks || []).find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status)) || null : null;
   const curKey = curAsk ? `${curAsk.askId}:${curAsk.status}` : '';
   useEffect(() => {
-    setAnswering(false);
     if (curAsk && ['live', 'voting'].includes(curAsk.status)) setPick((p) => (p && p.askId === curAsk.askId ? null : p));
   }, [curKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const answering = Boolean(curKey) && answeringKey === curKey;
+  const setAnswering = useCallback((on) => setAnsweringKey(on ? curKey : ''), [curKey]);
+  // A new spin of the same ask settles again: the pick made from the last
+  // landing no longer stands.
+  const spinsSeen = useRef({ askId: null, n: 0 });
+  const spinsNow = curAsk && curAsk.wheel ? (curAsk.wheel.spins || []).length : 0;
+  useEffect(() => {
+    const was = spinsSeen.current;
+    const id = curAsk ? curAsk.askId : null;
+    if (id && was.askId === id && spinsNow > was.n) setPick((p) => (p && p.askId === id ? null : p));
+    spinsSeen.current = { askId: id, n: spinsNow };
+  }, [curAsk && curAsk.askId, spinsNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // "Sent to Claude as Do now: ..." for six seconds after a decision goes.
   useEffect(() => {
@@ -646,6 +663,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const asks = room.asks || [];
   const proposed = asks.filter((a) => a.status === 'proposed');
   const current = asks.find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status)) || null;
+  // A draft left on an ask that is no longer current, and not yet decided.
+  const unsentAsk = asks.find((a) => drafts[a.askId] && (!current || a.askId !== current.askId)
+    && !['decided', 'discarded'].includes(a.status) && String(drafts[a.askId].direction || '').trim()) || null;
   const firstRun = !asks.length && !(room.log || []).some((l) => l.by === 'agent');
   const crew = room.crew && room.crew.enabled ? room.crew : null;
   const onCrew = Boolean(crew) && stage === 'crew';
@@ -672,7 +692,13 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onPick={(id) => {
             // The dock's "Go with B" is the room's own choice: no question,
             // and the Host opens on Send to Claude with it (a tie: on Settle).
-            if (id === null || !current) { if (current) setPick({ askId: current.askId, id: winnerOf(current) }); setScreen('host'); return; }
+            // A wheel still turning has picked nothing yet: Settle, no pick.
+            if (id === null || !current) {
+              const spinning = current && current.wheel && !current.wheel.landed;
+              if (current && !spinning) setPick({ askId: current.askId, id: winnerOf(current) });
+              setScreen('host');
+              return;
+            }
             setConfirmPick({ ask: current, id });
           }}
         />
@@ -765,6 +791,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           ) : (
             <>
               {!ended && shouldOfferWifi(room) && <WifiOffer busy={busy} run={run} api={api} />}
+              {unsentAsk && (
+                <p className="brm-notice brm-unsent" role="status">
+                  You had an unsent direction for Ask {askNumber(unsentAsk.askId)}. It is kept; reopen Ask {askNumber(unsentAsk.askId)} to send it.
+                </p>
+              )}
               {sent && <p className="brm-sentline" role="status">{sent}</p>}
               {current ? (
                 <div className="brm-now">
@@ -776,7 +807,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                     ask={current} room={room} busy={busy} ended={ended} run={run} api={api}
                     pickId={pick && pick.askId === current.askId ? pick.id : null}
                     onPick={(id, opts) => (opts && opts.confirmed ? choosePick(current, id) : setConfirmPick({ ask: current, id }))}
-                    answering={answering} setAnswering={setAnswering} onSent={onSent}
+                    answering={answering} setAnswering={setAnswering}
+                    onSent={(out) => { setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
+                    draft={drafts[current.askId] || null}
+                    onDraft={(d) => setDrafts((m) => ({ ...m, [current.askId]: d }))}
                   />
                 </div>
               ) : (
@@ -2063,28 +2097,34 @@ export function spokenDirection(ask, chosen) {
 
 /**
  * `next` (owner, 2026-10-07): this is the open step of the Host screen's path,
- * so the cursor lands in the direction and Send is the move Space presses.
+ * so the cursor lands in the direction. Send carries `data-next-primary` for
+ * the contract but `data-no-space` too: Space never sends (controller ruling,
+ * 2026-10-07); Ctrl or Cmd Enter in the direction does.
  * `onSent({ as, send, direction })` hears a decision that went through.
+ * `draft` ({direction, as, chosen}) is where it starts when the host left an
+ * unsent direction here; `onDraft` hears every change the host makes.
  */
-export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide, pickId = null, next = false, onSent }) {
+export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide, pickId = null, next = false, onSent, draft = null, onDraft }) {
   // An alternate to the room's choice says so where the host sends it.
   const verdict = !spoken && pickId ? pickVerdict(ask, pickId) : null;
   const alternate = verdict && !verdict.isPreferred && verdict.preferred ? verdict : null;
   const [direction, setDirection] = useState(() => {
+    if (draft) return draft.direction;
     if (spoken) return '';
     return pickId ? directionFor(ask, pickId) : defaultDirection(ask);
   });
-  const [edited, setEdited] = useState(false);
+  const [edited, setEdited] = useState(Boolean(draft));
   const [note, setNote] = useState('');
   const [send, setSend] = useState(true);
   // WHAT CLAUDE GETS (step 7c): as the ready question's set says, else Do now.
-  const [as, setAs] = useState(ask.claudeGets || 'do-now');
+  const [as, setAs] = useState(() => (draft && draft.as) || ask.claudeGets || 'do-now');
   const [folded, setFolded] = useState(() => new Set());
   const sources = foldSources(ask);
   const topChoice = !spoken && ask.kind === 'choice'
     ? [...((ask.results && ask.results.options) || [])].sort((a, b) => b.count - a.count).filter((o) => o.count)[0]
     : null;
   const [chosen, setChosen] = useState(() => {
+    if (draft && draft.chosen) return draft.chosen;
     if (spoken) return [];
     if (pickId) return [pickId];
     if (ask.wheel && ask.wheel.landed) return [ask.wheel.landed];
@@ -2103,13 +2143,21 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
     setFolded(new Set());
     setEdited(false);
   }, [pickId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Once the host has changed anything, every change is kept as a draft.
+  const dirty = useRef(false);
+  const touch = () => { dirty.current = true; };
+  useEffect(() => {
+    if (dirty.current && onDraft) onDraft({ direction, as, chosen });
+  }, [direction, as, chosen]); // eslint-disable-line react-hooks/exhaustive-deps
   // In spoken mode the sentence follows the picks until the host types in it.
   const pick = (next) => {
+    touch();
     setChosen(next);
     if (spoken && !edited) setDirection(spokenDirection(ask, next));
   };
 
   const toggleFold = (s) => {
+    touch();
     const next = new Set(folded);
     if (next.has(s.id)) {
       next.delete(s.id);
@@ -2170,7 +2218,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
           </div>
         </div>
       )}
-      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" data-next-focus={next || undefined} value={direction} maxLength={2000} onKeyDown={onBoxKey} onChange={(e) => { setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
+      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" data-next-focus={next || undefined} value={direction} maxLength={2000} onKeyDown={onBoxKey} onChange={(e) => { touch(); setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
       {ask.kind === 'choice' && (
         <div className="brm-field">
           <span className="brm-lbl">{spoken ? 'What the room chose' : 'Chosen'}</span>
@@ -2204,7 +2252,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
           <span className="brm-lbl">Claude gets it as</span>
           <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="Claude gets it as">
             {CLAUDE_KINDS.map((k) => (
-              <button key={k.key} type="button" role="radio" aria-checked={as === k.key} className={`brm-segbtn${as === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => setAs(k.key)}>{k.label}</button>
+              <button key={k.key} type="button" role="radio" aria-checked={as === k.key} className={`brm-segbtn${as === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => { touch(); setAs(k.key); }}>{k.label}</button>
             ))}
           </div>
           <span className="brm-hint">{CLAUDE_KINDS.find((k) => k.key === as).hint}{ask.claudeNote ? ` With it, from the set: "${ask.claudeNote}"` : ''}</span>
@@ -2217,11 +2265,11 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
         </label>
         <span className="brm-hint">{send ? "Delivered on Claude's next call" : 'Recorded in the timeline only'}</span>
         {onCancel && <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onCancel}>Cancel</button>}
-        <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} data-next-primary={next || undefined} disabled={cannot} onClick={decide}>
+        <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} data-next-primary={next || undefined} data-no-space={next || undefined} disabled={cannot} onClick={decide}>
           <Icon name="ArrowRight" size={16} /> {send ? 'Send to Claude' : 'Record decision'}
         </button>
       </div>
-      {next && <p className="brm-hint brm-path-keys">Ctrl Enter, or Cmd Enter on a Mac, sends it.</p>}
+      {next && <p className="brm-hint brm-path-keys">{`Ctrl Enter, or Cmd Enter on a Mac, ${send ? 'sends' : 'records'} it.`}</p>}
     </section>
   );
 }

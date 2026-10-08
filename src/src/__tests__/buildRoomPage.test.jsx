@@ -1127,6 +1127,41 @@ describe('the ask as four steps, and Space on the Host screen (owner, 2026-10-07
     expect(screen.getByText("Going with B, the room's choice, 2 to 1")).toBeInTheDocument();
   });
 
+  test('Space at Send does not send: only Ctrl or Cmd Enter in the direction does', async () => {
+    await openRoom(results());
+    goWith('Go with B');
+    fireEvent.keyDown(document.body, { key: ' ' });
+    expect(posts()).toHaveLength(0);
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Direction for Claude' }), { key: 'Enter', metaKey: true });
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide' }));
+  });
+
+  test('an unsent direction survives another ask opening, and says where it is kept', async () => {
+    const OTHER = { ...CHOICE, AskId: '005', Prompt: 'Which colour?', Options: [{ label: 'A', title: 'Blue' }, { label: 'B', title: 'Green' }] };
+    await openRoom(results());
+    goWith('Go with B');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Direction for Claude' }), { target: { value: 'B, with bigger dates' } });
+    // Claude's ask 005 opens and becomes current.
+    current = hostState({ st: { CurrentAskId: '005' }, asks: [{ ...CHOICE, Status: 'results' }, { ...OTHER, Status: 'live' }], answers: CHOICE_ANSWERS });
+    await act(async () => { webSocketClient.onMessage.mock.calls.find((c) => c[0] === 'buildChanged')[1](); });
+    await waitFor(() => expect(screen.getByText('You had an unsent direction for Ask 3. It is kept; reopen Ask 3 to send it.')).toBeInTheDocument());
+    // Back to 003 at results, the same pick: the direction is what was typed.
+    current = results();
+    await act(async () => { webSocketClient.onMessage.mock.calls.find((c) => c[0] === 'buildChanged')[1](); });
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('B, with bigger dates'));
+    expect(screen.queryByText(/You had an unsent direction/)).toBeNull();
+  });
+
+  test('Decide on Host while the wheel is still spinning picks nothing: the Host opens on Settle', async () => {
+    const TIE = [{ AskId: '003', PlayerName: 'Ana', Choice: ['A'] }, { AskId: '003', PlayerName: 'Priya', Choice: ['B'] }, { AskId: '003', PlayerName: 'Sam', Choice: ['B'] }];
+    const WHEEL = { Slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }], Spinner: 'Dee', Armed: true, Spins: [] };
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL }], answers: TIE }));
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Decide on Host' }));
+    expect(screen.getAllByRole('listitem').filter((li) => li.className.includes('brm-path-step'))[2].className).toContain('is-now');
+    expect(screen.queryByRole('textbox', { name: 'Direction for Claude' })).toBeNull();
+  });
+
   test('after it is sent, the Now column says what Claude got', async () => {
     await openRoom(results());
     fireEvent.click(screen.getByRole('button', { name: 'Go with B' }));
@@ -1317,10 +1352,11 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
       asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
       answers: TIE,
     }));
-    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Calm photo + calendar');
-    // Settle folds to where it landed, and opens again to spin again.
-    openStep(/The wheel picked B/);
+    // Settle stays open with the wheel (H3): spin again, or go with where it landed.
     expect(screen.getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
+    goWith('Go with B');
+    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Calm photo + calendar');
+    expect(screen.getByText('The wheel picked B')).toBeInTheDocument();
   });
 
   test('on the Stage the wheel is the screen; Space spins, and deciding is back on the Host', async () => {

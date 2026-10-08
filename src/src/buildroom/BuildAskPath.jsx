@@ -66,6 +66,10 @@ export function settleSummary(ask, pickId, summaries) {
   return `Going with ${said(pickId)}, the room's choice, ${votes} to ${next}`;
 }
 
+/** As the Stage dock: never on a rating, and an Ideas ask needs two ideas first. */
+const canSpinInstead = (ask) => ask.kind !== 'rating'
+  && (ask.kind !== 'suggest' || ask.status !== 'live' || (ask.answerCount || 0) >= 2);
+
 const ratingAvg = (ask) => {
   const r = ask.results && ask.results.rating;
   return r && r.avg !== null && r.avg !== undefined ? r.avg : null;
@@ -123,7 +127,12 @@ function AskWording({ ask, busy, run, api }) {
   );
 }
 
-export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPick, answering = false, setAnswering, onSent }) {
+/**
+ * `draft` / `onDraft` (Review Focus 2): BuildRoom keeps what the host typed in
+ * Send for each ask, so another ask opening does not lose it. A draft is used
+ * only for the same pick (or the same spoken answer) it was written for.
+ */
+export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPick, answering = false, setAnswering, onSent, draft = null, onDraft }) {
   const ref = useRef(null);
   const [opened, setOpened] = useState(null); // a done step opened by a click
   const step = askPathStep(ask, { pickId, answering });
@@ -140,7 +149,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   const avg = ask.kind === 'rating' ? ratingAvg(ask) : null;
   // The settle move, so a spin or a tie moves the focus as a new step does.
   let mode = '';
-  if (step === 'settle') mode = wheel ? 'wheel' : ask.kind === 'rating' ? 'rating' : win ? 'winner' : 'none';
+  if (step === 'settle') mode = wheel ? (wheel.landed ? `landed:${wheel.spins.length}` : 'wheel') : ask.kind === 'rating' ? 'rating' : win ? 'winner' : 'none';
   useNextFocus(ref, `${ask.askId}:${step}:${mode}`);
 
   const toggle = (name) => () => setOpened((o) => (o === name ? null : name));
@@ -161,7 +170,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
               : <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => act('close')}>Close and show results</button>}
             <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
             {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
-            {ask.kind !== 'rating' && (
+            {canSpinInstead(ask) && (
               <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title="Close it and let the wheel pick from every option" onClick={() => act('wheel')}>Spin instead</button>
             )}
             {ideasOpen && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => act('close')}>Close without a vote</button>}
@@ -183,7 +192,15 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   let settleBody = null;
   if (stateOf('settle') === 'now') {
     let moves = null;
-    if (host && !wheel && !ask.revotedAs) {
+    if (host && wheel && wheel.landed) {
+      // Where it landed is the room's way on (H3); Spin again stays on the wheel.
+      const landed = decisionChoices(ask).find((c) => c.id === wheel.landed);
+      moves = (
+        <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => onPick(wheel.landed, { confirmed: true })}>
+          {landed && landed.label ? `Go with ${landed.label}` : "Go with the wheel's pick"}
+        </button>
+      );
+    } else if (host && !wheel && !ask.revotedAs) {
       if (ask.kind === 'rating') {
         moves = avg !== null
           ? <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => onPick(String(avg), { confirmed: true })}>Go with the average</button>
@@ -210,7 +227,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     settleBody = (
       <>
         {board}
-        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary />}
+        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary={!(wheel && wheel.landed)} />}
         {moves && <div className="brm-path-row">{moves}<SpaceHint /></div>}
         {host && !wheel && ask.kind !== 'rating' && (
           <p className="brm-hint">
@@ -226,7 +243,8 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     settleBody = (
       <>
         {board}
-        {wheel && <WheelPanel ask={ask} busy={busy} run={run} api={api} />}
+        {/* The wheel to spin again, or with none yet: spin it, or vote again on a tie. */}
+        {ask.kind !== 'rating' && <WheelPanel ask={ask} busy={busy} run={run} api={api} />}
         {ask.kind !== 'rating' && <p className="brm-hint">Click another option to pick it instead; you will be asked first.</p>}
       </>
     );
@@ -236,9 +254,11 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   let sendBody = null;
   if (stateOf('send') === 'now' && host) {
     const sent = (out) => onSent && onSent(out);
+    const forThis = draft && draft.spoken === answering && (answering || draft.pickId === pickId) ? draft : null;
+    const keep = onDraft ? (d) => onDraft({ ...d, pickId: answering ? null : pickId, spoken: answering }) : undefined;
     sendBody = answering
-      ? <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} next onSent={sent} />
-      : <DecidePanel key={`wheel:${wheel ? wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} pickId={ask.kind === 'rating' ? null : pickId} next onSent={sent} />;
+      ? <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} next onSent={sent} draft={forThis} onDraft={keep} />
+      : <DecidePanel key={`wheel:${wheel ? wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} pickId={ask.kind === 'rating' ? null : pickId} next onSent={sent} draft={forThis} onDraft={keep} />;
   }
 
   let settleTitle = 'Settle: go with the room, spin or pick';
