@@ -3770,7 +3770,8 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
           <div className="brm-field">
             <span className="brm-lbl">When it is decided, Claude gets it as</span>
             <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="When it is decided, Claude gets it as">
-              {CLAUDE_KINDS.map((k) => (
+              {/* Later is not a kind to choose (owner, 2026-10-08): Save for later is the one way in. A ready question preset to later keeps it. */}
+              {CLAUDE_KINDS.filter((k) => k.key !== 'later').map((k) => (
                 <button key={k.key} type="button" role="radio" aria-checked={claudeGets === k.key} className={`brm-segbtn${claudeGets === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => setClaudeGets(k.key)}>{k.label}</button>
               ))}
             </div>

@@ -1972,6 +1972,8 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     expect(dialog.textContent).toMatch('from Build Room starters · Who it is for');
     const kinds = within(dialog).getByRole('radiogroup', { name: 'When it is decided, Claude gets it as' });
     expect(within(kinds).getByRole('radio', { name: 'Keep in mind' })).toHaveAttribute('aria-checked', 'true');
+    // Later is not a kind (owner, 2026-10-08): three choices, Save for later is the way in.
+    expect(within(kinds).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Do now', 'Keep in mind', 'Ask Claude']);
     expect(within(dialog).getByLabelText(/Note for Claude/)).toHaveValue('Treat the winning answer as the audience.');
     fireEvent.change(within(dialog).getByLabelText(/Question/), { target: { value: 'Who is this for, really?' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
