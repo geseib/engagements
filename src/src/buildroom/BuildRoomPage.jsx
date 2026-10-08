@@ -34,7 +34,7 @@ import { editableRows } from '../utils/questionRows';
 import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady } from './readyQuestions';
 import { OpeningPanel, BriefPath, WallBrief } from './BuildOpening';
 import BuildReport from './BuildReport';
-import BuildImage, { ImageLoader } from './BuildImage';
+import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import AskDetail from './BuildAskDetail';
 import MockupViewer, { ViewerContext, backLabelFor } from './MockupViewer';
 import BuildWheel from './BuildWheel';
@@ -394,6 +394,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (!a || !(a.options || []).some((o) => o.imageId)) return;
     setViewer({ askId, label, from, backLabel: backLabelFor(from, askId) });
   }, [room]);
+  // A screenshot on its own opens the same viewer, one picture, and Back
+  // names the screen it was opened from.
+  const openImage = useCallback((image) => {
+    if (!image || !image.imageId) return;
+    setViewer({ image, from: screen, backLabel: backLabelFor(screen, null) });
+  }, [screen]);
   const closeViewer = useCallback(() => setViewer(null), []);
   // A pick waiting for the host to confirm it (owner, 2026-10-06): {ask, id}.
   const [confirmPick, setConfirmPick] = useState(null);
@@ -720,6 +726,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   return (
     <ImageLoader.Provider value={loadImage}>
     <ViewerContext.Provider value={openViewer}>
+    <ImageViewer.Provider value={openImage}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}${screen === 'host' ? ' brm-room--host' : ''}`} data-theme="dark">
       {screen === 'stage' ? (
         <BuildStage
@@ -960,10 +967,14 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {detailAskId && askById(room, detailAskId) && (
         <AskDetail ask={askById(room, detailAskId)} entry={toldEntry(room, detailAskId)} held={((room.brief && room.brief.later) || []).some((i) => i.askId === detailAskId)} onClose={() => setDetailAskId(null)} onViewMockup={(label) => openViewer(detailAskId, label, 'history')} />
       )}
-      {viewer && askById(room, viewer.askId) && (
+      {viewer && viewer.image && (
+        <MockupViewer key={`img:${viewer.image.imageId}:${viewer.from}`} image={viewer.image} backLabel={viewer.backLabel} onBack={closeViewer} />
+      )}
+      {viewer && !viewer.image && askById(room, viewer.askId) && (
         <MockupViewer key={`${viewer.askId}:${viewer.label}:${viewer.from}`} ask={askById(room, viewer.askId)} startLabel={viewer.label} backLabel={viewer.backLabel} onBack={closeViewer} />
       )}
     </div>
+    </ImageViewer.Provider>
     </ViewerContext.Provider>
     </ImageLoader.Provider>
   );
@@ -1186,6 +1197,26 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
  * connection and the session menu; on a screen the room sees, nothing in it
  * is host-only (the Host tab's count is a number, never content).
  */
+/**
+ * THE LIVE BUILD (owner, 2026-10-08: "no obvious link to the live demo"): the
+ * address of what Claude is running. The Wi-Fi share's address when sharing is
+ * on (it works on every phone and laptop in the room), else the newest link
+ * Claude posted, else the wrap-up's demo.
+ */
+function liveBuildLink(room, now) {
+  const sharing = ['on', 'quiet'].includes(wifiState(room.lan, now).state);
+  return (sharing && wifiLink(room)) || latestBuild(room).link || '';
+}
+
+/** One always-visible control: opens the build in a new tab, or says why it cannot yet. */
+function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild' }) {
+  const href = safeHref(link);
+  if (!href) {
+    return <button type="button" className={className} disabled title="Claude hasn't started the app yet">Open the live build ↗</button>;
+  }
+  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Open the live build ↗</a>;
+}
+
 function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
   const waiting = waitingCount(room);
   const pill = askPill(room);
@@ -1238,6 +1269,7 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
         </button>
       )}
       <div className="brm-hbar-tools">
+        <LiveBuildButton link={liveBuildLink(room, now)} />
         {showWifi && (
           <div className="brm-wifiwrap" ref={wifiRef}>
             <WifiChip lan={room.lan} now={now} open={wifiOpen} onOpen={() => setWifiOpen((o) => !o)} />
@@ -1442,6 +1474,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const [settledSpin, setSettledSpin] = useState(lastSpinId);
   const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
   const waiting = waitingCount(room);
+  const liveLink = liveBuildLink(room, now);
   // A click on an option or a wheel slice at results opens the send window
   // with that pick made; while the room is still answering it asks first, as before.
   const boardPick = (id) => {
@@ -1546,6 +1579,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             {move && <button type="button" className="btn" disabled={busy} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
             {move && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
+            {liveLink && <LiveBuildButton link={liveLink} className="btn ghost brm-livebuild" />}
             <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
               <span className="dock-more-lbl">HOST</span>
               {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}

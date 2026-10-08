@@ -428,7 +428,7 @@ describe('Open the build (Wi-Fi share)', () => {
   test('shown while sharing is live, opens in a new tab, says same Wi-Fi', async () => {
     serve(baseView({ lan: { open: OPEN } }));
     await mount();
-    const link = await screen.findByRole('link', { name: 'Open the build' });
+    const link = await screen.findByRole('link', { name: 'Open the live build ↗' });
     expect(link).toHaveAttribute('href', OPEN);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -438,7 +438,7 @@ describe('Open the build (Wi-Fi share)', () => {
   test('at the top of the Now tab, above Watch the build (mockup L5)', async () => {
     serve(baseView({ log: [SHOWING], lan: { open: OPEN } }));
     const { container } = await mount();
-    const link = await screen.findByRole('link', { name: 'Open the build' });
+    const link = await screen.findByRole('link', { name: 'Open the live build ↗' });
     const feed = container.querySelector('.bpl-feed');
     expect(feed).not.toBeNull();
     // eslint-disable-next-line no-bitwise
@@ -449,7 +449,7 @@ describe('Open the build (Wi-Fi share)', () => {
     const shared = { ...SHOWING, link: OPEN };
     serve(baseView({ log: [shared], lan: { open: OPEN } }));
     const { container } = await mount();
-    await screen.findByRole('link', { name: 'Open the build' });
+    await screen.findByRole('link', { name: 'Open the live build ↗' });
     const tickerLink = container.querySelector('.bpl-feed .bpl-lnk');
     expect(tickerLink).toHaveAttribute('href', OPEN);
     expect(tickerLink.textContent).not.toMatch(/k=/);
@@ -460,7 +460,7 @@ describe('Open the build (Wi-Fi share)', () => {
     serve(baseView({ lan: null }));
     await mount();
     await screen.findByRole('button', { name: /Send an idea to the host/ });
-    expect(screen.queryByRole('link', { name: 'Open the build' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open the live build ↗' })).toBeNull();
   });
 
   test('the preview note asks to try it first only while sharing is live', async () => {

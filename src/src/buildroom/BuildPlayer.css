@@ -1054,3 +1054,14 @@
 .bpl .bpl-opening-bar { display: flex; gap: 4px; }
 .bpl .bpl-opening-bar i { flex: 1; height: 4px; border-radius: 2px; background: var(--surface); }
 .bpl .bpl-opening-bar i.on { background: var(--primary); }
+
+/* A picture opened full screen (never a new tab). */
+.bpl .bimg-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; color: inherit; font: inherit; }
+.bpl .bpl-viewer { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); color: var(--text); }
+.bpl .bpl-viewer-top { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--bpl-rule); }
+.bpl .bpl-viewer-back, .bpl .bpl-viewer-x { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--bpl-rule); background: var(--surface); color: var(--text); font: 700 var(--plr-t-meta)/1 var(--font-ui); cursor: pointer; }
+.bpl .bpl-viewer-x { margin-left: auto; padding: 0; }
+.bpl .bpl-viewer-cap { font-size: var(--plr-t-meta); color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.bpl .bpl-viewer-main { min-height: 0; overflow: auto; padding: 12px; display: grid; place-items: center; }
+.bpl .bpl-viewer-pic { margin: 0; }
+.bpl .bpl-viewer-pic img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border: 0; }

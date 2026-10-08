@@ -114,7 +114,7 @@ describe('the Host screen opens the viewer', () => {
   };
   test('the queue\'s waiting-vote tile', async () => {
     await openHost(proposed, false);
-    fireEvent.click(await screen.findByRole('button', { name: /Look closer: Choice B/ }));
+    fireEvent.click((await screen.findAllByRole('button', { name: /Look closer: Choice B/ })).find((b) => b.closest('.brm-mocktile-img')));
     const viewer = await screen.findByRole('dialog', { name: /mockup viewer/i });
     expect(within(viewer).getByRole('button', { name: /Back to the Host screen/ })).toBeInTheDocument();
     expect(within(viewer).getByRole('tab', { selected: true }).textContent).toMatch(/^B/);

@@ -6,8 +6,8 @@
  * hostView), never hand-shaped, so a change to the server's shape breaks these.
  */
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import BuildImage, { ImageLoader } from '../buildroom/BuildImage';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import BuildImage, { ImageLoader, ImageViewer } from '../buildroom/BuildImage';
 import BuildPlayer from '../buildroom/BuildPlayer';
 import BuildReport from '../buildroom/BuildReport';
 
@@ -36,15 +36,20 @@ const ROWS = [
 const CHECK = { SK: 'BUILD#LOG#0000000000009#c1', LogId: '9-c1', Kind: 'checkpoint', Text: 'Header B, as the room chose', Detail: 'commit 3b70a8c · 2 files', By: 'agent', CreatedAt: NOW };
 const room = () => S.roomFromRows([...ROWS, CHECK]);
 
-test('BuildImage shows what its surface loader returns, and opens full size in a new tab', async () => {
+test('BuildImage shows what its surface loader returns and never opens a tab: it hands the picture to the surface\'s viewer', async () => {
+  const opened = jest.fn();
   render(
     <ImageLoader.Provider value={(id) => Promise.resolve(`blob:test/${id}`)}>
-      <BuildImage imageId="aaa" caption="Choice A" />
+      <ImageViewer.Provider value={opened}>
+        <BuildImage imageId="aaa" caption="Choice A" />
+      </ImageViewer.Provider>
     </ImageLoader.Provider>,
   );
   const pic = await screen.findByRole('img', { name: 'Choice A' });
   expect(pic).toHaveAttribute('src', 'blob:test/aaa');
-  expect(pic.closest('a')).toHaveAttribute('target', '_blank');
+  expect(pic.closest('a')).toBeNull();
+  fireEvent.click(pic.closest('button'));
+  expect(opened).toHaveBeenCalledWith({ imageId: 'aaa', caption: 'Choice A' });
   expect(screen.getByText('Choice A').tagName).toBe('FIGCAPTION');
 });
 
@@ -69,6 +74,21 @@ describe('on the phone', () => {
     expect(pic.getAttribute('src')).toBe(`${API}games/${GAME}/build-play/images/aaa?playerName=Priya&clientId=cid-1`);
     // The laptop's localhost is not offered to a phone.
     expect(screen.queryByRole('link', { name: /Open preview/ })).toBeNull();
+  });
+});
+
+describe('a picture on the phone opens in the app', () => {
+  test('a full-screen view with a Back; never a link that opens a tab', async () => {
+    const view = S.publicView({ gameId: GAME, meta: { Title: 'Sign-up', Details: 'Goal' }, sessionState: 'STARTED', room: room(), players: ['Priya'], me: { playerName: 'Priya' }, now: NOW });
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => view }));
+    render(<BuildPlayer gameId={GAME} playerName="Priya" clientId="cid-1" apiBase={API} rev={0} />);
+    const pic = await screen.findByRole('img', { name: 'Choice A: Bold banner' });
+    expect(pic.closest('a')).toBeNull();
+    fireEvent.click(pic.closest('button'));
+    const viewer = screen.getByRole('dialog', { name: 'Picture' });
+    expect(within(viewer).getByRole('button', { name: /Back/ })).toBeInTheDocument();
+    fireEvent.click(within(viewer).getByRole('button', { name: /Back/ }));
+    expect(screen.queryByRole('dialog', { name: 'Picture' })).toBeNull();
   });
 });
 

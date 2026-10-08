@@ -1194,3 +1194,8 @@
   .brm .brm-sd-opt { grid-template-columns: minmax(0, 1fr) auto; }
   .brm .brm-sd-opt .brm-btn--link { grid-column: 1; justify-self: start; }
 }
+
+/* The live build, always in the header (and the Stage dock); the viewer's full-size link. */
+.brm .brm-livebuild { white-space: nowrap; }
+.brm .brm-livebuild[aria-disabled="true"], .brm .brm-livebuild:disabled { opacity: .55; cursor: not-allowed; }
+.brm .brm-viewer-full { color: var(--secondary); font-weight: 600; text-decoration: underline; }

@@ -14,7 +14,7 @@
 import React, { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import Modal from '../components/Modal';
 import Icon from '../components/Icon';
-import BuildImage from './BuildImage';
+import BuildImage, { useImageUrl } from './BuildImage';
 
 /** `(askId, label, from) => void`, or null where a surface has no viewer. */
 export const ViewerContext = createContext(null);
@@ -22,15 +22,48 @@ export const ViewerContext = createContext(null);
 const SWIPE_PX = 50;
 const askNo = (askId) => Number(askId) || askId;
 
-/** Where Back goes, in words. `from` is history | build | host | stage-edit. */
+/** Where Back goes, in words. `from` is history | build | host | stage | stage-edit. */
 export function backLabelFor(from, askId) {
-  if (from === 'history') return `Back to Ask ${askNo(askId)}`;
+  if (from === 'history') return askId ? `Back to Ask ${askNo(askId)}` : 'Back to History';
   if (from === 'build') return 'Back to the build';
+  if (from === 'stage') return 'Back to the Stage';
   if (from === 'stage-edit') return 'Back to Send to Claude';
   return 'Back to the Host screen';
 }
 
-export default function MockupViewer({ ask, startLabel, backLabel, onBack }) {
+/** The small link for putting a picture on a second screen: the only thing here that opens a tab. */
+function FullSize({ imageId }) {
+  const url = useImageUrl(imageId);
+  if (!url) return null;
+  return <a className="brm-viewer-full" href={url} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Open full size (new tab) ↗</a>;
+}
+
+/** One picture on its own (a screenshot, not a choice): the picture, its caption, Back. */
+function PictureViewer({ image, backLabel, onBack }) {
+  return (
+    <Modal overlayClassName="brm-viewer" contentClassName="brm-viewer-in" onClose={onBack} closeOnBackdrop={false} label="Picture viewer">
+      <div className="brm-viewer-top">
+        <button type="button" className="brm-btn brm-btn--sm" onClick={onBack}>
+          <Icon name="CaretLeft" size={14} /> {backLabel}
+        </button>
+        {image.caption ? <b className="brm-viewer-q">{image.caption}</b> : null}
+      </div>
+      <div className="brm-viewer-main" data-testid="brm-viewer-main">
+        <BuildImage imageId={image.imageId} alt={image.caption || 'Screenshot'} className="brm-viewer-pic" linked={false} />
+      </div>
+      <div className="brm-viewer-foot">
+        <span><kbd>Esc</kbd> to go back</span>
+        <span className="brm-push"><FullSize imageId={image.imageId} /></span>
+      </div>
+    </Modal>
+  );
+}
+
+export default function MockupViewer(props) {
+  return props.image ? <PictureViewer {...props} /> : <ChoiceViewer {...props} />;
+}
+
+function ChoiceViewer({ ask, startLabel, backLabel, onBack }) {
   const pics = (ask.options || []).filter((o) => o.imageId);
   const [label, setLabel] = useState(startLabel);
   const at = Math.max(0, pics.findIndex((o) => o.label === label));
@@ -91,7 +124,8 @@ export default function MockupViewer({ ask, startLabel, backLabel, onBack }) {
       <div className="brm-viewer-foot">
         <span><kbd>←</kbd> <kbd>→</kbd> to flip</span>
         <span><kbd>Esc</kbd> to go back</span>
-        <span className="brm-push">Mockup {here.label}{chosen.includes(here.label) ? ' · picked' : ''}</span>
+        <span className="brm-push"><FullSize imageId={here.imageId} /></span>
+        <span>Mockup {here.label}{chosen.includes(here.label) ? ' · picked' : ''}</span>
       </div>
     </Modal>
   );

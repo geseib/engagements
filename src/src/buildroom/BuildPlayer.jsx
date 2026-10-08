@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import BuildImage, { ImageLoader } from './BuildImage';
+import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
@@ -910,6 +910,25 @@ function Tabs({ tab, setTab, nowBadge, ideaCount, hideIdeas = false }) {
 
 /* ---------------------------------------------------------------- page -- */
 
+/** One picture, full screen, with a Back. Esc and the backdrop-free layout keep it simple on a phone. */
+function PictureView({ image, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="bpl-viewer" role="dialog" aria-modal="true" aria-label="Picture">
+      <div className="bpl-viewer-top">
+        <button type="button" className="bpl-viewer-back" onClick={onClose}><Icon name="CaretLeft" size={16} /> Back</button>
+        {image.caption ? <span className="bpl-viewer-cap">{image.caption}</span> : null}
+        <button type="button" className="bpl-viewer-x" onClick={onClose} aria-label="Close the picture"><Icon name="X" size={18} /></button>
+      </div>
+      <div className="bpl-viewer-main"><BuildImage imageId={image.imageId} alt={image.caption || 'Screenshot'} className="bpl-viewer-pic" linked={false} /></div>
+    </div>
+  );
+}
+
 export default function BuildPlayer({
   gameId, playerName, clientId, apiBase, rev = 0, online = true, banner = null, ended = false,
 }) {
@@ -971,8 +990,11 @@ export default function BuildPlayer({
     `${apiBase}games/${encodeURIComponent(gameId)}/build-play/images/${encodeURIComponent(imageId)}`
     + `?playerName=${encodeURIComponent(playerName || '')}&clientId=${encodeURIComponent(clientId || '')}`
   ), [apiBase, gameId, playerName, clientId]);
+  // A picture opens full screen in the app, with a Back; never a new tab (owner, 2026-10-08).
+  const [shown, setShown] = useState(null);
   const shell = ({ phase = 'quiet', volume = 'watch', dock = null, body, centre = false }) => (
     <ImageLoader.Provider value={loadImage}>
+    <ImageViewer.Provider value={setShown}>
     <PlayerShell
       phase={phase}
       volume={volume}
@@ -984,7 +1006,9 @@ export default function BuildPlayer({
       centre={centre}
     >
       <div className="bpl">{body}</div>
+      {shown && <div className="bpl"><PictureView image={shown} onClose={() => setShown(null)} /></div>}
     </PlayerShell>
+    </ImageViewer.Provider>
     </ImageLoader.Provider>
   );
 
@@ -1039,8 +1063,8 @@ export default function BuildPlayer({
   /* OPEN THE BUILD, at the top of Now (mockup L5): the first thing a
      participant sees while the host shares the build on this Wi-Fi. */
   const openBuild = !isEnded && view.lan && view.lan.open ? (
-    <section className="bpl-open" aria-label="Open the build">
-      <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer">Open the build</a>
+    <section className="bpl-open" aria-label="Open the live build">
+      <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Open the live build ↗</a>
       <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
     </section>
   ) : null;
