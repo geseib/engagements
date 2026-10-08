@@ -503,15 +503,18 @@ export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
   const opened = ask.openedAt ? `Opened ${clockOf(ask.openedAt)}` : 'Opened';
   const total = (ask.results && ask.results.total) || 0;
   const verb = ask.kind === 'suggest' ? 'answered' : ask.kind === 'rating' ? 'rated' : 'voted';
-  const collect = `${total} of ${playerCount || total} ${verb}`;
+  const collect = `${total} of ${Math.max(Number(playerCount) || 0, total)} ${verb}`;
+  const wheel = ask.wheel && ask.wheel.landed;
+  const leader = winnerOf({ ...ask, wheel: null }); // a unique vote leader only
   let settle = '';
-  const winner = winnerOf(ask);
-  if (ask.wheel && ask.wheel.landed && !pickId) settle = `The wheel picked ${ask.wheel.landed}`;
-  else if (pickId && winner && pickId !== winner) settle = `Going with ${pickId}, your pick instead of ${winner}`;
-  else if (pickId) {
-    const others = ((ask.results && ask.results.options) || []).filter((o) => o.label !== pickId).map((o) => Number(o.count) || 0);
-    const runnerUp = others.length ? Math.max(...others) : 0;
-    settle = `Going with ${pickId}, the room's choice, ${countOf(ask, pickId)} to ${runnerUp}`;
+  if (wheel) {
+    settle = !pickId || pickId === wheel ? `The wheel picked ${wheel}` : `Going with ${pickId}, your pick instead of the wheel's ${wheel}`;
+  } else if (pickId) {
+    if (!leader) settle = `Going with ${pickId}, your pick`;
+    else if (pickId === leader) {
+      const others = ((ask.results && ask.results.options) || []).filter((o) => o.label !== pickId).map((o) => Number(o.count) || 0);
+      settle = `Going with ${pickId}, the room's choice, ${countOf(ask, pickId)} to ${others.length ? Math.max(...others) : 0}`;
+    } else settle = `Going with ${pickId}, your pick instead of ${leader}`;
   }
   return { ask: opened, collect, settle };
 }
@@ -528,10 +531,12 @@ export function whatsNextMoves(room, { ticked = 0 } = {}) {
 }
 
 export function combineLine(ask) {
-  const q = questionOf(ask.prompt);
+  const prompt = String(ask.prompt || '').trim();
+  const q = questionOf(prompt);
   const d = String((ask.decision && ask.decision.direction) || '').trim();
   const answer = d.toLowerCase().startsWith(`${q.toLowerCase()}:`) ? d.slice(q.length + 1).trim() : d;
-  return `${q}? ${answer}`;
+  if (!answer) return prompt;
+  return /[?:]$/.test(prompt) ? `${prompt} ${answer}` : `${prompt}: ${answer}`;
 }
 
 export function combineText(asks) {

@@ -456,3 +456,29 @@ describe('mockupsReady: something for the room to look at before a vote', () => 
     expect(mockupsReady({ asks: [], images: [] })).toBeNull();
   });
 });
+
+describe('fix round 1: honest summaries and combine lines', () => {
+  const base = (over) => ({ askId: '004', kind: 'choice', status: 'results', prompt: 'Look?', options: [{ label: 'A', title: 'Calm' }, { label: 'B', title: 'Playful' }],
+    results: { total: 11, options: [{ label: 'A', title: 'Calm', count: 4 }, { label: 'B', title: 'Playful', count: 7 }] }, ...over });
+  const tie = { total: 8, options: [{ label: 'A', count: 4 }, { label: 'B', count: 4 }] };
+  test('tie, no votes and rating asks say it was the host\'s pick', () => {
+    expect(askPathSummaries(base({ results: tie }), { pickId: 'B' }).settle).toBe('Going with B, your pick');
+    expect(askPathSummaries(base({ results: { total: 0, options: [] } }), { pickId: 'A' }).settle).toBe('Going with A, your pick');
+    expect(askPathSummaries({ askId: '9', kind: 'rating', status: 'results', prompt: 'Rate', results: { total: 3 } }, { pickId: '4' }).settle).toBe('Going with 4, your pick');
+  });
+  test('wheel equal to the pick, and wheel then a different pick', () => {
+    const w = base({ wheel: { landed: 'A', spins: [{ landed: 'A' }] } });
+    expect(askPathSummaries(w, { pickId: 'A' }).settle).toBe('The wheel picked A');
+    expect(askPathSummaries(w, { pickId: 'B' }).settle).toBe("Going with B, your pick instead of the wheel's A");
+  });
+  test('collect never reads more voted than the room size', () => {
+    expect(askPathSummaries(base(), { playerCount: 9 }).collect).toBe('11 of 11 voted');
+  });
+  test('combineLine keeps the prompt ending', () => {
+    const l = (prompt, direction) => combineLine({ prompt, decision: { direction } });
+    expect(l('Pick a colour:', 'blue')).toBe('Pick a colour: blue');
+    expect(l('Name the app', 'Summit')).toBe('Name the app: Summit');
+    expect(l('Name the app', 'Name the app: Summit')).toBe('Name the app: Summit');
+    expect(l('Who is it for?', '')).toBe('Who is it for?');
+  });
+});
