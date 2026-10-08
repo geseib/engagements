@@ -5,6 +5,7 @@ import {
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
   queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
+  askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady,
 } from '../buildroom/buildScreens';
 
 describe('the screens', () => {
@@ -380,5 +381,78 @@ describe('the dock never carries Claude\'s status', () => {
     const status = stageModel(room, null, NOW).status;
     expect(status).toBe('Send an idea from your phone, laptop or tablet.');
     expect(status).not.toMatch(/Claude/);
+  });
+});
+
+describe('askPathStep: where the host is in one ask', () => {
+  const ask = (over) => ({ askId: '004', kind: 'choice', status: 'live', prompt: 'How should it look and feel?', options: [{ label: 'A', title: 'Calm' }, { label: 'B', title: 'Playful' }], results: { total: 0, options: [] }, ...over });
+  test('live and voting are Collect', () => {
+    expect(askPathStep(ask())).toBe('collect');
+    expect(askPathStep(ask({ kind: 'suggest', status: 'voting' }))).toBe('collect');
+  });
+  test('results with nothing picked is Settle', () => {
+    expect(askPathStep(ask({ status: 'results' }))).toBe('settle');
+  });
+  test('a pick, a landed wheel, or answering for the room is Send', () => {
+    expect(askPathStep(ask({ status: 'results' }), { pickId: 'B' })).toBe('send');
+    expect(askPathStep(ask({ status: 'results', wheel: { landed: 'A', spins: [{ landed: 'A' }] } }))).toBe('send');
+    expect(askPathStep(ask({ status: 'live' }), { answering: true })).toBe('send');
+  });
+});
+
+describe('askPathSummaries: what a folded step says', () => {
+  test('ask, collect and settle in plain words', () => {
+    const a = { askId: '004', kind: 'choice', status: 'results', prompt: 'How should it look and feel?', openedAt: '2026-10-07T14:51:00.000Z',
+      options: [{ label: 'A', title: 'Calm' }, { label: 'B', title: 'Playful' }],
+      results: { total: 11, options: [{ label: 'A', title: 'Calm', count: 4 }, { label: 'B', title: 'Playful', count: 7 }] } };
+    const s = askPathSummaries(a, { pickId: 'B', playerCount: 12 });
+    expect(s.ask).toMatch(/^Opened \d{1,2}:\d{2}/);
+    expect(s.collect).toBe('11 of 12 voted');
+    expect(s.settle).toBe("Going with B, the room's choice, 7 to 4");
+  });
+  test('an alternate pick says so; a wheel says so', () => {
+    const a = { askId: '004', kind: 'choice', status: 'results', prompt: 'Look?', options: [{ label: 'A', title: 'Calm' }, { label: 'B', title: 'Playful' }],
+      results: { total: 11, options: [{ label: 'A', title: 'Calm', count: 4 }, { label: 'B', title: 'Playful', count: 7 }] } };
+    expect(askPathSummaries(a, { pickId: 'A', playerCount: 12 }).settle).toBe('Going with A, your pick instead of B');
+    expect(askPathSummaries({ ...a, wheel: { landed: 'A', spins: [{ landed: 'A' }] } }, { playerCount: 12 }).settle).toBe('The wheel picked A');
+  });
+});
+
+describe('whatsNextMoves: the host between asks, most likely first', () => {
+  const room = (over) => ({ asks: [], ideas: [], ...over });
+  test('two or more new ideas lead', () => {
+    const m = whatsNextMoves(room({ ideas: [{ ideaId: 'i1', status: 'new' }, { ideaId: 'i2', status: 'new' }] }), { ticked: 3 });
+    expect(m[0]).toMatchObject({ key: 'vote-ideas', count: 2, button: 'To a vote' });
+    expect(m.map((x) => x.key)).toEqual(['vote-ideas', 'combine', 'starter', 'new-ask', 'tell']);
+  });
+  test('ticked answers lead when fewer than two ideas wait', () => {
+    expect(whatsNextMoves(room(), { ticked: 3 })[0]).toMatchObject({ key: 'combine', count: 3, button: 'Combine' });
+  });
+  test('otherwise the starter questions lead, and combine is not offered with nothing ticked', () => {
+    const m = whatsNextMoves(room(), { ticked: 0 });
+    expect(m.map((x) => x.key)).toEqual(['starter', 'new-ask', 'tell']);
+  });
+});
+
+describe('combine: decided answers into one prompt', () => {
+  test('one line per ask, question then answer, oldest decided first', () => {
+    const asks = [
+      { askId: '002', prompt: 'Who is it for?', decidedAt: '2026-10-07T14:40:00Z', decision: { direction: 'Who is it for: Everyone' } },
+      { askId: '001', prompt: 'What are we building?', decidedAt: '2026-10-07T14:30:00Z', decision: { direction: 'An app' } },
+    ];
+    expect(combineLine(asks[1])).toBe('What are we building? An app');
+    expect(combineLine(asks[0])).toBe('Who is it for? Everyone');
+    expect(combineText(asks)).toBe('What are we building? An app\nWho is it for? Everyone');
+  });
+});
+
+describe('mockupsReady: something for the room to look at before a vote', () => {
+  test('a proposed choice ask whose options all have pictures', () => {
+    const room = { asks: [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', title: 'Calm', imageId: 'im1' }, { label: 'B', title: 'Playful', imageId: 'im2' }] }], images: [] };
+    expect(mockupsReady(room)).toMatchObject({ ask: { askId: '005' }, images: [{ label: 'A', imageId: 'im1' }, { label: 'B', imageId: 'im2' }] });
+  });
+  test('nothing when an option has no picture yet, or there is no proposed choice', () => {
+    expect(mockupsReady({ asks: [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', imageId: 'im1' }, { label: 'B' }] }], images: [] })).toBeNull();
+    expect(mockupsReady({ asks: [], images: [] })).toBeNull();
   });
 });

@@ -473,3 +473,76 @@ export function artifactsOf({ images = [], asks = [] } = {}) {
     return { ...im, title: im.caption || (im.label ? `Choice ${im.label}` : 'A screenshot'), meta: `${who} · ${what}`, chosen };
   });
 }
+
+// ── THE HOST'S PATH (owner, 2026-10-07; docs/design/build-room-host-flow) ──
+// Every ask runs Ask, Collect, Settle, Send to Claude. The step decides which
+// button has focus; the summaries are what a folded step says.
+
+// h:mm in the host's locale (same format as the page's clockTime; kept here so
+// this file never imports the page).
+const clockOf = (iso) => {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return '';
+  return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+export function askPathStep(ask, { pickId = null, answering = false } = {}) {
+  if (!ask) return 'collect';
+  if (answering) return 'send';
+  if (['live', 'voting'].includes(ask.status)) return 'collect';
+  if (pickId || (ask.wheel && ask.wheel.landed)) return 'send';
+  return 'settle';
+}
+
+const countOf = (ask, label) => {
+  const o = ((ask.results && ask.results.options) || []).find((x) => x.label === label);
+  return o ? Number(o.count) || 0 : 0;
+};
+
+export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
+  const opened = ask.openedAt ? `Opened ${clockOf(ask.openedAt)}` : 'Opened';
+  const total = (ask.results && ask.results.total) || 0;
+  const verb = ask.kind === 'suggest' ? 'answered' : ask.kind === 'rating' ? 'rated' : 'voted';
+  const collect = `${total} of ${playerCount || total} ${verb}`;
+  let settle = '';
+  const winner = winnerOf(ask);
+  if (ask.wheel && ask.wheel.landed && !pickId) settle = `The wheel picked ${ask.wheel.landed}`;
+  else if (pickId && winner && pickId !== winner) settle = `Going with ${pickId}, your pick instead of ${winner}`;
+  else if (pickId) {
+    const others = ((ask.results && ask.results.options) || []).filter((o) => o.label !== pickId).map((o) => Number(o.count) || 0);
+    const runnerUp = others.length ? Math.max(...others) : 0;
+    settle = `Going with ${pickId}, the room's choice, ${countOf(ask, pickId)} to ${runnerUp}`;
+  }
+  return { ask: opened, collect, settle };
+}
+
+export function whatsNextMoves(room, { ticked = 0 } = {}) {
+  const ideas = ((room && room.ideas) || []).filter((i) => i.status === 'new');
+  const moves = [];
+  if (ideas.length >= 2) moves.push({ key: 'vote-ideas', count: ideas.length, title: `Put ${ideas.length} ideas to a vote`, hint: 'The room sent these while you were busy', button: 'To a vote' });
+  if (ticked > 0) moves.push({ key: 'combine', count: ticked, title: `Combine ${ticked} decided ${ticked === 1 ? 'answer' : 'answers'}`, hint: 'Into one prompt you can edit before Claude gets it', button: 'Combine' });
+  moves.push({ key: 'starter', title: 'Ask the room a starter question', hint: 'From the question library', button: 'Ask it' });
+  moves.push({ key: 'new-ask', title: 'Ask the room something new', hint: 'Ideas, a choice, or a 1 to 5 rating', button: 'New ask' });
+  moves.push({ key: 'tell', title: 'Tell Claude', hint: 'Do now, keep in mind, later, or ask Claude', button: 'Write' });
+  return moves;
+}
+
+export function combineLine(ask) {
+  const q = questionOf(ask.prompt);
+  const d = String((ask.decision && ask.decision.direction) || '').trim();
+  const answer = d.toLowerCase().startsWith(`${q.toLowerCase()}:`) ? d.slice(q.length + 1).trim() : d;
+  return `${q}? ${answer}`;
+}
+
+export function combineText(asks) {
+  return [...(asks || [])]
+    .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)))
+    .map(combineLine)
+    .join('\n');
+}
+
+export function mockupsReady(room) {
+  const ask = ((room && room.asks) || []).find((a) => a.kind === 'choice' && a.status === 'proposed'
+    && (a.options || []).length >= 2 && (a.options || []).every((o) => o.imageId));
+  return ask ? { ask, images: ask.options.map((o) => ({ label: o.label, imageId: o.imageId, title: o.title || '' })) } : null;
+}
