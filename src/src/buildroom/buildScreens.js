@@ -11,6 +11,7 @@
  * Pure: no React, no fetch. The page and its tests share these.
  */
 import { safeHref } from './buildHostApi';
+import { wifiState } from './wifiShare';
 
 export const SCREENS = Object.freeze([
   Object.freeze({ key: 'host', label: 'Host', shortcut: '1' }),
@@ -111,7 +112,70 @@ export function latestBuild(room) {
   return { link, shot };
 }
 
+/** What the room can do, never a second status; Wi-Fi sharing adds one sentence. */
+function roomDockLine(room, now) {
+  const w = wifiState(room && room.lan, now).state;
+  return `Send an idea from your phone, laptop or tablet.${w === 'on' || w === 'quiet' ? ' Open the build on the same Wi-Fi.' : ''}`;
+}
+
 const STAGE_KIND = Object.freeze({ suggest: 'Ideas', choice: 'Choose', rating: 'Rate' });
+
+// ── Claude's one status (owner, 2026-10-07) ─────────────────────────────────
+//
+// "Its listening but its building": the stage, the dock, the host's Now card
+// and the header chip each guessed. This is the one rule they all read.
+
+/** Claude has done something this recently: it is building. */
+export const BUILDING_WINDOW_MS = 90 * 1000;
+const POST_KINDS = ['progress', 'showing', 'milestone'];
+const timeOf = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? t : NaN; };
+const stripEnd = (text) => String(text || '').trim().replace(/[\s.!?]+$/, '');
+
+/**
+ * @returns {{ key: 'building'|'waiting'|'paused'|'none', headline: string, line: string, since: string|null }}
+ */
+export function claudeState(room, now) {
+  const at = new Date(now).getTime();
+  const agent = (room && room.agent) || {};
+  const log = (room && room.log) || [];
+  const posts = log.filter((l) => l.by === 'agent' && POST_KINDS.includes(l.kind) && l.text);
+  const lastPost = posts.reduce((best, l) => (!best || timeOf(l.createdAt) >= timeOf(best.createdAt) ? l : best), null);
+  const acts = ((room && room.activity) || []).filter((a) => a && Number.isFinite(timeOf(a.at)));
+  const lastAct = acts.reduce((best, a) => (!best || timeOf(a.at) >= timeOf(best.at) ? a : best), null);
+  const agentTimes = log.filter((l) => l.by === 'agent').map((l) => timeOf(l.createdAt)).filter(Number.isFinite);
+  const latestMs = Math.max(-Infinity, lastAct ? timeOf(lastAct.at) : -Infinity, ...agentTimes);
+  if (Number.isFinite(latestMs) && at - latestMs <= BUILDING_WINDOW_MS) {
+    return {
+      key: 'building',
+      headline: 'Claude is building',
+      line: lastPost ? lastPost.text : (lastAct ? lastAct.text : ''),
+      since: lastPost ? lastPost.createdAt : (lastAct ? lastAct.at : null),
+    };
+  }
+  if (agent.listening || agent.connected) {
+    return {
+      key: 'waiting',
+      headline: 'Claude is ready for the next step',
+      line: lastPost ? `It finished: ${stripEnd(lastPost.text)}. The host will choose what comes next.` : 'The host will choose what comes next.',
+      since: null,
+    };
+  }
+  if (agent.lastSeenAt || lastPost) {
+    return { key: 'paused', headline: 'Claude has paused', line: 'The host will pick it up again in a moment.', since: null };
+  }
+  return { key: 'none', headline: 'Waiting for Claude Code', line: '', since: null };
+}
+
+/** The latest decision as "Question: answer", or ''. */
+export function latestDecisionLine(room) {
+  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided' && a.decision)
+    .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
+  const d = decided[decided.length - 1];
+  if (!d) return '';
+  const dir = String(d.decision.direction || '');
+  const q = questionOf(d.prompt);
+  return q && dir && !dir.startsWith(q) ? `${q}: ${dir}` : dir;
+}
 
 /**
  * THE STAGE SCREEN, as the regular host stage draws it (Rail, RoomMeter,
@@ -120,7 +184,7 @@ const STAGE_KIND = Object.freeze({ suggest: 'Ideas', choice: 'Choose', rating: '
  * place as Start Voting on the regular stage; deciding needs words, so at
  * results the move is back to the Host screen.
  */
-export function stageModel(room, current) {
+export function stageModel(room, current, now = Date.now()) {
   const here = (room && room.playerCount) || 0;
   const ended = Boolean(room && room.state === 'ENDED');
   if (ended) {
@@ -131,7 +195,7 @@ export function stageModel(room, current) {
     const status = room && room.outcome && room.outcome.summary ? 'Here is what we built.'
       // The opening (owner, 2026-10-06): the room frames the build first.
       : room && room.opening && room.opening.phase === 'opening' ? 'We are framing the build together. Claude is getting ready.'
-        : agent.connected || agent.listening ? 'Claude is building. Send an idea from your phone any time.'
+        : agent.connected || agent.listening ? roomDockLine(room, now)
         : 'Waiting for Claude Code.';
     return { phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null }, status, primary: null };
   }

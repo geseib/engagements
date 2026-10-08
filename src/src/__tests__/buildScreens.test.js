@@ -3,7 +3,7 @@
  */
 import {
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
-  queueItems, filterQueue, laterIdeas,
+  queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
 } from '../buildroom/buildScreens';
 
@@ -114,7 +114,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
   });
 
   test('between asks: no chip, who is here, and what Claude is doing, in room-safe words', () => {
-    expect(stageModel(room(), null)).toMatchObject({ phase: null, meter: { heading: 'In the room', count: 18 }, status: 'Claude is building. Send an idea from your phone any time.', primary: null });
+    expect(stageModel(room(), null)).toMatchObject({ phase: null, meter: { heading: 'In the room', count: 18 }, status: 'Send an idea from your phone, laptop or tablet.', primary: null });
     expect(stageModel(room({ agent: {} }), null).status).toBe('Waiting for Claude Code.');
     expect(stageModel(room({ outcome: { summary: 'A sign-up page.' } }), null).status).toBe('Here is what we built.');
   });
@@ -293,6 +293,75 @@ describe('the wall during the opening (owner, 2026-10-06)', () => {
   test('says the room is framing the build, not that Claude is building', () => {
     const room = { playerCount: 4, agent: { connected: true }, opening: { phase: 'opening' } };
     expect(stageModel(room, null).status).toBe('We are framing the build together. Claude is getting ready.');
-    expect(stageModel({ ...room, opening: { phase: 'building' } }, null).status).toBe('Claude is building. Send an idea from your phone any time.');
+    expect(stageModel({ ...room, opening: { phase: 'building' } }, null).status).toBe('Send an idea from your phone, laptop or tablet.');
+  });
+});
+
+describe('claudeState: the one status the stage, dock, host line and chip share', () => {
+  const NOW = Date.parse('2026-10-07T15:00:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  const post = (sec, text = 'The dot grid', kind = 'progress') => ({ by: 'agent', kind, text, createdAt: at(sec) });
+  const base = (extra = {}) => ({ agent: { connected: true, listening: false, lastSeenAt: at(5) }, log: [], activity: [], ...extra });
+
+  test('building: an agent post in the last 90 s, with the post as the line and the time as since', () => {
+    const s = claudeState(base({ log: [post(30, 'The dot grid')] }), NOW);
+    expect(s).toEqual({ key: 'building', headline: 'Claude is building', line: 'The dot grid', since: at(30) });
+  });
+
+  test('building: a tool-activity line alone counts, and is the line when there is no post', () => {
+    const s = claudeState(base({ activity: [{ at: at(10), kind: 'edit', text: 'Editing App.jsx' }] }), NOW);
+    expect(s).toMatchObject({ key: 'building', line: 'Editing App.jsx', since: at(10) });
+  });
+
+  test('the 90 s boundary: 90 s is still building, 91 s is waiting', () => {
+    expect(claudeState(base({ log: [post(90)] }), NOW).key).toBe('building');
+    expect(claudeState(base({ log: [post(91)] }), NOW).key).toBe('waiting');
+  });
+
+  test('a host note or a room post is not Claude doing something', () => {
+    const log = [{ by: 'host', kind: 'note', text: 'Hi', createdAt: at(5) }];
+    expect(claudeState(base({ log }), NOW).key).toBe('waiting');
+  });
+
+  test('waiting: connected or listening with nothing in 90 s names what it finished', () => {
+    const s = claudeState(base({ agent: { listening: true, lastSeenAt: at(3) }, log: [post(300, 'The dot grid.')] }), NOW);
+    expect(s).toEqual({ key: 'waiting', headline: 'Claude is ready for the next step', line: 'It finished: The dot grid. The host will choose what comes next.', since: null });
+    expect(claudeState(base(), NOW).line).toBe('The host will choose what comes next.');
+  });
+
+  test('paused: seen before, neither connected nor listening', () => {
+    const s = claudeState({ agent: { connected: false, listening: false, lastSeenAt: at(400) }, log: [post(500)] }, NOW);
+    expect(s).toEqual({ key: 'paused', headline: 'Claude has paused', line: 'The host will pick it up again in a moment.', since: null });
+  });
+
+  test('none: Claude never connected', () => {
+    expect(claudeState({ agent: {} }, NOW)).toEqual({ key: 'none', headline: 'Waiting for Claude Code', line: '', since: null });
+    expect(claudeState({}, NOW).key).toBe('none');
+  });
+
+  test('now may be a number or an ISO string', () => {
+    const room = base({ log: [post(30)] });
+    expect(claudeState(room, NOW)).toEqual(claudeState(room, new Date(NOW).toISOString()));
+  });
+
+  test('the latest decision reads as question and answer', () => {
+    const room = { asks: [
+      { askId: '001', prompt: 'Who is it for?', status: 'decided', decidedAt: at(300), decision: { direction: 'Who is it for: everyone' } },
+      { askId: '002', prompt: 'What colour?', status: 'decided', decidedAt: at(100), decision: { direction: 'Blue' } },
+    ] };
+    expect(latestDecisionLine(room)).toBe('What colour: Blue');
+    expect(latestDecisionLine({ asks: [room.asks[0]] })).toBe('Who is it for: everyone');
+    expect(latestDecisionLine({ asks: [] })).toBe('');
+  });
+});
+
+describe('the dock line between asks', () => {
+  const room = (extra = {}) => ({ playerCount: 4, agent: { connected: true }, ...extra });
+  test('Wi-Fi sharing live adds the one sentence; off or still starting does not', () => {
+    const now = Date.now();
+    const live = { wanted: true, status: 'live', open: 2, liveSince: new Date(now - 1000).toISOString() };
+    expect(stageModel(room({ lan: live }), null, now).status).toBe('Send an idea from your phone, laptop or tablet. Open the build on the same Wi-Fi.');
+    expect(stageModel(room({ lan: { wanted: true, status: 'starting' } }), null, now).status).toBe('Send an idea from your phone, laptop or tablet.');
+    expect(stageModel(room(), null, now).status).toBe('Send an idea from your phone, laptop or tablet.');
   });
 });

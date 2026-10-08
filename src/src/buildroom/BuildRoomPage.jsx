@@ -48,7 +48,7 @@ import {
 import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
-  questionAnswer, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
+  questionAnswer, claudeState, latestDecisionLine, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict,
 } from './buildScreens';
@@ -882,7 +882,10 @@ export const CONTINUE_COMMAND = pluginCommand('continue');
  * says so (owner, 2026-10-05). Connected, or never connected, it explains
  * itself on hover and does nothing on click.
  */
-function AgentChip({ agent, now }) {
+function AgentChip({ room, now }) {
+  const agent = room && room.agent;
+  const st = claudeState(room, now);
+  const text = st.key === 'paused' && agent && agent.lastSeenAt ? `${st.headline} · last seen ${agoText(agent.lastSeenAt, now)}` : st.headline;
   const [copied, setCopied] = useState('');
   const quiet = agentStopped(agent);
   const cls = `brm-agentchip${agent && agent.connected ? ' is-on' : ''}${quiet ? ' is-quiet' : ''}`;
@@ -892,7 +895,7 @@ function AgentChip({ agent, now }) {
       : agent.listening
         ? 'Claude Code is waiting for your next direction.'
         : 'Claude Code is connected and working.';
-    return <span className={cls} data-testid="brm-agentchip" title={tip}>{agentChipText(agent, now)}</span>;
+    return <span className={cls} data-testid="brm-agentchip" data-state={st.key} title={tip}>{text}</span>;
   }
   const copy = async () => {
     const ok = await copyText(CONTINUE_COMMAND);
@@ -904,10 +907,11 @@ function AgentChip({ agent, now }) {
       type="button"
       className={cls}
       data-testid="brm-agentchip"
+      data-state={st.key}
       title={`Claude Code has stopped. Click to copy ${CONTINUE_COMMAND}, then paste it into the Claude Code window and press Enter.`}
       onClick={copy}
     >
-      {copied || agentChipText(agent, now)}
+      {copied || text}
     </button>
   );
 }
@@ -1100,7 +1104,7 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
             )}
           </div>
         )}
-        <AgentChip agent={room.agent} now={now} />
+        <AgentChip room={room} now={now} />
         {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
         <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => setQr(true)}>
           <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
@@ -1256,7 +1260,7 @@ function HistoryStack({ items }) {
 function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
-  const m = stageModel(room, current);
+  const m = stageModel(room, current, now);
   const waiting = waitingCount(room);
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
@@ -2188,7 +2192,6 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
 
 // ── Between asks ────────────────────────────────────────────────────────────
 
-const TICKER_KINDS = ['progress', 'showing', 'milestone'];
 
 /** Claude has wrapped up: the stage says so, and the demo is one click away. */
 function WrappedStage({ outcome, agent, images = [] }) {
@@ -2236,44 +2239,40 @@ function IdleStage({ room, now, host }) {
   if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
   const shots = (room.images || []).filter((i) => i.kind !== 'mockup');
   const latestShot = shots[shots.length - 1] || null;
-  const log = room.log || [];
-  const agentPosts = log.filter((l) => l.by === 'agent' && TICKER_KINDS.includes(l.kind));
-  const ticker = agentPosts.slice(-3).reverse();
-  const decided = (room.asks || []).filter((a) => a.status === 'decided' && a.decision).sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
-  const latest = decided[decided.length - 1] || null;
-  const since = latest ? latest.decidedAt : (agentPosts[0] && agentPosts[0].createdAt);
-  const mins = since ? Math.max(0, Math.round((now - Date.parse(since)) / 60000)) : null;
-  const waiting = !agentPosts.length && !(room.agent && room.agent.connected);
-
+  // ONE STATUS (owner, 2026-10-07): the same rule the dock, the host's Now
+  // card and the header chip read, so the wall never says two things.
+  const st = claudeState(room, now);
+  const decision = latestDecisionLine(room);
+  const sinceAt = st.since ? new Date(st.since) : null;
+  const sinceText = st.key === 'building' && sinceAt && Number.isFinite(sinceAt.getTime())
+    ? sinceAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
   return (
-    <section className="brm-stage brm-stage--idle" aria-label="Claude is building">
-      <div className="brm-building">
-        <span className="brm-pulse" aria-hidden="true" />
-        <h2 className="brm-q">{waiting ? 'Waiting for Claude Code…' : room.agent && room.agent.listening ? 'Claude is listening…' : 'Claude is building…'}</h2>
-        {!waiting && mins !== null && <span className="brm-mins">working for {mins} min</span>}
-      </div>
-      {host && <p className="brm-stagehint">{waiting ? 'Connect Claude Code, then paste the Kick off prompt.' : stageHint(null)}</p>}
-      {latest && (
-        <div className="brm-latest">
-          <div className="brm-kind">Latest decision · Ask {askNumber(latest.askId)}</div>
-          <div className="brm-tx">{latest.decision.direction}</div>
+    <section className="brm-stage brm-stage--idle brm-plain" aria-label="Claude">
+      <div className="brm-plain-main">
+        <div className="brm-building" data-state={st.key}>
+          <span className={`brm-sdot brm-sdot--${st.key}`} aria-hidden="true" />
+          <h2 className="brm-q">{st.headline}</h2>
         </div>
-      )}
-      {latestShot && <BuildImage imageId={latestShot.imageId} caption={latestShot.caption} className="brm-shot brm-shot--latest" />}
-      {ticker.length > 0 ? (
-        <ul className="brm-ticker">
-          {ticker.map((t, i) => (
-            <li key={t.logId} className={i === 0 ? 'is-newest' : undefined}>
-              <span className="brm-kind">{t.kind}</span>
-              <span className="brm-tx">{t.text}</span>
-              <span className="brm-ago">{agoText(t.createdAt, now)}</span>
-              {safeHref(t.link) && <span className="brm-tickopen"><OpenLink href={t.link} label="Open" /></span>}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="brm-empty">Claude&apos;s progress posts appear here while it builds.</div>
-      )}
+        {st.line && (
+          <p className="brm-nowtext">
+            {st.line}{sinceText && <span className="brm-muted"> · since {sinceText}</span>}
+          </p>
+        )}
+        {host && st.key === 'none' && <p className="brm-stagehint">Connect Claude Code, then paste the Kick off prompt.</p>}
+        {latestShot && <BuildImage imageId={latestShot.imageId} caption={latestShot.caption} className="brm-shot brm-shot--latest" />}
+      </div>
+      <aside className="brm-plain-side">
+        {decision && (
+          <div>
+            <div className="brm-kind">We decided</div>
+            <div className="brm-tx">{decision}</div>
+          </div>
+        )}
+        <div>
+          <div className="brm-kind">In the room</div>
+          <div className="brm-bignum">{room.playerCount || 0}</div>
+        </div>
+      </aside>
     </section>
   );
 }
@@ -2355,10 +2354,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose 
   const decided = (room.asks || []).filter((a) => a.status === 'decided' && a.decision)
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
   const latest = decided[decided.length - 1] || null;
-  const line = ended ? 'This session has ended.'
-    : agent.listening ? 'Claude is listening for you.'
-      : agent.connected ? 'Claude is building.'
-        : 'Waiting for Claude Code.';
+  const line = ended ? 'This session has ended.' : claudeState(room, now).headline;
   // A ROOM THAT BEGINS WITH AN ASK (owner, 2026-10-05): before anything is
   // built, the room picks what to build. The host lists the options or the
   // room suggests; a tie goes to the wheel or a revote (WheelPanel); and the

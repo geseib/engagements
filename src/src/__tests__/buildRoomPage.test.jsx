@@ -151,7 +151,7 @@ describe('loading and live updates', () => {
 
   test('the connected chip reads from state.agent', async () => {
     await openRoom(hostState());
-    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent(/Claude Code connected · active \d+s ago/);
+    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is ready for the next step');
   });
 });
 
@@ -338,7 +338,7 @@ describe('each ask status', () => {
     expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How close is this: 3.5 out of 5 (5 is great, 1 needs work)');
   });
 
-  test('between asks: Claude is building, with the latest decision and the ticker', async () => {
+  test('between asks: the stage says one thing, the latest decision, and no timer or ticker', async () => {
     await openRoom(hostState({
       asks: [{ ...CHOICE, Status: 'decided', DecidedAt: ago(240), Decision: { direction: 'Go with B, keep A\'s logo', chosen: ['B'], note: '' } }],
       answers: CHOICE_ANSWERS,
@@ -349,16 +349,33 @@ describe('each ask status', () => {
     }));
     // The Host screen's Now card carries the latest decision (C1)...
     expect(within(screen.getByRole('region', { name: 'Now' })).getByText('Go with B, keep A\'s logo')).toBeInTheDocument();
-    // ...and the room sees Claude building, with its ticker, on the Stage screen.
+    // ...and the room sees one headline, from the one rule, on the Stage screen.
     fireEvent.keyDown(window, { key: '2' });
-    const stage = screen.getByRole('region', { name: 'Claude is building' });
-    expect(within(stage).getByText('Claude is building…')).toBeInTheDocument();
-    expect(within(stage).getByText('Go with B, keep A\'s logo')).toBeInTheDocument();
-    expect(within(stage).getByText('Header B is live')).toBeInTheDocument();
-    // Claude's local link is a button the host opens on this laptop.
-    const open = within(stage).getByRole('link', { name: 'Open' });
-    expect(open).toHaveAttribute('href', 'http://localhost:5173/');
-    expect(open).toHaveAttribute('target', '_blank');
+    const stage = screen.getByRole('region', { name: 'Claude' });
+    expect(within(stage).getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    expect(within(stage).getByRole('heading', { name: 'Claude is ready for the next step' })).toBeInTheDocument();
+    expect(within(stage).getByText('It finished: Header B is live. The host will choose what comes next.')).toBeInTheDocument();
+    expect(within(stage).getByText('We decided')).toBeInTheDocument();
+    expect(within(stage).getByText(/Go with B, keep A's logo/)).toBeInTheDocument();
+    expect(within(stage).getByText('In the room')).toBeInTheDocument();
+    expect(stage.textContent).not.toMatch(/working for|listening…|building…/);
+    expect(stage.querySelector('.brm-ticker, .brm-mins, .brm-latest')).toBeNull();
+    expect(within(stage).queryByText('Moved the logo into header B')).toBeNull();
+  });
+
+  test('the stage, the dock and the header chip never disagree', async () => {
+    // Building: Claude posted 20 seconds ago.
+    await openRoom(hostState({ logs: [{ Kind: 'progress', Text: 'The dot grid', By: 'agent', CreatedAt: ago(20) }] }));
+    expect(screen.getByTestId('brm-agentchip')).toHaveAttribute('data-state', 'building');
+    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
+    fireEvent.keyDown(window, { key: '2' });
+    const stage = screen.getByRole('region', { name: 'Claude' });
+    expect(within(stage).getByRole('heading', { name: 'Claude is building' })).toBeInTheDocument();
+    expect(within(stage).getByText('The dot grid')).toBeInTheDocument();
+    expect(within(stage).getByText(/· since /)).toBeInTheDocument();
+    // The dock says what the room can do, never a second status.
+    expect(screen.getByText('Send an idea from your phone, laptop or tablet.')).toBeInTheDocument();
+    expect(screen.queryByText(/Claude is building\. Send/)).toBeNull();
   });
 
   test('an empty room shows how a Build Room works', async () => {
@@ -590,7 +607,7 @@ describe('after Claude wraps up, and what next', () => {
   test('the stage says what we built, with the demo one click away', async () => {
     await openRoom(hostState({ st: { Outcome: OUTCOME } }));
     const stage = screen.getByRole('region', { name: 'What we built' });
-    expect(screen.queryByText('Claude is building…')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Claude is building' })).toBeNull();
     expect(within(stage).getByText('A one-page sign-up site with live open spots.')).toBeInTheDocument();
     expect(within(stage).getByRole('link', { name: 'Demo' })).toHaveAttribute('href', 'http://localhost:5173/');
     expect(within(stage).getByRole('link', { name: 'Repository' })).toHaveAttribute('href', 'https://github.com/x/y');
@@ -605,7 +622,7 @@ describe('after Claude wraps up, and what next', () => {
 
   test('Tell Claude posts a direction and says honestly when Claude will read it', async () => {
     await openRoom(hostState({ st: { AgentListeningAt: ago(3) } }));
-    expect(screen.getByTestId('brm-agentchip').textContent).toBe('Claude Code is listening for you');
+    expect(screen.getByTestId('brm-agentchip').textContent).toBe('Claude is ready for the next step');
     const panel = screen.getByRole('region', { name: 'Add something' });
     expect(within(panel).getByText('Claude is listening. It will act on this straight away.')).toBeInTheDocument();
     fireEvent.change(within(panel).getByLabelText(/Tell Claude/), { target: { value: 'Make the button green' } });
@@ -1145,7 +1162,7 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
     try {
       const chip = screen.getByTestId('brm-agentchip');
       expect(chip.tagName).toBe('BUTTON');
-      expect(chip.textContent).toMatch(/Claude Code last seen/);
+      expect(chip.textContent).toMatch(/^Claude has paused · last seen /);
       expect(chip.getAttribute('title')).toBe('Claude Code has stopped. Click to copy /engage:continue, then paste it into the Claude Code window and press Enter.');
       fireEvent.click(chip);
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('/engage:continue'));
