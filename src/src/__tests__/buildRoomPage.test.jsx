@@ -357,7 +357,8 @@ describe('each ask status', () => {
     expect(within(stage).getByText('It finished: Header B is live. The host will choose what comes next.')).toBeInTheDocument();
     expect(within(stage).getByText('We decided')).toBeInTheDocument();
     expect(within(stage).getByText(/Go with B, keep A's logo/)).toBeInTheDocument();
-    expect(within(stage).getByText('In the room')).toBeInTheDocument();
+    // The head count is the stage meter's, shown once; the idle stage adds none.
+    expect(within(stage).queryByText('In the room')).toBeNull();
     expect(stage.textContent).not.toMatch(/working for|listening…|building…/);
     expect(stage.querySelector('.brm-ticker, .brm-mins, .brm-latest')).toBeNull();
     expect(within(stage).queryByText('Moved the logo into header B')).toBeNull();

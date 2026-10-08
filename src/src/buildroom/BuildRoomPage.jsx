@@ -2261,18 +2261,14 @@ function IdleStage({ room, now, host }) {
         {host && st.key === 'none' && <p className="brm-stagehint">Connect Claude Code, then paste the Kick off prompt.</p>}
         {latestShot && <BuildImage imageId={latestShot.imageId} caption={latestShot.caption} className="brm-shot brm-shot--latest" />}
       </div>
-      <aside className="brm-plain-side">
-        {decision && (
+      {decision && (
+        <aside className="brm-plain-side">
           <div>
             <div className="brm-kind">We decided</div>
             <div className="brm-tx">{decision}</div>
           </div>
-        )}
-        <div>
-          <div className="brm-kind">In the room</div>
-          <div className="brm-bignum">{room.playerCount || 0}</div>
-        </div>
-      </aside>
+        </aside>
+      )}
     </section>
   );
 }

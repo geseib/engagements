@@ -115,7 +115,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
 
   test('between asks: no chip, who is here, and what Claude is doing, in room-safe words', () => {
     expect(stageModel(room(), null)).toMatchObject({ phase: null, meter: { heading: 'In the room', count: 18 }, status: 'Send an idea from your phone, laptop or tablet.', primary: null });
-    expect(stageModel(room({ agent: {} }), null).status).toBe('Waiting for Claude Code.');
+    expect(stageModel(room({ agent: {} }), null).status).toBe('Send an idea from your phone, laptop or tablet.');
     expect(stageModel(room({ outcome: { summary: 'A sign-up page.' } }), null).status).toBe('Here is what we built.');
   });
 
@@ -363,5 +363,22 @@ describe('the dock line between asks', () => {
     expect(stageModel(room({ lan: live }), null, now).status).toBe('Send an idea from your phone, laptop or tablet. Open the build on the same Wi-Fi.');
     expect(stageModel(room({ lan: { wanted: true, status: 'starting' } }), null, now).status).toBe('Send an idea from your phone, laptop or tablet.');
     expect(stageModel(room(), null, now).status).toBe('Send an idea from your phone, laptop or tablet.');
+  });
+});
+
+describe('the dock never carries Claude\'s status', () => {
+  const NOW = Date.now();
+  const rooms = {
+    building: { agent: { connected: true, lastSeenAt: new Date(NOW).toISOString() }, log: [{ by: 'agent', kind: 'progress', text: 'x', createdAt: new Date(NOW - 5000).toISOString() }] },
+    waiting: { agent: { listening: true, connected: true, lastSeenAt: new Date(NOW).toISOString() } },
+    paused: { agent: { lastSeenAt: new Date(NOW - 600000).toISOString() } },
+    none: { agent: {} },
+  };
+  test.each(Object.keys(rooms))('%s: the same idea line, no Claude', (key) => {
+    const room = { playerCount: 3, ...rooms[key] };
+    expect(claudeState(room, NOW).key).toBe(key);
+    const status = stageModel(room, null, NOW).status;
+    expect(status).toBe('Send an idea from your phone, laptop or tablet.');
+    expect(status).not.toMatch(/Claude/);
   });
 });

@@ -195,8 +195,7 @@ export function stageModel(room, current, now = Date.now()) {
     const status = room && room.outcome && room.outcome.summary ? 'Here is what we built.'
       // The opening (owner, 2026-10-06): the room frames the build first.
       : room && room.opening && room.opening.phase === 'opening' ? 'We are framing the build together. Claude is getting ready.'
-        : agent.connected || agent.listening ? roomDockLine(room, now)
-        : 'Waiting for Claude Code.';
+        : roomDockLine(room, now);
     return { phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null }, status, primary: null };
   }
   const n = Number(current.askId) || current.askId;
