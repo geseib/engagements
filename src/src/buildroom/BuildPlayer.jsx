@@ -5,6 +5,7 @@ import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
 import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
+import { W } from './words';
 import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS } from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import './BuildPlayer.css';
@@ -209,7 +210,7 @@ function PhoneWheel({ ask, api, onResult }) {
   return (
     <div className="bpl-wheel">
       {w.mine && <p className="plr-help bpl-wheel-turn"><b>Your turn.</b> Spin the wheel for the room.</p>}
-      <BuildWheel wheel={w} size="md" onSpin={w.mine ? () => run(() => sendSpin(api, ask.askId)) : null} spinLabel="Spin the wheel" busy={busy} />
+      <BuildWheel wheel={w} size="md" onSpin={w.mine ? () => run(() => sendSpin(api, ask.askId)) : null} spinLabel={W.spin} busy={busy} />
       <ErrorLine error={error} />
     </div>
   );

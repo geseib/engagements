@@ -17,6 +17,7 @@
 import React, { useRef, useState } from 'react';
 import { askPathStep, askPathSummaries, winnerOf, decisionChoices } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
+import { W } from './words';
 import { AskStage, WheelPanel, DecidePanel, KIND_LABEL } from './BuildRoomPage';
 
 const ORDER = ['ask', 'collect', 'settle', 'send'];
@@ -177,7 +178,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
             <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
             {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
             {canSpinInstead(ask) && (
-              <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title="Close it and let the wheel pick from every option" onClick={() => act('wheel')}>Spin instead</button>
+              <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title="Close it and let the wheel pick from every option" onClick={() => act('wheel')}>{W.spin}</button>
             )}
             {ideasOpen && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => act('close')}>Close without a vote</button>}
             <SpaceHint />
@@ -218,14 +219,14 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
             <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => onPick(win, { confirmed: true })}>
               {pick && pick.label ? `Go with ${pick.label}` : 'Go with the top idea'}
             </button>
-            <button type="button" className="brm-btn" disabled={busy} onClick={() => act('wheel')}>Spin the wheel</button>
+            <button type="button" className="brm-btn" disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
           </>
         );
       } else {
         moves = (
           <>
-            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => act('wheel')}>Spin the wheel</button>
-            {tied.length >= 2 && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => act('revote')}>Vote again</button>}
+            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
+            {tied.length >= 2 && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => act('revote')}>{W.voteAgain}</button>}
           </>
         );
       }

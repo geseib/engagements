@@ -1199,3 +1199,23 @@
 .brm .brm-livebuild { white-space: nowrap; }
 .brm .brm-livebuild[aria-disabled="true"], .brm .brm-livebuild:disabled { opacity: .55; cursor: not-allowed; }
 .brm .brm-viewer-full { color: var(--secondary); font-weight: 600; text-decoration: underline; }
+
+/* ---- Main menu in the header; the extras fold into the session menu at 480px
+   (docs/design/build-room-batch-2-3, B5 and B5a). Tokens only. ---- */
+.brm .brm-mainmenu { flex: 0 0 auto; white-space: nowrap; }
+.brm .brm-more-extras {
+  display: grid; gap: 8px; justify-items: start;
+  padding-bottom: 8px; border-bottom: 1px solid var(--brm-rule);
+}
+.brm .brm-more-extras .brm-askpill, .brm .brm-more-extras .brm-livebuild, .brm .brm-more-extras .brm-codebtn { max-width: 100%; }
+.brm .brm-more-extras .brm-wifiwrap { position: static; width: 100%; }
+.brm .brm-more-extras .brm-wifipanel { position: static; width: auto; max-width: none; margin-top: 8px; }
+@media (max-width: 480px) {
+  /* Row one: Main menu, the title, the session menu. Row two: the four screens. */
+  .brm .brm-hbar { gap: 8px 10px; padding: 10px 12px; }
+  .brm .brm-hbar-title { flex: 1 1 0; }
+  .brm .brm-screens { order: 3; flex: 0 0 100%; width: 100%; box-sizing: border-box; }
+  .brm .brm-screens .brm-screen { flex: 1 1 0; justify-content: center; padding: 0 6px; }
+  .brm .brm-hbar-tools { order: 2; }
+  .brm .brm-more-panel { width: min(260px, calc(100vw - 32px)); }
+}

@@ -36,12 +36,12 @@ test('Collect: four steps, Ask folded, Close and show results focused', () => {
   expect(document.activeElement).toBe(primary);
 });
 
-test('Collect: Answer for the room and Spin instead sit beside the primary; each does its thing', () => {
+test('Collect: Answer for the room and Spin the wheel sit beside the primary; each does its thing', () => {
   const a = api();
   mount({ ...base, status: 'live', results: { total: 7, options: [] } }, { api: a });
   fireEvent.click(screen.getByRole('button', { name: 'Close and show results' }));
   expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'close' });
-  fireEvent.click(screen.getByRole('button', { name: 'Spin instead' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Spin the wheel' }));
   expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'wheel' });
 });
 
@@ -126,13 +126,13 @@ test('a pick on a tie: the folded Settle still offers Spin the wheel and Vote ag
   expect(screen.getByRole('button', { name: 'Vote again' })).toBeInTheDocument();
 });
 
-test('a live Ideas ask with fewer than two ideas has no Spin instead (as the Stage dock)', () => {
+test('a live Ideas ask with fewer than two ideas has no Spin the wheel (as the Stage dock)', () => {
   const ideas = { ...base, kind: 'suggest', options: [], status: 'live', results: { total: 1 } };
   const { unmount } = mount({ ...ideas, answerCount: 1, responses: [{ respId: 'r1', text: 'One' }] });
-  expect(screen.queryByRole('button', { name: 'Spin instead' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Spin the wheel' })).toBeNull();
   unmount();
   mount({ ...ideas, answerCount: 2, responses: [{ respId: 'r1', text: 'One' }, { respId: 'r2', text: 'Two' }] });
-  expect(screen.getByRole('button', { name: 'Spin instead' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
 });
 
 test('a draft: typing reports it, and a draft for the same pick is where Send starts', () => {

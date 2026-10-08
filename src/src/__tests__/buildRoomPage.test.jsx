@@ -1406,7 +1406,7 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIE }));
     const panel = screen.getByRole('region', { name: 'The wheel' });
     expect(within(panel).getByText('Dee spins the wheel')).toBeInTheDocument();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Spin it yourself' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Spin the wheel' }));
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'spin' }));
     const pass = within(panel).getByRole('button', { name: 'Someone else spins' });
     await waitFor(() => expect(pass).not.toBeDisabled());
@@ -1507,11 +1507,11 @@ describe('the wheel whenever the room could vote (owner, 2026-10-06)', () => {
   test('an open Choose offers Spin the wheel instead, on the Host and on the Stage', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], answers: CHOICE_ANSWERS }));
     const kit = screen.getByRole('list', { name: 'This ask' });
-    fireEvent.click(within(kit).getByRole('button', { name: 'Spin instead' }));
+    fireEvent.click(within(kit).getByRole('button', { name: 'Spin the wheel' }));
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'wheel' }));
     fireEvent.keyDown(window, { key: '2' });
     const dock = document.querySelector('footer.dock');
-    const instead = within(dock).getByRole('button', { name: 'Spin the wheel instead' });
+    const instead = within(dock).getByRole('button', { name: 'Spin the wheel' });
     await waitFor(() => expect(instead).not.toBeDisabled());
     fireEvent.click(instead);
     await waitFor(() => expect(calls.filter((c) => c.method === 'POST' && c.body && c.body.action === 'wheel')).toHaveLength(2));
@@ -1906,28 +1906,71 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
   });
 });
 
-describe('the way back to the main menu (owner, 2026-10-06)', () => {
-  test('More always has Main menu', async () => {
+describe('the way back to the main menu (owner, 2026-10-06; Main menu in the header, 2026-10-08 B5)', () => {
+  const header = () => document.querySelector('header.brm-hbar');
+  const asNarrow = (narrow) => {
+    window.matchMedia = (q) => ({ matches: narrow && /max-width:\s*480px/.test(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+  };
+  afterEach(() => { delete window.matchMedia; });
+
+  test('Main menu is the first control in the header, a link to /, and is not in More', async () => {
     await openRoom(hostState());
+    const link = within(header()).getByRole('link', { name: /Main menu/ });
+    expect(link).toHaveAttribute('href', '/');
+    expect(link.querySelector('svg')).not.toBeNull();
+    expect(header().querySelector('a, button')).toBe(link);
     openMore();
-    expect(screen.getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
+    expect(within(screen.getByRole('group', { name: 'Session' })).queryByRole('link', { name: /Main menu/ })).toBeNull();
+    expect(screen.getAllByRole('link', { name: /Main menu/ })).toHaveLength(1);
   });
 
-  test('wrapped up: a bar with the report, End session and the main menu', async () => {
+  test('it is there on Build and History too (the Stage has no header; its way back is Host in the dock)', async () => {
+    await openRoom(hostState());
+    for (const name of ['Build', 'History', 'Host']) {
+      fireEvent.click(within(header()).getByRole('button', { name }));
+      expect(within(header()).getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
+    }
+  });
+
+  test('wrapped up: a bar with the report and End session; the main menu is in the header only', async () => {
     await openRoom(hostState({ st: { Outcome: { summary: 'A connect four game.', built: [], links: [], nextSteps: [], by: 'agent', updatedAt: ago(30) } } }));
     const bar = screen.getByTestId('brm-wrappedbar');
     expect(bar.textContent).toMatch('Claude has wrapped up.');
     expect(within(bar).getByRole('button', { name: 'Report' })).toBeInTheDocument();
-    expect(within(bar).getByRole('link', { name: 'Main menu' })).toHaveAttribute('href', '/');
+    expect(within(bar).queryByRole('link', { name: /Main menu/ })).toBeNull();
+    expect(within(header()).getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
     fireEvent.click(within(bar).getByRole('button', { name: 'End session' }));
     expect(screen.getByRole('dialog', { name: 'End this session?' })).toBeInTheDocument();
   });
 
-  test('ended: the bar leads back to the main menu', async () => {
+  test('ended: the bar no longer carries it; the header still does', async () => {
     const st = hostState();
     await openRoom({ ...st, state: 'ENDED' });
-    expect(within(screen.getByTestId('brm-endedbar')).getByRole('link', { name: 'Back to the main menu' })).toHaveAttribute('href', '/');
+    expect(within(screen.getByTestId('brm-endedbar')).queryByRole('link')).toBeNull();
+    expect(within(header()).getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
     expect(screen.queryByTestId('brm-wrappedbar')).toBeNull();
+  });
+
+  test('wide: the join code, ask pill and live build stay in the header', async () => {
+    asNarrow(false);
+    await openRoom(hostState());
+    expect(within(header()).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+    expect(within(header()).getByText(/Open the live build/)).toBeInTheDocument();
+  });
+
+  test('375px: Main menu stays; the join code, live build, Wi-Fi and Claude status move into the more menu', async () => {
+    asNarrow(true);
+    await openRoom(hostState());
+    const h = header();
+    expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
+    expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
+    expect(within(h).queryByText(/Open the live build/)).toBeNull();
+    openMore();
+    const menu = screen.getByRole('group', { name: 'Session' });
+    expect(within(menu).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+    expect(within(menu).getByText(/Open the live build/)).toBeInTheDocument();
+    expect(menu.querySelector('.brm-wifi')).not.toBeNull();
+    expect(menu.querySelector('.brm-agentchip')).not.toBeNull();
   });
 });
 

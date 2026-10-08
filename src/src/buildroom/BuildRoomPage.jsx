@@ -39,6 +39,7 @@ import AskDetail from './BuildAskDetail';
 import MockupViewer, { ViewerContext, backLabelFor } from './MockupViewer';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
+import { W } from './words';
 import { AskPath } from './BuildAskPath';
 import { WhatsNext, DecidedList, decidedAsks } from './BuildWhatsNext';
 import { isTypingTarget, dialogOpen } from './useNextFocus';
@@ -788,7 +789,6 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {host && ended && (
         <div className="brm-notice brm-notice--bar brm-row brm-gap" data-testid="brm-endedbar">
           <span>This session has ended. The timeline, the wrap-up and the report are still yours to edit.</span>
-          <a className="brm-btn brm-btn--sm brm-push" href="/">Back to the main menu</a>
         </div>
       )}
       {!host && ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
@@ -798,7 +798,6 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <span>Claude has wrapped up. Look over the report, then end the session when the room is done.</span>
           <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={() => goView('report')}>Report</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={() => setDialog('end')}>End session</button>
-          <a className="brm-btn brm-btn--sm brm-btn--ghost" href="/">Main menu</a>
         </div>
       )}
 
@@ -1217,6 +1216,24 @@ function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild'
   return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Open the live build ↗</a>;
 }
 
+/** True at 480px and narrower. No matchMedia (jsdom, an old browser) reads as wide. */
+const NARROW_QUERY = '(max-width: 480px)';
+function useNarrowHeader() {
+  const read = () => {
+    try { return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(NARROW_QUERY).matches; } catch (e) { return false; }
+  };
+  const [narrow, setNarrow] = useState(read);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(NARROW_QUERY);
+    const on = () => setNarrow(read());
+    if (mq.addEventListener) mq.addEventListener('change', on); else if (mq.addListener) mq.addListener(on);
+    on();
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', on); else if (mq.removeListener) mq.removeListener(on); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return narrow;
+}
+
 function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
   const waiting = waitingCount(room);
   const pill = askPill(room);
@@ -1242,8 +1259,50 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
   const showWifi = host && !ended;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   const pick = (close, fn) => () => { close(); fn(); };
+  // At 480px and narrower the extras (join code, ask pill, live build, Wi-Fi,
+  // Claude's status) fold into the session menu so the title keeps room (B5a).
+  const narrow = useNarrowHeader();
+  const tucked = host && narrow;
+  const askPillButton = pill && (
+    <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => onScreen('stage')}>
+      {pill.text}
+    </button>
+  );
+  const extras = (
+    <>
+      <LiveBuildButton link={liveBuildLink(room, now)} />
+      {showWifi && (
+        <div className="brm-wifiwrap" ref={wifiRef}>
+          <WifiChip lan={room.lan} now={now} open={wifiOpen} onOpen={() => setWifiOpen((o) => !o)} />
+          {wifiOpen && (
+            <WifiPanel
+              lan={room.lan}
+              link={wifiLink(room)}
+              now={now}
+              busy={busy}
+              run={run}
+              api={api}
+              onClose={() => setWifiOpen(false)}
+              onShowWall={() => { setWifiOpen(false); onWifiWall(); }}
+            />
+          )}
+        </div>
+      )}
+      <AgentChip room={room} now={now} />
+      {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
+      <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => setQr(true)}>
+        <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
+      </button>
+      <span className="brm-chip">{room.playerCount || 0} joined</span>
+    </>
+  );
   return (
     <header className="brm-hbar">
+      {/* MAIN MENU (B5, 2026-10-08): always the first control, on every host
+          screen and in every state. Leaving does not end the session. */}
+      <a className="brm-btn brm-btn--sm brm-btn--ghost brm-mainmenu" href="/">
+        <Icon name="House" size={14} /> {W.mainMenu}
+      </a>
       <div className="brm-hbar-title">
         <span className="brm-t" title={room.title}>{room.title || 'Build Room'}</span>
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
@@ -1263,41 +1322,20 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
           </button>
         ))}
       </nav>
-      {pill && (
-        <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => onScreen('stage')}>
-          {pill.text}
-        </button>
-      )}
+      {pill && !tucked && askPillButton}
       <div className="brm-hbar-tools">
-        <LiveBuildButton link={liveBuildLink(room, now)} />
-        {showWifi && (
-          <div className="brm-wifiwrap" ref={wifiRef}>
-            <WifiChip lan={room.lan} now={now} open={wifiOpen} onOpen={() => setWifiOpen((o) => !o)} />
-            {wifiOpen && (
-              <WifiPanel
-                lan={room.lan}
-                link={wifiLink(room)}
-                now={now}
-                busy={busy}
-                run={run}
-                api={api}
-                onClose={() => setWifiOpen(false)}
-                onShowWall={() => { setWifiOpen(false); onWifiWall(); }}
-              />
-            )}
-          </div>
-        )}
-        <AgentChip room={room} now={now} />
-        {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
-        <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => setQr(true)}>
-          <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
-        </button>
-        <span className="brm-chip">{room.playerCount || 0} joined</span>
+        {!tucked && extras}
         {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
         {host && (
           <SessionMenu>
             {(close) => (
               <>
+                {tucked && (
+                  <div className="brm-more-extras" data-testid="brm-more-extras">
+                    {pill && askPillButton}
+                    {extras}
+                  </div>
+                )}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onConnect)}>
                   <Icon name="Lock" size={14} /> Connect Claude Code
                 </button>
@@ -1317,11 +1355,6 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
                   <Icon name="FileText" size={14} /> Report
                 </button>
                 {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(close, onEnd)}>End session</button>}
-                {/* THE WAY BACK (owner, 2026-10-06: "a way to get back to the main
-                    menu"). The room keeps running; this only leaves the page. */}
-                <a className="brm-btn brm-btn--sm brm-btn--ghost" href="/">
-                  <Icon name="House" size={14} /> Main menu
-                </a>
               </>
             )}
           </SessionMenu>
@@ -2047,7 +2080,7 @@ export function WheelPanel({ ask, busy, run, api, primary = false, onSettled = n
           <p className="brm-hint">Let chance pick: the wheel holds every option.</p>
         )}
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={() => act('wheel')}>Spin the wheel</button>
+          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
           {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={() => act('revote')}>Vote again</button>}
         </div>
         <p className="brm-hint">Someone in the room spins it from their phone. You can always spin it yourself.</p>
@@ -2057,7 +2090,7 @@ export function WheelPanel({ ask, busy, run, api, primary = false, onSettled = n
   const w = ask.wheel;
   return (
     <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
-      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? 'Spin again' : 'Spin it yourself'} spinPrimary={primary} onSettled={onSettled} />
+      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? W.spinAgain : W.spin} spinPrimary={primary} onSettled={onSettled} />
       <div className="brm-row brm-gap brm-wheelacts">
         <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Pick someone else in the room to spin it" onClick={() => act('pass')}>Someone else spins</button>
       </div>
@@ -2420,7 +2453,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
         <span className="brm-hint">{send ? "Delivered on Claude's next call" : 'Recorded in the timeline only'}</span>
         {onCancel && <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onCancel}>Cancel</button>}
         <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} data-next-primary={next || undefined} data-no-space={next || undefined} disabled={cannot} onClick={decide}>
-          <Icon name="ArrowRight" size={16} /> {send ? 'Send to Claude' : 'Record decision'}
+          <Icon name="PaperPlaneTilt" size={16} /> {send ? W.sendPlain : 'Record decision'}
         </button>
       </div>
       {next && <p className="brm-hint brm-path-keys">{`Ctrl Enter, or Cmd Enter on a Mac, ${send ? 'sends' : 'records'} it.`}</p>}
@@ -2701,7 +2734,7 @@ function SendToClaude({ onSend, busy, disabled = false, small = false, primary =
         title="Do now: the next thing Claude builds"
         onClick={submit ? undefined : () => onSend('do-now')}
       >
-        {!small && <Icon name="PaperPlaneTilt" size={16} />}{!small && ' '}Send to Claude
+        <Icon name="PaperPlaneTilt" size={16} /> {W.sendPlain}
       </button>
       <SessionMenu label="" groupLabel="Send to Claude as" ariaLabel="Send to Claude as" buttonClass={`brm-btn${size}${primary ? ' brm-btn--primary' : ''} brm-split-caret`}>
         {(close) => CLAUDE_KINDS.map((k) => (
@@ -3029,7 +3062,7 @@ function Queue({ room, current, busy, ended, run, api }) {
           <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy || tickedLive.length < 2 || tickedLive.length > 6} title={tickedLive.length < 2 ? 'Tick at least 2' : tickedLive.length > 6 ? 'A vote takes at most 6' : undefined} onClick={() => toVote(tickedLive)}>
             Put {tickedLive.length} to a vote
           </button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('direct')}>Send to Claude</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('direct')}><Icon name="PaperPlaneTilt" size={14} /> {W.sendPlain}</button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. They wait under Parked; nothing goes to Claude." onClick={() => bulk('later')}>Park</button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('acknowledge')}>Acknowledge</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked([])}>Clear</button>

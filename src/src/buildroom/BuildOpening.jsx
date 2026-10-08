@@ -12,6 +12,7 @@ import React, { useState } from 'react';
 import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import { questionAnswer } from './buildScreens';
+import { W } from './words';
 
 const stepOf = (opening, key) => (opening.steps || []).find((x) => x.key === key) || null;
 const doneCount = (opening) => (opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length;
@@ -86,7 +87,7 @@ function KindStep({ step, kinds: initial, busy, run, api }) {
           ) : (
             <>
               <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !ready} onClick={ask}>Ask the room to pick</button>
-              <button type="button" className="brm-btn" disabled={busy || !ready} onClick={spin}>Spin the wheel</button>
+              <button type="button" className="brm-btn" disabled={busy || !ready} onClick={spin}>{W.spin}</button>
               <button type="button" className="brm-btn brm-btn--ghost" disabled={busy || !ready} onClick={() => setPicking(true)}>Pick for the room</button>
               <button type="button" className="brm-btn brm-btn--link brm-push" onClick={() => setEditing(true)}>Edit the list</button>
             </>

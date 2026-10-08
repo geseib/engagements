@@ -12,6 +12,7 @@
  */
 import { safeHref } from './buildHostApi';
 import { wifiState } from './wifiShare';
+import { W } from './words';
 
 export const SCREENS = Object.freeze([
   Object.freeze({ key: 'host', label: 'Host', shortcut: '1' }),
@@ -227,10 +228,10 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
       // THE WHEEL (owner, 2026-10-05): the host can always spin; a person in
       // the room may have the turn. Edit opens the send window over the Stage.
       const status = w.landed ? 'The wheel has picked'
-        : w.spinner && w.armed ? `${w.spinner} spins the wheel` : 'Spin the wheel';
+        : w.spinner && w.armed ? `${w.spinner} spins the wheel` : W.spin;
       return {
         phase: 'RESULTS', context, meter, status, wheel: true,
-        primary: { action: 'spin', label: w.landed ? 'Spin again' : 'Spin' },
+        primary: { action: 'spin', label: w.landed ? W.spinAgain : W.spin },
         secondary: { action: 'edit', label: 'Edit' },
       };
     }
@@ -253,7 +254,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
   }
   // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06): wherever the room could
   // vote between options, the host may let the wheel pick instead.
-  const instead = { action: 'wheel', label: 'Spin the wheel instead' };
+  const instead = { action: 'wheel', label: W.spin };
   if (current.status === 'voting') {
     const voted = current.voteCount || 0;
     return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} have voted`, primary: { action: 'close', label: 'Close and show results' }, secondary: instead };

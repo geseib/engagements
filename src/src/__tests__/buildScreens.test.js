@@ -101,7 +101,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
       meter: { heading: 'Answered', count: 5, of: 18 },
       status: '5 of 18 have answered',
       primary: { action: 'close', label: 'Close and show results' },
-      secondary: { action: 'wheel', label: 'Spin the wheel instead' },
+      secondary: { action: 'wheel', label: 'Spin the wheel' },
     });
   });
 
@@ -131,7 +131,7 @@ describe('the Stage with the wheel up', () => {
   test('someone has the turn; the host can always spin; deciding stays on the Host', () => {
     expect(stageModel(room, results({ spinner: 'Dee', armed: true, landed: null, spins: [] }))).toMatchObject({
       status: 'Dee spins the wheel', wheel: true,
-      primary: { action: 'spin', label: 'Spin' }, secondary: { action: 'edit', label: 'Edit' },
+      primary: { action: 'spin', label: 'Spin the wheel' }, secondary: { action: 'edit', label: 'Edit' },
     });
   });
   test('landed: Spin again', () => {
@@ -150,7 +150,7 @@ describe('the wheel instead of a vote (owner, 2026-10-06)', () => {
   const room = { playerCount: 18, agent: { connected: true } };
   test('a Choose, an Ideas ask with two or more ideas, and a vote all offer it; a rating does not', () => {
     expect(stageModel(room, { askId: '1', kind: 'suggest', status: 'live', answerCount: 1 }).secondary).toBeUndefined();
-    expect(stageModel(room, { askId: '1', kind: 'suggest', status: 'live', answerCount: 2 }).secondary).toEqual({ action: 'wheel', label: 'Spin the wheel instead' });
+    expect(stageModel(room, { askId: '1', kind: 'suggest', status: 'live', answerCount: 2 }).secondary).toEqual({ action: 'wheel', label: 'Spin the wheel' });
     expect(stageModel(room, { askId: '1', kind: 'suggest', status: 'voting', voteCount: 3 }).secondary.action).toBe('wheel');
     expect(stageModel(room, { askId: '1', kind: 'rating', status: 'live', answerCount: 3 }).secondary).toBeUndefined();
   });

@@ -202,7 +202,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
         <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setMode('reask')}>Re-ask…</button>
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
         <button type="button" className="brm-btn brm-push" disabled={cannot} onClick={() => decide('later')}>Save for later</button>
-        <button type="button" className="brm-btn brm-btn--primary" disabled={cannot} onClick={() => decide(as)}>Send to Claude</button>
+        <button type="button" className="brm-btn brm-btn--primary" disabled={cannot} onClick={() => decide(as)}><Icon name="PaperPlaneTilt" size={16} /> Send to Claude</button>
       </div>
       {confirmDiscard && (
         <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={() => setConfirmDiscard(false)} closeOnBackdrop={false} labelledBy="brm-sd-discard">
