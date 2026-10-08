@@ -45,12 +45,12 @@ export function decidedAnswer(ask) {
   return String((ask.decision && ask.decision.direction) || '').trim();
 }
 
-export function WhatsNext({ room, now, ticked, onMove }) {
+export function WhatsNext({ room, now, ticked, onMove, continueOn = false }) {
   const ref = useRef(null);
   const moves = whatsNextMoves(room, { ticked: ticked ? ticked.size : 0 });
   const lead = moves[0];
   useNextFocus(ref, lead ? lead.key : '');
-  const st = claudeState(room, now);
+  const st = claudeState(room, now, { host: true, continueOn });
   return (
     <div className="brm-wnext" ref={ref}>
       <div className="brm-claudeline" data-state={st.key}>
@@ -104,7 +104,8 @@ export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, end
           const method = a.decision.method && METHOD_WORDS[a.decision.method];
           const how = used[a.askId] ? `In a prompt · ${clockOf(used[a.askId])}` : upFirst(method || '');
           return (
-            <li key={a.askId} className={`brm-dec${on ? ' is-ticked' : ''}`}>
+            // The whole row ticks; the checkbox stays the accessible control.
+            <li key={a.askId} className={`brm-dec${on ? ' is-ticked' : ''}${ended ? '' : ' is-pick'}`} onClick={ended ? undefined : (e) => { if (e.target.tagName !== 'INPUT') toggle(a.askId); }}>
               {!ended && (
                 <input type="checkbox" className="brm-qtick" checked={on} onChange={() => toggle(a.askId)} aria-label={a.prompt} />
               )}

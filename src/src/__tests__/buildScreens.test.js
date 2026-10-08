@@ -345,6 +345,20 @@ describe('claudeState: the one status the stage, dock, host line and chip share'
     expect(claudeState(room, NOW)).toEqual(claudeState(room, new Date(NOW).toISOString()));
   });
 
+  test('on the host\'s own screen the line never speaks of the host', () => {
+    const waiting = base({ agent: { listening: true, lastSeenAt: at(3) }, log: [post(300, 'The dot grid.')] });
+    expect(claudeState(waiting, NOW, { host: true })).toMatchObject({ key: 'waiting', headline: 'Claude is ready for the next step', line: 'It finished: The dot grid.' });
+    expect(claudeState(base(), NOW, { host: true }).line).toBe('');
+    const paused = { agent: { connected: false, listening: false, lastSeenAt: at(400) }, log: [post(500)] };
+    expect(claudeState(paused, NOW, { host: true, continueOn: true }).line).toBe('Copy the Continue prompt to pick it up.');
+    expect(claudeState(paused, NOW, { host: true }).line).toBe('');
+    // The Stage keeps its wording, for the room.
+    expect(claudeState(paused, NOW).line).toBe('The host will pick it up again in a moment.');
+    for (const r of [waiting, paused, base({ log: [post(10)] })]) {
+      expect(claudeState(r, NOW, { host: true, continueOn: true }).line).not.toMatch(/\bthe host\b/i);
+    }
+  });
+
   test('the latest decision reads as question and answer', () => {
     const room = { asks: [
       { askId: '001', prompt: 'Who is it for?', status: 'decided', decidedAt: at(300), decision: { direction: 'Who is it for: everyone' } },
@@ -423,6 +437,12 @@ describe('askPathSummaries: what a folded step says', () => {
 
 describe('whatsNextMoves: the host between asks, most likely first', () => {
   const room = (over) => ({ asks: [], ideas: [], ...over });
+  test('the vote-ideas title counts what the dialog takes: six at most', () => {
+    const ideas = (n) => Array.from({ length: n }, (_, i) => ({ ideaId: `i${i}`, status: 'new' }));
+    expect(whatsNextMoves(room({ ideas: ideas(9) }))[0]).toMatchObject({ key: 'vote-ideas', count: 6, title: 'Put 6 ideas to a vote', hint: '6 of 9 waiting' });
+    expect(whatsNextMoves(room({ ideas: ideas(6) }))[0]).toMatchObject({ count: 6, title: 'Put 6 ideas to a vote', hint: 'The room sent these while you were busy' });
+    expect(whatsNextMoves(room({ ideas: ideas(3) }))[0]).toMatchObject({ count: 3, title: 'Put 3 ideas to a vote' });
+  });
   test('two or more new ideas lead', () => {
     const m = whatsNextMoves(room({ ideas: [{ ideaId: 'i1', status: 'new' }, { ideaId: 'i2', status: 'new' }] }), { ticked: 3 });
     expect(m[0]).toMatchObject({ key: 'vote-ideas', count: 2, button: 'To a vote' });
@@ -492,6 +512,13 @@ describe('S4: the stage says the mockups are ready', () => {
     const m = stageModel(ready, null, Date.now());
     expect(m.status).toBe('Mockups ready \u00b7 the host opens the vote');
     expect(m.primary).toEqual({ action: 'open', label: 'Open the vote', askId: '005' });
+  });
+  test('not while the opening frames the build, nor on the crew board', () => {
+    const framing = { ...ready, opening: { phase: 'opening' } };
+    expect(stageModel(framing, null, Date.now()).primary).toBeNull();
+    expect(stageModel({ ...ready, opening: { phase: 'building' } }, null, Date.now()).primary).toMatchObject({ action: 'open' });
+    expect(stageModel(ready, null, Date.now(), { crewOn: true }).primary).toBeNull();
+    expect(stageModel(ready, null, Date.now(), { crewOn: true }).status).not.toMatch(/Mockups ready/);
   });
   test('no primary without mockups, or once an ask is current', () => {
     expect(stageModel({ ...ready, asks: [] }, null, Date.now()).primary).toBeNull();

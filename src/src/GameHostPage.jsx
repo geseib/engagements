@@ -1,3 +1,4 @@
+import { useRosterMode, rosterRevealFor } from './hooks/useRosterReveal';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
@@ -388,13 +389,7 @@ function GameHostPage() {
    * the dock, so suppressing the advance key for it would take SPACE away
    * while the dock still advertised it.
    */
-  const [rosterMode, setRosterMode] = useState(null);
-  useEffect(() => {
-    if (!rosterMode) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setRosterMode(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [rosterMode]);
+  const [rosterMode, setRosterMode] = useRosterMode();
   /**
    * WHICH PAGE OF THE STAGE IS ON THE WALL.
    *
@@ -6638,15 +6633,7 @@ Focus on actionable business strategy insights.`;
    * property that makes naming the waiting acceptable at all.
    */
   const rosterKey = `${hostPhase}#${lessonNumber}`;
-  const rosterReveal = rosterMode && rosterMode.key === rosterKey ? rosterMode.mode : null;
-  const rosterHandlers = {
-    onPreview: () => setRosterMode((m) => (m && m.key === rosterKey && m.mode === 'pinned'
-      ? m : { key: rosterKey, mode: 'preview' })),
-    onPreviewEnd: () => setRosterMode((m) => (m && m.key === rosterKey && m.mode === 'pinned'
-      ? m : null)),
-    onPin: () => setRosterMode((m) => (m && m.key === rosterKey && m.mode === 'pinned'
-      ? null : { key: rosterKey, mode: 'pinned' })),
-  };
+  const { reveal: rosterReveal, handlers: rosterHandlers } = rosterRevealFor(rosterMode, setRosterMode, rosterKey);
   /* null, not an empty object: RoomMeter renders the plain, non-interactive
      count unless it is handed both names and handlers, so a gated round — or
      a round everybody is already in — offers no affordance at all rather than

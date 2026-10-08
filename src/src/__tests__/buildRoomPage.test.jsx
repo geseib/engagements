@@ -2116,10 +2116,60 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     expect(screen.getByRole('dialog', { name: 'Ask the room' })).toBeInTheDocument();
   });
 
+  test('the library search never takes the focus from a box the host is typing in', async () => {
+    await openRoom(decidedRoom());
+    const base = authFetch.getMockImplementation();
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    authFetch.mockImplementation(async (url, opts = {}) => {
+      if (url === `${API}question-sets`) {
+        await gate;
+        return res({ sets: [{ id: 'br-starters', scope: 'platform', name: 'Build Room starters', engagementType: 'call-and-answer', tags: ['build-room'] }] });
+      }
+      if (/question-sets\/br-starters\/questions/.test(url)) return res({ setId: 'br-starters', questions: [{ id: 'c001#001', Category: 'Who', title: 'Who is this for?' }] });
+      return base(url, opts);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask it' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    const prompt = within(dialog).getAllByRole('textbox')[0];
+    prompt.focus();
+    await act(async () => { release(); });
+    await within(dialog).findByRole('searchbox', { name: 'Search ready questions' });
+    expect(document.activeElement).toBe(prompt);
+  });
+
   test('Ask it opens Ask the room on its question library', async () => {
     await openRoom(decidedRoom());
     fireEvent.click(screen.getByRole('button', { name: 'Ask it' }));
     const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
     expect(within(dialog).getByRole('complementary', { name: 'Ready questions' })).toBeInTheDocument();
+  });
+});
+
+describe('the Stage meter names who is in the room, on hover', () => {
+  const meterButton = () => screen.getByRole('button', { name: /^Already joined: 4/ });
+  test('hover previews the joined names, leave puts them away, click pins, Escape unpins', async () => {
+    await openRoom(hostState());
+    fireEvent.keyDown(window, { key: '2' });
+    const btn = meterButton();
+    expect(screen.queryByText('Already joined')).toBeNull();
+    fireEvent.mouseEnter(btn);
+    expect(screen.getByText('Already joined')).toBeInTheDocument();
+    for (const n of ['Ana', 'Dee', 'Priya', 'Sam']) expect(screen.getByText(n)).toBeInTheDocument();
+    expect(document.querySelector('[data-list-kind="joined"]')).not.toBeNull();
+    fireEvent.mouseLeave(btn);
+    expect(screen.queryByText('Already joined')).toBeNull();
+    fireEvent.click(btn);
+    fireEvent.mouseLeave(btn);
+    expect(screen.getByText('Already joined')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('Already joined')).toBeNull();
+  });
+
+  test('with an ask up the meter keeps its plain count (no joined list under an ask caption)', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } }));
+    fireEvent.keyDown(window, { key: '2' });
+    expect(screen.queryByRole('button', { name: /^Already joined/ })).toBeNull();
+    expect(document.querySelector('[data-list-kind="joined"]')).toBeNull();
   });
 });

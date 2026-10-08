@@ -132,9 +132,11 @@ const timeOf = (iso) => { const t = Date.parse(iso || ''); return Number.isFinit
 const stripEnd = (text) => String(text || '').trim().replace(/[\s.!?]+$/, '');
 
 /**
+ * `host: true` is the host's own screen: the line speaks to the host, never about
+ * them (`continueOn`: the Continue prompt button is on that screen).
  * @returns {{ key: 'building'|'waiting'|'paused'|'none', headline: string, line: string, since: string|null }}
  */
-export function claudeState(room, now) {
+export function claudeState(room, now, { host = false, continueOn = false } = {}) {
   const at = new Date(now).getTime();
   const agent = (room && room.agent) || {};
   const log = (room && room.log) || [];
@@ -156,12 +158,17 @@ export function claudeState(room, now) {
     return {
       key: 'waiting',
       headline: 'Claude is ready for the next step',
-      line: lastPost ? `It finished: ${stripEnd(lastPost.text)}. The host will choose what comes next.` : 'The host will choose what comes next.',
+      line: host
+        ? (lastPost ? `It finished: ${stripEnd(lastPost.text)}.` : '')
+        : (lastPost ? `It finished: ${stripEnd(lastPost.text)}. The host will choose what comes next.` : 'The host will choose what comes next.'),
       since: null,
     };
   }
   if (agent.lastSeenAt || lastPost) {
-    return { key: 'paused', headline: 'Claude has paused', line: 'The host will pick it up again in a moment.', since: null };
+    // The host's own screen never speaks of the host in the third person: it
+    // points at the one action that is on the screen, or says nothing.
+    const line = host ? (continueOn ? 'Copy the Continue prompt to pick it up.' : '') : 'The host will pick it up again in a moment.';
+    return { key: 'paused', headline: 'Claude has paused', line, since: null };
   }
   return { key: 'none', headline: 'Waiting for Claude Code', line: '', since: null };
 }
@@ -184,7 +191,7 @@ export function latestDecisionLine(room) {
  * place as Start Voting on the regular stage; deciding needs words, so at
  * results the move is back to the Host screen.
  */
-export function stageModel(room, current, now = Date.now()) {
+export function stageModel(room, current, now = Date.now(), { crewOn = false } = {}) {
   const here = (room && room.playerCount) || 0;
   const ended = Boolean(room && room.state === 'ENDED');
   if (ended) {
@@ -198,7 +205,9 @@ export function stageModel(room, current, now = Date.now()) {
         : roomDockLine(room, now);
     // MOCKUPS TO LOOK AT (host-flow S4): the pictures are in, the vote is not
     // open; the host's one move is to open it.
-    const looks = room && !(room.outcome && room.outcome.summary) ? mockupsReady(room) : null;
+    // Not while the opening frames the build, nor while the crew board is up.
+    const framing = Boolean(room && room.opening && room.opening.phase === 'opening');
+    const looks = room && !framing && !crewOn && !(room.outcome && room.outcome.summary) ? mockupsReady(room) : null;
     if (looks) {
       return {
         phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null },
@@ -530,10 +539,20 @@ export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
   return { ask: opened, collect, settle };
 }
 
+/** The most ideas one vote takes. */
+export const VOTE_IDEAS_MAX = 6;
+
 export function whatsNextMoves(room, { ticked = 0 } = {}) {
   const ideas = ((room && room.ideas) || []).filter((i) => i.status === 'new');
   const moves = [];
-  if (ideas.length >= 2) moves.push({ key: 'vote-ideas', count: ideas.length, title: `Put ${ideas.length} ideas to a vote`, hint: 'The room sent these while you were busy', button: 'To a vote' });
+  if (ideas.length >= 2) {
+    // The dialog takes six at most; the title says what it will do.
+    const n = Math.min(ideas.length, VOTE_IDEAS_MAX);
+    moves.push({
+      key: 'vote-ideas', count: n, title: `Put ${n} ideas to a vote`,
+      hint: ideas.length > n ? `${n} of ${ideas.length} waiting` : 'The room sent these while you were busy', button: 'To a vote',
+    });
+  }
   if (ticked > 0) moves.push({ key: 'combine', count: ticked, title: `Combine ${ticked} decided ${ticked === 1 ? 'answer' : 'answers'}`, hint: 'Into one prompt you can edit before Claude gets it', button: 'Combine' });
   moves.push({ key: 'starter', title: 'Ask the room a starter question', hint: 'From the question library', button: 'Ask it' });
   moves.push({ key: 'new-ask', title: 'Ask the room something new', hint: 'Ideas, a choice, or a 1 to 5 rating', button: 'New ask' });

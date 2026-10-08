@@ -52,7 +52,9 @@ export function useNextFocus(containerRef, stepKey) {
     }
     if (!pending.current) return;
     const active = document.activeElement;
-    if (isTypingTarget(active) || dialogOpen()) { pending.current = false; return; }
+    // Ticking in Decided can change the lead; it never pulls the focus away.
+    const inDecided = Boolean(active && active.closest && active.closest('.brm-decided'));
+    if (isTypingTarget(active) || dialogOpen() || inDecided) { pending.current = false; return; }
     const container = containerRef.current;
     const el = nextTarget(container);
     if (!el || el.disabled) return; // not ready yet: try again on the next render

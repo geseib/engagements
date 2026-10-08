@@ -89,3 +89,56 @@ test('decidedAnswer: the answer alone, never the question again', () => {
   expect(decidedAnswer(decided[1])).toBe('Everyone');
   expect(decidedAnswer({ prompt: 'Name the app', decision: { direction: 'Summit' } })).toBe('Summit');
 });
+
+test('What\'s next on the host\'s screen: Claude\'s line is not about the host', () => {
+  const room = { asks: [], ideas: [], agent: { connected: true }, log: [{ by: 'agent', kind: 'progress', text: 'Header B is live.', createdAt: '2026-10-07T14:50:00Z' }] };
+  render(<WhatsNext room={room} now={NOW} ticked={new Set()} onMove={jest.fn()} />);
+  expect(screen.getByText('It finished: Header B is live.')).toBeInTheDocument();
+  expect(screen.queryByText(/The host will choose/)).toBeNull();
+});
+
+test('What\'s next: a paused Claude points at the Continue prompt only when it is on the screen', () => {
+  const room = { asks: [], ideas: [], agent: { connected: false, listening: false, lastSeenAt: '2026-10-07T14:40:00Z' }, log: [] };
+  const { rerender } = render(<WhatsNext room={room} now={NOW} ticked={new Set()} onMove={jest.fn()} continueOn />);
+  expect(screen.getByText('Copy the Continue prompt to pick it up.')).toBeInTheDocument();
+  rerender(<WhatsNext room={room} now={NOW} ticked={new Set()} onMove={jest.fn()} />);
+  expect(screen.queryByText(/Continue prompt/)).toBeNull();
+});
+
+test('Decided: ticking does not pull the focus when the lead move changes', () => {
+  function Harness() {
+    const [ticked, setTicked] = React.useState(new Set());
+    return (
+      <>
+        <WhatsNext room={{ asks: decided, ideas: [], agent: { connected: true }, log: [] }} now={NOW} ticked={ticked} onMove={jest.fn()} />
+        <DecidedList asks={decided} ticked={ticked} setTicked={setTicked} used={{}} onCombine={jest.fn()} />
+      </>
+    );
+  }
+  render(<Harness />);
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask it' }));
+  const box = screen.getByRole('checkbox', { name: /What are we building/ });
+  box.focus();
+  fireEvent.click(box);
+  expect(box).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Combine' })).toHaveAttribute('data-next-primary');
+  expect(document.activeElement).toBe(box);
+  fireEvent.click(box);
+  expect(document.activeElement).toBe(box);
+});
+
+test('Decided: clicking anywhere on the row toggles the tick; the checkbox toggles once', () => {
+  const setTicked = jest.fn();
+  render(<DecidedList asks={decided} ticked={new Set()} setTicked={setTicked} used={{}} onCombine={jest.fn()} />);
+  fireEvent.click(screen.getByText('An app'));
+  expect([...setTicked.mock.calls[0][0]]).toEqual(['001']);
+  fireEvent.click(screen.getByRole('checkbox', { name: /Who is it for/ }));
+  expect(setTicked).toHaveBeenCalledTimes(2);
+});
+
+test('Decided: an ended session has no row click', () => {
+  const setTicked = jest.fn();
+  render(<DecidedList asks={decided} ticked={new Set()} setTicked={setTicked} used={{}} onCombine={jest.fn()} ended />);
+  fireEvent.click(screen.getByText('An app'));
+  expect(setTicked).not.toHaveBeenCalled();
+});

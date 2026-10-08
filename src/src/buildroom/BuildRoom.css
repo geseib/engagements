@@ -1096,6 +1096,8 @@
 }
 .brm .brm-dec .brm-qtick { margin: 2px 0 0; }
 .brm .brm-dec.is-ticked { border-color: var(--primary); }
+.brm .brm-dec.is-pick { cursor: pointer; }
+.brm .brm-stackhint { font-size: var(--brm-t-floor); font-weight: 400; }
 .brm .brm-dec-t { grid-column: 2; min-width: 0; }
 .brm .brm-dec-q { margin: 0; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
 .brm .brm-dec-a { margin: 2px 0 0; font-size: var(--brm-t-body); overflow-wrap: anywhere; }

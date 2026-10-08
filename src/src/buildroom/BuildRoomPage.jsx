@@ -40,6 +40,8 @@ import { useKeepOnScreen } from './keepOnScreen';
 import { AskPath } from './BuildAskPath';
 import { WhatsNext, DecidedList, decidedAsks } from './BuildWhatsNext';
 import { isTypingTarget, dialogOpen } from './useNextFocus';
+import { useRosterMode, rosterRevealFor } from '../hooks/useRosterReveal';
+import { joinedRoster } from '../config/anonymity';
 import { WifiChip, WifiPanel, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
 import { shouldOfferWifi, wifiState } from './wifiShare';
 import {
@@ -51,7 +53,7 @@ import {
 import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
-  questionAnswer, claudeState, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
+  questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
 } from './buildScreens';
@@ -706,7 +708,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     else if (key === 'tell') setComposeFocus((n) => n + 1);
     else if (key === 'new-ask') setDialog({ compose: 'suggest' });
     else if (key === 'starter') setDialog({ compose: 'suggest', library: true });
-    else if (key === 'vote-ideas') setVoteIdeas((room.ideas || []).filter((i) => i.status === 'new').slice(0, 6));
+    else if (key === 'vote-ideas') setVoteIdeas((room.ideas || []).filter((i) => i.status === 'new').slice(0, VOTE_IDEAS_MAX));
   };
 
   return (
@@ -899,7 +901,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                 body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
               }] : []),
               // DECIDED (P1): every decided ask with a tick, to combine into one prompt.
-              { key: 'decided', label: 'Decided', count: decidedNow.length, skip: !decidedNow.length, body: <DecidedList asks={asks} ticked={tickedNow} setTicked={setTicked} used={used} onCombine={combine} ended={ended} /> },
+              { key: 'decided', label: 'Decided', count: decidedNow.length, skip: !decidedNow.length, hint: ended ? '' : 'Tick to combine', body: <DecidedList asks={asks} ticked={tickedNow} setTicked={setTicked} used={used} onCombine={combine} ended={ended} /> },
               { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
               { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
                 ? <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
@@ -1385,6 +1387,7 @@ function HistoryStack({ items }) {
               <Icon name={isOpen ? 'CaretDown' : 'CaretRight'} size={14} />
               {it.label}
               <span className="brm-muted">{` · ${it.count}`}</span>
+              {it.hint && <span className="brm-muted brm-stackhint">{` · ${it.hint}`}</span>}
             </button>
             {isOpen && <div className="brm-stackbody" id={`brm-stack-${it.key}`}>{it.body}</div>}
           </div>
@@ -1409,7 +1412,7 @@ function HistoryStack({ items }) {
 function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
-  const m = stageModel(room, current, now);
+  const m = stageModel(room, current, now, { crewOn });
   const waiting = waitingCount(room);
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
@@ -1431,6 +1434,13 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [act]);
+  // WHO IS IN THE ROOM, on hover (owner, 2026-10-07): the regular stage's
+  // lobby list, the same hover, focus, pin and Escape. Only while no ask is
+  // up: the list is the joined set, and an ask phase names the waiting set.
+  const [rosterMode, setRosterMode] = useRosterMode();
+  const { reveal, handlers } = rosterRevealFor(rosterMode, setRosterMode, 'LOBBY#0');
+  const joined = m.phase ? null : joinedRoster({ players: (room.players || []).map((name) => ({ name })) });
+  const joinedWaiting = joined ? { names: joined, mode: reveal, ...handlers } : null;
   const body = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   let content;
@@ -1484,7 +1494,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
               : { url: `${window.location.host}/play`, code: room.gameId, onPreview: () => undefined, onPreviewEnd: () => undefined, onPin: () => setQr(true) }}
           />
         )}
-        meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} />}
+        meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} waiting={joinedWaiting} />}
         dock={(
           <Dock status={m.status}>
             {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
@@ -2549,7 +2559,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
         </div>
       )}
       {whatsNext
-        ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} onMove={onMove} />
+        ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} onMove={onMove} continueOn={quiet && Boolean(CONTINUE_PROMPT)} />
         : <p className="brm-nowline">{line}</p>}
       {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
       {!ended && (
@@ -3446,6 +3456,8 @@ function ReadyLibrary({ api, asks, selectedKey, onPick, autoFocus = false }) {
   const focused = useRef(false);
   useEffect(() => {
     if (!autoFocus || focused.current || !search.current) return;
+    // Never take the focus from the host typing somewhere else (the composer).
+    if (isTypingTarget(document.activeElement) && document.activeElement !== search.current) { focused.current = true; return; }
     focused.current = true;
     search.current.focus();
   });
