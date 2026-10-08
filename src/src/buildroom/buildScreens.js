@@ -545,6 +545,16 @@ export const VOTE_IDEAS_MAX = 6;
 export function whatsNextMoves(room, { ticked = 0 } = {}) {
   const ideas = ((room && room.ideas) || []).filter((i) => i.status === 'new');
   const moves = [];
+  // MOCKUPS TO LOOK AT (host-flow S4): the Stage says the vote is ready to open,
+  // so this leads with the same move (not while the opening frames the build).
+  const framing = Boolean(room && room.opening && room.opening.phase === 'opening');
+  const looks = room && !framing && !(room.outcome && room.outcome.summary) ? mockupsReady(room) : null;
+  if (looks) {
+    moves.push({
+      key: 'vote-mockups', askId: looks.ask.askId, title: "Open the vote on Claude's mockups",
+      hint: `${lettersLine(looks.images.map((i) => i.label))} ${looks.images.length === 1 ? 'is' : 'are'} ready to compare`, button: 'Open the vote',
+    });
+  }
   if (ideas.length >= 2) {
     // The dialog takes six at most; the title says what it will do.
     const n = Math.min(ideas.length, VOTE_IDEAS_MAX);

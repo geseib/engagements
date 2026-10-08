@@ -447,6 +447,23 @@ describe('the host side panel', () => {
     });
   });
 
+  test('after the Composer creates an ask, the focus lands on Close and show results, not back on the opener', async () => {
+    await openRoom(hostState());
+    const opener = screen.getByRole('button', { name: /Choose/ });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    fireEvent.change(within(dialog).getByLabelText(/Question/), { target: { value: 'Which header should volunteers see first?' } });
+    fireEvent.change(within(dialog).getByLabelText('Option A'), { target: { value: 'Bold banner' } });
+    fireEvent.change(within(dialog).getByLabelText('Option B'), { target: { value: 'Calm photo + calendar' } });
+    current = hostState({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ask the room' })).toBeNull());
+    const close = await screen.findByRole('button', { name: 'Close and show results' });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    expect(document.activeElement).not.toBe(opener);
+  });
+
   test('End session posts games/{id}/end', async () => {
     await openRoom(hostState());
     openMore();
@@ -1058,6 +1075,16 @@ describe('S4: the Stage says there are mockups to look at', () => {
     AskId: '005', Kind: 'choice', Prompt: 'Which look?', Source: 'host', Status: 'proposed', MaxPicks: 1,
     Options: [{ label: 'A', title: 'Calm', imageId: 'img-a' }, { label: 'B', title: 'Playful', imageId: 'img-b' }],
   };
+  test('What\'s next on the Host leads with the same move, and it opens the vote', async () => {
+    await openRoom(hostState({ asks: [READY] }));
+    expect(screen.getByText("Open the vote on Claude's mockups")).toBeInTheDocument();
+    expect(screen.getByText('A and B are ready to compare')).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: 'Open the vote' });
+    expect(btn).toHaveAttribute('data-next-primary');
+    fireEvent.click(btn);
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/005`));
+    expect(lastPost().body).toEqual({ action: 'open' });
+  });
   test('headline, letters, Next line, and Space opens the vote', async () => {
     await openRoom(hostState({ asks: [READY] }));
     fireEvent.keyDown(window, { key: '2' });
@@ -1385,6 +1412,25 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
     goWith('Go with B');
     expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Calm photo + calendar');
     expect(screen.getByText('The wheel picked B')).toBeInTheDocument();
+  });
+
+  test('Go with the landed pick waits for the wheel to stop: disabled, unfocused, then focused', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIE }));
+    const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
+    current = hostState({
+      st: { CurrentAskId: '003' },
+      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
+      answers: TIE,
+    });
+    await act(async () => { handler({}); });
+    const go = await screen.findByRole('button', { name: 'Go with B' });
+    expect(go).toBeDisabled();
+    expect(document.activeElement).not.toBe(go);
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(lastPost() && lastPost().body && lastPost().body.action).not.toBe('decide');
+    fireEvent.transitionEnd(document.querySelector('.bwh-rot'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Go with B' })).not.toBeDisabled());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go with B' })));
   });
 
   test('on the Stage the wheel is the screen; Space spins, and deciding is back on the Host', async () => {
@@ -2138,6 +2184,20 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     expect(document.activeElement).toBe(prompt);
   });
 
+  test('New ask: after the dialog creates the ask, the focus lands on Close and show results, not on New ask', async () => {
+    await openRoom(decidedRoom());
+    const opener = screen.getByRole('button', { name: 'New ask' });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    fireEvent.change(within(dialog).getByLabelText(/Question/), { target: { value: 'What would stop someone signing up?' } });
+    current = hostState({ asks: [WHO, BUILT, { ...IDEAS_ASK, Status: 'live' }], st: { CurrentAskId: IDEAS_ASK.AskId } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ask the room' })).toBeNull());
+    const close = await screen.findByRole('button', { name: /Close and show results|Open voting/ });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+  });
+
   test('Ask it opens Ask the room on its question library', async () => {
     await openRoom(decidedRoom());
     fireEvent.click(screen.getByRole('button', { name: 'Ask it' }));
@@ -2164,6 +2224,24 @@ describe('the Stage meter names who is in the room, on hover', () => {
     expect(screen.getByText('Already joined')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByText('Already joined')).toBeNull();
+  });
+
+  test('a pinned list does not come back by itself after an ask ends', async () => {
+    await openRoom(hostState());
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(meterButton());
+    fireEvent.mouseLeave(meterButton());
+    expect(screen.getByText('Already joined')).toBeInTheDocument();
+    const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
+    current = hostState({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } });
+    await act(async () => { handler({}); });
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Already joined/ })).toBeNull());
+    current = hostState({ asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'B' } }] });
+    await act(async () => { handler({}); });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Already joined/ })).toBeInTheDocument());
+    expect(screen.queryByText('Ana')).toBeNull();
+    fireEvent.mouseEnter(meterButton());
+    expect(screen.getByText('Ana')).toBeInTheDocument();
   });
 
   test('with an ask up the meter keeps its plain count (no joined list under an ask caption)', async () => {

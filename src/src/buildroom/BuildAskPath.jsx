@@ -145,6 +145,12 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   const act = (action) => run(() => api.askAction(ask.askId, { action }));
   const tied = (ask.results && ask.results.tied) || [];
   const wheel = ask.wheel && !ask.revotedAs ? ask.wheel : null;
+  // WHERE IT LANDED IS HELD BACK until the wheel stops: the move is not offered
+  // (or focused, or pressed by Space) while the projector is still turning, or
+  // the result is given away. A wheel already still when this mounts is settled.
+  const lastSpin = wheel && wheel.spins && wheel.spins.length ? wheel.spins[wheel.spins.length - 1].spinId : null;
+  const [settledSpin, setSettledSpin] = useState(lastSpin);
+  const turning = Boolean(wheel && wheel.landed && lastSpin && lastSpin !== settledSpin);
   const win = ask.kind === 'rating' ? null : winnerOf({ ...ask, wheel: null });
   const avg = ask.kind === 'rating' ? ratingAvg(ask) : null;
   // The settle move, so a spin or a tie moves the focus as a new step does.
@@ -196,7 +202,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
       // Where it landed is the room's way on (H3); Spin again stays on the wheel.
       const landed = decisionChoices(ask).find((c) => c.id === wheel.landed);
       moves = (
-        <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => onPick(wheel.landed, { confirmed: true })}>
+        <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || turning} onClick={() => onPick(wheel.landed, { confirmed: true })}>
           {landed && landed.label ? `Go with ${landed.label}` : "Go with the wheel's pick"}
         </button>
       );
@@ -227,7 +233,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     settleBody = (
       <>
         {board}
-        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary={!(wheel && wheel.landed)} />}
+        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary={!(wheel && wheel.landed)} onSettled={setSettledSpin} />}
         {moves && <div className="brm-path-row">{moves}<SpaceHint /></div>}
         {host && !wheel && ask.kind !== 'rating' && (
           <p className="brm-hint">

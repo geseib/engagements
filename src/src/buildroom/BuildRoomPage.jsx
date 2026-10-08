@@ -708,7 +708,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     else if (key === 'tell') setComposeFocus((n) => n + 1);
     else if (key === 'new-ask') setDialog({ compose: 'suggest' });
     else if (key === 'starter') setDialog({ compose: 'suggest', library: true });
-    else if (key === 'vote-ideas') setVoteIdeas((room.ideas || []).filter((i) => i.status === 'new').slice(0, VOTE_IDEAS_MAX));
+    else if (key === 'vote-mockups') {
+      const looks = mockupsReady(room);
+      if (looks) run(() => api.askAction(looks.ask.askId, { action: 'open' }));
+    } else if (key === 'vote-ideas') setVoteIdeas((room.ideas || []).filter((i) => i.status === 'new').slice(0, VOTE_IDEAS_MAX));
   };
 
   return (
@@ -1413,6 +1416,11 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   const m = stageModel(room, current, now, { crewOn });
+  // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
+  const spinsOf = (current && current.wheel && current.wheel.spins) || [];
+  const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
+  const [settledSpin, setSettledSpin] = useState(lastSpinId);
+  const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
   const waiting = waitingCount(room);
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
@@ -1438,7 +1446,11 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   // lobby list, the same hover, focus, pin and Escape. Only while no ask is
   // up: the list is the joined set, and an ask phase names the waiting set.
   const [rosterMode, setRosterMode] = useRosterMode();
-  const { reveal, handlers } = rosterRevealFor(rosterMode, setRosterMode, 'LOBBY#0');
+  const { reveal, handlers } = rosterRevealFor(rosterMode, setRosterMode, `IDLE#${room.currentAskId || (room.asks || []).length}`);
+  // A pinned list does not outlive the quiet moment it was asked for: when an
+  // ask is up it is put away, and it is not there when the ask ends.
+  const askUp = Boolean(m.phase);
+  useEffect(() => { if (askUp) setRosterMode(null); }, [askUp, setRosterMode]);
   const joined = m.phase ? null : joinedRoster({ players: (room.players || []).map((name) => ({ name })) });
   const joinedWaiting = joined ? { names: joined, mode: reveal, ...handlers } : null;
   const body = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
@@ -1456,10 +1468,10 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       <section className="brm-stage brm-wheelstage" aria-label="The wheel">
         <span className="brm-eyebrow"><b>The wheel</b> · Ask {Number(current.askId) || current.askId}</span>
         <h2 className="brm-q">{current.prompt}</h2>
-        <BuildWheel wheel={current.wheel} size="lg" />
+        <BuildWheel wheel={current.wheel} size="lg" onSettled={setSettledSpin} />
         {/* SAME GOES FOR SPIN (owner, 2026-10-06): after it lands, the host may
             take the wheel's pick or an alternate, with the same question. */}
-        {!ended && current.wheel.landed && (
+        {!ended && current.wheel.landed && !wheelTurning && (
           <div className="brm-wheelpicks" role="group" aria-label="Pick">
             {(current.wheel.slices || []).map((sl) => (
               <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' brm-btn--primary' : ''}`} onClick={() => onPick(sl.id)}>
@@ -1930,7 +1942,7 @@ export function AskStage({ ask, host, busy, ended, run, api, pickId = null, onPi
  * if the room groans, spin again or hand it to someone else. Where it lands
  * fills in the direction below, which the host can still change.
  */
-export function WheelPanel({ ask, busy, run, api, primary = false }) {
+export function WheelPanel({ ask, busy, run, api, primary = false, onSettled = null }) {
   const tied = (ask.results && ask.results.tied) || [];
   const act = (action, extra = {}) => run(() => api.askAction(ask.askId, { action, ...extra }));
   const nameOf = (id) => {
@@ -1960,7 +1972,7 @@ export function WheelPanel({ ask, busy, run, api, primary = false }) {
   const w = ask.wheel;
   return (
     <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
-      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? 'Spin again' : 'Spin it yourself'} spinPrimary={primary} />
+      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? 'Spin again' : 'Spin it yourself'} spinPrimary={primary} onSettled={onSettled} />
       <div className="brm-row brm-gap brm-wheelacts">
         <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Pick someone else in the room to spin it" onClick={() => act('pass')}>Someone else spins</button>
       </div>

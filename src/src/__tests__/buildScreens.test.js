@@ -437,6 +437,16 @@ describe('askPathSummaries: what a folded step says', () => {
 
 describe('whatsNextMoves: the host between asks, most likely first', () => {
   const room = (over) => ({ asks: [], ideas: [], ...over });
+  test('mockups ready lead, above vote-ideas, with the letters the Stage says', () => {
+    const asks = [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', imageId: 'i1' }, { label: 'B', imageId: 'i2' }] }];
+    const ideas = [{ ideaId: 'i1', status: 'new' }, { ideaId: 'i2', status: 'new' }];
+    const m = whatsNextMoves(room({ asks, ideas }));
+    expect(m.map((x) => x.key)).toEqual(['vote-mockups', 'vote-ideas', 'starter', 'new-ask', 'tell']);
+    expect(m[0]).toEqual({ key: 'vote-mockups', askId: '005', title: "Open the vote on Claude's mockups", hint: 'A and B are ready to compare', button: 'Open the vote' });
+    expect(whatsNextMoves(room({ asks, opening: { phase: 'opening' } })).map((x) => x.key)).not.toContain('vote-mockups');
+    expect(whatsNextMoves(room({ asks, outcome: { summary: 'Done.' } })).map((x) => x.key)).not.toContain('vote-mockups');
+    expect(whatsNextMoves(room()).map((x) => x.key)).not.toContain('vote-mockups');
+  });
   test('the vote-ideas title counts what the dialog takes: six at most', () => {
     const ideas = (n) => Array.from({ length: n }, (_, i) => ({ ideaId: `i${i}`, status: 'new' }));
     expect(whatsNextMoves(room({ ideas: ideas(9) }))[0]).toMatchObject({ key: 'vote-ideas', count: 6, title: 'Put 6 ideas to a vote', hint: '6 of 9 waiting' });

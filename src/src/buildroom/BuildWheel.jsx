@@ -65,7 +65,7 @@ function prefersStill() {
  * turn it is); `spinLabel` names it. `spinPrimary` marks it as the Host
  * screen's next move (useNextFocus: focus lands on it, Space presses it).
  */
-export default function BuildWheel({ wheel, onSpin = null, spinLabel = 'Spin the wheel', busy = false, size = 'md', spinPrimary = false }) {
+export default function BuildWheel({ wheel, onSpin = null, spinLabel = 'Spin the wheel', busy = false, size = 'md', spinPrimary = false, onSettled = null }) {
   const slices = (wheel && wheel.slices) || [];
   const n = slices.length;
   const spins = (wheel && wheel.spins) || [];
@@ -82,6 +82,8 @@ export default function BuildWheel({ wheel, onSpin = null, spinLabel = 'Spin the
     clearTimeout(timer.current);
     setMoving(false);
     setSettled(true);
+    // The wheel has stopped on this spin: the page may now say where it landed.
+    if (onSettled && last) onSettled(last.spinId);
   };
 
   // A new spin: animate on to its slice. (Layout effect, so the start angle

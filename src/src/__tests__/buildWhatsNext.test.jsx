@@ -8,6 +8,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import { useNextFocus } from '../buildroom/useNextFocus';
 import { WhatsNext, DecidedList, decidedAnswer } from '../buildroom/BuildWhatsNext';
 
 const NOW = Date.parse('2026-10-07T15:00:00.000Z');
@@ -141,4 +142,39 @@ test('Decided: an ended session has no row click', () => {
   render(<DecidedList asks={decided} ticked={new Set()} setTicked={setTicked} used={{}} onCombine={jest.fn()} ended />);
   fireEvent.click(screen.getByText('An app'));
   expect(setTicked).not.toHaveBeenCalled();
+});
+
+describe('useNextFocus: a step that arrives under a dialog still gets the focus when it closes', () => {
+  function Step({ stepKey }) {
+    const ref = React.useRef(null);
+    useNextFocus(ref, stepKey);
+    return <div ref={ref}><button type="button" data-next-primary>Close and show results</button></div>;
+  }
+  test('Modal puts the focus back on the opener; the step takes it from there', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    const modal = document.createElement('div');
+    modal.className = 'brm-modal';
+    document.body.appendChild(modal);
+    const { rerender } = render(<Step stepKey="a" />);
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 'Close and show results' }));
+    modal.remove();
+    opener.focus(); // what Modal does as it unmounts
+    rerender(<Step stepKey="a" />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close and show results' }));
+    opener.remove();
+  });
+  test('but never while the host is typing', () => {
+    const box = document.createElement('textarea');
+    document.body.appendChild(box);
+    const modal = document.createElement('div');
+    modal.className = 'brm-modal';
+    document.body.appendChild(modal);
+    const { rerender } = render(<Step stepKey="b" />);
+    modal.remove();
+    box.focus();
+    rerender(<Step stepKey="b" />);
+    expect(document.activeElement).toBe(box);
+    box.remove();
+  });
 });
