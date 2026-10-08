@@ -158,6 +158,7 @@ describe('the room (dusk): tinted composites', () => {
     ['the key warning in the Connect dialog', D.text, [D.bg, D.surface, rt('--brm-tint-amber-soft')]],
     ['the key warning lead', D.primary, [D.bg, D.surface, rt('--brm-tint-amber-soft')]],
     ['the selected kind in Ask the room', D.primary, [D.bg, D.surface, rt('--brm-tint-amber')]],
+    ['the sent line in the Now column', D.text, [D.bg, rt('--brm-tint-green')]],
   ];
   test.each(cases)('%s clears AA', (_l, fg, layers) => {
     expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);

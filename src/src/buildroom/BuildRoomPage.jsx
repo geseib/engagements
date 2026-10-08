@@ -37,6 +37,8 @@ import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
+import { AskPath } from './BuildAskPath';
+import { isTypingTarget, dialogOpen } from './useNextFocus';
 import { WifiChip, WifiPanel, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
 import { shouldOfferWifi, wifiState } from './wifiShare';
 import {
@@ -390,6 +392,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [pick, setPick] = useState(null); // {askId, id}
   // A pick waiting for the host to confirm it (owner, 2026-10-06): {ask, id}.
   const [confirmPick, setConfirmPick] = useState(null);
+  // The host answers for the room (the path's Send step, spoken), and the
+  // line that says what Claude was just sent (owner, 2026-10-07).
+  const [answering, setAnswering] = useState(false);
+  const [sent, setSent] = useState('');
   // The opening step the host chose in the brief (null: the next one).
   const [openFocus, setOpenFocus] = useState(null);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
@@ -539,6 +545,45 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [setScreen]);
 
+  // SPACE ON THE HOST SCREEN (owner, 2026-10-07) presses the open step's
+  // primary (`data-next-primary`), with the Stage dock's guards: never while
+  // typing, never with a modifier, never when a control or a dialog has focus.
+  useEffect(() => {
+    if (screen !== 'host') return undefined;
+    const onKey = (e) => {
+      if (e.key !== ' ' || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || isTypingTarget(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('button, a, input, select, textarea, label, [role="button"], [role="radio"], [role="switch"], [role="dialog"]')) return;
+      if (dialogOpen()) return;
+      const b = document.querySelector('.brm-host [data-next-primary]');
+      if (b && !b.disabled) { e.preventDefault(); b.click(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen]);
+
+  // A new current ask, or the same one moving on (closed, reopened), starts
+  // its path afresh: no spoken answer carried over, and a reopened ask drops
+  // the pick it had, so closing it again settles from the new count.
+  const curAsk = room ? (room.asks || []).find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status)) || null : null;
+  const curKey = curAsk ? `${curAsk.askId}:${curAsk.status}` : '';
+  useEffect(() => {
+    setAnswering(false);
+    if (curAsk && ['live', 'voting'].includes(curAsk.status)) setPick((p) => (p && p.askId === curAsk.askId ? null : p));
+  }, [curKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Sent to Claude as Do now: ..." for six seconds after a decision goes.
+  useEffect(() => {
+    if (!sent) return undefined;
+    const t = setTimeout(() => setSent(''), 6000);
+    return () => clearTimeout(t);
+  }, [sent]);
+  const onSent = useCallback(({ as, send, direction }) => {
+    const short = direction.length > 80 ? `${direction.slice(0, 80).trimEnd()}…` : direction;
+    if (!send) setSent(`Recorded in the timeline: ${short}`);
+    else if (as === 'later') setSent(`Held for Claude, later: ${short}`);
+    else setSent(`Sent to Claude as ${claudeKindLabel(as)}: ${short}`);
+  }, []);
+
   /** Every host action: one at a time, the server's sentence on failure, then refetch. */
   const run = useCallback(async (fn) => {
     setBusy(true);
@@ -559,6 +604,19 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       setBusy(false);
     }
   }, [refresh, failureKind]);
+
+  /**
+   * The room's own choice, picked with no question (the path's "Go with B").
+   * Picking while the room still answers closes the vote first, as the
+   * confirm below does for a click on an option.
+   */
+  const choosePick = async (ask, id) => {
+    if (['live', 'voting'].includes(ask.status)) {
+      const ok = await run(() => api.askAction(ask.askId, { action: 'close' }));
+      if (ok === undefined) return;
+    }
+    setPick({ askId: ask.askId, id });
+  };
 
   const goView = (next) => {
     setView(next);
@@ -612,8 +670,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onHost={() => setScreen('host')}
           pickId={pick && current && pick.askId === current.askId ? pick.id : null}
           onPick={(id) => {
-            // The dock's "Go with B" is the room's own choice: no question.
-            if (id === null || !current) { if (current) setPick({ askId: current.askId, id }); setScreen('host'); return; }
+            // The dock's "Go with B" is the room's own choice: no question,
+            // and the Host opens on Send to Claude with it (a tie: on Settle).
+            if (id === null || !current) { if (current) setPick({ askId: current.askId, id: winnerOf(current) }); setScreen('host'); return; }
             setConfirmPick({ ask: current, id });
           }}
         />
@@ -706,13 +765,18 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           ) : (
             <>
               {!ended && shouldOfferWifi(room) && <WifiOffer busy={busy} run={run} api={api} />}
+              {sent && <p className="brm-sentline" role="status">{sent}</p>}
               {current ? (
                 <div className="brm-now">
-                  <AskStage
-                    key={`${current.askId}:${current.status}`}
-                    ask={current} room={room} host busy={busy} ended={ended} run={run} api={api}
+                  {/* THE ASK AS FOUR STEPS (owner, 2026-10-07). "Go with B"
+                      is the room's choice and goes straight on; a click on
+                      another option still asks first. */}
+                  <AskPath
+                    key={current.askId}
+                    ask={current} room={room} busy={busy} ended={ended} run={run} api={api}
                     pickId={pick && pick.askId === current.askId ? pick.id : null}
-                    onPick={(id) => setConfirmPick({ ask: current, id })}
+                    onPick={(id, opts) => (opts && opts.confirmed ? choosePick(current, id) : setConfirmPick({ ask: current, id }))}
+                    answering={answering} setAnswering={setAnswering} onSent={onSent}
                   />
                 </div>
               ) : (
@@ -1733,80 +1797,34 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
 
 // ── The current ask ─────────────────────────────────────────────────────────
 
-function AskStage({ ask, room, host, busy, ended, run, api, pickId = null, onPick = null }) {
-  const [editing, setEditing] = useState(false);
-  const [answering, setAnswering] = useState(false);
-  const [prompt, setPrompt] = useState(ask.prompt);
-  const [detail, setDetail] = useState(ask.detail || '');
-  const act = (action) => run(() => api.askAction(ask.askId, { action }));
-  const saveWording = async () => {
-    const ok = await run(() => api.askAction(ask.askId, { action: 'edit', prompt, detail }));
-    if (ok !== undefined) setEditing(false);
-  };
-
+/**
+ * THE CURRENT ASK'S BOARD: the options and their counts, the ideas, the
+ * rating, the reasons. On the Stage it is the wall (host={false}). On the Host
+ * screen it sits inside the four-step path with `pathMode` (owner,
+ * 2026-10-07): the path (BuildAskPath.jsx) carries the question, Edit wording,
+ * Discard, Close, Reopen, the wheel and the direction, so the board has no
+ * eyebrow, heading or controls of its own; a click on an option still picks.
+ */
+export function AskStage({ ask, host, busy, ended, run, api, pickId = null, onPick = null, pathMode = false }) {
   return (
-    <>
-      <section className={`brm-stage brm-stage--${ask.status}`} aria-label="Current ask">
-        <div className="brm-top">
-          <span className="brm-eyebrow">
-            <b>{ask.status === 'voting' ? 'Vote' : KIND_LABEL[ask.kind]}</b> · Ask {askNumber(ask.askId)} · {ask.source === 'agent' ? 'Claude asks' : 'Host asks'}
-            {ask.status === 'results' && ' · Closed'}
-          </span>
-          {host && !ended && (
-            <span className="brm-hostkit">
-              {!editing && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setEditing(true)}>Edit wording</button>}
-              {ask.status === 'live' && ask.kind === 'suggest' && (
-                <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act('vote')}>Open voting</button>
-              )}
-              {['live', 'voting'].includes(ask.status) && !answering && (
-                <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
-              )}
-              {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
-              {['live', 'voting'].includes(ask.status) && ask.kind !== 'rating' && (
-                <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Close it and let the wheel pick from every option" onClick={() => act('wheel')}>Spin the wheel instead</button>
-              )}
-              {['live', 'voting'].includes(ask.status) && (
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => act('close')}>Close</button>
-              )}
-              {ask.status === 'results' && (
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => act('reopen')}>Reopen</button>
-              )}
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => act('discard')}>Discard</button>
+    <section className={`brm-stage brm-stage--${ask.status}`} aria-label="Current ask">
+      {!pathMode && (
+        <>
+          <div className="brm-top">
+            <span className="brm-eyebrow">
+              <b>{ask.status === 'voting' ? 'Vote' : KIND_LABEL[ask.kind]}</b> · Ask {askNumber(ask.askId)} · {ask.source === 'agent' ? 'Claude asks' : 'Host asks'}
+              {ask.status === 'results' && ' · Closed'}
             </span>
-          )}
-        </div>
-        {host && !ended && <p className="brm-stagehint">{stageHint(ask)}</p>}
-        {host && editing ? (
-          <div className="brm-panel brm-inset">
-            <label className="brm-field"><span className="brm-lbl">Question</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
-            <label className="brm-field"><span className="brm-lbl">Context</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} /></label>
-            <div className="brm-row brm-gap">
-              <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { setEditing(false); setPrompt(ask.prompt); setDetail(ask.detail || ''); }}>Cancel</button>
-              <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim()} onClick={saveWording}>Save wording</button>
-            </div>
           </div>
-        ) : (
-          <>
-            <h2 className="brm-q">{ask.prompt}</h2>
-            {ask.detail && <p className="brm-detail">{ask.detail}</p>}
-          </>
-        )}
-
-        {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} />}
-        {ask.kind === 'rating' && <RatingBoard ask={ask} />}
-        {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />}
-        {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
-      </section>
-      {host && !ended && ask.status === 'results' && ask.kind !== 'rating' && (
-        <WheelPanel ask={ask} busy={busy} run={run} api={api} />
+          <h2 className="brm-q">{ask.prompt}</h2>
+          {ask.detail && <p className="brm-detail">{ask.detail}</p>}
+        </>
       )}
-      {host && !ended && ask.status === 'results' && (
-        <DecidePanel key={`wheel:${ask.wheel ? ask.wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} pickId={pickId} />
-      )}
-      {host && !ended && answering && ['live', 'voting'].includes(ask.status) && (
-        <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} />
-      )}
-    </>
+      {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} />}
+      {ask.kind === 'rating' && <RatingBoard ask={ask} />}
+      {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />}
+      {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
+    </section>
   );
 }
 
@@ -1817,7 +1835,7 @@ function AskStage({ ask, room, host, busy, ended, run, api, pickId = null, onPic
  * if the room groans, spin again or hand it to someone else. Where it lands
  * fills in the direction below, which the host can still change.
  */
-function WheelPanel({ ask, busy, run, api }) {
+export function WheelPanel({ ask, busy, run, api, primary = false }) {
   const tied = (ask.results && ask.results.tied) || [];
   const act = (action, extra = {}) => run(() => api.askAction(ask.askId, { action, ...extra }));
   const nameOf = (id) => {
@@ -1847,7 +1865,7 @@ function WheelPanel({ ask, busy, run, api }) {
   const w = ask.wheel;
   return (
     <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
-      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? 'Spin again' : 'Spin it yourself'} />
+      <BuildWheel wheel={w} size="sm" busy={busy} onSpin={() => act('spin')} spinLabel={w.landed ? 'Spin again' : 'Spin it yourself'} spinPrimary={primary} />
       <div className="brm-row brm-gap brm-wheelacts">
         <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Pick someone else in the room to spin it" onClick={() => act('pass')}>Someone else spins</button>
       </div>
@@ -2043,7 +2061,12 @@ export function spokenDirection(ask, chosen) {
   return '';
 }
 
-function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide, pickId = null }) {
+/**
+ * `next` (owner, 2026-10-07): this is the open step of the Host screen's path,
+ * so the cursor lands in the direction and Send is the move Space presses.
+ * `onSent({ as, send, direction })` hears a decision that went through.
+ */
+export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCancel, beforeDecide, pickId = null, next = false, onSent }) {
   // An alternate to the room's choice says so where the host sends it.
   const verdict = !spoken && pickId ? pickVerdict(ask, pickId) : null;
   const alternate = verdict && !verdict.isPreferred && verdict.preferred ? verdict : null;
@@ -2101,16 +2124,28 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
   };
   const toggleChosen = (label) => pick(chosen.includes(label) ? chosen.filter((x) => x !== label) : [...chosen, label]);
 
-  const decide = () => run(async () => {
-    if (beforeDecide) await beforeDecide();
-    return api.askAction(ask.askId, {
-      action: 'decide', direction: direction.trim(), chosen, note: note.trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
-      method: decisionMethod(ask, chosen, spoken),
-      // Only when the host changed it: the server's default is the question's own kind.
-      ...(send && as !== (ask.claudeGets || 'do-now') ? { as } : {}),
+  const decide = async () => {
+    const said = direction.trim();
+    const out = await run(async () => {
+      if (beforeDecide) await beforeDecide();
+      return api.askAction(ask.askId, {
+        action: 'decide', direction: said, chosen, note: note.trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
+        method: decisionMethod(ask, chosen, spoken),
+        // Only when the host changed it: the server's default is the question's own kind.
+        ...(send && as !== (ask.claudeGets || 'do-now') ? { as } : {}),
+      });
     });
-  });
+    if (out !== undefined && onSent) onSent({ as, send, direction: said });
+    return out;
+  };
   const total = ask.results?.total || 0;
+  const cannot = busy || (!direction.trim() && (spoken || !total));
+  // Ctrl+Enter (Cmd+Enter on a Mac) sends from the direction box.
+  const onBoxKey = (e) => {
+    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    if (!cannot) decide();
+  };
 
   return (
     <section className="brm-panel brm-decide" aria-labelledby={`brm-decide-${ask.askId}`}>
@@ -2135,7 +2170,7 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
           </div>
         </div>
       )}
-      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => { setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
+      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" data-next-focus={next || undefined} value={direction} maxLength={2000} onKeyDown={onBoxKey} onChange={(e) => { setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
       {ask.kind === 'choice' && (
         <div className="brm-field">
           <span className="brm-lbl">{spoken ? 'What the room chose' : 'Chosen'}</span>
@@ -2182,10 +2217,11 @@ function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, onCance
         </label>
         <span className="brm-hint">{send ? "Delivered on Claude's next call" : 'Recorded in the timeline only'}</span>
         {onCancel && <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onCancel}>Cancel</button>}
-        <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} disabled={busy || (!direction.trim() && (spoken || !total))} onClick={decide}>
+        <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} data-next-primary={next || undefined} disabled={cannot} onClick={decide}>
           <Icon name="ArrowRight" size={16} /> {send ? 'Send to Claude' : 'Record decision'}
         </button>
       </div>
+      {next && <p className="brm-hint brm-path-keys">Ctrl Enter, or Cmd Enter on a Mac, sends it.</p>}
     </section>
   );
 }
