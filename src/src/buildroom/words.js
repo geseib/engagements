@@ -36,6 +36,13 @@ export const W = Object.freeze({
   remove: 'Remove',
   undo: 'Undo',
   askRoom: 'Ask the room',
+  /** The Later list: what each item is, and what it tells the host. */
+  ideaTag: 'Idea from the room',
+  directionTag: 'Direction for Claude',
+  laterNote: 'Claude has not heard these',
+  laterEmpty: 'Nothing saved for later. Save for later puts a room idea or a direction here.',
+  putToVote: (n) => `Put ${n} to a vote`,
+  laterHeld: 'Later \u00b7 not sent',
   // The kinds ("Claude gets it as"): three, no Later
   doNow: 'Do now',
   keepInMind: 'Keep in mind',
@@ -95,9 +102,9 @@ export const RETIRED = Object.freeze([
   // The Stage dock's "Edit" is now W.change; Edit stays legal elsewhere (notes, the crew board).
   { word: 'Edit', files: ['buildScreens.js', 'BuildStageDecide.jsx'], enforced: true, task: 3 },
   // Task 4: one Later list
-  { word: 'Park', prefix: true, enforced: false, task: 4 },
-  { word: 'Parked', prefix: true, enforced: false, task: 4 },
-  { word: 'Send now', enforced: false, task: 4 },
-  { word: 'Dismiss', files: ['BuildLater.jsx'], enforced: false, task: 4 },
-  { word: 'For Claude, later', prefix: true, enforced: false, task: 4 },
+  { word: 'Park', prefix: true, enforced: true, task: 4 },
+  { word: 'Parked', prefix: true, enforced: true, task: 4 },
+  { word: 'Send now', enforced: true, task: 4 },
+  { word: 'Dismiss', files: ['BuildLater.jsx'], enforced: true, task: 4 },
+  { word: 'For Claude, later', prefix: true, enforced: true, task: 4 },
 ]);

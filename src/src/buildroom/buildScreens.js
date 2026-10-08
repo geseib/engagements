@@ -78,6 +78,27 @@ export const filterQueue = (items, key) => (key === 'all' ? items : items.filter
 /** Ideas the host set aside with Later: their own fold under the queue. */
 export const laterIdeas = (room) => ((room && room.ideas) || []).filter((i) => i.status === 'later');
 
+/**
+ * THE ONE LATER LIST (batch 2-3, B4): a merged view of two things the server
+ * keeps apart: room ideas the host saved (status `later`) and directions held
+ * for Claude (`brief.later`, which also holds a decision saved with the old
+ * `later` kind). Newest first; an item with no time sorts last.
+ * Item: `{ key, type: 'idea'|'direction', id, text, tag, from, at }`.
+ */
+export function laterItems(room) {
+  const ideas = laterIdeas(room).map((i) => ({
+    key: `idea:${i.ideaId}`, type: 'idea', id: i.ideaId, text: i.text, tag: W.ideaTag,
+    from: i.source === 'host' ? 'You \u00b7 typed' : `${i.playerName || 'Someone'} \u00b7 ${i.aboutLogId ? 'on the preview' : 'idea'}`,
+    at: i.createdAt || '',
+  }));
+  const dirs = (((room && room.brief) || {}).later || []).map((i) => ({
+    key: `dir:${i.id}`, type: 'direction', id: i.id, text: i.text, tag: W.directionTag,
+    from: !i.from || i.from === 'you' ? 'You \u00b7 typed' : `You \u00b7 from ${i.from.charAt(0).toUpperCase()}${i.from.slice(1)}`,
+    at: i.at || '',
+  }));
+  return [...ideas, ...dirs].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
 /** The open ask the header pill names, or null: "Ask 3 · 5 of 18" / "Ask 3 · results". */
 export function askPill(room) {
   if (!room || !room.currentAskId) return null;
@@ -535,7 +556,7 @@ export const CLAUDE_KINDS = Object.freeze([
   { key: 'do-now', label: 'Do now', hint: 'The next thing to build. Claude stops and does it.' },
   { key: 'keep', label: 'Keep in mind', hint: 'A rule or a fact for everything from now on. Goes on the brief; Claude does not stop.' },
   // Held, not sent (owner, 2026-10-06: "only when I send it").
-  { key: 'later', label: 'For Claude, later', hint: 'Waits in your For Claude, later list. Claude hears nothing until you send it.' },
+  { key: 'later', label: W.later, hint: 'Waits on your Later list. Claude hears nothing until you send it.' },
   { key: 'ask', label: 'Ask Claude', hint: 'A question. Claude answers on the screen and keeps building.' },
 ]);
 /** The kinds the host may choose: Later is a list, never a way Claude takes a direction. */
@@ -698,7 +719,7 @@ export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
 /** The most ideas one vote takes. */
 export const VOTE_IDEAS_MAX = 6;
 
-export function whatsNextMoves(room, { ticked = 0 } = {}) {
+export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   const ideas = ((room && room.ideas) || []).filter((i) => i.status === 'new');
   const moves = [];
   // MOCKUPS TO LOOK AT (host-flow S4): the Stage says the vote is ready to open,
@@ -732,6 +753,10 @@ export function whatsNextMoves(room, { ticked = 0 } = {}) {
   // Nothing runs without Claude: with none connected, that is the first move.
   if (room && room.agent && !room.agent.key && !room.agent.connected && !framing) {
     moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing gets built until Claude Code is connected', button: 'Connect' });
+  }
+  // TICKED ON THE LATER LIST: the host chose these, so this leads (2 to 6 fit a vote).
+  if (laterTicked >= 2 && laterTicked <= VOTE_IDEAS_MAX) {
+    moves.unshift({ key: 'vote-later', count: laterTicked, title: `Put ${laterTicked} from Later to a vote`, hint: 'The room picks which one Claude gets', button: W.openVoting });
   }
   return moves;
 }

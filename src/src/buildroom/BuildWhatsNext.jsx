@@ -19,7 +19,7 @@ import Icon from '../components/Icon';
 import { whatsNextMoves, claudeState, combineLine, METHOD_WORDS } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 
-const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', starter: 'Question', 'new-ask': 'Plus', tell: 'ChatCircleText' };
+const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', starter: 'Question', 'new-ask': 'Plus', 'vote-later': 'ListChecks', tell: 'ChatCircleText' };
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');
@@ -45,9 +45,9 @@ export function decidedAnswer(ask) {
   return String((ask.decision && ask.decision.direction) || '').trim();
 }
 
-export function WhatsNext({ room, now, ticked, onMove, continueOn = false }) {
+export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continueOn = false }) {
   const ref = useRef(null);
-  const moves = whatsNextMoves(room, { ticked: ticked ? ticked.size : 0 });
+  const moves = whatsNextMoves(room, { ticked: ticked ? ticked.size : 0, laterTicked });
   const lead = moves[0];
   useNextFocus(ref, lead ? lead.key : '');
   const st = claudeState(room, now, { host: true, continueOn });

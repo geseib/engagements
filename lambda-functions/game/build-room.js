@@ -973,10 +973,16 @@ async function askFromIdeas(ctx, body) {
   const room = await loadRoom(ctx);
   const ideas = ids.map((id) => findIdea(room, id));
   if (ideas.some((i) => !i)) return fail(404, 'One of those ideas is gone');
+  // One Later list (batch 2-3, B4): directions held for Claude can stand in the
+  // same vote as ideas. They are options too, and leave the list once it exists.
+  const laterIds = Array.isArray(b.laterIds) ? [...new Set(b.laterIds.map(String))] : [];
+  const brief = S.briefView(room.state);
+  const held = laterIds.map((id) => brief.later.find((i) => i.id === id));
+  if (held.some((i) => !i)) return fail(404, 'One of those is no longer on the Later list');
   if (ideas.some((i) => !['new', 'later', 'acknowledged'].includes(i.Status || 'new'))) {
     return fail(409, 'One of those ideas is already in a vote or sent to Claude');
   }
-  const norm = S.voteFromIdeas(ideas, b);
+  const norm = S.voteFromIdeas([...ideas, ...held.map((i) => ({ Text: i.text }))], b);
   if (norm.error) return fail(400, norm.error);
   const mockups = b.askForMockups === true;
   const status = mockups || b.open === false ? 'proposed' : 'live';
@@ -991,10 +997,11 @@ async function askFromIdeas(ctx, body) {
     ...(status === 'live' ? { OpenedAt: now } : {}),
   });
   for (const idea of ideas) await put(ctx, { ...idea, Status: 'promoted', PromotedTo: askId, UpdatedAt: now });
+  if (held.length) await saveBrief(ctx, { ...brief, later: brief.later.filter((i) => !laterIds.includes(i.id)) });
   if (status === 'live') await makeCurrent(ctx, room, askId, 'host');
   // No question in the entry: phones read the timeline, and a waiting vote
   // stays hidden from the room until it opens.
-  else await logEntry(ctx, { kind: 'ask', text: `${ideas.length} ideas are waiting for a vote`, by: 'system', askId });
+  else await logEntry(ctx, { kind: 'ask', text: `${ideas.length + held.length} ideas are waiting for a vote`, by: 'system', askId });
   if (mockups) await logEntry(ctx, { kind: 'direction', text: S.mockupDirection(askId, v.options.map((o) => o.label)), by: 'host', askId, forAgent: true });
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;

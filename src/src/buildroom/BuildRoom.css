@@ -1243,3 +1243,12 @@
 .brm .brm-more-extras .brm-wifipanel-apps li .brm-btn { justify-self: start; }
 .brm .brm-more-extras .brm-wifipanel { box-sizing: border-box; width: 100%; }
 .brm .brm-agentwrap { display: inline-flex; }
+
+/* THE LATER LIST (batch 2-3, B4): one list; an item says what it is. */
+.brm .brm-later { margin-top: 14px; }
+.brm .brm-later .brm-h5 .brm-hint { margin-left: 8px; font-weight: 400; }
+.brm .brm-later-item.is-ticked { outline: 2px solid var(--primary); outline-offset: -2px; }
+.brm .brm-later-tag { font-size: max(12px, var(--brm-t-label)); font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.brm .brm-later-tag--idea { color: var(--secondary); background: var(--brm-tint-blue); }
+.brm .brm-later-tag--direction { color: var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-later-acts .brm-push { margin-left: auto; }

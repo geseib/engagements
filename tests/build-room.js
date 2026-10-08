@@ -1080,6 +1080,20 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     seed();
     assert.strictEqual((await hostCall('POST', 'brief/vote', {})).status, 400, 'nothing on the Later list');
   });
+  await check('one Later list: a held direction and an idea share one vote, and the direction leaves the list', async () => {
+    seed();
+    const ids = await threeIdeas();
+    await hostCall('POST', 'directions', { text: 'Car park map', as: 'later' });
+    const laterId = (await state()).brief.later[0].id;
+    const r = await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[0]], laterIds: [laterId] });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.ask.options.map((o) => o.title), ['Text a reminder the day before', 'Car park map']);
+    const st = await state();
+    assert.deepStrictEqual(st.brief.later, [], 'the direction left Later');
+    assert.strictEqual(st.ideas.find((i) => i.ideaId === ids[0]).status, 'promoted');
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[1]], laterIds: ['gone'] })).status, 404);
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[1]] })).status, 400, 'one option is not a vote');
+  });
   await check('Claude may answer an Ask Claude on the timeline', async () => {
     seed();
     const r = await agentCall('POST', 'log', { kind: 'answer', text: 'Reminder texts: about an hour, with a provider account.' });

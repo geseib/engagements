@@ -396,6 +396,15 @@ describe('watching the build', () => {
 });
 
 describe('send an idea', () => {
+  test('an idea the host saved for later still reads Saved for later on the author\'s device', async () => {
+    serve(baseView({
+      myIdeas: [{ ideaId: 'i9', text: 'A slider for salary', playerName: ME, status: 'later', createdAt: '2026-10-02T19:41:00.000Z' }],
+    }), () => ({ status: 201, body: { ok: true } }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Send an idea to the host/ }));
+    expect(screen.getByText('Saved for later')).toBeInTheDocument();
+  });
+
   test('Now has the way in; the Ideas tab sends one and lists mine with status', async () => {
     serve(baseView({
       myIdeas: [{ ideaId: 'i1', text: 'A map link for parking', playerName: ME, status: 'promoted', createdAt: '2026-10-02T19:41:00.000Z' }],

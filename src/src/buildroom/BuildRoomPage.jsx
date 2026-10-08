@@ -40,6 +40,7 @@ import MockupViewer, { ViewerContext, backLabelFor } from './MockupViewer';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
 import { W } from './words';
+import BuildLater from './BuildLater';
 import { AskPath } from './BuildAskPath';
 import ActionRow from './BuildActionRow';
 import { WhatsNext, DecidedList, decidedAsks } from './BuildWhatsNext';
@@ -59,7 +60,7 @@ import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
-  queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
+  queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
@@ -426,6 +427,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [ticked, setTicked] = useState(() => new Set());
   const [used, setUsed] = useState({});
   const [voteIdeas, setVoteIdeas] = useState(null);
+  /** The Later list's ticks (keys from laterItems); What's next leads with a vote while 2 to 6 are ticked. */
+  const [laterTicked, setLaterTicked] = useState([]);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
@@ -727,6 +730,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     } else if (key === 'vote-mockups') {
       const looks = mockupsReady(room);
       if (looks) run(() => api.askAction(looks.ask.askId, { action: 'open' }));
+    } else if (key === 'vote-later') {
+      const keys = new Set(laterTicked);
+      setVoteIdeas(voteEntries(room, laterItems(room).filter((x) => keys.has(x.key))));
     } else if (key === 'vote-ideas') setVoteIdeas((room.ideas || []).filter((i) => i.status === 'new').slice(0, VOTE_IDEAS_MAX));
   };
 
@@ -867,7 +873,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ) : (
                 room.opening && room.opening.phase === 'opening'
                   ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => setScreen('stage')} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} onMove={onMove} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTicked.length} onMove={onMove} />
               )}
             </>
           )}
@@ -896,7 +902,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               <CrewIncoming crew={crew} busy={busy} run={run} api={api} onOpen={setOpenShareId} />
             </>
           ) : (
-            <Queue room={room} current={current} busy={busy} ended={ended} run={run} api={api} />
+            <Queue room={room} current={current} busy={busy} ended={ended} run={run} api={api} laterTicked={laterTicked} setLaterTicked={setLaterTicked} onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))} onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })} />
           )}
         </section>
 
@@ -967,7 +973,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <VoteFromIdeasDialog
           ideas={voteIdeas} connected={Boolean(room.agent && room.agent.connected)} openAsk={openAskOf(room)} busy={busy} run={run} api={api}
           onClose={() => setVoteIdeas(null)}
-          onDone={() => setVoteIdeas(null)}
+          onDone={() => { setVoteIdeas(null); setLaterTicked([]); }}
         />
       )}
       {wallQrLink && <WallBuildQr link={wallQrLink} onClose={() => setWallQr(false)} />}
@@ -1379,17 +1385,17 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
  * open section takes the column's height and scrolls inside itself; the
  * closed ones are a row each. One is always open: Timeline to start.
  */
-const briefCount = (b) => (b ? (b.forWhom ? 1 : 0) + (b.keep || []).length + (b.later || []).length : 0);
+const briefCount = (b) => (b ? (b.forWhom ? 1 : 0) + (b.keep || []).length : 0);
 
 /**
- * THE ROOM BRIEF (step 7c, C14): who it is for, what Claude keeps in mind,
- * and the Later list. Keep in mind and Later fill it as the host sends them;
- * the host edits it here. Claude re-reads it on every change.
+ * THE ROOM BRIEF (step 7c, C14): who it is for and what Claude keeps in mind.
+ * Keep in mind fills it as the host sends; the host edits it here. What is held
+ * back lives on the Later list on the Host screen (BuildLater.jsx). Claude re-reads it on every change.
  */
 export function BriefPanel({ brief, busy, ended, run, api }) {
   const b = brief || { forWhom: '', keep: [], later: [] };
   const [forWhom, setForWhom] = useState(b.forWhom || '');
-  const [adding, setAdding] = useState({ keep: '', later: '' });
+  const [adding, setAdding] = useState({ keep: '' });
   useEffect(() => { setForWhom(b.forWhom || ''); }, [b.forWhom]);
   const save = (body) => run(() => api.editBrief(body));
   const remove = (list, id) => save({ [list]: b[list].filter((i) => i.id !== id).map(({ id: i, text }) => ({ id: i, text })) });
@@ -1422,7 +1428,7 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
   );
   return (
     <section className="brm-brief" aria-label="The room brief">
-      <p className="brm-hint">Claude reads who it is for and Keep in mind whenever they change. For Claude, later stays with you until you send an item. At wrap-up Claude says which rules are worth keeping in the project, and you choose.</p>
+      <p className="brm-hint">Claude reads who it is for and Keep in mind whenever they change. At wrap-up Claude says which rules are worth keeping in the project, and you choose.</p>
       <div className="brm-brief-sec">
         <h3 className="brm-h5">Who it is for</h3>
         {ended ? <p>{b.forWhom || 'Not set.'}</p> : (
@@ -1433,12 +1439,6 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
         )}
       </div>
       {section('keep', 'Keep in mind', 'Send something to Claude as Keep in mind and it lands here.')}
-      {section('later', 'For Claude, later', 'Send something For Claude, later and it waits here. Claude hears nothing until you send it.')}
-      {!ended && b.later.length >= 2 && (
-        <button type="button" className="brm-btn brm-btn--sm" disabled={busy || b.later.length > 6} title={b.later.length > 6 ? 'A vote takes at most 6; remove some first' : 'A Pick one vote, open now'} onClick={() => run(() => api.laterToVote())}>
-          Put them to a vote
-        </button>
-      )}
     </section>
   );
 }
@@ -2683,7 +2683,7 @@ const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
  */
 export const STARTER_PROMPT = 'What should we build?';
 
-function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose, ticked = null, onMove = null }) {
+function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose, ticked = null, laterTicked = 0, onMove = null }) {
   const [sent, setSent] = useState(false);
   if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
   const agent = room.agent || {};
@@ -2724,7 +2724,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
         </div>
       )}
       {whatsNext
-        ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} onMove={onMove} continueOn={quiet && Boolean(CONTINUE_PROMPT)} />
+        ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} laterTicked={laterTicked} onMove={onMove} continueOn={quiet && Boolean(CONTINUE_PROMPT)} />
         : <p className="brm-nowline">{line}</p>}
       {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
       {!ended && (
@@ -2953,7 +2953,7 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
             {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
-            {host && entry.held && <span className="brm-tl-flag">For Claude, later · not sent</span>}
+            {host && entry.held && <span className="brm-tl-flag">{W.laterHeld}</span>}
             {host && entry.forAgent && <span className="brm-tl-flag">{entry.as && entry.as !== 'do-now' ? `${claudeKindLabel(entry.as)} · ` : ''}{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${CONTINUE_COMMAND}` : 'Waiting for Claude'}</span>}
           </>
         )}
@@ -3027,45 +3027,11 @@ function ideaWho(idea) {
 }
 
 /**
- * FOR CLAUDE, LATER (owner, 2026-10-06: "later to me means there is something
- * for claude but we are putting in the queue"). Held on the host's side;
- * nothing reaches Claude until Send now, or a vote over the list.
- */
-function ForClaudeLater({ brief, busy, ended, run, api }) {
-  const list = (brief && brief.later) || [];
-  if (!list.length) return null;
-  const remove = (id) => run(() => api.editBrief({ later: list.filter((i) => i.id !== id).map(({ id: i, text }) => ({ id: i, text })) }));
-  return (
-    <details className="brm-handled brm-forlater" open>
-      <summary>For Claude, later · {list.length}</summary>
-      <p className="brm-hint">Claude has not heard these. Send one when it is time, or let the room pick.</p>
-      {list.map((i) => (
-        <div className="brm-idea" key={i.id}>
-          <div className="brm-idea-text">{i.text}</div>
-          <div className="brm-who">{i.from}</div>
-          {!ended && (
-            <div className="brm-idea-acts">
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Claude gets it now, as Do now" onClick={() => run(() => api.sendLater(i.id))}>Send now</button>
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => remove(i.id)}>Remove</button>
-            </div>
-          )}
-        </div>
-      ))}
-      {!ended && list.length >= 2 && (
-        <button type="button" className="brm-btn brm-btn--sm" disabled={busy || list.length > 6} title={list.length > 6 ? 'A vote takes at most 6; remove some first' : 'A Pick one vote, open now'} onClick={() => run(() => api.laterToVote())}>
-          Put them to a vote
-        </button>
-      )}
-    </details>
-  );
-}
-
-/**
  * THE QUEUE (step 4, C1–C3b): everything waiting on the host in one list,
  * Claude's asks first, then oldest first. Filters by who it came from; tick
  * ideas to act on several at once, or put them to a vote.
  */
-function Queue({ room, current, busy, ended, run, api }) {
+function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {} }) {
   const [filter, setFilter] = useState('all');
   const [ticked, setTicked] = useState([]);
   const [voteOf, setVoteOf] = useState(null);
@@ -3074,7 +3040,6 @@ function Queue({ room, current, busy, ended, run, api }) {
   const ideas = room.ideas || [];
   const live = new Set(items.filter((x) => x.type === 'idea').map((x) => x.idea.ideaId));
   const tickedLive = ticked.filter((id) => live.has(id));
-  const later = laterIdeas(room);
   const handled = ideas.filter((i) => ['promoted', 'acknowledged', 'dismissed'].includes(i.status));
   const freshRoom = items.filter((x) => x.type === 'idea' && x.from === 'room');
   const canSuggest = Boolean(current && current.kind === 'suggest' && ['live', 'voting'].includes(current.status));
@@ -3109,7 +3074,7 @@ function Queue({ room, current, busy, ended, run, api }) {
             Put {tickedLive.length} to a vote
           </button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('direct')}><Icon name="PaperPlaneTilt" size={14} /> {W.sendPlain}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. They wait under Parked; nothing goes to Claude." onClick={() => bulk('later')}>Park</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. They wait on your Later list; nothing goes to Claude." onClick={() => bulk('later')}>{W.saveLater}</button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('acknowledge')}>Acknowledge</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked([])}>Clear</button>
         </div>
@@ -3140,25 +3105,8 @@ function Queue({ room, current, busy, ended, run, api }) {
         />
       )))}
 
-      <ForClaudeLater brief={room.brief} busy={busy} ended={ended} run={run} api={api} />
+      <BuildLater room={room} ticked={laterTicked} setTicked={setLaterTicked} busy={busy} ended={ended} run={run} api={api} onVote={onVoteLater} onAskRoom={onAskRoom} />
 
-      {later.length > 0 && (
-        <details className="brm-handled">
-          <summary>Parked · {later.length}</summary>
-          {later.map((idea) => (
-            <div className="brm-idea brm-idea--done" key={idea.ideaId}>
-              <div className="brm-idea-text">{idea.text}</div>
-              <div className="brm-who">{ideaWho(idea)}</div>
-              {!ended && (
-                <div className="brm-row brm-gap">
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Back to the queue</button>
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'dismiss')}>Dismiss</button>
-                </div>
-              )}
-            </div>
-          ))}
-        </details>
-      )}
       {handled.length > 0 && (
         <details className="brm-handled">
           <summary>{handled.length} handled</summary>
@@ -3211,8 +3159,8 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
               </>
             )}
           </SessionMenu>
-          {/* PARK (owner, 2026-10-06): the host's "not now". Nothing goes to Claude; "For Claude, later" is a different thing. */}
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. It waits under Parked; nothing goes to Claude." onClick={() => onAct('later')}>Park</button>
+          {/* SAVE FOR LATER (owner, 2026-10-08): the host's "not now", onto the one Later list. Nothing goes to Claude. */}
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. It waits on your Later list; nothing goes to Claude." onClick={() => onAct('later')}>{W.saveLater}</button>
           {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude. */}
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Mark it as seen. Their phone says so; nothing goes to Claude." onClick={() => onAct('acknowledge')}>Acknowledge</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => onAct('dismiss')}>Dismiss</button>
@@ -3227,6 +3175,16 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
  * "Ask Claude for a quick mockup of each first", the vote waits in the queue,
  * hidden from the room, until the pictures are in (C3b).
  */
+/**
+ * Later items as the vote dialog's entries: an idea is the room's own idea
+ * object; a held direction stands in as `{ laterId, text, source: 'host' }`.
+ */
+function voteEntries(room, items) {
+  return items.map((x) => (x.type === 'idea'
+    ? (room.ideas || []).find((i) => i.ideaId === x.id)
+    : { laterId: x.id, text: x.text, source: 'host' })).filter(Boolean);
+}
+
 export function VoteFromIdeasDialog({ ideas, connected, openAsk, busy, run, api, onClose, onDone }) {
   const [prompt, setPrompt] = useState('Which should Claude build next?');
   const [maxPicks, setMaxPicks] = useState(1);
@@ -3234,13 +3192,14 @@ export function VoteFromIdeasDialog({ ideas, connected, openAsk, busy, run, api,
   const n = ideas.length;
   const letter = (i) => String.fromCharCode(65 + i);
   const send = async (extra) => {
-    const out = await run(() => api.askFromIdeas({ ideaIds: ideas.map((i) => i.ideaId), prompt: prompt.trim(), maxPicks, ...extra }));
+    const laterIds = ideas.filter((i) => i.laterId).map((i) => i.laterId);
+    const out = await run(() => api.askFromIdeas({ ideaIds: ideas.filter((i) => i.ideaId).map((i) => i.ideaId), ...(laterIds.length ? { laterIds } : {}), prompt: prompt.trim(), maxPicks, ...extra }));
     if (out !== undefined) onDone();
   };
   const picks = [1, ...(n > 2 ? [2] : []), ...(n > 3 ? [3] : [])];
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-vote-title">
-      <DialogHead id="brm-vote-title" title={`Put ${n} ideas to a vote`} onClose={onClose} />
+      <DialogHead id="brm-vote-title" title={ideas.some((i) => i.laterId) ? W.putToVote(n) : `Put ${n} ideas to a vote`} onClose={onClose} />
       <label className="brm-field"><span className="brm-lbl">Question for the room</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
       <div className="brm-field">
         <span className="brm-lbl">How people vote · Pick one is the default</span>
@@ -3254,7 +3213,7 @@ export function VoteFromIdeasDialog({ ideas, connected, openAsk, busy, run, api,
       </div>
       <ul className="brm-reviewopts">
         {ideas.map((idea, i) => (
-          <li key={idea.ideaId}>
+          <li key={idea.ideaId || idea.laterId}>
             <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
             <span className="brm-reviewopt-t">{idea.text}</span>
             <span className="brm-who brm-push">{idea.source === 'host' ? 'You' : idea.playerName}</span>
