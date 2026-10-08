@@ -1437,6 +1437,58 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(r.body.error && r.body.error.length > 10);
   });
 
+  await check('reask: a typo fix keeps the mockup; a deleted A moves B\'s mockup with B; a new option gets none', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Which?', options: ['Sign up', 'Shift map', 'Texts'] });
+    const id = c.body.ask.askId;
+    const img = async (label) => (await hostCall('POST', 'images', { askId: id, label, kind: 'mockup', data: PNG.toString('base64'), contentType: 'image/png' })).body.image.imageId;
+    const ia = await img('A'); const ib = await img('B');
+    const typo = await hostCall('POST', `asks/${id}`, { action: 'reask', options: ['Sign-up', 'Shift map', 'Texts', 'Rota'] });
+    assert.strictEqual(typo.body.ask.options[0].imageId, ia, 'typo fix keeps A');
+    assert.strictEqual(typo.body.ask.options[1].imageId, ib);
+    assert.ok(!typo.body.ask.options[3].imageId, 'a new option has none');
+    const del = await hostCall('POST', `asks/${id}`, { action: 'reask', options: ['Shift map', 'Texts'] });
+    assert.strictEqual(del.body.ask.options[0].title, 'Shift map');
+    assert.strictEqual(del.body.ask.options[0].imageId, ib, 'B\'s mockup moves with B');
+    assert.ok(!del.body.ask.options[1].imageId, 'Texts had none');
+  });
+  await check('reask while the wheel is armed: the old ask\'s wheel is disarmed and a phone cannot spin it', async () => {
+    seed();
+    const id = await tie();
+    const w = await hostCall('POST', `asks/${id}`, { action: 'wheel' });
+    const spinner = w.body.ask.wheel.spinner;
+    const me = spinner === 'Priya' ? priya : marcus;
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'reask', prompt: 'Again?' })).status, 200);
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.asks.find((a) => a.askId === id).wheel.armed, false);
+    assert.strictEqual((await playCall('POST', 'spin', { ...me, askId: id })).status, 409);
+  });
+  await check('reask drops a revote\'s tie line, keeps the opening step, and leaves a proposed ask proposed', async () => {
+    seed();
+    const id = await tie();
+    const rv = await hostCall('POST', `asks/${id}`, { action: 'revote' });
+    assert.ok(/^A tie/.test(rv.body.ask.detail));
+    const again = await hostCall('POST', `asks/${rv.body.ask.askId}`, { action: 'reask' });
+    assert.strictEqual(again.body.ask.detail, '', 'the tie line is not carried on');
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Which?', options: ['X', 'Y'] });
+    const p2 = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Held', draft: true });
+    const r = await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'reask', prompt: 'Which now?' });
+    assert.strictEqual(r.status, 200);
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.asks.find((a) => a.askId === p2.body.ask.askId).status, 'proposed');
+  });
+  await check('reask in a team room: the new ask is sealed at rest and readable through the API', async () => {
+    seed({ orgId: ORG });
+    const T = { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG };
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Old words', options: ['One', 'Two'] }, T);
+    const r = await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'reask', prompt: 'Sealed reask words', options: ['Alpha', 'Beta'] }, T);
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.strictEqual(r.body.ask.prompt, 'Sealed reask words');
+    const raw = JSON.stringify([...store.values()]);
+    assert.ok(!raw.includes('Sealed reask words') && !raw.includes('Alpha'), 'plaintext at rest');
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

@@ -316,28 +316,52 @@ async function reaskAction(ctx, room, ask, b) {
   if (!['live', 'voting', 'results'].includes(ask.Status)) {
     return fail(409, `This ask is ${ask.Status}; only an ask that is open or showing results can be asked again`);
   }
+  // A revote's own "A tie between…" line is not the host's wording; do not carry it on.
+  const oldDetail = /^A tie\b/.test(ask.Detail || '') ? '' : ask.Detail;
   const norm = S.normalizeAsk({
     kind: ask.Kind,
     prompt: b.prompt !== undefined ? b.prompt : ask.Prompt,
-    detail: b.detail !== undefined ? b.detail : ask.Detail,
+    detail: b.detail !== undefined ? b.detail : oldDetail,
     options: b.options !== undefined ? b.options : ask.Options,
     maxPicks: ask.MaxPicks,
   });
   if (norm.error) return fail(400, norm.error);
   const v = norm.value;
   const askId = ask.AskId;
+  // A mockup follows its option: the same title first, then the same letter
+  // (a typo fix) unless that old title now belongs to another new option.
+  // Each old image is used once.
   const images = S.optionImages(room, askId);
-  const imageOf = (title) => {
-    const old = (ask.Options || []).find((o) => o.title === title);
-    return old ? (old.imageId || images[old.label] || '') : '';
-  };
-  const options = v.options.map((o) => {
-    const imageId = imageOf(o.title);
-    return imageId ? { ...o, imageId } : o;
+  const oldOpts = ask.Options || [];
+  const imageOfOld = (o) => (o ? (o.imageId || images[o.label] || '') : '');
+  const usedOld = new Set();
+  const newTitles = new Set(v.options.map((o) => o.title));
+  const picked = v.options.map(() => '');
+  v.options.forEach((o, i) => {
+    const j = oldOpts.findIndex((x, k) => x.title === o.title && !usedOld.has(k));
+    if (j >= 0) { usedOld.add(j); picked[i] = imageOfOld(oldOpts[j]); }
   });
+  v.options.forEach((o, i) => {
+    if (picked[i] || oldOpts[i] === undefined || usedOld.has(i)) return;
+    if (newTitles.has(oldOpts[i].title)) return;
+    usedOld.add(i);
+    picked[i] = imageOfOld(oldOpts[i]);
+  });
+  const options = v.options.map((o, i) => (picked[i] ? { ...o, imageId: picked[i] } : o));
   const now = new Date().toISOString();
+  // Close everything still open first (the old ask among it), so there is never a moment with two.
+  for (const other of room.asks) {
+    if (S.OPEN_STATUSES.includes(other.Status) && other.AskId !== askId) await put(ctx, { ...other, Status: 'results', ClosedAt: now });
+  }
   const st = await touchState(ctx, { add: { AskSeq: 1 } });
   const newId = S.pad3(st.AskSeq || 1);
+  const open = S.OPEN_STATUSES.includes(ask.Status);
+  await put(ctx, {
+    ...ask,
+    ...(open ? { Status: 'results', ClosedAt: now } : {}),
+    ...(ask.Wheel ? { Wheel: { ...ask.Wheel, Armed: false } } : {}),
+    RevotedAs: newId,
+  });
   await put(ctx, {
     SK: S.SK.ask(newId), AskId: newId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: options,
     ...(v.scale ? { Scale: v.scale } : {}),
@@ -345,13 +369,8 @@ async function reaskAction(ctx, room, ask, b) {
     Status: 'live', Source: 'host', CreatedAt: now, OpenedAt: now,
     ...(ask.ClaudeGets ? { ClaudeGets: ask.ClaudeGets } : {}),
     ...(ask.ClaudeNote ? { ClaudeNote: ask.ClaudeNote } : {}),
+    ...(ask.OpeningStep ? { OpeningStep: ask.OpeningStep, ...(ask.Probe ? { Probe: true } : {}) } : {}),
   });
-  // Close whatever is still open (the old ask among it), then point the old one at the new.
-  for (const other of room.asks) {
-    if (S.OPEN_STATUSES.includes(other.Status)) await put(ctx, { ...other, Status: 'results', ClosedAt: now });
-  }
-  const fresh = findAsk(await loadRoom(ctx), askId);
-  await put(ctx, { ...fresh, RevotedAs: newId });
   await touchState(ctx, { set: { CurrentAskId: newId } });
   await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
   const after = await loadRoom(ctx);
@@ -1902,6 +1921,7 @@ async function routePlay(ctx, method, parts, body, query) {
   } else if (a === 'spin') {
     // The one phone the wheel picked, once per turn; the host can always spin.
     const w = ask.Wheel;
+    if (ask.RevotedAs) return fail(409, 'This question was asked again, so its wheel is closed');
     if (!w || ask.Status !== 'results') return fail(409, 'There is no wheel to spin');
     if (w.Spinner !== me.playerName || !w.Armed) return fail(403, 'It is not your turn to spin');
     await spinWheel(ctx, ask, me.playerName);
