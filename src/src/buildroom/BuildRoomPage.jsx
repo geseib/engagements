@@ -20,7 +20,7 @@
  * React escapes it — and never as HTML. A link renders only when it is
  * http(s) (`safeHref`).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../components/Modal';
 import { getAuthToken } from '../auth/authFetch';
@@ -35,6 +35,8 @@ import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady } from './re
 import { OpeningPanel, BriefPath, WallBrief } from './BuildOpening';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader } from './BuildImage';
+import AskDetail from './BuildAskDetail';
+import MockupViewer, { ViewerContext, backLabelFor } from './MockupViewer';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
 import { AskPath } from './BuildAskPath';
@@ -145,6 +147,7 @@ export const slashCommand = (name) => `/mcp__engage__${name}`;
 export const pluginCommand = (name) => `/engage:${name}`;
 
 const askNumber = (askId) => Number(askId) || askId;
+const askById = (room, askId) => ((room && room.asks) || []).find((a) => a.askId === askId) || null;
 
 export function clockTime(iso) {
   const t = Date.parse(iso || '');
@@ -393,6 +396,13 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // WHICH ANSWER GOES TO CLAUDE (owner, 2026-10-06): the winner unless the
   // host picks another ("choose this instead"), on the Stage or the Host.
   const [pick, setPick] = useState(null); // {askId, id}
+  // THE PAST-ASK WINDOW and THE MOCKUP VIEWER (owner, 2026-10-08). The viewer
+  // records where it was opened from so Back returns there and leaves that
+  // place exactly as it was.
+  const [detailAskId, setDetailAskId] = useState(null);
+  const [viewer, setViewer] = useState(null); // {askId, label, from, backLabel}
+  const openViewer = useCallback((askId, label, from = 'host') => setViewer({ askId, label, from, backLabel: backLabelFor(from, askId) }), []);
+  const closeViewer = useCallback(() => setViewer(null), []);
   // A pick waiting for the host to confirm it (owner, 2026-10-06): {ask, id}.
   const [confirmPick, setConfirmPick] = useState(null);
   // The host answers for the room (the path's Send step, spoken), and the
@@ -716,6 +726,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
   return (
     <ImageLoader.Provider value={loadImage}>
+    <ViewerContext.Provider value={openViewer}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}${screen === 'host' ? ' brm-room--host' : ''}`} data-theme="dark">
       {screen === 'stage' ? (
         <BuildStage
@@ -801,7 +812,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
 
       {screen === 'build' && <BuildScreen room={room} now={now} />}
-      {screen === 'history' && <HistoryScreen room={room} />}
+      {screen === 'history' && <HistoryScreen room={room} onOpenAsk={setDetailAskId} />}
       {screen === 'host' && (
       <div className="brm-host">
         {/* NOW: what Claude or the room is doing, with that moment's controls,
@@ -962,7 +973,14 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         />
       )}
       {wallQrLink && <WallBuildQr link={wallQrLink} onClose={() => setWallQr(false)} />}
+      {detailAskId && askById(room, detailAskId) && (
+        <AskDetail ask={askById(room, detailAskId)} entry={[...(room.log || [])].reverse().find((l) => l.kind === 'decision' && l.askId === detailAskId) || null} onClose={() => setDetailAskId(null)} onViewMockup={(label) => openViewer(detailAskId, label, 'history')} />
+      )}
+      {viewer && askById(room, viewer.askId) && (
+        <MockupViewer ask={askById(room, viewer.askId)} startLabel={viewer.label} backLabel={viewer.backLabel} onBack={closeViewer} />
+      )}
     </div>
+    </ViewerContext.Provider>
     </ImageLoader.Provider>
   );
 }
@@ -1540,6 +1558,10 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
  */
 function BuildScreen({ room, now }) {
   const { link, shot } = latestBuild(room);
+  const openViewer = useContext(ViewerContext);
+  // A newest screenshot that is a choice ask's option opens the viewer (R2).
+  const shotAsk = shot && shot.askId ? askById(room, shot.askId) : null;
+  const shotOpt = shotAsk && shotAsk.kind === 'choice' ? (shotAsk.options || []).find((o) => o.label === shot.label && o.imageId === shot.imageId) : null;
   const shareLink = ['on', 'quiet'].includes(wifiState(room.lan, now).state) ? wifiLink(room) : '';
   return (
     <section className="brm-screenbody brm-buildscreen" aria-label="The build">
@@ -1549,7 +1571,7 @@ function BuildScreen({ room, now }) {
         {link && <span className="brm-push"><OpenLink href={link} label="Open the build" primary /></span>}
       </div>
       {shot ? (
-        <BuildImage imageId={shot.imageId} caption={shot.caption} className="brm-shot brm-shot--build" />
+        <BuildImage imageId={shot.imageId} caption={shot.caption} className="brm-shot brm-shot--build" onOpen={shotOpt && openViewer ? () => openViewer(shotAsk.askId, shotOpt.label, 'build') : null} />
       ) : (
         <div className="brm-empty">Nothing to show yet. When Claude previews the work, its newest screenshot appears here.</div>
       )}
@@ -1578,13 +1600,21 @@ const HISTORY_FILTERS = [
   { key: 'timeline', label: 'Full timeline' },
 ];
 
-export function StoryItem({ item }) {
+export function StoryItem({ item, onOpen = null }) {
+  // A decided item opens its ask's window (History, R1); a click anywhere on
+  // it does, except on a link or button of its own.
+  const openable = Boolean(onOpen) && item.type === 'decided' && item.askId;
   return (
-    <li className={`brm-story-it brm-story-it--${item.type}`}>
+    <li
+      className={`brm-story-it brm-story-it--${item.type}${openable ? ' is-openable' : ''}`}
+      onClick={openable ? (e) => { if (!(e.target.closest && e.target.closest('a, button'))) onOpen(item.askId); } : undefined}
+    >
       <span className="brm-story-tm">{clockTime(item.at)}</span>
       <span className="brm-story-dot" aria-hidden="true" />
       <div className="brm-story-body">
-        <span className="brm-story-h">{item.heading}</span>
+        {openable
+          ? <button type="button" className="brm-story-h brm-story-open" aria-label={`Open Ask ${askNumber(item.askId)}`} onClick={() => onOpen(item.askId)}>{item.heading}</button>
+          : <span className="brm-story-h">{item.heading}</span>}
         <p className="brm-story-t">{item.text}</p>
         {item.chain.length > 0 && (
           <p className="brm-story-chain" aria-label="How it was decided">
@@ -1599,7 +1629,7 @@ export function StoryItem({ item }) {
         {item.imageIds.length > 0 && (
           <div className="brm-story-pics">
             {item.imageIds.map((id) => (
-              <BuildImage key={id} imageId={id} alt={item.text} className={`brm-shot brm-story-pic${(item.chosenLabels || []).length && item.imageIds[0] === id ? ' is-chosen' : ''}`} />
+              <BuildImage key={id} imageId={id} alt={item.text} linked={!openable} className={`brm-shot brm-story-pic${(item.chosenLabels || []).length && item.imageIds[0] === id ? ' is-chosen' : ''}`} />
             ))}
           </div>
         )}
@@ -1608,7 +1638,7 @@ export function StoryItem({ item }) {
   );
 }
 
-function HistoryScreen({ room }) {
+function HistoryScreen({ room, onOpenAsk }) {
   const [filter, setFilter] = useState('all');
   const asks = room.asks || [];
   const story = roomStory({ log: room.log || [], asks, images: room.images || [] });
@@ -1637,7 +1667,7 @@ function HistoryScreen({ room }) {
         ) : <p className="brm-empty">Claude&apos;s screenshots and mockups collect here as it works.</p>)}
         {(filter === 'all' || filter === 'decisions') && (shown.length ? (
           <ol className="brm-story" aria-label={filter === 'decisions' ? 'Decisions' : 'The story so far'}>
-            {shown.map((it) => <StoryItem key={it.id} item={it} />)}
+            {shown.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} />)}
           </ol>
         ) : (
           <p className="brm-empty">{filter === 'decisions' ? 'Nothing decided yet.' : 'What Claude shows, what the room decides and what it says collect here.'}</p>
@@ -1657,8 +1687,10 @@ function HistoryScreen({ room }) {
             <ol className="brm-list brm-decided">
               {decided.map((a) => (
                 <li key={a.askId}>
-                  {a.decision.direction || a.prompt}
-                  {a.decision.method && <span className="brm-muted brm-small">{` · ${METHOD_WORDS[a.decision.method] || a.decision.method}`}</span>}
+                  <button type="button" className="brm-decided-open" onClick={() => onOpenAsk(a.askId)}>
+                    {a.decision.direction || a.prompt}
+                    {a.decision.method && <span className="brm-muted brm-small">{` · ${METHOD_WORDS[a.decision.method] || a.decision.method}`}</span>}
+                  </button>
                 </li>
               ))}
             </ol>
@@ -1747,6 +1779,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   if (blocking) openLabel = `Close ask ${askNumber(blocking.askId)} and open this`;
   else if (waitingOnClaude) openLabel = 'Open now, without the rest';
   const setOpt = (i, key, value) => setOptions((list) => list.map((o, j) => (j === i ? { ...o, [key]: value } : o)));
+  const openViewer = useContext(ViewerContext);
   const letter = (i) => String.fromCharCode(65 + i);
 
   // PREVIEWS BEFORE THE ROOM SEES IT (owner, 2026-10-04). An option with no
@@ -1794,7 +1827,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
           {(ask.options || []).map((o, i) => (
             <li key={o.label || i}>
               {o.imageId
-                ? <BuildImage imageId={o.imageId} alt={`Choice ${letter(i)}`} className="brm-mocktile-img" />
+                ? <BuildImage imageId={o.imageId} alt={`Choice ${letter(i)}`} className="brm-mocktile-img" onOpen={openViewer ? () => openViewer(ask.askId, o.label, 'host') : null} />
                 : <span className="brm-mocktile-wait">{i === (ask.options || []).findIndex((x) => !x.imageId) ? 'Claude is making it' : 'Waiting'}</span>}
               <span className="brm-mocktile-t"><b>{letter(i)}</b> {o.title}</span>
             </li>
@@ -1927,7 +1960,7 @@ export function AskStage({ ask, host, busy, ended, run, api, pickId = null, onPi
           {ask.detail && <p className="brm-detail">{ask.detail}</p>}
         </>
       )}
-      {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} />}
+      {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} viewFrom={pathMode ? 'host' : null} />}
       {ask.kind === 'rating' && <RatingBoard ask={ask} />}
       {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />}
       {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
@@ -2030,7 +2063,8 @@ export function PickConfirm({ ask, id, busy, onConfirm, onClose }) {
   );
 }
 
-function ChoiceBoard({ ask, pickId = null, onPick = null }) {
+function ChoiceBoard({ ask, pickId = null, onPick = null, viewFrom = null }) {
+  const openViewer = useContext(ViewerContext);
   const open = ['live', 'voting'].includes(ask.status);
   const picking = Boolean(onPick) && (open || ask.status === 'results');
   const current = picking && !open ? pickId || winnerOf(ask) : null;
@@ -2050,7 +2084,7 @@ function ChoiceBoard({ ask, pickId = null, onPick = null }) {
                 <OpenLink href={o.url} label={`Open ${o.label}`} />
               </div>
             </div>
-            <BuildImage imageId={o.imageId} alt={`Choice ${o.label}: ${o.title}`} className="brm-shot brm-shot--opt" />
+            <BuildImage imageId={o.imageId} alt={`Choice ${o.label}: ${o.title}`} className="brm-shot brm-shot--opt" onOpen={viewFrom && openViewer ? () => openViewer(ask.askId, o.label, viewFrom) : null} />
             <div className="brm-bar" aria-hidden="true"><span style={{ width: `${r.pct}%` }} /></div>
             <div className="brm-count"><b>{r.count}</b> {r.pct}%</div>
             {picking && <PickButton id={o.label} current={current} onPick={onPick} open={open} />}

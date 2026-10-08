@@ -1107,3 +1107,69 @@
   .brm .brm-wn { grid-template-columns: 36px minmax(0, 1fr); }
   .brm .brm-wn .brm-btn { grid-column: 2; justify-self: start; }
 }
+
+/* ---- History: a past ask's window, and the mockup viewer ----------------
+   docs/design/build-room-history-and-stage-decide R1, R2. Tokens only. */
+.brm .bimg-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; color: inherit; font: inherit; }
+.brm .bimg-open:focus-visible { outline: 3px solid var(--secondary); outline-offset: 2px; border-radius: 10px; }
+.brm .brm-story-it.is-openable { cursor: pointer; }
+.brm .brm-story-open { background: none; border: 0; padding: 0; font: inherit; font-size: var(--brm-st-meta); letter-spacing: 0.06em; text-transform: uppercase; color: var(--secondary); cursor: pointer; text-align: left; }
+.brm .brm-story-open:hover, .brm .brm-story-open:focus-visible { text-decoration: underline; }
+.brm .brm-decided-open { background: none; border: 0; padding: 0; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.brm .brm-decided-open:hover, .brm .brm-decided-open:focus-visible { text-decoration: underline; }
+
+.brm .brm-modal--ask { width: min(900px, 100%); display: grid; gap: 14px; }
+.brm .brm-pa-head { display: flex; align-items: flex-start; gap: 12px; }
+.brm .brm-pa-eb { font-size: var(--brm-t-floor); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.brm .brm-pa-q { margin: 4px 0 0; font-size: var(--brm-t-title); line-height: 1.2; }
+.brm .brm-pa-body { display: grid; gap: 14px; }
+.brm .brm-pa-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.brm .brm-pa-card { border: 1px solid var(--brm-rule); border-radius: 12px; overflow: hidden; background: var(--bg); min-width: 0; }
+.brm .brm-pa-card.is-pick { border: 2px solid var(--success); }
+.brm .brm-pa-img { margin: 0; }
+.brm .brm-pa-img img { border-radius: 0; border: 0; height: 190px; object-fit: cover; object-position: top; }
+.brm .brm-pa-cb { padding: 10px 12px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.brm .brm-pa-letter { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: var(--primary); color: var(--bg); font-weight: 800; }
+.brm .brm-pa-title { overflow-wrap: anywhere; }
+.brm .brm-pa-count { font-variant-numeric: tabular-nums; }
+.brm .brm-pa-bar { grid-column: 1 / -1; display: block; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.brm .brm-pa-bar > span { display: block; height: 100%; background: var(--primary); }
+.brm .brm-pa-card.is-pick .brm-pa-bar > span { background: var(--success); }
+.brm .brm-pa-tag { grid-column: 1 / -1; font-size: var(--brm-t-label); font-weight: 700; color: var(--brm-success-text); }
+.brm .brm-pa-ideas { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-pa-idea { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 12px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--bg); }
+.brm .brm-pa-idea.is-pick { border: 2px solid var(--success); }
+.brm .brm-pa-ideatext { overflow-wrap: anywhere; }
+.brm .brm-pa-rating { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.brm .brm-pa-avg { display: grid; }
+.brm .brm-pa-avg b { font-size: var(--brm-t-num); line-height: 1; }
+.brm .brm-pa-avg span { color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-pa-dist { display: grid; gap: 4px; flex: 1; min-width: 200px; }
+.brm .brm-pa-distrow { display: grid; grid-template-columns: 18px minmax(0, 1fr) 28px; gap: 8px; align-items: center; font-size: var(--brm-t-label); }
+.brm .brm-pa-told { display: grid; gap: 6px; padding: 12px 14px; border-radius: 10px; background: var(--brm-tint-green); border: 1px solid var(--success); }
+.brm .brm-pa-told.is-held { background: var(--brm-tint-amber-soft); border-color: var(--brm-line-amber); }
+.brm .brm-pa-dir { margin: 0; font-size: var(--brm-t-body); font-weight: 700; overflow-wrap: anywhere; }
+.brm .brm-pa-meta { font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-pa-foot { display: flex; align-items: center; gap: 10px; }
+
+.brm .brm-viewer { position: fixed; inset: 0; z-index: 1100; background: var(--bg); display: block; }
+.brm .brm-viewer-in { position: absolute; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--bg); color: var(--text); }
+.brm .brm-viewer-top { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--brm-rule); flex-wrap: wrap; }
+.brm .brm-viewer-q { overflow-wrap: anywhere; }
+.brm .brm-viewer-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
+.brm .brm-viewer-tab { min-height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--brm-rule); background: none; color: var(--muted); font: 700 14px/1 var(--font-ui); cursor: pointer; }
+.brm .brm-viewer-tab.is-on { color: var(--text); border-color: var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-viewer-n { margin-left: auto; color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-viewer-main { position: relative; display: grid; place-items: center; padding: 16px 76px; min-height: 0; touch-action: pan-y; }
+.brm .brm-viewer-pic { margin: 0; max-width: 100%; max-height: 100%; min-height: 0; }
+.brm .brm-viewer-pic img { max-height: calc(100vh - 190px); width: auto; max-width: 100%; margin: 0 auto; }
+.brm .brm-viewer-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--brm-rule); background: var(--surface); color: var(--text); cursor: pointer; }
+.brm .brm-viewer-arrow:disabled { opacity: .35; cursor: default; }
+.brm .brm-viewer-arrow--l { left: 14px; }
+.brm .brm-viewer-arrow--r { right: 14px; }
+.brm .brm-viewer-foot { display: flex; align-items: center; gap: 16px; padding: 10px 20px; border-top: 1px solid var(--brm-rule); font-size: var(--brm-t-label); color: var(--muted); flex-wrap: wrap; }
+.brm .brm-viewer-foot kbd { font: 700 var(--brm-t-floor)/1 var(--font-ui); border: 1px solid var(--brm-rule); border-radius: 4px; padding: 3px 6px; color: var(--text); }
+@media (max-width: 560px) {
+  .brm .brm-viewer-main { padding: 12px 8px; }
+  .brm .brm-viewer-arrow { width: 40px; height: 40px; opacity: .85; }
+}

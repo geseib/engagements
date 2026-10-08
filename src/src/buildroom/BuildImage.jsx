@@ -13,7 +13,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 /** (imageId) => Promise<string url>. Null when the surface shows no images. */
 export const ImageLoader = createContext(null);
 
-export default function BuildImage({ imageId, caption, className = '', alt, linked = true }) {
+export default function BuildImage({ imageId, caption, className = '', alt, linked = true, onOpen = null }) {
   const load = useContext(ImageLoader);
   const [url, setUrl] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -35,7 +35,9 @@ export default function BuildImage({ imageId, caption, className = '', alt, link
     : <span className="bimg-wait" role="img" aria-label={`${text} (loading)`} />;
   return (
     <figure className={`bimg ${className}`.trim()}>
-      {linked && url ? <a href={url} target="_blank" rel="noopener noreferrer" title="Open full size">{img}</a> : img}
+      {onOpen && url
+        ? <button type="button" className="bimg-open" onClick={onOpen} aria-label={`Look closer: ${text}`} title="Look closer">{img}</button>
+        : linked && url ? <a href={url} target="_blank" rel="noopener noreferrer" title="Open full size">{img}</a> : img}
       {caption ? <figcaption>{caption}</figcaption> : null}
     </figure>
   );
