@@ -89,6 +89,7 @@ export function buildApi(gameId) {
     getAsk: (askId) => call(`${root}asks/${seg(askId)}`),
     /** `{action:'edit'|'open'|'vote'|'close'|'decide'|'reopen'|'discard', …}` → `{ask}` */
     askAction: (askId, body) => post(`asks/${seg(askId)}`, body),
+    reask: (askId, body) => post(`asks/${seg(askId)}`, { action: 'reask', ...body }),
     /** Add what the room said out loud as a suggestion. */
     addResponse: (askId, text) => post(`asks/${seg(askId)}/responses`, { text }),
     /** `{action:'hide'|'show'|'edit', text?}` */

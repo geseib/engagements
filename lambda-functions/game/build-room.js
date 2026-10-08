@@ -305,12 +305,68 @@ async function makeCurrent(ctx, room, askId, role) {
   });
 }
 
+/**
+ * RE-ASK WITH EDITS (owner, 2026-10-08: "reask, edit before reasking"): a new
+ * live ask of the same kind from the edited words, made current. The old ask
+ * closes if it was open and points at the new one with RevotedAs, the field
+ * the tie revote writes, so History already says "Voted again as ask N".
+ * Options whose title is unchanged keep their mockup.
+ */
+async function reaskAction(ctx, room, ask, b) {
+  if (!['live', 'voting', 'results'].includes(ask.Status)) {
+    return fail(409, `This ask is ${ask.Status}; only an ask that is open or showing results can be asked again`);
+  }
+  const norm = S.normalizeAsk({
+    kind: ask.Kind,
+    prompt: b.prompt !== undefined ? b.prompt : ask.Prompt,
+    detail: b.detail !== undefined ? b.detail : ask.Detail,
+    options: b.options !== undefined ? b.options : ask.Options,
+    maxPicks: ask.MaxPicks,
+  });
+  if (norm.error) return fail(400, norm.error);
+  const v = norm.value;
+  const askId = ask.AskId;
+  const images = S.optionImages(room, askId);
+  const imageOf = (title) => {
+    const old = (ask.Options || []).find((o) => o.title === title);
+    return old ? (old.imageId || images[old.label] || '') : '';
+  };
+  const options = v.options.map((o) => {
+    const imageId = imageOf(o.title);
+    return imageId ? { ...o, imageId } : o;
+  });
+  const now = new Date().toISOString();
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const newId = S.pad3(st.AskSeq || 1);
+  await put(ctx, {
+    SK: S.SK.ask(newId), AskId: newId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: options,
+    ...(v.scale ? { Scale: v.scale } : {}),
+    ...(v.maxPicks ? { MaxPicks: v.maxPicks } : {}),
+    Status: 'live', Source: 'host', CreatedAt: now, OpenedAt: now,
+    ...(ask.ClaudeGets ? { ClaudeGets: ask.ClaudeGets } : {}),
+    ...(ask.ClaudeNote ? { ClaudeNote: ask.ClaudeNote } : {}),
+  });
+  // Close whatever is still open (the old ask among it), then point the old one at the new.
+  for (const other of room.asks) {
+    if (S.OPEN_STATUSES.includes(other.Status)) await put(ctx, { ...other, Status: 'results', ClosedAt: now });
+  }
+  const fresh = findAsk(await loadRoom(ctx), askId);
+  await put(ctx, { ...fresh, RevotedAs: newId });
+  await touchState(ctx, { set: { CurrentAskId: newId } });
+  await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { ask: S.askView(findAsk(after, newId), after, 'host') });
+}
+
 async function askAction(ctx, role, askId, body) {
   const b = body || {};
   const room = await loadRoom(ctx);
   const ask = findAsk(room, askId);
   if (!ask) return fail(404, `No ask ${askId}`);
   const action = String(b.action || '').toLowerCase();
+  if (action === 'reask') return reaskAction(ctx, room, ask, b);
   if (WHEEL_ACTIONS.includes(action)) return wheelAction(ctx, role, room, ask, action, b);
   const now = new Date().toISOString();
   const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');

@@ -1394,6 +1394,49 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(!sent.some((m) => m.message.type === 'buildChanged'));
   });
 
+  console.log('\nre-asking an ask with edits');
+  await check('reask a closed choice ask: a new live ask with the edits, images kept, the old one points at it', async () => {
+    seed();
+    const id = await tie();
+    const shotA = await hostCall('POST', 'images', { askId: id, label: 'A', kind: 'mockup', data: PNG.toString('base64'), contentType: 'image/png' });
+    const shotB = await hostCall('POST', 'images', { askId: id, label: 'B', kind: 'mockup', data: PNG.toString('base64'), contentType: 'image/png' });
+    const r = await hostCall('POST', `asks/${id}`, {
+      action: 'reask', prompt: 'What should we build first?', detail: 'Pick one',
+      options: ['Sign-up page', 'Shift map', 'Pick-up list'],
+    });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.strictEqual(r.body.ask.status, 'live');
+    assert.strictEqual(r.body.ask.prompt, 'What should we build first?');
+    assert.deepStrictEqual(r.body.ask.options.map((o) => [o.label, o.title]), [['A', 'Sign-up page'], ['B', 'Shift map'], ['C', 'Pick-up list']]);
+    assert.strictEqual(r.body.ask.options[0].imageId, shotA.body.image.imageId);
+    assert.strictEqual(r.body.ask.options[1].imageId, shotB.body.image.imageId);
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.currentAskId, r.body.ask.askId);
+    assert.strictEqual(h.body.asks.find((a) => a.askId === id).revotedAs, r.body.ask.askId);
+    assert.ok(h.body.log.some((l) => l.text === 'Asked again: What should we build first?'));
+  });
+  await check('reask a live ask: the old one closes and only the new one is open', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Which one?', options: ['Red', 'Blue'] });
+    const id = c.body.ask.askId;
+    const r = await hostCall('POST', `asks/${id}`, { action: 'reask', prompt: 'Which colour?', options: ['Red', 'Blue'] });
+    assert.strictEqual(r.status, 200);
+    const h = await hostCall('GET', 'state');
+    assert.strictEqual(h.body.asks.find((a) => a.askId === id).status, 'results');
+    assert.deepStrictEqual(h.body.asks.filter((a) => ['live', 'voting'].includes(a.status)).map((a) => a.askId), [r.body.ask.askId]);
+  });
+  await check('a decided ask cannot be asked again; Claude cannot reask', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Which one?', options: ['Red', 'Blue'] });
+    const id = c.body.ask.askId;
+    assert.strictEqual((await agentCall('POST', `asks/${id}`, { action: 'reask', prompt: 'x', options: ['Red', 'Blue'] })).status, 403);
+    await hostCall('POST', `asks/${id}`, { action: 'close' });
+    await hostCall('POST', `asks/${id}`, { action: 'decide', direction: 'Red' });
+    const r = await hostCall('POST', `asks/${id}`, { action: 'reask', prompt: 'Which colour?', options: ['Red', 'Blue'] });
+    assert.strictEqual(r.status, 409);
+    assert.ok(r.body.error && r.body.error.length > 10);
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);
