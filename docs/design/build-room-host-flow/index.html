@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room host: the next step · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* Owner, 2026-10-07: "a lot of scrolling and its unclear what to do ... always
+   moving the focus to where they likely should be going next". Extends v2.css. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .notes{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:92ch}
+.host{grid-template-columns:560px 1fr 360px}
+
+/* The path: one ask, four steps. */
+.path4{display:flex;flex-direction:column;gap:8px}
+.st{border:1px solid var(--m-rule);border-radius:12px;background:var(--surface)}
+.st .sh{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:10px 14px}
+.st .n{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:800 13px/1 var(--font-ui);border:2px solid var(--muted);color:var(--muted)}
+.st .t{font:700 15px/1.2 var(--font-ui)}
+.st .s{font-size:13px;color:var(--muted);text-align:right}
+.st.done .n{background:var(--success);border-color:var(--success);color:var(--bg)}
+.st.done .t{color:var(--muted);font-weight:600}
+.st.done .s{color:var(--text)}
+.st.next{opacity:.5}
+.st.now{border-color:var(--m-line-amber);box-shadow:0 0 0 1px var(--m-line-amber)}
+.st.now .n{border-color:var(--primary);background:var(--primary);color:var(--bg)}
+.st .sb{padding:4px 16px 16px 54px;display:flex;flex-direction:column;gap:12px}
+.st .q2{margin:0;font:800 24px/1.15 var(--font-display)}
+.focusbtn{outline:3px solid var(--secondary);outline-offset:3px}
+.spacehint{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.spacehint kbd{font:700 11px/1 var(--font-ui);border:1px solid var(--m-rule);border-radius:4px;padding:3px 6px;color:var(--text)}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:grid;grid-template-columns:28px 1fr 110px 30px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--m-rule);border-radius:10px}
+.opt.win{border-color:rgba(79,178,134,.6);background:var(--m-tint-green)}
+.opt .L{width:28px;height:28px;font-size:15px;border-radius:7px}
+.opt .tr{height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.opt .tr span{display:block;height:100%;background:var(--primary)}
+.opt b{text-align:right}
+.dir{min-height:84px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:15px;line-height:1.45}
+.seg{display:flex;gap:4px;background:var(--bg);border:1px solid var(--m-rule);border-radius:10px;padding:3px;width:max-content}
+.seg span{padding:6px 10px;border-radius:7px;font-size:13px;color:var(--muted)}
+.seg span.on{background:var(--surface-2);color:var(--text);font-weight:700}
+
+/* What's next. */
+.whatnext{display:flex;flex-direction:column;gap:10px}
+.wn{display:grid;grid-template-columns:36px 1fr auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--m-rule);border-radius:12px;background:var(--surface)}
+.wn .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--surface-2);font:800 16px/1 var(--font-ui);color:var(--primary)}
+.wn b{display:block;font-size:15px}
+.wn span{font-size:13px;color:var(--muted)}
+.wn.lead{border-color:var(--m-line-amber);background:linear-gradient(var(--m-tint-amber),var(--m-tint-amber)),var(--surface)}
+.claudeline{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--m-rule)}
+.claudeline .d{width:12px;height:12px;border-radius:50%;background:var(--secondary)}
+.claudeline .d.w{background:var(--primary)}
+.toast{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green);font-size:14px}
+
+/* Right column: Decided with ticks (P1/P2 of build-room-combine-and-stage). */
+.dec{display:flex;flex-direction:column;gap:6px}
+.dec .it{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;padding:9px 12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--surface)}
+.dec .bx{width:18px;height:18px;border-radius:5px;border:2px solid var(--muted);margin-top:2px}
+.dec .it.on{border-color:var(--secondary)}
+.dec .it.on .bx{background:var(--secondary);border-color:var(--secondary);box-shadow:inset 0 0 0 3px var(--surface)}
+.dec .q{font-size:12px;color:var(--muted);margin:0}
+.dec .a{font-size:14px;margin:2px 0 0}
+.acc{display:flex;flex-direction:column;gap:6px}
+.acc .ah{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--surface);font:700 14px/1 var(--font-ui)}
+.acc .ah span{margin-left:auto;color:var(--muted);font-weight:600;font-size:12px}
+.acc .ah.open{border-color:var(--secondary)}
+
+/* Stage S4. */
+.plain{display:grid;grid-template-columns:1fr 320px;gap:40px;padding:36px 44px 24px;min-height:0}
+.statehd{display:flex;align-items:center;gap:22px}
+.statehd .dot{width:26px;height:26px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 10px rgba(246,169,76,.16)}
+.statehd h1{margin:0;font:800 64px/1.05 var(--font-display)}
+.now-line{margin:14px 0 0 48px;font-size:28px;line-height:1.3;max-width:34ch}
+.mocks{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:26px}
+.mocks figure{margin:0;border:1px solid var(--m-rule);border-radius:12px;overflow:hidden;background:var(--surface)}
+.mocks img{display:block;width:100%;max-height:300px;object-fit:cover;object-position:top}
+.mocks figcaption{padding:10px 14px;font-size:22px}
+.side .lbl{font:800 18px/1 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.side .val{font-size:26px;line-height:1.3;margin-top:8px}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room host</b>
+<a href="#h1">H1 What's next</a><a href="#h2">H2 Collect</a><a href="#h3">H3 Settle</a><a href="#h4">H4 Send to Claude</a><a href="#h5">H5 Sent</a><a href="#s4">S4 Stage: something to look at</a>
+<span class="sp"></span><a href="../build-room-combine-and-stage/index.html">Combine + plain stage</a></nav>
+<div class="pg-title"><h1>The host is always one button from the next step</h1>
+<p>Owner, 2026-10-07: "there is a lot of scrolling and its unclear what to do. if i select something or a choice has been made, it seems i need to send to claude but the focus does [not] move to it ... we want power in the host, but we really want to make it super easy to progress things forward asking questions, getting votes, spins, or selecting and getting to the next step with claude". The Now column becomes a path: every ask runs Ask, Collect, Settle, Send to Claude. The step you are on is open with one primary button, which has focus and answers to Space; finished steps fold to one line; and after Send the column asks What's next.</p></div>
+
+<!-- H1 ------------------------------------------------------------------ -->
+<div class="frame-h" id="h1"><h2>H1 · What's next (nothing open)</h2>
+<p>Claude's status on one line, then the host's moves, most likely first. The lead move has focus.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is ready for the next step</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col">
+<div class="claudeline"><span class="d w"></span><b>Claude is ready for the next step.</b><span class="hint" style="margin-left:auto">It finished the dot grid</span></div>
+<div class="colh"><h2>What's next</h2><span class="spacehint" style="margin-left:auto"><kbd>Space</kbd> does the first</span></div>
+<div class="whatnext">
+<div class="wn lead"><span class="ic">?</span><div><b>Ask the room a starter question</b><span>Next in the library: How should it look and feel?</span></div><span class="btn btn--sm btn--primary focusbtn">Ask it</span></div>
+<div class="wn"><span class="ic">3</span><div><b>Combine 3 decided answers</b><span>What, who for, what it does, into one prompt</span></div><span class="btn btn--sm">Combine</span></div>
+<div class="wn"><span class="ic">+</span><div><b>Ask the room something new</b><span>Ideas, a choice, or a 1 to 5 rating</span></div><span class="btn btn--sm">New ask</span></div>
+<div class="wn"><span class="ic">C</span><div><b>Tell Claude</b><span>Do now, keep in mind, later, or ask Claude</span></div><span class="btn btn--sm">Write</span></div>
+</div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">2</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Priya</span><span class="chip">Idea</span></div><div class="q-text">Show it as a stack of $100 bills next to a person</div></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Marcus</span><span class="chip">Idea</span></div><div class="q-text">A slider: your salary vs. a billionaire's hour</div></div>
+</section>
+<section class="col"><div class="acc">
+<div class="ah open">Decided<span>3 · tick to combine</span></div>
+<div class="dec">
+<div class="it on"><span class="bx"></span><div><p class="q">What are we building?</p><p class="a">An app</p></div></div>
+<div class="it on"><span class="bx"></span><div><p class="q">Who is it for?</p><p class="a">Everyone</p></div></div>
+<div class="it on"><span class="bx"></span><div><p class="q">What does it do?</p><p class="a">Shows billionaires vs. average people, concretely</p></div></div>
+</div>
+<div class="ah">Timeline<span>14</span></div>
+<div class="ah">Screenshots<span>3</span></div>
+<div class="ah">Room brief</div>
+</div></section>
+</div>
+<span class="pin" style="left:6px;top:76px">1</span><span class="pin" style="left:6px;top:160px">2</span><span class="pin" style="left:1052px;top:118px">3</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Claude, in one line</h3><p>The same status as the Stage and the header (one rule): building, ready for the next step, or paused, with what it last did.</p></div>
+<div class="note"><h3><b class="n">2</b>The host's moves, most likely first</h3><p>The lead move is chosen by a rule: the next unasked starter question while the brief has gaps; Combine when answers are ticked; New ask otherwise. It has focus; Space does it. The rest stay one click away.</p></div>
+<div class="note"><h3><b class="n">3</b>Decided, with ticks</h3><p>The right column opens on Decided. Ticks feed Combine (the P1/P2 mockups). Timeline, Screenshots and the brief fold below.</p></div>
+</div>
+
+<!-- H2 ------------------------------------------------------------------ -->
+<div class="frame-h" id="h2"><h2>H2 · The room is answering (Collect)</h2>
+<p>The ask runs as four steps. Ask is done and folded. Collect is open with the count and one button, Close and show results, focused. Settle and Send to Claude wait, greyed.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="askpill">Ask 4 · 7 of 12</span><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col">
+<div class="path4">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51 · Choose</span></div></div>
+<div class="st now"><div class="sh"><span class="n">2</span><span class="t">The room is choosing</span><span class="s">7 of 12</span></div>
+<div class="sb">
+<div class="opts">
+<div class="opt"><span class="L">A</span><span>Calm and clear: big numbers, lots of white</span><span class="tr"><span style="width:43%"></span></span><b>3</b></div>
+<div class="opt"><span class="L L--b">B</span><span>Playful: stacks, coins, a bit of humour</span><span class="tr"><span style="width:57%"></span></span><b>4</b></div>
+</div>
+<div class="row"><span class="btn btn--primary focusbtn">Close and show results</span><span class="btn btn--ghost">Answer for the room</span><span class="btn btn--ghost">Spin instead</span><span class="spacehint" style="margin-left:auto"><kbd>Space</kbd></span></div>
+</div></div>
+<div class="st next"><div class="sh"><span class="n">3</span><span class="t">Settle: go with the room, spin or pick</span><span class="s"></span></div></div>
+<div class="st next"><div class="sh"><span class="n">4</span><span class="t">Send to Claude</span><span class="s"></span></div></div>
+</div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">2</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Priya</span><span class="chip">Idea</span></div><div class="q-text">Show it as a stack of $100 bills next to a person</div></div>
+</section>
+<section class="col"><div class="acc">
+<div class="ah open">Claude is doing<span>live</span></div>
+<ul class="hist"><li><span class="tm">2:52</span><span class="pt pt--claude"></span><div class="bd">Edited DotGrid.jsx</div></li><li><span class="tm">2:51</span><span class="pt pt--claude"></span><div class="bd">Ran npm test</div></li></ul>
+<div class="ah">Decided<span>3</span></div>
+<div class="ah">Timeline<span>15</span></div>
+</div></section>
+</div>
+<span class="pin" style="left:6px;top:76px">1</span><span class="pin" style="left:6px;top:250px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Done steps fold to one line</h3><p>Click a folded step to open it (to edit the wording, reopen, or discard). Nothing below has to be scrolled to.</p></div>
+<div class="note"><h3><b class="n">2</b>One primary, focused</h3><p>Close and show results has focus and answers to Space, as on the Stage dock. Answer for the room and Spin instead stay beside it.</p></div>
+</div>
+
+<!-- H3 ------------------------------------------------------------------ -->
+<div class="frame-h" id="h3"><h2>H3 · Votes are in (Settle)</h2>
+<p>Collect folds to its count. Settle opens with the result and three ways on: go with the room's choice (focused), spin, or vote again on a tie. Clicking any option asks before picking an alternate, as today.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="askpill askpill--results">Ask 4 · results</span><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col">
+<div class="path4">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">11 of 12 voted</span></div></div>
+<div class="st now"><div class="sh"><span class="n">3</span><span class="t">Settle</span><span class="s">B leads, 7 to 4</span></div>
+<div class="sb">
+<div class="opts">
+<div class="opt"><span class="L">A</span><span>Calm and clear: big numbers, lots of white</span><span class="tr"><span style="width:36%"></span></span><b>4</b></div>
+<div class="opt win"><span class="L L--b">B</span><span>Playful: stacks, coins, a bit of humour</span><span class="tr"><span style="width:64%"></span></span><b>7</b></div>
+</div>
+<div class="row"><span class="btn btn--primary focusbtn">Go with B</span><span class="btn">Spin the wheel</span><span class="btn btn--ghost">Vote again</span><span class="spacehint" style="margin-left:auto"><kbd>Space</kbd></span></div>
+<p class="hint" style="margin:0">Or click A to pick it instead; you'll be asked first.</p>
+</div></div>
+<div class="st next"><div class="sh"><span class="n">4</span><span class="t">Send to Claude</span><span class="s"></span></div></div>
+</div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">2</span></div></section>
+<section class="col"><div class="acc"><div class="ah open">Claude is doing<span>live</span></div><div class="ah">Decided<span>3</span></div><div class="ah">Timeline<span>16</span></div></div></section>
+</div>
+<span class="pin" style="left:6px;top:290px">1</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>One clear way on</h3><p>A winner: Go with B (focused). A tie: Spin the wheel is focused, Vote again beside it. After a spin: Go with where it landed. Whichever is chosen, Send to Claude opens next, with focus already in it.</p></div>
+</div>
+
+<!-- H4 ------------------------------------------------------------------ -->
+<div class="frame-h" id="h4"><h2>H4 · Send to Claude</h2>
+<p>Settle folds to what was chosen. Send to Claude opens right under it, the direction already written, the cursor in it, and Send focused when the host tabs out. No scrolling to find it.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="askpill askpill--results">Ask 4 · decided</span><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col">
+<div class="path4">
+<div class="st done"><div class="sh"><span class="n">1</span><span class="t">Ask: How should it look and feel?</span><span class="s">Opened 2:51</span></div></div>
+<div class="st done"><div class="sh"><span class="n">2</span><span class="t">The room chose</span><span class="s">11 of 12 voted</span></div></div>
+<div class="st done"><div class="sh"><span class="n">3</span><span class="t">Going with B</span><span class="s">The room's choice, 7 to 4</span></div></div>
+<div class="st now"><div class="sh"><span class="n">4</span><span class="t">Send to Claude</span><span class="s"></span></div>
+<div class="sb">
+<div class="dir focusbtn">How should it look and feel? Playful: stacks, coins, a bit of humour. Keep the numbers big enough to read from the back.</div>
+<div class="row"><span class="hint" style="margin:0">Claude gets it as</span><div class="seg"><span class="on">Do now</span><span>Keep in mind</span><span>For Claude, later</span><span>Ask Claude</span></div></div>
+<div class="row"><span class="btn btn--primary">Send to Claude</span><span class="btn btn--ghost">Record only</span><span class="spacehint" style="margin-left:auto">Ctrl Enter sends</span></div>
+</div></div>
+</div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">2</span></div></section>
+<section class="col"><div class="acc"><div class="ah open">Claude is doing<span>live</span></div><div class="ah">Decided<span>3</span></div><div class="ah">Timeline<span>16</span></div></div></section>
+</div>
+<span class="pin" style="left:6px;top:300px">1</span><span class="pin" style="left:6px;top:420px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Written for you</h3><p>"Question? Answer", plus anything the host adds. The cursor lands in it, so editing is one click away and sending is Ctrl Enter.</p></div>
+<div class="note"><h3><b class="n">2</b>The four kinds, one row</h3><p>Do now is the default. Record only keeps it in the room's history without telling Claude.</p></div>
+</div>
+
+<!-- H5 ------------------------------------------------------------------ -->
+<div class="frame-h" id="h5"><h2>H5 · Sent, and back to What's next</h2>
+<p>A short confirmation, the ask leaves the path (it is in Decided and History), Claude's line says it has it, and What's next leads with the most likely move.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col">
+<div class="toast">Sent to Claude as Do now: How should it look and feel? Playful.</div>
+<div class="claudeline"><span class="d"></span><b>Claude is building.</b><span class="hint" style="margin-left:auto">On: the playful look</span></div>
+<div class="colh"><h2>What's next</h2><span class="spacehint" style="margin-left:auto"><kbd>Space</kbd> does the first</span></div>
+<div class="whatnext">
+<div class="wn lead"><span class="ic">2</span><div><b>Put 2 ideas to a vote</b><span>Priya and Marcus sent ideas while the room voted</span></div><span class="btn btn--sm btn--primary focusbtn">To a vote</span></div>
+<div class="wn"><span class="ic">?</span><div><b>Ask the room a starter question</b><span>Next in the library: How will we know it worked?</span></div><span class="btn btn--sm">Ask it</span></div>
+<div class="wn"><span class="ic">+</span><div><b>Ask the room something new</b><span>Ideas, a choice, or a 1 to 5 rating</span></div><span class="btn btn--sm">New ask</span></div>
+<div class="wn"><span class="ic">C</span><div><b>Tell Claude</b><span>Do now, keep in mind, later, or ask Claude</span></div><span class="btn btn--sm">Write</span></div>
+</div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">2</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Priya</span><span class="chip">Idea</span></div><div class="q-text">Show it as a stack of $100 bills next to a person</div></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Marcus</span><span class="chip">Idea</span></div><div class="q-text">A slider: your salary vs. a billionaire's hour</div></div>
+</section>
+<section class="col"><div class="acc"><div class="ah open">Decided<span>4 · tick to combine</span></div>
+<div class="dec">
+<div class="it"><span class="bx"></span><div><p class="q">What are we building?</p><p class="a">An app</p></div></div>
+<div class="it"><span class="bx"></span><div><p class="q">How should it look and feel?</p><p class="a">Playful: stacks, coins, a bit of humour</p></div></div>
+</div>
+<div class="ah">Timeline<span>17</span></div></div></section>
+</div>
+<span class="pin" style="left:6px;top:76px">1</span><span class="pin" style="left:6px;top:220px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Said once, then out of the way</h3><p>The confirmation stays a few seconds. Claude's line updates when Claude picks the direction up ("Claude has it").</p></div>
+<div class="note"><h3><b class="n">2</b>The lead move follows the room</h3><p>Ideas waiting lead when there are two or more; then the next starter question; then a new ask. The middle column is unchanged: it is where the ideas are.</p></div>
+</div>
+
+<!-- S4 ------------------------------------------------------------------ -->
+<div class="frame-h" id="s4"><h2>S4 · Stage: Claude has something to look at</h2>
+<p>The Stage says what comes next in plain words, by the same steps: a question to answer (the ask stage, as today), votes are in, Claude is building (S1), ready for the next step (S2), or, here, mockups to look at before a vote.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="plain">
+<div>
+<div class="statehd"><span class="dot"></span><h1>Two looks to compare</h1></div>
+<p class="now-line">Claude made A and B. Look now; the vote opens next.</p>
+<div class="mocks">
+<figure><img src="../build-room-host-redesign/img/choice-a.svg" alt="Mockup A"><figcaption><b>A</b> Calm and clear</figcaption></figure>
+<figure><img src="../build-room-host-redesign/img/choice-b.svg" alt="Mockup B"><figcaption><b>B</b> Playful</figcaption></figure>
+</div>
+</div>
+<aside class="side"><div><div class="lbl">Next</div><div class="val">Pick one on your phone, laptop or tablet</div></div></aside>
+</div>
+<footer class="dock"><div class="status">Mockups ready · the host opens the vote</div><span class="dbtn dbtn--primary">Open the vote</span><span class="kbd">SPACE</span></footer>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>What comes next, on the wall</h3><p>One headline per moment: A question to answer · Votes are in · Two looks to compare · Claude is building · Claude is ready for the next step · Claude has paused. The dock carries the host's one move for that moment, with Space.</p></div>
+</div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>
