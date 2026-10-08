@@ -1156,11 +1156,11 @@ export function ConnectionChip({ connection = 'live', onReconnect }) {
  * dialog closes the menu; a switch leaves it open. A click inside a dialog
  * the menu opened (Run crew code asks first) is not "outside".
  */
-function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLabel, buttonClass = 'brm-btn brm-btn--sm brm-btn--ghost' }) {
+function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLabel, buttonClass = 'brm-btn brm-btn--sm brm-btn--ghost', placeKey }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const panelRef = useRef(null);
-  useKeepOnScreen(panelRef, open);
+  useKeepOnScreen(panelRef, open, placeKey);
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
@@ -1208,12 +1208,12 @@ function liveBuildLink(room, now) {
 }
 
 /** One always-visible control: opens the build in a new tab, or says why it cannot yet. */
-function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild' }) {
+function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild', onPick }) {
   const href = safeHref(link);
   if (!href) {
-    return <button type="button" className={className} disabled title="Claude hasn't started the app yet">Open the live build ↗</button>;
+    return <button type="button" className={className} disabled title="Claude hasn't started the app yet">{W.liveBuild}</button>;
   }
-  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Open the live build ↗</a>;
+  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={onPick}>{W.liveBuild}</a>;
 }
 
 /** True at 480px and narrower. No matchMedia (jsdom, an old browser) reads as wide. */
@@ -1263,14 +1263,15 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
   // Claude's status) fold into the session menu so the title keeps room (B5a).
   const narrow = useNarrowHeader();
   const tucked = host && narrow;
-  const askPillButton = pill && (
-    <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => onScreen('stage')}>
+  // In the tucked menu a press closes it (onPick); inline there is nothing to close.
+  const askPillButton = (onPick = () => {}) => pill && (
+    <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => { onPick(); onScreen('stage'); }}>
       {pill.text}
     </button>
   );
-  const extras = (
+  const extras = (onPick = () => {}) => (
     <>
-      <LiveBuildButton link={liveBuildLink(room, now)} />
+      <LiveBuildButton link={liveBuildLink(room, now)} onPick={onPick} />
       {showWifi && (
         <div className="brm-wifiwrap" ref={wifiRef}>
           <WifiChip lan={room.lan} now={now} open={wifiOpen} onOpen={() => setWifiOpen((o) => !o)} />
@@ -1288,9 +1289,9 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
           )}
         </div>
       )}
-      <AgentChip room={room} now={now} />
+      <span onClickCapture={onPick} className="brm-agentwrap"><AgentChip room={room} now={now} /></span>
       {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
-      <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => setQr(true)}>
+      <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => { onPick(); setQr(true); }}>
         <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
       </button>
       <span className="brm-chip">{room.playerCount || 0} joined</span>
@@ -1322,18 +1323,18 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
           </button>
         ))}
       </nav>
-      {pill && !tucked && askPillButton}
+      {pill && !tucked && askPillButton()}
       <div className="brm-hbar-tools">
-        {!tucked && extras}
+        {!tucked && extras()}
         {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
         {host && (
-          <SessionMenu>
+          <SessionMenu placeKey={wifiOpen}>
             {(close) => (
               <>
                 {tucked && (
                   <div className="brm-more-extras" data-testid="brm-more-extras">
-                    {pill && askPillButton}
-                    {extras}
+                    {pill && askPillButton(close)}
+                    {extras(close)}
                   </div>
                 )}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onConnect)}>
@@ -2081,7 +2082,7 @@ export function WheelPanel({ ask, busy, run, api, primary = false, onSettled = n
         )}
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
-          {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={() => act('revote')}>Vote again</button>}
+          {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={() => act('revote')}>{W.voteAgain}</button>}
         </div>
         <p className="brm-hint">Someone in the room spins it from their phone. You can always spin it yourself.</p>
       </section>
@@ -2453,7 +2454,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
         <span className="brm-hint">{send ? "Delivered on Claude's next call" : 'Recorded in the timeline only'}</span>
         {onCancel && <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onCancel}>Cancel</button>}
         <button type="button" className={`brm-btn brm-btn--primary${onCancel ? '' : ' brm-push'}`} data-next-primary={next || undefined} data-no-space={next || undefined} disabled={cannot} onClick={decide}>
-          <Icon name="PaperPlaneTilt" size={16} /> {send ? W.sendPlain : 'Record decision'}
+          {send && <Icon name="PaperPlaneTilt" size={16} />}{send && ' '}{send ? W.sendPlain : 'Record decision'}
         </button>
       </div>
       {next && <p className="brm-hint brm-path-keys">{`Ctrl Enter, or Cmd Enter on a Mac, ${send ? 'sends' : 'records'} it.`}</p>}
@@ -2723,7 +2724,7 @@ const LOG_KINDS = [
  * before; the caret offers Keep in mind, Later and Ask Claude, each saying
  * what Claude will do with it.
  */
-function SendToClaude({ onSend, busy, disabled = false, small = false, primary = false, submit = false }) {
+export function SendToClaude({ onSend, busy, disabled = false, small = false, primary = false, submit = false }) {
   const size = small ? ' brm-btn--sm' : '';
   return (
     <span className="brm-split">

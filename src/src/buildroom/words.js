@@ -22,15 +22,14 @@ export const W = Object.freeze({
   sendTopIdea: 'Send the top idea to Claude',
   change: 'Change before sending',
   /** Opens the edit: the whole question is asked again. */
-  askAgainEdit: 'Ask again…',
-  /** Footer-level "ask again" (the Stage window). */
-  askAgain: 'Ask again',
+  askAgainEllipsis: 'Ask again…',
   /** A tie: a new vote between the tied options (owner ruling). */
   voteAgain: 'Vote again',
   // The wheel
   spin: 'Spin the wheel',
   spinAgain: 'Spin again',
   // Holding back: one list, Later
+  recordOnly: 'Record only',
   saveLater: 'Save for later',
   later: 'Later',
   sendNow: 'Send to Claude now',
@@ -58,7 +57,9 @@ export const KIND_WORDS = Object.freeze([W.doNow, W.keepInMind, W.askClaude]);
  * Old words that must not appear as a label anywhere in src/src/buildroom.
  * `enforced` is switched on by the task that replaces the word; until then the
  * check in tests/build-room-copy.js skips it. `prefix` matches a label that
- * starts with the word ("Go with B"). Lists are not scanned in this file.
+ * starts with the word ("Go with B"). `files` scopes a word to those basenames
+ * (Dismiss stays legal in the error bar and the opening's draft).
+ * Stage "Edit" is retired by Task 3 too; too short to scan, so it is not listed. Lists are not scanned in this file.
  */
 export const RETIRED = Object.freeze([
   // Enforced: replaced in Task 1 (wheel labels, Main menu, Send icon)
@@ -77,9 +78,9 @@ export const RETIRED = Object.freeze([
   { word: 'Re-ask…', enforced: false, task: 3 },
   { word: 'Open the live build ↗', enforced: false, task: 3 },
   // Task 4: one Later list
-  { word: 'Park', enforced: false, task: 4 },
-  { word: 'Parked', enforced: false, task: 4 },
+  { word: 'Park', prefix: true, enforced: false, task: 4 },
+  { word: 'Parked', prefix: true, enforced: false, task: 4 },
   { word: 'Send now', enforced: false, task: 4 },
-  { word: 'Dismiss', enforced: false, task: 4 },
-  { word: 'For Claude, later', enforced: false, task: 4 },
+  { word: 'Dismiss', files: ['BuildLater.jsx'], enforced: false, task: 4 },
+  { word: 'For Claude, later', prefix: true, enforced: false, task: 4 },
 ]);

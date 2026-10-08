@@ -27,8 +27,9 @@ export function roomBelow(rect, viewportHeight, gutter = GUTTER) {
   return Math.max(MIN_HEIGHT, Math.floor(viewportHeight - rect.top - gutter));
 }
 
-/** While `open`, keep the element `ref` points at inside the window, on open and on resize. */
-export function useKeepOnScreen(ref, open) {
+/** While `open`, keep the element `ref` points at inside the window, on open, on resize, and when `placeKey` changes
+ * (a panel whose content grows, such as a Wi-Fi panel opened inside it). */
+export function useKeepOnScreen(ref, open, placeKey) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!open || !el) return undefined;
@@ -47,5 +48,5 @@ export function useKeepOnScreen(ref, open) {
     place();
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [ref, open]);
+  }, [ref, open, placeKey]);
 }

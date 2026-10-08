@@ -1219,3 +1219,9 @@
   .brm .brm-hbar-tools { order: 2; }
   .brm .brm-more-panel { width: min(260px, calc(100vw - 32px)); }
 }
+
+/* The Wi-Fi panel opened inside the session menu: one column, no sideways room. */
+.brm .brm-more-extras .brm-wifipanel-apps li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.brm .brm-more-extras .brm-wifipanel-apps li .brm-btn { justify-self: start; }
+.brm .brm-more-extras .brm-wifipanel { box-sizing: border-box; width: 100%; }
+.brm .brm-agentwrap { display: inline-flex; }

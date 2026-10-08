@@ -327,7 +327,11 @@ describe('each ask status', () => {
   test('results: switching Send to Claude off records the decision only', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
     goWith('Go with B');
+    const sendBtn = document.querySelector('button[data-next-primary], button.brm-btn--primary.brm-push');
+    expect(sendBtn.textContent).toMatch('Send to Claude');
+    expect(sendBtn.querySelector('svg')).not.toBeNull();
     fireEvent.click(screen.getByRole('switch', { name: 'Send to Claude' }));
+    expect(screen.getByRole('button', { name: 'Record decision' }).querySelector('svg')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Record decision' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', sendToAgent: false }));
   });
@@ -1949,6 +1953,15 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(within(screen.getByTestId('brm-endedbar')).queryByRole('link')).toBeNull();
     expect(within(header()).getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
     expect(screen.queryByTestId('brm-wrappedbar')).toBeNull();
+  });
+
+  test('375px: pressing the join code inside the menu closes it and opens the QR', async () => {
+    asNarrow(true);
+    await openRoom(hostState());
+    openMore();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Session' })).getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
+    expect(screen.queryByRole('group', { name: 'Session' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
   });
 
   test('wide: the join code, ask pill and live build stay in the header', async () => {

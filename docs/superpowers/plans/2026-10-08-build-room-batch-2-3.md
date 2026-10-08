@@ -38,6 +38,7 @@
 
 **Interfaces produced:** `words.js` exports a frozen `W` object, e.g. `W.send(label) => \`Send ${label} to Claude\``, `W.change = 'Change before sending'`, `W.saveLater = 'Save for later'`, `W.later = 'Later'`, `W.spin = 'Spin the wheel'`, `W.spinAgain = 'Spin again'`, `W.voteAgain = 'Vote again'`, `W.askAgain = 'Ask again'`, `W.mainMenu = 'Main menu'`, `W.liveBuild = 'Open the live build ↗'`, plus every other row of the B6 table. Later tasks import from here; no new label literals in buildroom files.
 
+- Accepted (Task 1 review): Build and History are projected screens with no session menu, so at 480px and narrower their header extras stay inline; only the Host screen folds them into ···. "joined" and "More" keep their words.
 - [ ] Step 1: failing tests — `buildWords.test.js` pins the B6 words; `tests/build-room-copy.js` fails if any retired word from B6 appears in `src/src/buildroom/*.jsx|js` ("Queue it", "Park", "Go with", "Spin instead", "Spin the wheel instead", "Back to the main menu", "For Claude, later" as a button/heading, …) — read B6 for the full list, exclude comments.
 - [ ] Step 2: run, see them fail.
 - [ ] Step 3: implement: words.js; wheel labels; Main menu (house icon) at the far left of the host header on every screen and state, removed from ··· and the ended/wrapped bars; at ≤480px the join code, ask pill, live build, Wi-Fi and Claude status move into ··· (B5a); paper-plane is the one Send icon.
@@ -63,6 +64,7 @@
 
 **Behaviour:** dock at results: Change before sending · **Send B to Claude** · "Press Space to send" — the same words as the Host. "Open the live build ↗" leaves the button row and becomes a small link under the dock status ("Open the build in a new tab"). The other dock moments (B3b) use the B6 words.
 
+- Task 3 also retires the Stage's "Edit" label (too short to scan in `RETIRED`): switch to `W.change`, and "Re-ask…" to `W.askAgainEllipsis`.
 - [ ] Steps: failing tests → fail → implement → full gates → commit.
 
 ### Task 4: One Later list (B4)
