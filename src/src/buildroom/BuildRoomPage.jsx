@@ -736,16 +736,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onHost={() => setScreen('host')}
           pickId={pick && current && pick.askId === current.askId ? pick.id : null}
           onPick={(id) => {
-            // The dock's "Go with B" is the room's own choice: no question,
-            // and the Host opens on Send to Claude with it (a tie: on Settle).
-            // A wheel still turning has picked nothing yet: Settle, no pick.
-            if (id === null || !current) {
-              const spinning = current && current.wheel && !current.wheel.landed;
-              if (current && !spinning) setPick({ askId: current.askId, id: winnerOf(current) });
-              setScreen('host');
-              return;
-            }
-            setConfirmPick({ ask: current, id });
+            if (current) setConfirmPick({ ask: current, id });
           }}
         />
       ) : (
@@ -1413,16 +1404,6 @@ function HistoryStack({ items }) {
 
 // ── The Stage screen ────────────────────────────────────────────────────────
 
-/**
- * STAGE: what the room reads during an ask, drawn by the regular host stage's
- * own parts (components/stage/: Stage, Rail, RoomMeter, Dock), so a Build Room
- * ask looks and behaves like any other session on the projector: the same
- * display profiles and fitter, the phase chip and join code in the rail, the
- * count in the meter, one move in the dock on Space. The rail is this screen's
- * header; HOST at the dock's edge (or 1, or P) goes back, as SESSION does on
- * the regular stage. Everything on it is room-safe (stageModel); deciding needs
- * words, so at results the move is back to the Host screen.
- */
 /** The dock hint's verb: what Space does for the move beside it. */
 function hintVerb(move) {
   if (move.action === 'to-claude') return 'send';
@@ -1433,34 +1414,53 @@ function hintVerb(move) {
   return 'go';
 }
 
+/**
+ * STAGE: what the room reads during an ask, drawn by the regular host stage's
+ * own parts (components/stage/: Stage, Rail, RoomMeter, Dock), so a Build Room
+ * ask looks and behaves like any other session on the projector: the same
+ * display profiles and fitter, the phase chip and join code in the rail, the
+ * count in the meter, one move in the dock on Space. The rail is this screen's
+ * header; HOST at the dock's edge (or 1, or P) goes back, as SESSION does on
+ * the regular stage. Everything on it is room-safe (stageModel). At results the
+ * host decides here: To Claude sends the room's choice, Edit opens the send
+ * window (StageDecide), and a click on an option or a wheel slice opens that
+ * window with the pick made (owner, 2026-10-08).
+ */
 function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   const m = stageModel(room, current, now, { crewOn });
   const [editing, setEditing] = useState(false);
+  const [editPick, setEditPick] = useState(null); // an option clicked on the board
   // The window belongs to one ask at results: it goes when that ask moves on.
   const editable = Boolean(current && current.status === 'results' && !ended && !crewOn);
   const editKey = current ? `${current.askId}:${current.status}` : '';
-  useEffect(() => { setEditing(false); }, [editKey]);
+  useEffect(() => { setEditing(false); setEditPick(null); }, [editKey]);
   // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
   const spinsOf = (current && current.wheel && current.wheel.spins) || [];
   const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
   const [settledSpin, setSettledSpin] = useState(lastSpinId);
   const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
   const waiting = waitingCount(room);
+  // A click on an option or a wheel slice at results opens the send window
+  // with that pick made; while the room is still answering it asks first, as before.
+  const boardPick = (id) => {
+    if (editable) { setEditPick(id); setEditing(true); return; }
+    onPick(id);
+  };
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
     if (!m || busy) return;
     // EDIT opens the send window here; TO CLAUDE sends the room's choice with
     // its own sentence, as the Host's panel would (owner, 2026-10-08).
-    if (m.action === 'edit') { setEditing(true); return; }
+    if (m.action === 'edit') { if (editable) setEditing(true); return; }
     if (m.action === 'to-claude') {
       const { chosen, direction } = roomChoice(current);
       run(() => api.askAction(current.askId, decideBody(current, { direction, chosen, as: current.claudeGets || 'do-now' })));
       return;
     }
     run(() => api.askAction(m.askId || current.askId, { action: m.action }));
-  }, [busy, run, api, current]);
+  }, [busy, run, api, current, editable]);
   const act = useCallback(() => doMove(move), [doMove, move]);
   // Space fires the dock's move: never while typing, and never when a focused
   // control would take the Space itself.
@@ -1507,7 +1507,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         {!ended && current.wheel.landed && !wheelTurning && (
           <div className="brm-wheelpicks" role="group" aria-label="Pick">
             {(current.wheel.slices || []).map((sl) => (
-              <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' brm-btn--primary' : ''}`} onClick={() => onPick(sl.id)}>
+              <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' brm-btn--primary' : ''}`} onClick={() => boardPick(sl.id)}>
                 {sl.label ? `${sl.label} · ` : ''}{sl.text}
               </button>
             ))}
@@ -1516,7 +1516,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       </section>
     );
   } else if (current) {
-    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />;
+    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={editPick || pickId} onPick={boardPick} />;
   } else if (room.opening && room.opening.phase === 'opening') {
     // THE OPENING (O3): between steps, the wall reads back the brief so far.
     content = <WallBrief room={room} />;
@@ -1557,7 +1557,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       </Stage>
       <WallComment comment={freshWallComment(room, now)} />
       {editing && editable && (
-        <BuildStageDecide key={current.askId} ask={current} busy={busy} run={run} api={api} onClose={() => setEditing(false)} />
+        <BuildStageDecide key={`${current.askId}:${editPick || ''}`} initialPick={editPick} ask={current} busy={busy} run={run} api={api} onClose={() => { setEditing(false); setEditPick(null); }} />
       )}
       {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
     </>

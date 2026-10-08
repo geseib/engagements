@@ -188,8 +188,8 @@ export function latestDecisionLine(room) {
  * THE STAGE SCREEN, as the regular host stage draws it (Rail, RoomMeter,
  * Dock: components/stage/). Everything here is room-safe: a phase, a count,
  * one sentence. `primary` is the dock's one move, the same key (Space) and
- * place as Start Voting on the regular stage; deciding needs words, so at
- * results the move is back to the Host screen.
+ * place as Start Voting on the regular stage. At results the host decides on
+ * the Stage: `to-claude` sends the room's choice, `edit` opens the send window.
  */
 export function stageModel(room, current, now = Date.now(), { crewOn = false } = {}) {
   const here = (room && room.playerCount) || 0;
@@ -225,7 +225,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
     const w = current.wheel;
     if (w && !current.revotedAs) {
       // THE WHEEL (owner, 2026-10-05): the host can always spin; a person in
-      // the room may have the turn. Deciding stays a step on the Host screen.
+      // the room may have the turn. Edit opens the send window over the Stage.
       const status = w.landed ? 'The wheel has picked'
         : w.spinner && w.armed ? `${w.spinner} spins the wheel` : 'Spin the wheel';
       return {

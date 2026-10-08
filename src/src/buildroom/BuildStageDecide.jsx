@@ -21,6 +21,7 @@ import {
 
 const askNo = (askId) => Number(askId) || askId;
 const MAX_OPTIONS = 6;
+const FAILED = Symbol('failed'); // said in the window; the page's own banner stays quiet
 const letterOf = (i) => String.fromCharCode(65 + i);
 
 /** The reask form starts from this ask; a tie's own "A tie between..." line is not the host's wording. */
@@ -32,13 +33,14 @@ function reaskStart(ask) {
   };
 }
 
-export default function BuildStageDecide({ ask, busy, run, api, onClose }) {
+export default function BuildStageDecide({ ask, busy, run, api, onClose, initialPick = null }) {
   const openViewer = useContext(ViewerContext);
   const start = roomChoice(ask);
   const room = start.chosen[0] || null;
   const [mode, setMode] = useState('send'); // send | reask
-  const [pick, setPick] = useState(room);
-  const [direction, setDirection] = useState(start.direction);
+  // Opened by a click on an option or a wheel slice: that pick, and its sentence.
+  const [pick, setPick] = useState(initialPick || room);
+  const [direction, setDirection] = useState(initialPick ? directionFor(ask, initialPick) : start.direction);
   const [as, setAs] = useState(ask.claudeGets || 'do-now');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState('');
@@ -59,9 +61,9 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose }) {
   const attempt = async (fn, failed) => {
     setError('');
     const out = await run(async () => {
-      try { return await fn(); } catch (e) { setError(failed); throw e; }
+      try { return await fn(); } catch (e) { setError(failed); return FAILED; }
     });
-    return out;
+    return out === FAILED ? undefined : out;
   };
 
   const decide = async (kind) => {
@@ -130,7 +132,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose }) {
                   <Icon name="Plus" size={14} /> Add an option
                 </button>
               )}
-              <span className="brm-hint">A mockup stays with the option that keeps its words.</span>
+              <span className="brm-hint">Pictures stay with their option.</span>
             </div>
           )}
           {error && <p className="brm-alert" role="alert">{error}</p>}

@@ -19,6 +19,7 @@ jest.mock('../WebSocketClient', () => ({
 }));
 
 const S = require('../../../lambda-functions/game/build-store');
+const C = require('../../../lambda-functions/game/build-crew');
 
 const API = 'https://api.example.test/dev/';
 const GAME = '4821';
@@ -41,9 +42,14 @@ const TIE = [vote('Ana', 'B'), vote('Sam', 'A')];
 let rows;
 let calls;
 const baseRows = (ask = ASK, answers = WIN) => [{ SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', CurrentAskId: '004' }, ask, ...answers];
-const state = () => S.hostView({
-  gameId: GAME, meta: { Title: 'Volunteer sign-up', Details: 'A site.' }, sessionState: 'STARTED', room: S.roomFromRows(rows), players: ['Ana', 'Dee', 'Priya', 'Sam'], now: NOW,
-});
+const state = () => {
+  const room = S.roomFromRows(rows);
+  const view = S.hostView({
+    gameId: GAME, meta: { Title: 'Volunteer sign-up', Details: 'A site.' }, sessionState: 'STARTED', room, players: ['Ana', 'Dee', 'Priya', 'Sam'], now: NOW,
+  });
+  if (room.state && room.state.Crew) view.crew = C.crewView(room, 'host', null);
+  return view;
+};
 const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket'));
 const lastPost = () => posts()[posts().length - 1];
 let failNext = null;
@@ -309,5 +315,80 @@ describe('R5: Re-ask', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Ask again' }));
     expect(await within(form).findByRole('alert')).toHaveTextContent(/did not ask again/i);
     expect(within(form).getByLabelText('Option B').value).toBe('Bold');
+  });
+});
+
+describe('review fixes', () => {
+  test('a click on an option at results opens the window with that pick, not the Host screen', async () => {
+    await openStage();
+    fireEvent.click(screen.getByTitle('Pick A'));
+    const win = await screen.findByRole('dialog', { name: 'Send to Claude' });
+    expect(within(win).getByRole('button', { name: /Calm and clear/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How should it look and feel: Calm and clear');
+    expect(within(win).getByTestId('brm-alternate')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /alternate/i })).toBeNull();
+  });
+
+  test('a wheel slice after it lands opens the window with that pick', async () => {
+    const tie = [vote('Ana', 'B'), vote('Sam', 'A')];
+    const wheel = { Slices: [{ id: 'A', label: 'A', text: 'Calm and clear' }, { id: 'B', label: 'B', text: 'Playful' }], Spinner: 'Dee', Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] };
+    await openStage(baseRows({ ...ASK, Wheel: wheel }, tie));
+    fireEvent.transitionEnd(document.querySelector('.bwh-rot'));
+    fireEvent.click(await screen.findByRole('button', { name: /Calm and clear/ }));
+    const win = await screen.findByRole('dialog', { name: 'Send to Claude' });
+    expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How should it look and feel: Calm and clear');
+  });
+
+  test('Edit does nothing while the crew board is up', async () => {
+    const crewRows = baseRows();
+    crewRows[0] = { ...crewRows[0], Crew: { enabled: true, repoUrl: 'https://github.com/george/foodbank', baseBranch: 'build-room/4821' } };
+    rows = crewRows;
+    window.history.pushState({}, '', `/build?gameId=${GAME}`);
+    render(<BuildRoomPage />);
+    await screen.findByText('Volunteer sign-up');
+    fireEvent.click(screen.getByRole('tab', { name: /The crew/ }));
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(await within(document.querySelector('footer.dock')).findByRole('button', { name: 'Edit' }));
+    expect(screen.queryByRole('dialog', { name: 'Send to Claude' })).toBeNull();
+  });
+
+  test('a failed send is said once: in the window, not also in the page banner', async () => {
+    await openStage();
+    const win = await openEdit();
+    failNext = 'The server is down';
+    fireEvent.click(within(win).getByRole('button', { name: 'Send to Claude' }));
+    await within(win).findByRole('alert');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  test('Space with a dock button focused is the button\'s own press: one send, not two', async () => {
+    await openStage();
+    const btn = dock().getByRole('button', { name: 'To Claude: B' });
+    btn.focus();
+    fireEvent.keyDown(btn, { key: ' ' });
+    expect(posts()).toHaveLength(0);
+    fireEvent.click(btn);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+  });
+
+  test('re-asking a revote ask drops the "A tie" line and keeps a real detail', async () => {
+    await openStage(baseRows({ ...ASK, Detail: 'A tie between A and B.' }, TIE));
+    let win = await openEdit();
+    fireEvent.click(within(win).getByRole('button', { name: 'Re-ask…' }));
+    let form = await screen.findByRole('dialog', { name: 'Ask the room again' });
+    expect(within(form).getByLabelText('Context (optional)').value).toBe('');
+    fireEvent.click(within(form).getByRole('button', { name: 'Ask again' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'reask', detail: '' }));
+    expect(within(form).queryByText(/stay with the option that keeps/)).toBeNull();
+  });
+
+  test('a real detail goes with the re-ask, and the form says pictures stay with their option', async () => {
+    await openStage(baseRows({ ...ASK, Detail: 'Both run on the laptop.' }));
+    const win = await openEdit();
+    fireEvent.click(within(win).getByRole('button', { name: 'Re-ask…' }));
+    const form = await screen.findByRole('dialog', { name: 'Ask the room again' });
+    expect(within(form).getByText('Pictures stay with their option.')).toBeInTheDocument();
+    fireEvent.click(within(form).getByRole('button', { name: 'Ask again' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ detail: 'Both run on the laptop.' }));
   });
 });

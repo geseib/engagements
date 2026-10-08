@@ -1543,13 +1543,12 @@ describe('deciding: the winner by default, or choose another (owner, 2026-10-06)
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', direction: 'Which header should volunteers see first: Calm photo + calendar', chosen: ['B'], method: 'vote' }));
   });
 
-  test('on the Stage, choosing another goes to the Host with its sentence in the box', async () => {
+  test('on the Stage, choosing another opens the send window with its sentence in the box', async () => {
     await openRoom(results());
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(screen.getByRole('button', { name: 'Choose this instead' }));
-    confirmPick();
-    expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Bold banner');
+    const win = screen.getByRole('dialog', { name: 'Send to Claude' });
+    expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Which header should volunteers see first: Bold banner');
   });
 
   test('an Ideas ask: the top idea by default, any other idea on a click', async () => {
@@ -1967,8 +1966,8 @@ describe('the host picks by clicking an option, and confirms (owner, 2026-10-06)
     fireEvent.keyDown(window, { key: '2' });
     const picks = screen.getByRole('group', { name: 'Pick' });
     fireEvent.click(within(picks).getByRole('button', { name: 'B · Calm photo + calendar' }));
-    const dialog = screen.getByRole('dialog', { name: 'Pick an alternate?' });
-    expect(dialog.textContent).toMatch('The room preferred A · Bold banner (where the wheel landed)');
+    const dialog = screen.getByRole('dialog', { name: 'Send to Claude' });
+    expect(within(dialog).getByTestId('brm-alternate').textContent).toMatch('The room preferred A · Bold banner (where the wheel landed)');
   });
 });
 
