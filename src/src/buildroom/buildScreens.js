@@ -193,18 +193,32 @@ export function latestDecisionLine(room) {
  * the Stage: `to-claude` sends the room's choice, `edit` opens the send window.
  */
 /**
- * THE STAGE'S SEND, the Host's Settle button as a dock move: the same words and
- * the same rule (settleSend, defaultKind). A set that says Later saves instead
- * of sending, on both screens. Null when there is no pick to send.
+ * THE STAGE'S SEND, the Host's Settle button as a dock move: the same words,
+ * the same rule and the same kept draft (settleMove). A set that says Later
+ * saves instead of sending, on both screens. Null when there is no pick.
  */
-function stageSend(ask) {
-  const move = settleSend(ask);
-  if (!move) return null;
-  const { label, verb } = settleWords(ask, defaultKind(ask));
-  return { action: 'to-claude', label, verb };
+function stageSend(ask, draft) {
+  const move = settleMove(ask, draft);
+  return move ? { action: 'to-claude', label: move.label, verb: move.verb } : null;
 }
 
-export function stageModel(room, current, now = Date.now(), { crewOn = false } = {}) {
+/** "B leads, 7 to 4" · "Tied, 5 to 5" · "Average 3.4 from 10" (B3a). */
+function resultsLine(ask) {
+  if (ask.kind === 'rating') {
+    const r = ask.results && ask.results.rating;
+    return r && r.avg !== null && r.avg !== undefined ? `Average ${r.avg} from ${r.count || (ask.results && ask.results.total) || 0}` : 'Results';
+  }
+  const ranked = decisionChoices(ask).map((c) => c.count).sort((a, b) => b - a);
+  if (!ranked.length || !ranked[0]) return 'Results';
+  const win = winnerOf({ ...ask, wheel: null });
+  if (win) {
+    const pick = decisionChoices(ask).find((c) => c.id === win);
+    return `${pick && pick.label ? pick.label : 'The top idea'} leads, ${ranked[0]} to ${ranked[1] || 0}`;
+  }
+  return ranked[1] === ranked[0] && ranked[2] === ranked[0] ? `Tied, ${ranked[0]} each` : `Tied, ${ranked[0]} to ${ranked[1]}`;
+}
+
+export function stageModel(room, current, now = Date.now(), { crewOn = false, draft = null, turning = false } = {}) {
   const here = (room && room.playerCount) || 0;
   const ended = Boolean(room && room.state === 'ENDED');
   if (ended) {
@@ -224,7 +238,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
     if (looks) {
       return {
         phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null },
-        status: 'Mockups ready \u00b7 the host opens the vote',
+        status: 'Mockups ready \u00b7 the host opens voting',
         primary: { action: 'open', label: W.openVoting, askId: looks.ask.askId },
       };
     }
@@ -241,9 +255,19 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
       // THE WHEEL (owner, 2026-10-05): the host can always spin; a person in
       // the room may have the turn. Landed, the pick goes in one press, as on
       // the Host (B3b); until then Change before sending opens the window.
-      const status = w.landed ? 'The wheel has picked'
+      // Where it landed is not said while the wheel still turns (the projector would give it away).
+      const landedPick = w.landed ? decisionChoices(current).find((c) => c.id === w.landed) : null;
+      const status = w.landed
+        ? (turning ? 'The wheel is turning' : `The wheel landed${landedPick && landedPick.label ? ` on ${landedPick.label}` : ''}`)
         : w.spinner && w.armed ? `${w.spinner} spins the wheel` : W.spin;
-      const landedSend = w.landed ? stageSend(current) : null;
+      if (w.landed && turning) {
+        return {
+          phase: 'RESULTS', context, meter, status, wheel: true,
+          primary: { action: 'noop', label: 'The wheel is turning…', disabled: true },
+          secondary: { action: 'spin', label: W.spinAgain, disabled: true },
+        };
+      }
+      const landedSend = w.landed ? stageSend(current, draft) : null;
       if (landedSend) {
         return {
           phase: 'RESULTS', context, meter, status, wheel: true,
@@ -259,19 +283,19 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false } =
     // DECIDING ON THE STAGE (owner, 2026-10-08): the same words and the same
     // press as the Host's Settle row (B3). A tie, or no votes, has nothing to
     // send: Spin the wheel leads, as on the Host, with Change before sending
-    // beside it. A rating nobody gave has only the change.
+    // beside it. A rating nobody gave is reopened, as on the Host.
+    const status = resultsLine(current);
+    const send = stageSend(current, draft);
     if (current.kind === 'rating') {
-      const send = stageSend(current);
       return send
-        ? { phase: 'RESULTS', context, meter, status: 'Results', primary: send, secondary: change }
-        : { phase: 'RESULTS', context, meter, status: 'Results', primary: change };
+        ? { phase: 'RESULTS', context, meter, status, primary: send, secondary: change }
+        : { phase: 'RESULTS', context, meter, status, primary: { action: 'reopen', label: 'Reopen' } };
     }
-    const send = stageSend(current);
-    if (send) return { phase: 'RESULTS', context, meter, status: 'Results', primary: send, secondary: change };
+    if (send) return { phase: 'RESULTS', context, meter, status, primary: send, secondary: change };
     if (decisionChoices(current).length && !current.revotedAs) {
-      return { phase: 'RESULTS', context, meter, status: 'Results', primary: { action: 'wheel', label: W.spin }, secondary: change };
+      return { phase: 'RESULTS', context, meter, status, primary: { action: 'wheel', label: W.spin }, secondary: change };
     }
-    return { phase: 'RESULTS', context, meter, status: 'Results', primary: change };
+    return { phase: 'RESULTS', context, meter, status, primary: change };
   }
   // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06): wherever the room could
   // vote between options, the host may let the wheel pick instead.
@@ -424,7 +448,7 @@ export const defaultKind = (ask) => (ask && ask.claudeGets) || (ask && ask.openi
 
 /**
  * THE BODY OF A DECISION, one builder for every place that decides (the Host
- * screen's panel, the Stage's To Claude and its Edit window). `as` goes only
+ * screen's panel, the Stage's Send and its Change before sending window). `as` goes only
  * when it differs from the question's own kind: the server's default.
  */
 export function decideBody(ask, { direction, chosen, note = '', send = true, as, spoken = false }) {
@@ -466,6 +490,24 @@ export function settleWords(ask, kind) {
   const move = settleSend(ask);
   const held = kind === 'later';
   return { held, label: held ? W.saveLater : (move ? move.button : W.sendPlain), verb: held ? 'save for later' : 'send' };
+}
+
+/**
+ * THE ONE SETTLE PRESS (B1b, B3): what a press at Settle sends, for the Host's
+ * row and the Stage's dock alike. A direction (and kind) the host already
+ * changed for this very pick is what goes. Null when there is no pick yet.
+ */
+export function settleMove(ask, draft = null) {
+  const base = settleSend(ask);
+  if (!base) return null;
+  const kept = draft && !draft.spoken && draft.pickId === base.id && String(draft.direction || '').trim() ? draft : null;
+  const kind = kept && kept.as ? kept.as : defaultKind(ask);
+  const { held, label, verb } = settleWords(ask, kind);
+  return {
+    id: base.id, kind, held, label, verb,
+    direction: kept ? String(kept.direction).trim() : base.direction,
+    chosen: kept ? (kept.chosen || base.chosen) : base.chosen,
+  };
 }
 
 export const METHOD_WORDS = Object.freeze({ vote: 'by vote', wheel: 'by the wheel', host: "the host's pick", spoken: 'said out loud' });
@@ -665,7 +707,7 @@ export function whatsNextMoves(room, { ticked = 0 } = {}) {
   const looks = room && !framing && !(room.outcome && room.outcome.summary) ? mockupsReady(room) : null;
   if (looks) {
     moves.push({
-      key: 'vote-mockups', askId: looks.ask.askId, title: "Open the vote on Claude's mockups",
+      key: 'vote-mockups', askId: looks.ask.askId, title: "Open voting on Claude's mockups",
       hint: `${lettersLine(looks.images.map((i) => i.label))} ${looks.images.length === 1 ? 'is' : 'are'} ready to compare`, button: W.openVoting,
     });
   }

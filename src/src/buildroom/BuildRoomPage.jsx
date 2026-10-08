@@ -57,7 +57,7 @@ import {
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
-  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, roomChoice,
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
@@ -747,6 +747,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           run={run}
           api={api}
           now={now}
+          draft={current ? drafts[current.askId] || null : null}
+          onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
           onHost={() => setScreen('host')}
           pickId={pick && current && pick.askId === current.askId ? pick.id : null}
           onPick={(id) => {
@@ -1219,7 +1221,7 @@ function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild'
   if (!href) {
     return <button type="button" className={className} disabled title="Claude hasn't started the app yet">{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></button>;
   }
-  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={onPick}>{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></a>;
+  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title={`Opens ${href} in a new tab`} onClick={onPick}>{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></a>;
 }
 
 /** True at 480px and narrower. No matchMedia (jsdom, an old browser) reads as wide. */
@@ -1483,6 +1485,7 @@ function hintVerb(move) {
   if (move.action === 'spin' || move.action === 'wheel') return 'spin';
   if (move.action === 'open' || move.action === 'vote') return 'open voting';
   if (move.action === 'edit') return 'change before sending';
+  if (move.action === 'reopen') return 'reopen it';
   return 'go';
 }
 
@@ -1494,25 +1497,25 @@ function hintVerb(move) {
  * count in the meter, one move in the dock on Space. The rail is this screen's
  * header; HOST at the dock's edge (or 1, or P) goes back, as SESSION does on
  * the regular stage. Everything on it is room-safe (stageModel). At results the
- * host decides here: To Claude sends the room's choice, Edit opens the send
+ * host decides here: Send B to Claude sends the room's choice, Change before sending opens the send
  * window (StageDecide), and a click on an option or a wheel slice opens that
  * window with the pick made (owner, 2026-10-08).
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick, draft = null, onSent = () => {} }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
-  const m = stageModel(room, current, now, { crewOn });
+  // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
+  const spinsOf = (current && current.wheel && current.wheel.spins) || [];
+  const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
+  const [settledSpin, setSettledSpin] = useState(lastSpinId);
+  const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
+  const m = stageModel(room, current, now, { crewOn, draft, turning: wheelTurning });
   const [editing, setEditing] = useState(false);
   const [editPick, setEditPick] = useState(null); // an option clicked on the board
   // The window belongs to one ask at results: it goes when that ask moves on.
   const editable = Boolean(current && current.status === 'results' && !ended && !crewOn);
   const editKey = current ? `${current.askId}:${current.status}` : '';
   useEffect(() => { setEditing(false); setEditPick(null); }, [editKey]);
-  // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
-  const spinsOf = (current && current.wheel && current.wheel.spins) || [];
-  const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
-  const [settledSpin, setSettledSpin] = useState(lastSpinId);
-  const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
   const waiting = waitingCount(room);
   const liveLink = liveBuildLink(room, now);
   // A click on an option or a wheel slice at results opens the send window
@@ -1524,14 +1527,22 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const move = !ended && m.primary ? m.primary : null;
   const doMove = useCallback((m) => {
     if (!m || busy) return;
+    // The turning wheel offers nothing: a pick waits for it to stop, as the Host's button does.
+    if (m.action === 'noop' || m.disabled || (m.action === 'to-claude' && wheelTurning)) return;
     // A pick waits for the wheel to stop, as the Host's button does.
-    if (m.action === 'to-claude' && wheelTurning) return;
+    if (m.action === 'noop' || m.disabled || (m.action === 'to-claude' && wheelTurning)) return;
     // EDIT opens the send window here; TO CLAUDE sends the room's choice with
     // its own sentence, as the Host's panel would (owner, 2026-10-08).
     if (m.action === 'edit') { if (editable) setEditing(true); return; }
     if (m.action === 'to-claude') {
-      const { chosen, direction } = roomChoice(current);
-      run(() => api.askAction(current.askId, decideBody(current, { direction, chosen, as: defaultKind(current) })));
+      // The same move as the Host's Settle press, including a direction the host already changed.
+      const go = settleMove(current, draft);
+      if (!go) return;
+      run(async () => {
+        const out = await api.askAction(current.askId, decideBody(current, { direction: go.direction, chosen: go.chosen, as: go.kind }));
+        onSent({ as: go.kind, send: true, direction: go.direction });
+        return out;
+      });
       return;
     }
     run(() => api.askAction(m.askId || current.askId, { action: m.action }));
@@ -1582,7 +1593,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         {!ended && current.wheel.landed && !wheelTurning && (
           <div className="brm-wheelpicks" role="group" aria-label="Pick">
             {(current.wheel.slices || []).map((sl) => (
-              <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' brm-btn--primary' : ''}`} onClick={() => boardPick(sl.id)}>
+              <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' is-landed' : ''}`} onClick={() => boardPick(sl.id)}>
                 {sl.label ? `${sl.label} · ` : ''}{sl.text}
               </button>
             ))}
@@ -1624,10 +1635,10 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             </>
           ) : m.status}
           >
-            {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
-            {move && <button type="button" className="btn" disabled={busy || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
+            {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy || m.secondary.disabled} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
+            {move && <button type="button" className="btn" disabled={busy || move.disabled || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
-            {move && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
+            {move && !move.disabled && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
             <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
               <span className="dock-more-lbl">HOST</span>
               {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
@@ -1639,7 +1650,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       </Stage>
       <WallComment comment={freshWallComment(room, now)} />
       {editing && editable && (
-        <BuildStageDecide key={`${current.askId}:${editPick || ''}`} initialPick={editPick} ask={current} busy={busy} run={run} api={api} onClose={() => { setEditing(false); setEditPick(null); }} />
+        <BuildStageDecide key={`${current.askId}:${editPick || ''}`} initialPick={editPick} draft={draft} onSent={onSent} ask={current} busy={busy} run={run} api={api} onClose={() => { setEditing(false); setEditPick(null); }} />
       )}
       {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
     </>

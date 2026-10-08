@@ -1064,8 +1064,8 @@ export default function BuildPlayer({
   /* OPEN THE BUILD, at the top of Now (mockup L5): the first thing a
      participant sees while the host shares the build on this Wi-Fi. */
   const openBuild = !isEnded && view.lan && view.lan.open ? (
-    <section className="bpl-open" aria-label="Open the live build">
-      <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Open the live build ↗</a>
+    <section className="bpl-open" aria-label="Open the build">
+      <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">{W.openBuild} ↗</a>
       <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
     </section>
   ) : null;

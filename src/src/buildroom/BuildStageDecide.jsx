@@ -17,7 +17,7 @@ import Icon from '../components/Icon';
 import { ViewerContext } from './MockupViewer';
 import { W } from './words';
 import {
-  HOST_KINDS, defaultKind, decideBody, decisionChoices, directionFor, pickVerdict, roomChoice,
+  HOST_KINDS, defaultKind, decideBody, settleWords, decisionChoices, directionFor, pickVerdict, roomChoice,
 } from './buildScreens';
 
 const askNo = (askId) => Number(askId) || askId;
@@ -34,16 +34,18 @@ function reaskStart(ask) {
   };
 }
 
-export default function BuildStageDecide({ ask, busy, run, api, onClose, initialPick = null }) {
+export default function BuildStageDecide({ ask, busy, run, api, onClose, initialPick = null, draft = null, onSent = () => {} }) {
   const openViewer = useContext(ViewerContext);
   const start = roomChoice(ask);
   const room = start.chosen[0] || null;
   const [mode, setMode] = useState('send'); // send | reask
   // Opened by a click on an option or a wheel slice: that pick, and its sentence.
   const [pick, setPick] = useState(initialPick || room);
-  const [direction, setDirection] = useState(initialPick ? directionFor(ask, initialPick) : start.direction);
+  // Words the host already changed for this very pick on the Host screen are where this starts.
+  const kept = !initialPick && draft && !draft.spoken && draft.pickId === room && String(draft.direction || '').trim() ? draft : null;
+  const [direction, setDirection] = useState(kept ? String(kept.direction) : initialPick ? directionFor(ask, initialPick) : start.direction);
   // The three kinds; a set that says Later is not one of them (Save for later is the button).
-  const [as, setAs] = useState(() => { const k = defaultKind(ask); return k === 'later' ? 'do-now' : k; });
+  const [as, setAs] = useState(() => { const k = (kept && kept.as) || defaultKind(ask); return k === 'later' ? 'do-now' : k; });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(() => reaskStart(ask));
@@ -73,7 +75,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
       () => api.askAction(ask.askId, decideBody(ask, { direction, chosen: pick ? [pick] : [], as: kind })),
       'That did not send. Nothing changed; try again.',
     );
-    if (out !== undefined) onClose();
+    if (out !== undefined) { onSent({ as: kind, send: true, direction: direction.trim() }); onClose(); }
   };
   const discard = async () => {
     const out = await attempt(() => api.askAction(ask.askId, { action: 'discard' }), 'That did not discard. Nothing changed; try again.');
@@ -97,16 +99,8 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   const sendLabel = HOST_KINDS.find((k) => k.key === as) || HOST_KINDS[0];
   const cannot = busy || !direction.trim();
   // The main button follows the pick, in the Host's words.
-  const sendWords = (() => {
-    if (ask.kind === 'rating') {
-      const a = ask.results && ask.results.rating && ask.results.rating.avg;
-      return a !== null && a !== undefined ? W.send(a) : W.sendPlain;
-    }
-    const c = choices.find((x) => x.id === pick);
-    if (!c) return W.sendPlain;
-    if (c.label) return W.send(c.label);
-    return pick === room ? W.sendTopIdea : W.sendPlain;
-  })();
+  // Built from the same words as the Host's button, with this window's pick.
+  const sendWords = settleWords(pick && pick !== room ? { ...ask, wheel: { ...(ask.wheel || {}), landed: pick } } : ask, 'do-now').label;
   const pictured = (id) => (ask.kind === 'choice' ? (ask.options || []).find((o) => o.label === id && o.imageId) : null);
 
   if (mode === 'reask') {

@@ -16,7 +16,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  askPathStep, askPathSummaries, winnerOf, decisionChoices, settleSend, settleWords, decideBody, claudeKindLabel, defaultKind,
+  askPathStep, askPathSummaries, winnerOf, decisionChoices, settleMove, settleWords, decideBody, claudeKindLabel, defaultKind,
 } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 import { W } from './words';
@@ -213,11 +213,9 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   // ── 3 Settle ──
   // ONE PRESS SENDS (owner, 2026-10-08, F3): the room's pick, its sentence, the
   // question's own kind. The line under the board says what goes first.
-  const base = !wheel || wheel.landed ? settleSend(ask) : null;
   // A direction the host already edited for this very pick is what goes (and says it will).
-  const kept = base && draft && !draft.spoken && draft.pickId === base.id && String(draft.direction || '').trim() ? draft : null;
-  const move = base && kept ? { ...base, direction: String(kept.direction).trim(), chosen: kept.chosen || base.chosen } : base;
-  const kind = kept && kept.as ? kept.as : defaultKind(ask);
+  const move = !wheel || wheel.landed ? settleMove(ask, draft) : null;
+  const kind = move ? move.kind : defaultKind(ask);
   const held = kind === 'later'; // a set that says Later: the press saves it, nothing goes to Claude
   const kindName = claudeKindLabel(kind);
   const sendLabel = settleWords(ask, kind).label;

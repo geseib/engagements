@@ -93,7 +93,7 @@ describe('the live build', () => {
       const link = screen.getAllByRole('link', { name: 'Open the build' })[0];
       expect(link).toHaveAttribute('href', 'http://localhost:5173/');
       expect(link).toHaveAttribute('target', '_blank');
-      expect(link).toHaveAttribute('title', 'Opens in a new tab');
+      expect(link).toHaveAttribute('title', 'Opens http://localhost:5173/ in a new tab');
       expect(link.closest('header.brm-hbar')).not.toBeNull();
     }
   });

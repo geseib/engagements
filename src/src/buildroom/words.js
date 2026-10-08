@@ -75,7 +75,6 @@ export const KIND_WORDS = Object.freeze([W.doNow, W.keepInMind, W.askClaude]);
  * check in tests/build-room-copy.js skips it. `prefix` matches a label that
  * starts with the word ("Go with B"). `files` scopes a word to those basenames
  * (Dismiss stays legal in the error bar and the opening's draft).
- * The phone's own "Open the live build ↗" link (BuildPlayer.jsx) is not part of B3/B5, so that word is scoped to the host and Stage files.
  */
 export const RETIRED = Object.freeze([
   // Enforced: replaced in Task 1 (wheel labels, Main menu, Send icon)
@@ -92,7 +91,7 @@ export const RETIRED = Object.freeze([
   { word: 'Open the vote', enforced: true, task: 3 },
   { word: 'To Claude:', prefix: true, enforced: true, task: 3 },
   { word: 'Re-ask…', enforced: true, task: 3 },
-  { word: 'Open the live build ↗', files: ['BuildRoomPage.jsx', 'buildScreens.js', 'BuildStageDecide.jsx'], enforced: true, task: 3 },
+  { word: 'Open the live build ↗', enforced: true, task: 3 },
   // The Stage dock's "Edit" is now W.change; Edit stays legal elsewhere (notes, the crew board).
   { word: 'Edit', files: ['buildScreens.js', 'BuildStageDecide.jsx'], enforced: true, task: 3 },
   // Task 4: one Later list

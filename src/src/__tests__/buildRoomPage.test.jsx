@@ -1082,7 +1082,7 @@ describe('S4: the Stage says there are mockups to look at', () => {
   };
   test('What\'s next on the Host leads with the same move, and it opens the vote', async () => {
     await openRoom(hostState({ asks: [READY] }));
-    expect(screen.getByText("Open the vote on Claude's mockups")).toBeInTheDocument();
+    expect(screen.getByText("Open voting on Claude's mockups")).toBeInTheDocument();
     expect(screen.getByText('A and B are ready to compare')).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: 'Open voting' });
     expect(btn).toHaveAttribute('data-next-primary');
@@ -1100,7 +1100,7 @@ describe('S4: the Stage says there are mockups to look at', () => {
     expect(stage.textContent).toMatch('Pick one on your phone, laptop or tablet');
     expect(stage.textContent).toMatch('Calm');
     expect(stage.textContent).toMatch('Playful');
-    expect(document.querySelector('.dock .status').textContent).toBe('Mockups ready \u00b7 the host opens the vote');
+    expect(document.querySelector('.dock .status').textContent).toBe('Mockups ready \u00b7 the host opens voting');
     expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Open voting' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/005`));

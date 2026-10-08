@@ -2,7 +2,7 @@
  * The Build Room's four screens: the pure rules (buildroom/buildScreens.js).
  */
 import {
-  SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
+  SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, settleMove,
   queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
   askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords, decideBody, roomChoice,
@@ -111,7 +111,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
     expect(stageModel(room(), { askId: '004', kind: 'suggest', status: 'voting', voteCount: 7 }))
       .toMatchObject({ phase: 'VOTE', meter: { heading: 'Voted', count: 7, of: 18 }, primary: { action: 'close' } });
     expect(stageModel(room(), { askId: '004', kind: 'rating', status: 'results', results: { total: 15 } }))
-      .toMatchObject({ phase: 'RESULTS', meter: { count: 15, of: 18 }, primary: { action: 'edit', label: 'Change before sending' } });
+      .toMatchObject({ phase: 'RESULTS', meter: { count: 15, of: 18 }, primary: { action: 'reopen', label: 'Reopen' } });
   });
 
   test('between asks: no chip, who is here, and what Claude is doing, in room-safe words', () => {
@@ -137,8 +137,16 @@ describe('the Stage with the wheel up', () => {
   test('landed: Send B to Claude leads and Spin again sits beside it, as on the Host', () => {
     const ask = { ...results({ spinner: 'Dee', armed: false, landed: 'B', spins: [{}] }), options: [{ label: 'A', title: 'One' }, { label: 'B', title: 'Two' }], results: { total: 4, options: [{ label: 'A', count: 2 }, { label: 'B', count: 2 }] } };
     expect(stageModel(room, ask)).toMatchObject({
-      status: 'The wheel has picked', primary: { action: 'to-claude', label: 'Send B to Claude' }, secondary: { action: 'spin', label: 'Spin again' },
+      status: 'The wheel landed on B', primary: { action: 'to-claude', label: 'Send B to Claude' }, secondary: { action: 'spin', label: 'Spin again' },
     });
+  });
+  test('while it turns the result is not given away: a disabled "The wheel is turning…", Spin again disabled', () => {
+    const ask = { ...results({ spinner: 'Dee', armed: false, landed: 'B', spins: [{}] }), options: [{ label: 'A', title: 'One' }, { label: 'B', title: 'Two' }], results: { total: 4, options: [{ label: 'A', count: 2 }, { label: 'B', count: 2 }] } };
+    const m = stageModel(room, ask, Date.now(), { turning: true });
+    expect(m.status).toBe('The wheel is turning');
+    expect(m.primary).toEqual({ action: 'noop', label: 'The wheel is turning…', disabled: true });
+    expect(m.secondary).toMatchObject({ label: 'Spin again', disabled: true });
+    expect(JSON.stringify(m)).not.toMatch(/\bB\b/);
   });
   test('after a revote, the old ask is plain results', () => {
     expect(stageModel(room, { ...results({ spinner: null, armed: false, landed: null, spins: [] }), revotedAs: '004' })).toMatchObject({
@@ -190,6 +198,20 @@ describe('deciding: the winner by default, any other on a click (owner, 2026-10-
     const m = stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]) });
     expect(m.primary).toEqual({ action: 'to-claude', label: 'Send B to Claude', verb: 'send' });
     expect(m.secondary).toEqual({ action: 'edit', label: 'Change before sending' });
+  });
+  test('B3a status lines: who leads, a tie, the average', () => {
+    expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([4, 7, 0]) }).status).toBe('B leads, 7 to 4');
+    expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([5, 5, 0]) }).status).toBe('Tied, 5 to 5');
+    const rated = stageModel({ playerCount: 3 }, { askId: '5', kind: 'rating', status: 'results', results: { total: 10, rating: { avg: 3.4, count: 10, dist: [] } } });
+    expect(rated.status).toBe('Average 3.4 from 10');
+    expect(rated.primary.label).toBe('Send 3.4 to Claude');
+  });
+  test('a draft the host changed on the Host screen is what the Stage sends: kind and words', () => {
+    const ask = { askId: '3', ...choose([1, 3, 0]) };
+    const draft = { pickId: 'B', direction: 'Calm, with big dates', chosen: ['B'], as: 'keep' };
+    expect(settleMove(ask, draft)).toMatchObject({ kind: 'keep', direction: 'Calm, with big dates', chosen: ['B'], label: 'Send B to Claude' });
+    expect(settleMove(ask, { ...draft, pickId: 'A' })).toMatchObject({ kind: 'do-now', direction: 'What should we build: Calm photo' });
+    expect(settleMove(ask, { ...draft, as: 'later' })).toMatchObject({ kind: 'later', label: 'Save for later' });
   });
   test('a set that says Later: the primary saves, with the Host\'s label', () => {
     const m = stageModel({ playerCount: 3 }, { askId: '3', ...choose([1, 3, 0]), claudeGets: 'later' });
@@ -470,7 +492,7 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
     const ideas = [{ ideaId: 'i1', status: 'new' }, { ideaId: 'i2', status: 'new' }];
     const m = whatsNextMoves(room({ asks, ideas }));
     expect(m.map((x) => x.key)).toEqual(['vote-mockups', 'vote-ideas', 'starter', 'new-ask', 'tell']);
-    expect(m[0]).toEqual({ key: 'vote-mockups', askId: '005', title: "Open the vote on Claude's mockups", hint: 'A and B are ready to compare', button: 'Open voting' });
+    expect(m[0]).toEqual({ key: 'vote-mockups', askId: '005', title: "Open voting on Claude's mockups", hint: 'A and B are ready to compare', button: 'Open voting' });
     expect(whatsNextMoves(room({ asks, opening: { phase: 'opening' } })).map((x) => x.key)).not.toContain('vote-mockups');
     expect(whatsNextMoves(room({ asks, outcome: { summary: 'Done.' } })).map((x) => x.key)).not.toContain('vote-mockups');
     expect(whatsNextMoves(room()).map((x) => x.key)).not.toContain('vote-mockups');
@@ -554,9 +576,9 @@ describe('fix round 1: honest summaries and combine lines', () => {
 
 describe('S4: the stage says the mockups are ready', () => {
   const ready = { playerCount: 12, state: 'STARTED', asks: [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', title: 'Calm', imageId: 'i1' }, { label: 'B', title: 'Playful', imageId: 'i2' }] }], images: [] };
-  test('stageModel offers Open the vote with the ask id', () => {
+  test('stageModel offers Open voting with the ask id', () => {
     const m = stageModel(ready, null, Date.now());
-    expect(m.status).toBe('Mockups ready \u00b7 the host opens the vote');
+    expect(m.status).toBe('Mockups ready \u00b7 the host opens voting');
     expect(m.primary).toEqual({ action: 'open', label: 'Open voting', askId: '005' });
   });
   test('not while the opening frames the build, nor on the crew board', () => {

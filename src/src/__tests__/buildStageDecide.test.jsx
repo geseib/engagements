@@ -4,7 +4,7 @@
  * To Claude posts is held equal to the body the Host screen's panel posts.
  */
 import React from 'react';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { authFetch, getAuthToken } from '../auth/authFetch';
 import BuildRoomPage from '../buildroom/BuildRoomPage';
 
@@ -19,6 +19,7 @@ jest.mock('../WebSocketClient', () => ({
 }));
 
 const S = require('../../../lambda-functions/game/build-store');
+const webSocketClient = require('../WebSocketClient').default;
 const C = require('../../../lambda-functions/game/build-crew');
 
 const API = 'https://api.example.test/dev/';
@@ -36,6 +37,7 @@ const ASK = {
   MaxPicks: 1,
 };
 const vote = (name, choice) => ({ SK: `BUILD#ANS#004#${name}`, AskId: '004', PlayerName: name, Choice: [choice], Why: '', CreatedAt: ago(500) });
+const LANDED = { Slices: [{ id: 'A', label: 'A', text: 'Calm and clear' }, { id: 'B', label: 'B', text: 'Playful' }], Spinner: 'Dee', Armed: false, Spins: [{ SpinId: 's1', At: ago(5), By: 'Dee', Result: 'B', Turns: 5 }] };
 const WIN = [vote('Ana', 'B'), vote('Priya', 'B'), vote('Sam', 'A')];
 const TIE = [vote('Ana', 'B'), vote('Sam', 'A')];
 
@@ -169,10 +171,55 @@ describe('R3: the Stage at results', () => {
     ['a tie', () => baseRows(ASK, TIE)],
     ['the room choosing', () => baseRows({ ...ASK, Status: 'live' }, [])],
     ['voting', () => baseRows({ ...ASK, Status: 'voting' }, WIN)],
-  ])('one orange on the Stage dock: %s', async (name, mk) => {
+    ['the wheel landed', () => baseRows({ ...ASK, Wheel: LANDED }, TIE)],
+  ])('one orange on the whole Stage, and no Edit button: %s', async (name, mk) => {
     await openStage(mk());
-    const dockBtns = [...document.querySelectorAll('footer.dock button')].filter((b) => !b.classList.contains('dock-more'));
-    expect(dockBtns.filter((b) => !b.classList.contains('ghost') && !b.classList.contains('dock-more'))).toHaveLength(1);
+    // The Stage's orange is the dock's `btn` (not `ghost`) or a Build Room primary; count the whole Stage.
+    const orange = [...document.querySelectorAll('.brm-room button')]
+      .filter((b) => (b.classList.contains('btn') ? !b.classList.contains('ghost') : b.classList.contains('brm-btn--primary')));
+    expect(orange.map((b) => b.textContent.trim())).toHaveLength(1);
+    expect(dock().queryByRole('button', { name: 'Edit' })).toBeNull();
+  });
+
+  test('a wheel still turning gives nothing away: a disabled "The wheel is turning…", no hint, Space sends nothing; then it unlocks', async () => {
+    const armed = { ...LANDED, Armed: true, Spins: [] };
+    await openStage(baseRows({ ...ASK, Wheel: armed }, TIE));
+    const handler = webSocketClient.onMessage.mock.calls.find(([t]) => t === 'buildChanged')[1];
+    rows = baseRows({ ...ASK, Wheel: LANDED }, TIE);
+    await act(async () => { handler({}); });
+    const turning = await dock().findByRole('button', { name: 'The wheel is turning…' });
+    expect(turning).toBeDisabled();
+    expect(dock().queryByRole('button', { name: /Send B to Claude/ })).toBeNull();
+    expect(dock().getByRole('button', { name: 'Spin again' })).toBeDisabled();
+    expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
+    expect(document.querySelector('.dock .status').textContent).not.toMatch(/\bB\b/);
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(posts()).toHaveLength(0);
+    fireEvent.transitionEnd(document.querySelector('.bwh-rot'));
+    await waitFor(() => expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeEnabled());
+    expect(document.querySelector('.dock .status').textContent).toMatch('The wheel landed on B');
+    fireEvent.keyDown(window, { key: ' ' });
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'] }));
+  });
+
+  test('words and a kind the host changed on the Host screen are what the Stage sends, and the draft is cleared', async () => {
+    await openStage();
+    fireEvent.keyDown(window, { key: '1' });
+    const path = screen.getByRole('list', { name: 'This ask' });
+    fireEvent.click(within(path).getByRole('button', { name: 'Change before sending' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Direction for Claude' }), { target: { value: 'Playful, with big dates' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Keep in mind' }));
+    fireEvent.keyDown(window, { key: '2' });
+    // The window starts from the same draft.
+    fireEvent.click(dock().getByRole('button', { name: 'Change before sending' }));
+    const win = await screen.findByRole('dialog', { name: 'Change before sending' });
+    expect(within(win).getByRole('radio', { name: 'Keep in mind' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('Playful, with big dates');
+    fireEvent.click(within(win).getByRole('button', { name: 'Close' }));
+    fireEvent.click(dock().getByRole('button', { name: 'Send B to Claude' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', direction: 'Playful, with big dates', as: 'keep', chosen: ['B'] }));
+    // Sent: the draft is gone, so the Host's row goes back to the plain sentence.
+    fireEvent.keyDown(window, { key: '1' });
   });
 
   test('the wheel landed: Send B to Claude leads and Spin again sits beside it', async () => {
