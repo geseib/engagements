@@ -5,7 +5,7 @@ import {
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel,
   queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
-  askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady,
+  askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords,
 } from '../buildroom/buildScreens';
 
 describe('the screens', () => {
@@ -483,5 +483,22 @@ describe('fix round 1: honest summaries and combine lines', () => {
     expect(l('Name the app', 'Summit')).toBe('Name the app: Summit');
     expect(l('Name the app', 'Name the app: Summit')).toBe('Name the app: Summit');
     expect(l('Who is it for?', '')).toBe('Who is it for?');
+  });
+});
+
+describe('S4: the stage says the mockups are ready', () => {
+  const ready = { playerCount: 12, state: 'STARTED', asks: [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', title: 'Calm', imageId: 'i1' }, { label: 'B', title: 'Playful', imageId: 'i2' }] }], images: [] };
+  test('stageModel offers Open the vote with the ask id', () => {
+    const m = stageModel(ready, null, Date.now());
+    expect(m.status).toBe('Mockups ready \u00b7 the host opens the vote');
+    expect(m.primary).toEqual({ action: 'open', label: 'Open the vote', askId: '005' });
+  });
+  test('no primary without mockups, or once an ask is current', () => {
+    expect(stageModel({ ...ready, asks: [] }, null, Date.now()).primary).toBeNull();
+    expect(stageModel(ready, { askId: '006', kind: 'rating', status: 'live' }, Date.now()).primary.action).toBe('close');
+  });
+  test('the words: Two looks, and N looks for more', () => {
+    expect(looksWords([{ label: 'A' }, { label: 'B' }])).toMatchObject({ headline: 'Two looks to compare', line: 'Claude made A and B. Look now; the vote opens next.' });
+    expect(looksWords([{ label: 'A' }, { label: 'B' }, { label: 'C' }])).toMatchObject({ headline: '3 looks to compare', line: 'Claude made A, B and C. Look now; the vote opens next.' });
   });
 });

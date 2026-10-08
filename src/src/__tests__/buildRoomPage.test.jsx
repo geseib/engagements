@@ -1053,6 +1053,29 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
   });
 });
 
+describe('S4: the Stage says there are mockups to look at', () => {
+  const READY = {
+    AskId: '005', Kind: 'choice', Prompt: 'Which look?', Source: 'host', Status: 'proposed', MaxPicks: 1,
+    Options: [{ label: 'A', title: 'Calm', imageId: 'img-a' }, { label: 'B', title: 'Playful', imageId: 'img-b' }],
+  };
+  test('headline, letters, Next line, and Space opens the vote', async () => {
+    await openRoom(hostState({ asks: [READY] }));
+    fireEvent.keyDown(window, { key: '2' });
+    const stage = screen.getByRole('region', { name: 'Mockups to compare' });
+    expect(stage.textContent).toMatch('Two looks to compare');
+    expect(stage.textContent).toMatch('Claude made A and B. Look now; the vote opens next.');
+    expect(stage.textContent).toMatch('Next');
+    expect(stage.textContent).toMatch('Pick one on your phone, laptop or tablet');
+    expect(stage.textContent).toMatch('Calm');
+    expect(stage.textContent).toMatch('Playful');
+    expect(document.querySelector('.dock .status').textContent).toBe('Mockups ready \u00b7 the host opens the vote');
+    expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Open the vote' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: ' ' });
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/005`));
+    expect(lastPost().body).toEqual({ action: 'open' });
+  });
+});
+
 describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
   const live = () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], answers: CHOICE_ANSWERS });
 

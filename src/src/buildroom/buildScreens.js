@@ -196,6 +196,16 @@ export function stageModel(room, current, now = Date.now()) {
       // The opening (owner, 2026-10-06): the room frames the build first.
       : room && room.opening && room.opening.phase === 'opening' ? 'We are framing the build together. Claude is getting ready.'
         : roomDockLine(room, now);
+    // MOCKUPS TO LOOK AT (host-flow S4): the pictures are in, the vote is not
+    // open; the host's one move is to open it.
+    const looks = room && !(room.outcome && room.outcome.summary) ? mockupsReady(room) : null;
+    if (looks) {
+      return {
+        phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null },
+        status: 'Mockups ready \u00b7 the host opens the vote',
+        primary: { action: 'open', label: 'Open the vote', askId: looks.ask.askId },
+      };
+    }
     return { phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null }, status, primary: null };
   }
   const n = Number(current.askId) || current.askId;
@@ -551,4 +561,22 @@ export function mockupsReady(room) {
   const ask = ((room && room.asks) || []).find((a) => a.kind === 'choice' && a.status === 'proposed'
     && (a.options || []).length >= 2 && (a.options || []).every((o) => o.imageId));
   return ask ? { ask, images: ask.options.map((o) => ({ label: o.label, imageId: o.imageId, title: o.title || '' })) } : null;
+}
+
+const LOOK_COUNTS = { 2: 'Two', 3: '3', 4: '4', 5: '5', 6: '6' };
+
+/** "A and B", "A, B and C": the letters Claude made looks for. */
+export function lettersLine(labels) {
+  const l = (labels || []).filter(Boolean);
+  return l.length < 2 ? l.join('') : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`;
+}
+
+/** The idle stage's words when mockups are ready (S4). */
+export function looksWords(images) {
+  const n = (images || []).length;
+  return {
+    headline: `${LOOK_COUNTS[n] || n} looks to compare`,
+    line: `Claude made ${lettersLine((images || []).map((i) => i.label))}. Look now; the vote opens next.`,
+    next: 'Pick one on your phone, laptop or tablet',
+  };
 }

@@ -51,7 +51,7 @@ import {
 import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor,
-  questionAnswer, claudeState, latestDecisionLine, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
+  questionAnswer, claudeState, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterIdeas, CLAUDE_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
 } from './buildScreens';
@@ -1416,7 +1416,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     if (!m || busy) return;
     // The dock's "Go with B" is the winner: back to the Host with its sentence.
     if (m.action === 'decide') { onPick(null); return; }
-    run(() => api.askAction(current.askId, { action: m.action }));
+    run(() => api.askAction(m.askId || current.askId, { action: m.action }));
   }, [busy, onPick, run, api, current]);
   const act = useCallback(() => doMove(move), [doMove, move]);
   // Space fires the dock's move: never while typing, and never when a focused
@@ -2378,6 +2378,35 @@ function IdleStage({ room, now, host }) {
   // card and the header chip read, so the wall never says two things.
   const st = claudeState(room, now);
   const decision = latestDecisionLine(room);
+  const looks = mockupsReady(room);
+  if (looks) {
+    const w = looksWords(looks.images);
+    return (
+      <section className="brm-stage brm-stage--idle brm-plain brm-looks" aria-label="Mockups to compare">
+        <div className="brm-plain-main">
+          <div className="brm-building" data-state="waiting">
+            <span className="brm-sdot brm-sdot--waiting" aria-hidden="true" />
+            <h2 className="brm-q">{w.headline}</h2>
+          </div>
+          <p className="brm-nowtext">{w.line}</p>
+          <div className="brm-looks-grid">
+            {looks.images.map((im) => (
+              <div className="brm-look" key={im.label}>
+                <BuildImage imageId={im.imageId} alt={`Mockup ${im.label}`} className="brm-shot brm-shot--look" />
+                <div className="brm-look-cap"><b>{im.label}</b> {im.title}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <aside className="brm-plain-side">
+          <div>
+            <div className="brm-kind">Next</div>
+            <div className="brm-tx">{w.next}</div>
+          </div>
+        </aside>
+      </section>
+    );
+  }
   const sinceAt = st.since ? new Date(st.since) : null;
   const sinceText = st.key === 'building' && sinceAt && Number.isFinite(sinceAt.getTime())
     ? sinceAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
