@@ -755,6 +755,7 @@ export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
     moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing gets built until Claude Code is connected', button: 'Connect' });
   }
   // TICKED ON THE LATER LIST: the host chose these, so this leads (2 to 6 fit a vote).
+  // It deliberately jumps ahead of Connect: ticking is a choice made just now.
   if (laterTicked >= 2 && laterTicked <= VOTE_IDEAS_MAX) {
     moves.unshift({ key: 'vote-later', count: laterTicked, title: `Put ${laterTicked} from Later to a vote`, hint: 'The room picks which one Claude gets', button: W.openVoting });
   }

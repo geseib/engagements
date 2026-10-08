@@ -188,6 +188,21 @@ async function saveBrief(ctx, brief) {
   const value = ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { Brief: brief })).Brief : brief;
   return touchState(ctx, { set: { Brief: value } });
 }
+/**
+ * The Later list is read-modify-write on the brief, so each change re-reads
+ * BUILD#STATE just before it writes: a send or an edit that landed meanwhile
+ * is kept, not overwritten.
+ */
+async function takeFromLater(ctx, ids) {
+  const fresh = S.briefView((await loadRoom(ctx)).state);
+  await saveBrief(ctx, { ...fresh, later: fresh.later.filter((i) => !ids.includes(i.id)) });
+}
+async function restoreToLater(ctx, items) {
+  const fresh = S.briefView((await loadRoom(ctx)).state);
+  const have = new Set(fresh.later.map((i) => i.id));
+  const back = items.filter((i) => i && i.id && !have.has(i.id)).map(({ id, text, from, askId, at }) => ({ id, text, from: from || 'you', askId: askId || null, at: at || null }));
+  if (back.length) await saveBrief(ctx, { ...fresh, later: [...fresh.later, ...back].slice(-S.BRIEF_MAX_ITEMS) });
+}
 async function addToBrief(ctx, as, item) {
   const room = await loadRoom(ctx);
   await saveBrief(ctx, S.briefWith(room.state, as, item));
@@ -475,15 +490,19 @@ async function askAction(ctx, role, askId, body) {
     if (action === 'open' && room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
     if (action === 'discard') {
       if (room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
-      // Cancelling a vote made from ideas puts them back in the queue.
+      // Cancelling a vote made from ideas puts them back where they were:
+      // on the Later list if that is where the vote found them, else the queue.
       for (const id of ask.FromIdeas || []) {
         const idea = findIdea(room, id);
         if (idea && idea.PromotedTo === askId) {
-          const back = { ...idea, Status: 'new', UpdatedAt: now };
+          const back = { ...idea, Status: idea.PriorStatus === 'later' ? 'later' : 'new', UpdatedAt: now };
           delete back.PromotedTo;
+          delete back.PriorStatus;
           await put(ctx, back);
         }
       }
+      // ...and the directions the vote took off the Later list go back on it.
+      if (Array.isArray(ask.FromLater) && ask.FromLater.length) await restoreToLater(ctx, ask.FromLater);
     }
     if (action === 'close' || action === 'decide' || action === 'discard') await openNextIfQueued(ctx, askId);
   }
@@ -902,15 +921,15 @@ async function settleDraft(ctx, action, body) {
 }
 
 /**
- * SEND NOW (owner, 2026-10-06): an item held For Claude, later goes to Claude
+ * SEND NOW (owner, 2026-10-06): a direction held on the Later list goes to Claude
  * as Do now, and leaves the list.
  */
 async function sendLater(ctx, itemId) {
   const room = await loadRoom(ctx);
   const brief = S.briefView(room.state);
   const item = brief.later.find((i) => i.id === itemId);
-  if (!item) return fail(404, 'That is no longer on the For Claude, later list');
-  await saveBrief(ctx, { ...brief, later: brief.later.filter((i) => i.id !== itemId) });
+  if (!item) return fail(404, 'That is no longer on the Later list');
+  await takeFromLater(ctx, [itemId]);
   const row = await logEntry(ctx, { kind: 'direction', text: item.text, by: 'host', forAgent: true, as: 'do-now', askId: item.askId || undefined });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -993,11 +1012,12 @@ async function askFromIdeas(ctx, body) {
   await put(ctx, {
     SK: S.SK.ask(askId), AskId: askId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: v.options, MaxPicks: v.maxPicks,
     Status: status, Source: 'host', CreatedAt: now, FromIdeas: ids,
+    ...(held.length ? { FromLater: held.map(({ id, text, from, askId, at }) => ({ id, text, from, askId, at })) } : {}),
     ...(mockups ? { AskForMockups: true } : {}),
     ...(status === 'live' ? { OpenedAt: now } : {}),
   });
-  for (const idea of ideas) await put(ctx, { ...idea, Status: 'promoted', PromotedTo: askId, UpdatedAt: now });
-  if (held.length) await saveBrief(ctx, { ...brief, later: brief.later.filter((i) => !laterIds.includes(i.id)) });
+  for (const idea of ideas) await put(ctx, { ...idea, Status: 'promoted', PromotedTo: askId, PriorStatus: idea.Status || 'new', UpdatedAt: now });
+  if (held.length) await takeFromLater(ctx, laterIds);
   if (status === 'live') await makeCurrent(ctx, room, askId, 'host');
   // No question in the entry: phones read the timeline, and a waiting vote
   // stays hidden from the room until it opens.

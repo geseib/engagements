@@ -1094,6 +1094,62 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[1]], laterIds: ['gone'] })).status, 404);
     assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[1]] })).status, 400, 'one option is not a vote');
   });
+  await check('Later vote: directions only, unticked items survive, duplicates count once, 7 is too many, Claude cannot', async () => {
+    seed();
+    for (const t of ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven']) await hostCall('POST', 'directions', { text: t, as: 'later' });
+    const later = (await state()).brief.later;
+    const id = (t) => later.find((i) => i.text === t).id;
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { laterIds: later.map((i) => i.id) })).status, 400, 'seven is too many');
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { laterIds: [id('One'), id('One')] })).status, 400, 'a duplicate is one option');
+    assert.strictEqual((await agentCall('POST', 'asks-from-ideas', { laterIds: [id('One'), id('Two')] })).status, 403);
+    assert.strictEqual((await state()).brief.later.length, 7, 'refused votes take nothing');
+    const r = await hostCall('POST', 'asks-from-ideas', { laterIds: [id('One'), id('Two'), id('One')] });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.ask.options.map((o) => o.title), ['One', 'Two']);
+    assert.deepStrictEqual((await state()).brief.later.map((i) => i.text), ['Three', 'Four', 'Five', 'Six', 'Seven'], 'unticked items survive');
+  });
+  await check('Later vote: 7 ideas and directions combined is a 400', async () => {
+    seed();
+    const ids = await threeIdeas();
+    for (const t of ['One', 'Two', 'Three', 'Four', 'Five']) await hostCall('POST', 'directions', { text: t, as: 'later' });
+    const laterIds = (await state()).brief.later.map((i) => i.id);
+    assert.strictEqual((await hostCall('POST', 'asks-from-ideas', { ideaIds: ids, laterIds })).status, 400);
+    assert.strictEqual((await state()).brief.later.length, 5);
+  });
+  await check('Cancel a Later vote: the direction goes back on the list and a Later idea back to Later', async () => {
+    seed();
+    const ids = await threeIdeas();
+    await hostCall('POST', `ideas/${ids[0]}`, { action: 'later' });
+    await hostCall('POST', 'directions', { text: 'Car park map', as: 'later', });
+    const held = (await state()).brief.later[0];
+    const v = await hostCall('POST', 'asks-from-ideas', { ideaIds: [ids[0], ids[1]], laterIds: [held.id], open: false });
+    assert.strictEqual(v.status, 201, JSON.stringify(v.body));
+    let st = await state();
+    assert.deepStrictEqual(st.brief.later, []);
+    // Something else lands on the list meanwhile; the restore keeps it.
+    await hostCall('POST', 'directions', { text: 'Added meanwhile', as: 'later' });
+    assert.strictEqual((await hostCall('POST', `asks/${v.body.ask.askId}`, { action: 'discard' })).status, 200);
+    st = await state();
+    assert.deepStrictEqual(st.brief.later.map((i) => i.text).sort(), ['Added meanwhile', 'Car park map']);
+    assert.strictEqual(st.brief.later.find((i) => i.text === 'Car park map').id, held.id);
+    assert.strictEqual(st.ideas.find((i) => i.ideaId === ids[0]).status, 'later', 'a Later idea returns to Later');
+    assert.strictEqual(st.ideas.find((i) => i.ideaId === ids[1]).status, 'new', 'a queued idea returns to the queue');
+    // Sent from Later while the vote waited: it is not put back twice.
+    const v2 = await hostCall('POST', 'asks-from-ideas', { laterIds: [held.id, st.brief.later.find((i) => i.text === 'Added meanwhile').id], open: false });
+    await hostCall('POST', 'directions', { text: 'Car park map', as: 'later' });
+    const dup = (await state()).brief.later.find((i) => i.text === 'Car park map');
+    assert.ok(dup && dup.id !== held.id);
+    await hostCall('POST', `asks/${v2.body.ask.askId}`, { action: 'discard' });
+    assert.strictEqual((await state()).brief.later.filter((i) => i.id === held.id).length, 1);
+  });
+  await check('the brief Claude reads has no Later list', async () => {
+    seed();
+    await hostCall('POST', 'directions', { text: 'Secret later thing', as: 'later' });
+    assert.strictEqual(S.briefText(S.briefView({ Brief: { later: [{ id: 'x', text: 'Secret later thing' }] } })), '');
+    const s = await hostCall('POST', 'opening/start', {});
+    assert.ok(!JSON.stringify((await agentCall('GET', 'inbox')).body).includes('Secret later thing'));
+    assert.ok(s.status < 300, JSON.stringify(s.body));
+  });
   await check('Claude may answer an Ask Claude on the timeline', async () => {
     seed();
     const r = await agentCall('POST', 'log', { kind: 'answer', text: 'Reminder texts: about an hour, with a provider account.' });
@@ -1501,6 +1557,26 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(r.body.ask.prompt, 'Sealed reask words');
     const raw = JSON.stringify([...store.values()]);
     assert.ok(!raw.includes('Sealed reask words') && !raw.includes('Alpha'), 'plaintext at rest');
+  });
+  await check('a Later vote in a team room: Brief and FromLater are ciphertext at rest, and read back; discard restores', async () => {
+    seed({ orgId: ORG });
+    const HOST_ORG = { userId: 'user-1', groups: 'hosts', orgId: ORG, orgIds: ORG };
+    for (const t of ['Secret later alpha', 'Secret later beta']) await hostCall('POST', 'directions', { text: t, as: 'later' }, HOST_ORG);
+    let st = (await hostCall('GET', 'state', undefined, HOST_ORG)).body;
+    assert.deepStrictEqual(st.brief.later.map((i) => i.text), ['Secret later alpha', 'Secret later beta']);
+    const rawOf = () => JSON.stringify([...store.values()].filter((x) => String(x.SK).startsWith('BUILD#')));
+    assert.ok(!rawOf().includes('Secret later alpha'), 'Brief is plaintext at rest');
+    const v = await hostCall('POST', 'asks-from-ideas', { laterIds: st.brief.later.map((i) => i.id), open: false }, HOST_ORG);
+    assert.strictEqual(v.status, 201, JSON.stringify(v.body));
+    const askRow = [...store.values()].find((x) => String(x.SK).startsWith('BUILD#ASK#'));
+    assert.ok(askRow.FromLater, 'the ask keeps what it took');
+    assert.ok(!rawOf().includes('Secret later'), 'FromLater and the Brief are plaintext at rest');
+    st = (await hostCall('GET', 'state', undefined, HOST_ORG)).body;
+    assert.deepStrictEqual(st.brief.later, []);
+    assert.strictEqual((await hostCall('POST', `asks/${v.body.ask.askId}`, { action: 'discard' }, HOST_ORG)).status, 200);
+    st = (await hostCall('GET', 'state', undefined, HOST_ORG)).body;
+    assert.deepStrictEqual(st.brief.later.map((i) => i.text), ['Secret later alpha', 'Secret later beta']);
+    assert.ok(!rawOf().includes('Secret later'), 'the restored Brief is sealed again');
   });
 
   console.log(`\n${pass} passed, ${failed} failed`);

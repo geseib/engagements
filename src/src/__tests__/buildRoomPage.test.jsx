@@ -1875,6 +1875,20 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
     expect(screen.getByRole('dialog', { name: 'Put 2 to a vote' })).toBeInTheDocument();
   });
 
+  test('a tick on an item that has left Later no longer counts: tick 2, remove 1, the vote lead goes', async () => {
+    await openRoom(hostState({ asks: [DONE], answers: CHOICE_ANSWERS, st: { Brief: BRIEF_AT } }));
+    fireEvent.click(within(laterRegion()).getByRole('checkbox', { name: 'Tick: Sign up as a pair' }));
+    fireEvent.click(within(laterRegion()).getByRole('checkbox', { name: 'Tick: Car park map' }));
+    expect(screen.getByText('Put 2 from Later to a vote')).toBeInTheDocument();
+    // The item leaves Later (a refetched room without it); its tick must not linger.
+    const gone = hostState({ asks: [DONE], answers: CHOICE_ANSWERS, st: { Brief: { ...BRIEF_AT, later: [BRIEF_AT.later[1]] } } });
+    current = gone;
+    fireEvent.click(within(laterRegion()).getAllByRole('button', { name: 'Remove' })[1]);
+    await waitFor(() => expect(lastPost().body).toEqual({ later: [{ id: 'l2', text: 'Sign up as a pair' }] }));
+    await waitFor(() => expect(screen.queryByText('Put 2 from Later to a vote')).toBeNull());
+    expect(screen.queryByText(/from Later to a vote/)).toBeNull();
+  });
+
   test('an old decision held with kind later shows in Later as a direction and sends', async () => {
     const ask = { AskId: '002', Kind: 'choice', Prompt: 'Which?', Options: [{ label: 'A', title: 'Dark mode' }, { label: 'B', title: 'Light' }], Status: 'decided', Source: 'host' };
     await openRoom(hostState({ asks: [ask], st: { Brief: { forWhom: '', keep: [], later: [{ id: 'old1', text: 'Add dark mode', from: 'ask 2', askId: '002', at: null }] } } }));

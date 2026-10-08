@@ -199,7 +199,7 @@ function normalizeBrief(state, body) {
 function briefText(brief) {
   const b = brief || { forWhom: '', keep: [], later: [] };
   const l = b.lines || {};
-  if (!b.forWhom && !b.keep.length && !b.later.length && !b.headline && !BRIEF_LINES.some((k) => l[k])) return '';
+  if (!b.forWhom && !b.keep.length && !b.headline && !BRIEF_LINES.some((k) => l[k])) return '';
   const lines = ['THE ROOM BRIEF (the room\'s standing direction; apply it to everything you build)'];
   if (b.headline) lines.push(`Headline: ${b.headline}`);
   if (b.summary) lines.push(`In short: ${b.summary}`);
@@ -212,7 +212,7 @@ function briefText(brief) {
   if (l.tools) lines.push(`Tools and style: ${l.tools}`);
   if (l.look) lines.push(`Look and feel: ${l.look}`);
   if (b.keep.length) lines.push('Keep in mind:', ...b.keep.map((i) => `  - ${i.text}`));
-  if (b.later.length) lines.push('Later (not now; when you finish your current work, say which you would take next):', ...b.later.map((i) => `  - ${i.text}`));
+  // The Later list is not in the brief Claude reads: it hears nothing from Later until the host sends an item.
   return lines.join('\n');
 }
 /** What the host may post by hand. */

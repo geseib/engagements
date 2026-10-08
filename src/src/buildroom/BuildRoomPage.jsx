@@ -716,6 +716,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     setTicked(new Set());
     setComposeFocus((n) => n + 1);
   };
+  // Ticks for items that have since left Later (sent, removed, voted) no longer count.
+  const laterLive = new Set(laterItems(room).map((x) => x.key));
+  const laterTickedNow = laterTicked.filter((k) => laterLive.has(k)).length;
   const moveAsk = () => whatsNextMoves(room).find((m) => m.key === 'open-proposed') || null;
   /** What's next's moves (whatsNextMoves' keys). */
   const onMove = (key) => {
@@ -873,7 +876,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ) : (
                 room.opening && room.opening.phase === 'opening'
                   ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => setScreen('stage')} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTicked.length} onMove={onMove} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} />
               )}
             </>
           )}
