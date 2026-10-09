@@ -175,6 +175,15 @@ describe('the Build Room shape', () => {
     expect(document.querySelector('.setup-roster__rank')).toBeNull();
   });
 
+  test('when the only person is the asker, the room list below is not an empty box', () => {
+    render(
+      <PlayersList rows={rows([{ name: 'Joe', handover: { requested: true } }])} askingFirst />
+    );
+    expect(screen.getAllByTestId('roster-row')).toHaveLength(1);
+    expect(document.querySelectorAll('ul.setup-roster')).toHaveLength(1);
+    expect(screen.queryByTestId('players-nomatch')).toBeNull();
+  });
+
   test('a badge and a second line stack under the name; the name cell stays the name', () => {
     render(
       <PlayersList

@@ -180,16 +180,23 @@ exports.handler = async (event) => {
           headers: cors
         };
       }
-      const closesGrant = existing.Item.HandoverForClientId === requestedBy;
+      const boundTo = existing.Item.HandoverForClientId || null;
+      // An open grant (bound to nobody) and one bound to this asker both go.
+      // One bound to somebody else is not this request's to close.
+      const closesGrant = !boundTo || boundTo === requestedBy;
       const at = new Date().toISOString();
       try {
         await db.send(new UpdateCommand({
           TableName: process.env.TABLE_NAME,
           Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
           UpdateExpression: `SET HandoverRefusedFor = :cid, HandoverRefusedAt = :at REMOVE HandoverRequestedBy, HandoverRequestedAt${closesGrant ? ', HandoverExpiresAt, HandoverForClientId' : ''}`,
-          // Only the ask that was read. A newer ask from another device that
-          // landed in between is not this refusal's to clear.
-          ConditionExpression: 'attribute_exists(SK) AND HandoverRequestedBy = :cid',
+          // Only the ask that was read, and when a grant bound to somebody
+          // else was left alone, only while it is still not this asker's: a
+          // grant for this cid written in between fails the write, and the
+          // host looks again rather than leaving the door open.
+          ConditionExpression: closesGrant
+            ? 'attribute_exists(SK) AND HandoverRequestedBy = :cid'
+            : 'attribute_exists(SK) AND HandoverRequestedBy = :cid AND HandoverForClientId <> :cid',
           ExpressionAttributeValues: { ':cid': requestedBy, ':at': at }
         }));
       } catch (error) {

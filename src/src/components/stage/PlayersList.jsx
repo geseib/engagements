@@ -217,11 +217,10 @@ export default function PlayersList({
           )}
           <h3 className="setup-h">{countLabel(rows.length)}</h3>
           {summary && <p className="setup-note">{summary}</p>}
-          {visible.length === 0 ? (
+          {visible.length === 0 && (
             <p className="setup-empty" data-testid="players-nomatch">Nobody matches.</p>
-          ) : (
-            <ul className="setup-roster">{rest.map(row)}</ul>
           )}
+          {rest.length > 0 && <ul className="setup-roster">{rest.map(row)}</ul>}
         </>
       )}
 

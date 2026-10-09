@@ -166,6 +166,24 @@ const row = (name) => store.get(key(PK, `PLAYER#${name}`));
     assert.strictEqual(taken.statusCode, 409);
   });
 
+  await check('refusing also closes an OPEN (unbound) grant, but not one bound to someone else', async () => {
+    reset();
+    await join({ playerName: 'Chris', clientId: 'old' });
+    await act('Chris', {});
+    await ask('Chris', { clientId: 'new' });
+    await act('Chris', { refuse: true });
+    assert.strictEqual(row('Chris').HandoverExpiresAt, undefined, 'an open grant outlived the refusal');
+    assert.strictEqual((await join({ playerName: 'Chris', clientId: 'new', claimExisting: true })).statusCode, 409);
+
+    reset();
+    await join({ playerName: 'Chris', clientId: 'old' });
+    await ask('Chris', { clientId: 'asker' });
+    store.get(key(PK, 'PLAYER#Chris')).HandoverExpiresAt = Math.floor(Date.now() / 1000) + 60;
+    store.get(key(PK, 'PLAYER#Chris')).HandoverForClientId = 'somebody-else';
+    await act('Chris', { refuse: true });
+    assert.strictEqual(handoverOpenFor(row('Chris'), 'somebody-else'), true, 'a grant for another device was closed');
+  });
+
   await check('a fresh ask after a refusal clears the refusal; a later grant is taken normally', async () => {
     reset();
     await join({ playerName: 'Chris', clientId: 'old' });

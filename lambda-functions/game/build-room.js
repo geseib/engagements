@@ -32,6 +32,7 @@ const { toAll, toHosts } = require('./survey-broadcast');
 const S = require('./build-store');
 const C = require('./build-crew');
 const LAN = require('./build-lan');
+const { closeSeat } = require('./build-seat');
 
 // S3 is loaded lazily: most calls never touch an image, and tests stub it.
 let s3client = null;
@@ -1658,11 +1659,9 @@ async function crewBuilderRemove(ctx, name) {
   const keys = room.keys.filter((k) => k.Role === 'builder' && k.PlayerName === name);
   if (!b && !keys.length) return fail(404, 'That player is not on the crew');
   const now = new Date().toISOString();
-  for (const k of keys) {
-    if (!k.RevokedAt) await put(ctx, { ...k, RevokedAt: now });
-  }
-  if (b && !b.ClosedAt) {
-    await put(ctx, { ...b, ClosedAt: now });
+  const wasOpen = Boolean(b && !b.ClosedAt);
+  await closeSeat(db, TABLE(), ctx.gameId, name, now);
+  if (wasOpen) {
     for (const s of room.shares) {
       if (s.Builder === name && !['merged', 'not-now'].includes(s.Lane || 'shared')) await put(ctx, { ...s, Lane: 'not-now', UpdatedAt: now });
     }
@@ -1671,7 +1670,22 @@ async function crewBuilderRemove(ctx, name) {
     }
     await logEntry(ctx, { kind: 'crew', text: `${name} was taken off the crew`, by: 'host', name });
   }
-  return done(ctx, 200, { ok: true, builder: name });
+  // One action: the person leaves the room's counts too, as remove-player does.
+  try {
+    await db.send(new UpdateCommand({
+      TableName: TABLE(),
+      Key: { PK: ctx.pk, SK: `PLAYER#${name}` },
+      UpdateExpression: 'SET RemovedAt = :at',
+      ConditionExpression: 'attribute_exists(SK)',
+      ExpressionAttributeValues: { ':at': now },
+    }));
+    await toHosts(db, TABLE(), ctx.gameId, { type: 'playerRemoved', gameId: ctx.gameId, playerName: name, timestamp: now });
+  } catch (error) {
+    if (error.name !== 'ConditionalCheckFailedException') throw error;
+  }
+  const st = await touchState(ctx);
+  await announce(ctx, st.Rev);
+  return reply(200, { ok: true, builder: name, removed: true });
 }
 
 /** A version's patch (patch mode), for the host's Claude to apply and review. */
@@ -1704,7 +1718,7 @@ async function routeCrew(ctx, role, method, parts, body, query) {
   }
   if (method !== 'POST') return fail(404, 'Not found');
   const room = await loadRoom(ctx);
-  if (!C.crewOf(room.state).enabled && !(host && b === 'settings')) return fail(409, 'Crew mode is off in this room');
+  if (!C.crewOf(room.state).enabled && !(host && (b === 'settings' || (b === 'builders' && d === 'remove')))) return fail(409, 'Crew mode is off in this room');
   if (b === 'settings' && !c) return hostSide ? crewSettings(ctx, role, body) : no();
   if (b === 'tasks' && !c) return hostSide ? crewTaskCreate(ctx, role, body) : no();
   if (b === 'tasks' && c && d === 'claim') return builder ? crewClaim(ctx, ctx.builder, c) : no();
@@ -1744,6 +1758,9 @@ async function routeBuilder(ctx, method, parts, body, query) {
   // builder the host took off the crew gets nothing, key or no key.
   const own = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: C.SK.builder(ctx.builder) } }));
   if (own && own.Item && own.Item.ClosedAt) return fail(403, 'The host took you off the crew');
+  // Removed from the room by any door (remove-player.js) is off the crew too.
+  const seat = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: `PLAYER#${ctx.builder}` } }));
+  if (seat && seat.Item && seat.Item.RemovedAt) return fail(403, 'The host took you out of the room');
   if (method === 'GET' && a === 'state' && !b) return reply(200, await builderState(ctx));
   if (method === 'GET' && a === 'inbox' && !b) return reply(200, {});
   if (method === 'GET' && a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
@@ -2512,7 +2529,7 @@ async function routePlayCrew(ctx, me, parts, input) {
   const now = new Date().toISOString();
   if (b === 'builder-key') {
     const already = findBuilder(room, me.playerName);
-    if (!already && C.liveBuilders(room).length >= C.MAX_BUILDERS) return fail(409, `This crew is full (${C.MAX_BUILDERS} builders)`);
+    if ((!already || already.ClosedAt) && C.liveBuilders(room).length >= C.MAX_BUILDERS) return fail(409, `This crew is full (${C.MAX_BUILDERS} builders)`);
     // One live key per builder: a new one retires their old one.
     for (const k of room.keys) {
       if (!k.RevokedAt && k.Role === 'builder' && k.PlayerName === me.playerName) await put(ctx, { ...k, RevokedAt: now });
