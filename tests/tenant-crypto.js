@@ -139,10 +139,15 @@ check('question fields are exactly the agreed set', () =>
     // content an author wrote that a player must never be served.
     // docs/superpowers/specs/2026-09-25-question-background-design.md §1.
     'Background',
+    // A Build Room ready question's note for Claude (step 7b): how to use the
+    // decided answer, never shown to the room (admin/shared/build-room-fields.js).
+    'ClaudeNote',
   ].sort()));
 check('the survey switches and vocabulary stay plaintext — flags, not prose', () => {
   for (const f of ['kind', 'required', 'allowMultiple', 'maxPicks', 'allowOther', 'shuffle', 'scale',
-    'unsure', 'followUpWhen', 'rankTop', 'textLength', 'maxLength', 'themes']) {
+    'unsure', 'followUpWhen', 'rankTop', 'textLength', 'maxLength', 'themes',
+    // A Build Room question's kind for Claude: a closed vocabulary (do-now, keep, later, ask).
+    'ClaudeGets']) {
     assert.ok(!C.ENCRYPTED_FIELDS.question.includes(f), `${f} is a switch or a count, not content`);
   }
 });
@@ -381,7 +386,7 @@ const MUST_NOT_LEAK = {
     'optionE', 'optionF', 'AnswerDetails', 'CustomInstructions',
     // A poll's or a survey's answers, and the words a survey question wraps
     // around them — the same prose a trivia option is.
-    'options', 'lowLabel', 'highLabel', 'yesLabel', 'noLabel', 'followUpPrompt', 'placeholder'],
+    'options', 'lowLabel', 'highLabel', 'yesLabel', 'noLabel', 'followUpPrompt', 'placeholder', 'ClaudeNote'],
   set: ['name', 'description', 'customInstruction', 'aiContextInstruction',
     'roundKindBrief'],
   // The session brief. Its Title/HostName are the same two strings as

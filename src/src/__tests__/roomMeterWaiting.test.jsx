@@ -527,6 +527,7 @@ describe('the reveal behaves like the QR trigger it was copied from', () => {
  */
 describe('GameHostPage wires the reveal through the gate', () => {
   const source = readFileSync(join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+  const hookSource = readFileSync(join(__dirname, '..', 'hooks', 'useRosterReveal.js'), 'utf8');
   // BLOCK **AND** LINE COMMENTS, the same stripper setupPanelCallSite.test.js
   // uses. Block-only was enough until this change: the page now explains in a
   // `//` comment what `authorsHiddenOnStage` was and why it is retired, and a
@@ -691,7 +692,10 @@ describe('GameHostPage wires the reveal through the gate', () => {
     // nobody having asked. The mode carries the round it belongs to and is
     // read back only for that round.
     expect(markup).toMatch(/const rosterKey = `\$\{hostPhase\}#\$\{lessonNumber\}`/);
-    expect(markup).toMatch(/rosterMode\.key === rosterKey \? rosterMode\.mode : null/);
+    // The scoping lives in hooks/useRosterReveal.js (shared with the Build
+    // Room stage); the page must read its reveal through it, with its key.
+    expect(markup).toMatch(/rosterRevealFor\(rosterMode, setRosterMode, rosterKey\)/);
+    expect(hookSource).toMatch(/rosterMode\.key === key \? rosterMode\.mode : null/);
   });
 
   test('the page, not just the harness, gives a pinned list a way down', () => {
@@ -703,15 +707,16 @@ describe('GameHostPage wires the reveal through the gate', () => {
     // rejects: copying Rail's `onPin: () => setMode('pinned')` unchanged.
     // Rail can afford that; its QR overlay closes on a click anywhere, and
     // this has no overlay.
-    const at = markup.indexOf('const rosterHandlers');
+    const at = hookSource.indexOf('handlers: {');
     expect(at).toBeGreaterThan(-1);
-    const handlers = markup.slice(at, markup.indexOf('\n  };', at));
+    const handlers = hookSource.slice(at, hookSource.indexOf('\n    },', at));
     ['onPreview', 'onPreviewEnd', 'onPin'].forEach((h) => {
       expect(handlers).toMatch(new RegExp(`${h}:`));
     });
     // A preview must not clear a pin, and a pin must clear itself.
-    expect(handlers).toMatch(/onPreview: \(\) => setRosterMode\(\(m\) => \(m && m\.key === rosterKey && m\.mode === 'pinned'/);
-    expect(handlers).toMatch(/onPin: \(\) => setRosterMode\(\(m\) => \(m && m\.key === rosterKey && m\.mode === 'pinned'\s*\n?\s*\? null/);
+    expect(hookSource).toMatch(/const pinnedHere = \(m\) => Boolean\(m && m\.key === key && m\.mode === 'pinned'\)/);
+    expect(handlers).toMatch(/onPreview: \(\) => setRosterMode\(\(m\) => \(pinnedHere\(m\) \? m :/);
+    expect(handlers).toMatch(/onPin: \(\) => setRosterMode\(\(m\) => \(pinnedHere\(m\) \? null/);
   });
 
   test('the page, not just the harness, dismisses on Escape', () => {
@@ -724,9 +729,10 @@ describe('GameHostPage wires the reveal through the gate', () => {
     // but the roster's own mode (a listener that never detaches, or one that
     // clears qrMode instead, would leave a pinned list on the wall with the
     // keyboard's only dismissal gone).
-    const at = markup.indexOf('const [rosterMode, setRosterMode]');
+    expect(markup).toMatch(/const \[rosterMode, setRosterMode\] = useRosterMode\(\)/);
+    const at = hookSource.indexOf('const [rosterMode, setRosterMode]');
     expect(at).toBeGreaterThan(-1);
-    const effect = markup.slice(at, at + 500);
+    const effect = hookSource.slice(at, at + 500);
     expect(effect).toMatch(/if \(!rosterMode\) return undefined;/);
     expect(effect).toMatch(/e\.key === 'Escape'/);
     expect(effect).toMatch(/setRosterMode\(null\)/);

@@ -5,10 +5,13 @@
  * throwaway folders (never this repository):
  *   - `connect` saves the key in the project's .engage/ (git-ignored) and
  *     every tool works from then on with no environment variables;
- *   - `checkpoint` makes a plain folder a git repository, commits, and puts
- *     the commit on the room's timeline;
- *   - `--checkpoint` (the plugin's Stop hook) commits in a CONNECTED project
- *     and does nothing at all in any other folder;
+ *   - `connect` starts the project (owner, 2026-10-06): an empty folder becomes
+ *     a repository on main with README.md, DECISIONS.md and "Start: <title>";
+ *     a folder with work keeps it and the room works on build-room/<name>;
+ *   - `commit` (and its old name `checkpoint`) makes one crisp commit: a real
+ *     first line, the project's hooks run, a decision goes into DECISIONS.md;
+ *   - `--checkpoint` (the plugin's Stop hook) takes a HIDDEN snapshot in a
+ *     CONNECTED project, never a commit, and does nothing in any other folder;
  *   - `--install-plugin` writes a local marketplace with the plugin, its
  *     commands and its hook, and says what to run when `claude` is absent.
  */
@@ -107,6 +110,12 @@ async function check(name, fn) {
     const r = await mcp.call('connect', { key: KEY, api: API });
     assert.ok(!r.isError, r.text);
     assert.ok(/Connected this project/.test(r.text) && /Sign-up site/.test(r.text), r.text);
+    // A folder that had files: they are committed as they were, and the room works on its own branch.
+    assert.ok(/the room's work goes on the branch build-room\/sign-up-site/.test(r.text), r.text);
+    assert.strictEqual(gitIn(project, 'rev-parse', '--abbrev-ref', 'HEAD'), 'build-room/sign-up-site');
+    assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s'), 'Before the Build Room: the files as they were');
+    assert.ok(gitIn(project, 'ls-files').split('\n').includes('index.html'));
+    assert.ok(/engage:build-room skill/.test(r.text), r.text);
     const saved = JSON.parse(fs.readFileSync(path.join(project, '.engage', 'session.json'), 'utf8'));
     assert.deepStrictEqual([saved.key, saved.api], [KEY, API]);
     assert.strictEqual(fs.readFileSync(path.join(project, '.engage', '.gitignore'), 'utf8'), '*\n');
@@ -117,25 +126,66 @@ async function check(name, fn) {
     assert.ok(r.isError && /does not look like a session key/.test(r.text), r.text);
   });
 
-  console.log('\ncheckpoints');
-  await check('checkpoint makes a plain folder a repository, commits, and tells the room', async () => {
-    assert.ok(!fs.existsSync(path.join(project, '.git')));
-    const r = await mcp.call('checkpoint', { message: 'Header B, as the room chose' });
-    assert.ok(!r.isError, r.text);
-    assert.ok(/Made this folder a git repository/.test(r.text), r.text);
-    assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s'), 'Header B, as the room chose');
-    // The key never enters git.
-    assert.ok(!gitIn(project, 'ls-files').split('\n').some((f) => f.startsWith('.engage')));
-    const posted = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).pop();
-    assert.strictEqual(posted.body.kind, 'checkpoint');
-    assert.strictEqual(posted.body.fromTool, true, 'the tool reads its answer, so it may carry directions');
-    assert.ok(/^commit [0-9a-f]{7,} · 2 files$/.test(posted.body.detail), posted.body.detail);
+  await check('connect in an empty folder starts a project on main: README, DECISIONS, .gitignore, "Start: <title>"', async () => {
+    const fresh = tmp('fresh');
+    const m2 = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: fresh });
+    try {
+      await m2.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+      const r = await m2.call('connect', { key: KEY, api: API });
+      assert.ok(!r.isError && /Started a new project here/.test(r.text), r.text);
+      assert.strictEqual(gitIn(fresh, 'rev-parse', '--abbrev-ref', 'HEAD'), 'main');
+      assert.strictEqual(gitIn(fresh, 'log', '--format=%s'), 'Start: Sign-up site');
+      assert.deepStrictEqual(gitIn(fresh, 'ls-files').split('\n').sort(), ['.gitignore', 'DECISIONS.md', 'README.md']);
+      assert.ok(/^# Sign-up site/.test(fs.readFileSync(path.join(fresh, 'README.md'), 'utf8')));
+      assert.ok(/Pick a shift fast/.test(fs.readFileSync(path.join(fresh, 'README.md'), 'utf8')));
+      assert.ok(/^\.engage\/$/m.test(fs.readFileSync(path.join(fresh, '.gitignore'), 'utf8')));
+    } finally {
+      m2.child.kill();
+    }
   });
-  await check('nothing changed, nothing committed', async () => {
+
+  console.log('\ncommits: one per decision or milestone');
+  await check('commit refuses a first line that says nothing, or runs past 72 characters', async () => {
+    for (const message of ['WIP', 'updates', 'x'.repeat(73)]) {
+      const r = await mcp.call('commit', { message });
+      assert.ok(r.isError, `${message}: ${r.text}`);
+    }
+  });
+  await check('commit with askId: the decision goes into DECISIONS.md and the body, with a Build-Room trailer', async () => {
+    fs.writeFileSync(path.join(project, 'header.html'), '<header>Calm</header>\n');
+    const r = await mcp.call('commit', { message: 'Add the calm header', askId: '008' });
+    assert.ok(!r.isError, r.text);
+    assert.ok(/with ask 8 in DECISIONS.md/.test(r.text), r.text);
+    assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s'), 'Add the calm header');
+    const body = gitIn(project, 'log', '-1', '--format=%b');
+    assert.ok(/Room decision, ask 8: Which header: Calm \(said out loud\)\./.test(body), body);
+    assert.ok(/Build-Room: 4321 ask 8/.test(body), body);
+    assert.ok(/- Ask 8 · Which header: Calm \(said out loud, \d{4}-\d\d-\d\d\)/.test(fs.readFileSync(path.join(project, 'DECISIONS.md'), 'utf8')));
+    assert.ok(gitIn(project, 'show', '--name-only', '--format=', 'HEAD').split('\n').includes('DECISIONS.md'), 'the decision line is in the same commit');
+    assert.ok(!gitIn(project, 'ls-files').split('\n').some((f) => f.startsWith('.engage')), 'the key never enters git');
+    const posted = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).pop();
+    assert.deepStrictEqual([posted.body.kind, posted.body.text, posted.body.fromTool], ['checkpoint', 'Add the calm header', true]);
+  });
+  await check('nothing changed, nothing committed; checkpoint is the old name for commit', async () => {
     const before = gitIn(project, 'rev-list', '--count', 'HEAD');
-    const r = await mcp.call('checkpoint', { message: 'again' });
+    const r = await mcp.call('checkpoint', { message: 'Add nothing at all' });
     assert.ok(/Nothing to commit/.test(r.text), r.text);
     assert.strictEqual(gitIn(project, 'rev-list', '--count', 'HEAD'), before);
+  });
+  await check('the project\'s own git hooks run, and a failing one stops the commit with its words', async () => {
+    const hookFile = path.join(project, '.git', 'hooks', 'pre-commit');
+    fs.writeFileSync(hookFile, '#!/bin/sh\necho "lint failed: header.html line 1"\nexit 1\n', { mode: 0o755 });
+    try {
+      fs.writeFileSync(path.join(project, 'footer.html'), '<footer></footer>\n');
+      const before = gitIn(project, 'rev-list', '--count', 'HEAD');
+      const r = await mcp.call('commit', { message: 'Add the footer' });
+      assert.ok(r.isError && /hooks stopped the commit/.test(r.text) && /lint failed: header.html line 1/.test(r.text), r.text);
+      assert.strictEqual(gitIn(project, 'rev-list', '--count', 'HEAD'), before);
+    } finally {
+      fs.rmSync(hookFile);
+    }
+    const ok2 = await mcp.call('commit', { message: 'Add the footer' });
+    assert.ok(!ok2.isError, ok2.text);
   });
   console.log('\na link is checked before the room sees it (2026-10-02: a second session pointed at the first one\'s server)');
   // A dev server left running by ANOTHER project, from another folder.
@@ -242,17 +292,23 @@ async function check(name, fn) {
     c.on('close', (status) => resolve({ status, stdout, stderr }));
     c.stdin.end(input !== undefined ? input : JSON.stringify({ cwd: dir, session_id: 's1', hook_event_name: 'Stop' }));
   });
-  await check('in a connected project it commits the turn, named after Claude\'s last update', async () => {
+  await check('in a connected project it takes a hidden snapshot: never a commit, nothing posted', async () => {
     fs.writeFileSync(path.join(project, 'form.html'), '<form></form>\n');
     fs.writeFileSync(path.join(project, '.engage', 'last-update.txt'), 'Sign-up form done');
+    const commitsBefore = gitIn(project, 'rev-list', '--count', 'HEAD');
+    const postsBefore = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).length;
     const r = await hook(project);
     assert.strictEqual(r.status, 0, r.stderr);
     assert.strictEqual(r.stdout, '', 'a Stop hook prints nothing');
-    assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s'), 'Build Room 4321: Sign-up form done');
-    const posted = requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).pop();
-    assert.deepStrictEqual([posted.body.kind, posted.body.text], ['checkpoint', 'Sign-up form done']);
-    // The hook drops the answer, so it must never be handed a direction (owner, 2026-10-06).
-    assert.strictEqual(posted.body.fromTool, undefined);
+    assert.strictEqual(gitIn(project, 'rev-list', '--count', 'HEAD'), commitsBefore, 'the branch is untouched');
+    assert.ok(/form\.html/.test(gitIn(project, 'status', '--porcelain')), 'the working tree is untouched');
+    assert.strictEqual(gitIn(project, 'log', '-1', '--format=%s', 'refs/engage/snapshots/latest'), 'Build Room 4321 snapshot: Sign-up form done');
+    assert.ok(gitIn(project, 'ls-tree', '-r', '--name-only', 'refs/engage/snapshots/latest').split('\n').includes('form.html'), 'untracked work is in the snapshot');
+    assert.strictEqual(requests.filter((q) => q.method === 'POST' && q.url.endsWith('/build/log')).length, postsBefore, 'nothing posted to the room');
+    // Nothing changed since: no second snapshot.
+    const refs = gitIn(project, 'for-each-ref', '--format=%(refname)', 'refs/engage/snapshots').split('\n').length;
+    await hook(project);
+    assert.strictEqual(gitIn(project, 'for-each-ref', '--format=%(refname)', 'refs/engage/snapshots').split('\n').length, refs);
   });
   await check('in any other folder it touches nothing', async () => {
     const other = tmp('other');
@@ -285,7 +341,15 @@ async function check(name, fn) {
     assert.ok(/\$ARGUMENTS/.test(fs.readFileSync(path.join(plug, 'commands', 'connect.md'), 'utf8')));
     // The crew commands: /engage:join <key>, /engage:early-look, /engage:review.
     assert.deepStrictEqual(fs.readdirSync(path.join(plug, 'commands')).sort(),
-      ['ab-mockups.md', 'connect.md', 'continue.md', 'early-look.md', 'ideas.md', 'join.md', 'kickoff.md', 'preview.md', 'review.md', 'share-repo.md', 'wrap-up.md']);
+      ['ab-mockups.md', 'connect.md', 'continue.md', 'early-look.md', 'ideas.md', 'join.md', 'kickoff.md', 'preview.md', 'restore.md', 'review.md', 'share-repo.md', 'wrap-up.md']);
+    // The skill (owner, 2026-10-06): the conventions, written down where Claude Code loads them.
+    const skill = fs.readFileSync(path.join(plug, 'skills', 'build-room', 'SKILL.md'), 'utf8');
+    assert.ok(/^---\nname: build-room\ndescription: /.test(skill), skill.slice(0, 200));
+    for (const words of ['~/build-room/<name>', 'one per decision or milestone', 'no `--no-verify`', 'DECISIONS.md', '.engage/servers.txt', 'Ask me before stopping any of them', 'For Claude, later', 'Questions go through Engage, never the terminal', 'The opening: frame it with the room, then build', 'draft the one-page brief with draft_brief']) {
+      assert.ok(skill.includes(words), `the skill says: ${words}`);
+    }
+    const wrap = fs.readFileSync(path.join(plug, 'commands', 'wrap-up.md'), 'utf8');
+    assert.ok(/git tag build-room-/.test(wrap) && /Ask me before stopping/.test(wrap) && /no more wait_for_direction/.test(wrap), wrap);
     // The live view: one plain line per tool, from a PostToolUse hook on every tool.
     assert.strictEqual(hooks.hooks.PostToolUse[0].matcher, '*');
     assert.ok(/--activity/.test(hooks.hooks.PostToolUse[0].hooks[0].command));

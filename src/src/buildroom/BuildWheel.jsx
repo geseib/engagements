@@ -13,6 +13,7 @@
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import './BuildWheel.css';
+import { W } from './words';
 
 export const SPIN_MS = 5600;
 const R = 100;          // slice radius
@@ -62,9 +63,11 @@ function prefersStill() {
 /**
  * `wheel` is the server's view: {slices, spinner, armed, spins, landed, mine}.
  * `onSpin`, when given, draws the Spin button (the host, or the phone whose
- * turn it is); `spinLabel` names it.
+ * turn it is); `spinLabel` names it. `spinPrimary` marks it as the Host
+ * screen's next move (useNextFocus: focus lands on it, Space presses it).
+ * `spinSecondary` draws it as an outline: another button on that screen is the main one.
  */
-export default function BuildWheel({ wheel, onSpin = null, spinLabel = 'Spin the wheel', busy = false, size = 'md' }) {
+export default function BuildWheel({ wheel, onSpin = null, spinLabel = W.spin, busy = false, size = 'md', spinPrimary = false, spinSecondary = false, onSettled = null }) {
   const slices = (wheel && wheel.slices) || [];
   const n = slices.length;
   const spins = (wheel && wheel.spins) || [];
@@ -81,6 +84,8 @@ export default function BuildWheel({ wheel, onSpin = null, spinLabel = 'Spin the
     clearTimeout(timer.current);
     setMoving(false);
     setSettled(true);
+    // The wheel has stopped on this spin: the page may now say where it landed.
+    if (onSettled && last) onSettled(last.spinId);
   };
 
   // A new spin: animate on to its slice. (Layout effect, so the start angle
@@ -158,7 +163,7 @@ export default function BuildWheel({ wheel, onSpin = null, spinLabel = 'Spin the
       </svg>
       <p className="bwh-caption" role="status" aria-live="polite">{caption}</p>
       {onSpin && (
-        <button type="button" className="bwh-spin" disabled={busy || moving} onClick={onSpin}>{spinLabel}</button>
+        <button type="button" className={`bwh-spin${spinSecondary ? ' bwh-spin--sec' : ''}`} data-next-primary={spinPrimary || undefined} disabled={busy || moving} onClick={onSpin}>{spinLabel}</button>
       )}
     </div>
   );

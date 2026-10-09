@@ -29,6 +29,7 @@ import { resolveRoundNoun, pluralRoundNoun } from '../config/instructions';
 import { calculatePlayerRankings } from '../config/podium';
 import { namesMode } from '../config/surveyNames';
 import KindResult from './survey/results/KindResult';
+import TalkingPointsReport from './TalkingPointsReport';
 import { unexpectedSaveMessage } from '../config/reportPdf';
 import './GameReport.css';
 
@@ -832,6 +833,9 @@ function ReportDocument({ reportData }) {
         </section>
         </>
         )}
+
+        {/* Build Room: findings, votes, the run list. Null for every other game. */}
+        <TalkingPointsReport data={reportData.talkingPoints} />
 
         {/* The document has to end somewhere, and a page that just stops is the
             tell of a screenshot. The running foot identifies the sheet; this

@@ -264,6 +264,9 @@ function shareView(share, room, audience, me) {
   };
 }
 
+/** Builders still on the crew: removing one (host) closes their row, never deletes it. */
+const liveBuilders = (room) => room.builders.filter((b) => !b.ClosedAt);
+
 function builderView(b, room) {
   const own = room.shares.filter((s) => s.Builder === b.PlayerName);
   const lastShare = own.sort((x, y) => String(y.UpdatedAt).localeCompare(String(x.UpdatedAt)))[0];
@@ -275,6 +278,7 @@ function builderView(b, room) {
     branch: b.Branch || '',
     commit: b.Commit || '',
     status: b.Status || 'setting-up',
+    closed: Boolean(b.ClosedAt),
     note: b.Note || '',
     taskId: b.TaskId || null,
     lastSeenAt: b.LastSeenAt || null,
@@ -305,7 +309,7 @@ function pipeline(room) {
   // done with it — not building — until they take another task.
   const done = (b) => !['needs-rebase', 'needs-help'].includes(b.Status)
     && room.shares.some((s) => s.Builder === b.PlayerName && s.Lane === 'merged' && s.TaskId === b.TaskId);
-  lanes.building = room.builders.filter((b) => !sharing.has(b.PlayerName) && !done(b)).length;
+  lanes.building = liveBuilders(room).filter((b) => !sharing.has(b.PlayerName) && !done(b)).length;
   return lanes;
 }
 
@@ -330,7 +334,7 @@ function crewView(room, audience, me) {
     shares: visible.slice().sort((a, b) => String(a.CreatedAt).localeCompare(String(b.CreatedAt)))
       .map((s) => shareView(s, room, audience, me)),
     pipeline: pipeline(room),
-    me: me && room.builders.some((b) => b.PlayerName === me.playerName) ? { name: me.playerName, isBuilder: true } : null,
+    me: me && liveBuilders(room).some((b) => b.PlayerName === me.playerName) ? { name: me.playerName, isBuilder: true } : null,
   };
 }
 
@@ -345,5 +349,5 @@ module.exports = {
   MAX_BUILDERS, MODES, BUILDER_STATUSES, LANES, REACTIONS, RECOMMENDATIONS, PATCH_MAX_BYTES, MAX_VERSIONS, MAX_TASKS, L, SK,
   entityForSk, addRow, crewOf, applyCrewSettings, repoUrl, branchName, commitId,
   normalizeTask, normalizeShare, normalizeReview, diffstat,
-  latest, shareView, builderView, taskView, pipeline, crewView, reactionCounts, baseMovedText,
+  liveBuilders, latest, shareView, builderView, taskView, pipeline, crewView, reactionCounts, baseMovedText,
 };

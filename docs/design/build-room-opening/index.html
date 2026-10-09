@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room opening · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* THE OPENING (docs/design/build-room-opening/PLAN.md). Extends v2.css. */
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:90ch}
+.path{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.path li{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--muted)}
+.path li .d{width:16px;height:16px;border-radius:50%;border:2px solid var(--muted)}
+.path li.done{color:var(--text)}
+.path li.done .d{background:var(--success);border-color:var(--success)}
+.path li.now{color:var(--text);background:var(--m-tint-amber);border:1px solid var(--m-line-amber)}
+.path li.now .d{border-color:var(--primary);box-shadow:inset 0 0 0 3px var(--surface);background:var(--primary)}
+.path li .v{font-size:12px;color:var(--muted);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.path li.host .v{color:var(--secondary)}
+.ophase{display:inline-flex;align-items:center;gap:8px;font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--primary)}
+.kinds{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kind{display:flex;flex-direction:column;gap:3px;border:1px solid var(--m-rule);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.kind b{font-size:15px}
+.kind span{font-size:12px;color:var(--muted)}
+.kind.add{border-style:dashed;align-items:center;justify-content:center;color:var(--muted)}
+.brief{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+.brief .bl{display:grid;grid-template-columns:116px 1fr;gap:10px;font-size:14px;line-height:1.35}
+.brief .bl .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px}
+.brief .bl .x{color:var(--muted);font-style:italic}
+.brief .bl.new .v{box-shadow:inset 3px 0 0 var(--success);padding-left:8px}
+.brief .bl{grid-template-columns:18px 112px 1fr}
+.brief .bl .d{width:12px;height:12px;border-radius:50%;border:2px solid var(--muted);margin-top:4px}
+.brief .bl.done .d{background:var(--success);border-color:var(--success)}
+.brief .bl.now{background:var(--m-tint-amber);border:1px solid var(--m-line-amber);border-radius:8px;padding:6px 6px;margin:0 -6px}
+.brief .bl.now .d{background:var(--primary);border-color:var(--primary)}
+.brief .bl.yours .x{color:var(--secondary);font-style:normal}
+.kinds{grid-template-columns:1fr 1fr 1fr}
+.startbar{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--m-line-amber);background:linear-gradient(var(--m-tint-amber),var(--m-tint-amber)),var(--surface)}
+.startbar .t{font-size:14px}
+.probe{display:flex;flex-wrap:wrap;gap:6px}
+.probe span{border:1px solid var(--m-rule);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--text)}
+.wallbrief{display:grid;grid-template-columns:1fr;gap:18px;padding:40px 70px;align-content:start}
+.wallbrief h1{margin:0;font:800 54px/1.05 var(--font-display);max-width:22ch}
+.wallbrief .lines{display:grid;grid-template-columns:260px 1fr;gap:14px 26px;font-size:28px;line-height:1.25;max-width:1150px}
+.wallbrief .lines .k{color:var(--muted);font-size:20px;letter-spacing:.08em;text-transform:uppercase;padding-top:6px}
+.wallbrief .eb{font:800 18px/1 var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--primary)}
+.walldock{display:flex;align-items:center;gap:16px;padding:16px 26px;border-top:1px solid var(--m-rule);background:#0C1628}
+.walldock .grow{flex:1}
+.ph-steps{display:flex;gap:4px}
+.ph-steps i{flex:1;height:4px;border-radius:2px;background:var(--surface-2)}
+.ph-steps i.on{background:var(--primary)}
+.ph-ta{min-height:110px;border:1px solid var(--m-rule);border-radius:12px;background:var(--surface);padding:12px;color:var(--muted);font-size:16px}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room opening</b>
+<a href="#o1">O1 What are we making?</a><a href="#o2">O2 Working backwards</a><a href="#o3">O3 The build brief on the wall</a><a href="#o4">O4 On a phone</a>
+<span class="sp"></span><a href="PLAN.md">PLAN.md</a><a href="../build-room-host-redesign/index.html">Host redesign</a></nav>
+<div class="pg-title"><h1>The Build Room opening: frame it with the room, then build</h1>
+<p>Owner, 2026-10-06: start wide open, narrow with the room ("pick from a list or spin a wheel"), probe like Amazon's working backwards (who is it for, what problem exists, what would good look like), then what we are building and with which tools. When that is done, Claude goes from planning and prep to build mode. Answers: a guided path the host can skip; the host answers Tools by default; Claude prepares, proposes probing questions and drafts the brief.</p></div>
+
+<!-- O1 ------------------------------------------------------------------ -->
+<div class="frame-h" id="o1"><h2>O1 · Host: the opening starts with "What are we making?"</h2>
+<p>The Now card carries the opening's path. Step 1 is a pick from a list the host can edit (up to six, so it fits the wheel). The room picks, the wheel picks, or the host picks for the room. The brief on the right starts empty and fills as each step is decided.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is preparing</span><span class="hjoin">Join <b>6717</b> · 9 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col"><div class="now">
+<div class="colh"><span class="ophase">Opening · step 1 of 9</span><span class="hint" style="margin-left:auto">Planning: Claude writes no code yet</span></div>
+<p class="nq">What are we making?</p>
+<div class="kinds">
+<div class="kind"><b>A website or page</b><span>Something people visit</span></div>
+<div class="kind"><b>An app</b><span>On a phone, laptop or tablet</span></div>
+<div class="kind"><b>A game</b><span>Something to play</span></div>
+<div class="kind"><b>A tool that saves time</b><span>A script, an automation, a helper</span></div>
+<div class="kind"><b>A document or guide</b><span>A plan, a how-to, a proposal</span></div>
+<div class="kind"><b>Figure something out</b><span>Compare, test an idea, decide</span></div>
+</div>
+<div class="row"><span class="btn btn--primary">Ask the room to pick</span><span class="btn">Spin the wheel</span><span class="btn btn--ghost">Pick for the room</span><span class="btn btn--link" style="margin-left:auto">Edit the list</span></div>
+</div>
+<div class="composer"><span class="lbl" style="margin:0">Add something</span>
+<textarea class="ta" placeholder="An idea, what the room said out loud, or a note for Claude"></textarea>
+<div class="routes"><span class="split"><span class="btn btn--sm btn--primary">Send to Claude</span><span class="btn btn--sm btn--primary">▾</span></span><span class="btn btn--sm btn--ghost">Queue it</span><span class="btn btn--sm btn--ghost" style="margin-left:auto">Log it</span></div></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="hint" style="margin-left:auto">Claude first, then oldest</span></div>
+<div class="filters"><span class="flt is-on">All</span><span class="flt">Claude · 0</span><span class="flt">Room · 0</span><span class="flt">You · 0</span></div>
+<div class="hint" style="text-align:center;padding:30px 10px;border:1px dashed var(--m-rule);border-radius:12px">Nothing waiting. Phones can send an idea at any time; Claude's probing questions land here first.</div>
+</section>
+<section class="col"><div class="colh"><h2>The opening: the build brief</h2><span class="hint" style="margin-left:auto">Skip any step</span></div>
+<div class="brief">
+<div class="bl now"><span class="d"></span><span class="k">Making</span><span class="v">Asking now</span></div>
+<div class="bl"><span class="d"></span><span class="k">For</span><span class="x">Who is it for?</span></div>
+<div class="bl"><span class="d"></span><span class="k">The problem</span><span class="x">What problem do they have today?</span></div>
+<div class="bl"><span class="d"></span><span class="k">Good looks like</span><span class="x">Launch day: the headline</span></div>
+<div class="bl"><span class="d"></span><span class="k">We will know</span><span class="x">How will we know it worked?</span></div>
+<div class="bl"><span class="d"></span><span class="k">Never</span><span class="x">What must it never do?</span></div>
+<div class="bl"><span class="d"></span><span class="k">First build</span><span class="x">The smallest version for today</span></div>
+<div class="bl yours"><span class="d"></span><span class="k">Tools, style</span><span class="x">You answer this one</span></div>
+<div class="bl"><span class="d"></span><span class="k">Look and feel</span><span class="x">How should it look and feel?</span></div>
+</div>
+<div class="startbar"><span class="t">Ready sooner? Start building whenever you like; the brief goes to Claude as it is.</span><span class="btn btn--sm" style="margin-left:auto">Start building</span></div>
+
+<ul class="hist"><li><span class="tm">6:21</span><span class="pt pt--claude"></span><div class="bd"><b>Claude</b> set up ~/build-room/monday-build-session: git, README, DECISIONS</div></li></ul>
+</section>
+</div>
+<span class="pin" style="left:6px;top:76px">1</span><span class="pin" style="left:6px;top:540px">2</span><span class="pin" style="left:1046px;top:640px">3</span><span class="pin" style="left:1046px;top:86px">4</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Step 1: a pick or a spin</h3><p>Six kinds, each with one line of what it means. Ask the room to pick opens a Pick one vote; Spin the wheel spins over the list; Pick for the room records the host's choice. Edit the list renames, adds or removes kinds for this session.</p></div>
+<div class="note"><h3><b class="n">2</b>Ask, spin, or pick</h3><p>The same three ways for every pick step. The room's answers come back as a vote; the wheel and a revote settle a tie.</p></div>
+<div class="note"><h3><b class="n">3</b>Start building, any time</h3><p>The opening never blocks. Start building sends the brief as it stands to Claude as Do now, and the session moves to building.</p></div>
+<div class="note"><h3><b class="n">4</b>The brief is the path</h3><p>Nine lines in Amazon's working-backwards order, one per step: done, asking now, or next. Click a line to ask it, skip it, reword it or ask it again. Tools and style is the host's to answer by default. Claude prepares meanwhile (the project folder and git) and reads each line as it lands; it writes no product code in the opening.</p></div>
+</div>
+
+<!-- O2 ------------------------------------------------------------------ -->
+<div class="frame-h" id="o2"><h2>O2 · Host: working backwards, with a probe and Claude's proposed question</h2>
+<p>Three steps done. The room answered "Who is it for?" and the host probed once ("Who is it not for?"). Claude, reading the brief, proposes a probing question; the host reviews it in the queue like any of Claude's asks.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<span class="n">1</span><kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="askpill">Ask 4 · 6 of 9</span><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is listening</span><span class="hjoin">Join <b>6717</b> · 9 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col"><div class="now now--live">
+<div class="colh"><span class="ophase">Opening · step 4 of 9</span><span class="chip chip--amber" style="margin-left:auto">Ideas · answering</span></div>
+<p class="nq">It is launch day. Write the headline.</p>
+<p class="hint" style="margin:0">Everyone writes one, then everyone votes. A tie goes to the wheel or a revote.</p>
+<div class="mini"><div class="r"><span></span><span>6 headlines so far</span><span class="tr"><span style="width:66%"></span></span><b>6/9</b></div></div>
+<div class="row"><span class="btn btn--primary">Everyone votes</span><span class="btn">Answer for the room</span><span class="btn btn--ghost">Skip this step</span></div>
+</div>
+<div class="composer"><span class="lbl" style="margin:0">Add something</span>
+<textarea class="ta" placeholder="An idea, what the room said out loud, or a note for Claude"></textarea>
+<div class="routes"><span class="split"><span class="btn btn--sm btn--primary">Send to Claude</span><span class="btn btn--sm btn--primary">▾</span></span><span class="btn btn--sm btn--ghost">Queue it</span><span class="btn btn--sm btn--ghost" style="margin-left:auto">Log it</span></div></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">1</span><span class="hint" style="margin-left:auto">Claude first, then oldest</span></div>
+<div class="filters"><span class="flt is-on">All</span><span class="flt">Claude · 1</span><span class="flt">Room · 0</span><span class="flt">You · 0</span></div>
+<div class="q-item is-wait"><div class="q-top"><span class="srcdot srcdot--claude">C</span><span class="src">Claude proposes a probe</span><span class="chip chip--amber">Ideas</span><span class="meta" style="margin-left:auto">for "The problem"</span></div>
+<div class="q-text q-text--big">What do two friends do today instead, when they want a quick game?</div>
+<div class="hint">Claude: the answers so far say "setup takes too long". Knowing what they do instead tells me what to beat.</div>
+<div class="q-acts"><span class="btn btn--sm btn--primary">Ask it next</span><span class="btn btn--sm">Answer for the room</span><span class="btn btn--sm btn--ghost">Edit</span><span class="btn btn--sm btn--link" style="margin-left:auto;color:var(--muted)">Discard</span></div></div>
+<div class="q-item"><div class="q-top"><span class="srcdot srcdot--you">Y</span><span class="src">Your probe, decided</span><span class="chip chip--green">Probe</span><span class="meta" style="margin-left:auto">on "Who is it for?"</span></div>
+<div class="q-text">Who is it not for? → "Anyone who wants to play online with strangers"</div>
+<div class="probe"><span>Who else?</span><span>Who is it not for?</span><span>Why does that matter to them?</span></div></div>
+</section>
+<section class="col"><div class="colh"><h2>The opening: the build brief</h2><span class="hint" style="margin-left:auto">Skip any step</span></div>
+<div class="brief">
+<div class="bl done"><span class="d"></span><span class="k">Making</span><span class="v">A game</span></div>
+<div class="bl done"><span class="d"></span><span class="k">For</span><span class="v">Two friends sitting together with one laptop. Not for playing online with strangers.</span></div>
+<div class="bl done new"><span class="d"></span><span class="k">The problem</span><span class="v">Board games take setup; online games want accounts.</span></div>
+<div class="bl now"><span class="d"></span><span class="k">Good looks like</span><span class="v">Answering now: the launch-day headline</span></div>
+<div class="bl"><span class="d"></span><span class="k">We will know</span><span class="x">How will we know it worked?</span></div>
+<div class="bl"><span class="d"></span><span class="k">Never</span><span class="x">What must it never do?</span></div>
+<div class="bl"><span class="d"></span><span class="k">First build</span><span class="x">The smallest version for today</span></div>
+<div class="bl yours"><span class="d"></span><span class="k">Tools, style</span><span class="x">You answer this one</span></div>
+<div class="bl"><span class="d"></span><span class="k">Look and feel</span><span class="x">How should it look and feel?</span></div>
+</div>
+<div class="startbar"><span class="t">Claude has drafted the one-page brief from what the room said.</span><span class="btn btn--sm" style="margin-left:auto">Show it on the wall</span></div>
+</section>
+</div>
+<span class="pin" style="left:20px;top:86px">1</span><span class="pin" style="left:520px;top:132px">2</span><span class="pin" style="left:520px;top:384px">3</span><span class="pin" style="left:1046px;top:200px">4</span><span class="pin" style="left:1046px;top:690px">5</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Each step is an ordinary ask</h3><p>Ideas, then a vote, with the wheel or a revote on a tie, exactly as today. Answer for the room and Skip are always there.</p></div>
+<div class="note"><h3><b class="n">2</b>Claude probes, the host decides</h3><p>Reading the brief, Claude proposes a probing question as a proposed ask, saying why. Ask it next runs it as the next step; its answer joins the same brief line.</p></div>
+<div class="note"><h3><b class="n">3</b>The host's own probes</h3><p>Each decided step offers short probes (Who else? Who is it not for? What do they do instead?). One click asks it.</p></div>
+<div class="note"><h3><b class="n">4</b>New lines show as new</h3><p>The line that just changed carries a mark, so the host sees what the room added.</p></div>
+<div class="note"><h3><b class="n">5</b>Claude drafts the brief</h3><p>Once Making, For, The problem and Good looks like are known, Claude drafts the one page (O3) for the host to edit and show.</p></div>
+</div>
+
+<!-- O3 ------------------------------------------------------------------ -->
+<div class="frame-h" id="o3"><h2>O3 · Stage: the build brief on the wall, then Start building</h2>
+<p>The room reads back what it decided, as the start of a press release. The host presses Start building (or Space): Claude gets the whole brief as Do now and moves from planning to building.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Monday build session</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>6717</b> · 9 here</span></header>
+<div class="wallbrief">
+<span class="eb">The build brief · ready to build</span>
+<h1>Connect four, for two friends on one laptop</h1>
+<div class="lines">
+<span class="k">For</span><span>Two friends sitting together, who want a quick game. Not for playing online with strangers.</span>
+<span class="k">Today</span><span>Board games take setup; online games want accounts.</span>
+<span class="k">Good looks like</span><span>"Play in one tap. No account. Any laptop."</span>
+<span class="k">We will know</span><span>A new player finishes a game without help.</span>
+<span class="k">Never</span><span>Ask for an account.</span>
+<span class="k">First build</span><span>A board, two colours, a win check.</span>
+<span class="k">Tools, style</span><span>Plain HTML and JavaScript, no framework. Big, bright, playful.</span>
+</div>
+</div>
+<div class="walldock"><span class="hint">Every line came from the room, except Tools (the host's).</span><span class="grow"></span><span class="btn">Edit the brief</span><span class="btn btn--primary">Start building <kbd>Space</kbd></span></div>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Read back before building</h3><p>One page, Room ladder sizes, so the back of the room can check it. It goes into the report as the session's brief.</p></div>
+<div class="note"><h3><b class="n">2</b>Start building</h3><p>Claude receives the brief as Do now: "The room has framed the build. Plan 3 to 6 steps, post the plan, and start." The header's status changes from Claude is preparing to Claude is building.</p></div>
+</div>
+
+<!-- O4 ------------------------------------------------------------------ -->
+<div class="frame-h" id="o4"><h2>O4 · On a phone or laptop: answering a step</h2>
+<p>The same Now tab as any ask, with the opening's progress above it, so people know the questions lead somewhere.</p></div>
+<div style="display:flex;gap:30px;justify-content:center;padding:10px 20px 40px">
+<div class="phone"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Shaping the build · step 3 of 9</div><div class="ph-steps" style="margin-top:8px"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+<div class="ph-body"><span class="eyebrow">Ideas · Ask 3</span><p class="q" style="font-size:28px">What problem do they have today?</p><p class="hint" style="margin:0">Two friends, one laptop. What gets in their way now?</p><div class="ph-ta">Setting up a board game takes ages…</div><span class="btn btn--primary" style="justify-content:center">Send</span><p class="hint" style="margin:0">Anonymous on the wall. Then everyone votes.</p></div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<div class="phone"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Shaping the build · step 1 of 9</div><div class="ph-steps" style="margin-top:8px"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+<div class="ph-body"><span class="eyebrow">Pick one · Ask 1</span><p class="q" style="font-size:28px">What are we making?</p>
+<div class="ph-opt"><b>A</b> A website or page</div><div class="ph-opt"><b>B</b> An app</div><div class="ph-opt on"><b>C</b> A game</div><div class="ph-opt"><b>D</b> A tool that saves time</div><div class="ph-opt"><b>E</b> A document or guide</div><div class="ph-opt"><b>F</b> Figure something out</div>
+<span class="btn btn--primary" style="justify-content:center">Send my pick</span></div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: a past ask, mockups, deciding on the Stage · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* Owner, 2026-10-08. Extends v2.css. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .notes{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:92ch}
+.dim{position:absolute;inset:60px 0 0 0;background:rgba(6,11,21,.72);z-index:30}
+.win{position:absolute;z-index:40;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--m-rule);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.5);display:flex;flex-direction:column}
+.win .wh{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--m-rule)}
+.win .wh h3{margin:0;font:800 22px/1.2 var(--font-display)}
+.win .wh .eb{font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.win .x{margin-left:auto;width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:9px;color:var(--muted);font-weight:800}
+.win .wb{padding:18px 20px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.win .wf{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid var(--m-rule)}
+.back{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--m-rule);font:700 13px/1 var(--font-ui);color:var(--text);background:var(--bg)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card2{border:1px solid var(--m-rule);border-radius:12px;overflow:hidden;background:var(--bg)}
+.card2.pick{border:2px solid rgba(79,178,134,.8)}
+.card2 img{display:block;width:100%;height:190px;object-fit:cover;object-position:top}
+.card2 .cb{padding:10px 12px;display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center}
+.card2 .L{width:28px;height:28px;font-size:15px;border-radius:7px}
+.card2 .bar{grid-column:1/-1;height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.card2 .bar span{display:block;height:100%;background:var(--primary)}
+.card2 .tag{grid-column:1/-1;font-size:12px;color:var(--m-success-text);font-weight:700}
+.zoom{position:absolute;left:0;bottom:0;right:0;padding:6px 10px;font:700 12px/1 var(--font-ui);color:var(--text);background:rgba(6,11,21,.75)}
+.verdict{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:10px;background:var(--m-tint-green);border:1px solid rgba(79,178,134,.5)}
+.verdict b{font-size:15px}
+.verdict span{font-size:13px;color:var(--muted)}
+.chain{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted)}
+.chain span{border:1px solid var(--m-rule);border-radius:999px;padding:2px 9px}
+.viewer{position:absolute;inset:60px 0 0 0;z-index:40;background:#0A1222;display:grid;grid-template-rows:auto 1fr auto}
+.vtop{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--m-rule)}
+.vtabs2{display:flex;gap:6px;margin-left:16px}
+.vtabs2 span{height:34px;display:inline-flex;align-items:center;gap:8px;padding:0 14px;border-radius:9px;border:1px solid var(--m-rule);font:700 14px/1 var(--font-ui);color:var(--muted)}
+.vtabs2 span.on{color:var(--text);border-color:var(--primary);background:var(--m-tint-amber)}
+.vmain{position:relative;display:grid;place-items:center;padding:20px 80px;min-height:0}
+.vmain img{max-width:100%;max-height:100%;border-radius:10px;border:1px solid var(--m-rule)}
+.arrow{position:absolute;top:50%;transform:translateY(-50%);width:52px;height:52px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--m-rule);background:var(--surface);font:800 22px/1 var(--font-ui);color:var(--text)}
+.vfoot{display:flex;align-items:center;gap:14px;padding:12px 20px;border-top:1px solid var(--m-rule);font-size:14px;color:var(--muted)}
+.keys{display:inline-flex;gap:6px;align-items:center}
+.keys kbd{font:700 11px/1 var(--font-ui);border:1px solid var(--m-rule);border-radius:4px;padding:3px 6px;color:var(--text)}
+/* Stage at results. */
+.res{display:grid;grid-template-columns:1fr 320px;gap:40px;padding:30px 44px 20px;min-height:0}
+.res .q{font:800 46px/1.08 var(--font-display);margin:0 0 20px}
+.rrow{display:grid;grid-template-columns:52px 1fr 120px;gap:18px;align-items:center;margin-bottom:16px}
+.rrow .L{width:52px;height:52px;font-size:28px;border-radius:12px}
+.rrow .t{font-size:26px}
+.rrow .tr{height:18px;border-radius:9px;background:var(--surface-2);overflow:hidden;margin-top:8px}
+.rrow .tr span{display:block;height:100%;background:var(--primary)}
+.rrow b{font:800 40px/1 var(--font-display);text-align:right}
+.rrow.win2 .tr span{background:var(--success)}
+.dockhint{flex:none;font-size:16px;color:var(--muted)}
+.dockhint b{color:var(--text);font-weight:700}
+.opts2{display:flex;flex-direction:column;gap:8px}
+.opt2{display:grid;grid-template-columns:28px 1fr 60px;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg)}
+.opt2.on{border-color:var(--secondary);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--bg)}
+.opt2 .L{width:28px;height:28px;font-size:15px;border-radius:7px}
+.dirbox{min-height:70px;border:1px solid var(--secondary);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:15px;line-height:1.45}
+.seg{display:flex;gap:4px;background:var(--bg);border:1px solid var(--m-rule);border-radius:10px;padding:3px;width:max-content}
+.seg span{padding:6px 10px;border-radius:7px;font-size:13px;color:var(--muted)}
+.seg span.on{background:var(--surface-2);color:var(--text);font-weight:700}
+.reask{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px dashed var(--m-line-amber);border-radius:10px;background:var(--m-tint-amber)}
+.inp{border:1px solid var(--m-rule);border-radius:8px;background:var(--bg);padding:8px 10px;font-size:14px}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room</b>
+<a href="#r1">R1 History: a past ask</a><a href="#r2">R2 Mockup viewer</a><a href="#r3">R3 Stage: results</a><a href="#r4">R4 Stage: Edit</a><a href="#r5">R5 Edit: re-ask</a>
+<span class="sp"></span><a href="../build-room-host-flow/index.html">Host flow</a></nav>
+<div class="pg-title"><h1>Look back at a past ask, flip through mockups, and decide without leaving the Stage</h1>
+<p>Owner, 2026-10-08: "when in history can we expand each item ... a modal would pop up with the visual of the choices and the result + the one picked. the show of the mockups ... contained by a button to go back to previous view (history if looking from there, build screen if viewing from there ... host screen ...). it should be super easy to quickly go back and forth between choices on the mockup". And: "on the stage mode (the word space is weird still it looks like a button not instructions) it would be nice to keep eyes here when possible. so 'to claude' would just send it. edit would bring up the modal offered at the host screen where you could pick between them, or edit before clicking send or save it for later, discard, or reask ... reask lets you edit before reasking".</p></div>
+
+<!-- R1 -->
+<div class="frame-h" id="r1"><h2>R1 · History: a past ask, opened</h2>
+<p>Every decided ask in History opens a window: the choices as they were shown (with their mockups), the result, the one picked and how, and what Claude was told. Read-only: nothing here changes the decision.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view is-on">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div style="padding:20px;color:var(--muted)">The story so far…</div>
+<div class="dim"></div>
+<div class="win" style="top:96px;width:900px">
+<div class="wh"><div><div class="eb">Ask 4 · Choose · decided 2:58</div><h3>How should it look and feel?</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<div class="cards">
+<div class="card2" style="position:relative"><img src="../build-room-host-redesign/img/choice-a.svg" alt="Mockup A"><span class="zoom" style="top:160px;bottom:auto">Open mockup</span>
+<div class="cb"><span class="L">A</span><b>Calm and clear</b><b>4</b><span class="bar"><span style="width:36%"></span></span></div></div>
+<div class="card2 pick" style="position:relative"><img src="../build-room-host-redesign/img/choice-b.svg" alt="Mockup B"><span class="zoom" style="top:160px;bottom:auto">Open mockup</span>
+<div class="cb"><span class="L L--b">B</span><b>Playful</b><b>7</b><span class="bar"><span style="width:64%"></span></span><span class="tag">Picked · the room's choice, 7 to 4</span></div></div>
+</div>
+<div class="verdict"><b>Claude was told: "How should it look and feel? Playful. Keep the numbers big enough to read from the back."</b><span>Do now · sent 2:59 · 11 of 12 voted</span></div>
+<div class="chain"><span>Asked by Claude</span><span>→ 11 voted</span><span>→ the room's choice</span><span>→ to Claude</span><span>→ screenshot 3:12</span></div>
+</div>
+<div class="wf"><span class="hint">Click a mockup to look closer.</span><span class="btn btn--ghost" style="margin-left:auto">Close</span></div>
+</div>
+<span class="pin" style="left:240px;top:250px">1</span><span class="pin" style="left:240px;top:520px">2</span><span class="pin" style="left:240px;top:600px">3</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>The choices as the room saw them</h3><p>Choose asks show each option with its mockup, its bar and count; the pick is outlined and says how it was decided (the room's choice, your pick, the wheel). Ideas asks list the ideas with their votes; ratings show the average and the spread.</p></div>
+<div class="note"><h3><b class="n">2</b>What Claude got</h3><p>The exact direction, its kind and when. Room-safe: no names, no host notes, as everything on History.</p></div>
+<div class="note"><h3><b class="n">3</b>How it got there</h3><p>The same chain History already shows, ending at the screenshot that followed, if any.</p></div>
+</div>
+
+<!-- R2 -->
+<div class="frame-h" id="r2"><h2>R2 · The mockup viewer</h2>
+<p>One viewer everywhere a mockup can be opened (History, the Build screen, the Host's queue and path, the Stage). It fills the screen, flips between choices with the tabs, the arrows or ← →, and Back returns exactly where it was opened from.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view is-on">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="viewer">
+<div class="vtop"><span class="back">← Back to Ask 4</span><b style="margin-left:6px">How should it look and feel?</b><div class="vtabs2"><span>A · Calm and clear</span><span class="on">B · Playful · picked</span></div><span class="hint" style="margin-left:auto">2 of 2</span></div>
+<div class="vmain"><span class="arrow" style="left:20px">‹</span><img src="../build-room-host-redesign/img/choice-b.svg" alt="Mockup B, large"><span class="arrow" style="right:20px">›</span></div>
+<div class="vfoot"><span class="keys"><kbd>←</kbd><kbd>→</kbd> to flip</span><span class="keys"><kbd>Esc</kbd> to go back</span><span style="margin-left:auto">Mockup B · sent by Claude 2:52</span></div>
+</div>
+<span class="pin" style="left:6px;top:76px">1</span><span class="pin" style="left:330px;top:76px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Back to where you were</h3><p>The button names the place: "Back to Ask 4" (History), "Back to the build", "Back to the Host screen", "Back to the vote" (Stage). Esc does the same. The screen behind is exactly as it was.</p></div>
+<div class="note"><h3><b class="n">2</b>Flip, don't reopen</h3><p>Tabs for every choice, arrows, and ← →. The picked one says so. Works on a laptop, tablet or phone (swipe on touch).</p></div>
+</div>
+
+<!-- R3 -->
+<div class="frame-h" id="r3"><h2>R3 · Stage at results: decide without leaving</h2>
+<p>The dock carries the two moves the host needs on the wall: Edit and To Claude. To Claude sends the room's choice as it stands. The Space hint reads as an instruction, not a key cap.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="res">
+<div>
+<div class="eyebrow" style="margin-bottom:10px">Results <span>· Ask 4</span></div>
+<h2 class="q">How should it look and feel?</h2>
+<div class="rrow"><span class="L">A</span><div><span class="t">Calm and clear</span><div class="tr"><span style="width:36%"></span></div></div><b>4</b></div>
+<div class="rrow win2"><span class="L L--b">B</span><div><span class="t">Playful</span><div class="tr"><span style="width:64%"></span></div></div><b>7</b></div>
+</div>
+<aside class="meter"><span class="lbl">Voted</span><span class="big">11<small> / 12</small></span></aside>
+</div>
+<footer class="dock"><div class="status">B leads, 7 to 4</div><span class="dbtn dbtn--ghost">Edit</span><span class="dbtn dbtn--primary">To Claude: B</span><span class="dockhint">Press <b>Space</b> to send</span></footer>
+</div>
+<span class="pin" style="left:880px;top:800px">1</span><span class="pin" style="left:1360px;top:800px">2</span>
+</div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Edit opens the host's send panel here (R4)</h3><p>Without going back to the Host screen.</p></div>
+<div class="note"><h3><b class="n">2</b>To Claude, and a plain hint</h3><p>"To Claude: B" sends the room's choice with its default direction, as Do now. The hint is words, "Press Space to send", in the muted label style — no box around it. A tie or no votes: the primary is Spin the wheel, and To Claude waits for a pick.</p></div>
+</div>
+
+<!-- R4 -->
+<div class="frame-h" id="r4"><h2>R4 · Stage: Edit</h2>
+<p>The Send to Claude panel from the Host screen, as a window over the Stage. Pick between the options, edit the words, choose the kind, then Send, Save for later, Re-ask, or Discard.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="res"><div><h2 class="q">How should it look and feel?</h2></div></div>
+<footer class="dock"><div class="status">B leads, 7 to 4</div></footer>
+<div class="dim"></div>
+<div class="win" style="top:90px;width:720px">
+<div class="wh"><div><div class="eb">Ask 4 · results</div><h3>Send to Claude</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<div class="opts2">
+<div class="opt2"><span class="L">A</span><span>Calm and clear · <span class="hint">view mockup</span></span><b>4</b></div>
+<div class="opt2 on"><span class="L L--b">B</span><span>Playful · the room's choice · <span class="hint">view mockup</span></span><b>7</b></div>
+</div>
+<div class="dirbox">How should it look and feel? Playful. Keep the numbers big enough to read from the back.</div>
+<div class="row"><span class="hint" style="margin:0">Claude gets it as</span><div class="seg"><span class="on">Do now</span><span>Keep in mind</span><span>For Claude, later</span><span>Ask Claude</span></div></div>
+</div>
+<div class="wf"><span class="btn btn--ghost">Discard</span><span class="btn btn--ghost">Re-ask…</span><span class="btn" style="margin-left:auto">Save for later</span><span class="btn btn--primary">Send to Claude</span></div>
+</div>
+<span class="pin" style="left:350px;top:180px">1</span><span class="pin" style="left:350px;top:395px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Pick between them, and look first</h3><p>Click an option to switch the pick (the direction rewrites; a different pick than the room's says so, as today). "view mockup" opens the viewer (R2); Back returns here.</p></div>
+<div class="note"><h3><b class="n">2</b>Every way out, on the wall</h3><p>Send to Claude (the kind chosen above) · Save for later (For Claude, later: held until you send it) · Re-ask (R5) · Discard (asks first). Close or Esc keeps the results as they are.</p></div>
+</div>
+
+<!-- R5 -->
+<div class="frame-h" id="r5"><h2>R5 · Edit: re-ask, edited first</h2>
+<p>Re-ask turns the window into the question, filled in from this one: edit the words and the options, then Ask again. The old ask closes as "asked again as Ask 5", as a revote does today.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="res"><div><h2 class="q">How should it look and feel?</h2></div></div>
+<footer class="dock"><div class="status">B leads, 7 to 4</div></footer>
+<div class="dim"></div>
+<div class="win" style="top:90px;width:720px">
+<div class="wh"><div><div class="eb">Ask 4 · re-ask</div><h3>Ask the room again</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<div class="reask">
+<span class="hint" style="margin:0">Question</span><div class="inp">How should it look and feel, for a room of first-time visitors?</div>
+<span class="hint" style="margin:0">Options</span><div class="inp"><b>A</b> Calm and clear</div><div class="inp"><b>B</b> Playful</div><div class="inp" style="color:var(--muted)">+ Add an option (C: Bold and serious)</div>
+</div>
+</div>
+<div class="wf"><span class="btn btn--ghost">← Back to Send to Claude</span><span class="btn btn--primary" style="margin-left:auto">Ask again</span></div>
+</div>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Edit, then ask</h3><p>Mockups carry over to options that keep their letter. Ask again opens the new ask on the wall at once; Back returns to the send panel without losing anything.</p></div>
+</div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

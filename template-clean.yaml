@@ -3750,14 +3750,19 @@ Resources:
       Handler: grant-handover.handler
       Runtime: nodejs22.x
       Timeout: 30
-      # GetCommand + UpdateCommand. No websocket send: the person waiting for
-      # this has no socket yet (a player's socket opens only after a join
-      # succeeds), so there is nobody to push to and the client asks again.
+      # GetCommand + UpdateCommand, and a `playersChanged` note to every HOST
+      # connection (host-notify.js: QueryCommand, and DeleteCommand for a 410
+      # Gone row, which only Crud grants). Nothing is sent to the person
+      # waiting: they have no socket yet (a player's socket opens only after a
+      # join succeeds), so the client asks again.
       Policies:
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
-        - DynamoDBWritePolicy:
-            TableName: !Ref GameTable
+        - Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
       Events:
         GrantHandoverEvent:
           Type: HttpApi

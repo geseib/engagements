@@ -146,6 +146,61 @@ describe('loading the room', () => {
   });
 });
 
+describe('the host takes this phone out of the session (Session panel, 2026-10-09)', () => {
+  const REFUSED = { ok: false, status: 403, json: async () => ({ error: 'Join the session first', code: 'removed' }) };
+  const MOVED = { ok: false, status: 403, json: async () => ({ error: 'Join the session first', code: 'moved' }) };
+
+  test('a phone that was in and is now refused says the host took it out, and comes back when brought back', async () => {
+    jest.useFakeTimers();
+    try {
+      serve(baseView());
+      await mount();
+      await screen.findByText('Claude is building');
+      global.fetch.mockImplementation(() => Promise.resolve(REFUSED));
+      await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+      expect(await screen.findByText('The host took you out of this session.')).toBeInTheDocument();
+      expect(screen.queryByText('Join the session first')).toBeNull();
+      // Brought back: the same phone is let in again without a new join.
+      serve(baseView());
+      await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+      await screen.findByText('Claude is building');
+      expect(screen.queryByText('The host took you out of this session.')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('a phone whose name moved to another device says so, and says nothing about Claude', async () => {
+    jest.useFakeTimers();
+    try {
+      serve(baseView({ crew: { enabled: true, builders: [], tasks: [], shares: [], pipeline: {}, me: { name: ME, isBuilder: true } } }));
+      await mount();
+      await screen.findByText('Claude is building');
+      global.fetch.mockImplementation(() => Promise.resolve(MOVED));
+      await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+      expect(await screen.findByText('This name is on another device now. Join again with another name.')).toBeInTheDocument();
+      expect(screen.queryByText('The host took you out of this session.')).toBeNull();
+      expect(screen.queryByText(/Claude was unlinked/)).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('a builder is told their Claude was unlinked', async () => {
+    jest.useFakeTimers();
+    try {
+      serve(baseView({ crew: { enabled: true, builders: [], tasks: [], shares: [], pipeline: {}, me: { name: ME, isBuilder: true } } }));
+      await mount();
+      await screen.findByText('Claude is building');
+      global.fetch.mockImplementation(() => Promise.resolve(REFUSED));
+      await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+      expect(await screen.findByText(/Your Claude was unlinked/)).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
 describe('Ideas (suggest)', () => {
   const live = () => baseView({
     currentAskId: '004',
@@ -358,8 +413,8 @@ describe('watching the build', () => {
     expect(screen.getByText('detail one')).toBeInTheDocument();
     expect(screen.queryByText('HOST PRIVATE NOTE')).toBeNull();
     expect(screen.queryByText(/Closed: Which header/)).toBeNull();
-    // Rendered as text, not as a <b>.
-    expect(screen.getByText('<b>Header B</b> is live')).toBeInTheDocument();
+    // Rendered as text, not as a <b> (in the feed, and in the "showing something new" note).
+    expect(within(screen.getByRole('region', { name: 'Watch the build' })).getByText('<b>Header B</b> is live')).toBeInTheDocument();
     expect(container.querySelector('.bpl-feed b')).toBeNull();
     const links = screen.getAllByRole('link');
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['https://example.com/live']);
@@ -396,15 +451,24 @@ describe('watching the build', () => {
 });
 
 describe('send an idea', () => {
-  test('collapsed by default; POST idea; my ideas with status', async () => {
+  test('an idea the host saved for later still reads Saved for later on the author\'s device', async () => {
+    serve(baseView({
+      myIdeas: [{ ideaId: 'i9', text: 'A slider for salary', playerName: ME, status: 'later', createdAt: '2026-10-02T19:41:00.000Z' }],
+    }), () => ({ status: 201, body: { ok: true } }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Send an idea to the host/ }));
+    expect(screen.getByText('Saved for later')).toBeInTheDocument();
+  });
+
+  test('Now has the way in; the Ideas tab sends one and lists mine with status', async () => {
     serve(baseView({
       myIdeas: [{ ideaId: 'i1', text: 'A map link for parking', playerName: ME, status: 'promoted', createdAt: '2026-10-02T19:41:00.000Z' }],
     }), () => ({ status: 201, body: { ok: true } }));
     await mount();
     const toggle = await screen.findByRole('button', { name: /Send an idea to the host/ });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByLabelText('Your idea')).toBeNull();
     fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: /^Ideas/ })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('A map link for parking')).toBeInTheDocument();
     expect(screen.getByText('Picked up')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Your idea'), { target: { value: 'Teens 14+ welcome' } });
@@ -418,6 +482,60 @@ describe('send an idea', () => {
     await mount();
     await screen.findByText('Bold banner');
     expect(screen.getByRole('button', { name: /Send an idea to the host/ })).toBeInTheDocument();
+  });
+});
+
+describe('Open the build (Wi-Fi share)', () => {
+  const OPEN = 'http://192.168.1.20:4900/?k=KEY';
+  const SHOWING = { logId: 'L9', kind: 'showing', text: 'Header B is live', createdAt: '2026-10-04T12:00:00.000Z', link: 'http://localhost:5173/' };
+
+  test('shown while sharing is live, opens in a new tab, says same Wi-Fi', async () => {
+    serve(baseView({ lan: { open: OPEN } }));
+    await mount();
+    const link = await screen.findByRole('link', { name: 'Open the build ↗' });
+    expect(link).toHaveAttribute('href', OPEN);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByText('Works on the same Wi-Fi as the host')).toBeInTheDocument();
+  });
+
+  test('at the top of the Now tab, above Watch the build (mockup L5)', async () => {
+    serve(baseView({ log: [SHOWING], lan: { open: OPEN } }));
+    const { container } = await mount();
+    const link = await screen.findByRole('link', { name: 'Open the build ↗' });
+    const feed = container.querySelector('.bpl-feed');
+    expect(feed).not.toBeNull();
+    // eslint-disable-next-line no-bitwise
+    expect(link.compareDocumentPosition(feed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('a Wi-Fi link in the timeline shows without its key, and still opens with it', async () => {
+    const shared = { ...SHOWING, link: OPEN };
+    serve(baseView({ log: [shared], lan: { open: OPEN } }));
+    const { container } = await mount();
+    await screen.findByRole('link', { name: 'Open the build ↗' });
+    const tickerLink = container.querySelector('.bpl-feed .bpl-lnk');
+    expect(tickerLink).toHaveAttribute('href', OPEN);
+    expect(tickerLink.textContent).not.toMatch(/k=/);
+    expect(tickerLink.textContent).toContain('192.168.1.20:4900');
+  });
+
+  test('absent when sharing is off', async () => {
+    serve(baseView({ lan: null }));
+    await mount();
+    await screen.findByRole('button', { name: /Send an idea to the host/ });
+    expect(screen.queryByRole('link', { name: 'Open the build ↗' })).toBeNull();
+  });
+
+  test('the preview note asks to try it first only while sharing is live', async () => {
+    serve(baseView({ log: [SHOWING], lan: { open: OPEN } }));
+    const first = await mount();
+    expect(await screen.findByText('Try it, then say what you think.')).toBeInTheDocument();
+    first.unmount();
+    serve(baseView({ log: [SHOWING], lan: null }));
+    await mount();
+    await screen.findByRole('button', { name: 'Look and say what you think' });
+    expect(screen.queryByText('Try it, then say what you think.')).toBeNull();
   });
 });
 
@@ -480,6 +598,8 @@ describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
   test('Looks good goes at once, naming the preview', async () => {
     serve(baseView({ log: [SHOWING] }));
     await mount();
+    // On Now, a note; the feedback is on the preview, in History (C11).
+    fireEvent.click(screen.getByRole('button', { name: 'Look and say what you think' }));
     const card = screen.getByRole('region', { name: 'Feedback on the preview' });
     fireEvent.click(within(card).getByRole('button', { name: 'Looks good' }));
     await waitFor(() => expect(posts('idea').length).toBe(1));
@@ -489,6 +609,8 @@ describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
   test('Needs a change asks what, and sends it', async () => {
     serve(baseView({ log: [SHOWING] }));
     await mount();
+    // On Now, a note; the feedback is on the preview, in History (C11).
+    fireEvent.click(screen.getByRole('button', { name: 'Look and say what you think' }));
     const card = screen.getByRole('region', { name: 'Feedback on the preview' });
     fireEvent.click(within(card).getByRole('button', { name: 'Needs a change' }));
     const send = within(card).getByRole('button', { name: 'Send' });
@@ -502,6 +624,9 @@ describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
   test('once sent, the card thanks you; with nothing shown there is no card', async () => {
     serve(baseView({ log: [SHOWING], myIdeas: [{ ideaId: 'i1', text: 'On the preview "Header B is live": Looks good', status: 'new', aboutLogId: 'L9' }] }));
     const { unmount } = await mount();
+    // Sent already: no note on Now; History still thanks you.
+    expect(screen.queryByRole('button', { name: 'Look and say what you think' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
     expect(within(screen.getByRole('region', { name: 'Feedback on the preview' })).getByText(/Your feedback is with the host/)).toBeInTheDocument();
     unmount();
     serve(baseView({ log: [] }));
@@ -554,5 +679,93 @@ describe('a phone hears what happened to its comment (owner, 2026-10-05)', () =>
     fireEvent.click(await screen.findByRole('button', { name: /Send an idea to the host/ }));
     expect(screen.getByText('Seen by the host')).toBeInTheDocument();
     expect(screen.getByText('Shown on the wall')).toBeInTheDocument();
+  });
+});
+
+describe('Now · Ideas · History, on a phone or a laptop (step 7, C11)', () => {
+  const at = (m) => `2026-10-06T10:${String(m).padStart(2, '0')}:00.000Z`;
+  const STORY = {
+    log: [
+      { logId: 'v1', kind: 'verbal', text: 'It has to work on old phones', createdAt: at(22) },
+      { logId: 's1', kind: 'showing', text: 'The shift calendar is up', createdAt: at(46), link: '' },
+    ],
+    decisions: [{ askId: '002', prompt: 'Which next?', direction: 'Reminder texts next', decidedAt: at(44) }],
+    myIdeas: [{ ideaId: 'm1', text: 'Text a reminder the day before', status: 'promoted', promotedTo: '002' }],
+  };
+
+  test('History tells the story newest first, says when my idea was in the vote, and filters to decisions', async () => {
+    serve(baseView(STORY));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    const h = screen.getByRole('region', { name: 'History' });
+    const items = within(h).getAllByRole('listitem').map((li) => li.textContent);
+    expect(items[0]).toMatch('Claude showed · The shift calendar is up');
+    expect(items[1]).toMatch('Decided · Ask 2 · Reminder texts next');
+    expect(items[1]).toMatch('Your idea was in this vote');
+    expect(items[2]).toMatch('The room said · It has to work on old phones');
+    fireEvent.click(within(h).getByRole('button', { name: 'Decisions' }));
+    expect(within(h).getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  test('my ideas say what happened: in a vote now, put to a vote, sent to Claude, in the room\'s ideas', async () => {
+    serve(baseView({
+      currentAskId: '004',
+      current: ask({ askId: '004', kind: 'choice', status: 'live', options: CHOICE_OPTS }),
+      myIdeas: [
+        { ideaId: 'a', text: 'Idea in the open vote', status: 'promoted', promotedTo: '004' },
+        { ideaId: 'b', text: 'Idea in an old vote', status: 'promoted', promotedTo: '002' },
+        { ideaId: 'c', text: 'Idea sent on', status: 'promoted', promotedVia: 'claude' },
+        { ideaId: 'd', text: 'Idea added to ideas', status: 'promoted', promotedVia: 'ideas' },
+      ],
+    }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: /^Ideas/ }));
+    const row = (t) => screen.getByText(t).closest('li').textContent;
+    expect(row('Idea in the open vote')).toMatch('In a vote now');
+    expect(row('Idea in an old vote')).toMatch('Put to a vote');
+    expect(row('Idea sent on')).toMatch('Sent to Claude');
+    expect(row('Idea added to ideas')).toMatch("In the room's ideas");
+  });
+
+  test('a new question brings everyone back to Now, and a typed answer survives a look at History', async () => {
+    const live = () => baseView({
+      currentAskId: '004',
+      current: ask({ askId: '004', kind: 'suggest', prompt: 'What would stop someone from signing up?', maxPicks: 3 }),
+    });
+    serve(baseView(STORY));
+    const { rerender } = await mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    responder.view = live();
+    await act(async () => { rerender(<BuildPlayer gameId={GAME} playerName={ME} clientId={CID} apiBase={API} rev={2} />); });
+    expect(await screen.findByLabelText('Your suggestion')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Now' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.change(screen.getByLabelText('Your suggestion'), { target: { value: 'Parking' } });
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    expect(screen.queryByLabelText('Your suggestion')).toBeNull();
+    // The Now tab carries the ask's number while you are elsewhere.
+    expect(screen.getByRole('button', { name: /^Now\s?Ask 4$/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Now/ }));
+    expect(screen.getByLabelText('Your suggestion')).toHaveValue('Parking');
+  });
+
+  test('ended: Now and History, no Ideas tab', async () => {
+    serve(baseView({ ...STORY, state: 'ENDED' }));
+    await mount();
+    expect(await screen.findByRole('button', { name: 'History' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Ideas/ })).toBeNull();
+  });
+});
+
+describe('the opening on a phone (owner, 2026-10-06)', () => {
+  test('a question that frames the build says which step of the opening it is', async () => {
+    serve(baseView({ currentAskId: '003', current: ask({ askId: '003', kind: 'suggest', prompt: 'What problem do they have today?', openingStep: 'problem', openingIndex: 3, openingOf: 9 }) }));
+    await mount();
+    expect(await screen.findByText('Shaping the build · step 3 of 9')).toBeInTheDocument();
+  });
+  test('an ordinary question says nothing about the opening', async () => {
+    serve(baseView({ currentAskId: '003', current: ask({ askId: '003', kind: 'suggest', prompt: 'Which colour?' }) }));
+    await mount();
+    await screen.findByText('Which colour?');
+    expect(screen.queryByText(/Shaping the build/)).toBeNull();
   });
 });

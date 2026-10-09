@@ -231,6 +231,9 @@ function toRow(question, extra = {}) {
     sourceAttribution: text(pick(q, 'SourceAttribution', 'sourceAttribution')),
     sourceSetId: text(pick(q, 'SourceSetId', 'sourceSetId')),
     sourceQuestionSk: text(pick(q, 'SourceQuestionSk', 'sourceQuestionSk')),
+    // Build Room ready questions (step 7b): what Claude gets, and how to use it.
+    claudeGets: text(pick(q, 'ClaudeGets', 'claudeGets')),
+    claudeNote: text(pick(q, 'ClaudeNote', 'claudeNote')),
     tags: toTagList(pick(q, 'Tags', 'tags')),
     optionA: text(pick(q, 'optionA', 'OptionA')),
     optionB: text(pick(q, 'optionB', 'OptionB')),
@@ -553,6 +556,8 @@ function rowsToCsv(rows, engagementType, options = {}) {
   const carriesAttribution = carries('sourceAttribution');
   const carriesSourceSet = carries('sourceSetId');
   const carriesSourceSk = carries('sourceQuestionSk');
+  const carriesClaudeGets = carries('claudeGets');
+  const carriesClaudeNote = carries('claudeNote');
 
   const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '')
     + (carriesBackground ? ',Background' : '')
@@ -560,7 +565,9 @@ function rowsToCsv(rows, engagementType, options = {}) {
     + (carriesRoundKind ? ',RoundKind' : '')
     + (carriesAttribution ? ',SourceAttribution' : '')
     + (carriesSourceSet ? ',SourceSetId' : '')
-    + (carriesSourceSk ? ',SourceQuestionSk' : '');
+    + (carriesSourceSk ? ',SourceQuestionSk' : '')
+    + (carriesClaudeGets ? ',ClaudeGets' : '')
+    + (carriesClaudeNote ? ',ClaudeNote' : '');
 
   const optionalCells = (r) =>
     (carriesAnswerDetails ? `,${quoted(r.answerDetails)}` : '')
@@ -569,7 +576,9 @@ function rowsToCsv(rows, engagementType, options = {}) {
     + (carriesRoundKind ? `,${quoted(r.roundKind)}` : '')
     + (carriesAttribution ? `,${quoted(r.sourceAttribution)}` : '')
     + (carriesSourceSet ? `,${quoted(r.sourceSetId)}` : '')
-    + (carriesSourceSk ? `,${quoted(r.sourceQuestionSk)}` : '');
+    + (carriesSourceSk ? `,${quoted(r.sourceQuestionSk)}` : '')
+    + (carriesClaudeGets ? `,${quoted(r.claudeGets)}` : '')
+    + (carriesClaudeNote ? `,${quoted(r.claudeNote)}` : '');
 
   // Category-relative numbering.
   //

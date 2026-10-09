@@ -205,10 +205,14 @@ exports.handler = async (event) => {
       const carriesAttribution = questions.some(q => String(q.SourceAttribution || q.sourceAttribution || '').trim());
       const carriesSourceSet = questions.some(q => String(q.SourceSetId || q.sourceSetId || '').trim());
       const carriesSourceSk = questions.some(q => String(q.SourceQuestionSk || q.sourceQuestionSk || '').trim());
+      // Build Room ready questions (step 7b, shared/build-room-fields.js).
+      const carriesClaudeGets = questions.some(q => String(q.ClaudeGets || q.claudeGets || '').trim());
+      const carriesClaudeNote = questions.some(q => String(q.ClaudeNote || q.claudeNote || '').trim());
       const optionalHeader = (carriesAnswerDetails ? ',AnswerDetails' : '') + (carriesBackground ? ',Background' : '')
         + (carriesImages ? ',Image' : '')
         + (carriesRoundKind ? ',RoundKind' : '') + (carriesAttribution ? ',SourceAttribution' : '')
-        + (carriesSourceSet ? ',SourceSetId' : '') + (carriesSourceSk ? ',SourceQuestionSk' : '');
+        + (carriesSourceSet ? ',SourceSetId' : '') + (carriesSourceSk ? ',SourceQuestionSk' : '')
+        + (carriesClaudeGets ? ',ClaudeGets' : '') + (carriesClaudeNote ? ',ClaudeNote' : '');
       const optionalCells = (q) =>
         (carriesAnswerDetails ? `,"${esc(q.AnswerDetails || q.answerDetails)}"` : '')
         + (carriesBackground ? `,"${esc(q.Background || q.background)}"` : '')
@@ -216,7 +220,9 @@ exports.handler = async (event) => {
         + (carriesRoundKind ? `,"${esc(q.RoundKind || q.roundKind)}"` : '')
         + (carriesAttribution ? `,"${esc(q.SourceAttribution || q.sourceAttribution)}"` : '')
         + (carriesSourceSet ? `,"${esc(q.SourceSetId || q.sourceSetId)}"` : '')
-        + (carriesSourceSk ? `,"${esc(q.SourceQuestionSk || q.sourceQuestionSk)}"` : '');
+        + (carriesSourceSk ? `,"${esc(q.SourceQuestionSk || q.sourceQuestionSk)}"` : '')
+        + (carriesClaudeGets ? `,"${esc(q.ClaudeGets || q.claudeGets)}"` : '')
+        + (carriesClaudeNote ? `,"${esc(q.ClaudeNote || q.claudeNote)}"` : '');
 
       if (engagementType === 'trivia') {
         // OptionA..OptionF, which is what the importer reads and what every

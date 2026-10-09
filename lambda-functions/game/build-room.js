@@ -31,6 +31,8 @@ const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { toAll, toHosts } = require('./survey-broadcast');
 const S = require('./build-store');
 const C = require('./build-crew');
+const LAN = require('./build-lan');
+const { closeSeat } = require('./build-seat');
 
 // S3 is loaded lazily: most calls never touch an image, and tests stub it.
 let s3client = null;
@@ -99,7 +101,7 @@ async function loadPlayers(ctx) {
   for (const r of rows) {
     const sk = String(r.SK);
     if (sk.includes('#SCORE') || sk.includes('#STATE')) continue;
-    if (r.Removed) continue;
+    if (r.Removed || r.RemovedAt) continue;
     const name = r.PlayerName || r.playerName || sk.slice('PLAYER#'.length);
     if (name) names.add(name);
   }
@@ -146,9 +148,13 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
+  // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
+  // but HELD: nothing reaches Claude until the host presses Send now.
+  const kind4 = S.claudeGetsOf(as);
+  const held = Boolean(forAgent) && kind4 === 'later';
   const row = {
     SK: sk,
     LogId: sk.slice('BUILD#LOG#'.length).replace('#', '-'),
@@ -158,14 +164,52 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(link ? { Link: link } : {}),
     By: by,
     ...(askId ? { AskId: askId } : {}),
-    ...(forAgent ? { ForAgent: true } : {}),
+    ...(forAgent && !held ? { ForAgent: true } : {}),
     ...(forBuilder ? { ForBuilder: forBuilder } : {}),
     ...(shareId ? { ShareId: shareId } : {}),
     ...(name ? { Name: name } : {}),
+    // A run-list item (the room's list, taken in turn): Claude reports it done with this number.
+    ...(runItem ? { RunItem: runItem } : {}),
+    ...(runId ? { RunId: runId } : {}),
     ...(spoken ? { Spoken: true } : {}),
+    // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
+    ...(forAgent ? { ForAgentAs: kind4 } : {}),
+    ...(forAgent && claudeNote ? { ClaudeNote: claudeNote } : {}),
     CreatedAt: now,
   };
-  return put(ctx, row);
+  const saved = await put(ctx, row);
+  // Keep in mind and Later stand: they join the room brief, which Claude
+  // reads on every call until the host edits them away.
+  // An opening step fills its own line of the brief instead (noBrief).
+  if (forAgent && !noBrief && ['keep', 'later'].includes(kind4)) {
+    await addToBrief(ctx, kind4, { id: row.LogId, text, from: from || (by === 'room' ? 'the room' : askId ? `ask ${Number(askId)}` : 'you'), askId: askId || null, at: now });
+  }
+  return saved;
+}
+
+/** BUILD#STATE is written by UpdateItem, so the brief is sealed by hand. */
+async function saveBrief(ctx, brief) {
+  const value = ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { Brief: brief })).Brief : brief;
+  return touchState(ctx, { set: { Brief: value } });
+}
+/**
+ * The Later list is read-modify-write on the brief, so each change re-reads
+ * BUILD#STATE just before it writes: a send or an edit that landed meanwhile
+ * is kept, not overwritten.
+ */
+async function takeFromLater(ctx, ids) {
+  const fresh = S.briefView((await loadRoom(ctx)).state);
+  await saveBrief(ctx, { ...fresh, later: fresh.later.filter((i) => !ids.includes(i.id)) });
+}
+async function restoreToLater(ctx, items) {
+  const fresh = S.briefView((await loadRoom(ctx)).state);
+  const have = new Set(fresh.later.map((i) => i.id));
+  const back = items.filter((i) => i && i.id && !have.has(i.id)).map(({ id, text, from, askId, at }) => ({ id, text, from: from || 'you', askId: askId || null, at: at || null }));
+  if (back.length) await saveBrief(ctx, { ...fresh, later: [...fresh.later, ...back].slice(-S.BRIEF_MAX_ITEMS) });
+}
+async function addToBrief(ctx, as, item) {
+  const room = await loadRoom(ctx);
+  await saveBrief(ctx, S.briefWith(room.state, as, item));
 }
 
 const findAsk = (room, askId) => room.asks.find((a) => a.AskId === askId) || null;
@@ -201,14 +245,21 @@ function hostOrAgent(event, ctx) {
   return callerMayDriveSession(event, ctx.meta) ? 'host' : null;
 }
 
-async function playerFrom(ctx, input) {
+/**
+ * The player a phone is, or null. `why` (optional) is filled with the reason a
+ * seat was refused when the phone should be told which: 'removed' (the host took
+ * this person out) or 'moved' (the name is on another device now). A name
+ * nobody holds gets no code.
+ */
+async function playerFrom(ctx, input, why = {}) {
   const playerName = S.cleanText(input.playerName, 60);
   const clientId = String(input.clientId || '').slice(0, 100);
   if (!playerName) return null;
   const r = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: `PLAYER#${playerName}` } }));
   const row = r && r.Item;
-  if (!row || row.Removed) return null;
-  if (row.ClientId && row.ClientId !== clientId) return null;
+  if (!row) return null;
+  if (row.Removed || row.RemovedAt) { why.code = 'removed'; return null; }
+  if (row.ClientId && row.ClientId !== clientId) { why.code = 'moved'; return null; }
   return { playerName };
 }
 
@@ -219,7 +270,8 @@ async function hostState(ctx, audience) {
   const view = S.hostView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, now: new Date().toISOString(), audience });
   view.crew = C.crewView(room, audience === 'agent' ? 'agent' : 'host', null);
   // The host's Claude may only run crew code when the host's switch says so.
-  if (audience === 'agent') view.you = { role: 'host-claude' };
+  // `name` = the host's name as the host screen shows it: the plugin names the repo folder with it.
+  if (audience === 'agent') view.you = { role: 'host-claude', name: S.cleanText(ctx.meta && ctx.meta.HostName, 60) };
   return { room, view };
 }
 
@@ -246,6 +298,10 @@ async function createAsk(ctx, role, body) {
     ...(v.maxPicks ? { MaxPicks: v.maxPicks } : {}),
     Status: status,
     Source: role === 'agent' ? 'agent' : 'host',
+    ...(v.claudeGets ? { ClaudeGets: v.claudeGets } : {}),
+    ...(v.claudeNote ? { ClaudeNote: v.claudeNote } : {}),
+    ...(v.fromQuestion ? { FromQuestion: v.fromQuestion } : {}),
+    ...(v.openingStep ? { OpeningStep: v.openingStep, ...(v.probe ? { Probe: true } : {}) } : {}),
     CreatedAt: now,
     ...(status === 'live' ? { OpenedAt: now } : {}),
   };
@@ -276,15 +332,117 @@ async function makeCurrent(ctx, room, askId, role) {
   });
 }
 
+/**
+ * RE-ASK WITH EDITS (owner, 2026-10-08: "reask, edit before reasking"): a new
+ * live ask of the same kind from the edited words, made current. The old ask
+ * closes if it was open and points at the new one with RevotedAs, the field
+ * the tie revote writes, so History already says "Voted again as ask N".
+ * Options whose title is unchanged keep their mockup.
+ */
+async function reaskAction(ctx, room, ask, b) {
+  if (!['live', 'voting', 'results'].includes(ask.Status)) {
+    return fail(409, `This ask is ${ask.Status}; only an ask that is open or showing results can be asked again`);
+  }
+  // A revote's own "A tie between…" line is not the host's wording; do not carry it on.
+  const oldDetail = /^A tie\b/.test(ask.Detail || '') ? '' : ask.Detail;
+  const norm = S.normalizeAsk({
+    kind: ask.Kind,
+    prompt: b.prompt !== undefined ? b.prompt : ask.Prompt,
+    detail: b.detail !== undefined ? b.detail : oldDetail,
+    options: b.options !== undefined ? b.options : ask.Options,
+    maxPicks: ask.MaxPicks,
+  });
+  if (norm.error) return fail(400, norm.error);
+  const v = norm.value;
+  const askId = ask.AskId;
+  // A mockup follows its option: the same title first, then the same letter
+  // (a typo fix) unless that old title now belongs to another new option.
+  // Each old image is used once.
+  const images = S.optionImages(room, askId);
+  const oldOpts = ask.Options || [];
+  const imageOfOld = (o) => (o ? (o.imageId || images[o.label] || '') : '');
+  const usedOld = new Set();
+  const newTitles = new Set(v.options.map((o) => o.title));
+  const picked = v.options.map(() => '');
+  v.options.forEach((o, i) => {
+    const j = oldOpts.findIndex((x, k) => x.title === o.title && !usedOld.has(k));
+    if (j >= 0) { usedOld.add(j); picked[i] = imageOfOld(oldOpts[j]); }
+  });
+  v.options.forEach((o, i) => {
+    if (picked[i] || oldOpts[i] === undefined || usedOld.has(i)) return;
+    if (newTitles.has(oldOpts[i].title)) return;
+    usedOld.add(i);
+    picked[i] = imageOfOld(oldOpts[i]);
+  });
+  const pointOf = (o) => { const old = oldOpts.find((x) => x.title === o.title && x.pointId); return old ? old.pointId : ''; };
+  const options = v.options.map((o, i) => ({ ...o, ...(picked[i] ? { imageId: picked[i] } : {}), ...(pointOf(o) ? { pointId: pointOf(o) } : {}) }));
+  const fromPoints = options.map((o) => o.pointId).filter(Boolean);
+  const now = new Date().toISOString();
+  // Close everything still open first (the old ask among it), so there is never a moment with two.
+  for (const other of room.asks) {
+    if (S.OPEN_STATUSES.includes(other.Status) && other.AskId !== askId) await put(ctx, { ...other, Status: 'results', ClosedAt: now });
+  }
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const newId = S.pad3(st.AskSeq || 1);
+  const open = S.OPEN_STATUSES.includes(ask.Status);
+  await put(ctx, {
+    ...ask,
+    ...(open ? { Status: 'results', ClosedAt: now } : {}),
+    ...(ask.Wheel ? { Wheel: { ...ask.Wheel, Armed: false } } : {}),
+    RevotedAs: newId,
+  });
+  await put(ctx, {
+    SK: S.SK.ask(newId), AskId: newId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: options,
+    ...(v.scale ? { Scale: v.scale } : {}),
+    ...(v.maxPicks ? { MaxPicks: v.maxPicks } : {}),
+    Status: 'live', Source: 'host', CreatedAt: now, OpenedAt: now,
+    ...(ask.ClaudeGets ? { ClaudeGets: ask.ClaudeGets } : {}),
+    ...(ask.ClaudeNote ? { ClaudeNote: ask.ClaudeNote } : {}),
+    ...(ask.OpeningStep ? { OpeningStep: ask.OpeningStep, ...(ask.Probe ? { Probe: true } : {}) } : {}),
+    ...(fromPoints.length ? { FromPoints: fromPoints } : {}),
+  });
+  if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, fromPoints, now);
+  await touchState(ctx, { set: { CurrentAskId: newId } });
+  await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { ask: S.askView(findAsk(after, newId), after, 'host') });
+}
+
 async function askAction(ctx, role, askId, body) {
   const b = body || {};
   const room = await loadRoom(ctx);
   const ask = findAsk(room, askId);
   if (!ask) return fail(404, `No ask ${askId}`);
   const action = String(b.action || '').toLowerCase();
+  if (action === 'reask') return reaskAction(ctx, room, ask, b);
+  if (action === 'forward') return role === 'host' ? forwardAction(ctx, room, ask, b) : fail(403, 'Only the host moves points forward');
   if (WHEEL_ACTIONS.includes(action)) return wheelAction(ctx, role, room, ask, action, b);
   const now = new Date().toISOString();
   const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
+
+  // OPEN NEXT (step 4, C3b): line a waiting ask up behind the open one. It
+  // opens when the current ask closes; with nothing open, it opens now.
+  if (action === 'opennext' || action === 'notnext') {
+    if (ask.Status !== 'proposed') return fail(409, `This ask is ${ask.Status}; only a waiting ask can be lined up`);
+    const current = room.state && room.state.CurrentAskId ? findAsk(room, room.state.CurrentAskId) : null;
+    const somethingOpen = Boolean(current && S.OPEN_STATUSES.includes(current.Status));
+    if (action === 'notnext') {
+      if (room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+    } else if (somethingOpen) {
+      await touchState(ctx, { set: { NextAskId: askId } });
+      await logEntry(ctx, { kind: 'ask', text: `Ask ${Number(askId)} opens when ask ${Number(current.AskId)} closes`, by: 'system', askId });
+    } else {
+      await put(ctx, { ...ask, Status: 'live', OpenedAt: now });
+      await makeCurrent(ctx, room, askId, role);
+      if (room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+    }
+    const after = await loadRoom(ctx);
+    const rev = (await touchState(ctx)).Rev;
+    await announce(ctx, rev);
+    return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host') });
+  }
 
   if (action === 'edit') {
     const edited = S.applyEdit(ask, b, { answered });
@@ -325,7 +483,19 @@ async function askAction(ctx, role, askId, body) {
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken });
+      // As the host chose, else as the ready question's set says, else Do now.
+      // An opening step is Keep in mind: it frames everything to come.
+      const as = S.claudeGetsOf(b.as, S.claudeGetsOf(ask.ClaudeGets, ask.OpeningStep ? 'keep' : 'do-now'));
+      next.Decision.as = as;
+      if (as === 'later') next.Decision.heldForLater = true;
+      if (ask.OpeningStep) {
+        // A probe keeps its question ("Who is it not for: strangers online"),
+        // or its answer would read as the opposite of what the room said.
+        const answer = openingAnswer(ask, room, chosen, direction);
+        const brief = S.briefWithStep(room.state, ask.OpeningStep, ask.Probe ? S.questionAnswer(ask.Prompt, answer) : answer, { probe: Boolean(ask.Probe), askId, at: now });
+        await saveBrief(ctx, brief);
+      }
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '', noBrief: Boolean(ask.OpeningStep) });
     }
     await put(ctx, next);
     if (action === 'open' || action === 'reopen') await makeCurrent(ctx, room, askId, role);
@@ -333,6 +503,36 @@ async function askAction(ctx, role, askId, body) {
       await touchState(ctx, { set: { CurrentAskId: '' } });
     }
     if (action === 'close') await logEntry(ctx, { kind: 'ask', text: `Closed: ${ask.Prompt}`, by: 'system', askId });
+    // Opened by hand: it is no longer waiting to go next.
+    if (action === 'open' && room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+    if (action === 'discard') {
+      if (room.state && room.state.NextAskId === askId) await touchState(ctx, { set: { NextAskId: '' } });
+      // Cancelling a vote made from ideas puts them back where they were:
+      // on the Later list if that is where the vote found them, else the queue.
+      for (const id of ask.FromIdeas || []) {
+        const idea = findIdea(room, id);
+        if (idea && idea.PromotedTo === askId) {
+          const back = { ...idea, Status: idea.PriorStatus === 'later' ? 'later' : 'new', UpdatedAt: now };
+          delete back.PromotedTo;
+          delete back.PriorStatus;
+          await put(ctx, back);
+        }
+      }
+      // The same for a vote made from talking points.
+      for (const id of ask.FromPoints || []) {
+        const pt = findPoint(room, id);
+        if (pt && pt.Status === 'voting' && pt.PromotedTo === askId) {
+          const back = { ...pt, Status: pt.PriorStatus === 'queued' ? 'queued' : 'new', UpdatedAt: now };
+          delete back.PromotedTo;
+          delete back.PriorStatus;
+          delete back.Outcome;
+          await put(ctx, back);
+        }
+      }
+      // ...and the directions the vote took off the Later list go back on it.
+      if (Array.isArray(ask.FromLater) && ask.FromLater.length) await restoreToLater(ctx, ask.FromLater);
+    }
+    if (action === 'close' || action === 'decide' || action === 'discard') await openNextIfQueued(ctx, askId);
   }
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
@@ -422,7 +622,8 @@ async function wheelAction(ctx, role, room, ask, action, b) {
       const images = S.optionImages(room, askId);
       const options = (ask.Options || []).filter((o) => tied.includes(o.label))
         .map((o) => ({ ...o, ...(o.imageId || images[o.label] ? { imageId: o.imageId || images[o.label] } : {}) }));
-      await put(ctx, { ...base, Detail: `A tie between ${options.map((o) => o.label).join(' and ')}. Vote again.`, Options: options, Status: 'live' });
+      const fromPoints = options.map((o) => o.pointId).filter(Boolean);
+      await put(ctx, { ...base, Detail: `A tie between ${options.map((o) => o.label).join(' and ')}. Vote again.`, Options: options, Status: 'live', ...(fromPoints.length ? { FromPoints: fromPoints } : {}) });
     } else {
       await put(ctx, { ...base, Detail: 'A tie. Vote again between these.', Options: [], Status: 'voting', VotingAt: now });
       const resps = room.resps.filter((r) => r.AskId === askId && tied.includes(r.RespId));
@@ -432,6 +633,7 @@ async function wheelAction(ctx, role, room, ask, action, b) {
       }
     }
     await put(ctx, { ...ask, RevotedAs: newId });
+    if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, (ask.Options || []).filter((o) => tied.includes(o.label)).map((o) => o.pointId).filter(Boolean), now);
     await makeCurrent(ctx, await loadRoom(ctx), newId, role);
   }
   const after = await loadRoom(ctx);
@@ -488,6 +690,7 @@ async function postLog(ctx, role, body) {
     by: role === 'agent' ? 'agent' : 'host',
     // What the room said can go straight to Claude; a host note never does.
     forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
+    as: b.as,
   });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -556,7 +759,7 @@ async function editLog(ctx, logId, body) {
 async function postDirection(ctx, body) {
   const text = S.cleanText((body || {}).text, S.LIMITS.direction);
   if (!text) return fail(400, 'Write the direction');
-  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true });
+  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -586,17 +789,24 @@ async function ideaAction(ctx, ideaId, body) {
     // WALL also puts it on the Stage for a short while, with no name.
     status = 'acknowledged';
   } else if (action === 'dismiss') status = 'dismissed';
+  // LATER (step 4): not now, not gone. It leaves the queue and waits in its
+  // own fold until the host brings it back.
+  else if (action === 'later') status = 'later';
   else if (action === 'restore') status = 'new';
-  else return fail(400, 'action must be direct, suggest, acknowledge, wall, dismiss or restore');
+  else return fail(400, 'action must be direct, suggest, acknowledge, wall, later, dismiss or restore');
   const next = { ...idea, Status: status, UpdatedAt: now, ...(action === 'wall' ? { WalledAt: now } : {}) };
-  if (action === 'restore') delete next.WalledAt;
+  // How it was used, so the sender's phone can say (step 7, C11): sent to
+  // Claude, or added to the room's open Ideas ask.
+  if (action === 'direct') next.PromotedVia = 'claude';
+  if (action === 'suggest') next.PromotedVia = 'ideas';
+  if (action === 'restore') { delete next.WalledAt; delete next.PromotedVia; }
   await put(ctx, next);
   if (action === 'wall') {
     const comment = { IdeaId: idea.IdeaId, Text: idea.Text, At: now };
     await touchState(ctx, { set: { WallComment: ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { WallComment: comment })).WallComment : comment } });
   }
   if (action === 'direct' || action === 'suggest') {
-    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct' });
+    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -621,6 +831,251 @@ async function clearWall(ctx) {
   return reply(200, { ok: true });
 }
 
+/**
+ * THE HOST EDITS THE BRIEF (C14): who it is for, Keep in mind, Later. Claude
+ * is told, as a Keep in mind direction, so it re-reads the whole brief.
+ */
+async function editBrief(ctx, body) {
+  const room = await loadRoom(ctx);
+  const next = S.normalizeBrief(room.state, body);
+  await saveBrief(ctx, next);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { brief: next });
+}
+
+/**
+ * WHAT AN OPENING STEP'S DECISION SAYS, for its brief line: the chosen
+ * option(s) or idea(s), else the sentence the host wrote without its question.
+ */
+function openingAnswer(ask, room, chosen, direction) {
+  if (ask.Kind === 'choice' && chosen.length) {
+    const titles = (ask.Options || []).filter((o) => chosen.includes(o.label)).map((o) => o.title);
+    if (titles.length) return titles.join('; ');
+  }
+  if (ask.Kind === 'suggest' && chosen.length) {
+    const texts = room.resps.filter((x) => x.AskId === ask.AskId && chosen.includes(x.RespId)).map((x) => x.Text);
+    if (texts.length) return texts.join('; ');
+  }
+  const prefix = `${S.questionAnswer(ask.Prompt, 'x').slice(0, -1)}`;
+  return direction.startsWith(prefix) ? direction.slice(prefix.length).trim() : direction;
+}
+
+/**
+ * THE OPENING, BY HAND (owner, 2026-10-06): the host answers a step for the
+ * room (Tools and style above all), skips one, or opens it again; and Start
+ * building ends the opening, sending Claude the whole brief as Do now.
+ */
+async function openingAction(ctx, action, body) {
+  const b = body || {};
+  const room = await loadRoom(ctx);
+  const step = String(b.step || '');
+  const now = new Date().toISOString();
+  if (action === 'start') {
+    const brief = S.briefView(room.state);
+    const text = S.briefText(brief);
+    await touchState(ctx, { set: { Phase: 'building' } });
+    await logEntry(ctx, {
+      kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
+      text: `The room has framed the build. Plan 3 to 6 steps, post the plan with post_update (kind "milestone"), and start building.${text ? `\n\n${text}` : ''}`,
+    });
+    await logEntry(ctx, { kind: 'milestone', text: 'The room framed the build. Claude is building.', by: 'system' });
+  } else if (action === 'resume') {
+    // BACK TO THE OPENING (owner, 2026-10-06: Start building was pressed by
+    // mistake and "the opening questioning was lost"). Nothing was lost: the
+    // brief and its steps stay. Claude is told to pause.
+    await touchState(ctx, { set: { Phase: 'opening' } });
+    await logEntry(ctx, {
+      kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
+      text: 'The host has gone back to the opening to frame the build further. Pause building: finish or set aside what you are doing, write no new product code, and wait with wait_for_direction until the host presses Start building again.',
+    });
+    await logEntry(ctx, { kind: 'milestone', text: 'Back to the opening: the room is framing the build further.', by: 'system' });
+  } else {
+    if (!S.OPENING_KEYS.includes(step)) return fail(400, `step must be one of ${S.OPENING_KEYS.join(', ')}`);
+    const def = S.OPENING_STEPS.find((x) => x.key === step);
+    if (action === 'answer') {
+      const text = S.cleanText(b.text, S.LIMITS.listItem);
+      if (!text) return fail(400, 'Write the answer');
+      await saveBrief(ctx, S.briefWithStep(room.state, step, text, { probe: b.probe === true, at: now }));
+      await logEntry(ctx, { kind: 'direction', by: 'host', forAgent: true, as: 'keep', noBrief: true, text: S.questionAnswer(def.question, text) });
+    } else if (action === 'skip' || action === 'reopen') {
+      const brief = S.briefView(room.state);
+      const steps = { ...brief.steps };
+      if (action === 'skip') steps[step] = 'skipped';
+      else delete steps[step];
+      await saveBrief(ctx, { ...brief, steps });
+    } else return fail(400, 'action must be answer, skip, reopen, start or resume');
+  }
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { opening: S.openingView(after.state, after), brief: S.briefView(after.state) });
+}
+
+/**
+ * CLAUDE DRAFTS THE BRIEF (owner, 2026-10-06): a headline, a short summary
+ * and plainer wording for any line, waiting for the host on the opening
+ * panel. BUILD#STATE is written by UpdateItem, so the draft is sealed by hand.
+ */
+async function draftBrief(ctx, body) {
+  const norm = S.normalizeDraft(body);
+  if (norm.error) return fail(400, norm.error);
+  const draft = { ...norm.value, at: new Date().toISOString() };
+  const value = ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { BriefDraft: draft })).BriefDraft : draft;
+  await touchState(ctx, { set: { BriefDraft: value } });
+  await logEntry(ctx, { kind: 'progress', text: 'Claude drafted the build brief for the host to look over', by: 'agent' });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { draft: S.draftView({ BriefDraft: draft }) });
+}
+
+/** The host uses Claude's draft (as edited) or dismisses it. */
+async function settleDraft(ctx, action, body) {
+  const room = await loadRoom(ctx);
+  if (!S.draftView(room.state)) return fail(404, 'There is no draft to settle');
+  if (action === 'accept') {
+    const norm = S.normalizeDraft(body);
+    if (norm.error) return fail(400, norm.error);
+    const d = norm.value;
+    const brief = S.briefView(room.state);
+    const lines = { ...brief.lines };
+    for (const k of S.BRIEF_LINES) if (d.lines[k]) lines[k] = d.lines[k];
+    await saveBrief(ctx, { ...brief, lines, forWhom: d.lines.forWhom || brief.forWhom, headline: d.headline, summary: d.summary });
+    await logEntry(ctx, { kind: 'direction', by: 'host', forAgent: true, as: 'keep', noBrief: true, text: `The build brief's headline: ${d.headline}${d.summary ? `. ${d.summary}` : ''}` });
+  }
+  await touchState(ctx, { set: { BriefDraft: null } });
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { brief: S.briefView(after.state), opening: S.openingView(after.state, after) });
+}
+
+/**
+ * SEND NOW (owner, 2026-10-06): a direction held on the Later list goes to Claude
+ * as Do now, and leaves the list.
+ */
+async function sendLater(ctx, itemId) {
+  const room = await loadRoom(ctx);
+  const brief = S.briefView(room.state);
+  const item = brief.later.find((i) => i.id === itemId);
+  if (!item) return fail(404, 'That is no longer on the Later list');
+  await takeFromLater(ctx, [itemId]);
+  const row = await logEntry(ctx, { kind: 'direction', text: item.text, by: 'host', forAgent: true, as: 'do-now', askId: item.askId || undefined });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { entry: S.logView(row) });
+}
+
+/**
+ * PUT LATER TO A VOTE (C14): the brief's Later items become a Pick one vote,
+ * open at once. Items stay on the list until the host removes them.
+ */
+async function laterToVote(ctx, body) {
+  const b = body || {};
+  const room = await loadRoom(ctx);
+  const brief = S.briefView(room.state);
+  const ids = Array.isArray(b.ids) && b.ids.length ? b.ids.map(String) : brief.later.map((i) => i.id);
+  const picked = ids.map((id) => brief.later.find((i) => i.id === id)).filter(Boolean);
+  const norm = S.voteFromIdeas(picked.map((i) => ({ Text: i.text })), { prompt: b.prompt || 'Which should Claude build next?' });
+  if (norm.error) return fail(400, norm.error.replace('Tick at least', 'The Later list needs at least').replace(' ideas to put to a vote', ' items to vote on'));
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const askId = S.pad3(st.AskSeq || 1);
+  const now = new Date().toISOString();
+  const v = norm.value;
+  await put(ctx, { SK: S.SK.ask(askId), AskId: askId, Kind: 'choice', Prompt: v.prompt, Detail: '', Options: v.options, MaxPicks: 1, Status: 'live', Source: 'host', CreatedAt: now, OpenedAt: now });
+  await makeCurrent(ctx, room, askId, 'host');
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { ask: S.askView(findAsk(after, askId), after, 'host') });
+}
+
+/**
+ * QUEUE IT (step 4, C1): the host's own idea, from the composer, waiting in
+ * the queue beside the room's. It never reaches a phone's "your ideas".
+ */
+async function hostIdea(ctx, body) {
+  const text = S.cleanText((body || {}).text, S.LIMITS.idea);
+  if (!text) return fail(400, 'Write the idea');
+  const now = new Date().toISOString();
+  const sk = S.SK.idea(now);
+  const item = { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: 'Host', Source: 'host', Text: text, Status: 'new', CreatedAt: now };
+  await put(ctx, item);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { idea: S.ideaView(item) });
+}
+
+/**
+ * IDEAS TO A VOTE (step 4, C3, C3b). The ticked ideas become a Choose ask and
+ * are marked used. Three ways out:
+ *   - open now (the default): the vote is live at once;
+ *   - `open: false`: a draft, waiting in the queue;
+ *   - `askForMockups`: a draft too, and Claude is asked for a mockup of each
+ *     option. It is Ready when every option has a picture and opens only when
+ *     the host opens it (or said "Open next").
+ * Cancelling the vote (discard) puts the ideas back in the queue.
+ */
+async function askFromIdeas(ctx, body) {
+  const b = body || {};
+  const ids = Array.isArray(b.ideaIds) ? [...new Set(b.ideaIds.map(String))] : [];
+  const room = await loadRoom(ctx);
+  const ideas = ids.map((id) => findIdea(room, id));
+  if (ideas.some((i) => !i)) return fail(404, 'One of those ideas is gone');
+  // One Later list (batch 2-3, B4): directions held for Claude can stand in the
+  // same vote as ideas. They are options too, and leave the list once it exists.
+  const laterIds = Array.isArray(b.laterIds) ? [...new Set(b.laterIds.map(String))] : [];
+  const brief = S.briefView(room.state);
+  const held = laterIds.map((id) => brief.later.find((i) => i.id === id));
+  if (held.some((i) => !i)) return fail(404, 'One of those is no longer on the Later list');
+  if (ideas.some((i) => !['new', 'later', 'acknowledged'].includes(i.Status || 'new'))) {
+    return fail(409, 'One of those ideas is already in a vote or sent to Claude');
+  }
+  const norm = S.voteFromIdeas([...ideas, ...held.map((i) => ({ Text: i.text }))], b);
+  if (norm.error) return fail(400, norm.error);
+  const mockups = b.askForMockups === true;
+  const status = mockups || b.open === false ? 'proposed' : 'live';
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const askId = S.pad3(st.AskSeq || 1);
+  const now = new Date().toISOString();
+  const v = norm.value;
+  await put(ctx, {
+    SK: S.SK.ask(askId), AskId: askId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: v.options, MaxPicks: v.maxPicks,
+    Status: status, Source: 'host', CreatedAt: now, FromIdeas: ids,
+    ...(held.length ? { FromLater: held.map(({ id, text, from, askId, at }) => ({ id, text, from, askId, at })) } : {}),
+    ...(mockups ? { AskForMockups: true } : {}),
+    ...(status === 'live' ? { OpenedAt: now } : {}),
+  });
+  for (const idea of ideas) await put(ctx, { ...idea, Status: 'promoted', PromotedTo: askId, PriorStatus: idea.Status || 'new', UpdatedAt: now });
+  if (held.length) await takeFromLater(ctx, laterIds);
+  if (status === 'live') await makeCurrent(ctx, room, askId, 'host');
+  // No question in the entry: phones read the timeline, and a waiting vote
+  // stays hidden from the room until it opens.
+  else await logEntry(ctx, { kind: 'ask', text: `${ideas.length + held.length} ideas are waiting for a vote`, by: 'system', askId });
+  if (mockups) await logEntry(ctx, { kind: 'direction', text: S.mockupDirection(askId, v.options.map((o) => o.label)), by: 'host', askId, forAgent: true });
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { ask: S.askView(findAsk(after, askId), after, 'host') });
+}
+
+/** Open the ask the host lined up with "Open next", once the current one closes. */
+async function openNextIfQueued(ctx, closedAskId) {
+  const room = await loadRoom(ctx);
+  const nextId = room.state && room.state.NextAskId;
+  if (!nextId || nextId === closedAskId) return;
+  // Only once nothing is open: answering a waiting ask for the room closes
+  // nothing the room is looking at.
+  if (room.asks.some((x) => S.OPEN_STATUSES.includes(x.Status))) return;
+  const next = findAsk(room, nextId);
+  await touchState(ctx, { set: { NextAskId: '' } });
+  if (!next || next.Status !== 'proposed') return;
+  const now = new Date().toISOString();
+  await put(ctx, { ...next, Status: 'live', OpenedAt: now });
+  await makeCurrent(ctx, room, nextId, 'host');
+  await logEntry(ctx, { kind: 'ask', text: `Opened ask ${Number(nextId)} next, as you lined it up`, by: 'system', askId: nextId });
+}
+
 async function postOutcome(ctx, role, body) {
   const now = new Date().toISOString();
   const norm = S.normalizeOutcome(body, role === 'agent' ? 'agent' : 'host', now);
@@ -643,6 +1098,7 @@ async function postSettings(ctx, body) {
   const room = await loadRoom(ctx);
   const settings = { ...S.settingsOf(room.state) };
   if (b.reviewAgentAsks !== undefined) settings.reviewAgentAsks = Boolean(b.reviewAgentAsks);
+  if (b.listNames !== undefined) settings.listNames = Boolean(b.listNames);
   const set = { Settings: settings };
   if (b.agentName !== undefined) set.AgentName = S.cleanText(b.agentName, S.LIMITS.agentName) || 'Claude Code';
   const st = await touchState(ctx, { set });
@@ -718,6 +1174,13 @@ async function agentTouch(ctx, event, role) {
  * every few seconds while it waits, and a broadcast per poll would have every
  * page refetching constantly. Only the moment it STARTS listening is announced.
  */
+async function markKickedOff(ctx) {
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: 'KickedOffAt' }));
+  if (res && res.Item && res.Item.KickedOffAt) return;
+  const st = await touchState(ctx, { set: { KickedOffAt: new Date().toISOString() } });
+  await announce(ctx, st.Rev);
+}
+
 async function markListening(ctx) {
   const now = new Date().toISOString();
   const res = await db.send(new UpdateCommand({
@@ -748,11 +1211,34 @@ async function takeInbox(ctx, role) {
         ConditionExpression: 'attribute_not_exists(DeliveredAt)',
         ExpressionAttributeValues: { ':now': now },
       }));
-      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt });
+      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), as: S.claudeGetsOf(d.ForAgentAs), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt, ...(d.RunItem ? { runItem: d.RunItem, runId: d.RunId || null } : {}) });
     } catch (e) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
     }
   }
+  // Research / Ideas requests: delivered to the Claude they are for, once. A
+  // request made while Claude was away stays `waiting` and arrives on its next call.
+  const waiting = (room.preqs || []).filter((r) => r.Status === 'waiting' && (role === 'builder' ? r.ForBuilder === ctx.builder : !r.ForBuilder));
+  for (const r of waiting) {
+    try {
+      await db.send(new UpdateCommand({
+        TableName: TABLE(),
+        Key: { PK: ctx.pk, SK: r.SK },
+        UpdateExpression: 'SET DeliveredAt = :now, #st = :working, UpdatedAt = :now',
+        ConditionExpression: 'attribute_not_exists(DeliveredAt)',
+        ExpressionAttributeNames: { '#st': 'Status' },
+        ExpressionAttributeValues: { ':now': now, ':working': 'working' },
+      }));
+      const verb = r.Kind === 'research' ? 'Research this for the room, with sources' : 'Give the room ideas for where to go next';
+      out.push({
+        id: r.ReqId, kind: r.Kind, requestId: r.ReqId, subject: r.Subject || '',
+        text: `${verb}: ${r.Subject || ''}`, from: 'request', as: 'do-now', askId: null, shareId: null, createdAt: r.CreatedAt,
+      });
+    } catch (e) {
+      if (e && e.name !== 'ConditionalCheckFailedException') throw e;
+    }
+  }
+  out.sort((x, y) => String(x.createdAt || '').localeCompare(String(y.createdAt || '')));
   // The decision row records that Claude heard it.
   for (const item of out.filter((x) => x.askId)) {
     const ask = findAsk(room, item.askId);
@@ -1135,7 +1621,7 @@ async function crewBase(ctx, role, body) {
     }
   }
   await logEntry(ctx, { kind: 'base', text: `Base moved to ${commit.slice(0, 7)}${merged ? `: ${merged.Builder}'s ${merged.Title}` : note ? `: ${note}` : ''}`, by: role === 'agent' ? 'agent' : 'host', shareId: merged ? merged.ShareId : undefined });
-  for (const bl of room.builders) {
+  for (const bl of C.liveBuilders(room)) {
     await logEntry(ctx, { kind: 'direction', text: C.baseMovedText(next, merged ? `${merged.Builder}'s ${merged.Title}` : note), by: 'host', forBuilder: bl.PlayerName });
   }
   return done(ctx, 200, { crew: next });
@@ -1164,6 +1650,50 @@ async function crewHelpAction(ctx, name, body) {
   } else if (action !== 'resolve') return fail(400, 'action must be send-claude or resolve');
   await put(ctx, { ...b, Status: action === 'resolve' ? 'building' : b.Status });
   return done(ctx, 200, { ok: true });
+}
+
+/**
+ * Host: take a builder off the crew. Their Claude is unlinked (every live key
+ * of theirs is retired, which the authorizer refuses from then on), their lane
+ * closes (open early looks go to Not now, their claims on tasks are released,
+ * the board stops counting them), and the work already merged is not touched.
+ * Idempotent. It does NOT soft-remove the player (that is remove-player.js, and
+ * the Session panel makes both calls); Bring back restores the seat there, and
+ * the person gets a NEW key by minting one again.
+ */
+async function crewBuilderRemove(ctx, name) {
+  const room = await loadRoom(ctx);
+  const b = findBuilder(room, name);
+  const keys = room.keys.filter((k) => k.Role === 'builder' && k.PlayerName === name);
+  if (!b && !keys.length) return fail(404, 'That player is not on the crew');
+  const now = new Date().toISOString();
+  const wasOpen = Boolean(b && !b.ClosedAt);
+  await closeSeat(db, TABLE(), ctx.gameId, name, now);
+  if (wasOpen) {
+    for (const s of room.shares) {
+      if (s.Builder === name && !['merged', 'not-now'].includes(s.Lane || 'shared')) await put(ctx, { ...s, Lane: 'not-now', UpdatedAt: now });
+    }
+    for (const t of room.tasks) {
+      if ((t.ClaimedBy || []).includes(name)) await put(ctx, { ...t, ClaimedBy: t.ClaimedBy.filter((x) => x !== name) });
+    }
+    await logEntry(ctx, { kind: 'crew', text: `${name} was taken off the crew`, by: 'host', name });
+  }
+  // One action: the person leaves the room's counts too, as remove-player does.
+  try {
+    await db.send(new UpdateCommand({
+      TableName: TABLE(),
+      Key: { PK: ctx.pk, SK: `PLAYER#${name}` },
+      UpdateExpression: 'SET RemovedAt = :at',
+      ConditionExpression: 'attribute_exists(SK)',
+      ExpressionAttributeValues: { ':at': now },
+    }));
+    await toHosts(db, TABLE(), ctx.gameId, { type: 'playerRemoved', gameId: ctx.gameId, playerName: name, timestamp: now });
+  } catch (error) {
+    if (error.name !== 'ConditionalCheckFailedException') throw error;
+  }
+  const st = await touchState(ctx);
+  await announce(ctx, st.Rev);
+  return reply(200, { ok: true, builder: name, removed: true });
 }
 
 /** A version's patch (patch mode), for the host's Claude to apply and review. */
@@ -1196,7 +1726,7 @@ async function routeCrew(ctx, role, method, parts, body, query) {
   }
   if (method !== 'POST') return fail(404, 'Not found');
   const room = await loadRoom(ctx);
-  if (!C.crewOf(room.state).enabled && !(host && b === 'settings')) return fail(409, 'Crew mode is off in this room');
+  if (!C.crewOf(room.state).enabled && !(host && (b === 'settings' || (b === 'builders' && d === 'remove')))) return fail(409, 'Crew mode is off in this room');
   if (b === 'settings' && !c) return hostSide ? crewSettings(ctx, role, body) : no();
   if (b === 'tasks' && !c) return hostSide ? crewTaskCreate(ctx, role, body) : no();
   if (b === 'tasks' && c && d === 'claim') return builder ? crewClaim(ctx, ctx.builder, c) : no();
@@ -1212,6 +1742,7 @@ async function routeCrew(ctx, role, method, parts, body, query) {
   if (b === 'base' && !c) return hostSide ? crewBase(ctx, role, body) : no();
   if (b === 'help' && !c) return builder ? crewHelp(ctx, ctx.builder, body) : no();
   if (b === 'help' && c) return host ? crewHelpAction(ctx, c, body) : no();
+  if (b === 'builders' && c && d === 'remove') return host ? crewBuilderRemove(ctx, c) : no();
   return fail(404, 'Not found');
 }
 
@@ -1223,6 +1754,7 @@ async function builderState(ctx) {
   return {
     gameId: pub.gameId, title: pub.title, goal: pub.goal, state: pub.state, playerCount: pub.playerCount,
     log: pub.log, outcome: pub.outcome,
+    points: S.pointsClaudeView(room, { role: 'builder', name: ctx.builder }),
     you: { role: 'builder', name: ctx.builder },
     crew: C.crewView(room, 'builder', me),
   };
@@ -1230,6 +1762,13 @@ async function builderState(ctx) {
 
 async function routeBuilder(ctx, method, parts, body, query) {
   const [a, b] = parts;
+  // The authorizer already refuses a retired key. This is the second wall: a
+  // builder the host took off the crew gets nothing, key or no key.
+  const own = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: C.SK.builder(ctx.builder) } }));
+  if (own && own.Item && own.Item.ClosedAt) return fail(403, 'The host took you off the crew');
+  // Removed from the room by any door (remove-player.js) is off the crew too.
+  const seat = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: `PLAYER#${ctx.builder}` } }));
+  if (seat && seat.Item && seat.Item.RemovedAt) return fail(403, 'The host took you out of the room');
   if (method === 'GET' && a === 'state' && !b) return reply(200, await builderState(ctx));
   if (method === 'GET' && a === 'inbox' && !b) return reply(200, {});
   if (method === 'GET' && a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
@@ -1237,6 +1776,7 @@ async function routeBuilder(ctx, method, parts, body, query) {
   if ((await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
   if (a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
   if (method === 'POST' && a === 'images' && !b) return postImage(ctx, 'builder', body);
+  if (method === 'POST' && a === 'points' && !b) return postPoints(ctx, 'builder', body);
   if (method === 'POST' && a === 'log' && !b) {
     const kind = String((body || {}).kind || 'progress');
     if (!['progress', 'milestone', 'showing', 'checkpoint'].includes(kind)) return fail(400, 'kind must be progress, milestone, showing or checkpoint');
@@ -1274,12 +1814,648 @@ async function postActivity(ctx, body) {
   return reply(200, { activity: items });
 }
 
+/**
+ * WI-FI SHARE (docs/design/build-room-lan-share/PLAN.md §3). The row is
+ * written with UpdateItem so the host's switch and the plugin's report never
+ * overwrite each other's fields. Sealed fields are encrypted by hand, as the
+ * brief draft is.
+ */
+async function updateLan(ctx, set) {
+  const sealed = ctx.orgId ? await encryptItem(ctx.orgId, 'buildLan', set) : set;
+  const names = { '#ttl': 'ttl' };
+  const values = { ':ttl': ctx.ttl };
+  const sets = ['#ttl = :ttl'];
+  Object.entries(sealed).forEach(([k, v], i) => { names[`#f${i}`] = k; values[`:f${i}`] = v; sets.push(`#f${i} = :f${i}`); });
+  await db.send(new UpdateCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN }, UpdateExpression: `SET ${sets.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+}
+
+/** The host's switch: `{on}` turns sharing on or off; `{dismissOffer}` hides the one-time offer. */
+async function hostShare(ctx, body) {
+  const b = body || {};
+  const now = new Date().toISOString();
+  if (b.dismissOffer === true) await updateLan(ctx, { OfferDismissedAt: now });
+  if (typeof b.on === 'boolean') {
+    if (b.on && (await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
+    // The plugin closes its gateways on a switch either way, so the old key and
+    // map are dead: clear them, and the row reads 'starting' until the plugin's
+    // next live report brings its new key.
+    await updateLan(ctx, { Wanted: b.on, WantedAt: now, OfferDismissedAt: now, Status: 'off', Key: '', Map: [], Open: 0, Error: '' });
+    await logEntry(ctx, { kind: 'note', by: 'host', text: b.on ? 'You shared the build on this Wi-Fi' : 'You stopped sharing the build on this Wi-Fi' });
+  }
+  const room = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true }) });
+}
+
+/** Map entries compared field by field: a stored map's key order is not promised. */
+const sameMap = (x, y) => x.length === y.length && x.every((m, i) => m.local === y[i].local && m.lan === y[i].lan);
+
+/** The plugin's report, every 4 to 15 seconds. Answers what to open. */
+async function shareReport(ctx, body) {
+  const norm = LAN.normalizeReport(body);
+  if (norm.error) return fail(400, norm.error);
+  const now = new Date().toISOString();
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+  const before = res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildLan', res.Item) : res.Item) : {};
+  const v = norm.value;
+  const set = { ...v, ReportedAt: now };
+  if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
+  await updateLan(ctx, set);
+  const changed = ['Status', 'Key', 'Open', 'Error'].some((k) => before[k] !== v[k])
+    || !sameMap(before.Map || [], v.Map);
+  if (changed) {
+    const rev = (await touchState(ctx)).Rev;
+    await announce(ctx, rev);
+  }
+  const ended = (await sessionState(ctx)) === 'ENDED';
+  // Targets matter only while sharing is wanted: skip reading the room otherwise.
+  const targets = before.Wanted ? LAN.lanTargets(await loadRoom(ctx)) : [];
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets });
+}
+
+// ── Talking points, research and ideas ──────────────────────────────────────
+//
+// Claude (the host's, or a builder's) posts points; the host curates them and
+// asks for Research / Ideas. Every row goes through put(), so it carries the
+// session ttl and is sealed in a team room. Nothing here reaches a phone or
+// the Stage: the room sees a point only when the host shows it or puts it to
+// a vote.
+
+const findPoint = (room, id) => (room.points || []).find((p) => p.PointId === id) || null;
+const findPointRequest = (room, id) => (room.preqs || []).find((r) => r.ReqId === id) || null;
+const POINT_FULL = 'Remove or save some first';
+/** Now, but never at or before the newest row's time: rows keep the order they were made in, even within a millisecond. */
+const nextMs = (rows) => Math.max(Date.now(), ...(rows || []).map((r) => (Date.parse(r.CreatedAt) || 0) + 1));
+
+/** Claude (role agent) or a builder's Claude posts 1 to 8 points, optionally answering a request. */
+async function postPoints(ctx, role, body) {
+  const norm = S.normalizePointsPost(body);
+  if (norm.error) return fail(400, norm.error);
+  const { points, done: closes, requestId, batchId } = norm.value;
+  const room = await loadRoom(ctx);
+  const who = role === 'builder' ? { role: 'builder', name: ctx.builder } : { role: 'agent' };
+  let request = null;
+  if (requestId) {
+    request = findPointRequest(room, requestId);
+    if (!request) return fail(404, 'No such request');
+    // Builders answer their own requests; the host's Claude answers the host's. Never across.
+    if (!S.isOwnRequest(request, who)) return fail(403, 'That request is not yours');
+    if (['done', 'failed'].includes(request.Status)) return fail(409, 'That request is already closed');
+  }
+  if (S.openPointCount(room) + points.length > S.POINT_LIMITS.open) return fail(409, POINT_FULL, { open: S.openPointCount(room), limit: S.POINT_LIMITS.open });
+  if (request) {
+    // One conditional update, before any point is written: a request that closed
+    // meanwhile (another post said done) refuses this one and nothing is stored.
+    const nowIso = new Date().toISOString();
+    try {
+      await db.send(new UpdateCommand({
+        TableName: TABLE(),
+        Key: { PK: ctx.pk, SK: request.SK },
+        UpdateExpression: 'SET #st = :st, UpdatedAt = :now ADD #cnt :n',
+        ConditionExpression: '#st <> :done AND #st <> :failed',
+        ExpressionAttributeNames: { '#st': 'Status', '#cnt': 'Count' },
+        ExpressionAttributeValues: { ':st': closes ? 'done' : 'working', ':now': nowIso, ':n': points.length, ':done': 'done', ':failed': 'failed' },
+      }));
+    } catch (e) {
+      if (e && e.name === 'ConditionalCheckFailedException') return fail(409, 'That request is already closed');
+      throw e;
+    }
+    request = { ...request, Status: closes ? 'done' : 'working', Count: (Number(request.Count) || 0) + points.length, UpdatedAt: nowIso };
+  }
+  const base = nextMs(room.points);
+  const batch = batchId || requestId || S.newId();
+  const posted = [];
+  for (let i = 0; i < points.length; i += 1) {
+    // One millisecond apart, so a post keeps Claude's order on the host's list.
+    const at = new Date(base + i).toISOString();
+    const sk = S.SK.point(at);
+    const v = points[i];
+    await put(ctx, {
+      SK: sk,
+      PointId: S.pointIdOf(sk),
+      Kind: v.kind,
+      Text: v.text,
+      ...(v.detail ? { Detail: v.detail } : {}),
+      ...(v.sources.length ? { Sources: v.sources } : {}),
+      ...(v.about ? { About: v.about } : {}),
+      BatchId: batch,
+      ...(requestId ? { RequestId: requestId } : {}),
+      By: role === 'builder' ? ctx.builder : 'claude',
+      ByRole: role === 'builder' ? 'builder' : 'agent',
+      Status: 'new',
+      CreatedAt: at,
+    });
+    posted.push(S.pointIdOf(sk));
+  }
+  const st = await touchState(ctx);
+  await announce(ctx, st.Rev);
+  return reply(201, { posted, ...(request ? { request: S.requestView(request) } : {}) });
+}
+
+/** A Research or Ideas request, for the host's Claude (forBuilder empty) or one builder's. */
+async function createPointRequest(ctx, forBuilder, body) {
+  const norm = S.normalizePointRequest(body);
+  if (norm.error) return fail(400, norm.error);
+  const room = await loadRoom(ctx);
+  const now = new Date(nextMs(room.preqs)).toISOString();
+  if (S.activeRequests(room, forBuilder, Date.parse(now)).length >= S.POINT_LIMITS.activeRequests) {
+    return fail(409, 'Claude already has plenty to look into; wait for some to finish');
+  }
+  const sk = S.SK.preq(now);
+  const row = await put(ctx, {
+    SK: sk,
+    ReqId: S.requestIdOf(sk),
+    Kind: norm.value.kind,
+    Subject: norm.value.subject,
+    ...(forBuilder ? { ForBuilder: forBuilder } : {}),
+    Status: 'waiting',
+    Count: 0,
+    CreatedAt: now,
+  });
+  return done(ctx, 201, { request: S.requestView(row) });
+}
+
+/** The host gives up on a request Claude has not finished (it will not be delivered or answered). */
+async function pointRequestAction(ctx, reqId, body) {
+  if (String((body || {}).action || '') !== 'cancel') return fail(400, 'action must be cancel');
+  const room = await loadRoom(ctx);
+  const r = findPointRequest(room, reqId);
+  if (!r) return fail(404, 'No such request');
+  if (['done', 'failed'].includes(r.Status)) return fail(409, 'That request is already closed');
+  const saved = await put(ctx, { ...r, Status: 'failed', UpdatedAt: new Date().toISOString() });
+  return done(ctx, 200, { request: S.requestView(saved) });
+}
+
+const WAITING_IN_RUN = 'That point is waiting in the list Claude is working through; skip it there';
+
+/** A point moved to `status`: its outcome in plain words (with the vote that got it there), run bookkeeping cleared. */
+function repoint(p, status, now, label = S.POINT_OUTCOMES[status], extra = {}) {
+  const row = { ...p, Status: status, UpdatedAt: now, ...extra };
+  const outcome = S.outcomeFor(row, label);
+  if (outcome) row.Outcome = outcome; else delete row.Outcome;
+  return row;
+}
+
+/** What the host may do with one point. */
+async function pointAction(ctx, pointId, body) {
+  const action = String((body || {}).action || '');
+  if (!['remove', 'later', 'show', 'hide', 'send'].includes(action)) return fail(400, 'action must be remove, later, show, hide or send');
+  const room = await loadRoom(ctx);
+  const p = findPoint(room, pointId);
+  if (!p || p.Status === 'removed') return fail(404, 'No such point');
+  if (S.runPendingIds(room).has(pointId)) return fail(409, WAITING_IN_RUN);
+  const status = p.Status || 'new';
+  const now = new Date().toISOString();
+  let next = status;
+  let ideas = null;
+  if (action === 'remove') next = 'removed';
+  else if (action === 'later') {
+    if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
+    // The Later list is the one place held directions live: saved, never sent.
+    // On the Stage, the room's ideas about it travel with it, as lines under the point (no names).
+    const about = status === 'shown' ? room.ideas.filter((i) => i.AboutPoint === pointId && (i.Status || 'new') === 'new').slice(0, 8) : [];
+    const lines = about.length ? `\nIdeas from the room about it:\n${about.map((i) => `- ${S.oneLine(i.Text)}`).join('\n')}` : '';
+    await logEntry(ctx, { kind: 'direction', text: S.cleanText(`${S.pointLaterText(p)}${lines}`, S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
+    next = 'later';
+  } else if (action === 'show') {
+    if (status === 'shown') return done(ctx, 200, { point: S.pointView(p) });
+    if (!['new', 'queued'].includes(status)) return fail(409, 'That point cannot go on the Stage now');
+    // One point on the Stage at a time: any other comes down.
+    for (const other of room.points) if (other.Status === 'shown') await put(ctx, repoint(other, 'new', now));
+    next = 'shown';
+  } else if (action === 'hide') {
+    if (status !== 'shown') return fail(409, 'That point is not on the Stage');
+    next = 'new';
+    // The ideas the room sent while it was up: the host may put them to a vote (T4c).
+    ideas = room.ideas.filter((i) => i.AboutPoint === pointId && (i.Status || 'new') === 'new').map((i) => i.IdeaId);
+  } else if (action === 'send') {
+    if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
+    const dir = S.pointsDirection([p]);
+    if (dir.error) return fail(400, dir.error);
+    await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now' });
+    next = 'sent';
+  }
+  // The report lists what the room saw; the status flips back when the point comes down, so the first showing is stamped.
+  const saved = await put(ctx, repoint(p, next, now, undefined, next === 'shown' ? { ShownAt: p.ShownAt || now } : {}));
+  return done(ctx, 200, { point: S.pointView(saved), ...(ideas ? { ideasAbout: ideas.length, ideaIds: ideas } : {}) });
+}
+
+/** Several points to Claude as ONE direction. Nothing is sent unless every id can be. */
+async function sendPoints(ctx, body) {
+  const ids = Array.isArray((body || {}).ids) ? [...new Set(body.ids.map(String))] : [];
+  if (!ids.length) return fail(400, 'Tick at least one point to send');
+  if (ids.length > S.POINT_LIMITS.open) return fail(400, 'Too many points to send at once');
+  const room = await loadRoom(ctx);
+  const rows = ids.map((id) => findPoint(room, id));
+  if (rows.some((p) => !p)) return fail(404, 'One of those points is gone');
+  if (rows.some((p) => !S.OPEN_POINT_STATUSES.includes(p.Status || 'new'))) return fail(409, 'One of those points is already on its way somewhere else');
+  const waiting = S.runPendingIds(room);
+  if (ids.some((id) => waiting.has(id))) return fail(409, WAITING_IN_RUN);
+  const dir = S.pointsDirection(rows);
+  if (dir.error) return fail(400, dir.error);
+  await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now' });
+  const now = new Date().toISOString();
+  for (const p of rows) await put(ctx, repoint(p, 'sent', now));
+  return done(ctx, 200, { sent: ids });
+}
+
+// ── Vote from points, the highlight, the run list ───────────────────────────
+//
+// The host ticks 2 to 8 points and puts them to a vote (a multi-pick Choose
+// ask whose options carry the point). At results the host highlights the ones
+// to move forward and sends them to Claude, works through them in turn, or
+// saves the rest for Later. The run is one row, BUILD#RUN, one at a time; it
+// changes under a version number so two presses cannot both win.
+
+/** A point leaves a vote untaken: back where it was, with the count it got. */
+function released(p, now, counts) {
+  const back = repoint(p, p.PriorStatus === 'queued' ? 'queued' : 'new', now, 'not taken forward', { VoteCount: counts[p.PointId] || 0 });
+  delete back.PromotedTo;
+  delete back.PriorStatus;
+  return back;
+}
+
+/** An ask was asked again: its kept points follow it to the new ask, the dropped ones go back. */
+async function rehomePoints(ctx, room, oldAsk, newAskId, keepIds, now) {
+  const counts = S.pointVoteCounts(oldAsk, room);
+  for (const id of oldAsk.FromPoints || []) {
+    const p = findPoint(room, id);
+    if (!p || p.Status !== 'voting') continue;
+    await put(ctx, keepIds.includes(id) ? { ...p, PromotedTo: newAskId, UpdatedAt: now } : released(p, now, counts));
+  }
+}
+
+/** The points an id list names, or the plain refusal. `statuses` = the states a point may be in. */
+function pickPoints(room, ids, statuses) {
+  const rows = ids.map((id) => findPoint(room, id));
+  if (rows.some((p) => !p || p.Status === 'removed')) return { response: fail(404, 'One of those points is gone') };
+  if (rows.some((p) => !statuses.includes(p.Status || 'new'))) return { response: fail(409, 'One of those points is already on its way somewhere else') };
+  const waiting = S.runPendingIds(room);
+  if (ids.some((id) => waiting.has(id))) return { response: fail(409, WAITING_IN_RUN) };
+  return { rows };
+}
+const idList = (v) => (Array.isArray(v) ? [...new Set(v.map(String))] : []);
+
+async function pointsVote(ctx, body) {
+  const b = body || {};
+  const ids = idList(b.ids);
+  if (ids.length < S.POINT_VOTE.min) return fail(400, `Tick at least ${S.POINT_VOTE.min} points to put to a vote`);
+  if (ids.length > S.POINT_VOTE.max) return fail(400, `A vote takes at most ${S.POINT_VOTE.max} points`);
+  const room = await loadRoom(ctx);
+  const got = pickPoints(room, ids, S.OPEN_POINT_STATUSES);
+  if (got.response) return got.response;
+  const norm = S.pointVoteAsk(got.rows, b);
+  if (norm.error) return fail(400, norm.error);
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const askId = S.pad3(st.AskSeq || 1);
+  const now = new Date().toISOString();
+  const v = norm.value;
+  await put(ctx, {
+    SK: S.SK.ask(askId), AskId: askId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: v.options, MaxPicks: v.maxPicks,
+    Status: 'live', Source: 'host', CreatedAt: now, OpenedAt: now, FromPoints: ids,
+  });
+  for (const p of got.rows) await put(ctx, repoint(p, 'voting', now, 'in a vote', { PromotedTo: askId, PriorStatus: p.Status || 'new' }));
+  await makeCurrent(ctx, room, askId, 'host');
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { ask: S.askView(findAsk(after, askId), after, 'host') });
+}
+
+/**
+ * The highlight result (asks/{id} action 'forward'). `pointIds` are the ones
+ * highlighted; `then` is what to do with them:
+ *   send       one direction to Claude, Do now
+ *   run        start the run list with them, in this order
+ *   later-rest the points not highlighted go to Later; the highlighted stay queued
+ */
+async function forwardAction(ctx, room, ask, b) {
+  const askId = ask.AskId;
+  if (!Array.isArray(ask.FromPoints) || !ask.FromPoints.length) return fail(409, 'This vote was not made from points');
+  if (ask.RevotedAs) return fail(409, 'This vote was asked again');
+  // At the results. A decided ask only when its decision was not sent to Claude.
+  if (!(ask.Status === 'results' || (ask.Status === 'decided' && ask.Decision && ask.Decision.sendToAgent === false))) {
+    return fail(409, ask.Status === 'decided' ? 'This vote was decided and sent to Claude already' : 'Close the vote first; this comes after the results');
+  }
+  const then = String(b.then || '');
+  if (!['send', 'run', 'later-rest'].includes(then)) return fail(400, 'then must be send, run or later-rest');
+  const ids = idList(b.pointIds);
+  if (then !== 'later-rest' && !ids.length) return fail(400, 'Highlight at least one point');
+  if (ids.some((id) => !ask.FromPoints.includes(id))) return fail(400, 'One of those points was not in this vote');
+  const got = pickPoints(room, ids, ['voting', 'queued']);
+  if (got.response) return got.response;
+  const counts = S.pointVoteCounts(ask, room);
+  const now = new Date().toISOString();
+  const voted = (p) => ({ VoteCount: counts[p.PointId] || 0 });
+  // The points not taken forward go back where they were (a send or a run ends the vote).
+  const releaseRest = async (taken) => {
+    const waiting = S.runPendingIds(room);
+    for (const id of ask.FromPoints.filter((x) => !taken.includes(x))) {
+      const p = findPoint(room, id);
+      if (p && ['voting', 'queued'].includes(p.Status) && !waiting.has(id)) await put(ctx, released(p, now, counts));
+    }
+  };
+  // A send or a run settles the vote: decided in one write, recorded for the host, not told to Claude again.
+  const closeVote = async (taken) => {
+    const labels = (ask.Options || []).filter((o) => taken.includes(o.pointId)).map((o) => o.label);
+    const said = (ask.Options || []).filter((o) => taken.includes(o.pointId)).map((o) => String(o.detail || o.title || '').trim().replace(/[.;]+$/, '')).join('; ');
+    const direction = S.cleanText(`Moved forward: ${said}`, S.LIMITS.direction);
+    await put(ctx, {
+      ...ask, Status: 'decided', DecidedAt: now, ClosedAt: ask.ClosedAt || now,
+      Decision: { direction, chosen: labels, note: '', sendToAgent: false, method: 'vote', as: 'do-now' },
+    });
+    await logEntry(ctx, { kind: 'decision', text: direction, by: 'host', askId, forAgent: false, spoken: false, as: 'do-now', claudeNote: '', noBrief: false });
+    await openNextIfQueued(ctx, askId);
+  };
+  let result;
+  if (then === 'send') {
+    const dir = S.pointsDirection(got.rows);
+    if (dir.error) return fail(400, dir.error);
+    await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now', askId });
+    for (const p of got.rows) await put(ctx, repoint(p, 'sent', now, 'sent to Claude', voted(p)));
+    await releaseRest(ids);
+    result = { sent: ids };
+    await closeVote(ids);
+  } else if (then === 'run') {
+    const started = await startRun(ctx, room, got.rows, now, (p) => voted(p));
+    if (started.response) return started.response;
+    await releaseRest(ids);
+    result = { run: started.run };
+    await closeVote(ids);
+  } else {
+    const waiting = S.runPendingIds(room);
+    const rest = ask.FromPoints.filter((id) => !ids.includes(id)).map((id) => findPoint(room, id))
+      .filter((p) => p && ['voting', 'queued'].includes(p.Status) && !waiting.has(p.PointId));
+    for (const p of rest) {
+      await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
+      await put(ctx, repoint(p, 'later', now, 'saved for later', voted(p)));
+    }
+    for (const p of got.rows) await put(ctx, repoint(p, 'queued', now, 'highlighted', voted(p)));
+    result = { saved: rest.map((p) => p.PointId), highlighted: ids };
+  }
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host'), ...result, ...(then === 'run' ? { run: S.runView(after.run, 'host') } : {}) });
+}
+
+/** One conditional write of the run row: false when someone else changed it first. */
+async function writeRun(ctx, row, expectedVer) {
+  const cond = expectedVer === null
+    ? { ConditionExpression: 'attribute_not_exists(PK) OR #st <> :running', ExpressionAttributeNames: { '#st': 'Status' }, ExpressionAttributeValues: { ':running': 'running' } }
+    : { ConditionExpression: '#ver = :ver', ExpressionAttributeNames: { '#ver': 'Ver' }, ExpressionAttributeValues: { ':ver': expectedVer } };
+  try {
+    await db.send(new PutCommand({ TableName: TABLE(), Item: await seal(ctx, { PK: ctx.pk, ...row, ttl: ctx.ttl }), ...cond }));
+    return true;
+  } catch (e) {
+    if (e && e.name === 'ConditionalCheckFailedException') return false;
+    throw e;
+  }
+}
+
+/** Send item k of the running list to the host's Claude, as Do now. */
+const sendRunItem = (ctx, run, k, extra = {}) => logEntry(ctx, {
+  kind: 'direction', text: S.runItemText(k, run.Items.length, run.Items[k - 1].dir), by: 'host', forAgent: true, as: 'do-now', runItem: k, runId: run.RunId, ...extra,
+});
+
+/** Start a list from these points, in order. Item 1 goes to Claude at once. */
+async function startRun(ctx, room, rows, now, voteFields) {
+  if (rows.length < 2) return { response: fail(400, 'A list needs at least two points; send a single one instead') };
+  if (rows.length > S.RUN_MAX_ITEMS) return { response: fail(400, `A list takes at most ${S.RUN_MAX_ITEMS} points`) };
+  if (room.run && room.run.Status === 'running') return { response: fail(409, 'Finish or stop the current list first') };
+  const items = [];
+  for (const p of rows) {
+    const dir = S.runDirection(p);
+    if (dir.error) return { response: fail(400, dir.error) };
+    const src = (p.Sources || [])[0];
+    items.push({
+      pointId: p.PointId, text: p.Text || '', kind: p.Kind, site: src ? S.siteOf(src.url) : '', dir: dir.value,
+      ...(p.ByRole === 'builder' ? { byBuilder: p.By } : {}),
+    });
+  }
+  const n = items.length;
+  const row = {
+    SK: S.SK.run,
+    RunId: S.newId(),
+    Status: 'running',
+    Cur: 1,
+    Marks: items.map((it, i) => (i === 0 ? 'doing' : 'pending')),
+    SentAt: items.map((it, i) => (i === 0 ? now : '')),
+    DoneAt: items.map(() => ''),
+    Items: items,
+    Ver: ((room.run && Number(room.run.Ver)) || 0) + 1,
+    StartedAt: now,
+    UpdatedAt: now,
+  };
+  if (!(await writeRun(ctx, row, null))) return { response: fail(409, 'Finish or stop the current list first') };
+  // Nothing of an older list may still reach Claude.
+  if (room.run) await cancelRunRows(ctx, room, room.run.RunId);
+  for (let i = 0; i < n; i += 1) {
+    const p = rows[i];
+    const extra = { RunItem: i + 1, ...(voteFields ? voteFields(p) : {}) };
+    await put(ctx, i === 0 ? repoint(p, 'sent', now, `run item 1`, extra) : repoint(p, 'queued', now, `queued, run item ${i + 1}`, extra));
+  }
+  await sendRunItem(ctx, row, 1);
+  return { run: S.runView(row, 'host') };
+}
+
+async function runStart(ctx, body) {
+  const ids = idList((body || {}).pointIds);
+  const room = await loadRoom(ctx);
+  const got = pickPoints(room, ids, S.OPEN_POINT_STATUSES);
+  if (got.response) return got.response;
+  const started = await startRun(ctx, room, got.rows, new Date().toISOString());
+  if (started.response) return started.response;
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { run: started.run });
+}
+
+/**
+ * Change the run under its version. `step(room, run, now)` returns `{response}` to
+ * refuse, or `{row, after}`: the new row, and what to do once it is written.
+ * A press that lost the race re-reads and decides again (three tries).
+ */
+async function mutateRun(ctx, step, runId) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const room = await loadRoom(ctx);
+    const now = new Date().toISOString();
+    // A press from a screen that holds an older list is refused, not applied to the new one.
+    if (runId && room.run && String(runId) !== String(room.run.RunId)) return fail(409, 'That list has ended');
+    const out = step(room, room.run, now);
+    if (out.response) return out.response;
+    if (await writeRun(ctx, { ...out.row, Ver: (Number(room.run.Ver) || 0) + 1, UpdatedAt: now }, room.run.Ver)) {
+      await out.after(room, now);
+      const after = await loadRoom(ctx);
+      const rev = (await touchState(ctx)).Rev;
+      await announce(ctx, rev);
+      return reply(200, { run: S.runView(after.run, 'host') });
+    }
+  }
+  return fail(409, 'The list changed while you pressed; look again');
+}
+
+/** The point behind item k, if it is still on the list. */
+const runPoint = (room, run, k) => findPoint(room, run.Items[k - 1].pointId);
+const noneLeft = (marks) => !marks.some((m) => m === 'pending' || m === 'doing');
+const firstPending = (marks) => marks.findIndex((m) => m === 'pending');
+
+async function runNext(ctx, body) {
+  const b = body || {};
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    // A press made from a screen that is behind (the list moved on) is refused, not repeated.
+    if (b.from !== undefined && b.from !== null && Number(b.from) !== Number(run.Cur)) return { response: fail(409, 'The list has moved on; look again') };
+    const marks = [...run.Marks];
+    const idx = firstPending(marks);
+    if (idx < 0) return { response: fail(409, 'Nothing is left in the list') };
+    const cur = Number(run.Cur) || 0;
+    if (marks[cur - 1] === 'doing' && b.force !== true) {
+      return { response: fail(409, `Claude hasn't finished ${cur}. Send ${idx + 1} anyway?`, { needsConfirm: true, cur, next: idx + 1 }) };
+    }
+    marks[idx] = 'doing';
+    const SentAt = [...run.SentAt];
+    SentAt[idx] = now;
+    const row = { ...run, Cur: idx + 1, Marks: marks, SentAt };
+    return {
+      row,
+      after: async (rm) => {
+        const p = runPoint(rm, run, idx + 1);
+        if (p && p.Status !== 'removed') await put(ctx, repoint(p, 'sent', now, `run item ${idx + 1}`));
+        await sendRunItem(ctx, row, idx + 1);
+      },
+    };
+  }, b.runId);
+}
+
+async function runSkip(ctx, body) {
+  const b = body || {};
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    if (b.from !== undefined && b.from !== null && Number(b.from) !== Number(run.Cur)) return { response: fail(409, 'The list has moved on; look again') };
+    const marks = [...run.Marks];
+    const idx = firstPending(marks);
+    if (idx < 0) return { response: fail(409, 'Nothing is left to skip') };
+    marks[idx] = 'skipped';
+    const finished = noneLeft(marks);
+    const row = { ...run, Marks: marks, ...(finished ? { Status: 'finished', FinishedAt: now } : {}) };
+    return { row, after: (rm) => toLater(ctx, rm, run, [idx + 1], now) };
+  }, b.runId);
+}
+
+/** Run items of a list that Claude has not yet heard are cancelled, so they never arrive. */
+async function cancelRunRows(ctx, room, runId) {
+  const now = new Date().toISOString();
+  for (const l of room.logs) {
+    if (l.RunId !== runId || !l.RunItem || l.DeliveredAt) continue;
+    try {
+      await db.send(new UpdateCommand({
+        TableName: TABLE(),
+        Key: { PK: ctx.pk, SK: l.SK },
+        UpdateExpression: 'SET DeliveredAt = :now, Cancelled = :yes',
+        ConditionExpression: 'attribute_not_exists(DeliveredAt)',
+        ExpressionAttributeValues: { ':now': now, ':yes': true },
+      }));
+    } catch (e) {
+      if (e && e.name !== 'ConditionalCheckFailedException') throw e;
+    }
+  }
+}
+
+async function runStop(ctx, body) {
+  const b = body || {};
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    const marks = [...run.Marks];
+    const left = [];
+    // An item sent but not yet heard by Claude is cancelled with the list, and goes to Later too.
+    const unheard = new Set(room.logs.filter((l) => l.RunId === run.RunId && l.RunItem && !l.DeliveredAt).map((l) => l.RunItem));
+    marks.forEach((m, i) => {
+      if (m === 'pending' || (m === 'doing' && unheard.has(i + 1))) { marks[i] = 'skipped'; left.push(i + 1); }
+    });
+    const row = { ...run, Marks: marks, Status: 'stopped', FinishedAt: now };
+    return { row, after: async (rm) => { await cancelRunRows(ctx, rm, run.RunId); await toLater(ctx, rm, run, left, now); } };
+  }, b.runId);
+}
+
+/** Items that did not get done go to Later as held directions, not lost. */
+async function toLater(ctx, room, run, ks, now) {
+  for (const k of ks) {
+    const p = runPoint(room, run, k);
+    if (!p || p.Status === 'removed') continue;
+    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
+    await put(ctx, repoint(p, 'later', now, `run item ${k}, skipped to Later`));
+  }
+}
+
+/** Reorder the items not yet sent: `order` names every pending point once; `ver` is the version the screen saw. */
+async function runReorder(ctx, body) {
+  const b = body || {};
+  const order = idList(b.order);
+  const ver = Number(b.ver);
+  if (b.ver === undefined || b.ver === null || !Number.isInteger(ver)) return fail(400, 'ver is the list version the screen saw');
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    if (Number(run.Ver) !== ver) return { response: fail(409, 'The list changed; look again') };
+    const slots = [];
+    run.Marks.forEach((m, i) => { if (m === 'pending') slots.push(i); });
+    const byId = new Map(slots.map((i) => [run.Items[i].pointId, run.Items[i]]));
+    if (order.length !== slots.length || order.some((id) => !byId.has(id))) return { response: fail(400, 'order must name every item that has not been sent, once each') };
+    const Items = [...run.Items];
+    slots.forEach((slot, n) => { Items[slot] = byId.get(order[n]); });
+    return {
+      row: { ...run, Items },
+      after: async (rm) => {
+        for (const slot of slots) {
+          const p = findPoint(rm, Items[slot].pointId);
+          if (p && p.Status !== 'removed') await put(ctx, repoint(p, 'queued', now, `queued, run item ${slot + 1}`, { RunItem: slot + 1 }));
+        }
+      },
+    };
+  }, b.runId);
+}
+
+/** Claude reports a run item finished (post_update with runItem). The host's Claude only. */
+async function runDone(ctx, body) {
+  const b = body || {};
+  const k = Number(b.runItem);
+  const note = S.cleanText(b.note, S.LIMITS.note);
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run) return { response: fail(409, 'No list is running') };
+    // A report from a list that has since been replaced.
+    if (b.runId !== undefined && b.runId !== null && String(b.runId) !== String(run.RunId)) return { response: fail(409, 'That list has ended') };
+    if (!Number.isInteger(k) || k < 1 || k > run.Items.length) return { response: fail(400, `runItem is a number from 1 to ${run.Items.length}`) };
+    const mark = (run.Marks || [])[k - 1];
+    if (mark === 'done') return { response: reply(200, { run: S.runView(run, 'host'), already: true }) };
+    if (mark !== 'doing') return { response: fail(409, mark === 'skipped' ? `Item ${k} was skipped to Later` : `Item ${k} has not been sent to Claude yet`) };
+    const marks = [...run.Marks];
+    marks[k - 1] = 'done';
+    const DoneAt = [...run.DoneAt];
+    DoneAt[k - 1] = now;
+    const Items = run.Items.map((it, i) => (i === k - 1 && note ? { ...it, note } : it));
+    const finished = run.Status === 'running' && noneLeft(marks);
+    const row = { ...run, Marks: marks, DoneAt, Items, ...(finished ? { Status: 'finished', FinishedAt: now } : {}) };
+    return {
+      row,
+      after: async (rm) => {
+        const p = runPoint(rm, run, k);
+        if (p && p.Status !== 'removed') await put(ctx, repoint(p, p.Status, now, `run item ${k}, done`));
+      },
+    };
+  });
+}
+
 async function routeHost(ctx, role, method, parts, body, event, query) {
   const [a, b, c, d] = parts;
   const hostOnly = () => (role === 'host' ? null : fail(403, 'Only the host can do that'));
   if (a === 'crew') return routeCrew(ctx, role, method, parts, body, query);
 
   if (method === 'GET' && a === 'state' && !b) {
+    // KICK OFF (owner, 2026-10-07): /engage:kickoff has Claude call
+    // room_status with kickoff, so the Connect panel's step 4 can turn green.
+    // The first time is kept.
+    if (role === 'agent' && query && query.kickoff === '1') await markKickedOff(ctx);
     const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
     // The role the host's screen would delete a screenshot or an entry in
     // (the owner's delete rule, 2026-10-04): it asks staff for a reason.
@@ -1303,10 +2479,26 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   }
   if (method !== 'POST') return fail(404, 'Not found');
 
+  // Before the ended check: an ended session still answers the plugin (wanted: false).
+  if (a === 'share' && b === 'report' && !c) return role === 'agent' ? shareReport(ctx, body) : fail(403, 'Only Claude Code reports the Wi-Fi share');
+
   const ended = (await sessionState(ctx)) === 'ENDED';
   if (ended && !(a === 'outcome' || (a === 'log' && b))) return fail(409, 'This session has ended');
 
+  if (a === 'share' && !b) return hostOnly() || hostShare(ctx, body);
   if (a === 'activity' && !b) return role === 'agent' ? postActivity(ctx, body) : fail(403, 'Only Claude reports its activity');
+  if (a === 'points' && !b) return role === 'agent' ? postPoints(ctx, role, body) : fail(403, 'Claude posts the points; the host curates them');
+  if (a === 'points' && b === 'requests' && !c) return hostOnly() || createPointRequest(ctx, '', body);
+  if (a === 'points' && b === 'requests' && c && !d) return hostOnly() || pointRequestAction(ctx, c, body);
+  if (a === 'points' && b === 'send' && !c) return hostOnly() || sendPoints(ctx, body);
+  if (a === 'points' && b === 'vote' && !c) return hostOnly() || pointsVote(ctx, body);
+  if (a === 'run' && !b) return hostOnly() || runStart(ctx, body);
+  if (a === 'run' && b === 'next' && !c) return hostOnly() || runNext(ctx, body);
+  if (a === 'run' && b === 'reorder' && !c) return hostOnly() || runReorder(ctx, body);
+  if (a === 'run' && b === 'skip' && !c) return hostOnly() || runSkip(ctx, body);
+  if (a === 'run' && b === 'stop' && !c) return hostOnly() || runStop(ctx, body);
+  if (a === 'run' && b === 'done' && !c) return role === 'agent' ? runDone(ctx, body) : fail(403, 'Only the host\'s Claude reports a list item done');
+  if (a === 'points' && b && !c) return hostOnly() || pointAction(ctx, b, body);
   if (a === 'asks' && !b) return createAsk(ctx, role, body);
   if (a === 'asks' && b && !c) return hostOnly() || askAction(ctx, role, b, body);
   if (a === 'asks' && b && c === 'responses') return hostOnly() || hostResponse(ctx, b, d || null, body);
@@ -1315,6 +2507,14 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
   if (a === 'ideas' && b === 'acknowledge-all' && !c) return hostOnly() || acknowledgeAll(ctx);
   if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
+  if (a === 'ideas' && !b) return hostOnly() || hostIdea(ctx, body);
+  if (a === 'asks-from-ideas' && !b) return hostOnly() || askFromIdeas(ctx, body);
+  if (a === 'brief' && !b) return hostOnly() || editBrief(ctx, body);
+  if (a === 'brief' && b === 'vote' && !c) return hostOnly() || laterToVote(ctx, body);
+  if (a === 'brief' && b === 'later' && c && d === 'send') return hostOnly() || sendLater(ctx, c);
+  if (a === 'brief' && b === 'draft' && !c) return role === 'agent' ? draftBrief(ctx, body) : fail(403, 'Claude drafts the brief; the host uses or dismisses it');
+  if (a === 'opening' && b === 'draft' && ['accept', 'dismiss'].includes(c)) return hostOnly() || settleDraft(ctx, c, body);
+  if (a === 'opening' && b && !c) return hostOnly() || openingAction(ctx, b, body);
   if (a === 'ideas' && b) return hostOnly() || ideaAction(ctx, b, body);
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);
@@ -1337,19 +2537,30 @@ async function routePlayCrew(ctx, me, parts, input) {
   const now = new Date().toISOString();
   if (b === 'builder-key') {
     const already = findBuilder(room, me.playerName);
-    if (!already && room.builders.length >= C.MAX_BUILDERS) return fail(409, `This crew is full (${C.MAX_BUILDERS} builders)`);
+    if ((!already || already.ClosedAt) && C.liveBuilders(room).length >= C.MAX_BUILDERS) return fail(409, `This crew is full (${C.MAX_BUILDERS} builders)`);
     // One live key per builder: a new one retires their old one.
     for (const k of room.keys) {
       if (!k.RevokedAt && k.Role === 'builder' && k.PlayerName === me.playerName) await put(ctx, { ...k, RevokedAt: now });
     }
     const { key, hash } = S.mintKey(ctx.gameId);
     await put(ctx, { SK: S.SK.key(hash), KeyId: hash.slice(0, 12), Role: 'builder', PlayerName: me.playerName, Label: `${me.playerName}'s Claude Code`, CreatedAt: now });
+    if (already && already.ClosedAt) {
+      // Brought back after the host removed them: a seat again, on a new key.
+      const { ClosedAt, ...open } = already;
+      await put(ctx, { ...open, Status: 'setting-up' });
+      await logEntry(ctx, { kind: 'crew', text: `${me.playerName} rejoined the crew`, by: 'builder', name: me.playerName });
+    }
     if (!already) {
       await put(ctx, { SK: C.SK.builder(me.playerName), PlayerName: me.playerName, Mode: crew.modes[0], Status: 'setting-up', JoinedAt: now });
       await logEntry(ctx, { kind: 'crew', text: `${me.playerName} joined the crew`, by: 'builder', name: me.playerName });
     }
     await done(ctx, 201, {});
     return reply(201, { key, gameId: ctx.gameId });
+  }
+  // A builder's own Research / Ideas button: it asks THEIR Claude, whatever the body says.
+  if (b === 'points' && parts[2] === 'requests' && !parts[3]) {
+    if (!findBuilder(room, me.playerName)) return fail(409, 'Connect your laptop as a builder first');
+    return createPointRequest(ctx, me.playerName, input);
   }
   if (b === 'claim') return crewClaim(ctx, me.playerName, String(input.taskId || ''));
   if (b === 'react') {
@@ -1369,8 +2580,9 @@ async function routePlayCrew(ctx, me, parts, input) {
 async function routePlay(ctx, method, parts, body, query) {
   const [a] = parts;
   const input = method === 'GET' ? (query || {}) : (body || {});
-  const me = await playerFrom(ctx, input);
-  if (!me) return fail(403, 'Join the session first');
+  const why = {};
+  const me = await playerFrom(ctx, input, why);
+  if (!me) return fail(403, 'Join the session first', why.code ? { code: why.code } : undefined);
 
   if (method === 'GET' && a === 'images' && parts[1]) return getImage(ctx, parts[1]);
   if (a === 'crew' && method === 'POST') return routePlayCrew(ctx, me, parts, input);
@@ -1378,6 +2590,8 @@ async function routePlay(ctx, method, parts, body, query) {
     const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
     const view = S.publicView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, me, now: new Date().toISOString() });
     view.crew = C.crewView(room, 'public', me);
+    // A builder's own points and requests, for their lane (talking points T8). Nobody else's.
+    if (C.liveBuilders(room).some((b) => b.PlayerName === me.playerName)) view.myPoints = S.pointsBuilderView(room, me.playerName);
     return reply(200, view);
   }
   if (method !== 'POST') return fail(404, 'Not found');
@@ -1404,9 +2618,11 @@ async function routePlay(ctx, method, parts, body, query) {
       aboutLogId = about.LogId;
     }
     if (!text) return fail(400, 'Write your idea');
-    if (room.ideas.filter((i) => i.PlayerName === me.playerName).length >= 20) return fail(429, 'That is plenty of ideas from one phone for now');
+    if (room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').length >= 20) return fail(429, 'That is plenty of ideas from one phone for now');
     const sk = S.SK.idea(now);
-    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now, ...(aboutLogId ? { AboutLogId: aboutLogId } : {}) });
+    // Sent while a talking point is on the Stage: the idea is about that point.
+    const onStage = room.points.find((x) => x.Status === 'shown');
+    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now, ...(aboutLogId ? { AboutLogId: aboutLogId } : {}), ...(onStage ? { AboutPoint: onStage.PointId } : {}) });
     const st = await touchState(ctx);
     await announce(ctx, st.Rev);
     return reply(201, { ok: true });
@@ -1440,6 +2656,7 @@ async function routePlay(ctx, method, parts, body, query) {
   } else if (a === 'spin') {
     // The one phone the wheel picked, once per turn; the host can always spin.
     const w = ask.Wheel;
+    if (ask.RevotedAs) return fail(409, 'This question was asked again, so its wheel is closed');
     if (!w || ask.Status !== 'results') return fail(409, 'There is no wheel to spin');
     if (w.Spinner !== me.playerName || !w.Armed) return fail(403, 'It is not your turn to spin');
     await spinWheel(ctx, ask, me.playerName);
@@ -1515,7 +2732,10 @@ exports.handler = async (event) => {
     const role = hostOrAgent(event, ctx);
     if (!role) return fail(404, 'Session not found');
     if (role === 'agent' || role === 'builder') {
-      await agentTouch(ctx, event, role);
+      // The Wi-Fi share report comes from the plugin's background loop: it
+      // neither counts as Claude being seen nor takes Claude's inbox.
+      const shareReportCall = parts[0] === 'share' && parts[1] === 'report';
+      if (!shareReportCall) await agentTouch(ctx, event, role);
       const res = role === 'builder'
         ? await routeBuilder(ctx, method, parts, body, event.queryStringParameters || {})
         : await routeHost(ctx, role, method, parts, body, event, event.queryStringParameters || {});
@@ -1530,9 +2750,15 @@ exports.handler = async (event) => {
       // 2026-10-06). The checkpoint TOOL marks itself `fromTool`; a checkpoint
       // without it (any plugin's hook) leaves the inbox for the next real call.
       const hookCheckpoint = parts[0] === 'log' && body && body.kind === 'checkpoint' && body.fromTool !== true;
-      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity' && !hookCheckpoint) {
+      if (res.statusCode < 500 && !res.isBase64Encoded && parts[0] !== 'activity' && !hookCheckpoint && !shareReportCall) {
         const inbox = await takeInbox(ctx, role);
         const parsed = JSON.parse(res.body || '{}');
+        // The brief rides along whenever it changed for Claude: a Keep in mind
+        // item in this delivery (the plugin rewrites .engage/brief.md).
+        if (role === 'agent' && !parsed.brief && inbox.some((d) => d.as === 'keep')) {
+          // Never the Later list: it is held until the host sends an item.
+          parsed.brief = { ...S.briefView((await loadRoom(ctx)).state), later: [] };
+        }
         res.body = JSON.stringify({ ...parsed, inbox });
         if (inbox.length) {
           const st = await touchState(ctx);

@@ -40,7 +40,7 @@ const flag = (name, fallback = null) => {
 const apply = argv.includes('--apply');
 
 if (!tableName || !file) {
-  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <topic> [--description "..."] [--persona <id>] [--quickstart] [--apply]');
+  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <topic> [--description "..."] [--persona <id>] [--quickstart] [--tags a,b] [--apply]');
   process.exit(2);
 }
 
@@ -55,6 +55,11 @@ const topic = flag('topic');
 const customDescription = flag('description', '');
 const personaId = flag('persona');
 const quickstart = argv.includes('--quickstart');
+/* SET TAGS, comma-separated: e.g. --tags build-room makes a Call and Answer or
+   Poll set Build Room ready (step 7b). The importer normalises them
+   (shared/set-topics.js normalizeSetTags), as it does for the console. */
+const tagsFlag = flag('tags');
+const tags = typeof tagsFlag === 'string' ? tagsFlag.split(',').map((t) => t.trim()).filter(Boolean) : [];
 
 if (!customTitle) { console.error('--title is required'); process.exit(2); }
 if (!topic || topic === true) {
@@ -87,8 +92,18 @@ const setId = customTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
  * implementation here that drifts from it.
  */
 async function dryImport() {
-  const proto = DynamoDBDocumentClient.prototype;
-  const realSend = proto.send;
+  // EVERY COPY OF THE CLIENT THE HANDLER MIGHT LOAD. The handler resolves
+  // @aws-sdk/lib-dynamodb from its own folder (lambda-functions/admin/
+  // node_modules when that exists), not from lambda-functions/. Patching only
+  // the copy this script loaded let a "dry run" write for real (2026-10-06:
+  // it created two sets on engagedev without --apply).
+  const handlerRequire = createRequire(path.join(REPO, 'lambda-functions', 'admin', 'upload-questions.js'));
+  const protos = [...new Set([
+    DynamoDBDocumentClient.prototype,
+    handlerRequire('@aws-sdk/lib-dynamodb').DynamoDBDocumentClient.prototype,
+  ])];
+  const realSends = protos.map((p) => p.send);
+  const proto = { set send(fn) { protos.forEach((p) => { p.send = fn; }); } };
   const writes = [];
 
   proto.send = async function (cmd) {
@@ -119,6 +134,7 @@ async function dryImport() {
         customDescription,
         engagementType,
         topic,
+        ...(tags.length ? { tags } : {}),
       }),
     });
     const payload = JSON.parse(res.body || '{}');
@@ -126,7 +142,7 @@ async function dryImport() {
     if (res.statusCode >= 300) payload.__failed = true;
     return { payload, writes };
   } finally {
-    proto.send = realSend;   // never leave the prototype patched
+    protos.forEach((p, i) => { p.send = realSends[i]; });   // never leave a prototype patched
   }
 }
 
@@ -246,6 +262,7 @@ function reportImport(payload, writes) {
       customDescription,
       engagementType,
       topic,
+      ...(tags.length ? { tags } : {}),
     }),
   });
 
@@ -281,6 +298,6 @@ function reportImport(payload, writes) {
   const it = final.Item || {};
   console.log('\nVerified on the SETS row:');
   console.log(`  active=${it.active}  quickstart=${it.quickstart}  personaId=${it.personaId}`);
-  console.log(`  engagementType=${it.engagementType}  questionCount=${it.questionCount}`);
+  console.log(`  engagementType=${it.engagementType}  questionCount=${it.questionCount}  tags=${JSON.stringify(it.tags || [])}`);
   if (it.ttl) { console.error('  WARNING: this row carries a ttl — see docs/architecture/data-model.md'); }
 })().catch((e) => { console.error('error:', e); process.exit(1); });

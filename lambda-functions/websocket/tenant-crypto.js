@@ -246,7 +246,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF',
     'AnswerDetails',
     'Background',
-    'CustomInstructions',
+    'CustomInstructions', 'ClaudeNote',
     'options',
     'lowLabel', 'highLabel',
     'yesLabel', 'noLabel',
@@ -356,6 +356,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
     // `surveyResultsPayload`, which never opens a SURVEY#RESP#/SURVEY#DONE#
     // row, so no respondent name is ever in here to protect).
     'surveyResults',
+    // A Build Room's "Talking points and research" (build-points-report.js):
+    // findings and their sources, the vote options' words, the run list's
+    // notes. Sealed here because the live rows (buildPoint, buildRun) are.
+    'talkingPoints',
   ]),
 
   /** The derived tally: SK=QUESTION#<nnn>#RESULTS.
@@ -520,10 +524,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *   summary, files and commit, and the PR link), buildComment (reactions
    *   and replies), buildReview (the host's Claude's review). The repo and
    *   base branch ride in buildState.Crew. */
-  buildState: Object.freeze(['Outcome', 'Crew', 'WallComment']),
-  buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel']),
+  buildState: Object.freeze(['Outcome', 'Crew', 'WallComment', 'Brief', 'BriefDraft']),
+  buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel', 'ClaudeNote', 'FromLater']),
   buildResponse: Object.freeze(['Text', 'Why']),
-  buildLog: Object.freeze(['Text', 'Detail', 'Link']),
+  buildLog: Object.freeze(['Text', 'Detail', 'Link', 'ClaudeNote']),
   buildIdea: Object.freeze(['Text']),
   buildImage: Object.freeze(['Caption']),
   buildBuilder: Object.freeze(['Note']),
@@ -533,6 +537,14 @@ const ENCRYPTED_FIELDS = Object.freeze({
   buildReview: Object.freeze(['Does', 'Fits', 'Risk', 'Suggestions', 'TestsSummary']),
   // Claude's live activity lines ("Edited payroll.js"): the team's content too.
   buildActivity: Object.freeze(['Items']),
+  // The Wi-Fi share (build-lan.js): the local and Wi-Fi addresses, the key
+  // that opens the gateway, and the plugin's last error.
+  buildLan: Object.freeze(['Map', 'Key', 'Error']),
+  // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md):
+  // a point's words and sources, a request's subject, and the run list's items.
+  buildPoint: Object.freeze(['Text', 'Detail', 'Sources', 'About']),
+  buildPointReq: Object.freeze(['Subject']),
+  buildRun: Object.freeze(['Items']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

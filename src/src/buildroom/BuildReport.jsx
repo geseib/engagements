@@ -38,7 +38,7 @@ import { safeHref, apiBase } from './buildHostApi';
 import './BuildReport.css';
 
 const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate 1–5' };
-const IDEA_STATUS = { new: 'New', promoted: 'Used', dismissed: 'Dismissed' };
+const IDEA_STATUS = { new: 'New', promoted: 'Used', acknowledged: 'Acknowledged', later: 'Later', dismissed: 'Dismissed' };
 
 function when(iso, opts) {
   const t = Date.parse(iso || '');

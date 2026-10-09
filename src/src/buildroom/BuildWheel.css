@@ -58,6 +58,7 @@
   background: var(--primary); color: var(--bg);
   font-family: var(--font-display); font-weight: 800; font-size: 19px; letter-spacing: 0.02em;
 }
+.bwh .bwh-spin--sec { background: transparent; color: var(--text); border: 1px solid var(--muted); font-size: 16px; min-height: 44px; padding: 8px 22px; }
 .bwh .bwh-spin:disabled { opacity: 0.55; cursor: not-allowed; }
 .bwh .bwh-spin:focus-visible { outline: 3px solid var(--secondary); outline-offset: 3px; }
 

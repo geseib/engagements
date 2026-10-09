@@ -53,6 +53,7 @@ const { ApiGatewayManagementApiClient } = require('@aws-sdk/client-apigatewayman
 
 const { notifyHost } = require('./host-notify');
 const { callerMayDriveSession } = require('./tenant');
+const { closeSeat } = require('./build-seat');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -87,7 +88,7 @@ exports.handler = async (event) => {
     const meta = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      ProjectionExpression: 'PK, orgId, OrgId'
+      ProjectionExpression: 'PK, orgId, OrgId, GameType'
     }));
     const authorizer = event?.requestContext?.authorizer;
     const identity = authorizer?.jwt?.claims || authorizer?.lambda;
@@ -144,6 +145,13 @@ exports.handler = async (event) => {
         }),
         headers: cors
       };
+    }
+
+    // A Build Room builder who is removed loses their seat and their Claude's
+    // key with it, whichever door the host used (build-seat.js). Bring back
+    // (removed:false) does not reopen either.
+    if (removed && meta.Item.GameType === 'build') {
+      await closeSeat(db, process.env.TABLE_NAME, gameId, playerName, removedAt);
     }
 
     console.log(`${removed ? '🚪' : '↩️'} ${playerName} ${removed ? 'removed from' : 'restored to'} the room in game ${gameId}`);

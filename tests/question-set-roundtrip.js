@@ -439,6 +439,21 @@ const ROUND_KIND_CSV = [
     + '"Business School","Give a verdict.","judge","","release|verdict"',
 ].join('\n');
 
+/**
+ * Build Room ready questions (step 7b): ClaudeGets and ClaudeNote. Mixed on
+ * purpose, with one row carrying neither, so a round trip that collapses or
+ * fills them in is caught.
+ */
+const BUILD_ROOM_CSV = [
+  'Category,Question#,Title,Detail_lesson,School,CustomInstruction,ClaudeGets,ClaudeNote,Tags',
+  '"Who it is for",1,"Who is this for, in one sentence?","Name a real kind of person.","Engage","One sentence.","keep",'
+    + '"Treat the winning answer as the audience for every screen.","build"',
+  '"While building",1,"What should we cut?","What on the screen could go?","Saint-Exupery","One thing.","do-now",'
+    + '"Remove the winning item, ""unless"" it breaks a rule.","build"',
+  '"Before wrapping up",1,"What should we build next time?","One thing.","Engage","One thing.","later","","build"',
+  '"Think differently",1,"How would we do this with no app at all?","A paper sheet on a door.","Engage","Name it.","","","build"',
+].join('\n');
+
 const WAVELENGTH_CSV = [
   'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags',
   '"Technology",1,"Agentic AI","Your PM wants it on the dashboard by Friday.","Business School",'
@@ -743,6 +758,64 @@ const WAVELENGTH_CSV = [
     const again = await download({ ...adminContext(), pathParameters: { setId: t.setId }, queryStringParameters: {} });
     check('a second export of the kinded set is byte-identical', () =>
       assert.strictEqual(parse(again).content, t.csv));
+  }
+
+  // ==== call-and-answer, Build Room ready (ClaudeGets + ClaudeNote) =======
+  say('\n  -- call-and-answer (Build Room: ClaudeGets + ClaudeNote) --');
+  resetDb();
+  {
+    const t = await roundTrip('Roundtrip Build Room', 'call-and-answer', BUILD_ROOM_CSV);
+    // (Not assertCarries: one row is blank on purpose.)
+    check('the seeded set really carries ClaudeGets and ClaudeNote', () => {
+      assert.strictEqual(t.before.filter((r) => r.ClaudeGets).length, 3);
+      assert.strictEqual(t.before.filter((r) => r.ClaudeNote).length, 2);
+    });
+    check('the exported header names ClaudeGets and ClaudeNote', () => {
+      const cols = t.header.split(',');
+      assert.ok(cols.includes('ClaudeGets') && cols.includes('ClaudeNote'), t.header);
+    });
+    check('every question survives the round trip field for field', () =>
+      assertSameQuestions(t.before, t.after));
+    check('the kinds come back as written, and a blank stays blank', () => {
+      const byTitle = Object.fromEntries(t.after.map((r) => [r.Title, [r.ClaudeGets, r.ClaudeNote]]));
+      assert.deepStrictEqual(byTitle['What should we cut?'], ['do-now', 'Remove the winning item, "unless" it breaks a rule.']);
+      assert.deepStrictEqual(byTitle['What should we build next time?'], ['later', undefined]);
+      assert.deepStrictEqual(byTitle['How would we do this with no app at all?'], [undefined, undefined]);
+    });
+    const res = await getQuestions({ ...adminContext(), pathParameters: { setId: t.setId }, queryStringParameters: {} });
+    const rows = editableRows(JSON.parse(res.body));
+    check('the console serialises ClaudeGets and ClaudeNote byte-identically to download-question-set.js', () =>
+      assert.strictEqual(rowsToCsv(rows, 'call-and-answer'), t.csv));
+  }
+  {
+    resetDb();
+    const bad = BUILD_ROOM_CSV.replace('"later"', '"someday"');
+    const refused = await upload({
+      ...adminContext(),
+      body: JSON.stringify({ fileName: 'bad.csv', fileContent: bad, customTitle: 'Bad kinds', engagementType: 'call-and-answer', topic: 'business-work' }),
+    });
+    check('an unknown ClaudeGets refuses the whole file, naming the row', () => {
+      assert.strictEqual(refused.statusCode, 400, refused.body);
+      const msg = JSON.parse(refused.body).error;
+      assert.ok(msg.startsWith('The ClaudeGets column has 1 unrecognised value: row 4 ("someday")'), msg);
+    });
+  }
+
+  // ==== the shipped Build Room starter sets import as they are ============
+  say('\n  -- sets/build-room-starters.csv and sets/build-room-pulse.csv --');
+  for (const [file, type, count] of [['build-room-starters.csv', 'call-and-answer', 17], ['build-room-pulse.csv', 'poll', 3]]) {
+    resetDb();
+    const csv = require('fs').readFileSync(require('path').join(__dirname, '..', 'sets', file), 'utf8');
+    const t = await roundTrip(`Shipped ${file}`, type, csv);
+    check(`${file}: all ${count} questions import, each with what Claude gets`, () => {
+      assert.strictEqual(t.before.length, count);
+      assert.ok(t.before.every((r) => ['do-now', 'keep', 'later', 'ask'].includes(r.ClaudeGets) && r.ClaudeNote), JSON.stringify(t.before.map((r) => [r.Title, r.ClaudeGets])));
+    });
+    check(`${file}: it survives the round trip`, () => assertSameQuestions(t.before, t.after));
+    if (type === 'poll') {
+      check(`${file}: every pulse question is a 1 to 5 rating on the fixed scale`, () =>
+        assert.ok(t.before.every((r) => r.kind === 'rating' && r.scale === '1-5'), JSON.stringify(t.before)));
+    }
   }
 
   // ==== wavelength =========================================================

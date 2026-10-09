@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: combine answers, and a plainer stage · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* Owner, 2026-10-07. Extends v2.css. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .notes{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:92ch}
+
+/* P1/P2: decided questions with ticks, in the host's right column. */
+.dec{display:flex;flex-direction:column;gap:6px}
+.dec .it{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--surface)}
+.dec .it.on{border-color:var(--secondary);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface)}
+.dec .bx{width:18px;height:18px;border-radius:5px;border:2px solid var(--muted);margin-top:2px}
+.dec .it.on .bx{background:var(--secondary);border-color:var(--secondary);box-shadow:inset 0 0 0 3px var(--surface)}
+.dec .q{font-size:13px;color:var(--muted);margin:0}
+.dec .a{font-size:15px;color:var(--text);margin:2px 0 0;line-height:1.35}
+.dec .meta{font-size:12px;color:var(--muted);margin-top:4px}
+.dec .used{font-size:12px;color:var(--m-success-text)}
+.dec .it.open{opacity:.55}
+.addbar{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(124,167,230,.5);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface);font-size:13px}
+.ta-big{min-height:150px;font:500 15px/1.5 var(--font-ui);color:var(--text);white-space:pre-wrap}
+.flash{box-shadow:0 0 0 2px var(--secondary)}
+
+/* S1-S3: the plainer stage. */
+.plain{display:grid;grid-template-columns:1fr 320px;gap:40px;padding:36px 44px 24px;min-height:0}
+.state{display:flex;align-items:center;gap:22px}
+.state .dot{width:26px;height:26px;border-radius:50%;background:var(--secondary);box-shadow:0 0 0 10px rgba(124,167,230,.18);flex:none}
+.state .dot.wait{background:var(--primary);box-shadow:0 0 0 10px rgba(246,169,76,.16)}
+.state .dot.off{background:var(--muted);box-shadow:none}
+.state h1{margin:0;font:800 64px/1.05 var(--font-display);letter-spacing:-.01em}
+.now-line{margin:14px 0 0 48px;font-size:28px;line-height:1.3;color:var(--text);max-width:34ch}
+.now-line span{color:var(--muted)}
+.bigshot{margin-top:28px;border-radius:14px;border:1px solid var(--m-rule);overflow:hidden;max-height:430px}
+.bigshot img{display:block;width:100%}
+.side{display:flex;flex-direction:column;gap:22px}
+.side .lbl{font:800 18px/1 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.side .val{font-size:26px;line-height:1.3;margin-top:8px}
+.side .num{font:800 72px/1 var(--font-display)}
+.dockline{flex:1;font-size:var(--L-body)}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room</b>
+<a href="#p1">P1 Tick answers</a><a href="#p2">P2 One prompt</a><a href="#s1">S1 Stage: working</a><a href="#s2">S2 Stage: waiting</a><a href="#s3">S3 Stage: paused</a>
+<span class="sp"></span><a href="../build-room-host-redesign/index.html">Host redesign</a></nav>
+<div class="pg-title"><h1>Combine the room's answers into one prompt, and a plainer stage</h1>
+<p>Owner, 2026-10-07: "ask a series of those starter questions ... the host goes back and checks all three of those and says add. all of that gets put into a prompt box that can be edited" (on the Host screen). And: the stage while Claude builds sends mixed messages, "its listening but its building"; make it simpler and straightforward.</p></div>
+
+<!-- P1 ------------------------------------------------------------------ -->
+<div class="frame-h" id="p1"><h2>P1 · Host: tick the answers to combine</h2>
+<p>The right column's "Decided" section lists every decided question as question and answer. Each has a tick. Three ticked, the bar offers to add them to the prompt.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is waiting for you</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col"><div class="now">
+<div class="colh"><span class="chip chip--blue">Claude is waiting for you</span></div>
+<p class="nq">Three questions answered. Tell Claude what to build next.</p>
+<div class="row"><span class="btn btn--primary">Ask the room</span><span class="btn">Start building</span></div>
+</div>
+<div class="composer"><span class="lbl" style="margin:0">Add something</span>
+<textarea class="ta" placeholder="An idea, what the room said out loud, or a note for Claude"></textarea>
+<div class="routes"><span class="split"><span class="btn btn--sm btn--primary">Send to Claude</span><span class="btn btn--sm btn--primary">▾</span></span><span class="btn btn--sm btn--ghost">Queue it</span><span class="btn btn--sm btn--ghost" style="margin-left:auto">Log it</span></div></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="hint" style="margin-left:auto">Claude first, then oldest</span></div>
+<div class="hint" style="text-align:center;padding:30px 10px;border:1px dashed var(--m-rule);border-radius:12px">Nothing waiting.</div></section>
+<section class="col"><div class="colh"><h2>Decided</h2><span class="count">3</span><span class="hint" style="margin-left:auto">Tick to combine</span></div>
+<div class="dec">
+<div class="it on"><span class="bx"></span><div><p class="q">Ask 1 · What are we building?</p><p class="a">An app</p><p class="meta">The room picked · 7 of 12</p></div></div>
+<div class="it on"><span class="bx"></span><div><p class="q">Ask 2 · Who is it for?</p><p class="a">Everyone</p><p class="meta">You answered for the room</p></div></div>
+<div class="it on"><span class="bx"></span><div><p class="q">Ask 3 · What does it do?</p><p class="a">It shows the difference between billionaires and average people in ways that make it concrete, not abstract.</p><p class="meta">The room's idea, picked by vote</p></div></div>
+<div class="it open"><span class="bx"></span><div><p class="q">Ask 4 · How should it look and feel?</p><p class="a">Open: the room is answering</p></div></div>
+</div>
+<div class="addbar"><b>3 ticked</b><span class="btn btn--sm btn--primary" style="margin-left:auto">Add to the prompt</span><span class="btn btn--sm btn--ghost">Clear</span></div>
+</section>
+</div>
+<span class="pin" style="left:1046px;top:120px">1</span><span class="pin" style="left:1012px;top:466px">2</span><span class="pin" style="left:1012px;top:552px">3</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Decided, as question and answer</h3><p>Every decided ask, oldest first: the question, the answer, and how it was decided. The section sits with the Timeline and Asks in the right column. It is not on the History screen, so nothing on the wall changes.</p></div>
+<div class="note"><h3><b class="n">2</b>Only decided ones can be ticked</h3><p>An open ask is greyed and says what is happening. A tick on the box or the row toggles it.</p></div>
+<div class="note"><h3><b class="n">3</b>Add to the prompt</h3><p>Shows when one or more is ticked. Clear unticks everything.</p></div>
+</div>
+
+<!-- P2 ------------------------------------------------------------------ -->
+<div class="frame-h" id="p2"><h2>P2 · Host: one editable prompt, sent the usual way</h2>
+<p>The ticked pairs land in Add something, oldest first, one per line, under anything already typed. The host edits freely, then sends with any of the four kinds.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is waiting for you</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host">
+<section class="col"><div class="now">
+<div class="colh"><span class="chip chip--blue">Claude is waiting for you</span></div>
+<p class="nq">Three questions answered. Tell Claude what to build next.</p>
+</div>
+<div class="composer flash"><span class="lbl" style="margin:0">Add something</span>
+<div class="ta ta-big">Build this as our first version:
+What are we building? An app
+Who is it for? Everyone
+What does it do? It shows the difference between billionaires and average people in ways that make it concrete, not abstract.</div>
+<div class="routes"><span class="split"><span class="btn btn--sm btn--primary">Send to Claude</span><span class="btn btn--sm btn--primary">▾</span></span><span class="btn btn--sm btn--ghost">Queue it</span><span class="btn btn--sm btn--ghost" style="margin-left:auto">Log it</span></div>
+<div class="hint">Send to Claude ▾ · Do now · Keep in mind · For Claude, later · Ask Claude</div></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2></div>
+<div class="hint" style="text-align:center;padding:30px 10px;border:1px dashed var(--m-rule);border-radius:12px">Nothing waiting.</div></section>
+<section class="col"><div class="colh"><h2>Decided</h2><span class="count">3</span></div>
+<div class="dec">
+<div class="it"><span class="bx"></span><div><p class="q">Ask 1 · What are we building?</p><p class="a">An app</p><p class="used">In a prompt · 2:41</p></div></div>
+<div class="it"><span class="bx"></span><div><p class="q">Ask 2 · Who is it for?</p><p class="a">Everyone</p><p class="used">In a prompt · 2:41</p></div></div>
+<div class="it"><span class="bx"></span><div><p class="q">Ask 3 · What does it do?</p><p class="a">It shows the difference between billionaires and average people in ways that make it concrete, not abstract.</p><p class="used">In a prompt · 2:41</p></div></div>
+</div>
+</section>
+</div>
+<span class="pin" style="left:6px;top:250px">1</span><span class="pin" style="left:1046px;top:200px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Edit, then send</h3><p>Plain lines, "Question? Answer", in the order they were decided. The host added the first line by hand. It goes to Claude as one message and shows in History as one entry from the host.</p></div>
+<div class="note"><h3><b class="n">2</b>Marked as used</h3><p>The ticks clear and each row says "In a prompt" with the time, so the host can see what has been combined. They can still be ticked again.</p></div>
+</div>
+
+<!-- S1 ------------------------------------------------------------------ -->
+<div class="frame-h" id="s1"><h2>S1 · Stage: Claude is working</h2>
+<p>One status, said once. The headline is what Claude is doing, not a guess between listening and building. Underneath: the newest thing Claude showed, and the last decision. No timer, no list of posts, no second sentence in the dock.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="plain">
+<div>
+<div class="state"><span class="dot"></span><h1>Claude is building</h1></div>
+<p class="now-line">The dot grid: one dot for every $1,000 <span>· since 2:44</span></p>
+<div class="bigshot"><img src="../build-room-lan-share/img/board.svg" alt="The newest screenshot"></div>
+</div>
+<aside class="side">
+<div><div class="lbl">We decided</div><div class="val">Who it is for: everyone</div></div>
+<div><div class="lbl">In the room</div><div class="num">12</div></div>
+</aside>
+</div>
+<footer class="dock"><div class="dockline">Send an idea from your phone, laptop or tablet.</div><span class="hjoin" style="font-size:22px">Join <b>4443</b></span></footer>
+</div>
+<span class="pin" style="left:6px;top:96px">1</span><span class="pin" style="left:6px;top:170px">2</span><span class="pin" style="left:1046px;top:92px">3</span><span class="pin" style="left:4px;top:862px">4</span>
+</div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>One status, from one rule</h3><p>Building: Claude has done something in the last 90 seconds (an edit, a command, a post). Waiting: Claude is listening and has done nothing for 90 seconds (S2). Paused: Claude has not been heard from for 2 minutes (S3). The host's header chip uses the same rule, so the wall and the laptop never disagree.</p></div>
+<div class="note"><h3><b class="n">2</b>What it is on, in words</h3><p>The step from Claude's plan, or its newest progress post. "Since" is when that started, not when the last decision was made.</p></div>
+<div class="note"><h3><b class="n">3</b>One decision, not a feed</h3><p>Only the latest decision, as question and answer. Everything else is on History.</p></div>
+<div class="note"><h3><b class="n">4</b>The dock says what the room can do</h3><p>Not a second status. With Wi-Fi sharing on, it also says "Open the build on the same Wi-Fi".</p></div>
+</div>
+
+<!-- S2 ------------------------------------------------------------------ -->
+<div class="frame-h" id="s2"><h2>S2 · Stage: Claude is waiting for the host</h2>
+<p>Claude has finished a step and is listening. The wall says so plainly, and what it has ready to show.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="plain">
+<div>
+<div class="state"><span class="dot wait"></span><h1>Claude is ready for the next step</h1></div>
+<p class="now-line">It finished the dot grid. The host will choose what comes next.</p>
+<div class="bigshot"><img src="../build-room-lan-share/img/board.svg" alt="The newest screenshot"></div>
+</div>
+<aside class="side">
+<div><div class="lbl">We decided</div><div class="val">Who it is for: everyone</div></div>
+<div><div class="lbl">In the room</div><div class="num">12</div></div>
+</aside>
+</div>
+<footer class="dock"><div class="dockline">Send an idea from your phone, laptop or tablet.</div><span class="hjoin" style="font-size:22px">Join <b>4443</b></span></footer>
+</div></div></div>
+
+<!-- S3 ------------------------------------------------------------------ -->
+<div class="frame-h" id="s3"><h2>S3 · Stage: Claude has paused</h2>
+<p>Nothing heard for 2 minutes. The wall does not pretend it is building; the host's screen offers the usual "copy /engage:continue".</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto"><header class="hdr"><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view is-on">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="plain">
+<div>
+<div class="state"><span class="dot off"></span><h1>Claude has paused</h1></div>
+<p class="now-line">The host will pick it up again in a moment.</p>
+<div class="bigshot"><img src="../build-room-lan-share/img/board.svg" alt="The newest screenshot"></div>
+</div>
+<aside class="side">
+<div><div class="lbl">We decided</div><div class="val">Who it is for: everyone</div></div>
+<div><div class="lbl">In the room</div><div class="num">12</div></div>
+</aside>
+</div>
+<footer class="dock"><div class="dockline">Send an idea from your phone, laptop or tablet.</div><span class="hjoin" style="font-size:22px">Join <b>4443</b></span></footer>
+</div></div></div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

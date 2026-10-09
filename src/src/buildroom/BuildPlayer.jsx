@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import BuildImage, { ImageLoader } from './BuildImage';
+import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
 import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
-import { RATING_SCALE } from './buildScreens';
+import { W } from './words';
+import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS } from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
+import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
 
 /**
@@ -71,9 +73,22 @@ export const FEED_KINDS = Object.freeze({
 const DETAIL_KINDS = ['progress', 'showing', 'milestone'];
 const FEED_LENGTH = 8;
 
-const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', dismissed: 'Not used this time' };
-/** What a phone says about its own idea; one shown on the wall says so (owner, 2026-10-05). */
-const ideaStatusText = (idea) => (idea.walled ? 'Shown on the wall' : IDEA_STATUS[idea.status] || IDEA_STATUS.new);
+const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', later: 'Saved for later', dismissed: 'Not used this time' };
+/**
+ * What a phone says about its own idea; one shown on the wall says so (owner,
+ * 2026-10-05), and one the host put to a vote says so (step 4).
+ */
+const ideaStatusText = (idea, current = null) => {
+  if (idea.walled) return 'Shown on the wall';
+  if (idea.status === 'promoted' && idea.promotedTo) {
+    const open = current && current.askId === idea.promotedTo && ['live', 'voting'].includes(current.status);
+    return open ? 'In a vote now' : 'Put to a vote';
+  }
+  // How it was used (step 7, C11): to Claude, or into the room's open ideas.
+  if (idea.status === 'promoted' && idea.promotedVia === 'claude') return 'Sent to Claude';
+  if (idea.status === 'promoted' && idea.promotedVia === 'ideas') return "In the room's ideas";
+  return IDEA_STATUS[idea.status] || IDEA_STATUS.new;
+};
 
 export function isHttpUrl(value) {
   if (!value) return false;
@@ -112,9 +127,27 @@ function Eyebrow({ word, askId, extra }) {
   );
 }
 
+/**
+ * THE OPENING ON A PHONE (owner, 2026-10-06; mockup O4): a question that
+ * frames the build says how far the room has got, so people know the
+ * questions lead somewhere.
+ */
+function OpeningProgress({ ask }) {
+  if (!ask.openingIndex || !ask.openingOf) return null;
+  return (
+    <div className="bpl-opening" aria-label={`Shaping the build, step ${ask.openingIndex} of ${ask.openingOf}`}>
+      <p className="plr-help bpl-opening-t">Shaping the build · step {ask.openingIndex} of {ask.openingOf}</p>
+      <div className="bpl-opening-bar" aria-hidden="true">
+        {Array.from({ length: ask.openingOf }, (_, i) => <i key={i} className={i < ask.openingIndex ? 'on' : ''} />)}
+      </div>
+    </div>
+  );
+}
+
 function AskHead({ ask, word, extra }) {
   return (
     <>
+      <OpeningProgress ask={ask} />
       <Eyebrow word={word} askId={ask.askId} extra={extra} />
       <h2 className="plr-q bpl-text">{ask.prompt}</h2>
       {ask.detail ? <p className="plr-help bpl-text bpl-askdetail">{ask.detail}</p> : null}
@@ -178,7 +211,7 @@ function PhoneWheel({ ask, api, onResult }) {
   return (
     <div className="bpl-wheel">
       {w.mine && <p className="plr-help bpl-wheel-turn"><b>Your turn.</b> Spin the wheel for the room.</p>}
-      <BuildWheel wheel={w} size="md" onSpin={w.mine ? () => run(() => sendSpin(api, ask.askId)) : null} spinLabel="Spin the wheel" busy={busy} />
+      <BuildWheel wheel={w} size="md" onSpin={w.mine ? () => run(() => sendSpin(api, ask.askId)) : null} spinLabel={W.spin} busy={busy} />
       <ErrorLine error={error} />
     </div>
   );
@@ -621,6 +654,22 @@ function Outcome({ outcome, images = [] }) {
   );
 }
 
+/**
+ * A link as a participant reads it. A Wi-Fi share link carries the gateway's
+ * key (?k=); it opens with it, but the key is not text to show on a screen
+ * the room can see. Any other link reads exactly as it is.
+ */
+export function linkText(url) {
+  try {
+    const u = new URL(String(url));
+    if (!u.searchParams.has('k')) return String(url);
+    u.searchParams.delete('k');
+    return u.toString().replace(/\/$/, '');
+  } catch (e) {
+    return String(url);
+  }
+}
+
 function Feed({ view, showGoal = true, skipAskId = null }) {
   const crew = view.crew && view.crew.enabled ? view.crew : null;
   // The newest base move is the notice above the ticker; said once, not twice.
@@ -663,7 +712,7 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
               <span className="bpl-tx bpl-text">{e.text}</span>
               {DETAIL_KINDS.includes(e.kind) && e.detail ? <span className="bpl-dt bpl-text">{e.detail}</span> : null}
               {isHttpUrl(e.link) ? (
-                <a className="bpl-link bpl-lnk" href={e.link} target="_blank" rel="noopener noreferrer">{e.link}</a>
+                <a className="bpl-link bpl-lnk" href={e.link} target="_blank" rel="noopener noreferrer">{linkText(e.link)}</a>
               ) : null}
             </li>
           ))}
@@ -702,14 +751,12 @@ function PreviewFeedback({ api, preview, sent, onResult }) {
   };
   return (
     <section className="bpl-ideas bpl-pvfb" aria-label="Feedback on the preview">
-      {/* The preview itself is the newest "Showing" line in the feed: it is
-          not repeated here (one fact, once a viewport). */}
+      {/* On its preview, in History (C11): the preview is the line above. */}
       <h3 className="plr-lab">What do you think of the preview?</h3>
       {sent ? (
         <p className="bpl-ok" role="status">Thanks. Your feedback is with the host.</p>
       ) : (
         <>
-          <p className="plr-help">It is the newest Showing line in the build below.</p>
           {!changing ? (
             <div className="bpl-fbrow">
               <button type="button" className="bpl-send" disabled={busy} onClick={() => send('good')}>Looks good</button>
@@ -734,7 +781,7 @@ function PreviewFeedback({ api, preview, sent, onResult }) {
 
 /* --------------------------------------------------------------- ideas -- */
 
-function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) {
+function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, current = null, alwaysOpen = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [sentNote, setSentNote] = useState(false);
@@ -759,12 +806,16 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) 
 
   return (
     <section className="bpl-ideas">
-      <button type="button" className="bpl-ideabtn" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Icon name="Lightbulb" size={18} />
-        <span>Send an idea to the host</span>
-        {mine.length ? <span className="bpl-ideacount">{mine.length} sent</span> : null}
-      </button>
-      {open && (
+      {alwaysOpen ? (
+        <h2 className="plr-h1 bpl-tabh">Your ideas</h2>
+      ) : (
+        <button type="button" className="bpl-ideabtn" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Icon name="Lightbulb" size={18} />
+          <span>Send an idea to the host</span>
+          {mine.length ? <span className="bpl-ideacount">{mine.length} sent</span> : null}
+        </button>
+      )}
+      {(open || alwaysOpen) && (
         <div className="bpl-ideabox">
           <label className="bpl-label" htmlFor="bpl-idea">Your idea</label>
           <textarea
@@ -785,7 +836,7 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) 
               {mine.map((idea) => (
                 <li key={idea.ideaId}>
                   <span className="bpl-text">{idea.text}</span>
-                  <span className={`bpl-status bpl-status--${idea.walled ? 'walled' : idea.status || 'new'}`}>{ideaStatusText(idea)}</span>
+                  <span className={`bpl-status bpl-status--${idea.walled ? 'walled' : idea.status || 'new'}`}>{ideaStatusText(idea, current)}</span>
                 </li>
               ))}
             </ul>
@@ -796,18 +847,108 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult }) 
   );
 }
 
+/* -------------------------------------------------------------- history -- */
+
+/**
+ * WHAT WE HAVE BUILT SO FAR (step 7, C11): the room's story on this phone or
+ * laptop, newest first — what Claude showed (with its pictures), what was
+ * decided, what the room said. Feedback on a preview sits on the preview it
+ * is about. The same story the wall shows (buildScreens roomStory).
+ */
+function HistoryTab({ view, api, onResult }) {
+  const [filter, setFilter] = useState('all');
+  const story = roomStory({ log: view.log || [], decisions: view.decisions || [], images: view.images || [], myIdeas: view.myIdeas || [] });
+  const shown = filterStory(story, filter);
+  const preview = latestPreview(view.log);
+  const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
+  return (
+    <section className="bpl-history" aria-label="History">
+      <h2 className="plr-h1 bpl-tabh">What we have built so far</h2>
+      <div className="bpl-filters" role="group" aria-label="Show">
+        {STORY_FILTERS.map((f) => (
+          <button key={f.key} type="button" className={`bpl-filter${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</button>
+        ))}
+      </div>
+      {!shown.length && <p className="plr-help">{filter === 'decisions' ? 'Nothing decided yet.' : filter === 'pictures' ? 'No pictures yet.' : 'Nothing yet. What Claude shows and what the room decides collect here.'}</p>}
+      <ol className="bpl-story">
+        {shown.map((it) => (
+          <li key={it.id} className={`bpl-story-it bpl-story-it--${it.type}`}>
+            <span className="bpl-ago">{clock(it.at)}</span>
+            <div className="bpl-story-body">
+              <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
+              {it.mine ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
+              {it.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={it.text} className="bpl-shot" />)}
+              {isHttpUrl(it.link) ? <a className="bpl-link bpl-lnk" href={it.link} target="_blank" rel="noopener noreferrer">{linkText(it.link)}</a> : null}
+              {preview && it.type === 'showed' && it.id === preview.logId && view.state !== 'ENDED' && (
+                <PreviewFeedback key={preview.logId} api={api} preview={preview} sent={previewSent} onResult={onResult} />
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** Now · Ideas · History (C11), the same at the top of every screen, phone or laptop. */
+const TABS = [
+  { key: 'now', label: 'Now' },
+  { key: 'ideas', label: 'Ideas' },
+  { key: 'history', label: 'History' },
+];
+function Tabs({ tab, setTab, nowBadge, ideaCount, hideIdeas = false }) {
+  return (
+    <nav className="bpl-tabs" aria-label="Build Room">
+      {TABS.filter((t) => !(hideIdeas && t.key === 'ideas')).map((t) => (
+        <button key={t.key} type="button" className={`bpl-tab${tab === t.key ? ' is-on' : ''}`} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>
+          {t.label}
+          {t.key === 'now' && nowBadge && tab !== 'now' ? <span className="bpl-tabdot">{nowBadge}</span> : null}
+          {t.key === 'ideas' && ideaCount ? <span className="bpl-tabcount">{ideaCount}</span> : null}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 /* ---------------------------------------------------------------- page -- */
+
+/** One picture, full screen, with a Back. Esc and the backdrop-free layout keep it simple on a phone. */
+function PictureView({ image, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="bpl-viewer" role="dialog" aria-modal="true" aria-label="Picture">
+      <div className="bpl-viewer-top">
+        <button type="button" className="bpl-viewer-back" onClick={onClose}><Icon name="CaretLeft" size={16} /> Back</button>
+        {image.caption ? <span className="bpl-viewer-cap">{image.caption}</span> : null}
+        <button type="button" className="bpl-viewer-x" onClick={onClose} aria-label="Close the picture"><Icon name="X" size={18} /></button>
+      </div>
+      <div className="bpl-viewer-main"><BuildImage imageId={image.imageId} alt={image.caption || 'Screenshot'} className="bpl-viewer-pic" linked={false} /></div>
+    </div>
+  );
+}
 
 export default function BuildPlayer({
   gameId, playerName, clientId, apiBase, rev = 0, online = true, banner = null, ended = false,
 }) {
   const [view, setView] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  // The host removed this person (Session panel, Remove): the room refuses the
+  // phone it had let in. Cleared the moment a read works again (Bring back).
+  const [removed, setRemoved] = useState(false);
+  // Or the name was taken by another device (the host let it): 'moved'.
+  const [refusal, setRefusal] = useState('removed');
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [ideaDraft, setIdeaDraft] = useState('');
+  const [tab, setTab] = useState('now');
+  const lastOpenAsk = useRef(null);
   // A builder key, held only until "Done" (shown once; never stored).
   const [builderKey, setBuilderKey] = useState(null);
   const seq = useRef(0);
+  const seen = useRef(false);
   const firstScreen = useRef(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -820,9 +961,14 @@ export default function BuildPlayer({
     if (r.ok) {
       setView(r.data);
       setLoadError(null);
+      setRemoved(false);
+    } else if (r.status === 403 && seen.current) {
+      setRefusal(r.data && r.data.code === 'moved' ? 'moved' : 'removed');
+      setRemoved(true);
     } else {
       setLoadError(r.error);
     }
+    if (r.ok) seen.current = true;
   }, [apiBase, gameId, playerName, clientId]);
 
   useEffect(() => { load(); }, [load, rev, ended]);
@@ -831,6 +977,16 @@ export default function BuildPlayer({
     const t = setInterval(load, POLL_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  // A NEW QUESTION BRINGS EVERYONE BACK TO NOW (step 7): whoever is reading
+  // History or writing an idea sees the room is waiting on them.
+  const openKey = view && view.current && ['live', 'voting'].includes(view.current.status) ? `${view.current.askId}:${view.current.status}` : null;
+  useEffect(() => {
+    if (openKey && openKey !== lastOpenAsk.current) {
+      lastOpenAsk.current = openKey;
+      setTab('now');
+    }
+  }, [openKey]);
 
   const api = { apiBase, gameId, playerName, clientId };
 
@@ -847,8 +1003,11 @@ export default function BuildPlayer({
     `${apiBase}games/${encodeURIComponent(gameId)}/build-play/images/${encodeURIComponent(imageId)}`
     + `?playerName=${encodeURIComponent(playerName || '')}&clientId=${encodeURIComponent(clientId || '')}`
   ), [apiBase, gameId, playerName, clientId]);
+  // A picture opens full screen in the app, with a Back; never a new tab (owner, 2026-10-08).
+  const [shown, setShown] = useState(null);
   const shell = ({ phase = 'quiet', volume = 'watch', dock = null, body, centre = false }) => (
     <ImageLoader.Provider value={loadImage}>
+    <ImageViewer.Provider value={setShown}>
     <PlayerShell
       phase={phase}
       volume={volume}
@@ -860,9 +1019,33 @@ export default function BuildPlayer({
       centre={centre}
     >
       <div className="bpl">{body}</div>
+      {shown && <div className="bpl"><PictureView image={shown} onClose={() => setShown(null)} /></div>}
     </PlayerShell>
+    </ImageViewer.Provider>
     </ImageLoader.Provider>
   );
+
+  if (removed && refusal === 'moved') {
+    return shell({
+      volume: 'rest',
+      centre: true,
+      body: <p className="plr-lede">This name is on another device now. Join again with another name.</p>,
+    });
+  }
+  if (removed) {
+    const wasBuilder = Boolean(view && view.crew && view.crew.me);
+    return shell({
+      volume: 'rest',
+      centre: true,
+      body: (
+        <>
+          <p className="plr-lede">The host took you out of this session.</p>
+          {wasBuilder && <p className="plr-help">Your Claude was unlinked and your lane closed. What was already merged stays. If the host brings you back, link your Claude again from The crew.</p>}
+          <p className="plr-help">Your ideas and votes stay in the session report.</p>
+        </>
+      ),
+    });
+  }
 
   if (!view) {
     return shell({
@@ -874,34 +1057,83 @@ export default function BuildPlayer({
     });
   }
 
+  const isEnded = ended || view.state === 'ENDED';
+  const ask = view.current;
+  const mine = view.mine || {};
+  const myIdeas = view.myIdeas || [];
   const preview = latestPreview(view.log);
-  const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
-  const ideas = (
-    <>
-    {preview && <PreviewFeedback key={preview.logId} api={api} preview={preview} sent={previewSent} onResult={onResult} />}
-    <IdeaComposer
-      api={api}
-      ideas={view.myIdeas}
-      open={ideaOpen}
-      setOpen={setIdeaOpen}
-      draft={ideaDraft}
-      setDraft={setIdeaDraft}
-      onResult={onResult}
-    />
-    </>
-  );
+  const previewSent = Boolean(preview && myIdeas.some((i) => i.aboutLogId === preview.logId));
+  const openAsk = Boolean(ask && ['live', 'voting'].includes(ask.status));
+  const shownTab = isEnded && tab === 'ideas' ? 'now' : tab;
 
   const crewOn = Boolean(view.crew && view.crew.enabled);
   const crew = crewOn ? (
     <>
       <hr className="plr-sep" />
-      <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} />
+      <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} myPoints={view.myPoints} />
     </>
   ) : null;
 
+  /* NOW · IDEAS · HISTORY (C11). On Ideas or History the dock goes and the
+     body is that tab, while the Now screen stays mounted underneath, so an
+     answer being typed survives a look at History. */
+  const tabs = (
+    <Tabs
+      tab={shownTab}
+      setTab={setTab}
+      nowBadge={openAsk ? `Ask ${askNo(ask.askId)}` : null}
+      ideaCount={isEnded ? 0 : myIdeas.length}
+      hideIdeas={isEnded}
+    />
+  );
+  const ideasTab = (
+    <IdeaComposer
+      api={api} ideas={myIdeas} open setOpen={setIdeaOpen} draft={ideaDraft} setDraft={setIdeaDraft}
+      onResult={onResult} current={ask} alwaysOpen
+    />
+  );
+  const otherTab = shownTab === 'ideas' ? ideasTab : shownTab === 'history' ? <HistoryTab view={view} api={api} onResult={onResult} /> : null;
+  /* On Now: a word when Claude shows something new (the feedback is on its
+     picture in History), and the way to send an idea. */
+  /* OPEN THE BUILD, at the top of Now (mockup L5): the first thing a
+     participant sees while the host shares the build on this Wi-Fi. */
+  const openBuild = !isEnded && view.lan && view.lan.open ? (
+    <section className="bpl-open" aria-label="Open the build">
+      <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">{W.openBuild} ↗</a>
+      <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
+    </section>
+  ) : null;
+  const run = view.run && view.run.status === 'running' ? view.run : null;
+  const nowExtras = isEnded ? null : (
+    <>
+      {run && ask ? <RunBlock run={run} /> : null}
+      {preview && !previewSent && (
+        <section className="bpl-ideas bpl-pvnote" aria-label="Claude is showing something">
+          <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
+          {view.lan && view.lan.open && <p className="plr-help">Try it, then say what you think.</p>}
+          <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('history')}>Look and say what you think</button>
+        </section>
+      )}
+      <section className="bpl-ideas">
+        <button type="button" className="bpl-ideabtn" onClick={() => setTab('ideas')}>
+          <Icon name="Lightbulb" size={18} />
+          <span>Send an idea to the host</span>
+          {myIdeas.length ? <span className="bpl-ideacount">{myIdeas.length} sent</span> : null}
+        </button>
+      </section>
+    </>
+  );
+  const page = ({ dock = null, volume = 'watch', phase, body, centre = false }) => shell({
+    phase,
+    volume: shownTab === 'now' ? volume : 'watch',
+    dock: shownTab === 'now' ? dock : null,
+    centre: shownTab === 'now' ? centre : false,
+    body: <>{tabs}{shownTab === 'now' ? body : otherTab}</>,
+  });
+
   /* ENDED: the wrap-up, and nothing to send — the server refuses every write. */
-  if (ended || view.state === 'ENDED') {
-    return shell({
+  if (isEnded) {
+    return page({
       volume: 'rest',
       body: (
         <>
@@ -913,9 +1145,6 @@ export default function BuildPlayer({
     });
   }
 
-  const ask = view.current;
-  const mine = view.mine || {};
-
   /* WHAT THIS IS, said once: on the first screen this phone sees (until that
      screen changes), and always on the watch screen, which is home. */
   const screenKey = ask && ['live', 'voting', 'results', 'decided'].includes(ask.status) ? `${ask.askId}:${ask.status}` : 'watch';
@@ -926,10 +1155,10 @@ export default function BuildPlayer({
       Answer when a question appears; send ideas any time.
     </p>
   ) : null;
-  /* The ask screens draw their own shell (they own the dock); the idea
-     composer rides under every one of them. Keyed by ask AND status, so a
-     refetch keeps a draft and a new ask or phase starts clean. */
-  const askShell = (props) => shell({ ...props, body: <>{intro}{props.body}{ideas}{crew}</> });
+  /* The ask screens draw their own shell (they own the dock); the Now extras
+     ride under every one of them. Keyed by ask AND status, so a refetch keeps
+     a draft and a new ask or phase starts clean. */
+  const askShell = (props) => page({ ...props, body: <>{intro}{openBuild}{props.body}{nowExtras}{crew}</> });
   const kids = { ask, mine, api, onResult, shell: askShell };
 
   if (ask && ask.status === 'live') {
@@ -941,13 +1170,17 @@ export default function BuildPlayer({
   if (ask && ask.status === 'voting' && ask.kind === 'suggest') {
     return <VoteAsk key={`${ask.askId}:voting`} {...kids} />;
   }
-  if (ask && (ask.status === 'results' || ask.status === 'decided')) {
+  /* A point the host shows wins over a settled question: the host can only show
+     one once the question is no longer open, but the last decided ask stays
+     current on the phone, so without this the point never reached the room. */
+  if (ask && (ask.status === 'results' || ask.status === 'decided') && !view.shownPoint) {
     const decided = ask.status === 'decided';
-    return shell({
+    return page({
       volume: 'watch',
       body: (
         <>
           {intro}
+          {openBuild}
           <Eyebrow word={decided ? 'Decided' : 'Results'} askId={ask.askId} />
           <h2 className="plr-q bpl-text">{ask.prompt}</h2>
           {decided ? <Decided decision={ask.decision} /> : null}
@@ -955,7 +1188,7 @@ export default function BuildPlayer({
           <Results ask={ask} mine={mine} />
           <Whys whys={ask.results && ask.results.whys} />
           {!decided ? <p className="plr-help">The host shapes this into Claude's next step.</p> : null}
-          {ideas}
+          {nowExtras}
           {crew}
           <hr className="plr-sep" />
           <Feed view={view} showGoal={false} skipAskId={ask.askId} />
@@ -964,19 +1197,30 @@ export default function BuildPlayer({
     });
   }
 
-  /* No current ask: watch the build. */
-  return shell({
+  /* No current ask: watch the build. A point the host put on the Stage comes
+     first (Talk it over), then the host's run list; both replace the heading. */
+  const point = view.shownPoint || null;
+  return page({
     volume: 'watch',
     body: (
       <>
         {intro}
-        <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
-        <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
+        {openBuild}
+        {point ? <TalkItOver key={`${point.kind}:${point.text}`} point={point} api={api} onResult={onResult} /> : null}
+        {point && run ? <RunBlock run={run} /> : null}
+        {!point && run ? <RunBlock run={run} lead /> : null}
+        {!point && !run ? (
+          <>
+            <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
+            <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
+          </>
+        ) : null}
         {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}
-        {crewOn ? <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} /> : null}
+        {crewOn ? <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} myPoints={view.myPoints} /> : null}
         <Feed view={view} />
-        {ideas}
+        {nowExtras}
       </>
     ),
   });
+
 }

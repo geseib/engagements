@@ -97,8 +97,10 @@ function classifyRejoin({ storedClientId, clientId, claimExisting, handoverOpen 
  * reported with. It is deliberately NOT a roster: one submitted name in, one
  * yes/no out, no listing and no endpoint that answers without a join attempt.
  */
-function nameConflictResponse(code, playerName) {
-  const message = code === 'NAME_UNVERIFIED'
+function nameConflictResponse(code, playerName, { handoverRefused = false } = {}) {
+  const message = handoverRefused
+    ? `The host said not now. Add a last initial or pick another name so the host can tell you apart.`
+    : code === 'NAME_UNVERIFIED'
     ? `Someone in this session is already answering as "${playerName}". If that was you on another device, rejoin to pick your answers and score back up. If not, choose a name the host can tell apart.`
     : `Someone in this session is already answering as "${playerName}". Add a last initial or pick another name so the host can tell you apart.`;
 
@@ -108,7 +110,10 @@ function nameConflictResponse(code, playerName) {
       error: 'Name already in use',
       code,
       playerName,
-      message
+      message,
+      // Only ever true for the device the host refused (join-game's collision
+      // branch compares clientIds); anyone else gets the plain refusal.
+      ...(handoverRefused ? { handoverRefused: true } : {})
     }),
     headers: { 'Access-Control-Allow-Origin': '*' }
   };
@@ -292,7 +297,12 @@ exports.handler = async (event) => {
         console.log(`⛔ Refusing join for ${playerName} in game ${gameId}: ${verdict}`);
         return nameConflictResponse(
           verdict === 'unverified' ? 'NAME_UNVERIFIED' : 'NAME_TAKEN',
-          playerName
+          playerName,
+          {
+            handoverRefused: Boolean(
+              clientId && existingPlayer.Item.HandoverRefusedFor === clientId
+            )
+          }
         );
       }
 
@@ -360,7 +370,7 @@ exports.handler = async (event) => {
           await db.send(new UpdateCommand({
             TableName: process.env.TABLE_NAME,
             Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
-            UpdateExpression: 'SET ClientId = :cid REMOVE HandoverExpiresAt, HandoverForClientId, HandoverRequestedBy, HandoverRequestedAt, RemovedAt',
+            UpdateExpression: 'SET ClientId = :cid REMOVE HandoverExpiresAt, HandoverForClientId, HandoverRequestedBy, HandoverRequestedAt, HandoverRefusedFor, HandoverRefusedAt, RemovedAt',
             ConditionExpression: 'attribute_exists(HandoverExpiresAt) AND HandoverExpiresAt > :now AND (attribute_not_exists(HandoverForClientId) OR HandoverForClientId = :cid)',
             ExpressionAttributeValues: { ':cid': clientId, ':now': nowSeconds() }
           }));

@@ -28,41 +28,53 @@ const { PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagemen
  */
 async function notifyHost(db, apigateway, tableName, gameId, message) {
   try {
-    const connections = await db.send(new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      FilterExpression: 'ConnectionType = :type',
-      ExpressionAttributeValues: {
-        ':pk': `GAME#${gameId}`,
-        ':sk': 'CONNECTION#',
-        ':type': 'HOST'
-      }
-    }));
+    // EVERY host connection, page by page: a host with two devices open (the
+    // laptop and the projector, say) must see the same thing on both.
+    const hosts = [];
+    let ExclusiveStartKey;
+    do {
+      const page = await db.send(new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        FilterExpression: 'ConnectionType = :type',
+        ExpressionAttributeValues: {
+          ':pk': `GAME#${gameId}`,
+          ':sk': 'CONNECTION#',
+          ':type': 'HOST'
+        },
+        ExclusiveStartKey
+      }));
+      hosts.push(...((page && page.Items) || []));
+      ExclusiveStartKey = page && page.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
 
-    const host = (connections.Items || [])[0];
-    if (!host) {
+    if (!hosts.length) {
       console.log(`⚠️ No host connection for game ${gameId}; ${message.type} not delivered`);
       return { sent: false };
     }
 
-    try {
-      await apigateway.send(new PostToConnectionCommand({
-        ConnectionId: host.ConnectionId,
-        Data: JSON.stringify(message)
-      }));
-      console.log(`✅ Host notified: ${message.type} for game ${gameId}`);
-      return { sent: true };
-    } catch (error) {
-      if (error.statusCode === 410 || error.name === 'GoneException' || error.$response?.statusCode === 410) {
-        console.log(`🧹 Removing stale host connection ${host.ConnectionId} (410 Gone)`);
-        await db.send(new DeleteCommand({
-          TableName: tableName,
-          Key: { PK: `GAME#${gameId}`, SK: `CONNECTION#${host.ConnectionId}` }
-        })).catch(() => {});
-        return { sent: false };
+    let delivered = 0;
+    await Promise.all(hosts.map(async (host) => {
+      try {
+        await apigateway.send(new PostToConnectionCommand({
+          ConnectionId: host.ConnectionId,
+          Data: JSON.stringify(message)
+        }));
+        delivered += 1;
+      } catch (error) {
+        if (error.statusCode === 410 || error.name === 'GoneException' || error.$response?.statusCode === 410) {
+          console.log(`🧹 Removing stale host connection ${host.ConnectionId} (410 Gone)`);
+          await db.send(new DeleteCommand({
+            TableName: tableName,
+            Key: { PK: `GAME#${gameId}`, SK: `CONNECTION#${host.ConnectionId}` }
+          })).catch(() => {});
+        } else {
+          console.error(`❌ notifyHost(${message.type}) to ${host.ConnectionId} failed:`, error);
+        }
       }
-      throw error;
-    }
+    }));
+    if (delivered) console.log(`✅ Host notified (${delivered}): ${message.type} for game ${gameId}`);
+    return { sent: delivered > 0 };
   } catch (error) {
     // Deliberately swallowed. See the header: a host who is not listening must
     // not turn a successful write into a 500 for the person who made it.

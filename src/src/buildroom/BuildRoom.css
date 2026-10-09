@@ -319,27 +319,24 @@
 
 /* ---- between asks ------------------------------------------------------- */
 .brm .brm-building { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.brm .brm-pulse {
-  width: 20px; height: 20px; border-radius: 50%; flex: none; background: var(--secondary);
-  box-shadow: 0 0 0 8px var(--brm-tint-blue);
-  animation: brm-pulse 2.4s ease-in-out infinite;
-}
-@keyframes brm-pulse { 50% { box-shadow: 0 0 0 14px var(--brm-tint-blue); } }
-@media (prefers-reduced-motion: reduce) { .brm .brm-pulse { animation: none; } }
 .brm .brm-mins { font-size: var(--brm-st-meta); color: var(--muted); margin-left: auto; white-space: nowrap; }
+.brm .brm-sdot { width: 26px; height: 26px; border-radius: 50%; flex: none; background: var(--muted); }
+.brm .brm-sdot--building { background: var(--secondary); box-shadow: 0 0 0 10px var(--brm-tint-blue); animation: brm-sdot 2.4s ease-in-out infinite; }
+.brm .brm-sdot--waiting { background: var(--primary); box-shadow: 0 0 0 10px var(--brm-tint-amber); }
+@keyframes brm-sdot { 50% { box-shadow: 0 0 0 16px var(--brm-tint-blue); } }
+@media (prefers-reduced-motion: reduce) { .brm .brm-sdot--building { animation: none; } }
+.brm .brm-plain { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 320px); gap: 24px 40px; align-items: start; }
+.brm .brm-plain-main { min-width: 0; }
+.brm .brm-plain-main .brm-building { flex-wrap: nowrap; gap: 22px; }
+.brm .brm-nowtext { font-size: var(--brm-st-body); line-height: 1.3; margin: 14px 0 0 48px; overflow-wrap: anywhere; }
+.brm .brm-plain-side { display: flex; flex-direction: column; gap: 22px; }
+.brm .brm-plain-side .brm-tx { font-size: var(--brm-st-body); }
+.brm .brm-bignum { font-size: var(--brm-st-hero); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .brm .brm-plain { grid-template-columns: minmax(0, 1fr); } }
 .brm .brm-latest { background: var(--brm-tint-amber-soft); border: 1px solid var(--brm-line-amber); border-radius: 14px; padding: 14px 18px; }
 .brm .brm-kind { font-size: var(--brm-t-label); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); }
 .brm .brm-tx { font-size: var(--brm-st-body); line-height: 1.3; margin-top: 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.brm .brm-ticker { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.brm .brm-ticker li {
-  background: var(--surface); border-radius: 14px; padding: 12px 16px;
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 14px; align-items: baseline;
-}
-.brm .brm-ticker li .brm-kind { color: var(--secondary); }
-.brm .brm-ticker li .brm-tx { margin: 0; }
-.brm .brm-ticker li.is-newest { border-left: 4px solid var(--secondary); }
 .brm .brm-ago { font-size: var(--brm-t-body); color: var(--muted); white-space: nowrap; }
-.brm .brm-ticker .brm-lnk { grid-column: 2 / 4; font-size: var(--brm-t-body); }
 
 /* ---- the join foot ------------------------------------------------------ */
 .brm .brm-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; padding: 4px 4px 0; }
@@ -510,8 +507,6 @@
 .brm .brm-openbtn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; margin-top: 8px; }
 .brm .brm-openrow { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 18px; }
 .brm .brm-openrow .brm-openbtn { margin-top: 0; font-size: var(--brm-t-head); min-height: 44px; padding: 0 18px; }
-.brm .brm-tickopen { grid-column: 2 / 4; }
-.brm .brm-tickopen .brm-openbtn { margin-top: 2px; }
 
 /* ── The stage once Claude has wrapped up ── */
 .brm .brm-stage--wrapped .brm-donemark { color: var(--success); display: inline-flex; }
@@ -535,6 +530,12 @@
 .brm .brm-shot--thumb { margin-top: 6px; max-width: 220px; }
 .brm .brm-shot--latest { margin: 14px 0; }
 .brm .brm-shot--latest img { max-height: 420px; object-fit: contain; }
+/* Mockups to compare on the wall (host-flow S4): the looks side by side. */
+.brm .brm-looks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 26px; }
+.brm .brm-look { min-width: 0; }
+.brm .brm-shot--look img { max-height: 300px; object-fit: cover; object-position: top; }
+.brm .brm-look-cap { font-size: var(--brm-st-body); line-height: 1.3; margin-top: 10px; overflow-wrap: anywhere; }
+.brm .brm-look-cap b { font-weight: 800; margin-right: 6px; }
 .brm .brm-shot--tl { margin-top: 6px; max-width: 220px; }
 .brm .brm-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 0 0 18px; }
 .brm .brm-shotgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
@@ -760,3 +761,702 @@
 .brm .brm-unheard { border-left: 4px solid var(--primary); display: grid; gap: 8px; margin-top: 0; }
 .brm .brm-unheard-t { margin: 0; line-height: 1.4; }
 .brm .brm-unheard code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--primary); }
+
+/* ---- The queue (step 4, C1): filters, ticks, the bulk bar ----------------- */
+.brm .brm-queue { display: grid; gap: 0; min-width: 0; }
+.brm .brm-qfilters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.brm .brm-qchip {
+  min-height: 30px; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--brm-rule); background: transparent; color: var(--muted);
+  font: inherit; font-size: var(--brm-t-label);
+}
+.brm .brm-qchip.is-on { border-color: var(--secondary); color: var(--text); background: var(--brm-tint-blue); }
+.brm .brm-qchip:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-qbulk {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin: 0 0 8px;
+  font-size: var(--brm-t-label);
+}
+.brm .brm-qtick { width: 18px; height: 18px; accent-color: var(--primary); flex: none; }
+.brm .brm-qidea.is-ticked { outline: 2px solid var(--primary); outline-offset: -2px; }
+/* Menus on an idea open under their own button, rightward, so they stay in the
+   column (a menu opening leftward from a left-hand button ran off its edge). */
+.brm .brm-idea-acts .brm-more-panel { min-width: 260px; left: 0; right: auto; }
+/* C3b: a waiting vote shows a tile per option, its mockup as Claude attaches it. */
+.brm .brm-mocktiles { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.brm .brm-mocktiles li { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.brm .brm-mocktile-img { margin: 0; }
+.brm .brm-mocktile-img img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; object-position: top; border-radius: 6px; }
+.brm .brm-mocktile-wait {
+  display: grid; place-items: center; aspect-ratio: 4 / 3; border-radius: 6px;
+  border: 1px dashed var(--brm-rule); color: var(--muted); font-size: var(--brm-t-label); text-align: center; padding: 6px;
+}
+.brm .brm-mocktile-t { font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+
+/* ---- Send to Claude, in four kinds (step 7c, C14) ----------------------- */
+/* The menu hangs from the whole split button, opening rightward from its left
+   edge (owner, 2026-10-06: it opened off screen to the left). */
+.brm .brm-split { display: inline-flex; align-items: stretch; position: relative; }
+.brm .brm-split > .brm-more { position: static; }
+.brm .brm-split > .brm-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.brm .brm-split .brm-split-caret { border-top-left-radius: 0; border-bottom-left-radius: 0; padding-left: 6px; padding-right: 6px; margin-left: 1px; }
+.brm .brm-split .brm-more-panel { min-width: 300px; left: 0; right: auto; }
+.brm .brm-kindopt { display: grid; gap: 2px; text-align: left; white-space: normal; }
+.brm .brm-kindopt span { color: var(--muted); font-weight: 400; }
+.brm .brm-seg--kinds { flex-wrap: wrap; margin-bottom: 4px; }
+
+/* ---- The room brief (step 7c, C14) -------------------------------------- */
+.brm .brm-brief { display: grid; gap: 12px; }
+.brm .brm-brief-sec { display: grid; gap: 6px; }
+.brm .brm-brief-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.brm .brm-brief-list li {
+  display: flex; align-items: center; gap: 8px; background: var(--surface-2);
+  border-radius: 6px; padding: 6px 8px; font-size: var(--brm-t-label);
+}
+.brm .brm-brief-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* ---- Ask the room with ready questions (step 7b, C13) ------------------- */
+.brm .brm-modal--lib { width: min(1040px, 100%); max-height: calc(100vh - 48px); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.brm .brm-libgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; min-height: 0; }
+.brm .brm-libgrid > form { overflow: auto; min-height: 0; padding-right: 4px; }
+.brm .brm-lib { display: grid; align-content: start; gap: 8px; min-height: 0; overflow: auto; padding-right: 4px; }
+.brm .brm-lib-list section { display: grid; gap: 2px; margin-bottom: 10px; }
+.brm .brm-lib-q {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 6px;
+  padding: 6px 8px; font: inherit; font-size: var(--brm-t-label);
+}
+.brm .brm-lib-q:hover { background: var(--surface-2); }
+.brm .brm-lib-q.is-on { background: var(--surface-2); border-color: var(--primary); }
+.brm .brm-lib-q:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-lib-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  .brm .brm-libgrid { grid-template-columns: 1fr; }
+  .brm .brm-lib { max-height: 40vh; }
+}
+/* A ready question the room has been asked already: still there to ask again. */
+.brm .brm-lib-q.is-asked .brm-lib-t { color: var(--muted); }
+
+/* ---- History: the room's story (step 5, C9) and its artifacts (C10) ------ */
+.brm .brm-histmain { min-width: 0; }
+.brm .brm-histscreen .brm-histside { grid-column: 2; grid-row: 1; }
+.brm .brm-story { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
+.brm .brm-story-it { display: grid; grid-template-columns: max-content 14px minmax(0, 1fr); gap: 12px; align-items: start; }
+.brm .brm-story-tm { color: var(--muted); font-size: var(--brm-st-meta); font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; min-width: 5.5em; }
+.brm .brm-story-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 7px; background: var(--muted); }
+.brm .brm-story-it--decided .brm-story-dot { background: var(--success); }
+.brm .brm-story-it--showed .brm-story-dot, .brm .brm-story-it--picture .brm-story-dot { background: var(--primary); }
+.brm .brm-story-it--said .brm-story-dot { background: transparent; border: 2px solid var(--secondary); }
+.brm .brm-story-body { display: grid; gap: 6px; min-width: 0; }
+.brm .brm-story-h { color: var(--muted); font-size: var(--brm-st-meta); letter-spacing: 0.06em; text-transform: uppercase; }
+.brm .brm-story-t { margin: 0; font-size: var(--brm-st-body); line-height: 1.3; overflow-wrap: anywhere; }
+.brm .brm-story-chain { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--brm-t-body); }
+.brm .brm-story-step { border: 1px solid var(--brm-rule); border-radius: 999px; padding: 2px 10px; color: var(--text); }
+.brm .brm-story-arrow { color: var(--muted); }
+.brm .brm-story-pics { display: flex; flex-wrap: wrap; gap: 10px; }
+.brm .brm-story-pic { margin: 0; width: min(260px, 100%); }
+.brm .brm-story-pic img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; object-position: top; border-radius: 6px; }
+.brm .brm-story-pic.is-chosen img { outline: 3px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-arts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.brm .brm-art { display: grid; gap: 4px; background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 10px; padding: 8px; min-width: 0; }
+.brm .brm-art.is-chosen { border-color: var(--secondary); }
+.brm .brm-art-img { margin: 0; }
+.brm .brm-art-img img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; object-position: top; border-radius: 6px; }
+.brm .brm-art-t { font-size: var(--brm-t-body); overflow-wrap: anywhere; }
+.brm .brm-made { margin: 0; font-size: var(--brm-st-meta); }
+@media (max-width: 900px) {
+  .brm .brm-histscreen .brm-histside { grid-column: auto; grid-row: auto; order: -1; }
+  .brm .brm-story-it { grid-template-columns: max-content 12px minmax(0, 1fr); }
+}
+
+/* ---- The host picks by clicking an option (owner, 2026-10-06) ----------- */
+.brm .brm-choice.is-pickable, .brm .brm-sug.is-pickable { cursor: pointer; }
+.brm .brm-choice.is-pickable:hover, .brm .brm-sug.is-pickable:hover { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-wheelpicks { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; }
+
+/* ---- The opening (owner, 2026-10-06; docs/design/build-room-opening) ----- */
+.brm .brm-op-phase { color: var(--primary); }
+.brm .brm-op-q { font-size: var(--brm-t-head); font-weight: 700; }
+.brm .brm-op-kinds { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.brm .brm-op-kind { display: grid; gap: 2px; width: 100%; text-align: left; border: 1px solid var(--brm-rule); border-radius: 10px; padding: 10px 12px; background: var(--bg); color: var(--text); font: inherit; }
+.brm .brm-op-kind span { color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-op-kind.is-pick { cursor: pointer; }
+.brm .brm-op-kind.is-pick:hover, .brm .brm-op-kind.is-pick:focus-visible { border-color: var(--primary); outline: none; }
+.brm .brm-op-value { margin: 0; font-size: var(--brm-t-head); }
+.brm .brm-op-start {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--brm-line-amber); background: var(--brm-tint-amber);
+  font-size: var(--brm-t-label);
+}
+.brm .brm-op-start > span { flex: 1 1 220px; }
+.brm .brm-briefpath { display: grid; gap: 8px; }
+.brm .brm-bp { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.brm .brm-bp-line {
+  display: grid; grid-template-columns: 14px 104px minmax(0, 1fr); gap: 8px; align-items: start; width: 100%;
+  text-align: left; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px;
+  color: var(--text); font: inherit; font-size: var(--brm-t-label); cursor: pointer;
+}
+.brm .brm-bp-line:hover { background: var(--surface-2); }
+.brm .brm-bp-line:focus-visible { outline: 2px solid var(--secondary); outline-offset: 1px; }
+.brm .brm-bp-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--muted); margin-top: 3px; }
+.brm .brm-bp-k { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--brm-t-floor); padding-top: 2px; }
+.brm .brm-bp-v { overflow-wrap: anywhere; }
+.brm .brm-bp-it.is-next .brm-bp-v, .brm .brm-bp-it.is-skipped .brm-bp-v { color: var(--muted); font-style: italic; }
+.brm .brm-bp-it.is-done .brm-bp-dot { background: var(--success); border-color: var(--success); }
+.brm .brm-bp-it.is-asking .brm-bp-dot { background: var(--primary); border-color: var(--primary); }
+.brm .brm-bp-it.is-focus .brm-bp-line { background: var(--brm-tint-amber); border-color: var(--brm-line-amber); }
+.brm .brm-bp-probes { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 6px 30px; }
+.brm .brm-wallbrief { display: grid; gap: 18px; align-content: start; }
+.brm .brm-wb-lines { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 24px; margin: 0; font-size: var(--brm-st-body); line-height: 1.3; }
+.brm .brm-wb-lines dt { color: var(--muted); font-size: var(--brm-st-meta); text-transform: uppercase; letter-spacing: 0.08em; padding-top: 4px; }
+.brm .brm-wb-lines dd { margin: 0; overflow-wrap: anywhere; }
+/* Claude's draft of the brief, on the opening panel. */
+.brm .brm-draft { display: grid; gap: 10px; border-left: 4px solid var(--primary); margin: 0; }
+.brm .brm-draft-h { margin: 0; }
+.brm .brm-draft-lines { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-draft-line { align-items: flex-start; font-size: var(--brm-t-label); }
+.brm .brm-bp-head { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.brm .brm-bp-head span { color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-wb-summary { max-width: 60ch; }
+
+/* ── Wi-Fi share (docs/design/build-room-lan-share, L1-L4) ───────────────── */
+.brm .brm-hbar { position: relative; }
+.brm .brm-wifiwrap { position: relative; }
+.brm button.brm-wifi {
+  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 999px;
+  border: 1px solid var(--brm-rule); background: var(--surface); color: var(--muted);
+  font: 600 var(--brm-t-label)/1 var(--font-ui); white-space: nowrap; cursor: pointer;
+}
+.brm .brm-wifi::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.brm .brm-wifi--starting, .brm .brm-wifi--waiting, .brm .brm-wifi--quiet { color: var(--primary); border-color: var(--brm-line-amber); background: var(--brm-tint-amber); }
+.brm .brm-wifi--starting::before, .brm .brm-wifi--waiting::before, .brm .brm-wifi--quiet::before { background: var(--primary); }
+.brm .brm-wifi--on { color: var(--brm-success-text); border-color: var(--brm-tint-green); background: var(--brm-tint-green); }
+.brm .brm-wifi--on::before { background: var(--success); }
+.brm .brm-wifi--failed { color: var(--danger-text); border-color: var(--brm-line-red); background: var(--brm-tint-red); }
+.brm .brm-wifi--failed::before { background: var(--danger); }
+.brm .brm-wifi.is-open { box-shadow: 0 0 0 2px var(--secondary); }
+.brm button.brm-wifi:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
+.brm .brm-wifipanel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; width: 440px; max-width: calc(100vw - 32px);
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; text-align: left;
+  background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 14px; box-shadow: 0 18px 50px var(--brm-scrim);
+}
+.brm .brm-wifipanel h3 { margin: 0; font: 800 var(--brm-t-head)/1.2 var(--font-ui); }
+.brm .brm-wifipanel-top { display: flex; align-items: center; gap: 10px; }
+.brm .brm-wifipanel-top .brm-auto { margin-left: auto; }
+.brm .brm-wifipanel-x {
+  width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--brm-rule); border-radius: 8px;
+  background: transparent; color: var(--muted); font-weight: 800; cursor: pointer;
+}
+.brm .brm-wifipanel-x:hover, .brm .brm-wifipanel-x:focus-visible { border-color: var(--primary); color: var(--text); }
+.brm .brm-wifipanel-say { margin: 0; font-size: var(--brm-t-label); color: var(--muted); line-height: 1.45; }
+.brm .brm-wifipanel-apps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.brm .brm-wifipanel-apps li {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  font-size: var(--brm-t-label); padding: 8px 10px; border: 1px solid var(--brm-rule); border-radius: 9px; background: var(--bg);
+}
+.brm .brm-wifipanel-k { font-weight: 700; color: var(--text); }
+.brm .brm-wifipanel-u { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--brm-t-floor); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.brm .brm-wifipanel-stat { margin: 0; display: flex; align-items: center; gap: 8px; font-size: var(--brm-t-label); }
+.brm .brm-wifipanel-stat b { font: 800 var(--brm-t-num)/1 var(--font-display); color: var(--brm-success-text); }
+.brm .brm-wifipanel-warn, .brm .brm-wifipanel-err { border: 1px solid var(--brm-line-amber); background: var(--brm-tint-amber); border-radius: 10px; padding: 10px 12px; font-size: var(--brm-t-label); line-height: 1.45; }
+.brm .brm-wifipanel-warn b { color: var(--primary); }
+.brm .brm-wifipanel-err { border-color: var(--brm-line-red); background: var(--brm-tint-red); }
+.brm .brm-wifipanel-err b { color: var(--danger-text); }
+.brm .brm-wifipanel-foot { display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--brm-rule); padding-top: 12px; }
+
+.brm .brm-wifioffer {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--brm-line-blue); background: var(--brm-tint-blue);
+}
+.brm .brm-wifioffer-t { margin: 0; font: 700 var(--brm-t-body)/1.3 var(--font-ui); }
+.brm .brm-wifioffer-s { margin: 0; font-size: var(--brm-t-label); color: var(--muted); line-height: 1.45; }
+
+/* The QR on the wall: the join QR's dusk scrim, a card beside the words. */
+.brm .brm-wallqr {
+  position: fixed; inset: 0; z-index: 1000; background: var(--brm-qr-scrim);
+  display: flex; align-items: flex-start; overflow-y: auto; padding: 24px;
+}
+.brm .brm-wallqr-card { position: relative; margin: auto; background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 22px; padding: 40px 48px; max-width: 1150px; outline: none; }
+.brm .brm-wallqr-body { display: grid; grid-template-columns: auto 1fr; gap: 44px; align-items: center; }
+.brm .brm-wallqr-qr { width: min(60vh, 40vw); height: min(60vh, 40vw); }
+.brm .brm-wallqr-x {
+  position: absolute; top: 18px; right: 18px; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--surface); color: var(--muted); font-weight: 800; cursor: pointer;
+}
+.brm .brm-wallqr-x:hover, .brm .brm-wallqr-x:focus-visible { border-color: var(--primary); color: var(--text); }
+.brm .brm-wallqr-eb { display: block; margin-bottom: 16px; font: 800 var(--brm-st-meta)/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--primary); }
+.brm .brm-wallqr-h { margin: 0 0 14px; font: 800 54px/1.05 var(--font-display); }
+.brm .brm-wallqr-l { margin: 0 0 12px; font-size: 28px; line-height: 1.3; color: var(--text); }
+.brm .brm-wallqr-m { margin: 0 0 20px; font-size: 22px; color: var(--muted); }
+@media (max-width: 760px) {
+  .brm .brm-wallqr-body { grid-template-columns: 1fr; gap: 20px; }
+  .brm .brm-wallqr-qr { width: min(60vw, 60vh); height: min(60vw, 60vh); }
+  .brm .brm-wallqr-card { padding: 56px 20px 24px; }
+  .brm .brm-wallqr-h { font-size: 34px; }
+}
+
+/* The QR on the Build screen: open it on your own device. */
+.brm .brm-buildqr {
+  display: flex; align-items: center; gap: 14px; justify-self: start; padding: 12px 16px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--brm-tint-green); font-size: var(--brm-st-meta);
+}
+.brm .brm-buildqr-qr { width: 96px; height: 96px; padding: 6px; border-radius: 8px; background: var(--brm-qr-bg); }
+.brm .brm-buildqr-qr svg { display: block; width: 100%; height: 100%; }
+.brm .brm-buildqr p { margin: 0; line-height: 1.3; }
+.brm .brm-buildqr small { display: block; color: var(--muted); font-size: var(--brm-t-body); }
+.brm .brm-wifipanel-test { display: flex; gap: 14px; align-items: center; }
+
+/* ---- the ask as four steps (BuildAskPath.jsx; docs/design/build-room-host-flow H2-H4) ----
+   Ask, Collect, Settle, Send to Claude. A done step folds to one line on a
+   --success number (--bg on --success, measured); the open step carries the
+   amber line; the steps to come are greyed with --muted (never opacity, which
+   would take their text under AA). The one primary move wears a ring while it
+   has focus, whether the page or the host put it there. */
+.brm .brm-path { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.brm .brm-path-step { border: 1px solid var(--brm-rule); border-radius: 12px; background: var(--surface); min-width: 0; }
+.brm .brm-path-head {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--brm-row-h); padding: 10px 14px;
+  background: none; border: 0; border-radius: 12px; color: var(--text); font: inherit; text-align: left;
+}
+.brm button.brm-path-head { cursor: pointer; }
+.brm button.brm-path-head:hover { background: var(--surface-2); }
+.brm button.brm-path-head:focus-visible { outline: 2px solid var(--secondary); outline-offset: -2px; }
+.brm .brm-path-n {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: var(--brm-t-label); font-weight: 800; line-height: 1; border: 2px solid var(--muted); color: var(--muted);
+}
+.brm .brm-path-t { flex: 1; min-width: 0; font-size: var(--brm-t-body); font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.brm .brm-path-s { flex: none; max-width: 45%; font-size: var(--brm-t-label); color: var(--muted); text-align: right; overflow-wrap: anywhere; }
+.brm .brm-path-step.is-done .brm-path-n { background: var(--success); border-color: var(--success); color: var(--bg); }
+.brm .brm-path-step.is-done .brm-path-t { color: var(--muted); font-weight: 600; }
+.brm .brm-path-step.is-done .brm-path-s { color: var(--text); }
+.brm .brm-path-step.is-now { border-color: var(--brm-line-amber); box-shadow: 0 0 0 1px var(--brm-line-amber); }
+.brm .brm-path-step.is-now .brm-path-n { background: var(--primary); border-color: var(--primary); color: var(--bg); }
+.brm .brm-path-step.is-next .brm-path-t { color: var(--muted); font-weight: 600; }
+.brm .brm-path-body { display: grid; gap: 12px; padding: 0 14px 14px; min-width: 0; }
+.brm .brm-path-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.brm .brm-path-edit { display: grid; gap: 10px; }
+/* The board, the wheel and the direction sit inside the step: no box in a box. */
+.brm .brm-path .brm-stage, .brm .brm-path .brm-panel { padding: 0; border: 0; background: transparent; }
+.brm .brm-path .brm-notice { margin: 0; }
+.brm .brm-path [data-next-primary]:focus { outline: 3px solid var(--secondary); outline-offset: 3px; }
+.brm .brm-spacehint { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: var(--brm-t-floor); color: var(--muted); }
+.brm .brm-spacehint kbd {
+  font-family: var(--font-ui); font-size: var(--brm-t-floor); font-weight: 700; line-height: 1;
+  border: 1px solid var(--brm-rule); border-radius: 4px; padding: 3px 6px; color: var(--text);
+}
+.brm .brm-path-keys { margin: 0; }
+/* THE ACTION ROW (batch 2-3, B1): the hint at the left, ghosts, secondaries,
+   then the one primary, right-most. Pinned to the bottom of the open step. */
+.brm .brm-path-step.is-now .brm-path-body { display: flex; flex-direction: column; }
+.brm .brm-path-step.is-now .brm-path-body > * + * { margin-top: 12px; }
+.brm .brm-then { margin: 0; font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-told { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.brm .brm-arow {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
+  padding-top: 10px; border-top: 1px solid var(--brm-rule); background: var(--surface); min-width: 0;
+}
+.brm .brm-arow.is-pinned { position: sticky; bottom: 0; margin-top: auto; z-index: 1; }
+.brm .brm-say { flex: 1 1 auto; min-width: 0; margin-right: auto; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-arow > .brm-btn { flex: none; }
+@media (pointer: coarse) { .brm .brm-say.is-keys { display: none; } }
+/* "Sent to Claude as Do now: ..." for six seconds after a decision goes. */
+.brm .brm-sentline {
+  margin: 0; padding: 10px 14px; border-radius: 10px; font-size: var(--brm-t-body); color: var(--text);
+  background: var(--brm-tint-green); border: 1px solid var(--brm-tint-green); overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .brm .brm-path-head { flex-wrap: wrap; }
+  .brm .brm-path-s { max-width: none; flex-basis: 100%; text-align: left; padding-left: 36px; }
+}
+
+/* ---- between asks: What's next and Decided (BuildWhatsNext.jsx;
+   docs/design/build-room-host-flow H1, H5, build-room-combine-and-stage P1, P2) ----
+   Claude's line on one row (the dot is the Stage's colour for the same
+   state), then one row per move, the lead on the amber line with the primary
+   ring while it has focus. Decided rows tick the way queue ideas do. */
+.brm .brm-wnext { display: grid; gap: 10px; min-width: 0; }
+.brm .brm-wnext .brm-h5 { margin: 0; }
+.brm .brm-claudeline {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 12px 14px;
+  border: 1px solid var(--brm-rule); border-radius: 12px; background: var(--surface);
+  font-size: var(--brm-t-body); line-height: 1.35;
+}
+.brm .brm-claudeline-t { flex: 1 1 14em; min-width: 0; font-size: var(--brm-t-label); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-cdot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--muted); }
+.brm .brm-cdot--building { background: var(--secondary); }
+.brm .brm-cdot--waiting { background: var(--primary); }
+.brm .brm-wnlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-wn {
+  display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 10px 14px; border: 1px solid var(--brm-rule); border-radius: 12px; background: var(--surface);
+}
+.brm .brm-wn.is-lead { border-color: var(--brm-line-amber); background: var(--brm-tint-amber-soft); }
+.brm .brm-wn-ic {
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--primary); font-size: var(--brm-t-body); font-weight: 800; line-height: 1;
+}
+.brm .brm-wn-t { display: grid; gap: 2px; min-width: 0; }
+.brm .brm-wn-t b { font-size: var(--brm-t-body); overflow-wrap: anywhere; }
+.brm .brm-wn-t span { font-size: var(--brm-t-label); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-wnext [data-next-primary]:focus { outline: 3px solid var(--secondary); outline-offset: 3px; }
+.brm .brm-decided { display: grid; gap: 8px; }
+.brm .brm-declist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-dec {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start;
+  padding: 9px 12px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--surface);
+}
+.brm .brm-dec .brm-qtick { margin: 2px 0 0; }
+.brm .brm-dec.is-ticked { border-color: var(--primary); }
+.brm .brm-dec.is-pick { cursor: pointer; }
+.brm .brm-stackhint { font-size: var(--brm-t-floor); font-weight: 400; }
+.brm .brm-dec-t { grid-column: 2; min-width: 0; }
+.brm .brm-dec-q { margin: 0; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-dec-a { margin: 2px 0 0; font-size: var(--brm-t-body); overflow-wrap: anywhere; }
+.brm .brm-dec-how { margin: 2px 0 0; font-size: var(--brm-t-floor); color: var(--muted); }
+.brm .brm-decided .brm-qbulk { margin: 0; }
+@media (max-width: 560px) {
+  .brm .brm-wn { grid-template-columns: 36px minmax(0, 1fr); }
+  .brm .brm-wn .brm-btn { grid-column: 2; justify-self: start; }
+}
+
+/* ---- History: a past ask's window, and the mockup viewer ----------------
+   docs/design/build-room-history-and-stage-decide R1, R2. Tokens only. */
+.brm .bimg-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; color: inherit; font: inherit; }
+.brm .bimg-open:focus-visible { outline: 3px solid var(--secondary); outline-offset: 2px; border-radius: 10px; }
+.brm .brm-story-it.is-openable { cursor: pointer; }
+.brm .brm-story-open { background: none; border: 0; padding: 0; font: inherit; font-size: var(--brm-st-meta); letter-spacing: 0.06em; text-transform: uppercase; color: var(--secondary); cursor: pointer; text-align: left; }
+.brm .brm-story-open:hover, .brm .brm-story-open:focus-visible { text-decoration: underline; }
+.brm .brm-decided-open { background: none; border: 0; padding: 0; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.brm .brm-decided-open:hover, .brm .brm-decided-open:focus-visible { text-decoration: underline; }
+
+.brm .brm-modal--ask { width: min(900px, 100%); display: grid; gap: 14px; }
+.brm .brm-pa-head { display: flex; align-items: flex-start; gap: 12px; }
+.brm .brm-pa-eb { font-size: var(--brm-t-floor); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.brm .brm-pa-q { margin: 4px 0 0; font-size: var(--brm-t-title); line-height: 1.2; }
+.brm .brm-pa-body { display: grid; gap: 14px; }
+.brm .brm-pa-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.brm .brm-pa-card { border: 1px solid var(--brm-rule); border-radius: 12px; overflow: hidden; background: var(--bg); min-width: 0; }
+.brm .brm-pa-card.is-pick { border: 2px solid var(--success); }
+.brm .brm-pa-img { margin: 0; }
+.brm .brm-pa-img img { border-radius: 0; border: 0; height: 190px; object-fit: cover; object-position: top; }
+.brm .brm-pa-cb { padding: 10px 12px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.brm .brm-pa-letter { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: var(--primary); color: var(--bg); font-weight: 800; }
+.brm .brm-pa-title { overflow-wrap: anywhere; }
+.brm .brm-pa-count { font-variant-numeric: tabular-nums; }
+.brm .brm-pa-bar { grid-column: 1 / -1; display: block; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.brm .brm-pa-bar > span { display: block; height: 100%; background: var(--primary); }
+.brm .brm-pa-card.is-pick .brm-pa-bar > span { background: var(--success); }
+.brm .brm-pa-tag { grid-column: 1 / -1; font-size: var(--brm-t-label); font-weight: 700; color: var(--brm-success-text); }
+.brm .brm-pa-ideas { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-pa-idea { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 12px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--bg); }
+.brm .brm-pa-idea.is-pick { border: 2px solid var(--success); }
+.brm .brm-pa-ideatext { overflow-wrap: anywhere; }
+.brm .brm-pa-rating { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.brm .brm-pa-avg { display: grid; }
+.brm .brm-pa-avg b { font-size: var(--brm-t-num); line-height: 1; }
+.brm .brm-pa-avg span { color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-pa-dist { display: grid; gap: 4px; flex: 1; min-width: 200px; }
+.brm .brm-pa-distrow { display: grid; grid-template-columns: 18px minmax(0, 1fr) 28px; gap: 8px; align-items: center; font-size: var(--brm-t-label); }
+.brm .brm-pa-told { display: grid; gap: 6px; padding: 12px 14px; border-radius: 10px; background: var(--brm-tint-green); border: 1px solid var(--success); }
+.brm .brm-pa-told.is-held { background: var(--brm-tint-amber-soft); border-color: var(--brm-line-amber); }
+.brm .brm-pa-dir { margin: 0; font-size: var(--brm-t-body); font-weight: 700; overflow-wrap: anywhere; }
+.brm .brm-pa-meta { font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-pa-foot { display: flex; align-items: center; gap: 10px; }
+
+.brm .brm-viewer { position: fixed; inset: 0; z-index: 1100; background: var(--bg); display: block; }
+.brm .brm-viewer-in { position: absolute; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--bg); color: var(--text); }
+.brm .brm-viewer-top { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--brm-rule); flex-wrap: wrap; }
+.brm .brm-viewer-q { overflow-wrap: anywhere; }
+.brm .brm-viewer-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
+.brm .brm-viewer-tab { min-height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--brm-rule); background: none; color: var(--muted); font: 700 var(--brm-t-label)/1 var(--font-ui); cursor: pointer; }
+.brm .brm-viewer-tab.is-on { color: var(--text); border-color: var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-viewer-n { margin-left: auto; color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-viewer-main { position: relative; display: grid; place-items: center; padding: 16px 76px; min-height: 0; overflow: hidden; touch-action: pan-y; }
+.brm .brm-viewer-pic { margin: 0; width: 100%; height: 100%; min-height: 0; display: grid; place-items: center; }
+.brm .brm-viewer-pic img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
+.brm .brm-viewer-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--brm-rule); background: var(--surface); color: var(--text); cursor: pointer; }
+.brm .brm-viewer-arrow:disabled { opacity: .35; cursor: default; }
+.brm .brm-viewer-arrow--l { left: 14px; }
+.brm .brm-viewer-arrow--r { right: 14px; }
+.brm .brm-viewer-foot { display: flex; align-items: center; gap: 16px; padding: 10px 20px; border-top: 1px solid var(--brm-rule); font-size: var(--brm-t-label); color: var(--muted); flex-wrap: wrap; }
+.brm .brm-viewer-foot kbd { font: 700 var(--brm-t-floor)/1 var(--font-ui); border: 1px solid var(--brm-rule); border-radius: 4px; padding: 3px 6px; color: var(--text); }
+@media (max-width: 560px) {
+  .brm .brm-viewer-main { padding: 12px 8px; }
+  .brm .brm-viewer-arrow { width: 40px; height: 40px; opacity: .85; }
+}
+
+/* ---- deciding on the Stage (R3 hint, R4 window, R5 re-ask) -------------- */
+/* The dock's Space hint is words, not a key cap: muted, no box. Build Room only. */
+.brm .brm-dockhint { flex: none; color: var(--muted); font-size: max(var(--floor, 12px), calc(var(--t-body, 16px) * .8)); font-weight: 600; background: none; border: 0; padding: 0; white-space: nowrap; }
+.brm .brm-dockhint b { color: var(--text); font-weight: 800; }
+.brm .brm-modal--sd { width: min(720px, 100%); display: grid; gap: 14px; max-height: calc(100vh - 32px); overflow: auto; }
+.brm .brm-sd-body { display: grid; gap: 14px; min-width: 0; }
+.brm .brm-sd-q { margin: 0; font-size: var(--brm-t-body); font-weight: 700; overflow-wrap: anywhere; }
+.brm .brm-sd-opts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-sd-opt { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--bg); }
+.brm .brm-sd-opt.is-on { border: 2px solid var(--primary); padding: 5px 9px; }
+.brm .brm-sd-pick { display: flex; align-items: center; gap: 10px; min-height: 40px; background: none; border: 0; color: var(--text); font: 600 var(--brm-t-body)/1.2 var(--font-ui); text-align: left; cursor: pointer; min-width: 0; }
+.brm .brm-sd-pick:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 6px; }
+.brm .brm-sd-t { overflow-wrap: anywhere; }
+.brm .brm-sd-n { font-variant-numeric: tabular-nums; }
+.brm .brm-sd-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 480px) {
+  .brm .brm-modal--sd { padding: 16px; }
+  .brm .brm-sd-opt { grid-template-columns: minmax(0, 1fr) auto; }
+  .brm .brm-sd-opt .brm-btn--link { grid-column: 1; justify-self: start; }
+}
+
+/* The live build, always in the header (and the Stage dock); the viewer's full-size link. */
+.brm .brm-livebuild { white-space: nowrap; }
+/* The Stage's way to the running build (B3): a small link under the dock status, never a button. */
+.brm .dock .status .brm-dockbuild { display: block; margin-top: 2px; font-size: max(16px, calc(var(--t-body, 16px) * .85)); font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; white-space: nowrap; }
+.brm .dock .status .brm-dockbuild:hover { color: var(--text); }
+.brm .dock .status .brm-dockbuild svg { vertical-align: -2px; }
+.brm .brm-livebuild[aria-disabled="true"], .brm .brm-livebuild:disabled { opacity: .55; cursor: not-allowed; }
+.brm .brm-viewer-full { color: var(--secondary); font-weight: 600; text-decoration: underline; }
+
+/* ---- Main menu in the header; the extras fold into the session menu at 480px
+   (docs/design/build-room-batch-2-3, B5 and B5a). Tokens only. ---- */
+.brm .brm-mainmenu { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 480px) {
+  /* Row one: Main menu, the title, the session menu. Row two: the four screens. */
+  .brm .brm-hbar { gap: 8px 10px; padding: 10px 12px; }
+  .brm .brm-hbar-title { flex: 1 1 0; }
+  .brm .brm-screens { order: 3; flex: 0 0 100%; width: 100%; box-sizing: border-box; }
+  .brm .brm-screens .brm-screen { flex: 1 1 0; justify-content: center; padding: 0 6px; }
+  .brm .brm-hbar-tools { order: 2; }
+  .brm .brm-more-panel { width: min(260px, calc(100vw - 32px)); }
+}
+
+/* The Wi-Fi panel opened inside the session menu: one column, no sideways room. */
+.brm .brm-agentwrap { display: inline-flex; }
+
+/* THE LATER LIST (batch 2-3, B4): one list; an item says what it is. */
+.brm .brm-later { margin-top: 14px; }
+.brm .brm-later .brm-h5 .brm-hint { margin-left: 8px; font-weight: 400; }
+.brm .brm-later-item.is-ticked { outline: 2px solid var(--primary); outline-offset: -2px; }
+.brm .brm-later-tag { font-size: max(12px, var(--brm-t-label)); font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.brm .brm-later-tag--idea { color: var(--secondary); background: var(--brm-tint-blue); }
+.brm .brm-later-tag--direction { color: var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-later-acts .brm-push { margin-left: auto; }
+
+/* TALKING POINTS (docs/design/build-room-talking-points): Later and Points share one slot as two tabs. */
+.brm .brm-lp { margin-top: 14px; }
+.brm .brm-lp-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.brm .brm-lp-tab {
+  appearance: none; font: inherit; font-size: var(--brm-t-label); font-weight: 600; cursor: pointer;
+  color: var(--muted); background: transparent; border: 1px solid var(--brm-rule); border-radius: 999px; padding: 6px 12px; min-height: 36px;
+}
+.brm .brm-lp-tab b { color: var(--text); font-weight: 600; }
+.brm .brm-lp-tab.is-on { color: var(--text); border-color: var(--secondary); background: var(--brm-tint-blue); }
+.brm .brm-lp-tab:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-lp-new { color: var(--primary); font-weight: 600; }
+.brm .brm-lp .brm-later { margin-top: 0; }
+.brm .brm-points { display: grid; gap: 10px; }
+.brm .brm-ptop { flex-wrap: wrap; }
+.brm .brm-pchips { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-pchip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--brm-line-blue); background: var(--brm-tint-blue); font-size: var(--brm-t-label);
+}
+.brm .brm-pchip.is-away { border-color: var(--brm-line-amber); background: var(--brm-tint-amber); }
+.brm .brm-pchip-t { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-pgroup { display: grid; gap: 6px; border-top: 1px solid var(--brm-rule); padding-top: 8px; }
+.brm .brm-pgroup-h { align-items: center; flex-wrap: wrap; }
+.brm .brm-pgroup-t { margin: 0; font-size: var(--brm-t-label); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-plist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-point { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--brm-rule); border-radius: 10px; }
+.brm .brm-point.is-ticked { outline: 2px solid var(--primary); outline-offset: -2px; }
+.brm .brm-point[data-status="sent"], .brm .brm-point[data-status="later"], .brm .brm-point[data-status="voting"] { opacity: 0.8; }
+.brm .brm-ptag--finding { color: var(--secondary); background: var(--brm-tint-blue); }
+.brm .brm-ptag--talk, .brm .brm-ptag--idea { color: var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-pnote { font-size: var(--brm-t-floor); color: var(--muted); }
+.brm .brm-psrc { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--brm-t-label); }
+.brm .brm-psrc a { overflow-wrap: anywhere; }
+.brm .brm-points .brm-arow { flex-wrap: wrap; }
+.brm .brm-modal--point { width: min(520px, 100%); }
+.brm .brm-hint--warn { color: var(--primary); }
+
+/* A point on the Stage: the room reads the text, the source and what to do. */
+.brm .brm-pointstage { display: grid; gap: 16px; align-content: center; }
+.brm .brm-pointq { margin: 0; overflow-wrap: anywhere; }
+.brm .brm-pointsrc { margin: 0; color: var(--muted); font-size: var(--brm-st-meta); font-weight: 600; }
+.brm .brm-pointprompt { margin: 0; font-size: var(--brm-st-meta); color: var(--muted); }
+.brm .brm-shownpoint { border-color: var(--brm-line-amber); }
+.brm .brm-pchip.is-none { border-color: var(--brm-line-red); background: transparent; color: var(--danger-text); }
+
+/* The vote from points (T5): picks per person is a stepper, 1 to 5. */
+.brm .brm-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.brm .brm-stepper .brm-btn { min-width: 36px; }
+.brm .brm-stepper-n { min-width: 2ch; text-align: center; font: 800 var(--brm-t-head) var(--font-display); }
+.brm .brm-modal--vote { width: min(600px, 100%); }
+.brm .brm-modal--vote .brm-reviewopt-t { overflow-wrap: anywhere; }
+
+/* Results of a vote from points (T6): highlight is green with a filled box, never the blue tick of the Points list. */
+.brm .brm-hrows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-hrow {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--brm-row-h); padding: 8px 12px; text-align: left;
+  font: 500 var(--brm-t-body)/1.3 var(--font-ui); color: var(--text); background: transparent;
+  border: 1px solid var(--brm-rule); border-radius: 10px; cursor: pointer;
+}
+.brm .brm-hrow:hover:not(:disabled) { background: var(--surface-2); }
+.brm .brm-hrow:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-hrow.is-on { border-color: var(--success); background: var(--brm-tint-green); }
+.brm .brm-hrow.is-off { opacity: 0.7; cursor: default; }
+.brm .brm-hbox {
+  flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 5px;
+  border: 2px solid var(--brm-rule); color: var(--bg);
+}
+.brm .brm-hrow.is-on .brm-hbox { background: var(--success); border-color: var(--success); }
+.brm .brm-hl { flex: none; font: 800 var(--brm-t-body) var(--font-display); color: var(--muted); }
+.brm .brm-hrow-t { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-hrow-n { flex: none; font: 800 var(--brm-t-head) var(--font-display); font-variant-numeric: tabular-nums; }
+
+/* The run list (T7): Host and Stage. */
+.brm .brm-runlist { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.brm .brm-runitem {
+  display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; min-width: 0;
+  border: 1px solid var(--brm-rule); border-radius: 10px;
+}
+.brm .brm-runitem.is-doing { border-color: var(--brm-line-amber); background: var(--brm-tint-amber-soft); }
+.brm .brm-runitem.is-next { border-color: var(--brm-line-blue); }
+.brm .brm-runitem.is-done .brm-runn { background: var(--success); border-color: var(--success); color: var(--bg); }
+.brm .brm-runitem.is-skipped { opacity: 0.7; }
+.brm .brm-runitem.is-drag { opacity: 0.5; }
+.brm .brm-runn {
+  flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid var(--brm-rule); font: 700 var(--brm-t-label) var(--font-ui);
+}
+.brm .brm-runitem.is-doing .brm-runn { background: var(--primary); border-color: var(--primary); color: var(--bg); }
+.brm .brm-runt { flex: 1 1 auto; min-width: 0; display: grid; gap: 4px; }
+.brm .brm-runtext { overflow-wrap: anywhere; }
+.brm .brm-runnote { color: var(--muted); font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+.brm .brm-runs { flex: none; max-width: 40%; font-size: var(--brm-t-label); color: var(--muted); text-align: right; }
+.brm .brm-grip {
+  flex: none; display: grid; place-items: center; width: 32px; min-height: 32px; padding: 0;
+  color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: grab;
+}
+.brm .brm-grip:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; color: var(--text); }
+.brm .brm-runpanel { display: grid; gap: 10px; }
+.brm .brm-runpanel .brm-h5 { margin: 0; }
+.brm .brm-runstage { display: grid; gap: 16px; align-content: center; }
+.brm .brm-runlist--stage { gap: 10px; }
+.brm .brm-runlist--stage .brm-runitem { padding: 12px 16px; font-size: var(--brm-st-body); }
+.brm .brm-runlist--stage .brm-runn { width: 36px; height: 36px; font-size: var(--brm-t-body); }
+.brm .brm-runlist--stage .brm-runitem.is-lit { border-color: var(--primary); background: var(--brm-tint-amber); font-weight: 700; }
+.brm .brm-runlist--stage .brm-runitem.is-done { color: var(--muted); }
+.brm .brm-runsince { margin: 0; font-size: var(--brm-st-meta); color: var(--muted); font-weight: 600; }
+
+/* ==========================================================================
+   THE SESSION PANEL (docs/design/build-room-sidebar, S1-S6; owner 2026-10-09).
+   SESSION at the far right of the header (the three-dot menu is gone), the
+   panel from the right edge below the header, the request strip on the Host
+   screen. The Players rows are components/stage/PlayersList (its .setup-roster
+   rules live in styles.css); this sheet only places them. One orange per
+   screen: the strip's lead button is filled blue, never --primary.
+   ========================================================================== */
+.brm .brm-sess {
+  gap: 9px; min-height: 34px; padding: 0 10px 0 12px; font-weight: 800; letter-spacing: .12em;
+  white-space: nowrap; flex: none;
+}
+.brm .brm-sess kbd, .brm .brm-sp kbd {
+  font: 700 var(--brm-t-floor)/1 var(--font-ui); letter-spacing: 0; color: var(--muted);
+  border: 1px solid var(--brm-rule); border-radius: 4px; padding: 2px 5px;
+}
+.brm .brm-sess.is-on { border-color: var(--primary); box-shadow: inset 0 -2px 0 var(--primary); background: var(--surface-2); }
+.brm .brm-sess-n {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  background: var(--primary); color: var(--bg); font: 800 var(--brm-t-floor)/1 var(--font-ui); letter-spacing: 0;
+}
+.brm .brm-chip--btn { cursor: pointer; font-family: var(--font-ui); color: inherit; }
+.brm .brm-chip--btn:hover, .brm .brm-chip--btn:focus-visible { border-color: var(--primary); }
+.brm .dock-more.brm-dock-lit { box-shadow: inset 0 0 0 2px var(--primary); }
+.brm .brm-btn--solid { background: var(--secondary); border-color: var(--secondary); color: var(--bg); font-weight: 700; }
+
+/* The request strip (S6a). */
+.brm .brm-strip {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; margin: 12px 16px 0; padding: 12px 14px;
+  border: 1px solid var(--brm-line-amber); border-left-width: 4px; border-radius: 10px; background: var(--brm-tint-amber);
+}
+.brm .brm-strip-i {
+  flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  border: 1.5px solid var(--primary); color: var(--primary); font: 800 var(--brm-t-label)/1 var(--font-ui);
+}
+.brm .brm-strip-t { flex: 1 1 320px; min-width: 0; display: grid; gap: 4px; }
+.brm .brm-strip-t p { margin: 0; color: var(--muted); font-size: var(--brm-t-label); line-height: 1.45; }
+.brm .brm-strip-name { font-weight: 800; }
+.brm .brm-strip-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+
+/* The panel. Root: below the header, above the Stage's dock (placed in JS). */
+.brm .brm-sp-root { --brm-sp-top: 0px; --brm-sp-bottom: 0px; position: fixed; left: 0; right: 0; top: var(--brm-sp-top, 0px); bottom: var(--brm-sp-bottom, 0px); z-index: 800; }
+.brm .brm-sp-scrim { position: absolute; inset: 0; background: var(--brm-scrim); }
+.brm .brm-sp {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 100vw);
+  display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+  border-left: 2px solid var(--primary); outline: none;
+}
+.brm .brm-sp-head { flex: none; display: flex; align-items: center; gap: 12px; padding: 16px 20px 12px; border-bottom: 1px solid var(--brm-rule); }
+.brm .brm-sp-title { margin: 0; font: 800 var(--brm-t-head)/1 var(--font-display); letter-spacing: .09em; text-transform: uppercase; color: var(--primary); }
+.brm .brm-sp-ws { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: var(--brm-t-label); color: var(--muted); white-space: nowrap; }
+.brm .brm-sp-ws::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.brm .brm-sp-ws.is-up { color: var(--brm-success-text); }
+.brm .brm-sp-ws.is-up::before { background: var(--success); }
+.brm .brm-sp-x {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; padding: 0;
+  background: var(--surface-2); border: 1px solid var(--brm-rule); color: var(--text); cursor: pointer;
+}
+.brm .brm-sp-x:hover, .brm .brm-sp-x:focus-visible { border-color: var(--primary); }
+.brm .brm-sp-top { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--brm-rule); }
+.brm .brm-sp-tabs { flex: none; display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--brm-rule); }
+.brm .brm-sp-tab {
+  display: inline-flex; align-items: center; gap: 8px; padding: 13px 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent;
+  font: 800 var(--brm-t-label)/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; color: var(--muted); cursor: pointer;
+}
+.brm .brm-sp-tab.is-on { color: var(--text); border-bottom-color: var(--primary); }
+.brm .brm-sp-c { letter-spacing: 0; color: var(--muted); font-weight: 700; }
+.brm .brm-sp-flag { letter-spacing: 0; text-transform: none; font-weight: 700; color: var(--primary); }
+.brm .brm-sp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px 16px; }
+.brm .brm-sp-pane { display: flex; flex-direction: column; gap: 12px; }
+.brm .brm-sp-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-top: 1px solid var(--brm-rule); }
+.brm .brm-sp-grp { display: flex; flex-direction: column; gap: 9px; padding: 12px 0 14px; border-top: 1px solid var(--brm-rule); }
+.brm .brm-sp-grp:first-child { border-top: 0; padding-top: 4px; }
+.brm .brm-sp-gh { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.brm .brm-sp-gh h3 { margin: 0; font: 800 var(--brm-t-label)/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; color: var(--text); }
+.brm .brm-sp-gh span { font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-sp-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: var(--brm-row-h); }
+.brm .brm-sp-lab { font: 600 var(--brm-t-body)/1.3 var(--font-ui); }
+.brm .brm-sp-note { margin: 0; }
+.brm .brm-sp-switch { display: grid; gap: 4px; }
+.brm .brm-sp-switch .brm-auto { font-size: var(--brm-t-body); color: var(--text); gap: 10px; }
+.brm .brm-sp-new { font: 700 var(--brm-t-floor)/1 var(--font-ui); color: var(--secondary); border: 1px solid var(--brm-line-blue); border-radius: 999px; padding: 3px 7px; }
+.brm .brm-sp-end { margin-top: 4px; padding-top: 10px; border-top: 1px dashed var(--brm-rule); }
+.brm .brm-sp-keys { margin: 0; }
+.brm .brm-sp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--success); display: block; }
+.brm .brm-sp-dot.is-away { background: transparent; border: 2px solid var(--muted); }
+.brm .brm-sp-tag { height: 20px; font-size: var(--brm-t-floor); padding: 0 7px; }
+.brm .brm-sp .brm-wifipanel--inline { position: static; width: auto; max-width: none; padding: 0; border: 0; box-shadow: none; background: transparent; display: grid; gap: 8px; }
+.brm .brm-sp .brm-wifipanel--inline h4 { margin: 0; font: 600 var(--brm-t-body)/1.3 var(--font-ui); }
+.brm .brm-sp .brm-wifipanel--inline .brm-wifipanel-foot { border-top: 0; padding-top: 0; }
+/* PlayersList's rows (styles.css), placed for this panel: a dot, the name, the actions. */
+.brm .brm-sp .setup-roster__row { grid-template-columns: 14px minmax(0, 1fr) auto; }
+.brm .brm-sp .setup-roster__row--gone { grid-template-columns: minmax(0, 1fr) auto; }
+.brm .brm-sp .setup-roster__rank { display: grid; place-items: center; }
+.brm .brm-sp .setup-roster__name { font-weight: 700; font-size: var(--brm-t-body); }
+.brm .brm-sp .setup-roster__meta { font-size: var(--brm-t-label); }
+.brm .brm-sp .setup-roster__act { min-height: 30px; font-size: var(--brm-t-label); }
+.brm .brm-sp .setup-roster__acts { justify-content: flex-start; }
+
+@media (max-width: 480px) {
+  .brm .brm-sp { width: 100%; border-left: 0; border-top: 2px solid var(--primary); }
+  .brm .brm-sp-head { padding: 12px 14px 10px; }
+  .brm .brm-sp-top, .brm .brm-sp-body, .brm .brm-sp-foot { padding-left: 14px; padding-right: 14px; }
+  .brm .brm-sp-tabs { padding: 0 6px; }
+  .brm .brm-sp .setup-roster__row { grid-template-columns: 14px minmax(0, 1fr); }
+  .brm .brm-sp .setup-roster__acts { grid-column: 2; margin-left: 0; }
+  .brm .brm-sp .setup-roster__row--gone { grid-template-columns: minmax(0, 1fr); }
+  .brm .brm-sp .setup-roster__row--gone .setup-roster__acts { grid-column: 1; }
+  .brm .brm-strip-acts { margin-left: 0; width: 100%; }
+}

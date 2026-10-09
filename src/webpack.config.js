@@ -26,9 +26,20 @@ module.exports = (env, argv) => {
     // ---- ENTRY is src/src/index.jsx ----
     entry: path.resolve(__dirname, 'src', 'index.jsx'),
 
+    /*
+      CONTENT-HASHED NAMES, so a deploy cannot leave a browser on old code.
+      The site used to ship an unversioned /bundle.js (and NNN.bundle.js
+      chunks) with no Cache-Control, so a browser kept running the previous
+      bundle for as long as its heuristic cache liked. Now every script webpack
+      emits lives under static/js/ with its hash in the name: the buildspecs
+      upload static/ as immutable and everything else (index.html, config.js,
+      tier-favicon.js) as no-cache, so a fresh index.html names the new bundle.
+      __tests__/cacheHeaders.test.js pins both halves.
+    */
     output: {
       path: path.resolve(__dirname, 'dist'),
-      filename: 'bundle.js',
+      filename: isProd ? 'static/js/[name].[contenthash:8].js' : 'bundle.js',
+      chunkFilename: isProd ? 'static/js/[name].[contenthash:8].chunk.js' : '[name].chunk.js',
       publicPath: '/',
       clean: true,
     },

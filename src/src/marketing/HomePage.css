@@ -80,6 +80,15 @@
 .mk-stmts h3 { font-size: var(--mk-t-head); line-height: 1.14; max-width: 14ch; }
 .mk-stmts p { margin-top: 12px; color: var(--mk-muted); max-width: 34ch; }
 
+/* ----------------------------------------------------- Build Room teaser -- */
+.mk-build-teaser { padding-block: clamp(56px, 8vw, 92px); border-block: 1px solid var(--mk-rule); background: radial-gradient(circle at 82% 18%, rgba(246,169,76,.13), transparent 34%), var(--mk-bg); }
+.mk-build-teaser-in { display: grid; grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); gap: 34px 54px; align-items: center; }
+.mk-build-teaser-copy .mk-title { max-width: 14ch; }
+.mk-build-teaser-copy .mk-lead { max-width: 42ch; margin: 18px 0 28px; }
+.mk-build-teaser-art { position: relative; display: block; color: var(--mk-text); text-decoration: none; }
+.mk-build-teaser-art img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--mk-rule-strong); border-radius: var(--mk-radius); box-shadow: 0 24px 60px rgba(2,8,18,.28); }
+.mk-build-teaser-art span { position: absolute; left: 18px; right: 18px; bottom: 16px; padding: 10px 12px; border-radius: var(--mk-radius-sm); background: rgba(15,26,46,.92); border: 1px solid var(--mk-rule-strong); font-weight: 750; text-align: center; }
+
 /* ----------------------------------------------------------------- modes -- */
 .mk-mode {
   display: grid; gap: 30px 44px; margin-top: 46px; align-items: center;
@@ -214,6 +223,8 @@
   .mk-summit-aside .mk-art { aspect-ratio: 16 / 9; }
   .mk-art--sheet img { object-position: 50% 0; }
   .mk-mode, .mk-react-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-build-teaser-in { grid-template-columns: minmax(0, 1fr); }
+  .mk-build-teaser-copy .mk-title, .mk-build-teaser-copy .mk-lead { max-width: none; }
   .mk-mode--flip .mk-mode-copy { order: 0; }
   .mk-mode-screens { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .mk-mode-screens .mk-device--phone { width: 190px; }

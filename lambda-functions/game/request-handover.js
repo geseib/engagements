@@ -106,7 +106,7 @@ exports.handler = async (event) => {
       await db.send(new UpdateCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
-        UpdateExpression: 'SET HandoverRequestedBy = :cid, HandoverRequestedAt = :at',
+        UpdateExpression: 'SET HandoverRequestedBy = :cid, HandoverRequestedAt = :at REMOVE HandoverRefusedFor, HandoverRefusedAt',
         // Never CREATE a player row. An Update with no condition would upsert,
         // and a phantom row would join the roster and the readiness counts
         // under a name nobody is sat behind.

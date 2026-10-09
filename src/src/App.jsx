@@ -23,6 +23,7 @@ import SharedReportPage from './components/SharedReportPage';
 const HomePage = lazy(() => import('./marketing/HomePage'));
 const HowItWorksPage = lazy(() => import('./marketing/HowItWorksPage'));
 const UseCasesPage = lazy(() => import('./marketing/UseCasesPage'));
+const BuildRoomMarketingPage = lazy(() => import('./marketing/BuildRoomPage'));
 const ReportsPage = lazy(() => import('./marketing/ReportsPage'));
 const HelpPage = lazy(() => import('./marketing/HelpPage'));
 
@@ -344,6 +345,9 @@ function AppRouter() {
   }
   if (path === '/use-cases') {
     return <MarketingRoute page={UseCasesPage} />;
+  }
+  if (path === '/build-room') {
+    return <MarketingRoute page={BuildRoomMarketingPage} />;
   }
   if (path === '/reports') {
     return <MarketingRoute page={ReportsPage} />;

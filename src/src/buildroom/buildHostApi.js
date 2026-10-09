@@ -27,14 +27,15 @@ export function apiBase() {
 const seg = (value) => encodeURIComponent(String(value));
 
 async function readError(response) {
+  let body = null;
   try {
-    const body = await response.json();
-    if (body && typeof body.error === 'string' && body.error.trim()) return body.error;
-    if (body && typeof body.message === 'string' && body.message.trim()) return body.message;
+    body = await response.json();
   } catch (e) {
     /* an unreadable body says nothing; fall through to the status */
   }
-  return `The server said no (${response.status}).`;
+  if (body && typeof body.error === 'string' && body.error.trim()) return { message: body.error, body };
+  if (body && typeof body.message === 'string' && body.message.trim()) return { message: body.message, body };
+  return { message: `The server said no (${response.status}).`, body };
 }
 
 async function call(path, { method = 'GET', body } = {}) {
@@ -49,8 +50,11 @@ async function call(path, { method = 'GET', body } = {}) {
     throw new Error('That did not reach the server. Check the connection and try again.');
   }
   if (!response.ok) {
-    const err = new Error(await readError(response));
+    const said = await readError(response);
+    const err = new Error(said.message);
     err.status = response.status;
+    // The server's whole answer: a refusal can carry more than a sentence (a run's `needsConfirm`).
+    err.body = said.body;
     throw err;
   }
   try {
@@ -89,6 +93,7 @@ export function buildApi(gameId) {
     getAsk: (askId) => call(`${root}asks/${seg(askId)}`),
     /** `{action:'edit'|'open'|'vote'|'close'|'decide'|'reopen'|'discard', …}` → `{ask}` */
     askAction: (askId, body) => post(`asks/${seg(askId)}`, body),
+    reask: (askId, body) => post(`asks/${seg(askId)}`, { action: 'reask', ...body }),
     /** Add what the room said out loud as a suggestion. */
     addResponse: (askId, text) => post(`asks/${seg(askId)}/responses`, { text }),
     /** `{action:'hide'|'show'|'edit', text?}` */
@@ -97,12 +102,34 @@ export function buildApi(gameId) {
     postLog: (body) => post('log', body),
     /** `{action:'edit'|'delete', text?, detail?}` → `{entry}` */
     logAction: (logId, body) => post(`log/${seg(logId)}`, body),
-    postDirection: (text) => post('directions', { text }),
+    /** A direction; `as` is keep, later or ask (step 7c), else Do now. */
+    postDirection: (text, as) => post('directions', { text, ...(as && as !== 'do-now' ? { as } : {}) }),
     /** The host removes a screenshot. */
     /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
     deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
-    /** 'direct' | 'suggest' | 'dismiss' | 'restore' */
-    ideaAction: (ideaId, action) => post(`ideas/${seg(ideaId)}`, { action }),
+    /** 'direct' | 'suggest' | 'acknowledge' | 'wall' | 'later' | 'dismiss' | 'restore' */
+    ideaAction: (ideaId, action, extra = {}) => post(`ideas/${seg(ideaId)}`, { action, ...extra }),
+    /** Queue it: the host's own idea, waiting in the queue (step 4). */
+    queueIdea: (text) => post('ideas', { text }),
+    /** The room brief (step 7c): `{forWhom?, keep?, later?}` → `{brief}`. */
+    editBrief: (body) => post('brief', body),
+    /** The brief's Later list, to a Pick one vote. */
+    laterToVote: () => post('brief/vote', {}),
+    /** Send one held For Claude, later item now, as Do now. */
+    sendLater: (id) => post(`brief/later/${seg(id)}/send`, {}),
+    /** The opening (owner, 2026-10-06): 'answer' {step, text}, 'skip' / 'reopen' {step}, or 'start'. */
+    openingAction: (action, body = {}) => post(`opening/${seg(action)}`, body),
+    /** Claude's draft of the brief: 'accept' {headline, summary, lines} (as edited) or 'dismiss'. */
+    settleDraft: (action, body = {}) => post(`opening/draft/${seg(action)}`, body),
+    /**
+     * READY QUESTIONS (step 7b, C13): every set this host can read, from the
+     * session picker's own route; the library keeps those tagged build-room.
+     */
+    questionSets: () => call('question-sets').then((out) => (Array.isArray(out.sets) ? out.sets : [])),
+    /** One set's questions, read in the scope the set was listed in. */
+    setQuestions: (set) => call(`question-sets/${seg(set.id)}/questions${set.scope ? `?scope=${seg(set.scope)}` : ''}`),
+    /** `{ideaIds, prompt?, maxPicks?, open?, askForMockups?}` → `{ask}`: ticked ideas to a vote (step 4, C3). */
+    askFromIdeas: (body) => post('asks-from-ideas', body),
     /** Acknowledge every new idea at once (owner, 2026-10-05). */
     acknowledgeAll: () => post('ideas/acknowledge-all'),
     /** Take the room comment off the wall before its time is up. */
@@ -111,6 +138,36 @@ export function buildApi(gameId) {
     saveOutcome: (body) => post('outcome', body),
     /** `{reviewAgentAsks?, agentName?}` → `{settings}` */
     saveSettings: (body) => post('settings', body),
+    // ── Talking points (docs/design/build-room-talking-points; build-room.js) ──
+    /** `{kind:'research'|'ideas', subject}` → `{request}`: Claude (or a helper) starts when it next listens. */
+    pointRequest: (kind, subject) => post('points/requests', { kind, subject }),
+    /** Cancel a request that is stuck. → `{request}` */
+    cancelPointRequest: (requestId) => post(`points/requests/${seg(requestId)}`, { action: 'cancel' }),
+    /** `'remove'|'later'|'show'|'hide'|'send'` → `{point, ideasAbout?, ideaIds?}` */
+    pointAction: (pointId, action) => post(`points/${seg(pointId)}`, { action }),
+    /** Several points to Claude as ONE direction. → `{sent:[ids]}` */
+    sendPoints: (ids) => post('points/send', { ids }),
+    /** `{ids (2-8), prompt?, maxPicks?}` → `{ask}`: ticked points to a multi-pick vote. */
+    votePoints: (body) => post('points/vote', body),
+    /** The run list (Work through in turn). `{force?, from?}` → `{run}`; 409 `needsConfirm` when Claude has not reported the item done. */
+    runNext: (body = {}) => post('run/next', body),
+    /** The next pending item goes to Later; the one after becomes next. → `{run}` */
+    runSkip: (body = {}) => post('run/skip', body),
+    /** Everything not yet sent goes to Later, and the list closes. → `{run}` */
+    runStop: (body = {}) => post('run/stop', body),
+    /** `{order: [pointIds of every pending item], ver}` → `{run}`; 409 when the list changed. */
+    runReorder: (order, ver, runId) => post('run/reorder', { order, ver, ...(runId ? { runId } : {}) }),
+    // ── The Session panel's Players (the routes every engagement's Players tab uses) ──
+    /** The roster: `{players, removedPlayers}`. A public route, read with the host's sign-in all the same. */
+    players: () => call(`games/${seg(gameId)}/players`),
+    /** Unlock a name for one handover (`bindToRequester` binds it to the device that asked), `{lock:true}` closes it, `{refuse:true}` answers Not now. */
+    playerHandover: (name, body) => call(`games/${seg(gameId)}/players/${seg(name)}/handover`, { method: 'POST', body }),
+    /** Take a person out of the live counts (`removed: true`) or bring them back (`false`). Nothing they did is lost. */
+    playerRemoved: (name, removed) => call(`games/${seg(gameId)}/players/${seg(name)}/remove`, { method: 'POST', body: { removed } }),
+    /** A builder's Remove: closes the seat, retires their keys, soft-removes the player. */
+    removeBuilder: (name) => post(`crew/builders/${seg(name)}/remove`),
+    /** The Wi-Fi share: `{on}` or `{dismissOffer: true}` → `{lan}` */
+    share: (body) => post('share', body),
     /** → `{key, keyId}`. The key is shown once. */
     mintKey: (label) => post('keys', label ? { label } : {}),
     revokeKey: (keyId) => post(`keys/${seg(keyId)}/revoke`),
@@ -211,6 +268,21 @@ export function pluginInstallCommand({ origin, api }) {
 
 /** Each session, with the plugin: one line typed into Claude Code. */
 export const pluginConnectCommand = (key) => `/engage:connect ${key}`;
+
+/**
+ * THE START CAP (owner, 2026-10-06): a folder named for the project. The same
+ * rule as the plugin's projectSlug (engage-mcp.mjs): lower case, words joined
+ * by hyphens, a leading "Build" dropped.
+ */
+export function projectSlug(title) {
+  const words = String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const trimmed = words[0] === 'build' && words.length > 1 ? words.slice(1) : words;
+  return trimmed.join('-').slice(0, 60).replace(/-+$/, '') || 'build-room';
+}
+/** What a host may type as the folder name: the slug's own alphabet, nothing a shell would read. */
+export const cleanFolder = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+/** One paste into a terminal: make the folder, start Claude Code in it, connect. */
+export const startCommand = (folder, key) => `mkdir -p ~/build-room/${folder} && cd ~/build-room/${folder} && claude "/engage:connect ${key}"`;
 
 export function connectCommand({ origin, api, key }) {
   const site = String(origin || '').replace(/\/+$/, '');

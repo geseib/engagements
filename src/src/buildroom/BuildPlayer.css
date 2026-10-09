@@ -977,3 +977,123 @@
 /* The wheel on a phone (BuildWheel; its own sheet draws it). */
 .bpl .bpl-wheel { display: grid; justify-items: center; gap: 8px; margin: 12px 0 18px; }
 .bpl .bpl-wheel-turn { margin: 0; text-align: center; }
+
+/* ==========================================================================
+   NOW · IDEAS · HISTORY (step 7, C11). The tabs sit at the top of the
+   scrolling stage, the same on a phone and on a laptop (PlayerSurface's
+   profiles centre the column on a laptop). Sticky, so they stay in reach while
+   History scrolls. Colours from the tokens above: --text on --bg 14.97:1,
+   --bpl-muted on --bg, --primary on --bg for the open-ask dot.
+   ========================================================================== */
+.bpl .bpl-tabs {
+  position: sticky; top: -20px; z-index: 2;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 4px;
+  margin: -20px 0 16px; padding: 10px 0 8px;
+  background: var(--bg); border-bottom: 1px solid var(--bpl-rule);
+}
+.bpl .bpl-tab {
+  min-height: var(--bpl-tap); border: 0; border-radius: 10px; cursor: pointer;
+  background: transparent; color: var(--bpl-muted);
+  font: inherit; font-size: var(--plr-t-meta); font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.bpl .bpl-tab.is-on { background: var(--surface); color: var(--text); }
+.bpl .bpl-tab:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.bpl .bpl-tabdot {
+  font-size: var(--plr-t-meta); font-weight: 700; color: var(--bg); background: var(--primary);
+  border-radius: 999px; padding: 1px 8px;
+}
+.bpl .bpl-tabcount { font-weight: 600; color: var(--bpl-muted); }
+.bpl .bpl-tabh { margin: 0 0 12px; font-size: var(--plr-t-secondary); line-height: 1.2; }
+
+.bpl .bpl-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.bpl .bpl-filter {
+  min-height: 36px; padding: 4px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--bpl-rule-strong); background: transparent; color: var(--bpl-muted);
+  font: inherit; font-size: var(--plr-t-meta);
+}
+.bpl .bpl-filter.is-on { border-color: var(--bpl-blue-edge); background: var(--bpl-blue-tint); color: var(--text); }
+.bpl .bpl-filter:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.bpl .bpl-story { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+.bpl .bpl-story-it { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.bpl .bpl-story-it .bpl-ago { padding-top: 2px; }
+.bpl .bpl-story-body { min-width: 0; }
+.bpl .bpl-story-t { margin: 0; }
+.bpl .bpl-story-h { color: var(--text); }
+.bpl .bpl-story-it--decided .bpl-story-h { color: var(--bpl-success-text); }
+.bpl .bpl-story-mine { margin: 4px 0 0; }
+.bpl .bpl-shot { margin: 10px 0 0; }
+.bpl .bpl-story .bpl-pvfb { margin-top: 12px; }
+.bpl .bpl-pvnote .bpl-send { margin-top: 8px; }
+
+/* OPEN THE BUILD (mockup L5): the top of Now, full width, in the success tint. */
+.bpl .bpl-open {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--bpl-good-edge);
+  border-radius: 12px;
+  background: var(--bpl-good-tint);
+}
+.bpl .bpl-open .bpl-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  margin: 0;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+}
+.bpl .bpl-open .bpl-open-note { margin: 8px 0 0; text-align: center; }
+
+/* THE OPENING ON A PHONE (mockup O4): step N of 9, as a row of short bars.
+   --primary on --bg for the filled steps, --surface for the rest. */
+.bpl .bpl-opening { margin: 0 0 12px; }
+.bpl .bpl-opening-t { margin: 0 0 6px; }
+.bpl .bpl-opening-bar { display: flex; gap: 4px; }
+.bpl .bpl-opening-bar i { flex: 1; height: 4px; border-radius: 2px; background: var(--surface); }
+.bpl .bpl-opening-bar i.on { background: var(--primary); }
+
+/* A picture opened full screen (never a new tab). */
+.bpl .bimg-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; color: inherit; font: inherit; }
+.bpl .bpl-viewer { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); color: var(--text); }
+.bpl .bpl-viewer-top { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--bpl-rule); }
+.bpl .bpl-viewer-back, .bpl .bpl-viewer-x { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--bpl-rule); background: var(--surface); color: var(--text); font: 700 var(--plr-t-meta)/1 var(--font-ui); cursor: pointer; }
+.bpl .bpl-viewer-x { margin-left: auto; padding: 0; }
+.bpl .bpl-viewer-cap { font-size: var(--plr-t-meta); color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.bpl .bpl-viewer-main { min-height: 0; overflow: auto; padding: 12px; display: grid; place-items: center; }
+.bpl .bpl-viewer-pic { margin: 0; }
+.bpl .bpl-viewer-pic img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border: 0; }
+
+/* TALKING POINTS (docs/design/build-room-talking-points T4, T7c, T8). */
+.bpl .bpl-point { margin: 0 0 14px; }
+.bpl .bpl-run { margin: 0 0 14px; }
+.bpl .bpl-runlist { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; }
+.bpl .bpl-runitem {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--bpl-rule);
+  border-radius: 10px;
+  font-size: var(--plr-t-body);
+}
+.bpl .bpl-runitem.is-doing { border-color: var(--bpl-amber-edge); background: var(--bpl-amber-tint); }
+.bpl .bpl-runitem.is-done { color: var(--bpl-muted); }
+.bpl .bpl-runitem.is-skipped { color: var(--bpl-muted); opacity: .75; }
+.bpl .bpl-runn {
+  flex: none;
+  min-width: 1.6em;
+  text-align: center;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  color: var(--bpl-muted);
+}
+.bpl .bpl-runitem.is-done .bpl-runn { color: var(--bpl-success-text); }
+
+.bpl .bpl-lp { margin: 12px 0 0; }
+.bpl .bpl-lp-btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.bpl .bpl-lp-btns .bpl-send { flex: 1 1 140px; }
+.bpl .bpl-lp-form { margin: 10px 0 0; padding: 12px; border: 1px solid var(--bpl-rule-strong); border-radius: 12px; }
+.bpl .bpl-lp-chips { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--plr-t-meta); color: var(--bpl-muted); }

@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: talking points, research and ideas · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md.
+   Extends v2.css and the batch 2/3 page (one orange per screen, primary
+   right-most, the words of src/src/buildroom/words.js). */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .notes,body.is-solo .sec,body.is-solo .real,body.is-solo .devs,body.is-solo .qs,body.is-solo .orangecount{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.ico{display:inline-block;width:1em;height:1em;vertical-align:-.15em;flex:none}
+.btn--out{background:transparent;border-color:rgba(244,237,228,.35)}
+.btn--gd{background:transparent;color:var(--danger-text);border-color:transparent}
+.btn[aria-disabled="true"]{opacity:.42}
+.mm{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 11px 0 9px;border-radius:8px;color:var(--text);font:600 14px/1 var(--font-ui);white-space:nowrap;flex:none}
+.mm .ico{font-size:18px;color:var(--muted)}
+.hsep{width:1px;height:26px;background:var(--m-rule);flex:none}
+.livebtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--m-rule);font:600 14px/1 var(--font-ui);color:var(--text);white-space:nowrap}
+.say{font-size:13px;color:var(--muted)}
+.say b{color:var(--text)}
+
+/* ---- the held panel: Later and Points, one slot, two tabs --------------- */
+.held{flex:1;min-height:0;background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+.htabs{display:flex;align-items:stretch;border-bottom:1px solid var(--m-rule);padding:0 8px;flex:none}
+.htab{display:inline-flex;align-items:center;gap:8px;padding:12px 10px 11px;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent}
+.htab.on{color:var(--text);border-bottom-color:var(--primary)}
+.htab .c{font:800 13px/1 var(--font-ui);letter-spacing:0;color:var(--primary)}
+.htab .c2{font:600 12px/1 var(--font-ui);letter-spacing:0;text-transform:none;color:var(--muted)}
+.htabs .hint{margin-left:auto;align-self:center}
+.ptop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--m-rule);flex:none}
+.work{display:inline-flex;align-items:center;gap:8px;min-height:30px;padding:4px 12px;border-radius:999px;border:1px dashed var(--m-line-amber);background:var(--m-tint-amber);color:var(--text);font-size:13px;line-height:1.3}
+.work::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px rgba(246,169,76,.2)}
+.work b{color:var(--primary)}
+.work--wait{border-color:rgba(155,168,190,.5);background:transparent}
+.work--wait::before{background:var(--muted);box-shadow:none}
+.work--fail{border-color:rgba(229,100,94,.5);background:var(--m-tint-red)}
+.work--fail::before{background:var(--danger)}
+.plist{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.batch{border-bottom:1px solid var(--m-rule)}
+.bh{display:flex;align-items:center;gap:8px;padding:9px 14px 7px;background:#16233A}
+.bh b{font:700 13px/1.25 var(--font-ui)}
+.bh .bm{font-size:12px;color:var(--muted);white-space:nowrap}
+.pt{display:grid;grid-template-columns:20px 1fr;gap:10px;padding:10px 14px}
+.pt + .pt{border-top:1px solid rgba(155,168,190,.12)}
+.pt.on{background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue))}
+.pt .box{margin-top:2px}
+.pt .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pt .who{font-size:12px;color:var(--muted)}
+.pt .tx{font-size:15px;line-height:1.4;margin:5px 0 4px}
+.pt .srcs{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px}
+.pt .srcs a{color:var(--secondary);text-decoration:none}
+.pt .acts{display:flex;align-items:center;gap:8px;margin-top:4px}
+.pt .st{font-size:12px;color:var(--m-success-text);font-weight:700}
+.more1{padding:6px 14px 10px 44px;font-size:13px;color:var(--secondary);font-weight:600}
+.kind{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.kind--talk{color:var(--text);background:rgba(244,237,228,.08);border:1px solid rgba(244,237,228,.3)}
+.kind--find{color:var(--secondary);background:var(--m-tint-blue);border:1px solid rgba(124,167,230,.55)}
+.kind--idea{color:var(--m-success-text);background:var(--m-tint-green);border:1px solid rgba(79,178,134,.5)}
+.pfoot{flex:none;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--m-rule);background:#16233A}
+.pfoot .say{flex:0 0 100%;display:flex;gap:10px;align-items:center}
+.pfoot .say .btn--link{margin-left:auto;font-size:13px}
+.empty{padding:22px 18px;color:var(--muted);font-size:14px;line-height:1.5}
+.empty b{color:var(--text)}
+
+/* real-size panel close-ups */
+.real{padding:8px 20px 0;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;max-width:1480px}
+.realcol{display:flex;flex-direction:column;gap:8px}
+.cap{font:700 13px/1.3 var(--font-ui);color:var(--muted)}
+.cap b{color:var(--text)}
+.pane{width:560px;display:flex;flex-direction:column}
+.pane .held{flex:none}
+
+/* windows */
+.dim{position:absolute;inset:60px 0 0 0;background:rgba(6,11,21,.72);z-index:30}
+.wnd{position:absolute;z-index:40;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--m-rule);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.5);display:flex;flex-direction:column}
+.wnd--flat{position:relative;left:auto;transform:none;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.wnd .wh{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--m-rule)}
+.wnd .wh h3{margin:0;font:800 22px/1.2 var(--font-display)}
+.wnd .wh .eb{font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.wnd .x{margin-left:auto;flex:none;width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:9px;color:var(--muted);font-weight:800}
+.wnd .wb{padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.wnd .wf{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid var(--m-rule)}
+.wnd .wf .say{flex:1 1 auto}
+.inp{border:1px solid var(--secondary);border-radius:8px;background:var(--bg);padding:9px 12px;font-size:15px;line-height:1.4}
+.lbl2{font-size:13px;color:var(--muted)}
+.notice{border-left:3px solid var(--muted);background:rgba(155,168,190,.1);padding:9px 12px;border-radius:0 8px 8px 0;font-size:14px;line-height:1.45}
+.notice b{color:var(--text)}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--m-rule);border-radius:9px;overflow:hidden;background:var(--bg)}
+.stepper span{width:40px;height:36px;display:grid;place-items:center;font:800 16px/1 var(--font-ui);color:var(--muted)}
+.stepper b{width:52px;height:36px;display:grid;place-items:center;font:800 18px/1 var(--font-ui);border-left:1px solid var(--m-rule);border-right:1px solid var(--m-rule)}
+.vopts{display:flex;flex-direction:column;gap:6px}
+.vopt{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:9px 12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg);font-size:14px;line-height:1.4}
+.vopt .L{width:28px;height:28px;font-size:15px;border-radius:7px}
+.vopt .k{font-size:12px;color:var(--muted);white-space:nowrap;padding-top:5px}
+
+/* the Now column (as batch 2/3) */
+.nowcol{position:relative;width:600px;height:640px;background:var(--bg);border:1px solid var(--m-rule);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.st2{border:1px solid var(--m-rule);border-radius:12px;background:var(--surface);flex:none}
+.st2 .sh{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:10px 14px}
+.st2 .n{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:800 13px/1 var(--font-ui);border:2px solid var(--muted);color:var(--muted)}
+.st2 .t{font:700 15px/1.2 var(--font-ui)}
+.st2 .s{font-size:13px;color:var(--muted);text-align:right}
+.st2.done .n{background:var(--success);border-color:var(--success);color:var(--bg)}
+.st2.done .t{color:var(--muted);font-weight:600}
+.st2.cur{border-color:var(--m-line-amber);box-shadow:0 0 0 1px var(--m-line-amber);flex:1;display:flex;flex-direction:column;min-height:0}
+.st2.cur .n{border-color:var(--primary);background:var(--primary);color:var(--bg)}
+.st2 .sb{padding:4px 16px 0 54px;display:flex;flex-direction:column;gap:10px;flex:1;min-height:0}
+.board{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.arow{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;margin:0 -16px 0 -54px;padding:12px 16px;border-top:1px solid var(--m-rule);background:#16233A;border-radius:0 0 12px 12px}
+.arow .say{flex:0 0 100%}
+.arow .say.ok{color:var(--m-success-text)}
+.then{margin:auto 0 0;font-size:13px;color:var(--muted);padding-bottom:10px}
+.focusbtn{outline:3px solid var(--secondary);outline-offset:3px}
+
+/* results with highlight */
+.hrow{display:grid;grid-template-columns:22px 1fr 90px 28px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--m-rule);border-radius:10px;font-size:14px;line-height:1.35}
+.hrow .tr{height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.hrow .tr span{display:block;height:100%;background:var(--primary)}
+.hrow b{text-align:right;font-variant-numeric:tabular-nums}
+.hrow.hl{border-color:rgba(79,178,134,.6);background:var(--m-tint-green)}
+.hrow.hl .tr span{background:var(--success)}
+.hrow .hb{width:18px;height:18px;border-radius:5px;border:2px solid var(--muted)}
+.hrow.hl .hb{background:var(--success);border-color:var(--success);box-shadow:inset 0 0 0 3px var(--surface)}
+
+/* the run list */
+.run{display:flex;flex-direction:column;gap:6px}
+.ri{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--m-rule);border-radius:10px;font-size:14px;line-height:1.35;background:var(--bg)}
+.ri .rn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:800 13px/1 var(--font-ui);border:2px solid var(--muted);color:var(--muted)}
+.ri .rs{font-size:12px;color:var(--muted);white-space:nowrap}
+.ri.done .rn{background:var(--success);border-color:var(--success);color:var(--bg)}
+.ri.done{color:var(--muted)}
+.ri.done .rs{color:var(--m-success-text)}
+.ri.cur{border-color:var(--m-line-amber);background:linear-gradient(var(--m-tint-amber),var(--m-tint-amber)),var(--bg)}
+.ri.cur .rn{border-color:var(--primary);color:var(--primary)}
+.ri.cur .rs{color:var(--primary);font-weight:700}
+.ri.skip{color:var(--muted);text-decoration:line-through}
+.grip{color:var(--muted);font-size:14px;letter-spacing:-2px;padding-right:2px}
+
+/* the Stage, Room ladder */
+.stg{display:grid;grid-template-columns:1fr 300px;gap:40px;padding:34px 44px 20px;min-height:0}
+.stg .ey{font:800 var(--L-meta)/1 var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--primary);margin-bottom:16px}
+.stg .ey span{color:var(--muted);font-family:var(--font-ui);font-weight:600;letter-spacing:.06em}
+.stg .pq{margin:0;font:800 var(--L-primary)/1.12 var(--font-display);max-width:26ch}
+.stg .srcl{margin:22px 0 0;font-size:var(--L-meta);color:var(--muted)}
+.stg .srcl b{color:var(--text);font-weight:600}
+.stg .prompt{margin:26px 0 0;font-size:var(--L-body);color:var(--text);border-left:5px solid var(--secondary);padding:4px 0 4px 18px;max-width:40ch}
+.srun{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.srun li{display:grid;grid-template-columns:56px 1fr;gap:18px;align-items:center;font-size:var(--L-body);line-height:1.25;color:var(--muted)}
+.srun .rn{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font:800 26px/1 var(--font-display);border:3px solid var(--muted)}
+.srun li.done .rn{background:var(--success);border-color:var(--success);color:var(--bg)}
+.srun li.cur{color:var(--text);font-size:var(--L-secondary);font-weight:700}
+.srun li.cur .rn{border-color:var(--primary);background:var(--primary);color:var(--bg)}
+.dockhint{flex:none;font-size:16px;color:var(--muted)}
+.dockhint b{color:var(--text);font-weight:700}
+.dock .status .sub{display:block;margin-top:6px;font-size:16px;color:var(--muted)}
+
+/* participant devices: drawn at real size so they can be measured */
+.devs{padding:8px 20px 0;display:flex;gap:30px;flex-wrap:wrap;align-items:flex-start;max-width:1480px}
+.dev{width:375px;min-height:0;background:var(--bg);border:1px solid var(--m-rule);border-radius:18px;overflow:hidden;display:flex;flex-direction:column}
+.dev--wide{width:720px;min-height:0}
+.dvtop{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--m-rule);background:#0C1628;font-size:13px;color:var(--muted)}
+.dvtop b{font:800 15px/1.2 var(--font-display);color:var(--text)}
+.dvtop .code{margin-left:auto;font:800 17px/1 var(--font-display);color:var(--primary);letter-spacing:.04em}
+.dvb{padding:18px 16px;display:flex;flex-direction:column;gap:14px;flex:1}
+.dvey{font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--primary)}
+.dvey span{color:var(--muted);letter-spacing:.04em;font-weight:600;text-transform:none}
+.dvq{margin:0;font:800 22px/1.25 var(--font-display)}
+.dvp{margin:0;font-size:15px;line-height:1.5;color:var(--muted)}
+.dvp b{color:var(--text)}
+.dvp a{color:var(--secondary);text-decoration:none}
+.dvbox{border:1px solid var(--m-rule);border-radius:12px;background:var(--surface);padding:14px;display:flex;flex-direction:column;gap:10px}
+.dvbox .lbl3{font:700 14px/1 var(--font-ui)}
+.dvta{min-height:84px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:16px;color:var(--muted)}
+.dvsend{display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:12px;background:var(--primary);color:var(--bg);font:800 16px/1 var(--font-ui)}
+.dvsend--off{background:var(--surface-2);color:var(--muted)}
+.dvsec{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border-radius:12px;border:1px solid var(--m-rule);color:var(--text);font:700 15px/1 var(--font-ui)}
+.dvdock{padding:12px 16px 16px;border-top:1px solid var(--m-rule);background:#0C1628;display:flex;flex-direction:column;gap:8px}
+.vrow{display:grid;grid-template-columns:26px 1fr 24px;gap:10px;align-items:center;padding:12px;border:1px solid var(--m-rule);border-radius:12px;background:var(--surface);font-size:15px;line-height:1.4}
+.vrow .vn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:800 13px/1 var(--font-ui);background:var(--surface-2)}
+.vrow .tk{width:22px;height:22px;border-radius:6px;border:2px solid var(--muted)}
+.vrow.on{border-color:var(--secondary);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface)}
+.vrow.on .tk{background:var(--secondary);border-color:var(--secondary);box-shadow:inset 0 0 0 3px var(--surface)}
+.vrow.off{opacity:.55}
+.drun{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.drun li{display:grid;grid-template-columns:26px 1fr;gap:10px;font-size:15px;line-height:1.4;color:var(--muted)}
+.drun .rn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:800 13px/1 var(--font-ui);border:2px solid var(--muted)}
+.drun li.done .rn{background:var(--success);border-color:var(--success);color:var(--bg)}
+.drun li.cur{color:var(--text);font-weight:700}
+.drun li.cur .rn{background:var(--primary);border-color:var(--primary);color:var(--bg)}
+.measure{font:600 13px/1.5 var(--font-ui);color:var(--muted);background:var(--surface);border:1px solid var(--m-rule);border-radius:10px;padding:10px 12px;max-width:360px}
+.measure b{color:var(--text)}
+
+/* the builder's lane */
+.lane{border:1px solid var(--m-rule);border-radius:12px;background:var(--surface);padding:14px;display:flex;flex-direction:column;gap:10px}
+.lane .eb{font-size:13px;color:var(--muted)}
+.lane .eb b{color:var(--text)}
+.lstatus{font:700 15px/1.2 var(--font-ui);color:var(--m-success-text)}
+.mypt{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-top:1px solid var(--m-rule)}
+.mypt .tx{font-size:15px;line-height:1.4}
+.mypt .ms{font-size:12px;color:var(--muted)}
+.mypt .ms b{color:var(--m-success-text)}
+
+/* the repo */
+.repo{display:grid;grid-template-columns:460px 1fr 1fr;gap:16px;width:1440px}
+.rp{background:#0A1222;border:1px solid var(--m-rule);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.rp .rh{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--m-rule);background:#0C1628;font:700 13px/1 var(--font-ui);color:var(--muted)}
+.rp .rh b{color:var(--text)}
+.tree{margin:0;padding:12px 14px;font:500 13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text);white-space:pre}
+.tree .d{color:var(--secondary)}
+.tree .m{color:var(--muted)}
+.tree .hl{color:var(--primary)}
+.cpre{margin:0;padding:12px 14px;font:500 13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.cpre .k{color:var(--secondary)}
+.cpre .s{color:#C9DFA8}
+.cpre .c{color:var(--muted)}
+.md h4{margin:0 0 6px;font:800 19px/1.25 var(--font-display)}
+.md{padding:14px 16px;font-size:14px;line-height:1.5}
+.md p{margin:0 0 10px;color:var(--muted)}
+.md ol{margin:0;padding-left:20px}
+.md li{margin-bottom:10px}
+.md li span{display:block;font-size:13px;color:var(--secondary)}
+
+/* the report (paper) */
+.paper{width:900px;background:#FFFFFF;color:#1B2942;border-radius:6px;padding:40px 48px;box-shadow:0 18px 50px rgba(0,0,0,.45);font-size:15px;line-height:1.5}
+.paper h2{margin:0 0 4px;font:800 24px/1.2 var(--font-display);color:#1B2942}
+.paper h3{margin:22px 0 8px;font:800 15px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:#9A5B18}
+.paper .lede{margin:0 0 6px;color:#5E6167}
+.paper ul{margin:0;padding-left:20px}
+.paper li{margin-bottom:8px}
+.paper .src{display:block;font-size:13px;color:#2F5E9E}
+.paper .mut{color:#5E6167;font-size:13px}
+.paper table{width:100%;border-collapse:collapse;font-size:14px}
+.paper th{text-align:left;font:700 12px/1.2 var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:#5E6167;padding:6px 8px;border-bottom:1px solid rgba(27,41,66,.16)}
+.paper td{padding:7px 8px;border-bottom:1px solid rgba(27,41,66,.16);vertical-align:top}
+.paper td.n{text-align:right;font-variant-numeric:tabular-nums;width:60px}
+.paper .fw{font-weight:700;color:#1E7A52}
+.paper .sk{color:#5E6167}
+.paper .prev{color:#5E6167;font-size:13px;border-top:1px dashed rgba(27,41,66,.25);padding-top:10px;margin-top:22px}
+
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5}
+.qs li b{color:var(--text)}
+.orangecount{font:600 13px/1.5 var(--font-ui);color:var(--muted);margin:8px 20px 0;max-width:1440px}
+.orangecount b{color:var(--text)}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · talking points</b>
+<a href="#t1">T1 Points panel</a><a href="#t2">T2 Research… / Ideas…</a><a href="#t3">T3 Ticked points</a><a href="#t4">T4 Show on Stage</a><a href="#t5">T5 Put to a vote</a><a href="#t6">T6 Results</a><a href="#t7">T7 Run list</a><a href="#t8">T8 Builder</a><a href="#t9">T9 The repo</a><a href="#t10">T10 Report</a><a href="#qs">Owner rulings</a>
+<span class="sp"></span><a href="../build-room-batch-2-3/index.html">Batches 2 and 3</a><a href="../build-room-history-and-stage-decide/index.html">Stage decide</a></nav>
+<div class="pg-title"><h1>Talking points, research and ideas: Claude brings things to talk about, the host chooses what the room sees</h1>
+<p>From <code>docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md</code>. Owner, 2026-10-08: a researcher button, an ideas button, a list the host draws on, a vote where people pick more than one, then highlight the ones to move forward and send them to Claude or work through them one by one. The rules from batches 2 and 3 hold: one orange button on each screen, the main button last on the right of a pinned row, the words of <code>words.js</code>, and <b>Save for later</b> as the only way into Later. Points reach the Stage and people's laptops, tablets and phones only when the host shows them or puts them to a vote.</p></div>
+
+<!-- ===================================================================== T1 -->
+<div class="sec" id="t1"><h2>T1 · The Points panel on the Host screen</h2>
+<p>Points share the middle column's lower slot with Later, as a second tab. Both are lists the host holds and Claude has not acted on; one slot keeps the column from scrolling and keeps Waiting for you on top. The tab shows how many points are new, so a batch arriving while the host looks at Later is not missed.</p></div>
+<div class="frame-h" id="t1a"><h2>T1a · Claude is building; three batches have come in</h2>
+<p>One research request is still running in a helper; the build goes on. The one orange button is What's next's lead.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" data-frame="T1a Host screen"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="livebtn">Open the build<i data-i="out"></i></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div class="host" style="grid-template-columns:430px 1fr 330px">
+<section class="col">
+<div class="q-item" style="padding:12px 14px"><b>Claude is building</b><span class="hint">Wiring the slider to the totals · Edited Slider.jsx · 3:14</span></div>
+<div class="colh"><h2>What's next</h2><span class="say push">Press <b>Space</b> to do the first</span></div>
+<div class="q-item" style="border-color:var(--m-line-amber)"><div class="row"><div style="flex:1;min-width:0"><b>Ask the room what to build next</b><p class="hint">Ideas, a choice, or a 1 to 5 rating</p></div><span class="btn btn--sm btn--primary focusbtn">New ask</span></div></div>
+<div class="q-item"><div class="row"><div style="flex:1;min-width:0"><b>Talk over a point while Claude builds</b><p class="hint">Tick one in Points, then Show on Stage</p></div><span class="btn btn--sm">Points</span></div></div>
+<div class="composer" style="margin-top:auto"><h3 style="margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Add something</h3>
+<div class="ta" style="min-height:52px;color:var(--muted)">An idea, what the room said out loud, or a note for Claude</div>
+<div class="row"><span class="btn btn--sm btn--ghost">Log it</span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm btn--out push"><i data-i="send"></i>Send to Claude</span></div>
+</div>
+</section>
+<section class="col">
+<div class="colh"><h2>Waiting for you</h2><span class="count">1</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Dana</span><span class="chip">Idea</span><span class="meta push">3:11</span></div><div class="q-text">Let people type their own salary in</div>
+<div class="q-acts"><span class="btn btn--sm btn--ghost">Seen</span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude</span></div></div>
+<div class="held">
+<div class="htabs"><span class="htab">Later <span class="c">3</span></span><span class="htab on">Points <span class="c">10</span> <span class="c2">· 3 new</span></span><span class="hint">The room sees none of these</span></div>
+<div class="ptop"><span class="btn btn--sm"><i data-i="search"></i>Research…</span><span class="btn btn--sm"><i data-i="bulb"></i>Ideas…</span><span class="work">Claude is researching: <b>keyboard support for the slider</b></span></div>
+<div class="plist">
+<div class="batch"><div class="bh"><b>Research: accessible colour contrast · 5 findings</b><span class="bm push">Claude · 3:06</span></div>
+<div class="pt"><span class="box"></span><div><div class="top"><span class="kind kind--find">Finding</span><span class="who">Claude · 3:06</span><span class="btn btn--sm btn--gd push" style="min-height:22px;padding:2px 6px">Remove</span></div><p class="tx" style="margin-bottom:6px">Body text needs a contrast ratio of at least 4.5:1 with its background; large text needs 3:1.</p>
+<div class="srcs"><a>WCAG 2.2, contrast (minimum) · w3.org ↗</a><a>Contrast checker · webaim.org ↗</a></div></div></div>
+<div class="pt"><span class="box"></span><div><div class="top"><span class="kind kind--find">Finding</span><span class="who">Claude · 3:06</span><span class="st">Shown 3:08</span><span class="btn btn--sm btn--gd push" style="min-height:22px;padding:2px 6px">Remove</span></div><p class="tx">Mid oranges on white come out near 2:1, so small orange text fails. Use a deeper amber for text, or white text on an orange block.</p>
+<div class="srcs"><a>Contrast checker · webaim.org ↗</a></div></div></div>
+<div class="more1">3 more findings</div>
+</div>
+<div class="batch"><div class="bh"><b>From step: header built · 2 points</b><span class="bm push">Claude · 3:10</span></div>
+<div class="pt"><span class="box"></span><div><div class="top"><span class="kind kind--talk">Talking point</span><span class="who">Claude · 3:10</span><span class="btn btn--sm btn--gd push" style="min-height:22px;padding:2px 6px">Remove</span></div><p class="tx">The header shows the total in dollars. Would the room rather see it as hours of an average wage?</p></div></div>
+<div class="more1">1 more point</div>
+</div>
+<div class="batch" style="border-bottom:0"><div class="bh"><b>Priya's Claude · 3 ideas</b><span class="bm push">for Parking map · 3:13</span></div>
+<div class="pt"><span class="box"></span><div><div class="top"><span class="kind kind--idea">Idea</span><span class="who">Priya's Claude · 3:13</span><span class="btn btn--sm btn--gd push" style="min-height:22px;padding:2px 6px">Remove</span></div><p class="tx">Colour each lot by how long it takes an average worker to earn its value.</p></div></div>
+</div>
+</div>
+</div>
+</section>
+<section class="col"><div style="display:flex;flex-direction:column;gap:6px">
+<div class="q-item" style="padding:10px 12px"><b>Decided · 4</b><span class="hint">Tick to combine</span></div>
+<div class="q-item" style="padding:10px 12px"><b>Timeline · 21</b></div>
+<div class="q-item" style="padding:10px 12px"><b>Asks · 4</b></div>
+<div class="q-item" style="padding:10px 12px"><b>Screenshots · 3</b></div>
+</div></section>
+</div>
+<span class="pin" style="left:432px;top:244px">1</span><span class="pin" style="left:432px;top:288px">2</span><span class="pin" style="left:432px;top:366px">3</span><span class="pin" style="left:400px;top:285px">4</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Later and Points, one slot</h3><p>Two tabs over one panel. Points opens by itself the first time a batch arrives; after that the tab's "· 3 new" says so and the host chooses when to look. The line on the right, "The room sees none of these", is the rule for both tabs.</p></div>
+<div class="note"><h3><b class="n">2</b>Research… and Ideas… at the top</h3><p>Secondary buttons, never orange. The chip under them reads "Claude is researching: <i>subject</i>" (or "Claude is finding ideas: …") until Claude closes the request. Two requests show two chips.</p></div>
+<div class="note"><h3><b class="n">3</b>Grouped by batch</h3><p>One request, one milestone or one builder's post is one group, newest at the top. Its heading says where it came from and how many. A group shows two points; "3 more findings" opens the rest. Each point: a kind tag (<b>Finding</b>, <b>Talking point</b>, <b>Idea</b>), who posted it and when, the text, its sources as small links with the site named, and Remove. A point already used says so ("Shown 3:08", "In the vote", "Sent 3:20").</p></div>
+<div class="note"><h3><b class="n">4</b>What's next can point here</h3><p>When three or more new points are waiting and nothing is open, What's next offers "Talk over a point while Claude builds" as a secondary move. It never leads: the room is not shown anything the host has not chosen.</p></div>
+</div>
+
+<div class="frame-h" id="t1b"><h2>T1b · The panel's other states, at real size</h2>
+<p>The panel at the width it gets in the middle column (560px).</p></div>
+<div class="real">
+<div class="realcol pane"><span class="cap"><b>Empty</b> · no points yet</span>
+<div class="held">
+<div class="htabs"><span class="htab">Later <span class="c">0</span></span><span class="htab on">Points <span class="c">0</span></span><span class="hint">The room sees none of these</span></div>
+<div class="ptop"><span class="btn btn--sm"><i data-i="search"></i>Research…</span><span class="btn btn--sm"><i data-i="bulb"></i>Ideas…</span></div>
+<p class="empty"><b>No points yet.</b> Research… asks Claude to look something up on the web and bring back findings with their sources. Ideas… asks for where the build could go next. Claude may add one to three talking points of its own as it finishes a step. Nothing here reaches the Stage until you show it.</p>
+</div></div>
+<div class="realcol pane"><span class="cap"><b>Waiting and failed</b> · Claude not connected; a search that found nothing</span>
+<div class="held">
+<div class="htabs"><span class="htab">Later <span class="c">3</span></span><span class="htab on">Points <span class="c">6</span></span><span class="hint">The room sees none of these</span></div>
+<div class="ptop" style="flex-direction:column;align-items:flex-start"><div class="row"><span class="btn btn--sm"><i data-i="search"></i>Research…</span><span class="btn btn--sm"><i data-i="bulb"></i>Ideas…</span></div>
+<span class="work work--wait">Research waits: <b style="color:var(--text)">parking costs by city</b>. Claude will start when it reconnects.</span>
+<span class="work work--fail">Research found nothing it could source on "salary by street".</span></div>
+<div class="batch" style="border-bottom:0"><div class="bh"><b>Research: salary by street · 1 finding</b><span class="bm push">Claude · 3:22</span></div>
+<div class="pt"><span class="box"></span><div><div class="top"><span class="kind kind--find">Finding</span><span class="who">Claude · 3:22</span></div><p class="tx">No public source gives salaries street by street. The nearest is median income by census tract.</p><div class="srcs"><a>American Community Survey · census.gov ↗</a></div></div></div></div>
+</div></div>
+<div class="realcol pane"><span class="cap"><b>Full</b> · 40 open points</span>
+<div class="held">
+<div class="htabs"><span class="htab">Later <span class="c">2</span></span><span class="htab on">Points <span class="c">40</span></span><span class="hint">The room sees none of these</span></div>
+<div class="ptop"><span class="btn btn--sm" aria-disabled="true"><i data-i="search"></i>Research…</span><span class="btn btn--sm" aria-disabled="true"><i data-i="bulb"></i>Ideas…</span><span class="hint">40 is the most. Remove or save some first.</span></div>
+<p class="empty" style="padding-top:12px">Claude's posts are refused with the same words, and Claude stops posting until there is room. Tick a group's heading to tick all its points, then Save for later or Remove.</p>
+</div></div>
+</div>
+<div class="notes">
+<div class="note"><h3>A finding never lacks a source</h3><p>When the helper finds nothing it can source, the one finding says so, with where it looked. The chip in red says the same, so the host does not wait for more.</p></div>
+<div class="note"><h3>Not connected</h3><p>The request is kept and the chip says "Claude will start when it reconnects". Nothing is lost if the host closes the tab.</p></div>
+</div>
+
+<!-- ===================================================================== T2 -->
+<div class="sec" id="t2"><h2>T2 · Research… and Ideas…</h2>
+<p>One small window each: a one-line subject, filled in from the current ask (or from Claude's current step when no ask is open), and Send to Claude. Claude hands it to a helper and keeps building, so the window says so and closes at once.</p></div>
+<div class="frame-h" id="t2a"><h2>T2a · Research…, over the Host screen</h2></div>
+<div class="fit"><div class="fit-box"><div class="scr2" data-frame="T2a Research dialog"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div style="padding:20px;color:var(--muted)">The Host screen, behind.</div>
+<div class="dim"></div>
+<div class="wnd" style="top:150px;width:620px">
+<div class="wh"><div><div class="eb">Points</div><h3>Research</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<span class="lbl2">What should Claude look up?</span>
+<div class="inp">accessible colour contrast for the billionaire side</div>
+<p class="hint">Filled in from Ask 4, "How should it look and feel?". Change it as you like.</p>
+<p class="notice">Claude hands this to a helper and keeps building. Three to six findings come back to Points, each with the pages it came from. The room sees nothing until you show it.</p>
+</div>
+<div class="wf"><span class="btn btn--ghost">Close</span><span class="say">Ctrl Enter sends</span><span class="btn btn--primary"><i data-i="send"></i>Send to Claude</span></div>
+</div>
+<span class="pin" style="left:400px;top:265px">1</span><span class="pin" style="left:1014px;top:510px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>The subject, prefilled</h3><p>From the open ask's question, else the step Claude last reported ("header built"), else empty with the cursor in it. One line, 200 characters.</p></div>
+<div class="note"><h3><b class="n">2</b>One orange, on the right</h3><p>The window's Send is the one orange button while it is open; the screen behind is dimmed. Close and the X leave without sending. After Send, the chip appears on the panel and the window closes.</p></div>
+</div>
+
+<div class="frame-h" id="t2b"><h2>T2b · Ideas…, Claude not connected, at 375px and 560px</h2>
+<p>Drawn at real size. The window still sends: the request waits and the chip says so.</p></div>
+<div class="real">
+<div class="realcol"><span class="cap"><b>375px</b></span>
+<div class="wnd wnd--flat" id="w375" style="width:375px">
+<div class="wh"><div><div class="eb">Points</div><h3>Ideas</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<span class="lbl2">Ideas about what?</span>
+<div class="inp">where the slider goes next</div>
+<p class="hint">Filled in from Claude's last step, "slider wired to the totals".</p>
+<p class="notice"><b>Claude is not connected.</b> Claude will start when it reconnects.</p>
+</div>
+<div class="wf"><span class="btn btn--ghost">Close</span><span class="btn btn--primary push"><i data-i="send"></i>Send to Claude</span></div>
+</div></div>
+<div class="realcol"><span class="cap"><b>560px</b></span>
+<div class="wnd wnd--flat" style="width:560px">
+<div class="wh"><div><div class="eb">Points</div><h3>Ideas</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<span class="lbl2">Ideas about what?</span>
+<div class="inp">where the slider goes next</div>
+<p class="hint">Filled in from Claude's last step, "slider wired to the totals".</p>
+<p class="notice">Four to eight ideas for where to go next, tied to what the room has built and decided. <b>Claude is not connected.</b> Claude will start when it reconnects.</p>
+</div>
+<div class="wf"><span class="btn btn--ghost">Close</span><span class="say">Ctrl Enter sends</span><span class="btn btn--primary"><i data-i="send"></i>Send to Claude</span></div>
+</div></div>
+<div class="measure" id="m-w375">Measuring…</div>
+</div>
+
+<!-- ===================================================================== T3 -->
+<div class="sec" id="t3"><h2>T3 · Ticked points: the action row</h2>
+<p>Ticking a point pins an action row to the bottom of the panel. The main button is always last on the right, and it depends on how many are ticked (owner, 2026-10-09). <b>One ticked:</b> Save for later · Show on Stage · Put to a vote · Work through in turn · <b>Send to Claude</b> (orange). <b>Two or more:</b> Save for later · Show on Stage · Work through in turn · Send these 3 to Claude · <b>Put 3 to a vote</b> (orange). The others are secondary and say why when they cannot be used.</p></div>
+<div class="real">
+<div class="realcol pane"><span class="cap"><b>1 ticked</b> · vote and run list need two or more</span>
+<div class="held">
+<div class="htabs"><span class="htab">Later <span class="c">3</span></span><span class="htab on">Points <span class="c">10</span></span><span class="hint">The room sees none of these</span></div>
+<div class="plist">
+<div class="batch"><div class="bh"><b>Research: accessible colour contrast · 5 findings</b><span class="bm push">Claude · 3:06</span></div>
+<div class="pt on"><span class="box on"></span><div><div class="top"><span class="kind kind--find">Finding</span><span class="who">Claude · 3:06</span></div><p class="tx">Mid oranges on white come out near 2:1, so small orange text fails. Use a deeper amber for text, or white text on an orange block.</p><div class="srcs"><a>Contrast checker · webaim.org ↗</a></div></div></div>
+<div class="pt"><span class="box"></span><div><div class="top"><span class="kind kind--find">Finding</span><span class="who">Claude · 3:06</span></div><p class="tx">Body text needs a contrast ratio of at least 4.5:1 with its background; large text needs 3:1.</p></div></div>
+</div></div>
+<div class="pfoot" data-frame="T3 one ticked"><span class="say"><b>1 ticked</b> · Press Space to send<span class="btn btn--link">Clear</span></span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm">Show on Stage</span><span class="btn btn--sm" aria-disabled="true" title="Tick 2 to 8">Put to a vote</span><span class="btn btn--sm" aria-disabled="true" title="Tick 2 or more">Work through in turn</span><span class="btn btn--sm btn--primary focusbtn"><i data-i="send"></i>Send to Claude</span></div>
+</div></div>
+<div class="realcol pane"><span class="cap"><b>3 ticked</b> · Put to a vote leads; the Stage takes one point at a time</span>
+<div class="held">
+<div class="htabs"><span class="htab">Later <span class="c">3</span></span><span class="htab on">Points <span class="c">10</span></span><span class="hint">The room sees none of these</span></div>
+<div class="plist">
+<div class="batch"><div class="bh"><b>Ideas: where the slider goes next · 5 ideas</b><span class="bm push">Claude · 3:18</span></div>
+<div class="pt on"><span class="box on"></span><div><div class="top"><span class="kind kind--idea">Idea</span><span class="who">Claude · 3:18</span></div><p class="tx">Let the slider run in hours of work as well as dollars.</p></div></div>
+<div class="pt on"><span class="box on"></span><div><div class="top"><span class="kind kind--idea">Idea</span><span class="who">Claude · 3:18</span></div><p class="tx">Add keyboard support so the slider works without a mouse.</p></div></div>
+<div class="pt on"><span class="box on"></span><div><div class="top"><span class="kind kind--idea">Idea</span><span class="who">Claude · 3:18</span></div><p class="tx">A share link that keeps the slider where you left it.</p></div></div>
+</div></div>
+<div class="pfoot" data-frame="T3 three ticked"><span class="say"><b>3 ticked</b> · Press Space to put them to a vote<span class="btn btn--link">Clear</span></span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm" aria-disabled="true" title="One point at a time on the Stage">Show on Stage</span><span class="btn btn--sm">Work through in turn</span><span class="btn btn--sm"><i data-i="send"></i>Send these 3 to Claude</span><span class="btn btn--sm btn--primary focusbtn">Put 3 to a vote</span></div>
+</div></div>
+<div class="realcol" style="max-width:340px"><span class="cap"><b>What each move does</b></span>
+<table class="vt" style="font-size:13px;border-collapse:collapse;width:100%">
+<tbody>
+<tr><td style="padding:6px 0;border-bottom:1px solid var(--m-rule)"><b>Save for later</b><br><span class="hint">Into the one Later list, as a direction. Any number.</span></td></tr>
+<tr><td style="padding:6px 0;border-bottom:1px solid var(--m-rule)"><b>Show on Stage</b><br><span class="hint">Exactly 1. T4.</span></td></tr>
+<tr><td style="padding:6px 0;border-bottom:1px solid var(--m-rule)"><b>Put 3 to a vote</b><br><span class="hint">2 to 8. Opens the window in T5. The main button when 2 or more are ticked.</span></td></tr>
+<tr><td style="padding:6px 0;border-bottom:1px solid var(--m-rule)"><b>Work through in turn</b><br><span class="hint">2 or more. Starts the run list (T7) in the order shown.</span></td></tr>
+<tr><td style="padding:6px 0"><b>Send to Claude</b><br><span class="hint">Any number, as one direction, as Do now. The main button when 1 is ticked. The split menu offers Keep in mind and Ask Claude.</span></td></tr>
+</tbody></table></div>
+</div>
+<div class="notes">
+<div class="note"><h3>Who holds the orange</h3><p>While points are ticked, the row's main button (Send to Claude with one ticked, Put to a vote with two or more) is the one orange button and Space presses it; What's next's lead turns to an outline button until the ticks are cleared. While an ask is open, its step keeps the orange and the row's main button is outline. A test counts orange buttons in each of these states.</p></div>
+<div class="note"><h3>Disabled says why</h3><p>A disabled move stays in the row, so the host can see what more ticks would allow. Going from one tick to two, Send to Claude and Put to a vote swap places, so the main button is always last on the right. Hover text says what it needs: "Tick 2 to 8", "Tick 2 or more", "One point at a time on the Stage".</p></div>
+<div class="note"><h3>Ticks across batches</h3><p>Ticks may span batches and builders. Ticking a group's heading ticks all its points.</p></div>
+</div>
+
+<!-- ===================================================================== T4 -->
+<div class="sec" id="t4"><h2>T4 · Show on Stage: one point as a discussion prompt</h2>
+<p>The point fills the Stage in the Room ladder: where it came from, the text, and the source for a finding. Laptops, tablets and phones show the same point with a line to talk it over and the usual idea box; ideas sent while it is up are tied to it. The host takes it down and the Stage goes back to where it was.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto" data-frame="T4 Stage"><header class="hdr"><span class="ttl">Billions, made human</span><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="stg">
+<div>
+<div class="ey">Talk it over <span>· From Claude's research</span></div>
+<h2 class="pq">Mid oranges on white come out near 2:1, so small orange text fails.</h2>
+<p class="srcl">Source: <b>webaim.org</b></p>
+<p class="prompt">Talk it over with the people near you. Send an idea about it from your laptop, tablet or phone.</p>
+</div>
+<aside class="meter"><span class="lbl">Ideas on this</span><span class="big">4</span><span class="says">since 3:08</span></aside>
+</div>
+<footer class="dock"><div class="status">A point is up for the room<span class="sub">The Stage goes back to Claude building when you take it down</span></div><span class="dbtn dbtn--ghost">Save for later</span><span class="dbtn dbtn--primary">Take it down</span><span class="dockhint">Press <b>Space</b> to take it down</span><span class="more">HOST</span></footer>
+<span class="pin" style="left:6px;top:110px">1</span><span class="pin" style="left:6px;top:420px">2</span><span class="pin" style="left:1390px;top:110px">3</span><span class="pin" style="left:900px;top:790px">4</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Where it came from</h3><p>"From Claude's research" for a finding, "From Claude" for a talking point or idea, "From Priya's Claude" for a builder's point (a builder's name, which the spec allows; no other person is named). Room ladder, meta size.</p></div>
+<div class="note"><h3><b class="n">2</b>Text, source, and what to do</h3><p>The point's text only, never its Detail (that is the host's). "Source: webaim.org" names the site of the first source; a talking point has no source line. The prompt line is the same every time.</p></div>
+<div class="note"><h3><b class="n">3</b>A count, not the ideas</h3><p>The meter counts ideas sent about this point. The ideas themselves land in Waiting for you, tagged "about: Mid oranges on white…".</p></div>
+<div class="note"><h3><b class="n">4</b>The dock</h3><p>Take it down is the one move that matters here and holds the orange. With 0 or 1 ideas it takes the point down at once; an idea waits in Waiting for you, tied to the point. With 2 or more it asks first (T4c). Save for later takes it down and puts the point, with the room's ideas on it, on Later. The Host screen shows the same two moves on the Now card.</p></div>
+</div>
+<div class="frame-h" id="t4c"><h2>T4c · Take it down, with 2 or more ideas in</h2><p>Owner, 2026-10-09: Take it down offers the room's ideas about the point. Put to a vote opens T5's window with the 4 ideas as options; Not now takes the point down and the ideas wait in Waiting for you, tied to it.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto" data-frame="T4c Take it down"><header class="hdr"><span class="ttl">Billions, made human</span><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="stg"><div><div class="ey">Talk it over <span>· From Claude's research</span></div><h2 class="pq">Mid oranges on white come out near 2:1, so small orange text fails.</h2></div><aside class="meter"><span class="lbl">Ideas on this</span><span class="big">4</span></aside></div>
+<footer class="dock"><div class="status">A point is up for the room</div></footer>
+<div class="dim"></div>
+<div class="wnd" style="top:150px;width:720px">
+<div class="wh"><div><div class="eb">Taking the point down</div><h3>Put the 4 ideas to a vote?</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<p class="hint" style="font-size:15px">The room sent 4 ideas about this point:</p>
+<div class="vopts">
+<div class="vopt"><span class="L">A</span><span>Use the orange for the bars only, never for words</span><span class="k"></span></div>
+<div class="vopt"><span class="L L--b">B</span><span>Make the billionaire side white text on an orange block</span><span class="k"></span></div>
+<div class="vopt"><span class="L L--c">C</span><span>Swap orange for a deep red on that side</span><span class="k"></span></div>
+<div class="vopt"><span class="L">D</span><span>Check every colour pair with the contrast checker</span><span class="k"></span></div>
+</div>
+<p class="hint">Either way the point comes down and the Stage goes back to Claude building.</p>
+</div>
+<div class="wf"><span class="btn btn--ghost">Not now</span><span class="say">Press Space to put them to a vote</span><span class="btn btn--primary">Put to a vote</span></div>
+</div>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3>Not now</h3><p>The point comes down. The 4 ideas stay in Waiting for you, each tagged "about: Mid oranges on white…", for the host to use later.</p></div>
+<div class="note"><h3>Put to a vote</h3><p>Opens T5's window with the ideas as options and 3 picks each (fewer when there are fewer options), ready for Open voting. Ideas only; who sent them never shows.</p></div>
+<div class="note"><h3>0 or 1 idea</h3><p>No question. Take it down takes it down; a single idea waits in Waiting for you, tied to the point.</p></div>
+</div>
+<div class="frame-h"><h2>T4b · The same point on a phone, at real size</h2><p>Laptops and tablets show the same, wider.</p></div>
+<div class="devs">
+<div class="dev" id="d-t4">
+<div class="dvtop"><b>Billions, made human</b><span class="code">4443</span></div>
+<div class="dvb">
+<div class="dvey">Talk it over <span>· From Claude's research</span></div>
+<h2 class="dvq">Mid oranges on white come out near 2:1, so small orange text fails.</h2>
+<p class="dvp">Source: <a>webaim.org ↗</a></p>
+<p class="dvp">Talk it over with the people near you. If something comes up, send it to the host.</p>
+<div class="dvbox">
+<span class="lbl3">Your idea about this</span>
+<div class="dvta">Use the orange for the bars only, never for words</div>
+<p class="dvp" style="font-size:13px">The host sees your name and decides what to pass to Claude. The wall never shows it.</p>
+<span class="dvsend"><i data-i="send"></i>Send idea</span>
+</div>
+</div>
+</div>
+<div class="measure" id="m-t4">Measuring…</div>
+</div>
+
+<!-- ===================================================================== T5 -->
+<div class="sec" id="t5"><h2>T5 · Put to a vote: everyone picks more than one</h2>
+<p>A multi-pick ask made from the ticked points. The window shows the question, the options as they will read on phones, and how many each person may pick: 1 to 5, 3 by default. Every pick counts as one vote.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" data-frame="T5 Vote dialog"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b> · 12 here</span><span class="menu">···</span></header>
+<div style="padding:20px;color:var(--muted)">The Host screen, behind.</div>
+<div class="dim"></div>
+<div class="wnd" style="top:84px;width:760px">
+<div class="wh"><div><div class="eb">Points · 5 ticked</div><h3>Put 5 to a vote</h3></div><span class="x">✕</span></div>
+<div class="wb">
+<span class="lbl2">The question</span>
+<div class="inp">Which should Claude take on next?</div>
+<span class="lbl2">The options, as people will see them</span>
+<div class="vopts">
+<div class="vopt"><span class="L">A</span><span>Let the slider run in hours of work as well as dollars.</span><span class="k">Idea · Claude</span></div>
+<div class="vopt"><span class="L L--b">B</span><span>Add keyboard support so the slider works without a mouse.</span><span class="k">Idea · Claude</span></div>
+<div class="vopt"><span class="L L--c">C</span><span>A share link that keeps the slider where you left it.</span><span class="k">Idea · Claude</span></div>
+<div class="vopt"><span class="L">D</span><span>Use a deeper amber for any orange text.</span><span class="k">Finding · Claude</span></div>
+<div class="vopt"><span class="L L--b">E</span><span>Colour each lot by how long it takes to earn its value.</span><span class="k">Idea · Priya's Claude</span></div>
+</div>
+<div class="row"><span class="lbl2" style="margin-right:6px">Picks per person</span><span class="stepper"><span>−</span><b>3</b><span>+</span></span><span class="hint">1 to 5. Each pick counts as one vote.</span></div>
+</div>
+<div class="wf"><span class="btn btn--ghost">Close</span><span class="say">Ctrl Enter opens voting</span><span class="btn btn--primary">Open voting</span></div>
+</div>
+<span class="pin" style="left:330px;top:230px">1</span><span class="pin" style="left:330px;top:556px">2</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Options are the points</h3><p>Each option carries its point's id, so the result can move the right points forward. The text is the point's text; the source line is not shown on phones. The host can reword an option before opening; the point keeps its own words. Up to eight.</p></div>
+<div class="note"><h3><b class="n">2</b>Picks per person</h3><p>A stepper from 1 to 5, starting at 3 (or at the number of options less one, when that is smaller). Open voting puts the ask on the Stage and on phones at once, as Choose does.</p></div>
+</div>
+<div class="frame-h"><h2>T5b · A phone in the vote, at real size</h2></div>
+<div class="devs">
+<div class="dev" id="d-t5">
+<div class="dvtop"><b>Billions, made human</b><span class="code">4443</span></div>
+<div class="dvb">
+<div class="dvey">Vote <span>· Ask 5 · pick up to 3</span></div>
+<h2 class="dvq">Which should Claude take on next?</h2>
+<p class="dvp">Pick up to <b>3</b> · 2 of 3 picked.</p>
+<div class="vrow on"><span class="vn">A</span><span>Let the slider run in hours of work as well as dollars.</span><span class="tk"></span></div>
+<div class="vrow on"><span class="vn">B</span><span>Add keyboard support so the slider works without a mouse.</span><span class="tk"></span></div>
+<div class="vrow"><span class="vn">C</span><span>A share link that keeps the slider where you left it.</span><span class="tk"></span></div>
+<div class="vrow"><span class="vn">D</span><span>Use a deeper amber for any orange text.</span><span class="tk"></span></div>
+<div class="vrow"><span class="vn">E</span><span>Colour each lot by how long it takes to earn its value.</span><span class="tk"></span></div>
+</div>
+<div class="dvdock"><span class="dvsend">Send my picks</span></div>
+</div>
+<div class="dev">
+<div class="dvtop"><b>Billions, made human</b><span class="code">4443</span></div>
+<div class="dvb">
+<div class="dvey">Vote <span>· Ask 5 · pick up to 3</span></div>
+<h2 class="dvq">Which should Claude take on next?</h2>
+<p class="dvp">Pick up to <b>3</b> · 3 of 3 picked. Untick one to change.</p>
+<div class="vrow on"><span class="vn">A</span><span>Let the slider run in hours of work as well as dollars.</span><span class="tk"></span></div>
+<div class="vrow on"><span class="vn">B</span><span>Add keyboard support so the slider works without a mouse.</span><span class="tk"></span></div>
+<div class="vrow off"><span class="vn">C</span><span>A share link that keeps the slider where you left it.</span><span class="tk"></span></div>
+<div class="vrow on"><span class="vn">D</span><span>Use a deeper amber for any orange text.</span><span class="tk"></span></div>
+<div class="vrow off"><span class="vn">E</span><span>Colour each lot by how long it takes to earn its value.</span><span class="tk"></span></div>
+</div>
+<div class="dvdock"><span class="dvsend">Send my picks</span></div>
+</div>
+</div>
+<div class="notes">
+<div class="note"><h3>The counter is the rule</h3><p>"Pick up to 3 · 2 of 3 picked." At the limit the rest dim and the line adds "Untick one to change." Picks can change until results are shown, as today's idea ballot.</p></div>
+<div class="note"><h3>No names, no sources</h3><p>Options never say who posted them on phones or the Stage, except a builder's Claude in the host's window. Sources stay with the host.</p></div>
+</div>
+
+<!-- ===================================================================== T6 -->
+<div class="sec" id="t6"><h2>T6 · Results: highlight what moves forward</h2>
+<p>At results the Now column shows the votes with the top three highlighted. The host clicks a row to highlight or clear it, then chooses one of three moves.</p></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;gap:36px;align-items:flex-start;width:1440px">
+<div class="nowcol" data-frame="T6 Results">
+<div class="st2 done"><div class="sh"><span class="n">1</span><span class="t">Ask 5: Which should Claude take on next?</span><span class="s">Pick up to 3</span></div></div>
+<div class="st2 done"><div class="sh"><span class="n">2</span><span class="t">The room voted</span><span class="s">11 of 12 · 31 picks</span></div></div>
+<div class="st2 cur"><div class="sh"><span class="n">3</span><span class="t">Move forward</span><span class="s">3 highlighted</span></div>
+<div class="sb">
+<div class="board">
+<div class="hrow hl"><span class="hb"></span><span>B · Add keyboard support so the slider works without a mouse.</span><span class="tr"><span style="width:82%"></span></span><b>9</b></div>
+<div class="hrow hl"><span class="hb"></span><span>A · Let the slider run in hours of work as well as dollars.</span><span class="tr"><span style="width:73%"></span></span><b>8</b></div>
+<div class="hrow hl"><span class="hb"></span><span>D · Use a deeper amber for any orange text.</span><span class="tr"><span style="width:55%"></span></span><b>6</b></div>
+<div class="hrow"><span class="hb"></span><span>E · Colour each lot by how long it takes to earn its value.</span><span class="tr"><span style="width:45%"></span></span><b>5</b></div>
+<div class="hrow"><span class="hb"></span><span>C · A share link that keeps the slider where you left it.</span><span class="tr"><span style="width:27%"></span></span><b>3</b></div>
+<p class="hint">The top 3 by votes are highlighted. Click a row to change that. Claude will be told the highlighted ones, in this order.</p>
+<p class="then">Next: the run list, or one direction to Claude</p>
+</div>
+<div class="arow"><span class="say">Press <b>Space</b> to send</span><span class="btn">Save the rest for later</span><span class="btn">Work through in turn</span><span class="btn btn--primary focusbtn"><i data-i="send"></i>Send these 3 to Claude</span></div>
+</div></div>
+</div>
+<div class="nowcol" style="height:auto;min-height:0">
+<div class="st2 done"><div class="sh"><span class="n">3</span><span class="t">Move forward: a tie at the cut</span><span class="s">D and E, 6 each</span></div></div>
+<div class="hrow hl"><span class="hb"></span><span>B · Add keyboard support…</span><span class="tr"><span style="width:82%"></span></span><b>9</b></div>
+<div class="hrow hl"><span class="hb"></span><span>A · Let the slider run in hours…</span><span class="tr"><span style="width:73%"></span></span><b>8</b></div>
+<div class="hrow hl"><span class="hb"></span><span>D · Use a deeper amber…</span><span class="tr"><span style="width:55%"></span></span><b>6</b></div>
+<div class="hrow hl"><span class="hb"></span><span>E · Colour each lot…</span><span class="tr"><span style="width:55%"></span></span><b>6</b></div>
+<p class="hint">A tie at third place highlights both: 4 highlighted. Clear one, or keep both.</p>
+<div class="st2 done" style="margin-top:10px"><div class="sh"><span class="n">✓</span><span class="t">After Save the rest for later</span><span class="s"></span></div></div>
+<p class="hint">E and C go to Later as directions. The row's left slot says "Saved 2 for later" with Undo; B, A and D stay highlighted for Send or Work through in turn.</p>
+</div>
+</div><span class="pin" style="left:-12px;top:200px">1</span><span class="pin" style="left:560px;top:612px">2</span></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Highlight, not tick</h3><p>Green with a filled box, so it does not read as the blue tick of the Points list. Order is vote order; Work through in turn lets the host reorder in the run list (T7).</p></div>
+<div class="note"><h3><b class="n">2</b>Three moves, main on the right</h3><p><b>Send these 3 to Claude</b>: one direction, Do now. <b>Work through in turn</b>: the run list, item 1 sent at once. <b>Save the rest for later</b>: the ones not highlighted go to Later in one press and the step stays open. The same three sit on the Stage dock at results, with Send as the main button.</p></div>
+</div>
+
+<!-- ===================================================================== T7 -->
+<div class="sec" id="t7"><h2>T7 · Work through in turn: the run list</h2>
+<p>Claude takes the items one at a time: it builds one, commits it, reports it done, and waits. The host sends the next. One run at a time; starting another while one is going is refused with "Finish or stop the current list first".</p></div>
+<div class="frame-h" id="t7a"><h2>T7a · The Host's Now column: Claude still working, Claude done, and Next pressed early</h2></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;gap:30px;align-items:flex-start;width:1880px">
+<div class="nowcol" data-frame="T7 working">
+<div class="st2 done"><div class="sh"><span class="n">5</span><span class="t">Ask 5 decided: work through 4 in turn</span><span class="s">3:31</span></div></div>
+<div class="st2 cur"><div class="sh"><span class="n"><i data-i="list"></i></span><span class="t">Working through · 2 of 4</span><span class="s">started 3:31</span></div>
+<div class="sb">
+<div class="board run">
+<div class="ri done"><span class="rn">✓</span><span>Add keyboard support so the slider works without a mouse.</span><span class="rs">Done 3:38</span></div>
+<div class="ri cur"><span class="rn">2</span><span>Let the slider run in hours of work as well as dollars.</span><span class="rs">Claude is on it</span></div>
+<div class="ri"><span class="rn">3</span><span>Use a deeper amber for any orange text.</span><span class="rs"><span class="grip">⋮⋮</span></span></div>
+<div class="ri"><span class="rn">4</span><span>Colour each lot by how long it takes to earn its value.</span><span class="rs"><span class="grip">⋮⋮</span></span></div>
+<p class="then">Drag 3 and 4 to reorder. Skipped items go to Later.</p>
+</div>
+<div class="arow"><span class="say">Claude is working on 2. Next waits until Claude reports it done.</span><span class="btn btn--ghost">Stop</span><span class="btn">Skip 3</span><span class="btn btn--primary">Next: 3 · "Use a deeper amber…"</span></div>
+</div></div>
+</div>
+<div class="nowcol" data-frame="T7 done">
+<div class="st2 done"><div class="sh"><span class="n">5</span><span class="t">Ask 5 decided: work through 4 in turn</span><span class="s">3:31</span></div></div>
+<div class="st2 cur"><div class="sh"><span class="n"><i data-i="list"></i></span><span class="t">Working through · 2 of 4 done</span><span class="s">started 3:31</span></div>
+<div class="sb">
+<div class="board run">
+<div class="ri done"><span class="rn">✓</span><span>Add keyboard support so the slider works without a mouse.</span><span class="rs">Done 3:38</span></div>
+<div class="ri done"><span class="rn">✓</span><span>Let the slider run in hours of work as well as dollars.</span><span class="rs">Done 3:46</span></div>
+<div class="ri cur"><span class="rn">3</span><span>Use a deeper amber for any orange text.</span><span class="rs">Next</span></div>
+<div class="ri"><span class="rn">4</span><span>Colour each lot by how long it takes to earn its value.</span><span class="rs"><span class="grip">⋮⋮</span></span></div>
+<p class="hint">Claude: "Hours of work added beside dollars, using the median hourly wage. Committed."</p>
+</div>
+<div class="arow"><span class="say ok">Claude finished 2 · Press Space to send 3</span><span class="btn btn--ghost">Stop</span><span class="btn">Skip 3</span><span class="btn btn--primary focusbtn">Next: 3 · "Use a deeper amber…"</span></div>
+</div></div>
+</div>
+<div class="nowcol" style="position:relative" data-frame="T7 confirm">
+<div class="st2 cur" style="opacity:.35"><div class="sh"><span class="n"><i data-i="list"></i></span><span class="t">Working through · 2 of 4</span><span class="s"></span></div><div class="sb"><div class="board"></div></div></div>
+<div class="wnd" style="top:170px;width:480px">
+<div class="wh"><div><div class="eb">Working through</div><h3>Claude hasn't finished 2. Send 3 anyway?</h3></div><span class="x">✕</span></div>
+<div class="wb"><p class="hint" style="font-size:15px">Claude is still on "Let the slider run in hours of work…". If you send 3 now, Claude gets it next and 2 may be left half done.</p></div>
+<div class="wf"><span class="btn btn--ghost">Wait for Claude</span><span class="btn btn--primary push">Send 3 anyway</span></div>
+</div>
+</div>
+</div><span class="pin" style="left:588px;top:520px">1</span><span class="pin" style="left:1218px;top:520px">2</span><span class="pin" style="left:1296px;top:160px">3</span></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Next is always the main button</h3><p>"Next: 3 · " and the item's first words. It stays the one orange button while the list runs (What's next steps aside). While Claude is still on an item, the row's left slot says so and pressing Next asks first.</p></div>
+<div class="note"><h3><b class="n">2</b>When Claude reports done</h3><p>The item ticks green with the time, Claude's one-line report shows under the list, and the left slot turns green: "Claude finished 2 · Press Space to send 3". <b>Skip 3</b> sends that item to Later and makes 4 next. <b>Stop</b> sends everything not yet sent to Later and closes the list.</p></div>
+<div class="note"><h3><b class="n">3</b>Next pressed early</h3><p>"Claude hasn't finished 2. Send 3 anyway?" Wait for Claude is the way out; Send 3 anyway sends it.</p></div>
+</div>
+<div class="frame-h" id="t7b"><h2>T7b · The Stage, with the current item lit</h2></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto" data-frame="T7 Stage"><header class="hdr"><span class="ttl">Billions, made human</span><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 12 here</span></header>
+<div class="stg">
+<div>
+<div class="ey">Working through <span>· 4 the room chose</span></div>
+<ol class="srun">
+<li class="done"><span class="rn">✓</span><span>Add keyboard support so the slider works without a mouse.</span></li>
+<li class="cur"><span class="rn">2</span><span>Let the slider run in hours of work as well as dollars.</span></li>
+<li><span class="rn">3</span><span>Use a deeper amber for any orange text.</span></li>
+<li><span class="rn">4</span><span>Colour each lot by how long it takes to earn its value.</span></li>
+</ol>
+</div>
+<aside class="meter"><span class="lbl">Claude is on</span><span class="big">2<small> / 4</small></span><span class="says">since 3:38</span></aside>
+</div>
+<footer class="dock"><div class="status">Claude is working on 2 of 4<span class="sub">Next waits until Claude reports 2 done</span></div><span class="dbtn dbtn--ghost">Stop</span><span class="dbtn dbtn--ghost">Skip 3</span><span class="dbtn dbtn--primary">Next: 3</span><span class="dockhint">Press <b>Space</b> for 3</span><span class="more">HOST</span></footer>
+</div></div></div>
+<div class="frame-h"><h2>T7c · A phone during the run, at real size</h2></div>
+<div class="devs">
+<div class="dev" id="d-t7">
+<div class="dvtop"><b>Billions, made human</b><span class="code">4443</span></div>
+<div class="dvb">
+<div class="dvey">Working through</div>
+<h2 class="dvq">Claude is working on 2 of 4: Let the slider run in hours of work as well as dollars.</h2>
+<ol class="drun">
+<li class="done"><span class="rn">✓</span><span>Add keyboard support so the slider works without a mouse.</span></li>
+<li class="cur"><span class="rn">2</span><span>Let the slider run in hours of work as well as dollars.</span></li>
+<li><span class="rn">3</span><span>Use a deeper amber for any orange text.</span></li>
+<li><span class="rn">4</span><span>Colour each lot by how long it takes to earn its value.</span></li>
+</ol>
+<p class="dvp">The room chose these in Ask 5. Watch the big screen; the build updates as each one is done.</p>
+</div>
+<div class="dvdock"><span class="dvsec"><i data-i="bulb"></i>Send an idea to the host</span></div>
+</div>
+<div class="measure" id="m-t7">Measuring…</div>
+</div>
+
+<!-- ===================================================================== T8 -->
+<div class="sec" id="t8"><h2>T8 · A builder's view: the same help for their own task</h2>
+<p>In a crew, each builder's lane on their laptop, tablet or phone gets <b>Research…</b> and <b>Ideas…</b> for their own task. The request goes to their own Claude; the points come back to their lane and to the host's Points panel, tagged with their name. The host curates them like any other.</p></div>
+<div class="devs">
+<div class="dev dev--wide" data-frame="T8 builder">
+<div class="dvtop"><b>Billions, made human</b><span style="margin-left:14px">You are building as <b style="font:700 13px/1 var(--font-ui)">Priya</b></span><span class="code">4443</span></div>
+<div class="dvb">
+<div class="lane">
+<p class="eb" style="margin:0"><b>Your lane</b> · Parking map</p>
+<p class="lstatus" style="margin:0">Building</p>
+<div class="row"><span class="btn btn--sm"><i data-i="search"></i>Research…</span><span class="btn btn--sm"><i data-i="bulb"></i>Ideas…</span><span class="hint">For your task. Your Claude does it in a helper and keeps building.</span></div>
+<span class="work" style="align-self:flex-start">Your Claude is researching: <b>parking prices by city</b></span>
+</div>
+<div class="lane">
+<p class="eb" style="margin:0"><b>Your points</b> · 3 ideas, 1 talking point · the host chooses what the room sees</p>
+<div class="mypt"><div class="row"><span class="kind kind--idea">Idea</span><span class="ms">3:13</span></div><span class="tx">Colour each lot by how long it takes an average worker to earn its value.</span><span class="ms"><b>In the room's vote</b> · Ask 5</span></div>
+<div class="mypt"><div class="row"><span class="kind kind--idea">Idea</span><span class="ms">3:13</span></div><span class="tx">Let people drag their own salary onto the map.</span><span class="ms">With the host</span></div>
+<div class="mypt"><div class="row"><span class="kind kind--talk">Talking point</span><span class="ms">3:24</span></div><span class="tx">The map loads every lot at once. Is a city at a time enough for the room?</span><span class="ms">With the host</span></div>
+</div>
+<div class="lane"><p class="eb" style="margin:0"><b>Open tasks</b></p><p class="hint">Share link · Mobile layout</p></div>
+</div>
+</div>
+<div class="realcol" style="max-width:420px"><span class="cap"><b>And on the host's Points panel</b></span>
+<div class="held" style="width:420px">
+<div class="htabs"><span class="htab">Later <span class="c">3</span></span><span class="htab on">Points <span class="c">12</span></span></div>
+<div class="batch" style="border-bottom:0"><div class="bh"><b>Priya's Claude · 3 ideas</b><span class="bm push">for Parking map · 3:13</span></div>
+<div class="pt"><span class="box"></span><div><div class="top"><span class="kind kind--idea">Idea</span><span class="who">Priya's Claude · 3:13</span><span class="st">In the vote</span></div><p class="tx">Colour each lot by how long it takes an average worker to earn its value.</p></div></div>
+<div class="more1">2 more ideas</div></div>
+<div class="ptop" style="border-top:1px solid var(--m-rule);border-bottom:0"><span class="work">Priya's Claude is researching: <b>parking prices by city</b></span></div>
+</div>
+<p class="hint" style="max-width:420px">The builder's dialogs are T2's, titled "Research for Parking map" and "Ideas for Parking map", with the subject filled in from the task.</p>
+</div>
+</div>
+<div class="notes">
+<div class="note"><h3>Their points, their status</h3><p>Each point in "Your points" says what happened to it: With the host, Shown to the room, In the room's vote, Sent to your Claude, Saved for later, Not used this time. The builder cannot show, vote or remove; that is the host's.</p></div>
+<div class="note"><h3>One orange</h3><p>The lane has no orange button of its own. When the room is voting, the vote's Send my picks is the builder's one orange button, as for everyone.</p></div>
+<div class="note"><h3>Others' points</h3><p>A builder sees only their own Claude's points, never another builder's, and never the host's curation of anyone else's.</p></div>
+</div>
+
+<!-- ===================================================================== T9 -->
+<div class="sec" id="t9"><h2>T9 · The record in the repo</h2>
+<p>Each person's Claude writes its own folder, <code>build-room/&lt;code&gt;-&lt;date&gt;/&lt;name&gt;/</code>, and commits it with the work. The points expire from the room with the session; this folder and the report remain. Claude only adds or updates entries, never deletes, and learns each point's outcome from the room the next time it checks in.</p></div>
+<div class="fit"><div class="fit-box"><div class="repo" data-frame="T9 repo">
+<div class="rp"><div class="rh"><i data-i="folder"></i><b>billions-made-human</b> · branch build-room/4443</div>
+<pre class="tree"><span class="d">build-room/</span>
+└─ <span class="d">4443-2026-10-09/</span>
+   ├─ <span class="d">george/</span>             <span class="m"># the host's Claude</span>
+   │  ├─ <span class="hl">talking-points.json</span>
+   │  └─ <span class="d">research/</span>
+   │     ├─ accessible-colour-contrast.md
+   │     ├─ keyboard-support-for-the-slider.md
+   │     └─ salary-by-street.md
+   └─ <span class="d">priya/</span>              <span class="m"># Priya's Claude</span>
+      ├─ talking-points.json
+      └─ <span class="d">research/</span>
+         └─ parking-prices-by-city.md
+<span class="d">src/</span>
+README.md
+DECISIONS.md</pre>
+<p class="hint" style="padding:0 14px 14px">Names are lowercased, letters, digits and hyphens. Each Claude writes only its own folder, so merging builders' branches never collides.</p>
+</div>
+<div class="rp"><div class="rh"><b>george/talking-points.json</b> · first two of 14</div>
+<pre class="cpre">{
+  <span class="k">"session"</span>: <span class="s">"4443"</span>, <span class="k">"date"</span>: <span class="s">"2026-10-09"</span>, <span class="k">"by"</span>: <span class="s">"claude"</span>,
+  <span class="k">"points"</span>: [
+    {
+      <span class="k">"id"</span>: <span class="s">"p_7k2m"</span>,
+      <span class="k">"kind"</span>: <span class="s">"finding"</span>,
+      <span class="k">"text"</span>: <span class="s">"Mid oranges on white come out near 2:1, so small orange text fails. …"</span>,
+      <span class="k">"sources"</span>: [{ <span class="k">"title"</span>: <span class="s">"Contrast checker"</span>, <span class="k">"url"</span>: <span class="s">"https://webaim.org/resources/contrastchecker/"</span> }],
+      <span class="k">"about"</span>: <span class="s">"accessible colour contrast for the billionaire side"</span>,
+      <span class="k">"batch"</span>: <span class="s">"research: accessible colour contrast"</span>,
+      <span class="k">"at"</span>: <span class="s">"2026-10-09T15:06:12Z"</span>,
+      <span class="k">"outcome"</span>: [<span class="s">"shown 15:08"</span>, <span class="s">"voted 6 (Ask 5)"</span>, <span class="s">"run item 3, done 15:52"</span>]
+    },
+    {
+      <span class="k">"id"</span>: <span class="s">"p_7k3a"</span>,
+      <span class="k">"kind"</span>: <span class="s">"talk"</span>,
+      <span class="k">"text"</span>: <span class="s">"The header shows the total in dollars. Would the room rather see it as hours of an average wage?"</span>,
+      <span class="k">"about"</span>: <span class="s">"step: header built"</span>,
+      <span class="k">"at"</span>: <span class="s">"2026-10-09T15:10:40Z"</span>,
+      <span class="k">"outcome"</span>: [<span class="s">"saved for later"</span>]
+    }
+  ]
+}</pre></div>
+<div class="rp"><div class="rh"><b>george/research/accessible-colour-contrast.md</b></div>
+<div class="md">
+<h4>Research: accessible colour contrast</h4>
+<p>Asked by the host at 15:05, from Ask 4, "How should it look and feel?". Five findings.</p>
+<ol>
+<li>Body text needs a contrast ratio of at least 4.5:1 with its background; large text needs 3:1.<span>WCAG 2.2, Understanding 1.4.3 · w3.org</span><span>Contrast checker · webaim.org</span></li>
+<li>Mid oranges on white come out near 2:1, so small orange text fails. Use a deeper amber for text, or white text on an orange block.<span>Contrast checker · webaim.org</span></li>
+<li>Colour should not be the only way a difference is shown; pair it with a label or a pattern.<span>WCAG 2.2, Understanding 1.4.1 · w3.org</span></li>
+</ol>
+<p style="margin-top:8px">What happened: finding 2 was shown to the room at 15:08 and was the third item of the run list; Claude finished it at 15:52 (commit a41c9e2).</p>
+</div></div>
+</div></div></div>
+
+<!-- ===================================================================== T10 -->
+<div class="sec" id="t10"><h2>T10 · The session report: "Talking points and research"</h2>
+<p>A new section of the paper report, after Decisions. Findings with their sources, each vote with its counts and what moved forward, the run list, and the points shown to the room. No participant is named; a builder's name appears on their own points.</p></div>
+<div class="fit"><div class="fit-box"><div class="paper" data-frame="T10 report">
+<h2>Talking points and research</h2>
+<p class="lede">14 points from Claude and 3 from Priya's Claude. 2 research requests, 1 request for ideas. 1 vote, 1 run list.</p>
+<h3>Research</h3>
+<p><b>Accessible colour contrast</b> <span class="mut">· asked 3:05 · 5 findings</span></p>
+<ul>
+<li>Body text needs a contrast ratio of at least 4.5:1 with its background; large text needs 3:1.<span class="src">WCAG 2.2, Understanding 1.4.3 · w3.org/WAI/WCAG22/Understanding/contrast-minimum</span></li>
+<li>Mid oranges on white come out near 2:1, so small orange text fails. <span class="mut">Shown to the room 3:08.</span><span class="src">Contrast checker · webaim.org/resources/contrastchecker</span></li>
+<li class="mut">3 more findings, with their sources</li>
+</ul>
+<p style="margin-top:10px"><b>Salary by street</b> <span class="mut">· asked 3:20 · nothing found it could source; the nearest is median income by census tract (census.gov)</span></p>
+<h3>Put to the room</h3>
+<p><b>Ask 5: Which should Claude take on next?</b> <span class="mut">· pick up to 3 · 11 voted, 31 picks</span></p>
+<table><thead><tr><th>Option</th><th>From</th><th class="n" style="text-align:right">Votes</th><th>Outcome</th></tr></thead>
+<tbody>
+<tr><td>Add keyboard support so the slider works without a mouse.</td><td>Claude</td><td class="n">9</td><td class="fw">Moved forward · run item 1</td></tr>
+<tr><td>Let the slider run in hours of work as well as dollars.</td><td>Claude</td><td class="n">8</td><td class="fw">Moved forward · run item 2</td></tr>
+<tr><td>Use a deeper amber for any orange text.</td><td>Claude's research</td><td class="n">6</td><td class="fw">Moved forward · run item 3</td></tr>
+<tr><td>Colour each lot by how long it takes to earn its value.</td><td>Priya's Claude</td><td class="n">5</td><td class="sk">Saved for later</td></tr>
+<tr><td>A share link that keeps the slider where you left it.</td><td>Claude</td><td class="n">3</td><td class="sk">Saved for later</td></tr>
+</tbody></table>
+<h3>Worked through in turn</h3>
+<table><tbody>
+<tr><td style="width:30px">1</td><td>Add keyboard support so the slider works without a mouse.</td><td class="fw">Done 3:38</td></tr>
+<tr><td>2</td><td>Let the slider run in hours of work as well as dollars.</td><td class="fw">Done 3:46</td></tr>
+<tr><td>3</td><td>Use a deeper amber for any orange text.</td><td class="fw">Done 3:52</td></tr>
+<tr><td>4</td><td>Colour each lot by how long it takes to earn its value.</td><td class="sk">Skipped, to Later</td></tr>
+</tbody></table>
+<h3>Shown to the room</h3>
+<ul>
+<li>Mid oranges on white come out near 2:1, so small orange text fails. <span class="mut">From Claude's research · 3:08 · 4 ideas sent about it</span></li>
+<li>The header shows the total in dollars. Would the room rather see it as hours of an average wage? <span class="mut">From Claude · 3:14 · 2 ideas sent about it</span></li>
+</ul>
+<p class="prev">Points never shown, voted on or sent are left out of the report. They stay in each person's folder in the repo.</p>
+</div></div></div>
+
+<p class="orangecount" id="orangecount">Counting orange buttons…</p>
+
+<div class="qs" id="qs"><h2 style="font:800 26px/1.2 var(--font-display);margin:0">Owner rulings 2026-10-09</h2>
+<ol>
+<li><b>Points is a tab beside Later.</b> One slot in the middle column, two tabs, as drawn in T1.</li>
+<li><b>The main button follows the ticks.</b> With 2 or more points ticked, <b>Put to a vote</b> is the orange button, right-most, with Send to Claude beside it as a secondary. With 1 ticked, <b>Send to Claude</b> is the orange (Put to a vote is disabled). Drawn in T3.</li>
+<li><b>Take it down offers the room's ideas.</b> With 2 or more ideas about the point, Take it down asks "Put the 4 ideas to a vote?" with Not now and Put to a vote (orange). With 0 or 1, it just takes the point down, and any idea waits in the queue tied to the point. Drawn in T4c.</li>
+</ol></div>
+
+<script>
+(function () {
+  var P = {
+    send: '<path d="M21 3 3 10.2l7.3 2.6L13 20z"/><path d="m10.3 12.8 4.4-4.4"/>',
+    house: '<path d="M4 10.5 12 4l8 6.5V20h-5.5v-5.5h-5V20H4z"/>',
+    out: '<path d="M14 4h6v6"/><path d="m20 4-8.5 8.5"/><path d="M18 14v5H5V6h5"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/>',
+    bulb: '<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+    list: '<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/>',
+    folder: '<path d="M3 6.5V18a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8.5a1 1 0 0 0-1-1h-8L10 5H4a1 1 0 0 0-1 1.5z"/>'
+  };
+  document.querySelectorAll('i[data-i]').forEach(function (el) {
+    el.outerHTML = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P[el.getAttribute('data-i')] + '</svg>';
+  });
+  /* Measure a real-size frame: overflow past its box, the smallest text, the tallest primary. */
+  function measure(boxId, outId) {
+    var box = document.getElementById(boxId), out = document.getElementById(outId);
+    if (!box || !out) return;
+    var b = box.getBoundingClientRect(), worst = 0, small = 999;
+    box.querySelectorAll('*').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (!r.width) return;
+      worst = Math.max(worst, r.right - b.right, b.left - r.left);
+      if ([].some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.textContent.trim(); })) {
+        small = Math.min(small, parseFloat(getComputedStyle(el).fontSize));
+      }
+    });
+    var hs = box.scrollWidth > box.clientWidth;
+    out.innerHTML = 'Measured live: <b>' + Math.round(b.width) + 'px</b> wide; widest overflow <b>' + Math.max(0, Math.round(worst)) + 'px</b>; ' +
+      'sideways scroll <b>' + (hs ? 'yes' : 'none') + '</b>; smallest text <b>' + small + 'px</b>.';
+  }
+  /* Count orange buttons per frame: every [data-frame] and every real-size device or window. */
+  function oranges() {
+    var frames = document.querySelectorAll('[data-frame], .dev, .wnd--flat'), bad = [];
+    frames.forEach(function (f) {
+      var n = f.querySelectorAll('.btn--primary, .dbtn--primary, .dvsend:not(.dvsend--off)').length;
+      if (n > 1) bad.push((f.getAttribute('data-frame') || f.id || 'frame') + ' (' + n + ')');
+    });
+    var out = document.getElementById('orangecount');
+    if (out) out.innerHTML = 'Checked live: <b>' + frames.length + '</b> frames; ' + (bad.length ? 'more than one orange button in: <b>' + bad.join(', ') + '</b>' : 'none has more than one orange button.');
+  }
+  window.addEventListener('load', function () {
+    measure('w375', 'm-w375'); measure('d-t4', 'm-t4'); measure('d-t7', 'm-t7'); oranges();
+  });
+})();
+</script>
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

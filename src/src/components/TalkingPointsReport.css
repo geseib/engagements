@@ -1,0 +1,39 @@
+/* Build Room report section (TalkingPointsReport.jsx). Paper colours come from GameReport.css. */
+.report-paper .tpr .tpr-lede { margin: 0 0 6px; color: var(--muted); }
+.report-paper .tpr .tpr-h {
+  margin: 24px 0 10px;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+.report-paper .tpr .tpr-group { margin: 0 0 16px; }
+.report-paper .tpr .tpr-subject { margin: 0 0 6px; }
+.report-paper .tpr ul { margin: 0; padding-left: 20px; }
+.report-paper .tpr li { margin-bottom: 8px; overflow-wrap: anywhere; }
+.report-paper .tpr .tpr-mut { color: var(--muted); font-size: 0.85rem; }
+.report-paper .tpr .tpr-src { display: block; font-size: 0.85rem; color: var(--info, var(--text)); text-decoration: underline; overflow-wrap: anywhere; }
+.report-paper .tpr .tpr-note { color: var(--muted); }
+.report-paper .tpr .tpr-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.report-paper .tpr .tpr-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-bottom: var(--report-rule);
+}
+.report-paper .tpr .tpr-table td { padding: 7px 8px; border-bottom: var(--report-rule); vertical-align: top; overflow-wrap: anywhere; }
+.report-paper .tpr .tpr-n { text-align: right; font-variant-numeric: tabular-nums; width: 3.5rem; }
+.report-paper .tpr .tpr-k { width: 2rem; }
+.report-paper .tpr .tpr-fw { color: var(--success); font-weight: 700; }
+.report-paper .tpr .tpr-sk { color: var(--muted); }
+.report-paper .tpr .tpr-foot { margin: 18px 0 0; color: var(--muted); font-size: 0.85rem; font-style: italic; }
+@media print {
+  .report-paper .tpr .tpr-keep { break-inside: avoid; page-break-inside: avoid; }
+  .report-paper .tpr .tpr-src, .report-paper .tpr .tpr-fw { color: inherit; }
+}
