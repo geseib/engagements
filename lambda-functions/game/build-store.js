@@ -454,7 +454,11 @@ function applyEdit(ask, body, { answered }) {
     if (answered) return { error: 'People have already answered, so the options can no longer change' };
     const opts = cleanOptions(b.options);
     if (opts.error) return opts;
-    next.Options = opts.value;
+    // An option made from a talking point keeps its point when its words stay.
+    next.Options = opts.value.map((o) => {
+      const old = (ask.Options || []).find((x) => x.title === o.title && x.pointId);
+      return old ? { ...o, pointId: old.pointId } : o;
+    });
     next.MaxPicks = Math.min(next.MaxPicks || 1, opts.value.length);
   }
   return { value: next };
@@ -584,7 +588,7 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null })),
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}) })),
     scale: ask.Kind === 'rating' ? RATING_SCALE : null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
@@ -634,6 +638,8 @@ function askView(ask, room, audience, me) {
   // mockups. Ready when every option has a picture; it never opens by itself
   // unless the host said "Open next" (owner, 2026-10-05).
   if (ask.FromIdeas && ask.FromIdeas.length) out.fromIdeas = ask.FromIdeas;
+  // A vote made from talking points (Task 2): the host's results step reads these.
+  if (isHost && ask.FromPoints && ask.FromPoints.length) out.fromPoints = ask.FromPoints;
   if (isHost && ask.ClaudeGets) out.claudeGets = ask.ClaudeGets;
   if (isHost && ask.ClaudeNote) out.claudeNote = ask.ClaudeNote;
   if (isHost && ask.FromQuestion) out.fromQuestion = ask.FromQuestion;
@@ -716,6 +722,8 @@ function ideaView(r) {
     source: r.Source || 'room',
     promotedTo: r.PromotedTo || null,
     promotedVia: r.PromotedVia || null,
+    // Sent while a talking point was on the Stage: tied to that point.
+    aboutPoint: r.AboutPoint || null,
   };
 }
 
@@ -1067,6 +1075,136 @@ function pointsDirection(rows) {
   return { error: 'Too much to send at once; send fewer' };
 }
 
+// ── Talking points, Task 2: the vote, the run list, the Stage ───────────────
+
+/** A vote made from points takes 2 to 8 (more than the 6 an ideas vote takes), 1 to 5 picks each. */
+const POINT_VOTE = Object.freeze({ min: 2, max: 8, picks: 3, maxPicks: 5 });
+const DEFAULT_POINT_VOTE_PROMPT = 'Which of these should we take forward?';
+const RUN_MAX_ITEMS = 8;
+const RUN_STATES = Object.freeze(['pending', 'doing', 'done', 'skipped']);
+
+/** "webaim.org" from a link, for the Stage ("Source: webaim.org"). */
+function siteOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
+}
+
+/** The ask the vote becomes. Options carry the point they came from. */
+function pointVoteAsk(points, body) {
+  const b = body || {};
+  if (points.length < POINT_VOTE.min) return { error: `Tick at least ${POINT_VOTE.min} points to put to a vote` };
+  if (points.length > POINT_VOTE.max) return { error: `A vote takes at most ${POINT_VOTE.max} points` };
+  let picks = POINT_VOTE.picks;
+  if (b.maxPicks !== undefined && b.maxPicks !== null && b.maxPicks !== '') {
+    const mp = Number(b.maxPicks);
+    if (!Number.isInteger(mp) || mp < 1 || mp > POINT_VOTE.maxPicks) return { error: `Picks each is a whole number from 1 to ${POINT_VOTE.maxPicks}` };
+    picks = mp;
+  }
+  const options = points.map((p, n) => {
+    const text = cleanText(p.Text, LIMITS.idea);
+    const title = text.length > LIMITS.optionTitle ? `${text.slice(0, LIMITS.optionTitle - 1).trimEnd()}…` : text;
+    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '', pointId: p.PointId };
+  });
+  return {
+    value: {
+      kind: 'choice',
+      prompt: cleanText(b.prompt, LIMITS.prompt) || DEFAULT_POINT_VOTE_PROMPT,
+      detail: cleanText(b.detail, LIMITS.detail),
+      options,
+      maxPicks: Math.min(picks, options.length),
+    },
+  };
+}
+
+/** What each point got in a vote: pointId -> count of people who picked it. */
+function pointVoteCounts(ask, room) {
+  const t = tally(ask, room);
+  const out = {};
+  for (const o of t.options || []) {
+    const src = (ask.Options || []).find((x) => x.label === o.label);
+    if (src && src.pointId) out[src.pointId] = o.count;
+  }
+  return out;
+}
+
+/** The point's fate in plain words, with the vote that got it there when it had one. */
+function outcomeFor(p, label) {
+  if (!label) return '';
+  return p.VoteCount !== undefined && p.VoteCount !== null ? `voted ${p.VoteCount}, ${label}` : label;
+}
+
+/** Point ids waiting their turn in a list that is running: other moves on them are refused. */
+function runPendingIds(room) {
+  const r = room.run;
+  if (!r || r.Status !== 'running') return new Set();
+  const marks = r.Marks || [];
+  return new Set((r.Items || []).filter((it, i) => (marks[i] || 'pending') === 'pending').map((it) => it.pointId));
+}
+
+/**
+ * The direction one run item carries. Capped so the "Run list, item k of n:"
+ * line in front still fits the direction limit; never cut.
+ */
+function runDirection(p) {
+  const room = LIMITS.direction - 80;
+  for (const withDetail of [true, false]) {
+    const text = pointDirectionText(p, { withDetail });
+    if (text.length <= room) return { value: text };
+  }
+  return { error: 'One of those is too long to send on its own; shorten it first' };
+}
+const runItemText = (k, n, dir) => `Run list, item ${k} of ${n}: ${dir}`;
+
+/**
+ * The run list. The host (and its Claude) see every item with its state and times;
+ * the room sees the words, the kind, the source site and the state: no point ids,
+ * no notes, no one's name but a builder's tag on their own point.
+ */
+function runView(run, audience) {
+  if (!run) return null;
+  const isHost = audience === 'host' || audience === 'agent';
+  const items = Array.isArray(run.Items) ? run.Items : [];
+  const marks = run.Marks || [];
+  const cur = Number(run.Cur) || 0;
+  const list = items.map((it, i) => ({
+    k: i + 1,
+    text: it.text || '',
+    kind: it.kind || 'talk',
+    site: it.site || '',
+    state: marks[i] || 'pending',
+    ...(it.byBuilder ? { by: it.byBuilder } : {}),
+    ...(isHost ? { pointId: it.pointId, sentAt: (run.SentAt || [])[i] || null, doneAt: (run.DoneAt || [])[i] || null, note: it.note || '' } : {}),
+  }));
+  const out = {
+    status: run.Status || 'running',
+    cur,
+    total: items.length,
+    startedAt: run.StartedAt || null,
+    finishedAt: run.FinishedAt || null,
+    items: list,
+  };
+  if (isHost) {
+    const nextIdx = marks.findIndex((m, i) => i < items.length && (m || 'pending') === 'pending');
+    out.claudeDone = Boolean(cur && marks[cur - 1] === 'done');
+    out.next = nextIdx >= 0 ? nextIdx + 1 : null;
+    out.ver = Number(run.Ver) || 0;
+  }
+  return out;
+}
+
+/** The point on the Stage, as the room may see it: words, kind, source site, who it came from. */
+function shownPointView(room) {
+  const p = (room.points || []).find((x) => x.Status === 'shown');
+  if (!p) return null;
+  const src = (p.Sources || [])[0];
+  return {
+    id: p.PointId,
+    kind: p.Kind,
+    text: p.Text || '',
+    site: src ? siteOf(src.url) : '',
+    from: p.ByRole === 'builder' ? p.By : 'claude',
+  };
+}
+
 function hostView({ gameId, meta, sessionState, room, players, now, audience = 'host' }) {
   const isAgent = audience === 'agent';
   return {
@@ -1095,6 +1233,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     briefDraft: isAgent ? null : draftView(room.state),
     images: room.images.map(imageView),
     points: isAgent ? pointsClaudeView(room, { role: 'agent' }) : pointsHostView(room),
+    run: runView(room.run, audience),
+    shownPoint: shownPointView(room),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
   };
@@ -1139,6 +1279,9 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     images: room.images.map(imageView),
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forRoom),
     lan: LAN.lanPublicView(room, now),
+    // The room sees a point only when the host shows it, and the run list once it starts.
+    shownPoint: shownPointView(room),
+    run: runView(room.run, 'public'),
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
     mine,
     rev: (room.state && room.state.Rev) || 0,
@@ -1294,6 +1437,7 @@ module.exports = {
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
+  POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

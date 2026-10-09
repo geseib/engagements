@@ -60,7 +60,14 @@ const fakeDoc = {
   send: async (cmd) => {
     const inp = cmd.input || {};
     switch (cmd.type) {
-      case 'put': store.set(key(inp.Item.PK, inp.Item.SK), JSON.parse(JSON.stringify(inp.Item))); return {};
+      case 'put': {
+        const cur = store.get(key(inp.Item.PK, inp.Item.SK));
+        const bad = () => { const e = new Error('cond'); e.name = 'ConditionalCheckFailedException'; throw e; };
+        if (inp.ConditionExpression === '#ver = :ver' && (!cur || cur.Ver !== inp.ExpressionAttributeValues[':ver'])) bad();
+        if (inp.ConditionExpression === 'attribute_not_exists(PK) OR #st <> :running' && cur && cur.Status === 'running') bad();
+      }
+      // falls through
+      case 'putrow': store.set(key(inp.Item.PK, inp.Item.SK), JSON.parse(JSON.stringify(inp.Item))); return {};
       case 'get': return { Item: store.get(key(inp.Key.PK, inp.Key.SK)) };
       case 'delete': store.delete(key(inp.Key.PK, inp.Key.SK)); return {};
       case 'update': return applyUpdate(inp);
@@ -693,6 +700,354 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     for (const s of ['Sealed one', 'Sealed two', 'Sealed three', 'webaim.org']) assert.ok(!at.includes(s), `${s} plaintext after re-put`);
     assert.strictEqual((await host('GET', 'state')).body.points.items[0].text, 'Sealed one');
     HA = HOST;
+  });
+
+
+  // ── Task 2 ──────────────────────────────────────────────────────────────────
+  const idsOf = async (n, kind = 'idea') => (await claude('POST', 'points', { points: Array.from({ length: n }, (_, i) => (kind === 'finding' ? finding(`Finding ${i + 1}`) : { kind, text: `Option ${i + 1} text`, ...(kind === 'idea' ? {} : {}) })) })).body.posted;
+  const pointRow = (id) => rowsOf('BUILD#POINT#').find((r) => r.PointId === id);
+  const vote = async (ids, extra) => host('POST', 'points/vote', { ids, ...(extra || {}) });
+  const answer = (name, askId, choice) => phone(name)('POST', 'respond', { askId, choice });
+  const closeAsk = (askId) => host('POST', `asks/${askId}`, { action: 'close' });
+  const inbox = async () => (await claude('GET', 'inbox')).body.inbox;
+
+  console.log('\nTask 2: vote from points');
+  await check('vote: 3 points become a live multi-pick ask (default 3 picks), options carry pointId, points are voting', async () => {
+    seed();
+    const ids = await idsOf(3);
+    const r = await vote(ids);
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    const a = r.body.ask;
+    assert.strictEqual(a.kind, 'choice');
+    assert.strictEqual(a.status, 'live');
+    assert.strictEqual(a.maxPicks, 3);
+    assert.deepStrictEqual(a.options.map((o) => o.pointId), ids);
+    assert.deepStrictEqual(a.fromPoints, ids);
+    for (const id of ids) { assert.strictEqual(pointRow(id).Status, 'voting'); assert.strictEqual(pointRow(id).ttl, 2000000000); }
+    assert.strictEqual(rowsOf('BUILD#ASK#')[0].ttl, 2000000000);
+    assert.strictEqual((await host('GET', 'state')).body.currentAskId, a.askId);
+    assert.strictEqual((await host('GET', 'state')).body.points.items[0].outcome, 'in a vote');
+    // phones see the options but never the point ids
+    const pv = (await phone('Priya')('GET', 'state')).body;
+    assert.ok(!JSON.stringify(pv).includes(ids[0]), 'no point id on a phone');
+    assert.strictEqual(pv.current.options.length, 3);
+  });
+  await check('vote: maxPicks 1-5 honoured, fewer options cap it, out of range 400', async () => {
+    seed();
+    const ids = await idsOf(4);
+    assert.strictEqual((await vote(ids, { maxPicks: 0 })).status, 400);
+    assert.strictEqual((await vote(ids, { maxPicks: 6 })).status, 400);
+    assert.strictEqual((await vote(ids, { maxPicks: 1.5 })).status, 400);
+    assert.strictEqual((await vote(ids.slice(0, 2))).body.ask.maxPicks, 2, 'two options cap three picks');
+    seed();
+    const more = await idsOf(4);
+    assert.strictEqual((await vote(more, { maxPicks: 5 })).body.ask.maxPicks, 4);
+    seed();
+    const four = await idsOf(4);
+    assert.strictEqual((await vote(four, { maxPicks: 2, prompt: 'Which first?' })).body.ask.maxPicks, 2);
+  });
+  await check('vote: 2 to 8 ids, 8 accepted, 1 and 9 refused, unknown 404, a sent point 409, Claude 403', async () => {
+    seed();
+    const ids = await idsOf(8);
+    assert.strictEqual((await vote([ids[0]])).status, 400);
+    assert.strictEqual((await vote([...ids, 'nope'])).status, 400);
+    assert.strictEqual((await vote([ids[0], 'nope'])).status, 404);
+    assert.strictEqual((await claude('POST', 'points/vote', { ids })).status, 403);
+    await host('POST', `points/${ids[0]}`, { action: 'send' });
+    assert.strictEqual((await vote(ids.slice(0, 3))).status, 409);
+    const ok = await vote(ids.slice(1));
+    assert.strictEqual(ok.status, 201);
+    assert.strictEqual(ok.body.ask.options.length, 7);
+    seed();
+    const nine = [...(await idsOf(8)), ...(await idsOf(1))];
+    assert.strictEqual((await vote(nine)).status, 400);
+    assert.strictEqual((await vote(nine.slice(0, 8))).body.ask.options.length, 8);
+  });
+  await check('vote: cancelling it (discard) puts the points back', async () => {
+    seed();
+    const ids = await idsOf(3);
+    await host('POST', `points/${ids[0]}`, { action: 'show' });
+    const a = (await vote(ids)).body.ask;
+    assert.strictEqual((await host('POST', `asks/${a.askId}`, { action: 'discard' })).status, 200);
+    for (const id of ids) assert.strictEqual(pointRow(id).Status, 'new');
+    assert.strictEqual(pointRow(ids[0]).Outcome, undefined);
+  });
+
+  console.log('\nTask 2: highlight and forward');
+  const votedAsk = async (n = 4) => {
+    seed();
+    const ids = await idsOf(n);
+    const a = (await vote(ids)).body.ask;
+    await answer('Priya', a.askId, ['A', 'B']);
+    await answer('Sam', a.askId, ['A', 'C']);
+    await answer('Marcus', a.askId, ['A']);
+    return { ids, askId: a.askId };
+  };
+  await check('forward: refused before results, for a plain ask, for foreign points; Claude 403', async () => {
+    const { ids, askId } = await votedAsk();
+    assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: [ids[0]] })).status, 409);
+    await closeAsk(askId);
+    assert.strictEqual((await claude('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: [ids[0]] })).status, 403);
+    assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'bogus', pointIds: [ids[0]] })).status, 400);
+    assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: [] })).status, 400);
+    assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: ['zzz'] })).status, 400);
+    const plain = (await host('POST', 'asks', { kind: 'choice', prompt: 'Plain?', options: ['x', 'y'] })).body.ask.askId;
+    await closeAsk(plain);
+    assert.strictEqual((await host('POST', `asks/${plain}`, { action: 'forward', then: 'send', pointIds: [ids[0]] })).status, 409);
+  });
+  await check('forward send: one Do-now direction, points sent with "voted N" outcomes, once only', async () => {
+    const { ids, askId } = await votedAsk();
+    await closeAsk(askId);
+    const r = await host('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: [ids[0], ids[1]] });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const inb = await inbox();
+    assert.strictEqual(inb.length, 1);
+    assert.strictEqual(inb[0].as, 'do-now');
+    assert.ok(inb[0].text.includes('Option 1 text') && inb[0].text.includes('Option 2 text'));
+    assert.strictEqual(pointRow(ids[0]).Status, 'sent');
+    assert.strictEqual(pointRow(ids[0]).Outcome, 'voted 3, sent to Claude');
+    assert.strictEqual(pointRow(ids[1]).Outcome, 'voted 1, sent to Claude');
+    assert.strictEqual(pointRow(ids[2]).Status, 'voting');
+    assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: [ids[0]] })).status, 409);
+    const digest = (await claude('GET', 'state')).body.points.digest;
+    assert.strictEqual(digest.find((d) => d.id === ids[0]).outcome, 'voted 3, sent to Claude');
+  });
+  await check('forward later-rest: the rest go to Later as held directions, the highlighted stay queued', async () => {
+    const { ids, askId } = await votedAsk();
+    await closeAsk(askId);
+    const r = await host('POST', `asks/${askId}`, { action: 'forward', then: 'later-rest', pointIds: [ids[0], ids[1]] });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.saved.sort(), [ids[2], ids[3]].sort());
+    assert.strictEqual(pointRow(ids[0]).Status, 'queued');
+    assert.strictEqual(pointRow(ids[2]).Status, 'later');
+    assert.strictEqual(pointRow(ids[2]).Outcome, 'voted 1, saved for later');
+    const later = (await host('GET', 'state')).body.brief.later.map((x) => x.text);
+    assert.ok(later.includes('Option 3 text') && later.includes('Option 4 text'));
+    assert.deepStrictEqual(await inbox(), [], 'nothing reaches Claude');
+    // the step stays open: send the highlighted next
+    assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: [ids[0], ids[1]] })).status, 200);
+    assert.strictEqual(pointRow(ids[0]).Status, 'sent');
+  });
+
+  console.log('\nTask 2: the run list');
+  const startRun = async (n = 3) => {
+    seed();
+    const ids = await idsOf(n);
+    const r = await host('POST', 'run', { pointIds: ids });
+    return { ids, r };
+  };
+  await check('run: starts, item 1 goes to Claude as Do now with runItem 1, the rest queued; row has ttl', async () => {
+    const { ids, r } = await startRun(3);
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.strictEqual(r.body.run.status, 'running');
+    assert.strictEqual(r.body.run.total, 3);
+    assert.deepStrictEqual(r.body.run.items.map((i) => i.state), ['doing', 'pending', 'pending']);
+    const inb = await inbox();
+    assert.strictEqual(inb.length, 1);
+    assert.strictEqual(inb[0].runItem, 1);
+    assert.strictEqual(inb[0].as, 'do-now');
+    assert.ok(inb[0].text.startsWith('Run list, item 1 of 3: ') && inb[0].text.includes('Option 1 text'));
+    assert.strictEqual(pointRow(ids[0]).Status, 'sent');
+    assert.strictEqual(pointRow(ids[0]).Outcome, 'run item 1');
+    assert.strictEqual(pointRow(ids[1]).Status, 'queued');
+    assert.strictEqual(rowsOf('BUILD#RUN')[0].ttl, 2000000000);
+    assert.strictEqual((await host('GET', 'state')).body.run.items[0].pointId, ids[0]);
+  });
+  await check('run: one at a time, 409 "Finish or stop the current list first"; claude/builder 403; bad ids', async () => {
+    const { ids } = await startRun(3);
+    const more = await idsOf(2);
+    const r = await host('POST', 'run', { pointIds: more });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.body.error, 'Finish or stop the current list first');
+    assert.strictEqual((await claude('POST', 'run', { pointIds: more })).status, 403);
+    assert.strictEqual((await claude('POST', 'run/next', {})).status, 403);
+    assert.strictEqual((await priya('POST', 'run/done', { runItem: 1 })).status, 403);
+    assert.strictEqual((await host('POST', 'run/done', { runItem: 1 })).status, 403);
+    await host('POST', 'run/stop');
+    assert.strictEqual((await host('POST', 'run', { pointIds: [] })).status, 400);
+    assert.strictEqual((await host('POST', 'run', { pointIds: [more[0], 'nope'] })).status, 404);
+    assert.strictEqual((await host('POST', 'run', { pointIds: [ids[0]] })).status, 409, 'a sent point is not available');
+    assert.strictEqual((await host('POST', 'run', { pointIds: more })).status, 201, 'a stopped list lets a new one start');
+  });
+  await check('run: a point waiting in the list cannot be voted, sent, shown or removed', async () => {
+    const { ids } = await startRun(3);
+    for (const action of ['send', 'show', 'later', 'remove']) assert.strictEqual((await host('POST', `points/${ids[1]}`, { action })).status, 409, action);
+    assert.strictEqual((await host('POST', 'points/send', { ids: [ids[1]] })).status, 409);
+    assert.strictEqual((await vote([ids[1], ids[2]])).status, 409);
+  });
+  await check('run next: before done 409 with a question, nothing sent; force sends; after done sends', async () => {
+    const { ids } = await startRun(3);
+    await inbox();
+    const early = await host('POST', 'run/next', {});
+    assert.strictEqual(early.status, 409);
+    assert.strictEqual(early.body.error, "Claude hasn't finished 1. Send 2 anyway?");
+    assert.strictEqual(early.body.needsConfirm, true);
+    assert.deepStrictEqual(await inbox(), []);
+    const d = await claude('POST', 'run/done', { runItem: 1, note: 'Header built. Committed.' });
+    assert.strictEqual(d.status, 200, JSON.stringify(d.body));
+    assert.strictEqual(d.body.run.claudeDone, true);
+    assert.strictEqual(d.body.run.items[0].note, 'Header built. Committed.');
+    assert.strictEqual(pointRow(ids[0]).Outcome, 'run item 1, done');
+    const n = await host('POST', 'run/next', {});
+    assert.strictEqual(n.status, 200);
+    assert.strictEqual(n.body.run.cur, 2);
+    const inb = await inbox();
+    assert.strictEqual(inb.length, 1);
+    assert.strictEqual(inb[0].runItem, 2);
+    assert.strictEqual(pointRow(ids[1]).Status, 'sent');
+    const forced = await host('POST', 'run/next', { force: true });
+    assert.strictEqual(forced.status, 200);
+    assert.strictEqual((await inbox())[0].runItem, 3);
+    assert.strictEqual((await host('POST', 'run/next', { force: true })).status, 409, 'nothing left');
+  });
+  await check('run next: two presses at once send once (stale "from" and the version guard)', async () => {
+    await startRun(3);
+    await inbox();
+    await claude('POST', 'run/done', { runItem: 1 });
+    const [a, b] = await Promise.all([host('POST', 'run/next', { from: 1 }), host('POST', 'run/next', { from: 1 })]);
+    assert.deepStrictEqual([a.status, b.status].sort(), [200, 409]);
+    const items = await inbox();
+    assert.strictEqual(items.filter((x) => x.runItem === 2).length, 1);
+    const [c, d] = await Promise.all([host('POST', 'run/next', { force: true }), host('POST', 'run/next', { force: true })]);
+    assert.ok([c.status, d.status].includes(200));
+    const sentNow = (await inbox()).filter((x) => x.runItem);
+    assert.ok(sentNow.every((x, i, arr) => arr.findIndex((y) => y.runItem === x.runItem) === i), 'no item sent twice');
+  });
+  await check('run done: agent only, range and state checked, repeat is harmless, last done finishes the list', async () => {
+    const { ids } = await startRun(2);
+    assert.strictEqual((await claude('POST', 'run/done', { runItem: 0 })).status, 400);
+    assert.strictEqual((await claude('POST', 'run/done', { runItem: 3 })).status, 400);
+    assert.strictEqual((await claude('POST', 'run/done', { runItem: 2 })).status, 409, 'not sent yet');
+    assert.strictEqual((await claude('POST', 'run/done', { runItem: 1 })).status, 200);
+    const again = await claude('POST', 'run/done', { runItem: 1 });
+    assert.strictEqual(again.status, 200);
+    assert.strictEqual(again.body.already, true);
+    await host('POST', 'run/next', {});
+    const last = await claude('POST', 'run/done', { runItem: 2 });
+    assert.strictEqual(last.body.run.status, 'finished');
+    assert.strictEqual(pointRow(ids[1]).Outcome, 'run item 2, done');
+    assert.strictEqual((await host('POST', 'run/next', {})).status, 409);
+  });
+  await check('run skip: the next item goes to Later and the one after is next; stop sends the rest to Later', async () => {
+    const { ids } = await startRun(4);
+    await claude('POST', 'run/done', { runItem: 1 });
+    const s1 = await host('POST', 'run/skip');
+    assert.strictEqual(s1.status, 200);
+    assert.deepStrictEqual(s1.body.run.items.map((i) => i.state), ['done', 'skipped', 'pending', 'pending']);
+    assert.strictEqual(s1.body.run.next, 3);
+    assert.strictEqual(pointRow(ids[1]).Status, 'later');
+    assert.strictEqual(pointRow(ids[1]).Outcome, 'run item 2, skipped to Later');
+    assert.ok((await host('GET', 'state')).body.brief.later.some((x) => x.text === 'Option 2 text'));
+    const st = await host('POST', 'run/stop');
+    assert.strictEqual(st.body.run.status, 'stopped');
+    assert.strictEqual(pointRow(ids[2]).Status, 'later');
+    assert.strictEqual(pointRow(ids[3]).Status, 'later');
+    assert.strictEqual((await host('POST', 'run/skip')).status, 409);
+    assert.strictEqual((await host('POST', 'run/stop')).status, 409);
+  });
+  await check('forward run: highlighted points start the list in the given order; a second is refused', async () => {
+    const { ids, askId } = await votedAsk();
+    await closeAsk(askId);
+    const r = await host('POST', `asks/${askId}`, { action: 'forward', then: 'run', pointIds: [ids[2], ids[0]] });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.run.items.map((i) => i.pointId), [ids[2], ids[0]]);
+    assert.strictEqual(pointRow(ids[2]).Outcome, 'voted 1, run item 1');
+    assert.strictEqual(pointRow(ids[0]).Outcome, 'voted 3, queued, run item 2');
+    assert.strictEqual((await inbox())[0].runItem, 1);
+    assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'run', pointIds: [ids[1]] })).status, 409);
+  });
+
+  console.log('\nTask 2: Stage, phones, ideas');
+  await check('show/hide: one point at a time; the room sees words, kind, site, source; never detail or names', async () => {
+    seed();
+    const ids = (await claude('POST', 'points', { points: [{ ...finding('Contrast floor is 4.5:1'), detail: 'secret host detail' }, pt('Second')] })).body.posted;
+    await host('POST', `points/${ids[0]}`, { action: 'show' });
+    let pv = (await phone('Priya')('GET', 'state')).body;
+    assert.deepStrictEqual(pv.shownPoint, { id: ids[0], kind: 'finding', text: 'Contrast floor is 4.5:1', site: 'webaim.org', from: 'claude' });
+    assert.ok(!JSON.stringify(pv).includes('secret host detail'));
+    assert.strictEqual(pv.points, undefined);
+    await host('POST', `points/${ids[1]}`, { action: 'show' });
+    pv = (await phone('Priya')('GET', 'state')).body;
+    assert.strictEqual(pv.shownPoint.id, ids[1]);
+    assert.strictEqual(pointRow(ids[0]).Status, 'new');
+    assert.strictEqual((await host('GET', 'state')).body.shownPoint.id, ids[1]);
+    await host('POST', `points/${ids[1]}`, { action: 'hide' });
+    assert.strictEqual((await phone('Priya')('GET', 'state')).body.shownPoint, null);
+  });
+  await check('ideas sent while shown carry aboutPoint; hide returns ideasAbout and the ids; none = 0', async () => {
+    seed();
+    const ids = (await claude('POST', 'points', { points: [pt('Talk A'), pt('Talk B')] })).body.posted;
+    await phone('Sam')('POST', 'idea', { text: 'before it was up' });
+    await host('POST', `points/${ids[0]}`, { action: 'show' });
+    await phone('Priya')('POST', 'idea', { text: 'idea one' });
+    await phone('Sam')('POST', 'idea', { text: 'idea two' });
+    const ideas = (await host('GET', 'state')).body.ideas;
+    assert.strictEqual(ideas.find((i) => i.text === 'idea one').aboutPoint, ids[0]);
+    assert.strictEqual(ideas.find((i) => i.text === 'before it was up').aboutPoint, null);
+    const h = await host('POST', `points/${ids[0]}`, { action: 'hide' });
+    assert.strictEqual(h.body.ideasAbout, 2);
+    assert.strictEqual(h.body.ideaIds.length, 2);
+    await host('POST', `points/${ids[1]}`, { action: 'show' });
+    assert.strictEqual((await host('POST', `points/${ids[1]}`, { action: 'hide' })).body.ideasAbout, 0);
+    // the vote from them uses the existing route
+    const v = await host('POST', 'asks-from-ideas', { ideaIds: h.body.ideaIds });
+    assert.strictEqual(v.status, 201);
+  });
+  await check('phone run view: text, kind, site, state; no point ids, notes or participant names', async () => {
+    seed();
+    const ids = (await claude('POST', 'points', { points: [finding('First finding'), pt('Second')] })).body.posted;
+    await host('POST', 'run', { pointIds: ids });
+    await claude('POST', 'run/done', { runItem: 1, note: 'PRIVATE NOTE' });
+    const pv = (await phone('Priya')('GET', 'state')).body;
+    assert.strictEqual(pv.run.status, 'running');
+    assert.deepStrictEqual(pv.run.items.map((i) => [i.k, i.text, i.kind, i.site, i.state]), [[1, 'First finding', 'finding', 'webaim.org', 'done'], [2, 'Second', 'talk', '', 'pending']]);
+    const text = JSON.stringify(pv.run);
+    for (const bad of ['PRIVATE NOTE', ids[0], 'Priya', 'Sam', 'Marcus', 'pointId']) assert.ok(!text.includes(bad), bad);
+    const h = (await host('GET', 'state')).body.run;
+    assert.strictEqual(h.items[0].note, 'PRIVATE NOTE');
+  });
+  await check('a builder tag shows on the room view only for that builder\'s point', async () => {
+    seed();
+    await host('POST', 'crew/settings', { enabled: true, modes: ['fork'] });
+    await phone('Priya')('POST', 'crew/builder-key');
+    const bp = (await priya('POST', 'points', { points: [pt('From Priya claude')] })).body.posted;
+    const cp = (await claude('POST', 'points', { points: [pt('From host claude')] })).body.posted;
+    await host('POST', `points/${bp[0]}`, { action: 'show' });
+    assert.strictEqual((await phone('Sam')('GET', 'state')).body.shownPoint.from, 'Priya');
+    await host('POST', `points/${bp[0]}`, { action: 'hide' });
+    await host('POST', 'run', { pointIds: [cp[0], bp[0]] });
+    const run = (await phone('Sam')('GET', 'state')).body.run;
+    assert.strictEqual(run.items[0].by, undefined);
+    assert.strictEqual(run.items[1].by, 'Priya');
+    assert.strictEqual((await priya('POST', 'run/done', { runItem: 1 })).status, 403);
+  });
+  await check('team room: run items and vote options sealed at rest, still read back; ttl on the run', async () => {
+    seed({ orgId: ORG });
+    HA = TEAM_HOST;
+    const ids = (await claude('POST', 'points', { points: [pt('Sealed run alpha'), pt('Sealed run beta')] })).body.posted;
+    await host('POST', 'run', { pointIds: ids });
+    await claude('POST', 'run/done', { runItem: 1, note: 'Sealed note' });
+    await host('POST', 'run/next', {});
+    const at = raw();
+    for (const t of ['Sealed run alpha', 'Sealed run beta', 'Sealed note']) assert.ok(!at.includes(t), `${t} in plaintext`);
+    assert.strictEqual(rowsOf('BUILD#RUN')[0].ttl, 2000000000);
+    const run = (await host('GET', 'state')).body.run;
+    assert.strictEqual(run.items[1].text, 'Sealed run beta');
+    assert.strictEqual(run.items[0].note, 'Sealed note');
+    HA = HOST;
+  });
+  await check('you.name: the host\'s Claude gets the host name; a builder gets their own', async () => {
+    seed();
+    const m = store.get(key(`GAME#${GAME}`, 'METADATA'));
+    m.HostName = 'Dana Host';
+    assert.deepStrictEqual((await claude('GET', 'state')).body.you, { role: 'host-claude', name: 'Dana Host' });
+    assert.strictEqual((await priya('GET', 'state')).body.you.name, 'Priya');
+  });
+  await check('a vote\'s tied revote keeps the point on its options', async () => {
+    const { ids, askId } = await votedAsk(3);
+    const a2 = (await host('POST', `asks/${askId}`, { action: 'reask' })).body.ask;
+    assert.deepStrictEqual(a2.options.map((o) => o.pointId), ids);
+    assert.deepStrictEqual(a2.fromPoints, ids);
   });
 
   console.log(`\n${pass} passed, ${failed} failed`);

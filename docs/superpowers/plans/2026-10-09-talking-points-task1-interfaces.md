@@ -53,3 +53,35 @@ Changed interfaces (these supersede the text above):
 - The agent's `log` in `GET build/state` no longer contains held (Later) entries; the host's still does (`held:true`).
 
 Tests: build-points 41/0 (new checks for I1, I2 incl. overlapping batch+done, M3-M11), build-room 111/0, build-crew 22/0, tenant-crypto and tenant-crypto-wiring exit 0, full backend loop `LOOP DONE` with no FAIL lines.
+
+# Task 2: vote from points, highlight, run list, Stage (server), as built
+
+All routes under `/games/{id}/build/`. Host = the signed-in host; Claude = the host's Claude (agent key). Builders get 403 on all of these.
+
+## Vote
+- `POST points/vote` (host) `{ids (2-8), prompt?, detail?, maxPicks?}` -> 201 `{ask}`. A live Choose ask, made current. Options `{label,title,detail,url,pointId}` (pointId only in host/agent views, never on phones); ask view has `fromPoints:[ids]`. maxPicks 1-5, default 3, capped at the option count; anything else is 400. 400 for <2 or >8 ids, 404 unknown/removed, 409 point not open (new/shown/queued) or waiting in a running list. Points become `voting` (outcome "in a vote"), with `PromotedTo`/`PriorStatus`. Discarding the ask restores them; re-ask and revote keep pointId/FromPoints.
+
+## Forward (the highlight result)
+- `POST asks/{askId}` `{action:'forward', pointIds, then:'send'|'run'|'later-rest'}` (host; Claude 403). The ask must come from points (409) and be `results` or `decided` (409 "Close the vote first"). pointIds must be in the vote (400) and be `voting` or `queued` (409; so a second forward of the same points is 409).
+  - `send` -> 200 `{ask, sent:[ids]}`: ONE Do-now direction, points `sent`, outcome "voted N, sent to Claude".
+  - `run` -> 200 `{ask, run}`: starts the list in the given order (see Run). 409 if one is running.
+  - `later-rest` -> 200 `{ask, saved:[ids], highlighted:[ids]}`: points in the vote not in pointIds (still voting/queued) go to Later as held directions (`later`, "voted N, saved for later"); pointIds become `queued` ("voted N, highlighted"); the step stays open, so send/run can follow. pointIds may be empty here.
+- Point rows get `VoteCount`; every later outcome is prefixed "voted N, ".
+
+## Run (row `BUILD#RUN`, sealed field `Items`, ttl, one at a time)
+- `POST run` (host) `{pointIds (1-8, in order)}` -> 201 `{run}`. Points must be new/shown/queued. 409 "Finish or stop the current list first" while one has status running. Item 1 goes to Claude at once; its point is `sent` ("run item 1"); the rest `queued` ("queued, run item k"). Direction text: `Run list, item k of n: <point text, detail, sources>`; the inbox item has `runItem: k` (key present only for run items).
+- `POST run/next` (host) `{force?, from?}` -> 200 `{run}`. Sends the first pending item. 409 `{error:"Claude hasn't finished k. Send j anyway?", needsConfirm:true, cur, next}` unless `force:true` while the current item is not done. `from` (optional) = the Cur the screen saw; a mismatch is 409 "The list has moved on". 409 when nothing is pending.
+- `POST run/skip` (host) -> the first pending item (the one Next would send) is skipped to Later; the one after becomes next. `POST run/stop` (host) -> every pending item to Later, status `stopped`.
+- `POST run/done` (host's Claude only; host 403) `{runItem, note?}` -> 200 `{run}`; repeat is 200 with `already:true`; 400 out of range, 409 if not sent or skipped. The point outcome becomes "run item k, done". When nothing is pending or doing, status becomes `finished`.
+- Writes are conditional on `Ver` (create: not running), retried 3 times after a lost race, so two presses send once.
+- runView: `{status: running|finished|stopped, cur, total, startedAt, finishedAt, items:[{k,text,kind,site,state: pending|doing|done|skipped, by? (builder tag)}]}`. Host/agent also get per item `pointId, sentAt, doneAt, note`, and `claudeDone`, `next`, `ver`.
+
+## Show / hide
+- `show` sets one point `shown` (any other shown goes back to `new`). `hide` -> 200 `{point, ideasAbout:N, ideaIds:[...]}`: the room's still-`new` ideas sent while it was up. Phone ideas sent while a point is shown carry `AboutPoint`; the host's idea view has `aboutPoint` (null otherwise). The vote from those ideas is the existing `asks-from-ideas`.
+- A point waiting in a running list refuses show/later/send/remove, `points/send`, and vote (409 "That point is waiting in the list Claude is working through; skip it there").
+
+## Views
+- `hostView` (host and Claude): `run` (host shape) and `shownPoint`.
+- Phones (`build-play state`) and anything Stage-facing: `shownPoint: {id, kind, text, site, from}` (`from` = 'claude' or a builder's name; site = host name of the first source; no detail, no sources list) and `run` (room shape: no point ids, no notes). No `points` key. Never a participant name.
+- Outcomes: every move sets the point's `Outcome` (voted N, sent to Claude, run item k, run item k, done, highlighted, saved for later, skipped to Later, removed); the Claude/builder `points.digest` reports it.
+- `GET build/state` as the host's Claude: `you: {role:'host-claude', name}` where name = the session's HostName as the host screen shows it (empty string if none). A builder's state: `you: {role:'builder', name}` (already so).

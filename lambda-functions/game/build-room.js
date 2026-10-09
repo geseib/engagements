@@ -147,7 +147,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -167,6 +167,8 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(forBuilder ? { ForBuilder: forBuilder } : {}),
     ...(shareId ? { ShareId: shareId } : {}),
     ...(name ? { Name: name } : {}),
+    // A run-list item (the room's list, taken in turn): Claude reports it done with this number.
+    ...(runItem ? { RunItem: runItem } : {}),
     ...(spoken ? { Spoken: true } : {}),
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
     ...(forAgent ? { ForAgentAs: kind4 } : {}),
@@ -259,7 +261,8 @@ async function hostState(ctx, audience) {
   const view = S.hostView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, now: new Date().toISOString(), audience });
   view.crew = C.crewView(room, audience === 'agent' ? 'agent' : 'host', null);
   // The host's Claude may only run crew code when the host's switch says so.
-  if (audience === 'agent') view.you = { role: 'host-claude' };
+  // `name` = the host's name as the host screen shows it: the plugin names the repo folder with it.
+  if (audience === 'agent') view.you = { role: 'host-claude', name: S.cleanText(ctx.meta && ctx.meta.HostName, 60) };
   return { room, view };
 }
 
@@ -362,7 +365,9 @@ async function reaskAction(ctx, room, ask, b) {
     usedOld.add(i);
     picked[i] = imageOfOld(oldOpts[i]);
   });
-  const options = v.options.map((o, i) => (picked[i] ? { ...o, imageId: picked[i] } : o));
+  const pointOf = (o) => { const old = oldOpts.find((x) => x.title === o.title && x.pointId); return old ? old.pointId : ''; };
+  const options = v.options.map((o, i) => ({ ...o, ...(picked[i] ? { imageId: picked[i] } : {}), ...(pointOf(o) ? { pointId: pointOf(o) } : {}) }));
+  const fromPoints = options.map((o) => o.pointId).filter(Boolean);
   const now = new Date().toISOString();
   // Close everything still open first (the old ask among it), so there is never a moment with two.
   for (const other of room.asks) {
@@ -385,6 +390,7 @@ async function reaskAction(ctx, room, ask, b) {
     ...(ask.ClaudeGets ? { ClaudeGets: ask.ClaudeGets } : {}),
     ...(ask.ClaudeNote ? { ClaudeNote: ask.ClaudeNote } : {}),
     ...(ask.OpeningStep ? { OpeningStep: ask.OpeningStep, ...(ask.Probe ? { Probe: true } : {}) } : {}),
+    ...(fromPoints.length ? { FromPoints: fromPoints } : {}),
   });
   await touchState(ctx, { set: { CurrentAskId: newId } });
   await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
@@ -401,6 +407,7 @@ async function askAction(ctx, role, askId, body) {
   if (!ask) return fail(404, `No ask ${askId}`);
   const action = String(b.action || '').toLowerCase();
   if (action === 'reask') return reaskAction(ctx, room, ask, b);
+  if (action === 'forward') return role === 'host' ? forwardAction(ctx, room, ask, b) : fail(403, 'Only the host moves points forward');
   if (WHEEL_ACTIONS.includes(action)) return wheelAction(ctx, role, room, ask, action, b);
   const now = new Date().toISOString();
   const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
@@ -501,6 +508,17 @@ async function askAction(ctx, role, askId, body) {
           await put(ctx, back);
         }
       }
+      // The same for a vote made from talking points.
+      for (const id of ask.FromPoints || []) {
+        const pt = findPoint(room, id);
+        if (pt && pt.Status === 'voting' && pt.PromotedTo === askId) {
+          const back = { ...pt, Status: pt.PriorStatus === 'queued' ? 'queued' : 'new', UpdatedAt: now };
+          delete back.PromotedTo;
+          delete back.PriorStatus;
+          delete back.Outcome;
+          await put(ctx, back);
+        }
+      }
       // ...and the directions the vote took off the Later list go back on it.
       if (Array.isArray(ask.FromLater) && ask.FromLater.length) await restoreToLater(ctx, ask.FromLater);
     }
@@ -594,7 +612,8 @@ async function wheelAction(ctx, role, room, ask, action, b) {
       const images = S.optionImages(room, askId);
       const options = (ask.Options || []).filter((o) => tied.includes(o.label))
         .map((o) => ({ ...o, ...(o.imageId || images[o.label] ? { imageId: o.imageId || images[o.label] } : {}) }));
-      await put(ctx, { ...base, Detail: `A tie between ${options.map((o) => o.label).join(' and ')}. Vote again.`, Options: options, Status: 'live' });
+      const fromPoints = options.map((o) => o.pointId).filter(Boolean);
+      await put(ctx, { ...base, Detail: `A tie between ${options.map((o) => o.label).join(' and ')}. Vote again.`, Options: options, Status: 'live', ...(fromPoints.length ? { FromPoints: fromPoints } : {}) });
     } else {
       await put(ctx, { ...base, Detail: 'A tie. Vote again between these.', Options: [], Status: 'voting', VotingAt: now });
       const resps = room.resps.filter((r) => r.AskId === askId && tied.includes(r.RespId));
@@ -1180,7 +1199,7 @@ async function takeInbox(ctx, role) {
         ConditionExpression: 'attribute_not_exists(DeliveredAt)',
         ExpressionAttributeValues: { ':now': now },
       }));
-      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), as: S.claudeGetsOf(d.ForAgentAs), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt });
+      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), as: S.claudeGetsOf(d.ForAgentAs), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt, ...(d.RunItem ? { runItem: d.RunItem } : {}) });
     } catch (e) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
     }
@@ -1904,6 +1923,16 @@ async function pointRequestAction(ctx, reqId, body) {
   return done(ctx, 200, { request: S.requestView(saved) });
 }
 
+const WAITING_IN_RUN = 'That point is waiting in the list Claude is working through; skip it there';
+
+/** A point moved to `status`: its outcome in plain words (with the vote that got it there), run bookkeeping cleared. */
+function repoint(p, status, now, label = S.POINT_OUTCOMES[status], extra = {}) {
+  const row = { ...p, Status: status, UpdatedAt: now, ...extra };
+  const outcome = S.outcomeFor(row, label);
+  if (outcome) row.Outcome = outcome; else delete row.Outcome;
+  return row;
+}
+
 /** What the host may do with one point. */
 async function pointAction(ctx, pointId, body) {
   const action = String((body || {}).action || '');
@@ -1911,9 +1940,11 @@ async function pointAction(ctx, pointId, body) {
   const room = await loadRoom(ctx);
   const p = findPoint(room, pointId);
   if (!p || p.Status === 'removed') return fail(404, 'No such point');
+  if (S.runPendingIds(room).has(pointId)) return fail(409, WAITING_IN_RUN);
   const status = p.Status || 'new';
   const now = new Date().toISOString();
   let next = status;
+  let ideas = null;
   if (action === 'remove') next = 'removed';
   else if (action === 'later') {
     if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
@@ -1924,11 +1955,13 @@ async function pointAction(ctx, pointId, body) {
     if (status === 'shown') return done(ctx, 200, { point: S.pointView(p) });
     if (!['new', 'queued'].includes(status)) return fail(409, 'That point cannot go on the Stage now');
     // One point on the Stage at a time: any other comes down.
-    for (const other of room.points) if (other.Status === 'shown') await put(ctx, { ...other, Status: 'new', UpdatedAt: now });
+    for (const other of room.points) if (other.Status === 'shown') await put(ctx, repoint(other, 'new', now));
     next = 'shown';
   } else if (action === 'hide') {
     if (status !== 'shown') return fail(409, 'That point is not on the Stage');
     next = 'new';
+    // The ideas the room sent while it was up: the host may put them to a vote (T4c).
+    ideas = room.ideas.filter((i) => i.AboutPoint === pointId && (i.Status || 'new') === 'new').map((i) => i.IdeaId);
   } else if (action === 'send') {
     if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
     const dir = S.pointsDirection([p]);
@@ -1936,8 +1969,8 @@ async function pointAction(ctx, pointId, body) {
     await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now' });
     next = 'sent';
   }
-  const saved = await put(ctx, { ...p, Status: next, UpdatedAt: now });
-  return done(ctx, 200, { point: S.pointView(saved) });
+  const saved = await put(ctx, repoint(p, next, now));
+  return done(ctx, 200, { point: S.pointView(saved), ...(ideas ? { ideasAbout: ideas.length, ideaIds: ideas } : {}) });
 }
 
 /** Several points to Claude as ONE direction. Nothing is sent unless every id can be. */
@@ -1949,12 +1982,295 @@ async function sendPoints(ctx, body) {
   const rows = ids.map((id) => findPoint(room, id));
   if (rows.some((p) => !p)) return fail(404, 'One of those points is gone');
   if (rows.some((p) => !S.OPEN_POINT_STATUSES.includes(p.Status || 'new'))) return fail(409, 'One of those points is already on its way somewhere else');
+  const waiting = S.runPendingIds(room);
+  if (ids.some((id) => waiting.has(id))) return fail(409, WAITING_IN_RUN);
   const dir = S.pointsDirection(rows);
   if (dir.error) return fail(400, dir.error);
   await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now' });
   const now = new Date().toISOString();
-  for (const p of rows) await put(ctx, { ...p, Status: 'sent', UpdatedAt: now });
+  for (const p of rows) await put(ctx, repoint(p, 'sent', now));
   return done(ctx, 200, { sent: ids });
+}
+
+// ── Vote from points, the highlight, the run list ───────────────────────────
+//
+// The host ticks 2 to 8 points and puts them to a vote (a multi-pick Choose
+// ask whose options carry the point). At results the host highlights the ones
+// to move forward and sends them to Claude, works through them in turn, or
+// saves the rest for Later. The run is one row, BUILD#RUN, one at a time; it
+// changes under a version number so two presses cannot both win.
+
+/** The points an id list names, or the plain refusal. `statuses` = the states a point may be in. */
+function pickPoints(room, ids, statuses) {
+  const rows = ids.map((id) => findPoint(room, id));
+  if (rows.some((p) => !p || p.Status === 'removed')) return { response: fail(404, 'One of those points is gone') };
+  if (rows.some((p) => !statuses.includes(p.Status || 'new'))) return { response: fail(409, 'One of those points is already on its way somewhere else') };
+  const waiting = S.runPendingIds(room);
+  if (ids.some((id) => waiting.has(id))) return { response: fail(409, WAITING_IN_RUN) };
+  return { rows };
+}
+const idList = (v) => (Array.isArray(v) ? [...new Set(v.map(String))] : []);
+
+async function pointsVote(ctx, body) {
+  const b = body || {};
+  const ids = idList(b.ids);
+  if (ids.length < S.POINT_VOTE.min) return fail(400, `Tick at least ${S.POINT_VOTE.min} points to put to a vote`);
+  if (ids.length > S.POINT_VOTE.max) return fail(400, `A vote takes at most ${S.POINT_VOTE.max} points`);
+  const room = await loadRoom(ctx);
+  const got = pickPoints(room, ids, S.OPEN_POINT_STATUSES);
+  if (got.response) return got.response;
+  const norm = S.pointVoteAsk(got.rows, b);
+  if (norm.error) return fail(400, norm.error);
+  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const askId = S.pad3(st.AskSeq || 1);
+  const now = new Date().toISOString();
+  const v = norm.value;
+  await put(ctx, {
+    SK: S.SK.ask(askId), AskId: askId, Kind: v.kind, Prompt: v.prompt, Detail: v.detail, Options: v.options, MaxPicks: v.maxPicks,
+    Status: 'live', Source: 'host', CreatedAt: now, OpenedAt: now, FromPoints: ids,
+  });
+  for (const p of got.rows) await put(ctx, repoint(p, 'voting', now, 'in a vote', { PromotedTo: askId, PriorStatus: p.Status || 'new' }));
+  await makeCurrent(ctx, room, askId, 'host');
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { ask: S.askView(findAsk(after, askId), after, 'host') });
+}
+
+/**
+ * The highlight result (asks/{id} action 'forward'). `pointIds` are the ones
+ * highlighted; `then` is what to do with them:
+ *   send       one direction to Claude, Do now
+ *   run        start the run list with them, in this order
+ *   later-rest the points not highlighted go to Later; the highlighted stay queued
+ */
+async function forwardAction(ctx, room, ask, b) {
+  const askId = ask.AskId;
+  if (!Array.isArray(ask.FromPoints) || !ask.FromPoints.length) return fail(409, 'This vote was not made from points');
+  if (!['results', 'decided'].includes(ask.Status)) return fail(409, 'Close the vote first; this comes after the results');
+  const then = String(b.then || '');
+  if (!['send', 'run', 'later-rest'].includes(then)) return fail(400, 'then must be send, run or later-rest');
+  const ids = idList(b.pointIds);
+  if (then !== 'later-rest' && !ids.length) return fail(400, 'Highlight at least one point');
+  if (ids.some((id) => !ask.FromPoints.includes(id))) return fail(400, 'One of those points was not in this vote');
+  const got = pickPoints(room, ids, ['voting', 'queued']);
+  if (got.response) return got.response;
+  const counts = S.pointVoteCounts(ask, room);
+  const now = new Date().toISOString();
+  const voted = (p) => ({ VoteCount: counts[p.PointId] || 0 });
+  let result;
+  if (then === 'send') {
+    const dir = S.pointsDirection(got.rows);
+    if (dir.error) return fail(400, dir.error);
+    await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now', askId });
+    for (const p of got.rows) await put(ctx, repoint(p, 'sent', now, 'sent to Claude', voted(p)));
+    result = { sent: ids };
+  } else if (then === 'run') {
+    const started = await startRun(ctx, room, got.rows, now, (p) => voted(p));
+    if (started.response) return started.response;
+    result = { run: started.run };
+  } else {
+    const waiting = S.runPendingIds(room);
+    const rest = ask.FromPoints.filter((id) => !ids.includes(id)).map((id) => findPoint(room, id))
+      .filter((p) => p && ['voting', 'queued'].includes(p.Status) && !waiting.has(p.PointId));
+    for (const p of rest) {
+      await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
+      await put(ctx, repoint(p, 'later', now, 'saved for later', voted(p)));
+    }
+    for (const p of got.rows) await put(ctx, repoint(p, 'queued', now, 'highlighted', voted(p)));
+    result = { saved: rest.map((p) => p.PointId), highlighted: ids };
+  }
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host'), ...result, ...(then === 'run' ? { run: S.runView(after.run, 'host') } : {}) });
+}
+
+/** One conditional write of the run row: false when someone else changed it first. */
+async function writeRun(ctx, row, expectedVer) {
+  const cond = expectedVer === null
+    ? { ConditionExpression: 'attribute_not_exists(PK) OR #st <> :running', ExpressionAttributeNames: { '#st': 'Status' }, ExpressionAttributeValues: { ':running': 'running' } }
+    : { ConditionExpression: '#ver = :ver', ExpressionAttributeNames: { '#ver': 'Ver' }, ExpressionAttributeValues: { ':ver': expectedVer } };
+  try {
+    await db.send(new PutCommand({ TableName: TABLE(), Item: await seal(ctx, { PK: ctx.pk, ...row, ttl: ctx.ttl }), ...cond }));
+    return true;
+  } catch (e) {
+    if (e && e.name === 'ConditionalCheckFailedException') return false;
+    throw e;
+  }
+}
+
+/** Send item k of the running list to the host's Claude, as Do now. */
+const sendRunItem = (ctx, run, k, extra = {}) => logEntry(ctx, {
+  kind: 'direction', text: S.runItemText(k, run.Items.length, run.Items[k - 1].dir), by: 'host', forAgent: true, as: 'do-now', runItem: k, ...extra,
+});
+
+/** Start a list from these points, in order. Item 1 goes to Claude at once. */
+async function startRun(ctx, room, rows, now, voteFields) {
+  if (!rows.length) return { response: fail(400, 'Choose at least one point to work through') };
+  if (rows.length > S.RUN_MAX_ITEMS) return { response: fail(400, `A list takes at most ${S.RUN_MAX_ITEMS} points`) };
+  if (room.run && room.run.Status === 'running') return { response: fail(409, 'Finish or stop the current list first') };
+  const items = [];
+  for (const p of rows) {
+    const dir = S.runDirection(p);
+    if (dir.error) return { response: fail(400, dir.error) };
+    const src = (p.Sources || [])[0];
+    items.push({
+      pointId: p.PointId, text: p.Text || '', kind: p.Kind, site: src ? S.siteOf(src.url) : '', dir: dir.value,
+      ...(p.ByRole === 'builder' ? { byBuilder: p.By } : {}),
+    });
+  }
+  const n = items.length;
+  const row = {
+    SK: S.SK.run,
+    RunId: S.newId(),
+    Status: 'running',
+    Cur: 1,
+    Marks: items.map((it, i) => (i === 0 ? 'doing' : 'pending')),
+    SentAt: items.map((it, i) => (i === 0 ? now : '')),
+    DoneAt: items.map(() => ''),
+    Items: items,
+    Ver: ((room.run && Number(room.run.Ver)) || 0) + 1,
+    StartedAt: now,
+    UpdatedAt: now,
+  };
+  if (!(await writeRun(ctx, row, null))) return { response: fail(409, 'Finish or stop the current list first') };
+  for (let i = 0; i < n; i += 1) {
+    const p = rows[i];
+    const extra = { RunItem: i + 1, ...(voteFields ? voteFields(p) : {}) };
+    await put(ctx, i === 0 ? repoint(p, 'sent', now, `run item 1`, extra) : repoint(p, 'queued', now, `queued, run item ${i + 1}`, extra));
+  }
+  await sendRunItem(ctx, row, 1);
+  return { run: S.runView(row, 'host') };
+}
+
+async function runStart(ctx, body) {
+  const ids = idList((body || {}).pointIds);
+  const room = await loadRoom(ctx);
+  const got = pickPoints(room, ids, S.OPEN_POINT_STATUSES);
+  if (got.response) return got.response;
+  const started = await startRun(ctx, room, got.rows, new Date().toISOString());
+  if (started.response) return started.response;
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { run: started.run });
+}
+
+/**
+ * Change the run under its version. `step(room, run, now)` returns `{response}` to
+ * refuse, or `{row, after}`: the new row, and what to do once it is written.
+ * A press that lost the race re-reads and decides again (three tries).
+ */
+async function mutateRun(ctx, step) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const room = await loadRoom(ctx);
+    const now = new Date().toISOString();
+    const out = step(room, room.run, now);
+    if (out.response) return out.response;
+    if (await writeRun(ctx, { ...out.row, Ver: (Number(room.run.Ver) || 0) + 1, UpdatedAt: now }, room.run.Ver)) {
+      await out.after(room, now);
+      const after = await loadRoom(ctx);
+      const rev = (await touchState(ctx)).Rev;
+      await announce(ctx, rev);
+      return reply(200, { run: S.runView(after.run, 'host') });
+    }
+  }
+  return fail(409, 'The list changed while you pressed; look again');
+}
+
+/** The point behind item k, if it is still on the list. */
+const runPoint = (room, run, k) => findPoint(room, run.Items[k - 1].pointId);
+const noneLeft = (marks) => !marks.some((m) => m === 'pending' || m === 'doing');
+const firstPending = (marks) => marks.findIndex((m) => m === 'pending');
+
+async function runNext(ctx, body) {
+  const b = body || {};
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    // A press made from a screen that is behind (the list moved on) is refused, not repeated.
+    if (b.from !== undefined && b.from !== null && Number(b.from) !== Number(run.Cur)) return { response: fail(409, 'The list has moved on; look again') };
+    const marks = [...run.Marks];
+    const idx = firstPending(marks);
+    if (idx < 0) return { response: fail(409, 'Nothing is left in the list') };
+    const cur = Number(run.Cur) || 0;
+    if (marks[cur - 1] === 'doing' && b.force !== true) {
+      return { response: fail(409, `Claude hasn't finished ${cur}. Send ${idx + 1} anyway?`, { needsConfirm: true, cur, next: idx + 1 }) };
+    }
+    marks[idx] = 'doing';
+    const SentAt = [...run.SentAt];
+    SentAt[idx] = now;
+    const row = { ...run, Cur: idx + 1, Marks: marks, SentAt };
+    return {
+      row,
+      after: async (rm) => {
+        const p = runPoint(rm, run, idx + 1);
+        if (p && p.Status !== 'removed') await put(ctx, repoint(p, 'sent', now, `run item ${idx + 1}`));
+        await sendRunItem(ctx, row, idx + 1);
+      },
+    };
+  });
+}
+
+async function runSkip(ctx) {
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    const marks = [...run.Marks];
+    const idx = firstPending(marks);
+    if (idx < 0) return { response: fail(409, 'Nothing is left to skip') };
+    marks[idx] = 'skipped';
+    const finished = noneLeft(marks);
+    const row = { ...run, Marks: marks, ...(finished ? { Status: 'finished', FinishedAt: now } : {}) };
+    return { row, after: (rm) => toLater(ctx, rm, run, [idx + 1], now) };
+  });
+}
+
+async function runStop(ctx) {
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    const marks = [...run.Marks];
+    const left = [];
+    marks.forEach((m, i) => { if (m === 'pending') { marks[i] = 'skipped'; left.push(i + 1); } });
+    const row = { ...run, Marks: marks, Status: 'stopped', FinishedAt: now };
+    return { row, after: (rm) => toLater(ctx, rm, run, left, now) };
+  });
+}
+
+/** Items that did not get done go to Later as held directions, not lost. */
+async function toLater(ctx, room, run, ks, now) {
+  for (const k of ks) {
+    const p = runPoint(room, run, k);
+    if (!p || p.Status === 'removed') continue;
+    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
+    await put(ctx, repoint(p, 'later', now, `run item ${k}, skipped to Later`));
+  }
+}
+
+/** Claude reports a run item finished (post_update with runItem). The host's Claude only. */
+async function runDone(ctx, body) {
+  const b = body || {};
+  const k = Number(b.runItem);
+  const note = S.cleanText(b.note, S.LIMITS.note);
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run) return { response: fail(409, 'No list is running') };
+    if (!Number.isInteger(k) || k < 1 || k > run.Items.length) return { response: fail(400, `runItem is a number from 1 to ${run.Items.length}`) };
+    const mark = (run.Marks || [])[k - 1];
+    if (mark === 'done') return { response: reply(200, { run: S.runView(run, 'host'), already: true }) };
+    if (mark !== 'doing') return { response: fail(409, mark === 'skipped' ? `Item ${k} was skipped to Later` : `Item ${k} has not been sent to Claude yet`) };
+    const marks = [...run.Marks];
+    marks[k - 1] = 'done';
+    const DoneAt = [...run.DoneAt];
+    DoneAt[k - 1] = now;
+    const Items = run.Items.map((it, i) => (i === k - 1 && note ? { ...it, note } : it));
+    const finished = run.Status === 'running' && noneLeft(marks);
+    const row = { ...run, Marks: marks, DoneAt, Items, ...(finished ? { Status: 'finished', FinishedAt: now } : {}) };
+    return {
+      row,
+      after: async (rm) => {
+        const p = runPoint(rm, run, k);
+        if (p && p.Status !== 'removed') await put(ctx, repoint(p, p.Status, now, `run item ${k}, done`));
+      },
+    };
+  });
 }
 
 async function routeHost(ctx, role, method, parts, body, event, query) {
@@ -2002,6 +2318,12 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'points' && b === 'requests' && !c) return hostOnly() || createPointRequest(ctx, '', body);
   if (a === 'points' && b === 'requests' && c && !d) return hostOnly() || pointRequestAction(ctx, c, body);
   if (a === 'points' && b === 'send' && !c) return hostOnly() || sendPoints(ctx, body);
+  if (a === 'points' && b === 'vote' && !c) return hostOnly() || pointsVote(ctx, body);
+  if (a === 'run' && !b) return hostOnly() || runStart(ctx, body);
+  if (a === 'run' && b === 'next' && !c) return hostOnly() || runNext(ctx, body);
+  if (a === 'run' && b === 'skip' && !c) return hostOnly() || runSkip(ctx);
+  if (a === 'run' && b === 'stop' && !c) return hostOnly() || runStop(ctx);
+  if (a === 'run' && b === 'done' && !c) return role === 'agent' ? runDone(ctx, body) : fail(403, 'Only the host\'s Claude reports a list item done');
   if (a === 'points' && b && !c) return hostOnly() || pointAction(ctx, b, body);
   if (a === 'asks' && !b) return createAsk(ctx, role, body);
   if (a === 'asks' && b && !c) return hostOnly() || askAction(ctx, role, b, body);
@@ -2115,7 +2437,9 @@ async function routePlay(ctx, method, parts, body, query) {
     if (!text) return fail(400, 'Write your idea');
     if (room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').length >= 20) return fail(429, 'That is plenty of ideas from one phone for now');
     const sk = S.SK.idea(now);
-    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now, ...(aboutLogId ? { AboutLogId: aboutLogId } : {}) });
+    // Sent while a talking point is on the Stage: the idea is about that point.
+    const onStage = room.points.find((x) => x.Status === 'shown');
+    await put(ctx, { SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: me.playerName, Text: text, Status: 'new', CreatedAt: now, ...(aboutLogId ? { AboutLogId: aboutLogId } : {}), ...(onStage ? { AboutPoint: onStage.PointId } : {}) });
     const st = await touchState(ctx);
     await announce(ctx, st.Rev);
     return reply(201, { ok: true });
