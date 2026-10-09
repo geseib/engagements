@@ -101,3 +101,12 @@ and gives a crew builder or team lead the same one-paste setup. Not project scop
 `.claude/settings.json` into the repo, pointing at a marketplace that exists only on the host's
 machine. **Check first** that `claude plugin install --scope local` behaves this way on the
 current Claude Code.
+
+## Push and teamwork (next spec after talking points) — owner rulings 2026-10-08/09
+
+- **Push rule:** every commit is pushed straight away to `build-room/<code>` on origin, never to main; the host screen shows "Pushed" or "N not pushed"; wrap-up opens a pull request into main for the host to merge. The plugin's `commit` tool stops being "never pushes".
+- **Lasting artifacts live in the repo and the report**, never in DynamoDB (every DynamoDB row carries the session ttl).
+- **Crew work is a pull request.** Early look → PR (`share_pr`) → host review card → **Try it** → merge / ask for changes / put it to the room.
+- **Try it:** the host's Claude checks the builder's branch out into a separate worktree (`.engage/try/<builder>-<task>`), runs it on its own port, and shares it over the Wi-Fi gateway as "<Name>'s version" beside the main build. The host's own folder never switches, so nothing is committed or stashed for it. Needs the Run crew code switch On; Off means screenshots and review only. Closing a try stops its server and removes the worktree; session end closes all.
+- **If an in-place switch is ever unavoidable:** checkpoint commit first (pushed per the push rule), never a stash.
+- **Talking points in a crew:** every builder's Claude may post points, tagged by builder; Research and Ideas requests go to the host's Claude only.
