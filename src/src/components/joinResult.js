@@ -69,7 +69,10 @@ export function classifyJoinFailure(status, data) {
     return {
       kind: payload.code === 'NAME_TAKEN' ? 'name-taken' : 'name-unverified',
       playerName: payload.playerName || '',
-      message: payload.message || 'That name is already in use in this session.'
+      message: payload.message || 'That name is already in use in this session.',
+      // The host answered this device's ask with Not now (join-game.js sends
+      // it only to the device that asked).
+      ...(payload.handoverRefused ? { handoverRefused: true } : {})
     };
   }
 

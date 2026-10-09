@@ -119,6 +119,108 @@ exports.handler = async (event) => {
     }
 
     const requestedBy = existing.Item.HandoverRequestedBy || null;
+
+    // LOCK AGAIN — the host unlocked a name and changed their mind before
+    // anybody took it. The same host-only route and the same row, so no new
+    // function or auth rule exists to get wrong. `attribute_exists` on the
+    // grant is the whole rule: a grant a claim has already spent was REMOVEd by
+    // join-game.js, so there is nothing left to revoke and this says so rather
+    // than pretending to have closed a door that has already been walked
+    // through. The request marker is left alone: locking is not an answer to it.
+    if (body.lock === true) {
+      try {
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+          UpdateExpression: 'REMOVE HandoverExpiresAt, HandoverForClientId',
+          ConditionExpression: 'attribute_exists(SK) AND attribute_exists(HandoverExpiresAt)'
+        }));
+      } catch (error) {
+        if (error.name !== 'ConditionalCheckFailedException') throw error;
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: 'Not unlocked',
+            message: `"${playerName}" is not unlocked, or has already been taken.`
+          }),
+          headers: cors
+        };
+      }
+      console.log(`🔒 Handover closed for ${playerName} in game ${gameId}`);
+      const { HandoverExpiresAt, HandoverForClientId, ...rest } = existing.Item;
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          playerName,
+          locked: true,
+          handover: publicHandoverState(rest),
+          message: `"${playerName}" is locked again.`
+        }),
+        headers: cors
+      };
+    }
+
+    // NOT NOW — refuse the pending request. What the asking device learns is
+    // the join's business (join-game.js reads HandoverRefusedFor and answers
+    // "The host said not now"); this only records it. The asker's clientId is
+    // MOVED from the request marker to the refusal marker, never published
+    // (publicHandoverState is an allow-list), and a grant bound to that same
+    // asker goes with it — a refusal that left the door open for the person
+    // refused would be a refusal in name only. A grant bound to someone else,
+    // or an open one, is not this request's to close.
+    if (body.refuse === true) {
+      if (!requestedBy) {
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: 'No pending request',
+            message: `Nobody is asking to take "${playerName}" right now.`
+          }),
+          headers: cors
+        };
+      }
+      const closesGrant = existing.Item.HandoverForClientId === requestedBy;
+      const at = new Date().toISOString();
+      try {
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+          UpdateExpression: `SET HandoverRefusedFor = :cid, HandoverRefusedAt = :at REMOVE HandoverRequestedBy, HandoverRequestedAt${closesGrant ? ', HandoverExpiresAt, HandoverForClientId' : ''}`,
+          // Only the ask that was read. A newer ask from another device that
+          // landed in between is not this refusal's to clear.
+          ConditionExpression: 'attribute_exists(SK) AND HandoverRequestedBy = :cid',
+          ExpressionAttributeValues: { ':cid': requestedBy, ':at': at }
+        }));
+      } catch (error) {
+        if (error.name !== 'ConditionalCheckFailedException') throw error;
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: 'No pending request',
+            message: `That request has already changed. Look again.`
+          }),
+          headers: cors
+        };
+      }
+      console.log(`✋ Handover for ${playerName} in game ${gameId} refused`);
+      const {
+        HandoverRequestedBy, HandoverRequestedAt, ...rest
+      } = existing.Item;
+      if (closesGrant) { delete rest.HandoverExpiresAt; delete rest.HandoverForClientId; }
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          playerName,
+          refused: true,
+          handover: publicHandoverState(rest),
+          message: `Told them not now.`
+        }),
+        headers: cors
+      };
+    }
+
     if (bindToRequester && !requestedBy) {
       return {
         statusCode: 409,

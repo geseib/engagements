@@ -93,6 +93,9 @@ export function handoverNote(stage, playerName) {
   if (stage === 'asked') {
     return `Asked the host to hand “${playerName}” over. When they say go ahead, tap Take over the name.`;
   }
+  if (stage === 'declined') {
+    return 'The host said not now.';
+  }
   if (stage === 'refused') {
     // NEVER "something went wrong". The host simply has not got to it, and
     // saying so is what stops the person tapping the same button forever.

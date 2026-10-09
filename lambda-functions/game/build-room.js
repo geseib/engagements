@@ -100,7 +100,7 @@ async function loadPlayers(ctx) {
   for (const r of rows) {
     const sk = String(r.SK);
     if (sk.includes('#SCORE') || sk.includes('#STATE')) continue;
-    if (r.Removed) continue;
+    if (r.Removed || r.RemovedAt) continue;
     const name = r.PlayerName || r.playerName || sk.slice('PLAYER#'.length);
     if (name) names.add(name);
   }
@@ -250,7 +250,7 @@ async function playerFrom(ctx, input) {
   if (!playerName) return null;
   const r = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: `PLAYER#${playerName}` } }));
   const row = r && r.Item;
-  if (!row || row.Removed) return null;
+  if (!row || row.Removed || row.RemovedAt) return null;
   if (row.ClientId && row.ClientId !== clientId) return null;
   return { playerName };
 }
@@ -1612,7 +1612,7 @@ async function crewBase(ctx, role, body) {
     }
   }
   await logEntry(ctx, { kind: 'base', text: `Base moved to ${commit.slice(0, 7)}${merged ? `: ${merged.Builder}'s ${merged.Title}` : note ? `: ${note}` : ''}`, by: role === 'agent' ? 'agent' : 'host', shareId: merged ? merged.ShareId : undefined });
-  for (const bl of room.builders) {
+  for (const bl of C.liveBuilders(room)) {
     await logEntry(ctx, { kind: 'direction', text: C.baseMovedText(next, merged ? `${merged.Builder}'s ${merged.Title}` : note), by: 'host', forBuilder: bl.PlayerName });
   }
   return done(ctx, 200, { crew: next });
@@ -1641,6 +1641,37 @@ async function crewHelpAction(ctx, name, body) {
   } else if (action !== 'resolve') return fail(400, 'action must be send-claude or resolve');
   await put(ctx, { ...b, Status: action === 'resolve' ? 'building' : b.Status });
   return done(ctx, 200, { ok: true });
+}
+
+/**
+ * Host: take a builder off the crew. Their Claude is unlinked (every live key
+ * of theirs is retired, which the authorizer refuses from then on), their lane
+ * closes (open early looks go to Not now, their claims on tasks are released,
+ * the board stops counting them), and the work already merged is not touched.
+ * Idempotent. It does NOT soft-remove the player (that is remove-player.js, and
+ * the Session panel makes both calls); Bring back restores the seat there, and
+ * the person gets a NEW key by minting one again.
+ */
+async function crewBuilderRemove(ctx, name) {
+  const room = await loadRoom(ctx);
+  const b = findBuilder(room, name);
+  const keys = room.keys.filter((k) => k.Role === 'builder' && k.PlayerName === name);
+  if (!b && !keys.length) return fail(404, 'That player is not on the crew');
+  const now = new Date().toISOString();
+  for (const k of keys) {
+    if (!k.RevokedAt) await put(ctx, { ...k, RevokedAt: now });
+  }
+  if (b && !b.ClosedAt) {
+    await put(ctx, { ...b, ClosedAt: now });
+    for (const s of room.shares) {
+      if (s.Builder === name && !['merged', 'not-now'].includes(s.Lane || 'shared')) await put(ctx, { ...s, Lane: 'not-now', UpdatedAt: now });
+    }
+    for (const t of room.tasks) {
+      if ((t.ClaimedBy || []).includes(name)) await put(ctx, { ...t, ClaimedBy: t.ClaimedBy.filter((x) => x !== name) });
+    }
+    await logEntry(ctx, { kind: 'crew', text: `${name} was taken off the crew`, by: 'host', name });
+  }
+  return done(ctx, 200, { ok: true, builder: name });
 }
 
 /** A version's patch (patch mode), for the host's Claude to apply and review. */
@@ -1689,6 +1720,7 @@ async function routeCrew(ctx, role, method, parts, body, query) {
   if (b === 'base' && !c) return hostSide ? crewBase(ctx, role, body) : no();
   if (b === 'help' && !c) return builder ? crewHelp(ctx, ctx.builder, body) : no();
   if (b === 'help' && c) return host ? crewHelpAction(ctx, c, body) : no();
+  if (b === 'builders' && c && d === 'remove') return host ? crewBuilderRemove(ctx, c) : no();
   return fail(404, 'Not found');
 }
 
@@ -1708,6 +1740,10 @@ async function builderState(ctx) {
 
 async function routeBuilder(ctx, method, parts, body, query) {
   const [a, b] = parts;
+  // The authorizer already refuses a retired key. This is the second wall: a
+  // builder the host took off the crew gets nothing, key or no key.
+  const own = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: C.SK.builder(ctx.builder) } }));
+  if (own && own.Item && own.Item.ClosedAt) return fail(403, 'The host took you off the crew');
   if (method === 'GET' && a === 'state' && !b) return reply(200, await builderState(ctx));
   if (method === 'GET' && a === 'inbox' && !b) return reply(200, {});
   if (method === 'GET' && a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
@@ -2476,13 +2512,19 @@ async function routePlayCrew(ctx, me, parts, input) {
   const now = new Date().toISOString();
   if (b === 'builder-key') {
     const already = findBuilder(room, me.playerName);
-    if (!already && room.builders.length >= C.MAX_BUILDERS) return fail(409, `This crew is full (${C.MAX_BUILDERS} builders)`);
+    if (!already && C.liveBuilders(room).length >= C.MAX_BUILDERS) return fail(409, `This crew is full (${C.MAX_BUILDERS} builders)`);
     // One live key per builder: a new one retires their old one.
     for (const k of room.keys) {
       if (!k.RevokedAt && k.Role === 'builder' && k.PlayerName === me.playerName) await put(ctx, { ...k, RevokedAt: now });
     }
     const { key, hash } = S.mintKey(ctx.gameId);
     await put(ctx, { SK: S.SK.key(hash), KeyId: hash.slice(0, 12), Role: 'builder', PlayerName: me.playerName, Label: `${me.playerName}'s Claude Code`, CreatedAt: now });
+    if (already && already.ClosedAt) {
+      // Brought back after the host removed them: a seat again, on a new key.
+      const { ClosedAt, ...open } = already;
+      await put(ctx, { ...open, Status: 'setting-up' });
+      await logEntry(ctx, { kind: 'crew', text: `${me.playerName} rejoined the crew`, by: 'builder', name: me.playerName });
+    }
     if (!already) {
       await put(ctx, { SK: C.SK.builder(me.playerName), PlayerName: me.playerName, Mode: crew.modes[0], Status: 'setting-up', JoinedAt: now });
       await logEntry(ctx, { kind: 'crew', text: `${me.playerName} joined the crew`, by: 'builder', name: me.playerName });
@@ -2523,7 +2565,7 @@ async function routePlay(ctx, method, parts, body, query) {
     const view = S.publicView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, me, now: new Date().toISOString() });
     view.crew = C.crewView(room, 'public', me);
     // A builder's own points and requests, for their lane (talking points T8). Nobody else's.
-    if (room.builders.some((b) => b.PlayerName === me.playerName)) view.myPoints = S.pointsBuilderView(room, me.playerName);
+    if (C.liveBuilders(room).some((b) => b.PlayerName === me.playerName)) view.myPoints = S.pointsBuilderView(room, me.playerName);
     return reply(200, view);
   }
   if (method !== 'POST') return fail(404, 'Not found');

@@ -2591,7 +2591,10 @@ function PlayerPage({ event = null } = {}) {
     }
 
     if (result.failure.kind === 'name-taken' || result.failure.kind === 'name-unverified') {
-      setJoinCollision((current) => (current ? { ...current, handoverStage: 'refused' } : current));
+      // 'declined' when the host answered Not now to THIS device's ask;
+      // 'refused' is the quieter "not unlocked yet".
+      const stage = result.failure.handoverRefused ? 'declined' : 'refused';
+      setJoinCollision((current) => (current ? { ...current, handoverStage: stage } : current));
       return;
     }
     applyJoinFailure(result.failure, name);

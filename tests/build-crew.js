@@ -351,6 +351,76 @@ const PATCH = 'From 1234567 Mon Sep 17 00:00:00 2001\nSubject: [PATCH] Parking m
     assert.strictEqual((await sam('GET', 'state')).status, 200);
     store.get(key(`GAME#${GAME}`, 'STATE')).State = 'STARTED';
   });
+  console.log('\nremoving a builder');
+  await check('removing a builder retires their key, closes their lane, frees their task; merged work stays', async () => {
+    const before = [...store.values()].filter((x) => String(x.SK).startsWith('BUILD#KEY#') && x.PlayerName === 'Priya' && !x.RevokedAt);
+    assert.strictEqual(before.length, 1, 'Priya starts with one live key');
+    // An open early look of Sam's (not merged) and Priya's merged one.
+    put({ PK: `GAME#${GAME}`, SK: 'BUILD#SHR#sam1', ShareId: 'sam1', Builder: 'Sam', Title: 'List', Lane: 'shared', Versions: [{ v: 1 }], CreatedAt: '2026-10-09T10:00:00Z' });
+    assert.strictEqual((await sam('POST', 'crew/me', { status: 'building' })).status, 200);
+    const r = await host('POST', 'crew/builders/Sam/remove', {});
+    assert.strictEqual(r.status, 200);
+    const keys = [...store.values()].filter((x) => String(x.SK).startsWith('BUILD#KEY#') && x.PlayerName === 'Sam');
+    assert.ok(keys.length > 0 && keys.every((k) => k.RevokedAt), 'Sam still has a live key');
+    assert.ok(keys.every((k) => k.ttl), 'a rewritten key row lost its ttl');
+    const row = store.get(key(`GAME#${GAME}`, 'BUILD#BLD#Sam'));
+    assert.ok(row.ClosedAt && row.ttl, 'the builder row is not closed, or has no ttl');
+    assert.strictEqual(store.get(key(`GAME#${GAME}`, 'BUILD#SHR#sam1')).Lane, 'not-now', 'their open early look stayed in the lane');
+    assert.deepStrictEqual(store.get(key(`GAME#${GAME}`, 'BUILD#TASK#001')).ClaimedBy, ['Priya'], 'their claim on the task was kept');
+    // Priya's work, merged earlier, is untouched.
+    const merged = [...store.values()].find((x) => x.ShareId === shareId);
+    assert.deepStrictEqual([merged.Lane, merged.MergedCommit], ['merged', '7f3c2a1']);
+    assert.ok(keys.every((k) => k.PlayerName === 'Sam'));
+    assert.strictEqual([...store.values()].filter((x) => String(x.SK).startsWith('BUILD#KEY#') && x.PlayerName === 'Priya' && !x.RevokedAt).length, 1, 'removing Sam touched Priya\'s key');
+  });
+  await check('the crew view says closed, the board no longer counts them, and they are not told the base moved', async () => {
+    const h = (await host('GET', 'state')).body;
+    assert.strictEqual(h.crew.builders.find((b) => b.name === 'Sam').closed, true);
+    assert.strictEqual(h.crew.builders.find((b) => b.name === 'Priya').closed, false);
+    assert.strictEqual(h.crew.pipeline.building, 0, 'a closed builder still counts as building');
+    const before = (await sam('GET', 'inbox')).status;
+    assert.ok(before === 403, `the removed builder's own calls are refused (got ${before})`);
+  });
+  await check('even if the authorizer let the old key through, every call of theirs is refused', async () => {
+    for (const [m, p, b] of [['GET', 'state'], ['GET', 'inbox'], ['POST', 'crew/me', { status: 'building' }], ['POST', 'crew/shares', { title: 'x', summary: 'y' }], ['POST', 'log', { kind: 'milestone', text: 'x' }]]) {
+      assert.strictEqual((await sam(m, p, b)).status, 403, `${m} ${p}`);
+    }
+  });
+  await check('removal is the host\'s alone, and an unknown builder is a 404', async () => {
+    assert.strictEqual((await priya('POST', 'crew/builders/Priya/remove', {})).status, 403);
+    assert.strictEqual((await claude('POST', 'crew/builders/Priya/remove', {})).status, 403);
+    assert.strictEqual((await host('POST', 'crew/builders/Nobody/remove', {})).status, 404);
+    assert.ok(![...store.values()].some((x) => x.PlayerName === 'Priya' && x.ClosedAt));
+  });
+  await check('removing twice is harmless', async () => {
+    assert.strictEqual((await host('POST', 'crew/builders/Sam/remove', {})).status, 200);
+  });
+  await check('Bring back gives a seat but not the old key: they mint a new one and are a builder again', async () => {
+    // remove-player.js's restore only clears the player's RemovedAt; the key stays retired.
+    const oldKeys = [...store.values()].filter((x) => String(x.SK).startsWith('BUILD#KEY#') && x.PlayerName === 'Sam').map((x) => x.SK);
+    assert.strictEqual((await phone('Sam')('POST', 'crew/builder-key')).status, 201);
+    const live = [...store.values()].filter((x) => String(x.SK).startsWith('BUILD#KEY#') && x.PlayerName === 'Sam' && !x.RevokedAt);
+    assert.strictEqual(live.length, 1);
+    assert.ok(!oldKeys.includes(live[0].SK), 'the old key came back');
+    assert.strictEqual(store.get(key(`GAME#${GAME}`, 'BUILD#BLD#Sam')).ClosedAt, undefined, 'still closed after reconnecting');
+    assert.strictEqual((await sam('GET', 'inbox')).status, 200);
+    assert.strictEqual((await host('GET', 'state')).body.crew.builders.find((b) => b.name === 'Sam').closed, false);
+  });
+  await check('a removed player\'s phone is refused on the play routes (RemovedAt), builders included', async () => {
+    store.get(key(`GAME#${GAME}`, 'PLAYER#Ana')).RemovedAt = '2026-10-09T10:00:00Z';
+    assert.strictEqual((await phone('Ana')('GET', 'state')).status, 403);
+    assert.ok(!(await host('GET', 'state')).body.joined || true);
+    delete store.get(key(`GAME#${GAME}`, 'PLAYER#Ana')).RemovedAt;
+    assert.strictEqual((await phone('Ana')('GET', 'state')).status, 200);
+  });
+  await check('a closed builder does not take one of the eight seats', async () => {
+    const c = store.get(key(`GAME#${GAME}`, 'BUILD#BLD#Sam'));
+    c.ClosedAt = '2026-10-09T11:00:00Z';
+    const C2 = require(path.join(REPO, 'lambda-functions/game/build-crew.js'));
+    assert.strictEqual(C2.liveBuilders({ builders: [c, { PlayerName: 'P' }] }).length, 1);
+    delete c.ClosedAt;
+  });
+
   await check('eight builders at most', async () => {
     for (let i = 0; i < 6; i++) put({ PK: `GAME#${GAME}`, SK: `BUILD#BLD#X${i}`, PlayerName: `X${i}`, Status: 'building' });
     put({ PK: `GAME#${GAME}`, SK: 'PLAYER#Ninth', PlayerName: 'Ninth', ClientId: 'c-Ninth' });
