@@ -134,6 +134,17 @@ export function buildApi(gameId) {
     saveOutcome: (body) => post('outcome', body),
     /** `{reviewAgentAsks?, agentName?}` → `{settings}` */
     saveSettings: (body) => post('settings', body),
+    // ── Talking points (docs/design/build-room-talking-points; build-room.js) ──
+    /** `{kind:'research'|'ideas', subject}` → `{request}`: Claude (or a helper) starts when it next listens. */
+    pointRequest: (kind, subject) => post('points/requests', { kind, subject }),
+    /** Cancel a request that is stuck. → `{request}` */
+    cancelPointRequest: (requestId) => post(`points/requests/${seg(requestId)}`, { action: 'cancel' }),
+    /** `'remove'|'later'|'show'|'hide'|'send'` → `{point, ideasAbout?, ideaIds?}` */
+    pointAction: (pointId, action) => post(`points/${seg(pointId)}`, { action }),
+    /** Several points to Claude as ONE direction. → `{sent:[ids]}` */
+    sendPoints: (ids) => post('points/send', { ids }),
+    /** `{ids (2-8), prompt?, maxPicks?}` → `{ask}`: ticked points to a multi-pick vote. */
+    votePoints: (body) => post('points/vote', body),
     /** The Wi-Fi share: `{on}` or `{dismissOffer: true}` → `{lan}` */
     share: (body) => post('share', body),
     /** → `{key, keyId}`. The key is shown once. */

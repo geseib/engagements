@@ -245,6 +245,17 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
   if (ended) {
     return { phase: 'ENDED', context: { category: 'Build Room' }, meter: { heading: 'Took part', count: here, of: null }, status: 'This session has ended.', primary: null };
   }
+  if (!current && room && room.shownPoint && !(room.opening && room.opening.phase === 'opening') && !crewOn) {
+    // A TALKING POINT ON THE STAGE (talking points T4): the host chose it; the room talks it over.
+    const p = shownPointOf(room);
+    return {
+      phase: null, context: { category: W.talkItOver }, point: p,
+      meter: { heading: W.ideasOnThis, count: shownPointIdeas(room).length, of: null },
+      status: W.pointUp,
+      primary: { action: 'take-down', label: W.takeItDown, point: p },
+      secondary: { action: 'point-later', label: W.saveLater, point: p },
+    };
+  }
   if (!current) {
     const agent = (room && room.agent) || {};
     const status = room && room.outcome && room.outcome.summary ? 'Here is what we built.'
@@ -750,6 +761,11 @@ export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   moves.push({ key: 'starter', title: 'Ask the room a starter question', hint: 'From the question library', button: 'Ask it' });
   moves.push({ key: 'new-ask', title: 'Ask the room something new', hint: 'Ideas, a choice, or a 1 to 5 rating', button: 'New ask' });
   moves.push({ key: 'tell', title: 'Tell Claude', hint: 'Do now, keep in mind, or ask Claude', button: 'Write' });
+  // THREE OR MORE NEW POINTS (talking points T1): a way to talk while Claude builds. Never the lead.
+  const newPoints = ((room && room.points && room.points.items) || []).filter((p) => p.status === 'new').length;
+  if (newPoints >= 3 && !room.shownPoint) {
+    moves.push({ key: 'talk-points', title: 'Talk over a point while Claude builds', hint: 'Tick one in Points, then Show on Stage', button: W.points });
+  }
   // Nothing runs without Claude: with none connected, that is the first move.
   if (room && room.agent && !room.agent.key && !room.agent.connected && !framing) {
     moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing gets built until Claude Code is connected', button: 'Connect' });
@@ -800,4 +816,108 @@ export function looksWords(images) {
     line: `Claude made ${lettersLine((images || []).map((i) => i.label))}. Look now; the vote opens next.`,
     next: 'Pick one on your phone, laptop or tablet',
   };
+}
+
+
+// ── Talking points (docs/design/build-room-talking-points) ──────────────────
+
+/** The most points open at once, and the most a vote takes (the server's own limits). */
+export const POINTS_OPEN_MAX = 40;
+export const VOTE_POINTS_MAX = 8;
+/** A point the host can still act on: it has not been sent, saved, voted or removed. */
+export const POINT_OPEN = Object.freeze(['new', 'shown', 'queued']);
+
+/** hostView.points, with its defaults. Null when the server sent none (an older room). */
+export function pointsOf(room) {
+  const p = room && room.points;
+  if (!p) return null;
+  return { items: p.items || [], requests: p.requests || [], open: Number(p.open) || 0 };
+}
+
+/**
+ * The point on the Stage with its id. The room-safe shownPoint carries no id
+ * (server fix round 1); the host's own Points list does, so join them there.
+ */
+export function shownPointOf(room) {
+  const p = room && room.shownPoint;
+  if (!p) return null;
+  const mine = ((room.points && room.points.items) || []).find((x) => x.status === 'shown');
+  return { ...p, id: p.id || (mine ? mine.id : null) };
+}
+
+/** The ideas the room sent about the point on the Stage, not yet dismissed. */
+export function shownPointIdeas(room) {
+  const p = shownPointOf(room);
+  if (!p) return [];
+  return (room.ideas || []).filter((i) => i.aboutPoint === p.id && i.status !== 'dismissed');
+}
+
+/** The ideas to offer a vote on when the point comes down: the ones still new. */
+export const takeDownIdeas = (room) => shownPointIdeas(room).filter((i) => i.status === 'new');
+
+/** Who a point is from, as the host reads it: "Claude" or "Priya's Claude". */
+export const pointFrom = (p) => (p.fromBuilder ? `${p.by}'s Claude` : 'Claude');
+/** "From Claude's research" / "From Claude" / "From Priya's Claude": the Stage's line. */
+export function stageFrom(p) {
+  if (p.from && p.from !== 'claude') return `From ${p.from}'s Claude`;
+  return p.kind === 'finding' ? "From Claude's research" : 'From Claude';
+}
+
+export const POINT_TAGS = Object.freeze({ talk: W.tagTalk, finding: W.tagFinding, idea: W.tagIdea });
+
+/** A used point says so: "On the Stage", "In the vote", "Sent to Claude", "Saved for later". */
+export function pointNote(p) {
+  return { shown: 'On the Stage', voting: 'In the vote', queued: 'Highlighted', sent: 'Sent to Claude', later: 'Saved for later' }[p.status] || '';
+}
+
+/** The noun a group counts, singular: finding, idea or point (a mixed group counts points). */
+function nounFor(kinds) {
+  const k = kinds.length === 1 ? kinds[0] : 'talk';
+  return { finding: 'finding', idea: 'idea', talk: 'point' }[k];
+}
+const counted = (n, noun) => (n === 1 ? noun : `${noun}s`);
+
+/**
+ * The panel's groups: one request, one milestone or one builder's post is one
+ * group, newest first. `{ key, heading, by, at, points, noun }`.
+ */
+export function pointGroups(room) {
+  const pts = pointsOf(room);
+  if (!pts) return [];
+  const reqs = new Map(pts.requests.map((r) => [r.id, r]));
+  const groups = new Map();
+  for (const p of pts.items) {
+    const key = p.requestId || p.batchId || `solo:${p.id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  const out = [];
+  for (const [key, list] of groups) {
+    list.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    const first = list[0];
+    const req = first.requestId ? reqs.get(first.requestId) : null;
+    const n = list.length;
+    const noun = nounFor([...new Set(list.map((x) => x.kind))]);
+    let label;
+    if (req) label = `${req.kind === 'ideas' ? 'Ideas' : 'Research'}: ${req.subject}`;
+    else if (first.fromBuilder) label = pointFrom(first);
+    else label = first.about ? `From step: ${first.about}` : 'From Claude';
+    out.push({
+      key,
+      heading: `${label} · ${n} ${counted(n, noun)}${!req && first.fromBuilder && first.about ? ` for ${first.about}` : ''}`,
+      by: pointFrom(first),
+      at: list[list.length - 1].createdAt,
+      points: list,
+      noun,
+    });
+  }
+  return out.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
+/** What Research… and Ideas… start with: the open ask's question, else Claude's last step, else nothing. */
+export function defaultSubject(room) {
+  const cur = ((room && room.asks) || []).find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status));
+  if (cur && cur.prompt) return String(cur.prompt).trim().slice(0, 200);
+  const step = [...((room && room.log) || [])].reverse().find((l) => l.by === 'agent' && ['milestone', 'progress'].includes(l.kind) && l.text);
+  return step ? String(step.text).trim().slice(0, 200) : '';
 }
