@@ -11,6 +11,10 @@
  *                combine into one prompt in the Composer, which the host edits
  *                and sends the usual way; a combined row says "In a prompt".
  *
+ * While points are ticked (talking points T3) the Points action row holds the
+ * one orange button: `outline` turns the lead to an outline button and takes
+ * Space away from it until the ticks are cleared.
+ *
  * The ticks and the "used" times are the page's session state (BuildRoom),
  * never saved, so a refetch of the room keeps them.
  */
@@ -19,7 +23,7 @@ import Icon from '../components/Icon';
 import { whatsNextMoves, claudeState, combineLine, METHOD_WORDS } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 
-const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', starter: 'Question', 'new-ask': 'Plus', 'vote-later': 'ListChecks', tell: 'ChatCircleText' };
+const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', starter: 'Question', 'new-ask': 'Plus', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks' };
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');
@@ -45,7 +49,7 @@ export function decidedAnswer(ask) {
   return String((ask.decision && ask.decision.direction) || '').trim();
 }
 
-export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continueOn = false }) {
+export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continueOn = false, outline = false }) {
   const ref = useRef(null);
   const moves = whatsNextMoves(room, { ticked: ticked ? ticked.size : 0, laterTicked });
   const lead = moves[0];
@@ -60,7 +64,7 @@ export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continue
       </div>
       <div className="brm-row brm-gap">
         <h3 className="brm-h5" id="brm-wnext-h">What&apos;s next</h3>
-        <span className="brm-spacehint"><kbd>Space</kbd> does the first</span>
+        {!outline && <span className="brm-spacehint"><kbd>Space</kbd> does the first</span>}
       </div>
       <ul className="brm-wnlist" aria-labelledby="brm-wnext-h">
         {moves.map((m, i) => (
@@ -74,8 +78,8 @@ export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continue
             </span>
             <button
               type="button"
-              className={`brm-btn brm-btn--sm${i === 0 ? ' brm-btn--primary' : ''}`}
-              data-next-primary={i === 0 ? true : undefined}
+              className={`brm-btn brm-btn--sm${i === 0 && !outline ? ' brm-btn--primary' : ''}`}
+              data-next-primary={i === 0 && !outline ? true : undefined}
               onClick={() => onMove(m.key)}
             >
               {m.button}

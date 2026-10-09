@@ -1252,3 +1252,47 @@
 .brm .brm-later-tag--idea { color: var(--secondary); background: var(--brm-tint-blue); }
 .brm .brm-later-tag--direction { color: var(--primary); background: var(--brm-tint-amber); }
 .brm .brm-later-acts .brm-push { margin-left: auto; }
+
+/* TALKING POINTS (docs/design/build-room-talking-points): Later and Points share one slot as two tabs. */
+.brm .brm-lp { margin-top: 14px; }
+.brm .brm-lp-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.brm .brm-lp-tab {
+  appearance: none; font: inherit; font-size: var(--brm-t-label); font-weight: 600; cursor: pointer;
+  color: var(--muted); background: transparent; border: 1px solid var(--brm-rule); border-radius: 999px; padding: 6px 12px; min-height: 36px;
+}
+.brm .brm-lp-tab b { color: var(--text); font-weight: 600; }
+.brm .brm-lp-tab.is-on { color: var(--text); border-color: var(--secondary); background: var(--brm-tint-blue); }
+.brm .brm-lp-tab:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-lp-new { color: var(--primary); font-weight: 600; }
+.brm .brm-lp .brm-later { margin-top: 0; }
+.brm .brm-points { display: grid; gap: 10px; }
+.brm .brm-ptop { flex-wrap: wrap; }
+.brm .brm-pchips { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-pchip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--brm-line-blue); background: var(--brm-tint-blue); font-size: var(--brm-t-label);
+}
+.brm .brm-pchip.is-away { border-color: var(--brm-line-amber); background: var(--brm-tint-amber); }
+.brm .brm-pchip-t { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-pgroup { display: grid; gap: 6px; border-top: 1px solid var(--brm-rule); padding-top: 8px; }
+.brm .brm-pgroup-h { align-items: center; flex-wrap: wrap; }
+.brm .brm-pgroup-t { margin: 0; font-size: var(--brm-t-label); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-plist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.brm .brm-point { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--brm-rule); border-radius: 10px; }
+.brm .brm-point.is-ticked { outline: 2px solid var(--primary); outline-offset: -2px; }
+.brm .brm-point[data-status="sent"], .brm .brm-point[data-status="later"], .brm .brm-point[data-status="voting"] { opacity: 0.8; }
+.brm .brm-ptag--finding { color: var(--secondary); background: var(--brm-tint-blue); }
+.brm .brm-ptag--talk, .brm .brm-ptag--idea { color: var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-pnote { font-size: var(--brm-t-floor); color: var(--muted); }
+.brm .brm-psrc { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--brm-t-label); }
+.brm .brm-psrc a { overflow-wrap: anywhere; }
+.brm .brm-points .brm-arow { flex-wrap: wrap; }
+.brm .brm-modal--point { width: min(520px, 100%); }
+.brm .brm-hint--warn { color: var(--primary); }
+
+/* A point on the Stage: the room reads the text, the source and what to do. */
+.brm .brm-pointstage { display: grid; gap: 16px; align-content: center; }
+.brm .brm-pointq { margin: 0; overflow-wrap: anywhere; }
+.brm .brm-pointsrc { margin: 0; color: var(--muted); font-size: var(--brm-st-meta); font-weight: 600; }
+.brm .brm-pointprompt { margin: 0; font-size: var(--brm-st-meta); color: var(--muted); }
+.brm .brm-shownpoint { border-color: var(--brm-line-amber); }
