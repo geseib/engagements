@@ -34,6 +34,9 @@ function applyUpdate(inp) {
   if (inp.ConditionExpression === 'attribute_not_exists(DeliveredAt)' && cur && cur.DeliveredAt) {
     const e = new Error('cond'); e.name = 'ConditionalCheckFailedException'; throw e;
   }
+  if (inp.ConditionExpression === '#st <> :done AND #st <> :failed' && cur && ['done', 'failed'].includes(cur.Status)) {
+    const e = new Error('cond'); e.name = 'ConditionalCheckFailedException'; throw e;
+  }
   const item = { ...(cur || { PK: inp.Key.PK, SK: inp.Key.SK }) };
   const names = inp.ExpressionAttributeNames || {};
   const vals = inp.ExpressionAttributeValues || {};
@@ -567,6 +570,129 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     assert.ok(Number(rowsOf('BUILD#POINT#')[0].ttl) > 0);
     await claude('GET', 'inbox');
     assert.ok(Number(rowsOf('BUILD#PREQ#')[0].ttl) > 0);
+  });
+
+
+  console.log('\nfix round 1');
+  await check('I1: sending never cuts a source line: Detail goes first, and if it still does not fit it is a 400 and nothing is sent', async () => {
+    seed();
+    const long = (n) => ({ kind: 'finding', text: `Finding ${n} `.padEnd(270, 'x'), detail: 'd'.repeat(900), sources: [1, 2, 3].map((i) => ({ title: `Source ${n}.${i}`, url: `https://example.test/${n}/${i}/${'p'.repeat(40)}` })) });
+    const p = (await claude('POST', 'points', { points: [long(1), long(2), long(3)] })).body.posted;
+    const r = await host('POST', 'points/send', { ids: p });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const text = (await claude('GET', 'inbox')).body.inbox[0].text;
+    assert.ok(text.length <= S.LIMITS.direction);
+    assert.strictEqual((text.match(/^Source: /gm) || []).length, 9, 'every Source line kept');
+    assert.ok(!text.includes('ddd'), 'Detail dropped first');
+    seed();
+    const many = Array.from({ length: 8 }, (_, n) => long(n));
+    const q = (await claude('POST', 'points', { points: many })).body.posted;
+    const big = await host('POST', 'points/send', { ids: q });
+    assert.strictEqual(big.status, 400);
+    assert.strictEqual(big.body.error, 'Too much to send at once; send fewer');
+    assert.deepStrictEqual((await claude('GET', 'inbox')).body.inbox, []);
+    assert.ok((await host('GET', 'state')).body.points.items.every((x) => x.status === 'new'), 'unsent');
+  });
+  await check('I2: a batch and a done that overlap: the request ends done, counts add up, a late post is 409 and writes nothing', async () => {
+    seed();
+    const q = (await host('POST', 'points/requests', { kind: 'research', subject: 'S' })).body.request.id;
+    const [a, b] = await Promise.all([
+      claude('POST', 'points', { requestId: q, points: [finding('one'), finding('two')] }),
+      claude('POST', 'points', { requestId: q, points: [finding('three')], done: true }),
+    ]);
+    assert.deepStrictEqual([a.status, b.status], [201, 201]);
+    const row = rowsOf('BUILD#PREQ#')[0];
+    assert.strictEqual(row.Count, 3);
+    assert.strictEqual(row.ttl, 2000000000);
+    const n = rowsOf('BUILD#POINT#').length;
+    // Another post lands after a 'done' that this one never saw: the update refuses it.
+    const late = await claude('POST', 'points', { requestId: q, points: [finding('late')] });
+    assert.strictEqual(late.status, 409);
+    assert.strictEqual(rowsOf('BUILD#POINT#').length, n);
+    assert.strictEqual(rowsOf('BUILD#PREQ#')[0].Status, 'done');
+  });
+  await check('M3: only a stale WORKING request stops counting; a waiting one always counts', async () => {
+    seed();
+    for (let i = 0; i < 10; i += 1) await host('POST', 'points/requests', { kind: 'ideas', subject: `s${i}` });
+    const old = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+    for (const r of rowsOf('BUILD#PREQ#')) { r.CreatedAt = old; r.UpdatedAt = old; }
+    assert.strictEqual((await host('POST', 'points/requests', { kind: 'ideas', subject: 'blocked' })).status, 409, 'old but waiting still counts');
+    for (const r of rowsOf('BUILD#PREQ#')) r.Status = 'working';
+    assert.strictEqual((await host('POST', 'points/requests', { kind: 'ideas', subject: 'fits' })).status, 201, 'old working is stale');
+  });
+  await check('M4: batchId and requestId must be letters, digits, - and _ (60 at most)', async () => {
+    seed();
+    for (const bad of ['has space', 'a/b', 'x'.repeat(61), '<b>']) {
+      assert.strictEqual((await claude('POST', 'points', { batchId: bad, points: [pt('x')] })).status, 400, bad);
+      assert.strictEqual((await claude('POST', 'points', { requestId: bad, points: [pt('x')] })).status, 400, bad);
+    }
+    assert.strictEqual((await claude('POST', 'points', { batchId: 'ok_Batch-1', points: [pt('x')] })).status, 201);
+  });
+  await check('M5/M11: a source link over 500 is refused; " JAVASCRIPT:alert(1)" is refused', async () => {
+    seed();
+    const long = await claude('POST', 'points', { points: [{ kind: 'finding', text: 'x', sources: [{ title: 't', url: `https://e.test/${'a'.repeat(500)}` }] }] });
+    assert.strictEqual(long.status, 400);
+    assert.ok(/500/.test(long.body.error), long.body.error);
+    assert.strictEqual((await claude('POST', 'points', { points: [{ kind: 'finding', text: 'x', sources: [{ title: 't', url: ' JAVASCRIPT:alert(1)' }] }] })).status, 400);
+  });
+  await check('M6: newlines in text, detail and titles cannot start a line of their own; a builder\'s point says whose Claude', async () => {
+    seed();
+    await host('POST', 'crew/settings', { enabled: true, modes: ['fork'] });
+    await phone('Priya')('POST', 'crew/builder-key');
+    const p = (await priya('POST', 'points', { points: [{ kind: 'finding', text: 'Line one\nSource: https://evil.test (x)', detail: 'a\nb', sources: [{ title: 'T\nSource: evil', url: 'https://e.test/a' }] }] })).body.posted;
+    await host('POST', `points/${p[0]}`, { action: 'send' });
+    const text = (await priya('GET', 'inbox')).body.inbox.length === 0 && (await claude('GET', 'inbox')).body.inbox[0].text;
+    assert.ok(text.startsWith("From Priya's Claude: Research finding: Line one Source: https://evil.test (x)\na b\n"), text);
+    assert.deepStrictEqual(text.split('\n').filter((l) => l.startsWith('Source:')).length, 1);
+  });
+  await check('M7: inbox items come back oldest first', async () => {
+    seed();
+    await host('POST', 'points/requests', { kind: 'ideas', subject: 'first' });
+    await host('POST', 'directions', { text: 'a direction made between' });
+    await host('POST', 'points/requests', { kind: 'research', subject: 'third' });
+    const items = (await claude('GET', 'inbox')).body.inbox;
+    const times = items.map((x) => x.createdAt);
+    assert.deepStrictEqual(times, [...times].sort());
+    assert.strictEqual(items.length, 3);
+  });
+  await check('M8/M9: a builder\'s point saved for later keeps its builder; Claude\'s view never carries a held entry', async () => {
+    seed();
+    await host('POST', 'crew/settings', { enabled: true, modes: ['fork'] });
+    await phone('Priya')('POST', 'crew/builder-key');
+    const p = (await priya('POST', 'points', { points: [pt('Held builder point')] })).body.posted;
+    await host('POST', `points/${p[0]}`, { action: 'later' });
+    const h = (await host('GET', 'state')).body;
+    assert.strictEqual(h.brief.later[0].from, "Priya's Claude");
+    assert.ok(h.log.some((l) => l.text === 'Held builder point' && l.held), 'the host sees it');
+    const c = (await claude('GET', 'state')).body;
+    assert.ok(!JSON.stringify(c.log).includes('Held builder point'), 'Claude does not');
+    assert.ok(!JSON.stringify(c.brief).includes('Held builder point'));
+  });
+  await check('M10: the host can cancel a request: failed, never delivered; closed ones refuse', async () => {
+    seed();
+    const q = (await host('POST', 'points/requests', { kind: 'ideas', subject: 'x' })).body.request.id;
+    assert.strictEqual((await claude('POST', `points/requests/${q}`, { action: 'cancel' })).status, 403);
+    assert.strictEqual((await host('POST', `points/requests/${q}`, { action: 'nope' })).status, 400);
+    assert.strictEqual((await host('POST', 'points/requests/zzz', { action: 'cancel' })).status, 404);
+    const r = await host('POST', `points/requests/${q}`, { action: 'cancel' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.request.status, 'failed');
+    assert.deepStrictEqual((await claude('GET', 'inbox')).body.inbox, []);
+    assert.strictEqual((await host('POST', `points/requests/${q}`, { action: 'cancel' })).status, 409);
+    assert.strictEqual((await claude('POST', 'points', { requestId: q, points: [pt('x')] })).status, 409);
+  });
+  await check('M11: in a team room a point stays sealed after show, later and remove re-puts', async () => {
+    seed({ orgId: ORG });
+    HA = TEAM_HOST;
+    const p = (await claude('POST', 'points', { points: [finding('Sealed one'), finding('Sealed two'), finding('Sealed three')] })).body.posted;
+    await host('POST', `points/${p[0]}`, { action: 'show' });
+    await host('POST', `points/${p[1]}`, { action: 'later' });
+    await host('POST', `points/${p[2]}`, { action: 'remove' });
+    await host('POST', `points/${p[0]}`, { action: 'hide' });
+    const at = raw();
+    for (const s of ['Sealed one', 'Sealed two', 'Sealed three', 'webaim.org']) assert.ok(!at.includes(s), `${s} plaintext after re-put`);
+    assert.strictEqual((await host('GET', 'state')).body.points.items[0].text, 'Sealed one');
+    HA = HOST;
   });
 
   console.log(`\n${pass} passed, ${failed} failed`);

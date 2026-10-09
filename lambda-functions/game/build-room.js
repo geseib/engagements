@@ -147,7 +147,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -178,7 +178,7 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
   // reads on every call until the host edits them away.
   // An opening step fills its own line of the brief instead (noBrief).
   if (forAgent && !noBrief && ['keep', 'later'].includes(kind4)) {
-    await addToBrief(ctx, kind4, { id: row.LogId, text, from: by === 'room' ? 'the room' : askId ? `ask ${Number(askId)}` : 'you', askId: askId || null, at: now });
+    await addToBrief(ctx, kind4, { id: row.LogId, text, from: from || (by === 'room' ? 'the room' : askId ? `ask ${Number(askId)}` : 'you'), askId: askId || null, at: now });
   }
   return saved;
 }
@@ -1207,6 +1207,7 @@ async function takeInbox(ctx, role) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
     }
   }
+  out.sort((x, y) => String(x.createdAt || '').localeCompare(String(y.createdAt || '')));
   // The decision row records that Claude heard it.
   for (const item of out.filter((x) => x.askId)) {
     const ask = findAsk(room, item.askId);
@@ -1820,6 +1821,25 @@ async function postPoints(ctx, role, body) {
     if (['done', 'failed'].includes(request.Status)) return fail(409, 'That request is already closed');
   }
   if (S.openPointCount(room) + points.length > S.POINT_LIMITS.open) return fail(409, POINT_FULL, { open: S.openPointCount(room), limit: S.POINT_LIMITS.open });
+  if (request) {
+    // One conditional update, before any point is written: a request that closed
+    // meanwhile (another post said done) refuses this one and nothing is stored.
+    const nowIso = new Date().toISOString();
+    try {
+      await db.send(new UpdateCommand({
+        TableName: TABLE(),
+        Key: { PK: ctx.pk, SK: request.SK },
+        UpdateExpression: 'SET #st = :st, UpdatedAt = :now ADD #cnt :n',
+        ConditionExpression: '#st <> :done AND #st <> :failed',
+        ExpressionAttributeNames: { '#st': 'Status', '#cnt': 'Count' },
+        ExpressionAttributeValues: { ':st': closes ? 'done' : 'working', ':now': nowIso, ':n': points.length, ':done': 'done', ':failed': 'failed' },
+      }));
+    } catch (e) {
+      if (e && e.name === 'ConditionalCheckFailedException') return fail(409, 'That request is already closed');
+      throw e;
+    }
+    request = { ...request, Status: closes ? 'done' : 'working', Count: (Number(request.Count) || 0) + points.length, UpdatedAt: nowIso };
+  }
   const base = nextMs(room.points);
   const batch = batchId || requestId || S.newId();
   const posted = [];
@@ -1844,14 +1864,6 @@ async function postPoints(ctx, role, body) {
       CreatedAt: at,
     });
     posted.push(S.pointIdOf(sk));
-  }
-  if (request) {
-    request = await put(ctx, {
-      ...request,
-      Status: closes ? 'done' : 'working',
-      Count: (Number(request.Count) || 0) + posted.length,
-      UpdatedAt: new Date().toISOString(),
-    });
   }
   const st = await touchState(ctx);
   await announce(ctx, st.Rev);
@@ -1881,6 +1893,17 @@ async function createPointRequest(ctx, forBuilder, body) {
   return done(ctx, 201, { request: S.requestView(row) });
 }
 
+/** The host gives up on a request Claude has not finished (it will not be delivered or answered). */
+async function pointRequestAction(ctx, reqId, body) {
+  if (String((body || {}).action || '') !== 'cancel') return fail(400, 'action must be cancel');
+  const room = await loadRoom(ctx);
+  const r = findPointRequest(room, reqId);
+  if (!r) return fail(404, 'No such request');
+  if (['done', 'failed'].includes(r.Status)) return fail(409, 'That request is already closed');
+  const saved = await put(ctx, { ...r, Status: 'failed', UpdatedAt: new Date().toISOString() });
+  return done(ctx, 200, { request: S.requestView(saved) });
+}
+
 /** What the host may do with one point. */
 async function pointAction(ctx, pointId, body) {
   const action = String((body || {}).action || '');
@@ -1895,7 +1918,7 @@ async function pointAction(ctx, pointId, body) {
   else if (action === 'later') {
     if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
     // The Later list is the one place held directions live: saved, never sent.
-    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later' });
+    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
     next = 'later';
   } else if (action === 'show') {
     if (status === 'shown') return done(ctx, 200, { point: S.pointView(p) });
@@ -1908,7 +1931,9 @@ async function pointAction(ctx, pointId, body) {
     next = 'new';
   } else if (action === 'send') {
     if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
-    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointDirectionText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'do-now' });
+    const dir = S.pointsDirection([p]);
+    if (dir.error) return fail(400, dir.error);
+    await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now' });
     next = 'sent';
   }
   const saved = await put(ctx, { ...p, Status: next, UpdatedAt: now });
@@ -1924,8 +1949,9 @@ async function sendPoints(ctx, body) {
   const rows = ids.map((id) => findPoint(room, id));
   if (rows.some((p) => !p)) return fail(404, 'One of those points is gone');
   if (rows.some((p) => !S.OPEN_POINT_STATUSES.includes(p.Status || 'new'))) return fail(409, 'One of those points is already on its way somewhere else');
-  const text = rows.length === 1 ? S.pointDirectionText(rows[0]) : `${rows.length} points from the room's list:\n\n${rows.map((p) => S.pointDirectionText(p)).join('\n\n')}`;
-  await logEntry(ctx, { kind: 'direction', text: S.cleanText(text, S.LIMITS.direction), by: 'host', forAgent: true, as: 'do-now' });
+  const dir = S.pointsDirection(rows);
+  if (dir.error) return fail(400, dir.error);
+  await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now' });
   const now = new Date().toISOString();
   for (const p of rows) await put(ctx, { ...p, Status: 'sent', UpdatedAt: now });
   return done(ctx, 200, { sent: ids });
@@ -1974,6 +2000,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'activity' && !b) return role === 'agent' ? postActivity(ctx, body) : fail(403, 'Only Claude reports its activity');
   if (a === 'points' && !b) return role === 'agent' ? postPoints(ctx, role, body) : fail(403, 'Claude posts the points; the host curates them');
   if (a === 'points' && b === 'requests' && !c) return hostOnly() || createPointRequest(ctx, '', body);
+  if (a === 'points' && b === 'requests' && c && !d) return hostOnly() || pointRequestAction(ctx, c, body);
   if (a === 'points' && b === 'send' && !c) return hostOnly() || sendPoints(ctx, body);
   if (a === 'points' && b && !c) return hostOnly() || pointAction(ctx, b, body);
   if (a === 'asks' && !b) return createAsk(ctx, role, body);

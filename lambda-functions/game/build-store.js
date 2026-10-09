@@ -881,7 +881,7 @@ const REQUEST_STATUSES = Object.freeze(['waiting', 'working', 'done', 'failed'])
 const POINT_LIMITS = Object.freeze({
   text: 280, detail: 1200, about: 200, subject: 200, sourceTitle: 120, sources: 3, perPost: 8, open: 40, batch: 60, activeRequests: 10,
 });
-/** A request still "working" after this long is stale: it stops counting against the cap. */
+/** A request still "working" after this long is stale: it stops counting against the cap. (A waiting one always counts.) */
 const REQUEST_STALE_MS = 2 * 60 * 60 * 1000;
 const POINT_OUTCOMES = Object.freeze({
   new: '', shown: 'shown to the room', voting: 'in a vote', queued: 'queued', sent: 'sent to Claude', later: 'saved for later', removed: 'removed',
@@ -891,6 +891,7 @@ const POINT_LABELS = Object.freeze({ talk: 'Talking point', finding: 'Research f
 /** One source: {title, url} with an http(s) url. */
 function normalizeSource(src) {
   const o = typeof src === 'string' ? { url: src } : (src || {});
+  if (String(o.url === undefined || o.url === null ? '' : o.url).trim().length > LIMITS.url) return { error: `A source link is ${LIMITS.url} characters at most` };
   const url = safeUrl(o.url);
   if (!url) return { error: 'Every source needs an http or https link' };
   let title = cleanText(o.title, POINT_LIMITS.sourceTitle);
@@ -935,7 +936,12 @@ function normalizePointsPost(body) {
   const list = Array.isArray(b.points) ? b.points : [];
   if (list.length > POINT_LIMITS.perPost) return { error: `Post up to ${POINT_LIMITS.perPost} points at a time` };
   const done = b.done === true;
-  const requestId = cleanText(b.requestId, 60);
+  const ID_OK = /^[A-Za-z0-9_-]{1,60}$/;
+  const idOf1 = (v) => (v === undefined || v === null ? '' : String(v).trim());
+  const requestId = idOf1(b.requestId);
+  const batchId = idOf1(b.batchId);
+  if (requestId && !ID_OK.test(requestId)) return { error: 'requestId is letters, digits, - and _ only (60 at most)' };
+  if (batchId && !ID_OK.test(batchId)) return { error: 'batchId is letters, digits, - and _ only (60 at most)' };
   if (done && !requestId) return { error: 'done closes a request: send its requestId too' };
   if (!list.length && !done) return { error: 'Post at least one point' };
   const points = [];
@@ -944,7 +950,7 @@ function normalizePointsPost(body) {
     if (n.error) return { error: list.length > 1 ? `Point ${i + 1}: ${n.error}` : n.error };
     points.push(n.value);
   }
-  return { value: { points, done, requestId, batchId: cleanText(b.batchId, POINT_LIMITS.batch) } };
+  return { value: { points, done, requestId, batchId } };
 }
 
 /** A Research or Ideas request: {kind, subject}. */
@@ -968,8 +974,8 @@ const openPointCount = (room) => (room.points || []).filter(isOpenPoint).length;
 /** Requests Claude has not finished, for one owner, ignoring stale ones. */
 function activeRequests(room, forBuilder, nowMs) {
   return (room.preqs || []).filter((r) => (r.ForBuilder || '') === (forBuilder || '')
-    && ['waiting', 'working'].includes(r.Status)
-    && nowMs - (Date.parse(r.UpdatedAt || r.CreatedAt) || 0) < REQUEST_STALE_MS);
+    && (r.Status === 'waiting'
+      || (r.Status === 'working' && nowMs - (Date.parse(r.UpdatedAt || r.CreatedAt) || 0) < REQUEST_STALE_MS)));
 }
 
 function pointView(p) {
@@ -1031,15 +1037,34 @@ function pointsClaudeView(room, who) {
 /** The line a point leaves on the Later list: its words, and where a finding came from. */
 function pointLaterText(p) {
   const src = (p.Sources || [])[0];
-  return p.Kind === 'finding' && src ? `${p.Text} (${src.url})` : p.Text;
+  return p.Kind === 'finding' && src ? `${oneLine(p.Text)} (${src.url})` : oneLine(p.Text);
 }
 
-/** The words a point carries to Claude when the host sends it. */
-function pointDirectionText(p) {
-  const bits = [`${POINT_LABELS[p.Kind] || 'Point'}: ${p.Text}`];
-  if (p.Detail) bits.push(p.Detail);
-  for (const s of p.Sources || []) bits.push(`Source: ${s.title} (${s.url})`);
+/** One line: newlines and runs of spaces collapse, so a point cannot start a line of its own in a direction. */
+const oneLine = (v) => String(v === undefined || v === null ? '' : v).replace(/\s+/g, ' ').trim();
+
+/** The words a point carries to Claude when the host sends it. `withDetail: false` drops the Detail line. */
+function pointDirectionText(p, { withDetail = true } = {}) {
+  const from = p.ByRole === 'builder' ? `From ${oneLine(p.By)}'s Claude: ` : '';
+  const bits = [`${from}${POINT_LABELS[p.Kind] || 'Point'}: ${oneLine(p.Text)}`];
+  if (withDetail && p.Detail) bits.push(oneLine(p.Detail));
+  for (const s of p.Sources || []) bits.push(`Source: ${oneLine(s.title)} (${s.url})`);
   return bits.join('\n');
+}
+
+/**
+ * One direction for one or more points. Never cut: if it is over the direction
+ * limit the Detail lines go first; if it is still over, `{error}`.
+ */
+function pointsDirection(rows) {
+  const build = (withDetail) => (rows.length === 1
+    ? pointDirectionText(rows[0], { withDetail })
+    : `${rows.length} points from the room's list:\n\n${rows.map((p) => pointDirectionText(p, { withDetail })).join('\n\n')}`);
+  for (const withDetail of [true, false]) {
+    const text = build(withDetail);
+    if (text.length <= LIMITS.direction) return { value: text };
+  }
+  return { error: 'Too much to send at once; send fewer' };
 }
 
 function hostView({ gameId, meta, sessionState, room, players, now, audience = 'host' }) {
@@ -1060,7 +1085,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // Host notes are the host's own; Claude never sees them.
     // A builder's own deliveries (feedback, the base moving) are plumbing; the
     // crew entries beside them say what happened.
-    log: room.logs.filter((l) => !l.ForBuilder && !(isAgent && PRIVATE_LOG_KINDS.includes(l.Kind))).map(logView),
+    // Claude hears nothing from Later until the host sends it: held entries are not in its view.
+    log: room.logs.filter((l) => !l.ForBuilder && !(isAgent && (PRIVATE_LOG_KINDS.includes(l.Kind) || (l.ForAgentAs === 'later' && !l.ForAgent)))).map(logView),
     ideas: isAgent ? [] : room.ideas.map(ideaView),
     wallComment: isAgent ? null : wallCommentView(room.state),
     // Claude's copy has no Later list: it hears an item only when the host sends it.
@@ -1268,6 +1294,6 @@ module.exports = {
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
-  pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointDirectionText, pointLaterText,
+  pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };
