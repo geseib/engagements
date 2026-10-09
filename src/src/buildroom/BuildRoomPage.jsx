@@ -64,7 +64,7 @@ import {
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
-  defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf,
+  defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -605,6 +605,21 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [screen]);
 
+  // CTRL OR CMD ENTER ON THE HOST SCREEN presses the Points row's main button
+  // while points are ticked and that row leads (Space never does: an accidental
+  // tick plus Space must do nothing). Same guards as Space: no dialog, no typing.
+  useEffect(() => {
+    if (screen !== 'host') return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.repeat || isTypingTarget(e.target)) return;
+      if (dialogOpen()) return;
+      const b = document.querySelector('.brm-host [data-points-primary]');
+      if (b && !b.disabled) { e.preventDefault(); b.click(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen]);
+
   // A new current ask, or the same one moving on (closed, reopened), starts
   // its path afresh: no spoken answer carried over, and a reopened ask drops
   // the pick it had, so closing it again settles from the new count.
@@ -756,12 +771,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // What's next's lead turns to an outline button. When an ask, the opening or
   // the starter question holds it instead, the row's main button is outline.
   const pointsList = (room.points && room.points.items) || [];
-  const pointTickedNow = pointTicked.filter((id) => pointsList.some((p) => p.id === id && ['new', 'shown', 'queued'].includes(p.status))).length;
-  const framedNow = Boolean(room.opening && room.opening.phase === 'building')
-    && (room.opening.steps || []).some((x) => ['done', 'skipped'].includes(x.status)) && !asks.some((x) => !x.openingStep);
-  const starterNow = !ended && !framedNow && !asks.some((x) => !x.openingStep);
-  const whatsNextShown = !ended && !onCrew && !current && !starterNow
-    && !(room.opening && room.opening.phase === 'opening') && !(room.outcome && room.outcome.summary);
+  const pointTickedNow = pointTicked.filter((id) => pointsList.some((p) => p.id === id && POINT_OPEN.includes(p.status))).length;
+  const whatsNextShown = !onCrew && !current && !(room.opening && room.opening.phase === 'opening') && nowFlags(room).whatsNext;
   const pointsLead = pointTickedNow > 0 && whatsNextShown;
   const sendPointRequest = (kind, subject) => run(() => api.pointRequest(kind, subject));
   const putPointsToVote = (ids) => run(() => api.votePoints({ ids }));
@@ -954,7 +965,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               laterTicked={laterTicked} setLaterTicked={setLaterTicked}
               onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
               onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
-              pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead} openPoints={pointsTab}
+              pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead} askOpen={Boolean(current)} openPoints={pointsTab}
               onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
             />
           )}
@@ -2774,10 +2785,9 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
   // room suggests; a tie goes to the wheel or a revote (WheelPanel); and the
   // host can pick one and send it to Claude at any point.
   // Just out of the opening, before any building ask: the way back is right here.
-  const framed = room.opening && room.opening.phase === 'building'
-    && (room.opening.steps || []).some((x) => ['done', 'skipped'].includes(x.status))
-    && !(room.asks || []).some((x) => !x.openingStep);
-  const starter = !ended && !framed && !(room.asks || []).some((x) => !x.openingStep) && onCompose;
+  const flags = nowFlags(room);
+  const framed = flags.framed;
+  const starter = flags.starter && onCompose;
   // WHAT'S NEXT (H1): between asks, once the room has something to build on.
   const whatsNext = !ended && !starter && onMove;
   return (
@@ -3111,7 +3121,7 @@ function ideaWho(idea) {
  * Claude's asks first, then oldest first. Filters by who it came from; tick
  * ideas to act on several at once, or put them to a vote.
  */
-function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined }) {
+function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, askOpen = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined }) {
   const [filter, setFilter] = useState('all');
   const [ticked, setTicked] = useState([]);
   const [voteOf, setVoteOf] = useState(null);
@@ -3188,7 +3198,7 @@ function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLate
       <BuildLaterPoints
         room={room} ended={ended} busy={busy} run={run} api={api}
         laterTicked={laterTicked} setLaterTicked={setLaterTicked} onVoteLater={onVoteLater} onAskRoom={onAskRoom}
-        pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={leadsRow} openPoints={openPoints} onRequest={onRequest} onVotePoints={onVotePoints}
+        pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={leadsRow} askOpen={askOpen} openPoints={openPoints} onRequest={onRequest} onVotePoints={onVotePoints}
       />
 
       {handled.length > 0 && (

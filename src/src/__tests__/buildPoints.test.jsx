@@ -52,7 +52,7 @@ const IDEA = (n, over = {}) => ({
   BatchId: 'b-priya', About: 'Parking map', CreatedAt: ago(100 - n), Sources: [], ...over,
 });
 const REQ = (over = {}) => ({
-  ReqId: 'rq1', Kind: 'research', Subject: 'accessible colour contrast', Status: 'done', CreatedAt: ago(320), ...over,
+  ReqId: 'rq1', Kind: 'research', Subject: 'accessible colour contrast', Status: 'done', Count: 3, CreatedAt: ago(320), ...over,
 });
 const CHOICE = {
   AskId: '003', Kind: 'choice', Prompt: 'Which header should volunteers see first?', Detail: '',
@@ -295,7 +295,8 @@ describe('ticks and the action row', () => {
     expect(row.getByRole('button', { name: 'Put 1 to a vote' })).toBeDisabled();
     expect(row.getByRole('button', { name: 'Put 1 to a vote' })).toHaveAttribute('title', 'Tick 2 to 8');
     expect(row.getByRole('button', { name: 'Show on Stage' })).not.toBeDisabled();
-    expect(row.getByText(/Press Space to send/)).toBeInTheDocument();
+    expect(row.getByText(/Ctrl Enter sends/)).toBeInTheDocument();
+    expect(row.queryByText(/Press Space/)).toBeNull();
     fireEvent.click(row.getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(postsTo('points/f1')).toHaveLength(1));
     expect(postsTo('points/f1')[0].body).toEqual({ action: 'send' });
@@ -311,7 +312,8 @@ describe('ticks and the action row', () => {
     const show = row.getByRole('button', { name: 'Show on Stage' });
     expect(show).toBeDisabled();
     expect(show).toHaveAttribute('title', 'One point at a time on the Stage');
-    expect(row.getByText(/Press Space to put them to a vote/)).toBeInTheDocument();
+    expect(row.getByText(/Ctrl Enter puts them to a vote/)).toBeInTheDocument();
+    expect(row.queryByText(/Press Space/)).toBeNull();
   });
 
   test('the main button is last on the right in both states', async () => {
@@ -402,12 +404,57 @@ describe('one orange on the whole Host screen, with Points', () => {
     expect(oranges().map((b) => b.textContent)).toEqual(['Put 2 to a vote']);
   });
 
-  test('Space presses the row\'s orange while points are ticked', async () => {
+  test('Space never fires the Points row: an accidental tick plus Space does nothing', async () => {
     await openRoom(RESEARCH_STATE());
     tick('Finding number 1');
     fireEvent.keyDown(window, { key: ' ' });
+    tick('Finding number 2');
+    fireEvent.keyDown(window, { key: ' ' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(posts()).toHaveLength(0);
+    expect(within(panel()).getByRole('button', { name: 'Put 2 to a vote' })).toHaveAttribute('data-no-space');
+  });
+
+  test('Ctrl Enter on the Host screen presses the row\'s primary: Send with one, the vote with two', async () => {
+    await openRoom(RESEARCH_STATE());
+    tick('Finding number 1');
+    fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
     await waitFor(() => expect(postsTo('points/f1')).toHaveLength(1));
     expect(postsTo('points/f1')[0].body).toEqual({ action: 'send' });
+  });
+
+  test('Cmd Enter puts two to a vote', async () => {
+    await openRoom(RESEARCH_STATE());
+    tick('Finding number 1');
+    tick('Finding number 2');
+    fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
+    await waitFor(() => expect(postsTo('points/vote')).toHaveLength(1));
+  });
+
+  test('Ctrl Enter does nothing while typing, with a dialog open, or when the row does not lead', async () => {
+    await openRoom(RESEARCH_STATE());
+    tick('Finding number 1');
+    const box = screen.getByLabelText('Tell Claude, or log what the room said');
+    box.focus();
+    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
+    box.blur();
+    const dlg = document.createElement('div');
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+    document.body.appendChild(dlg);
+    fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
+    dlg.remove();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(postsTo('points/f1')).toHaveLength(0);
+  });
+
+  test('Ctrl Enter does nothing while an ask holds the orange', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], points: [FINDING(1), FINDING(2)], preqs: [REQ()] }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
+    tick('Finding number 1');
+    fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(postsTo('points/f1')).toHaveLength(0);
   });
 
   test('while an ask is open its step keeps the orange; the row\'s main button is outline', async () => {
@@ -592,5 +639,76 @@ describe('pointGroups', () => {
     const groups = pointGroups(room);
     expect(groups.map((g) => g.heading)).toEqual(["Priya's Claude · 1 idea for Parking map", 'Research: accessible colour contrast · 1 finding']);
     expect(groups[0].by).toBe("Priya's Claude");
+  });
+});
+
+describe('fix round 1', () => {
+  test('I3: Show on Stage is off while an ask is current', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], points: [FINDING(1)], preqs: [REQ()] }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
+    tick('Finding number 1');
+    const show = within(panel()).getByRole('button', { name: 'Show on Stage' });
+    expect(show).toBeDisabled();
+    expect(show).toHaveAttribute('title', 'Finish the open question first');
+    fireEvent.click(show);
+    expect(postsTo('points/f1')).toHaveLength(0);
+  });
+
+  test('I4: a finished request that brought nothing back says so, and can be hidden', async () => {
+    await openRoom(hostState({ points: [TALK(1)], preqs: [REQ({ ReqId: 'n1', Subject: 'salary by street', Status: 'done', Count: 0 }), REQ({ ReqId: 'n2', Kind: 'ideas', Subject: 'next steps', Status: 'done', Count: 0 })] }));
+    expect(within(panel()).getByText('Research found nothing it could source on "salary by street".')).toBeInTheDocument();
+    expect(within(panel()).getByText('Ideas found nothing to suggest on "next steps".')).toBeInTheDocument();
+    fireEvent.click(within(panel()).getAllByRole('button', { name: 'Hide' })[0]);
+    expect(within(panel()).getAllByRole('button', { name: 'Hide' })).toHaveLength(1);
+  });
+
+  test('I4: a finished request with findings has no such chip', async () => {
+    await openRoom(hostState({ points: [FINDING(1)], preqs: [REQ({ Count: 1 })] }));
+    expect(within(panel()).queryByText(/found nothing/)).toBeNull();
+  });
+
+  test('I5: What\'s next sending the host to Points clears the Later ticks', async () => {
+    await openRoom(hostState({
+      asks: [DECIDED], points: [TALK(1), TALK(2), TALK(3)],
+      later: [{ id: 'l1', text: 'Check the dates', at: ago(50) }, { id: 'l2', text: 'Check the colours', at: ago(40) }],
+    }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Tick: Check the dates' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Tick: Check the colours' }));
+    expect(screen.getByRole('button', { name: 'Put 2 to a vote' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Points' }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Later/ }));
+    expect(screen.queryByText('2 ticked')).toBeNull();
+  });
+
+  test('forty open points: Research and Ideas are off and say why', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => TALK(i + 1, { PointId: `t${i + 1}` }));
+    await openRoom(hostState({ points: many }));
+    const r = within(panel()).getByRole('button', { name: 'Research…' });
+    expect(r).toBeDisabled();
+    expect(r).toHaveAttribute('title', '40 is the most. Remove or save some first.');
+    expect(within(panel()).getByRole('button', { name: 'Ideas…' })).toBeDisabled();
+  });
+
+  test('a point in a vote cannot be removed', async () => {
+    await openRoom(RESEARCH_STATE({ points: [FINDING(1, { Status: 'voting' }), FINDING(2)] }));
+    expect(within(panel()).getAllByRole('button', { name: 'Remove' })).toHaveLength(1);
+  });
+
+  test('source links say they open in a new tab', async () => {
+    await openRoom(RESEARCH_STATE());
+    expect(within(panel()).getAllByRole('link')[0]).toHaveAccessibleName(/\(opens in a new tab\)/);
+  });
+
+  test('the take-down window says closing keeps the point up', async () => {
+    const ideas = [{ Text: 'a', PlayerName: 'Ana', AboutPoint: 'f1' }, { Text: 'b', PlayerName: 'Dee', AboutPoint: 'f1' }];
+    await openRoom(RESEARCH_STATE({ points: [FINDING(1, { Status: 'shown' })], ideas }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'A point is up for the room' })).getByRole('button', { name: 'Take it down' }));
+    const dlg = await screen.findByRole('dialog');
+    expect(within(dlg).getByText(/Closing this window keeps the point up/)).toBeInTheDocument();
+  });
+
+  test('shownPointIdeas finds nothing when the point has no id', () => {
+    const { shownPointIdeas } = require('../buildroom/buildScreens');
+    expect(shownPointIdeas({ shownPoint: { text: 'x' }, points: { items: [] }, ideas: [{ aboutPoint: null, status: 'new' }] })).toEqual([]);
   });
 });

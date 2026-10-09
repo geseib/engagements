@@ -1296,3 +1296,4 @@
 .brm .brm-pointsrc { margin: 0; color: var(--muted); font-size: var(--brm-st-meta); font-weight: 600; }
 .brm .brm-pointprompt { margin: 0; font-size: var(--brm-st-meta); color: var(--muted); }
 .brm .brm-shownpoint { border-color: var(--brm-line-amber); }
+.brm .brm-pchip.is-none { border-color: var(--brm-line-red); background: transparent; color: var(--danger-text); }
