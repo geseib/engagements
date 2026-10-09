@@ -85,3 +85,14 @@ All routes under `/games/{id}/build/`. Host = the signed-in host; Claude = the h
 - Phones (`build-play state`) and anything Stage-facing: `shownPoint: {id, kind, text, site, from}` (`from` = 'claude' or a builder's name; site = host name of the first source; no detail, no sources list) and `run` (room shape: no point ids, no notes). No `points` key. Never a participant name.
 - Outcomes: every move sets the point's `Outcome` (voted N, sent to Claude, run item k, run item k, done, highlighted, saved for later, skipped to Later, removed); the Claude/builder `points.digest` reports it.
 - `GET build/state` as the host's Claude: `you: {role:'host-claude', name}` where name = the session's HostName as the host screen shows it (empty string if none). A builder's state: `you: {role:'builder', name}` (already so).
+
+## Task 2 fix round 1 (supersedes the lines above where they differ)
+- runId: the run view (host/agent) has `runId`; run-item direction rows and inbox items carry `runId` with `runItem`. `run/done {runItem, runId?, note?}`: a runId that is not the current list's is 409 "That list has ended" (a missing runId is accepted). Stop (and starting a new list) cancels run-item rows Claude has not yet heard (marked delivered + Cancelled, conditional), so they never arrive; an unheard `doing` item at stop becomes `skipped` and its point goes to Later. Done after stop is still accepted for items that were `doing`.
+- Forward `send`/`run`: voted points not taken forward return to PriorStatus (`new` or `queued`) with outcome "voted N, not taken forward" (`later-rest` unchanged: they go to Later).
+- Re-ask and the wheel's tie revote: kept points get `PromotedTo` = the new ask and stay `voting`; points whose option was dropped (or lost the tie) return with "voted N, not taken forward". Forward on an ask that has `RevotedAs` is 409 "This vote was asked again". Discarding the re-ask restores its points.
+- Forward is allowed only at `results`, or `decided` when the decision was not sent to Claude (else 409).
+- `POST run/reorder` (host) `{order:[pointIds of every pending item, once each], ver}`: `ver` required (the view's `ver`); mismatch 409 "The list changed; look again"; wrong set 400. Only pending items move; their points' outcomes renumber ("queued, run item k").
+- `POST run` needs 2+ points (400 otherwise), 8 at most; forward `run` too. The vote uses up to 8 option slots (letters A-H) where the ideas vote still takes 6.
+- `later` on a shown point appends "Ideas from the room about it:" with one "- idea" line each (up to 8, no names) to the Later direction.
+- `shownPoint` is `{kind, text, site, from}` (no id) everywhere; phones get `run` only while it is `running` (else null); the host still sees finished/stopped.
+- Plugin 1.13.1: `post_update` with `runItem` (minimum 1) sends `run/done {runItem, runId (remembered from the item), note (the update text, 200 chars)}`.

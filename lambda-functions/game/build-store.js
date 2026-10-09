@@ -1176,6 +1176,7 @@ function runView(run, audience) {
   }));
   const out = {
     status: run.Status || 'running',
+    ...(isHost ? { runId: run.RunId } : {}),
     cur,
     total: items.length,
     startedAt: run.StartedAt || null,
@@ -1197,7 +1198,6 @@ function shownPointView(room) {
   if (!p) return null;
   const src = (p.Sources || [])[0];
   return {
-    id: p.PointId,
     kind: p.Kind,
     text: p.Text || '',
     site: src ? siteOf(src.url) : '',
@@ -1281,7 +1281,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     lan: LAN.lanPublicView(room, now),
     // The room sees a point only when the host shows it, and the run list once it starts.
     shownPoint: shownPointView(room),
-    run: runView(room.run, 'public'),
+    run: room.run && room.run.Status === 'running' ? runView(room.run, 'public') : null,
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
     mine,
     rev: (room.state && room.state.Rev) || 0,
