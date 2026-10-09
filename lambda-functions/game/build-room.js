@@ -1185,6 +1185,28 @@ async function takeInbox(ctx, role) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
     }
   }
+  // Research / Ideas requests: delivered to the Claude they are for, once. A
+  // request made while Claude was away stays `waiting` and arrives on its next call.
+  const waiting = (room.preqs || []).filter((r) => r.Status === 'waiting' && (role === 'builder' ? r.ForBuilder === ctx.builder : !r.ForBuilder));
+  for (const r of waiting) {
+    try {
+      await db.send(new UpdateCommand({
+        TableName: TABLE(),
+        Key: { PK: ctx.pk, SK: r.SK },
+        UpdateExpression: 'SET DeliveredAt = :now, #st = :working, UpdatedAt = :now',
+        ConditionExpression: 'attribute_not_exists(DeliveredAt)',
+        ExpressionAttributeNames: { '#st': 'Status' },
+        ExpressionAttributeValues: { ':now': now, ':working': 'working' },
+      }));
+      const verb = r.Kind === 'research' ? 'Research this for the room, with sources' : 'Give the room ideas for where to go next';
+      out.push({
+        id: r.ReqId, kind: r.Kind, requestId: r.ReqId, subject: r.Subject || '',
+        text: `${verb}: ${r.Subject || ''}`, from: 'request', as: 'do-now', askId: null, shareId: null, createdAt: r.CreatedAt,
+      });
+    } catch (e) {
+      if (e && e.name !== 'ConditionalCheckFailedException') throw e;
+    }
+  }
   // The decision row records that Claude heard it.
   for (const item of out.filter((x) => x.askId)) {
     const ask = findAsk(room, item.askId);
@@ -1655,6 +1677,7 @@ async function builderState(ctx) {
   return {
     gameId: pub.gameId, title: pub.title, goal: pub.goal, state: pub.state, playerCount: pub.playerCount,
     log: pub.log, outcome: pub.outcome,
+    points: S.pointsClaudeView(room, { role: 'builder', name: ctx.builder }),
     you: { role: 'builder', name: ctx.builder },
     crew: C.crewView(room, 'builder', me),
   };
@@ -1669,6 +1692,7 @@ async function routeBuilder(ctx, method, parts, body, query) {
   if ((await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
   if (a === 'crew') return routeCrew(ctx, 'builder', method, parts, body, query);
   if (method === 'POST' && a === 'images' && !b) return postImage(ctx, 'builder', body);
+  if (method === 'POST' && a === 'points' && !b) return postPoints(ctx, 'builder', body);
   if (method === 'POST' && a === 'log' && !b) {
     const kind = String((body || {}).kind || 'progress');
     if (!['progress', 'milestone', 'showing', 'checkpoint'].includes(kind)) return fail(400, 'kind must be progress, milestone, showing or checkpoint');
@@ -1766,6 +1790,147 @@ async function shareReport(ctx, body) {
   return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets });
 }
 
+// ── Talking points, research and ideas ──────────────────────────────────────
+//
+// Claude (the host's, or a builder's) posts points; the host curates them and
+// asks for Research / Ideas. Every row goes through put(), so it carries the
+// session ttl and is sealed in a team room. Nothing here reaches a phone or
+// the Stage: the room sees a point only when the host shows it or puts it to
+// a vote.
+
+const findPoint = (room, id) => (room.points || []).find((p) => p.PointId === id) || null;
+const findPointRequest = (room, id) => (room.preqs || []).find((r) => r.ReqId === id) || null;
+const POINT_FULL = 'Remove or save some first';
+/** Now, but never at or before the newest row's time: rows keep the order they were made in, even within a millisecond. */
+const nextMs = (rows) => Math.max(Date.now(), ...(rows || []).map((r) => (Date.parse(r.CreatedAt) || 0) + 1));
+
+/** Claude (role agent) or a builder's Claude posts 1 to 8 points, optionally answering a request. */
+async function postPoints(ctx, role, body) {
+  const norm = S.normalizePointsPost(body);
+  if (norm.error) return fail(400, norm.error);
+  const { points, done: closes, requestId, batchId } = norm.value;
+  const room = await loadRoom(ctx);
+  const who = role === 'builder' ? { role: 'builder', name: ctx.builder } : { role: 'agent' };
+  let request = null;
+  if (requestId) {
+    request = findPointRequest(room, requestId);
+    if (!request) return fail(404, 'No such request');
+    // Builders answer their own requests; the host's Claude answers the host's. Never across.
+    if (!S.isOwnRequest(request, who)) return fail(403, 'That request is not yours');
+    if (['done', 'failed'].includes(request.Status)) return fail(409, 'That request is already closed');
+  }
+  if (S.openPointCount(room) + points.length > S.POINT_LIMITS.open) return fail(409, POINT_FULL, { open: S.openPointCount(room), limit: S.POINT_LIMITS.open });
+  const base = nextMs(room.points);
+  const batch = batchId || requestId || S.newId();
+  const posted = [];
+  for (let i = 0; i < points.length; i += 1) {
+    // One millisecond apart, so a post keeps Claude's order on the host's list.
+    const at = new Date(base + i).toISOString();
+    const sk = S.SK.point(at);
+    const v = points[i];
+    await put(ctx, {
+      SK: sk,
+      PointId: S.pointIdOf(sk),
+      Kind: v.kind,
+      Text: v.text,
+      ...(v.detail ? { Detail: v.detail } : {}),
+      ...(v.sources.length ? { Sources: v.sources } : {}),
+      ...(v.about ? { About: v.about } : {}),
+      BatchId: batch,
+      ...(requestId ? { RequestId: requestId } : {}),
+      By: role === 'builder' ? ctx.builder : 'claude',
+      ByRole: role === 'builder' ? 'builder' : 'agent',
+      Status: 'new',
+      CreatedAt: at,
+    });
+    posted.push(S.pointIdOf(sk));
+  }
+  if (request) {
+    request = await put(ctx, {
+      ...request,
+      Status: closes ? 'done' : 'working',
+      Count: (Number(request.Count) || 0) + posted.length,
+      UpdatedAt: new Date().toISOString(),
+    });
+  }
+  const st = await touchState(ctx);
+  await announce(ctx, st.Rev);
+  return reply(201, { posted, ...(request ? { request: S.requestView(request) } : {}) });
+}
+
+/** A Research or Ideas request, for the host's Claude (forBuilder empty) or one builder's. */
+async function createPointRequest(ctx, forBuilder, body) {
+  const norm = S.normalizePointRequest(body);
+  if (norm.error) return fail(400, norm.error);
+  const room = await loadRoom(ctx);
+  const now = new Date(nextMs(room.preqs)).toISOString();
+  if (S.activeRequests(room, forBuilder, Date.parse(now)).length >= S.POINT_LIMITS.activeRequests) {
+    return fail(409, 'Claude already has plenty to look into; wait for some to finish');
+  }
+  const sk = S.SK.preq(now);
+  const row = await put(ctx, {
+    SK: sk,
+    ReqId: S.requestIdOf(sk),
+    Kind: norm.value.kind,
+    Subject: norm.value.subject,
+    ...(forBuilder ? { ForBuilder: forBuilder } : {}),
+    Status: 'waiting',
+    Count: 0,
+    CreatedAt: now,
+  });
+  return done(ctx, 201, { request: S.requestView(row) });
+}
+
+/** What the host may do with one point. */
+async function pointAction(ctx, pointId, body) {
+  const action = String((body || {}).action || '');
+  if (!['remove', 'later', 'show', 'hide', 'send'].includes(action)) return fail(400, 'action must be remove, later, show, hide or send');
+  const room = await loadRoom(ctx);
+  const p = findPoint(room, pointId);
+  if (!p || p.Status === 'removed') return fail(404, 'No such point');
+  const status = p.Status || 'new';
+  const now = new Date().toISOString();
+  let next = status;
+  if (action === 'remove') next = 'removed';
+  else if (action === 'later') {
+    if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
+    // The Later list is the one place held directions live: saved, never sent.
+    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later' });
+    next = 'later';
+  } else if (action === 'show') {
+    if (status === 'shown') return done(ctx, 200, { point: S.pointView(p) });
+    if (!['new', 'queued'].includes(status)) return fail(409, 'That point cannot go on the Stage now');
+    // One point on the Stage at a time: any other comes down.
+    for (const other of room.points) if (other.Status === 'shown') await put(ctx, { ...other, Status: 'new', UpdatedAt: now });
+    next = 'shown';
+  } else if (action === 'hide') {
+    if (status !== 'shown') return fail(409, 'That point is not on the Stage');
+    next = 'new';
+  } else if (action === 'send') {
+    if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
+    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointDirectionText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'do-now' });
+    next = 'sent';
+  }
+  const saved = await put(ctx, { ...p, Status: next, UpdatedAt: now });
+  return done(ctx, 200, { point: S.pointView(saved) });
+}
+
+/** Several points to Claude as ONE direction. Nothing is sent unless every id can be. */
+async function sendPoints(ctx, body) {
+  const ids = Array.isArray((body || {}).ids) ? [...new Set(body.ids.map(String))] : [];
+  if (!ids.length) return fail(400, 'Tick at least one point to send');
+  if (ids.length > S.POINT_LIMITS.open) return fail(400, 'Too many points to send at once');
+  const room = await loadRoom(ctx);
+  const rows = ids.map((id) => findPoint(room, id));
+  if (rows.some((p) => !p)) return fail(404, 'One of those points is gone');
+  if (rows.some((p) => !S.OPEN_POINT_STATUSES.includes(p.Status || 'new'))) return fail(409, 'One of those points is already on its way somewhere else');
+  const text = rows.length === 1 ? S.pointDirectionText(rows[0]) : `${rows.length} points from the room's list:\n\n${rows.map((p) => S.pointDirectionText(p)).join('\n\n')}`;
+  await logEntry(ctx, { kind: 'direction', text: S.cleanText(text, S.LIMITS.direction), by: 'host', forAgent: true, as: 'do-now' });
+  const now = new Date().toISOString();
+  for (const p of rows) await put(ctx, { ...p, Status: 'sent', UpdatedAt: now });
+  return done(ctx, 200, { sent: ids });
+}
+
 async function routeHost(ctx, role, method, parts, body, event, query) {
   const [a, b, c, d] = parts;
   const hostOnly = () => (role === 'host' ? null : fail(403, 'Only the host can do that'));
@@ -1807,6 +1972,10 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
 
   if (a === 'share' && !b) return hostOnly() || hostShare(ctx, body);
   if (a === 'activity' && !b) return role === 'agent' ? postActivity(ctx, body) : fail(403, 'Only Claude reports its activity');
+  if (a === 'points' && !b) return role === 'agent' ? postPoints(ctx, role, body) : fail(403, 'Claude posts the points; the host curates them');
+  if (a === 'points' && b === 'requests' && !c) return hostOnly() || createPointRequest(ctx, '', body);
+  if (a === 'points' && b === 'send' && !c) return hostOnly() || sendPoints(ctx, body);
+  if (a === 'points' && b && !c) return hostOnly() || pointAction(ctx, b, body);
   if (a === 'asks' && !b) return createAsk(ctx, role, body);
   if (a === 'asks' && b && !c) return hostOnly() || askAction(ctx, role, b, body);
   if (a === 'asks' && b && c === 'responses') return hostOnly() || hostResponse(ctx, b, d || null, body);
@@ -1858,6 +2027,11 @@ async function routePlayCrew(ctx, me, parts, input) {
     }
     await done(ctx, 201, {});
     return reply(201, { key, gameId: ctx.gameId });
+  }
+  // A builder's own Research / Ideas button: it asks THEIR Claude, whatever the body says.
+  if (b === 'points' && parts[2] === 'requests' && !parts[3]) {
+    if (!findBuilder(room, me.playerName)) return fail(409, 'Connect your laptop as a builder first');
+    return createPointRequest(ctx, me.playerName, input);
   }
   if (b === 'claim') return crewClaim(ctx, me.playerName, String(input.taskId || ''));
   if (b === 'react') {

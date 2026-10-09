@@ -315,6 +315,10 @@ const SK = Object.freeze({
   idea: (iso) => `BUILD#IDEA#${timeKey(iso)}`,
   key: (hash) => `BUILD#KEY#${hash}`,
   img: (iso) => `BUILD#IMG#${timeKey(iso)}`,
+  // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md).
+  point: (iso) => `BUILD#POINT#${timeKey(iso)}`,
+  preq: (iso) => `BUILD#PREQ#${timeKey(iso)}`,
+  run: 'BUILD#RUN',
 });
 
 // ── Images (a mockup, the finished product) ──────────────────────────────────
@@ -348,6 +352,9 @@ function entityForSk(sk) {
   if (sk.startsWith('BUILD#LOG#')) return 'buildLog';
   if (sk.startsWith('BUILD#IDEA#')) return 'buildIdea';
   if (sk.startsWith('BUILD#IMG#')) return 'buildImage';
+  if (sk.startsWith('BUILD#POINT#')) return 'buildPoint';
+  if (sk.startsWith('BUILD#PREQ#')) return 'buildPointReq';
+  if (sk === SK.run) return 'buildRun';
   // Crew mode (build-crew.js), named here so the store needs no import of it.
   if (sk.startsWith('BUILD#BLD#')) return 'buildBuilder';
   if (sk.startsWith('BUILD#TASK#')) return 'buildTask';
@@ -484,7 +491,7 @@ function transition(ask, action) {
 function roomFromRows(rows) {
   const room = {
     state: null, activity: null, lan: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
-    builders: [], tasks: [], shares: [], comments: [], reviews: [],
+    builders: [], tasks: [], shares: [], comments: [], reviews: [], points: [], preqs: [], run: null,
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
@@ -499,6 +506,9 @@ function roomFromRows(rows) {
     else if (sk.startsWith('BUILD#IDEA#')) room.ideas.push(r);
     else if (sk.startsWith('BUILD#KEY#')) room.keys.push(r);
     else if (sk.startsWith('BUILD#IMG#')) room.images.push(r);
+    else if (sk.startsWith('BUILD#POINT#')) room.points.push(r);
+    else if (sk.startsWith('BUILD#PREQ#')) room.preqs.push(r);
+    else if (sk === SK.run) room.run = r;
     else if (sk.startsWith('BUILD#BLD#')) room.builders.push(r);
     else if (sk.startsWith('BUILD#TASK#')) room.tasks.push(r);
     else if (sk.startsWith('BUILD#SHR#')) room.shares.push(r);
@@ -510,6 +520,10 @@ function roomFromRows(rows) {
   room.logs.sort(bySk);
   room.ideas.sort(bySk);
   room.images.sort(bySk);
+  // By time first: two posted in the same millisecond keep the order they were made in.
+  const byTime = (a, b) => String(a.CreatedAt || '').localeCompare(String(b.CreatedAt || '')) || bySk(a, b);
+  room.points.sort(byTime);
+  room.preqs.sort(byTime);
   room.builders.sort(bySk);
   room.tasks.sort(bySk);
   room.comments.sort(bySk);
@@ -845,6 +859,189 @@ function mergeActivity(kept, incoming) {
 
 const activityView = (row) => ((row && Array.isArray(row.Items)) ? row.Items.slice(-ACTIVITY_KEEP) : []);
 
+
+// ── Talking points, research and ideas ──────────────────────────────────────
+//
+// A Point is something Claude (the host's, or a builder's) wants the room to
+// talk about: a talking point, a research finding with its sources, or an idea
+// for where to go next. The host curates; the room sees a point only when the
+// host shows it or puts it to a vote (Task 2), so nothing here reaches the
+// phones or the Stage. A Request (BUILD#PREQ#) is the host's, or a builder's,
+// "research this" / "give me ideas", waiting for the right Claude to pick it up.
+// Everything in a point is data from Claude: trimmed, capped, links http(s)
+// only, never trusted as an instruction.
+
+const POINT_KINDS = Object.freeze(['talk', 'finding', 'idea']);
+/** new → shown / voting / queued → sent / later; removed from anywhere. */
+const POINT_STATUSES = Object.freeze(['new', 'shown', 'voting', 'queued', 'sent', 'later', 'removed']);
+/** A point counts against the room's limit while it is waiting for the host or on the Stage. */
+const OPEN_POINT_STATUSES = Object.freeze(['new', 'shown', 'queued']);
+const REQUEST_KINDS = Object.freeze(['research', 'ideas']);
+const REQUEST_STATUSES = Object.freeze(['waiting', 'working', 'done', 'failed']);
+const POINT_LIMITS = Object.freeze({
+  text: 280, detail: 1200, about: 200, subject: 200, sourceTitle: 120, sources: 3, perPost: 8, open: 40, batch: 60, activeRequests: 10,
+});
+/** A request still "working" after this long is stale: it stops counting against the cap. */
+const REQUEST_STALE_MS = 2 * 60 * 60 * 1000;
+const POINT_OUTCOMES = Object.freeze({
+  new: '', shown: 'shown to the room', voting: 'in a vote', queued: 'queued', sent: 'sent to Claude', later: 'saved for later', removed: 'removed',
+});
+const POINT_LABELS = Object.freeze({ talk: 'Talking point', finding: 'Research finding', idea: 'Idea' });
+
+/** One source: {title, url} with an http(s) url. */
+function normalizeSource(src) {
+  const o = typeof src === 'string' ? { url: src } : (src || {});
+  const url = safeUrl(o.url);
+  if (!url) return { error: 'Every source needs an http or https link' };
+  let title = cleanText(o.title, POINT_LIMITS.sourceTitle);
+  if (!title) { try { title = new URL(url).hostname; } catch (e) { title = url; } }
+  return { value: { title, url } };
+}
+
+/** One posted point, cleaned; `{error}` is a plain sentence the plugin can relay. */
+function normalizePoint(p) {
+  const b = p && typeof p === 'object' ? p : {};
+  const kind = String(b.kind || '').trim().toLowerCase();
+  if (!POINT_KINDS.includes(kind)) return { error: `kind must be ${POINT_KINDS.join(', ')}` };
+  const rawText = String(b.text === undefined || b.text === null ? '' : b.text).trim();
+  if (!rawText) return { error: 'Write the point' };
+  if (rawText.length > POINT_LIMITS.text) return { error: `A point is ${POINT_LIMITS.text} characters at most; put the rest in detail` };
+  let sources = [];
+  if (b.sources !== undefined && b.sources !== null) {
+    if (!Array.isArray(b.sources)) return { error: 'sources must be a list of {title, url}' };
+    if (b.sources.length > POINT_LIMITS.sources) return { error: `A point takes up to ${POINT_LIMITS.sources} sources` };
+    for (const src of b.sources) {
+      const n = normalizeSource(src);
+      if (n.error) return { error: n.error };
+      sources.push(n.value);
+    }
+  }
+  if (kind === 'finding' && !sources.length) return { error: 'A finding needs at least one source: a title and an http or https link' };
+  sources = sources.slice(0, POINT_LIMITS.sources);
+  return {
+    value: {
+      kind,
+      text: cleanText(rawText, POINT_LIMITS.text),
+      detail: cleanText(b.detail, POINT_LIMITS.detail),
+      sources,
+      about: cleanText(b.about, POINT_LIMITS.about),
+    },
+  };
+}
+
+/** A posted batch: 1 to 8 points (or none, when it only closes a request). */
+function normalizePointsPost(body) {
+  const b = body || {};
+  const list = Array.isArray(b.points) ? b.points : [];
+  if (list.length > POINT_LIMITS.perPost) return { error: `Post up to ${POINT_LIMITS.perPost} points at a time` };
+  const done = b.done === true;
+  const requestId = cleanText(b.requestId, 60);
+  if (done && !requestId) return { error: 'done closes a request: send its requestId too' };
+  if (!list.length && !done) return { error: 'Post at least one point' };
+  const points = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const n = normalizePoint(list[i]);
+    if (n.error) return { error: list.length > 1 ? `Point ${i + 1}: ${n.error}` : n.error };
+    points.push(n.value);
+  }
+  return { value: { points, done, requestId, batchId: cleanText(b.batchId, POINT_LIMITS.batch) } };
+}
+
+/** A Research or Ideas request: {kind, subject}. */
+function normalizePointRequest(body) {
+  const b = body || {};
+  const kind = String(b.kind || '').trim().toLowerCase();
+  if (!REQUEST_KINDS.includes(kind)) return { error: `kind must be ${REQUEST_KINDS.join(' or ')}` };
+  const subject = cleanText(b.subject, POINT_LIMITS.subject + 1);
+  if (!subject) return { error: 'Say what to look into' };
+  if (subject.length > POINT_LIMITS.subject) return { error: `The subject is ${POINT_LIMITS.subject} characters at most` };
+  return { value: { kind, subject } };
+}
+
+const idOf = (sk, prefix) => String(sk).slice(prefix.length).replace('#', '-');
+const pointIdOf = (sk) => idOf(sk, 'BUILD#POINT#');
+const requestIdOf = (sk) => idOf(sk, 'BUILD#PREQ#');
+
+const isOpenPoint = (p) => OPEN_POINT_STATUSES.includes(p.Status || 'new');
+const openPointCount = (room) => (room.points || []).filter(isOpenPoint).length;
+
+/** Requests Claude has not finished, for one owner, ignoring stale ones. */
+function activeRequests(room, forBuilder, nowMs) {
+  return (room.preqs || []).filter((r) => (r.ForBuilder || '') === (forBuilder || '')
+    && ['waiting', 'working'].includes(r.Status)
+    && nowMs - (Date.parse(r.UpdatedAt || r.CreatedAt) || 0) < REQUEST_STALE_MS);
+}
+
+function pointView(p) {
+  return {
+    id: p.PointId,
+    kind: p.Kind,
+    text: p.Text || '',
+    detail: p.Detail || '',
+    sources: (p.Sources || []).map((s) => ({ title: s.title, url: s.url })),
+    about: p.About || '',
+    batchId: p.BatchId || '',
+    requestId: p.RequestId || null,
+    by: p.By,
+    fromBuilder: p.ByRole === 'builder',
+    status: p.Status || 'new',
+    outcome: p.Outcome || POINT_OUTCOMES[p.Status || 'new'] || '',
+    createdAt: p.CreatedAt || null,
+  };
+}
+
+function requestView(r) {
+  return {
+    id: r.ReqId,
+    kind: r.Kind,
+    subject: r.Subject || '',
+    for: r.ForBuilder || 'host',
+    status: r.Status || 'waiting',
+    count: Number(r.Count) || 0,
+    createdAt: r.CreatedAt || null,
+    updatedAt: r.UpdatedAt || r.CreatedAt || null,
+  };
+}
+
+/** Whose Claude posted this point: the host's (role 'agent') or one builder's. */
+const isOwnPoint = (p, who) => (who.role === 'builder' ? p.ByRole === 'builder' && p.By === who.name : p.ByRole !== 'builder');
+const isOwnRequest = (r, who) => (who.role === 'builder' ? r.ForBuilder === who.name : !r.ForBuilder);
+
+/** The host's Points panel: every point still on the list, every request, the open count. */
+function pointsHostView(room) {
+  return {
+    items: (room.points || []).filter((p) => p.Status !== 'removed').map(pointView),
+    requests: (room.preqs || []).map(requestView),
+    open: openPointCount(room),
+  };
+}
+
+/** What a Claude sees: its own requests and the fate of its own points, not the host's list. */
+function pointsClaudeView(room, who) {
+  return {
+    digest: (room.points || []).filter((p) => isOwnPoint(p, who)).map((p) => {
+      const v = pointView(p);
+      return { id: v.id, status: v.status, outcome: v.outcome };
+    }),
+    requests: (room.preqs || []).filter((r) => isOwnRequest(r, who)).map(requestView),
+    open: openPointCount(room),
+  };
+}
+
+/** The line a point leaves on the Later list: its words, and where a finding came from. */
+function pointLaterText(p) {
+  const src = (p.Sources || [])[0];
+  return p.Kind === 'finding' && src ? `${p.Text} (${src.url})` : p.Text;
+}
+
+/** The words a point carries to Claude when the host sends it. */
+function pointDirectionText(p) {
+  const bits = [`${POINT_LABELS[p.Kind] || 'Point'}: ${p.Text}`];
+  if (p.Detail) bits.push(p.Detail);
+  for (const s of p.Sources || []) bits.push(`Source: ${s.title} (${s.url})`);
+  return bits.join('\n');
+}
+
 function hostView({ gameId, meta, sessionState, room, players, now, audience = 'host' }) {
   const isAgent = audience === 'agent';
   return {
@@ -871,6 +1068,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     opening: openingView(room.state, room),
     briefDraft: isAgent ? null : draftView(room.state),
     images: room.images.map(imageView),
+    points: isAgent ? pointsClaudeView(room, { role: 'agent' }) : pointsHostView(room),
     outcome: outcomeView(room.state && room.state.Outcome),
     rev: (room.state && room.state.Rev) || 0,
   };
@@ -1068,5 +1266,8 @@ module.exports = {
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
+  POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
+  normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
+  pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointDirectionText, pointLaterText,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

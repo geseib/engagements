@@ -536,6 +536,11 @@ const ENCRYPTED_FIELDS = Object.freeze({
   // The Wi-Fi share (build-lan.js): the local and Wi-Fi addresses, the key
   // that opens the gateway, and the plugin's last error.
   buildLan: Object.freeze(['Map', 'Key', 'Error']),
+  // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md):
+  // a point's words and sources, a request's subject, and the run list's items.
+  buildPoint: Object.freeze(['Text', 'Detail', 'Sources', 'About']),
+  buildPointReq: Object.freeze(['Subject']),
+  buildRun: Object.freeze(['Items']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────
