@@ -541,7 +541,7 @@ const hardStop = setTimeout(() => {
     } finally { stateInbox = []; }
   });
   await check('a run item: finish, commit, post_update with runItem, then wait; post_update sends run/done', async () => {
-    stateInbox = [{ id: 'u1', text: 'Add a waitlist', from: 'host', as: 'do-now', runItem: 2 }];
+    stateInbox = [{ id: 'u1', text: 'Add a waitlist', from: 'host', as: 'do-now', runItem: 2, runId: 'run-abc' }];
     try {
       const t = textOf(await mcp.request('tools/call', { name: 'check_directions', arguments: {} }));
       assert.ok(/RUN LIST ITEM 2/.test(t) && /commit/.test(t) && /runItem 2/.test(t) && /wait_for_direction/.test(t), t);
@@ -550,7 +550,12 @@ const hardStop = setTimeout(() => {
     const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'Waitlist is in', runItem: 2 } });
     assert.ok(!r.result.isError, textOf(r));
     const done = requests.find((q) => q.url.endsWith('/build/run/done'));
-    assert.deepStrictEqual(done.body, { runItem: 2 });
+    assert.deepStrictEqual(done.body, { runItem: 2, runId: 'run-abc', note: 'Waitlist is in' });
+    const zero = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'x', runItem: 0 } });
+    assert.strictEqual(zero.result.isError, true, 'runItem starts at 1');
+    requests.length = 0;
+    await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'y'.repeat(400), runItem: 2 } });
+    assert.ok(requests.find((q) => q.url.endsWith('/build/run/done')).body.note.length <= 200, 'note is cut to 200');
     const bad = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'x', runItem: 'two' } });
     assert.strictEqual(bad.result.isError, true);
   });

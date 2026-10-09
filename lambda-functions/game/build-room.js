@@ -147,7 +147,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -169,6 +169,7 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(name ? { Name: name } : {}),
     // A run-list item (the room's list, taken in turn): Claude reports it done with this number.
     ...(runItem ? { RunItem: runItem } : {}),
+    ...(runId ? { RunId: runId } : {}),
     ...(spoken ? { Spoken: true } : {}),
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
     ...(forAgent ? { ForAgentAs: kind4 } : {}),
@@ -392,6 +393,7 @@ async function reaskAction(ctx, room, ask, b) {
     ...(ask.OpeningStep ? { OpeningStep: ask.OpeningStep, ...(ask.Probe ? { Probe: true } : {}) } : {}),
     ...(fromPoints.length ? { FromPoints: fromPoints } : {}),
   });
+  if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, fromPoints, now);
   await touchState(ctx, { set: { CurrentAskId: newId } });
   await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
   const after = await loadRoom(ctx);
@@ -623,6 +625,7 @@ async function wheelAction(ctx, role, room, ask, action, b) {
       }
     }
     await put(ctx, { ...ask, RevotedAs: newId });
+    if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, (ask.Options || []).filter((o) => tied.includes(o.label)).map((o) => o.pointId).filter(Boolean), now);
     await makeCurrent(ctx, await loadRoom(ctx), newId, role);
   }
   const after = await loadRoom(ctx);
@@ -1199,7 +1202,7 @@ async function takeInbox(ctx, role) {
         ConditionExpression: 'attribute_not_exists(DeliveredAt)',
         ExpressionAttributeValues: { ':now': now },
       }));
-      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), as: S.claudeGetsOf(d.ForAgentAs), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt, ...(d.RunItem ? { runItem: d.RunItem } : {}) });
+      out.push({ id: d.LogId, text: S.inboxText(d), from: S.inboxFrom(d), as: S.claudeGetsOf(d.ForAgentAs), askId: d.AskId || null, shareId: d.ShareId || null, createdAt: d.CreatedAt, ...(d.RunItem ? { runItem: d.RunItem, runId: d.RunId || null } : {}) });
     } catch (e) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
     }
@@ -1949,7 +1952,10 @@ async function pointAction(ctx, pointId, body) {
   else if (action === 'later') {
     if (!S.OPEN_POINT_STATUSES.includes(status)) return fail(409, 'That point is already on its way somewhere else');
     // The Later list is the one place held directions live: saved, never sent.
-    await logEntry(ctx, { kind: 'direction', text: S.cleanText(S.pointLaterText(p), S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
+    // On the Stage, the room's ideas about it travel with it, as lines under the point (no names).
+    const about = status === 'shown' ? room.ideas.filter((i) => i.AboutPoint === pointId && (i.Status || 'new') === 'new').slice(0, 8) : [];
+    const lines = about.length ? `\nIdeas from the room about it:\n${about.map((i) => `- ${S.oneLine(i.Text)}`).join('\n')}` : '';
+    await logEntry(ctx, { kind: 'direction', text: S.cleanText(`${S.pointLaterText(p)}${lines}`, S.LIMITS.direction), by: 'host', forAgent: true, as: 'later', ...(p.ByRole === 'builder' ? { from: `${p.By}'s Claude` } : {}) });
     next = 'later';
   } else if (action === 'show') {
     if (status === 'shown') return done(ctx, 200, { point: S.pointView(p) });
@@ -2000,6 +2006,24 @@ async function sendPoints(ctx, body) {
 // saves the rest for Later. The run is one row, BUILD#RUN, one at a time; it
 // changes under a version number so two presses cannot both win.
 
+/** A point leaves a vote untaken: back where it was, with the count it got. */
+function released(p, now, counts) {
+  const back = repoint(p, p.PriorStatus === 'queued' ? 'queued' : 'new', now, 'not taken forward', { VoteCount: counts[p.PointId] || 0 });
+  delete back.PromotedTo;
+  delete back.PriorStatus;
+  return back;
+}
+
+/** An ask was asked again: its kept points follow it to the new ask, the dropped ones go back. */
+async function rehomePoints(ctx, room, oldAsk, newAskId, keepIds, now) {
+  const counts = S.pointVoteCounts(oldAsk, room);
+  for (const id of oldAsk.FromPoints || []) {
+    const p = findPoint(room, id);
+    if (!p || p.Status !== 'voting') continue;
+    await put(ctx, keepIds.includes(id) ? { ...p, PromotedTo: newAskId, UpdatedAt: now } : released(p, now, counts));
+  }
+}
+
 /** The points an id list names, or the plain refusal. `statuses` = the states a point may be in. */
 function pickPoints(room, ids, statuses) {
   const rows = ids.map((id) => findPoint(room, id));
@@ -2047,7 +2071,11 @@ async function pointsVote(ctx, body) {
 async function forwardAction(ctx, room, ask, b) {
   const askId = ask.AskId;
   if (!Array.isArray(ask.FromPoints) || !ask.FromPoints.length) return fail(409, 'This vote was not made from points');
-  if (!['results', 'decided'].includes(ask.Status)) return fail(409, 'Close the vote first; this comes after the results');
+  if (ask.RevotedAs) return fail(409, 'This vote was asked again');
+  // At the results. A decided ask only when its decision was not sent to Claude.
+  if (!(ask.Status === 'results' || (ask.Status === 'decided' && ask.Decision && ask.Decision.sendToAgent === false))) {
+    return fail(409, ask.Status === 'decided' ? 'This vote was decided and sent to Claude already' : 'Close the vote first; this comes after the results');
+  }
   const then = String(b.then || '');
   if (!['send', 'run', 'later-rest'].includes(then)) return fail(400, 'then must be send, run or later-rest');
   const ids = idList(b.pointIds);
@@ -2058,16 +2086,26 @@ async function forwardAction(ctx, room, ask, b) {
   const counts = S.pointVoteCounts(ask, room);
   const now = new Date().toISOString();
   const voted = (p) => ({ VoteCount: counts[p.PointId] || 0 });
+  // The points not taken forward go back where they were (a send or a run ends the vote).
+  const releaseRest = async (taken) => {
+    const waiting = S.runPendingIds(room);
+    for (const id of ask.FromPoints.filter((x) => !taken.includes(x))) {
+      const p = findPoint(room, id);
+      if (p && ['voting', 'queued'].includes(p.Status) && !waiting.has(id)) await put(ctx, released(p, now, counts));
+    }
+  };
   let result;
   if (then === 'send') {
     const dir = S.pointsDirection(got.rows);
     if (dir.error) return fail(400, dir.error);
     await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now', askId });
     for (const p of got.rows) await put(ctx, repoint(p, 'sent', now, 'sent to Claude', voted(p)));
+    await releaseRest(ids);
     result = { sent: ids };
   } else if (then === 'run') {
     const started = await startRun(ctx, room, got.rows, now, (p) => voted(p));
     if (started.response) return started.response;
+    await releaseRest(ids);
     result = { run: started.run };
   } else {
     const waiting = S.runPendingIds(room);
@@ -2102,12 +2140,12 @@ async function writeRun(ctx, row, expectedVer) {
 
 /** Send item k of the running list to the host's Claude, as Do now. */
 const sendRunItem = (ctx, run, k, extra = {}) => logEntry(ctx, {
-  kind: 'direction', text: S.runItemText(k, run.Items.length, run.Items[k - 1].dir), by: 'host', forAgent: true, as: 'do-now', runItem: k, ...extra,
+  kind: 'direction', text: S.runItemText(k, run.Items.length, run.Items[k - 1].dir), by: 'host', forAgent: true, as: 'do-now', runItem: k, runId: run.RunId, ...extra,
 });
 
 /** Start a list from these points, in order. Item 1 goes to Claude at once. */
 async function startRun(ctx, room, rows, now, voteFields) {
-  if (!rows.length) return { response: fail(400, 'Choose at least one point to work through') };
+  if (rows.length < 2) return { response: fail(400, 'A list needs at least two points; send a single one instead') };
   if (rows.length > S.RUN_MAX_ITEMS) return { response: fail(400, `A list takes at most ${S.RUN_MAX_ITEMS} points`) };
   if (room.run && room.run.Status === 'running') return { response: fail(409, 'Finish or stop the current list first') };
   const items = [];
@@ -2135,6 +2173,8 @@ async function startRun(ctx, room, rows, now, voteFields) {
     UpdatedAt: now,
   };
   if (!(await writeRun(ctx, row, null))) return { response: fail(409, 'Finish or stop the current list first') };
+  // Nothing of an older list may still reach Claude.
+  if (room.run) await cancelRunRows(ctx, room, room.run.RunId);
   for (let i = 0; i < n; i += 1) {
     const p = rows[i];
     const extra = { RunItem: i + 1, ...(voteFields ? voteFields(p) : {}) };
@@ -2224,14 +2264,37 @@ async function runSkip(ctx) {
   });
 }
 
+/** Run items of a list that Claude has not yet heard are cancelled, so they never arrive. */
+async function cancelRunRows(ctx, room, runId) {
+  const now = new Date().toISOString();
+  for (const l of room.logs) {
+    if (l.RunId !== runId || !l.RunItem || l.DeliveredAt) continue;
+    try {
+      await db.send(new UpdateCommand({
+        TableName: TABLE(),
+        Key: { PK: ctx.pk, SK: l.SK },
+        UpdateExpression: 'SET DeliveredAt = :now, Cancelled = :yes',
+        ConditionExpression: 'attribute_not_exists(DeliveredAt)',
+        ExpressionAttributeValues: { ':now': now, ':yes': true },
+      }));
+    } catch (e) {
+      if (e && e.name !== 'ConditionalCheckFailedException') throw e;
+    }
+  }
+}
+
 async function runStop(ctx) {
   return mutateRun(ctx, (room, run, now) => {
     if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
     const marks = [...run.Marks];
     const left = [];
-    marks.forEach((m, i) => { if (m === 'pending') { marks[i] = 'skipped'; left.push(i + 1); } });
+    // An item sent but not yet heard by Claude is cancelled with the list, and goes to Later too.
+    const unheard = new Set(room.logs.filter((l) => l.RunId === run.RunId && l.RunItem && !l.DeliveredAt).map((l) => l.RunItem));
+    marks.forEach((m, i) => {
+      if (m === 'pending' || (m === 'doing' && unheard.has(i + 1))) { marks[i] = 'skipped'; left.push(i + 1); }
+    });
     const row = { ...run, Marks: marks, Status: 'stopped', FinishedAt: now };
-    return { row, after: (rm) => toLater(ctx, rm, run, left, now) };
+    return { row, after: async (rm) => { await cancelRunRows(ctx, rm, run.RunId); await toLater(ctx, rm, run, left, now); } };
   });
 }
 
@@ -2245,6 +2308,33 @@ async function toLater(ctx, room, run, ks, now) {
   }
 }
 
+/** Reorder the items not yet sent: `order` names every pending point once; `ver` is the version the screen saw. */
+async function runReorder(ctx, body) {
+  const b = body || {};
+  const order = idList(b.order);
+  const ver = Number(b.ver);
+  if (b.ver === undefined || b.ver === null || !Number.isInteger(ver)) return fail(400, 'ver is the list version the screen saw');
+  return mutateRun(ctx, (room, run, now) => {
+    if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    if (Number(run.Ver) !== ver) return { response: fail(409, 'The list changed; look again') };
+    const slots = [];
+    run.Marks.forEach((m, i) => { if (m === 'pending') slots.push(i); });
+    const byId = new Map(slots.map((i) => [run.Items[i].pointId, run.Items[i]]));
+    if (order.length !== slots.length || order.some((id) => !byId.has(id))) return { response: fail(400, 'order must name every item that has not been sent, once each') };
+    const Items = [...run.Items];
+    slots.forEach((slot, n) => { Items[slot] = byId.get(order[n]); });
+    return {
+      row: { ...run, Items },
+      after: async (rm) => {
+        for (const slot of slots) {
+          const p = findPoint(rm, Items[slot].pointId);
+          if (p && p.Status !== 'removed') await put(ctx, repoint(p, 'queued', now, `queued, run item ${slot + 1}`, { RunItem: slot + 1 }));
+        }
+      },
+    };
+  });
+}
+
 /** Claude reports a run item finished (post_update with runItem). The host's Claude only. */
 async function runDone(ctx, body) {
   const b = body || {};
@@ -2252,6 +2342,8 @@ async function runDone(ctx, body) {
   const note = S.cleanText(b.note, S.LIMITS.note);
   return mutateRun(ctx, (room, run, now) => {
     if (!run) return { response: fail(409, 'No list is running') };
+    // A report from a list that has since been replaced.
+    if (b.runId !== undefined && b.runId !== null && String(b.runId) !== String(run.RunId)) return { response: fail(409, 'That list has ended') };
     if (!Number.isInteger(k) || k < 1 || k > run.Items.length) return { response: fail(400, `runItem is a number from 1 to ${run.Items.length}`) };
     const mark = (run.Marks || [])[k - 1];
     if (mark === 'done') return { response: reply(200, { run: S.runView(run, 'host'), already: true }) };
@@ -2321,6 +2413,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'points' && b === 'vote' && !c) return hostOnly() || pointsVote(ctx, body);
   if (a === 'run' && !b) return hostOnly() || runStart(ctx, body);
   if (a === 'run' && b === 'next' && !c) return hostOnly() || runNext(ctx, body);
+  if (a === 'run' && b === 'reorder' && !c) return hostOnly() || runReorder(ctx, body);
   if (a === 'run' && b === 'skip' && !c) return hostOnly() || runSkip(ctx);
   if (a === 'run' && b === 'stop' && !c) return hostOnly() || runStop(ctx);
   if (a === 'run' && b === 'done' && !c) return role === 'agent' ? runDone(ctx, body) : fail(403, 'Only the host\'s Claude reports a list item done');
