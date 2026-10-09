@@ -207,7 +207,7 @@ export function RunStage({ run }) {
           </li>
         ))}
       </ol>
-      {cur && <p className="brm-runsince">{W.claudeIsOnOf(cur.k, run.total)}</p>}
+      {cur && <p className="brm-runsince">{cur.state === 'done' ? W.claudeFinishedOf(cur.k, run.total) : W.claudeIsOnOf(cur.k, run.total)}</p>}
     </section>
   );
 }

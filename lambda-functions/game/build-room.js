@@ -2098,7 +2098,7 @@ async function forwardAction(ctx, room, ask, b) {
   // A send or a run settles the vote: decided in one write, recorded for the host, not told to Claude again.
   const closeVote = async (taken) => {
     const labels = (ask.Options || []).filter((o) => taken.includes(o.pointId)).map((o) => o.label);
-    const said = (ask.Options || []).filter((o) => taken.includes(o.pointId)).map((o) => o.detail || o.title).join('; ');
+    const said = (ask.Options || []).filter((o) => taken.includes(o.pointId)).map((o) => String(o.detail || o.title || '').trim().replace(/[.;]+$/, '')).join('; ');
     const direction = S.cleanText(`Moved forward: ${said}`, S.LIMITS.direction);
     await put(ctx, {
       ...ask, Status: 'decided', DecidedAt: now, ClosedAt: ask.ClosedAt || now,

@@ -85,14 +85,18 @@ function Sources({ sources }) {
   );
 }
 
-function PointRow({ p, on, canTick, onTick, busy, ended, run, api }) {
+function PointRow({ p, on, canTick, onTick, busy, ended, run, api, groupBy = '', groupClock = '' }) {
   const note = pointNote(p);
+  // The group's heading already says who and when; repeat either only where this point differs.
+  const who = pointFrom(p);
+  const when = clockOf(p.createdAt);
+  const meta = [who !== groupBy ? who : '', when !== groupClock ? when : ''].filter(Boolean).join(' \u00b7 ');
   return (
     <li className={`brm-point${on ? ' is-ticked' : ''}`} data-kind={p.kind} data-status={p.status}>
       <div className="brm-row brm-gap">
         {canTick && <input type="checkbox" className="brm-qtick" checked={on} onChange={onTick} aria-label={W.tickPoint(p.text)} />}
         <span className={`brm-later-tag brm-ptag brm-ptag--${p.kind}`}>{POINT_TAGS[p.kind] || W.tagTalk}</span>
-        <span className="brm-who">{pointFrom(p)} · {clockOf(p.createdAt)}</span>
+        {meta && <span className="brm-who">{meta}</span>}
         {note && <span className="brm-pnote">{note}</span>}
         {!ended && !['sent', 'later', 'voting'].includes(p.status) && (
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={() => run(() => api.pointAction(p.id, 'remove'))}>{W.remove}</button>
@@ -168,7 +172,7 @@ export default function BuildPoints({
             </div>
             <ul className="brm-plist">
               {list.map((p) => (
-                <PointRow key={p.id} p={p} on={on.includes(p.id)} canTick={!ended && actionable.has(p.id)} onTick={() => toggle(p.id)} busy={busy} ended={ended} run={run} api={api} />
+                <PointRow key={p.id} p={p} on={on.includes(p.id)} canTick={!ended && actionable.has(p.id)} onTick={() => toggle(p.id)} busy={busy} ended={ended} run={run} api={api} groupBy={g.by} groupClock={clockOf(g.at)} />
               ))}
             </ul>
             {rest > 0 && (

@@ -1137,7 +1137,10 @@ export default function BuildPlayer({
   if (ask && ask.status === 'voting' && ask.kind === 'suggest') {
     return <VoteAsk key={`${ask.askId}:voting`} {...kids} />;
   }
-  if (ask && (ask.status === 'results' || ask.status === 'decided')) {
+  /* A point the host shows wins over a settled question: the host can only show
+     one once the question is no longer open, but the last decided ask stays
+     current on the phone, so without this the point never reached the room. */
+  if (ask && (ask.status === 'results' || ask.status === 'decided') && !view.shownPoint) {
     const decided = ask.status === 'decided';
     return page({
       volume: 'watch',

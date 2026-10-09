@@ -128,6 +128,13 @@ describe('a point on the Stage, on a phone: Talk it over', () => {
     expect(screen.queryByText('Claude is building')).toBeNull();
   });
 
+  test('the point shows even when the last question is decided (found on dev, 2026-10-09)', async () => {
+    const decided = { ...VOTE_ASK, Status: 'decided', DecidedAt: T(4), Decision: { direction: 'Moved forward: x', chosen: ['A'], sendToAgent: false, method: 'vote', as: 'do-now' } };
+    serve(phoneView('Dee', { ask: decided, shown: { kind: 'talk', text: 'Is teal the right mood for this room?' } }));
+    await mount('Dee', 'Talk it over');
+    expect(screen.getByRole('region', { name: 'Talk it over' }).textContent).toMatch('Is teal the right mood for this room?');
+  });
+
   test('a talking point from a builder\'s Claude says whose; a talking point has no source line', async () => {
     serve(phoneView('Dee', { shown: { kind: 'talk', text: 'Is a city at a time enough?', by: 'Priya' } }));
     await mount('Dee', 'Talk it over');
