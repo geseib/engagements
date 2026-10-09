@@ -20,7 +20,7 @@ export function PointStage({ point }) {
     <section className="brm-stage brm-pointstage" aria-label={W.talkItOver}>
       <span className="brm-eyebrow"><b>{W.talkItOver}</b> · {stageFrom(point)}</span>
       <h2 className="brm-q brm-pointq">{point.text}</h2>
-      {point.site && <p className="brm-pointsrc">Source: {point.site}</p>}
+      {point.site && <p className="brm-pointsrc">{W.sourceSite(point.site)}</p>}
       <p className="brm-pointprompt">{W.talkPrompt}</p>
     </section>
   );
@@ -57,7 +57,7 @@ export function TakeDownOffer({ ideas, busy, onNotNow, onVote, onClose }) {
         </div>
         <button type="button" className="brm-x" aria-label={W.close} onClick={onClose}><Icon name="X" size={16} /></button>
       </div>
-      <p>The room sent {n} ideas about this point:</p>
+      <p>{W.roomSentIdeas(n)}</p>
       <ul className="brm-reviewopts">
         {ideas.map((idea, i) => (
           <li key={idea.ideaId}>
@@ -66,7 +66,7 @@ export function TakeDownOffer({ ideas, busy, onNotNow, onVote, onClose }) {
           </li>
         ))}
       </ul>
-      <p className="brm-hint">{W.takeDownEither}</p>
+      <p className="brm-hint">{W.takeDownEither} {W.takeDownClose}</p>
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={onNotNow}>{W.notNow}</button>
         <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onVote}>{W.putToAVote}</button>

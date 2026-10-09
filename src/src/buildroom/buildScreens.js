@@ -848,7 +848,7 @@ export function shownPointOf(room) {
 /** The ideas the room sent about the point on the Stage, not yet dismissed. */
 export function shownPointIdeas(room) {
   const p = shownPointOf(room);
-  if (!p) return [];
+  if (!p || !p.id) return [];
   return (room.ideas || []).filter((i) => i.aboutPoint === p.id && i.status !== 'dismissed');
 }
 
@@ -856,18 +856,18 @@ export function shownPointIdeas(room) {
 export const takeDownIdeas = (room) => shownPointIdeas(room).filter((i) => i.status === 'new');
 
 /** Who a point is from, as the host reads it: "Claude" or "Priya's Claude". */
-export const pointFrom = (p) => (p.fromBuilder ? `${p.by}'s Claude` : 'Claude');
+export const pointFrom = (p) => (p.fromBuilder ? W.claudeOf(p.by) : 'Claude');
 /** "From Claude's research" / "From Claude" / "From Priya's Claude": the Stage's line. */
 export function stageFrom(p) {
-  if (p.from && p.from !== 'claude') return `From ${p.from}'s Claude`;
-  return p.kind === 'finding' ? "From Claude's research" : 'From Claude';
+  if (p.from && p.from !== 'claude') return W.fromBuilderClaude(p.from);
+  return p.kind === 'finding' ? W.fromResearch : W.fromClaude;
 }
 
 export const POINT_TAGS = Object.freeze({ talk: W.tagTalk, finding: W.tagFinding, idea: W.tagIdea });
 
 /** A used point says so: "On the Stage", "In the vote", "Sent to Claude", "Saved for later". */
 export function pointNote(p) {
-  return { shown: 'On the Stage', voting: 'In the vote', queued: 'Highlighted', sent: 'Sent to Claude', later: 'Saved for later' }[p.status] || '';
+  return W.pointNotes[p.status] || '';
 }
 
 /** The noun a group counts, singular: finding, idea or point (a mixed group counts points). */
@@ -899,12 +899,12 @@ export function pointGroups(room) {
     const n = list.length;
     const noun = nounFor([...new Set(list.map((x) => x.kind))]);
     let label;
-    if (req) label = `${req.kind === 'ideas' ? 'Ideas' : 'Research'}: ${req.subject}`;
+    if (req) label = req.kind === 'ideas' ? W.groupIdeas(req.subject) : W.groupResearch(req.subject);
     else if (first.fromBuilder) label = pointFrom(first);
-    else label = first.about ? `From step: ${first.about}` : 'From Claude';
+    else label = first.about ? W.fromStep(first.about) : W.fromClaude;
     out.push({
       key,
-      heading: `${label} · ${n} ${counted(n, noun)}${!req && first.fromBuilder && first.about ? ` for ${first.about}` : ''}`,
+      heading: `${label} · ${n} ${counted(n, noun)}${!req && first.fromBuilder && first.about ? W.forAbout(first.about) : ''}`,
       by: pointFrom(first),
       at: list[list.length - 1].createdAt,
       points: list,
@@ -920,4 +920,23 @@ export function defaultSubject(room) {
   if (cur && cur.prompt) return String(cur.prompt).trim().slice(0, 200);
   const step = [...((room && room.log) || [])].reverse().find((l) => l.by === 'agent' && ['milestone', 'progress'].includes(l.kind) && l.text);
   return step ? String(step.text).trim().slice(0, 200) : '';
+}
+
+
+/**
+ * WHAT THE NOW AREA SHOWS BETWEEN ASKS, derived once for the page and for
+ * NowBuilding: the opening just over (`framed`), the starter question
+ * (`starter`) and What's next (`whatsNext`). The page adds its own conditions
+ * (an ask open, the crew board) and NowBuilding its callbacks.
+ */
+export function nowFlags(room) {
+  const ended = Boolean(room && room.state === 'ENDED');
+  const asks = (room && room.asks) || [];
+  const opening = (room && room.opening) || null;
+  const noBuildingAsk = !asks.some((x) => !x.openingStep);
+  const framed = Boolean(opening && opening.phase === 'building')
+    && (opening.steps || []).some((x) => ['done', 'skipped'].includes(x.status)) && noBuildingAsk;
+  const starter = !ended && !framed && noBuildingAsk;
+  const wrapped = Boolean(room && room.outcome && room.outcome.summary);
+  return { framed, starter, whatsNext: !ended && !starter && !wrapped };
 }

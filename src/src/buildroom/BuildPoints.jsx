@@ -10,6 +10,10 @@
  * an ask or the opening holds the orange, the row's main button is outline
  * (`leadsRow` is false): one orange on the whole Host screen.
  *
+ * SPACE NEVER FIRES THIS ROW (controller ruling): an accidental tick plus Space
+ * must do nothing. The main button carries `data-no-space`; Ctrl or Cmd Enter
+ * presses it (`data-points-primary`, read by the page's key handler).
+ *
  * Untrusted text: a point's words and links came from Claude or a builder's
  * Claude. They are shown as text; a link is shown only when it is http(s).
  */
@@ -35,12 +39,21 @@ const siteOf = (url) => {
 
 /** The active requests' chips: "Claude is researching: …", or the wait for a Claude that is away. */
 function RequestChips({ requests, connected, ended, busy, run, api }) {
+  // A request that finished with nothing says so, until the host dismisses it.
+  const [gone, setGone] = useState(() => new Set());
   const active = requests.filter((r) => ['waiting', 'working'].includes(r.status));
-  if (!active.length) return null;
+  const empty = requests.filter((r) => r.status === 'done' && r.count === 0 && !gone.has(r.id));
+  if (!active.length && !empty.length) return null;
   return (
-    <ul className="brm-pchips" aria-label="Requests">
+    <ul className="brm-pchips" aria-label={W.requestsLabel}>
+      {empty.map((r) => (
+        <li key={r.id} className="brm-pchip is-none" data-status="empty">
+          <span className="brm-pchip-t" role="status">{W.nothingFound(r.kind, r.subject)}</span>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setGone((s) => new Set([...s, r.id]))}>{W.hide}</button>
+        </li>
+      ))}
       {active.map((r) => {
-        const who = r.for === 'host' ? 'Claude' : `${r.for}'s Claude`;
+        const who = r.for === 'host' ? 'Claude' : W.claudeOf(r.for);
         const away = r.status === 'waiting' && r.for === 'host' && !connected;
         const text = away
           ? W.requestWaits(r.kind, r.subject)
@@ -64,7 +77,7 @@ function Sources({ sources }) {
   return (
     <p className="brm-psrc">
       {links.map((s) => (
-        <a key={s.href} className="brm-link" href={s.href} target="_blank" rel="noopener noreferrer">
+        <a key={s.href} className="brm-link" href={s.href} target="_blank" rel="noopener noreferrer" aria-label={`${s.title ? `${s.title} \u00b7 ${siteOf(s.href)}` : siteOf(s.href)} (${W.opensNewTab})`}>
           {s.title ? `${s.title} · ${siteOf(s.href)}` : siteOf(s.href)} {'↗'}
         </a>
       ))}
@@ -77,11 +90,11 @@ function PointRow({ p, on, canTick, onTick, busy, ended, run, api }) {
   return (
     <li className={`brm-point${on ? ' is-ticked' : ''}`} data-kind={p.kind} data-status={p.status}>
       <div className="brm-row brm-gap">
-        {canTick && <input type="checkbox" className="brm-qtick" checked={on} onChange={onTick} aria-label={`Tick: ${p.text}`} />}
+        {canTick && <input type="checkbox" className="brm-qtick" checked={on} onChange={onTick} aria-label={W.tickPoint(p.text)} />}
         <span className={`brm-later-tag brm-ptag brm-ptag--${p.kind}`}>{POINT_TAGS[p.kind] || W.tagTalk}</span>
         <span className="brm-who">{pointFrom(p)} · {clockOf(p.createdAt)}</span>
         {note && <span className="brm-pnote">{note}</span>}
-        {!ended && p.status !== 'sent' && p.status !== 'later' && (
+        {!ended && !['sent', 'later', 'voting'].includes(p.status) && (
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={() => run(() => api.pointAction(p.id, 'remove'))}>{W.remove}</button>
         )}
       </div>
@@ -92,7 +105,7 @@ function PointRow({ p, on, canTick, onTick, busy, ended, run, api }) {
 }
 
 export default function BuildPoints({
-  room, ticked, setTicked, busy, ended, run, api, leadsRow, onRequest, onVote,
+  room, ticked, setTicked, busy, ended, run, api, leadsRow, askOpen = false, onRequest, onVote,
 }) {
   const [open, setOpen] = useState(() => new Set());
   const pts = pointsOf(room);
@@ -125,15 +138,16 @@ export default function BuildPoints({
   };
   const n = on.length;
   const main = leadsRow ? ' brm-btn--primary' : '';
-  const attrs = leadsRow ? { 'data-next-primary': true } : {};
+  // Space never presses these; Ctrl or Cmd Enter does, while the row leads.
+  const attrs = { 'data-no-space': true, ...(leadsRow ? { 'data-points-primary': true } : {}) };
   const full = pts.open >= POINTS_OPEN_MAX;
 
   return (
     <section className="brm-points" aria-label={W.points}>
       {!ended && (
         <div className="brm-row brm-gap brm-ptop">
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => onRequest('research')}><Icon name="MagnifyingGlass" size={14} /> {W.research}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => onRequest('ideas')}><Icon name="Lightbulb" size={14} /> {W.ideasAsk}</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : undefined} onClick={() => onRequest('research')}><Icon name="MagnifyingGlass" size={14} /> {W.research}</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : undefined} onClick={() => onRequest('ideas')}><Icon name="Lightbulb" size={14} /> {W.ideasAsk}</button>
           {full && <span className="brm-hint" role="status">{W.pointsFull(POINTS_OPEN_MAX)}</span>}
         </div>
       )}
@@ -148,7 +162,7 @@ export default function BuildPoints({
         return (
           <div className="brm-pgroup" key={g.key} role="group" aria-label={g.heading}>
             <div className="brm-row brm-gap brm-pgroup-h">
-              {!ended && ids.length > 0 && <input type="checkbox" className="brm-qtick" checked={allOn} onChange={() => toggleGroup(g)} aria-label={`Tick all: ${g.heading}`} />}
+              {!ended && ids.length > 0 && <input type="checkbox" className="brm-qtick" checked={allOn} onChange={() => toggleGroup(g)} aria-label={W.tickAll(g.heading)} />}
               <h4 className="brm-pgroup-t">{g.heading}</h4>
               <span className="brm-who brm-push">{g.by} · {clockOf(g.at)}</span>
             </div>
@@ -167,12 +181,12 @@ export default function BuildPoints({
         );
       })}
       {!ended && n > 0 && (
-        <ActionRow space={leadsRow} hint={leadsRow ? `${W.ticked(n)} · ${W.spaceTo(n === 1 ? 'send' : 'put them to a vote')}` : W.ticked(n)}>
+        <ActionRow space={leadsRow} hint={leadsRow ? `${W.ticked(n)} · ${n === 1 ? W.ctrlEnterSends : W.ctrlEnterVote}` : W.ticked(n)}>
           <button type="button" className="brm-btn brm-btn--ghost" onClick={clear}>{W.clear}</button>
           <button type="button" className="brm-btn" disabled={busy} onClick={each('later')}>{W.saveLater}</button>
           <button
-            type="button" className="brm-btn" disabled={busy || n !== 1}
-            title={n !== 1 ? W.oneAtATime : undefined}
+            type="button" className="brm-btn" disabled={busy || n !== 1 || askOpen}
+            title={n !== 1 ? W.oneAtATime : askOpen ? W.finishAsk : undefined}
             onClick={each('show')}
           >
             {W.showOnStage}
@@ -188,7 +202,7 @@ export default function BuildPoints({
               <button
                 type="button" className={`brm-btn${main}`} {...attrs}
                 disabled={busy || n > VOTE_POINTS_MAX}
-                title={n > VOTE_POINTS_MAX ? 'A vote takes at most 8' : undefined}
+                title={n > VOTE_POINTS_MAX ? W.voteAtMost(VOTE_POINTS_MAX) : undefined}
                 onClick={vote}
               >
                 {W.putToVote(n)}

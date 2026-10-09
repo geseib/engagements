@@ -18,33 +18,37 @@ import { laterItems, pointsOf } from './buildScreens';
 
 export default function BuildLaterPoints({
   room, ended, busy, run, api, laterTicked, setLaterTicked, onVoteLater, onAskRoom,
-  pointTicked, setPointTicked, leadsRow, openPoints = 0, onRequest, onVotePoints,
+  pointTicked, setPointTicked, leadsRow, askOpen = false, openPoints = 0, onRequest, onVotePoints,
 }) {
   const pts = pointsOf(room);
   const later = laterItems(room);
   const total = pts ? pts.items.length : 0;
   const fresh = pts ? pts.items.filter((p) => p.status === 'new').length : 0;
   const [tab, setTab] = useState(() => (total > 0 && later.length === 0 ? 'points' : 'later'));
+  // Ticks belong to the tab they were made on: the action row is not on screen in the other.
+  // Every switch, the host's click or an automatic one, clears the tab being left.
+  const goTo = (next) => {
+    if (next === 'later') setPointTicked([]);
+    else setLaterTicked([]);
+    setTab(next);
+  };
   // The first batch to arrive opens Points by itself, once.
   const seenAny = useRef(total > 0);
   useEffect(() => {
-    if (total > 0 && !seenAny.current) { seenAny.current = true; setTab('points'); }
+    if (total > 0 && !seenAny.current) { seenAny.current = true; goTo('points'); }
     if (total > 0) seenAny.current = true;
-  }, [total]);
+  }, [total]); // eslint-disable-line react-hooks/exhaustive-deps
   // What's next sent the host here.
   const asked = useRef(openPoints);
   useEffect(() => {
-    if (openPoints !== asked.current) { asked.current = openPoints; setTab('points'); }
-  }, [openPoints]);
+    if (openPoints !== asked.current) { asked.current = openPoints; goTo('points'); }
+  }, [openPoints]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!pts) {
     return <BuildLater room={room} ticked={laterTicked} setTicked={setLaterTicked} busy={busy} ended={ended} run={run} api={api} onVote={onVoteLater} onAskRoom={onAskRoom} />;
   }
   const choose = (next) => {
     if (next === tab) return;
-    // Ticks belong to the tab they were made on: the action row is not on screen in the other.
-    if (next === 'later') setPointTicked([]);
-    else setLaterTicked([]);
-    setTab(next);
+    goTo(next);
   };
   return (
     <div className="brm-lp">
@@ -66,7 +70,7 @@ export default function BuildLaterPoints({
         ) : (
           <BuildPoints
             room={room} ticked={pointTicked} setTicked={setPointTicked} busy={busy} ended={ended} run={run} api={api}
-            leadsRow={leadsRow} onRequest={onRequest} onVote={onVotePoints}
+            leadsRow={leadsRow} askOpen={askOpen} onRequest={onRequest} onVote={onVotePoints}
           />
         )}
       </div>
