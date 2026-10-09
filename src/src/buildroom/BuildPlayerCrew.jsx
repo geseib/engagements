@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import BuildImage from './BuildImage';
 import Icon from '../components/Icon';
 import { mintBuilderKey, claimTask, react } from './buildPlayApi';
+import { LanePoints } from './BuildPlayerPoints';
 
 /**
  * CREW MODE ON THE PHONE (docs/design/build-room-crew/FLOWS.md, storyboard
@@ -237,7 +238,7 @@ function TaskRow({ task, index, me, api, onResult }) {
   );
 }
 
-function YourLane({ crew, api, setBuilderKey, onResult }) {
+function YourLane({ crew, api, setBuilderKey, onResult, myPoints }) {
   const me = crew.me.name;
   const b = (crew.builders || []).find((x) => x.name === me) || { status: 'setting-up' };
   const task = (crew.tasks || []).find((t) => t.taskId === b.taskId) || null;
@@ -273,6 +274,7 @@ function YourLane({ crew, api, setBuilderKey, onResult }) {
       ) : null}
       {/* Said once: not when the same screenshot is on an early look below. */}
       {shownBelow ? null : <BuildImage imageId={b.latestImageId} alt="Your latest screenshot" className="bpl-shot" />}
+      <LanePoints task={task} myPoints={myPoints} api={api} onResult={onResult} />
       <h4 className="plr-lab bpl-tasks-h">Open tasks</h4>
       {open.length ? (
         <ol className="bpl-tasks">
@@ -447,7 +449,7 @@ function EarlyLook({ share, me, api, onResult }) {
 
 /* --------------------------------------------------------- the section -- */
 
-export default function CrewSection({ crew, api, onResult, builderKey, setBuilderKey }) {
+export default function CrewSection({ crew, api, onResult, builderKey, setBuilderKey, myPoints = null }) {
   if (!crew || !crew.enabled) return null;
   const me = crew.me ? crew.me.name : null;
   const shares = crew.shares || [];
@@ -456,7 +458,7 @@ export default function CrewSection({ crew, api, onResult, builderKey, setBuilde
       <h3 className="plr-lab bpl-crew-h">The crew</h3>
       <CrewPipeline crew={crew} />
       {builderKey ? <KeyCard keyText={builderKey} onDone={() => setBuilderKey(null)} /> : null}
-      {me ? <YourLane crew={crew} api={api} setBuilderKey={setBuilderKey} onResult={onResult} /> : null}
+      {me ? <YourLane crew={crew} api={api} setBuilderKey={setBuilderKey} onResult={onResult} myPoints={myPoints} /> : null}
       {shares.length > 0 && (
         <div className="bpl-els">
           {shares.map((s) => <EarlyLook key={s.shareId} share={s} me={me} api={api} onResult={onResult} />)}

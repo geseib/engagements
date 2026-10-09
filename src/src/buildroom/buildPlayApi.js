@@ -130,3 +130,13 @@ export function react({ apiBase, gameId, playerName, clientId }, shareId, kind, 
   const words = String(text || '').trim();
   return post(apiBase, gameId, 'crew/react', { playerName, clientId }, { shareId, kind, ...(words ? { text: words } : {}) });
 }
+
+/**
+ * POST crew/points/requests — a builder asks THEIR OWN Claude for Research or
+ * Ideas on their task (talking points T8). There is no way to name another
+ * builder: the server aims it at the caller, and answers 409 to anybody who is
+ * not a builder.
+ */
+export function requestPoints({ apiBase, gameId, playerName, clientId }, kind, subject) {
+  return post(apiBase, gameId, 'crew/points/requests', { playerName, clientId }, { kind, subject });
+}

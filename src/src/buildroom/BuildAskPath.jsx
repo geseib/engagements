@@ -79,7 +79,7 @@ const ratingAvg = (ask) => {
   return r && r.avg !== null && r.avg !== undefined ? r.avg : null;
 };
 
-function Step({ n, state, title, summary, open, onToggle, children }) {
+export function Step({ n, state, title, summary, open, onToggle, children }) {
   const head = (
     <>
       <span className="brm-path-n" aria-hidden="true">{n}</span>

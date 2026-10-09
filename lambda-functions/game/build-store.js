@@ -1042,6 +1042,22 @@ function pointsClaudeView(room, who) {
   };
 }
 
+/**
+ * A builder's own screen: the fate of their own Claude's points and their own
+ * requests, nothing else. Words and state only (no sources list, no detail);
+ * never another builder's point, never the host's own.
+ */
+function pointsBuilderView(room, name) {
+  const who = { role: 'builder', name };
+  return {
+    items: (room.points || []).filter((p) => p.Status !== 'removed' && isOwnPoint(p, who)).map((p) => {
+      const v = pointView(p);
+      return { id: v.id, kind: v.kind, text: v.text, status: v.status, outcome: v.outcome, createdAt: v.createdAt };
+    }),
+    requests: (room.preqs || []).filter((r) => isOwnRequest(r, who)).map(requestView),
+  };
+}
+
 /** The line a point leaves on the Later list: its words, and where a finding came from. */
 function pointLaterText(p) {
   const src = (p.Sources || [])[0];
@@ -1438,6 +1454,6 @@ module.exports = {
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
-  pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
+  pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
   hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
 };

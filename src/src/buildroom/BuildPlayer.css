@@ -1065,3 +1065,35 @@
 .bpl .bpl-viewer-main { min-height: 0; overflow: auto; padding: 12px; display: grid; place-items: center; }
 .bpl .bpl-viewer-pic { margin: 0; }
 .bpl .bpl-viewer-pic img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border: 0; }
+
+/* TALKING POINTS (docs/design/build-room-talking-points T4, T7c, T8). */
+.bpl .bpl-point { margin: 0 0 14px; }
+.bpl .bpl-run { margin: 0 0 14px; }
+.bpl .bpl-runlist { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; }
+.bpl .bpl-runitem {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--bpl-rule);
+  border-radius: 10px;
+  font-size: var(--plr-t-body);
+}
+.bpl .bpl-runitem.is-doing { border-color: var(--bpl-amber-edge); background: var(--bpl-amber-tint); }
+.bpl .bpl-runitem.is-done { color: var(--bpl-muted); }
+.bpl .bpl-runitem.is-skipped { color: var(--bpl-muted); opacity: .75; }
+.bpl .bpl-runn {
+  flex: none;
+  min-width: 1.6em;
+  text-align: center;
+  font-size: var(--plr-t-meta);
+  font-weight: 700;
+  color: var(--bpl-muted);
+}
+.bpl .bpl-runitem.is-done .bpl-runn { color: var(--bpl-success-text); }
+
+.bpl .bpl-lp { margin: 12px 0 0; }
+.bpl .bpl-lp-btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.bpl .bpl-lp-btns .bpl-send { flex: 1 1 140px; }
+.bpl .bpl-lp-form { margin: 10px 0 0; padding: 12px; border: 1px solid var(--bpl-rule-strong); border-radius: 12px; }
+.bpl .bpl-lp-chips { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--plr-t-meta); color: var(--bpl-muted); }

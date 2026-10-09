@@ -44,6 +44,9 @@ import BuildLaterPoints from './BuildLaterPoints';
 import BuildPointRequest from './BuildPointRequest';
 import { PointStage, ShownPointCard, TakeDownOffer } from './BuildPointStage';
 import { AskPath } from './BuildAskPath';
+import BuildPointsVote from './BuildPointsVote';
+import BuildPointsResults from './BuildPointsResults';
+import { RunPanel, RunConfirm, RunStage } from './BuildRun';
 import ActionRow from './BuildActionRow';
 import { WhatsNext, DecidedList, decidedAsks } from './BuildWhatsNext';
 import { isTypingTarget, dialogOpen } from './useNextFocus';
@@ -65,6 +68,7 @@ import {
   queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
   defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN,
+  isPointsVote, highlightOf, highlightedPointIds, rowIsLive, pointVoteRows, runOf, runRunning,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -440,6 +444,19 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [takeDown, setTakeDown] = useState(null);
   /** Picks per person the vote window opens with: 1 by default, 3 from the take-down offer. */
   const [votePicks, setVotePicks] = useState(1);
+  /** Put N to a vote from the Points tab (T5): the ticked ids while the window is open, else null. */
+  const [pointVote, setPointVote] = useState(null);
+  /** The highlight at a points vote's results (T6): the host's own labels per ask, else the top three. */
+  const [highlights, setHighlights] = useState({});
+  /** What a move at the highlight step said ("Saved 2 for later"), per ask. */
+  const [pointsSaid, setPointsSaid] = useState({});
+  /** Next pressed before Claude reported the item done (T7): the confirm is open. */
+  const [runConfirm, setRunConfirm] = useState(false);
+  /** The finished or stopped list the host put away (its runId). */
+  const [runHidden, setRunHidden] = useState('');
+  // The confirm belongs to one item of one list: it goes when the list moves on.
+  const runKey = room && room.run ? `${room.run.runId}:${room.run.cur}:${room.run.status}` : '';
+  useEffect(() => { setRunConfirm(false); }, [runKey]);
   const [dialog, setDialog] = useState(null); // 'connect' | 'wrap' | 'end' | 'crew' | {compose: kind}
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
@@ -775,7 +792,13 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const whatsNextShown = !onCrew && !current && !(room.opening && room.opening.phase === 'opening') && nowFlags(room).whatsNext;
   const pointsLead = pointTickedNow > 0 && whatsNextShown;
   const sendPointRequest = (kind, subject) => run(() => api.pointRequest(kind, subject));
-  const putPointsToVote = (ids) => run(() => api.votePoints({ ids }));
+  // Put N to a vote opens the window (T5); its Open voting makes the ask.
+  const putPointsToVote = (ids) => { setPointVote(ids); return undefined; };
+  const openPointsVote = async (body) => {
+    const out = await run(() => api.votePoints(body));
+    if (out !== undefined) { setPointVote(null); setPointTicked([]); }
+    return out;
+  };
   const hidePoint = (p) => run(() => api.pointAction(p.id, 'hide'));
   const savePointLater = (p) => run(() => api.pointAction(p.id, 'later'));
   /** Take it down: with 2 or more new ideas about it, offer them a vote first (T4c). */
@@ -785,6 +808,66 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     else hidePoint(p);
   };
   const shownPoint = shownPointOf(room);
+
+  // ── The highlight at a points vote's results, and the run list ───────────
+  // The highlight step replaces the Settle step for a vote made from points
+  // (T6). The Stage dock reads the same highlight and presses the same moves.
+  const pointsResults = current && current.status === 'results' && isPointsVote(current) && !current.wheel && !current.revotedAs ? current : null;
+  const toggleHighlight = (ask, label) => {
+    setPointsSaid((m) => ({ ...m, [ask.askId]: '' }));
+    setHighlights((h) => {
+      const on = highlightOf(ask, room, h[ask.askId]);
+      return { ...h, [ask.askId]: on.includes(label) ? on.filter((x) => x !== label) : [...on, label] };
+    });
+  };
+  /** 'send' | 'run' | 'later-rest' move the highlighted forward; 'close' records a vote that has nothing left to move. */
+  const moveForward = async (ask, then) => {
+    const override = highlights[ask.askId];
+    const labels = highlightOf(ask, room, override);
+    const ids = highlightedPointIds(ask, room, override);
+    const rows = pointVoteRows(ask, room);
+    const said = rows.filter((r) => labels.includes(r.label)).map((r) => r.text).join('; ').slice(0, 400);
+    const recordOnly = (chosen, text) => run(() => api.askAction(ask.askId, decideBody(ask, { direction: text, chosen, send: false })));
+    if (then === 'close') return recordOnly([], W.movedForwardDone);
+    if (then !== 'later-rest' && !ids.length) return undefined;
+    const rest = rows.filter((r) => rowIsLive(r) && !labels.includes(r.label)).length;
+    const out = await run(() => api.askAction(ask.askId, { action: 'forward', pointIds: ids, then }));
+    if (out === undefined) return undefined;
+    if (then === 'later-rest') {
+      setPointsSaid((m) => ({ ...m, [ask.askId]: W.savedForLater((out.saved || []).length || rest) }));
+      return out;
+    }
+    // Sent or started: the vote is settled, so it leaves the Now column like any decided ask.
+    await recordOnly(labels, `${W.movedForwardDone}: ${said}`);
+    return out;
+  };
+  const list = runOf(room);
+  const listRunning = runRunning(room);
+  const nextItem = async (force = false) => {
+    if (!list) return undefined;
+    // Claude has not reported the item done: ask before sending the next over it.
+    if (!force && !list.claudeDone) { setRunConfirm(true); return undefined; }
+    let confirmNeeded = false;
+    const out = await run(async () => {
+      try {
+        return await api.runNext({ from: list.cur, ...(force ? { force: true } : {}) });
+      } catch (e) {
+        // The server's own refusal, when the list moved under us: ask the same question.
+        if (e && e.status === 409 && e.body && e.body.needsConfirm) { confirmNeeded = true; return {}; }
+        throw e;
+      }
+    });
+    if (confirmNeeded) setRunConfirm(true);
+    return out;
+  };
+  const skipItem = () => run(() => api.runSkip());
+  const stopList = () => run(() => api.runStop());
+  const reorderList = (order, ver) => run(() => api.runReorder(order, ver));
+  // Next holds the one orange while the list runs and nothing else does: no ask,
+  // no opening, no dialog, not the crew board. The Points row and What's next
+  // stand aside for it.
+  const runLeads = listRunning && !current && !(room.opening && room.opening.phase === 'opening') && !onCrew
+    && !pointVote && !takeDown && !voteIdeas && !dialog;
 
   return (
     <ImageLoader.Provider value={loadImage}>
@@ -808,6 +891,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onHost={() => setScreen('host')}
           onTakeDown={takePointDown}
           onPointLater={savePointLater}
+          highlight={current ? highlights[current.askId] : undefined}
+          onPointsMove={moveForward}
+          onRunNext={() => nextItem(false)} onRunSkip={skipItem} onRunStop={stopList}
           pickId={pick && current && pick.askId === current.askId ? pick.id : null}
           onPick={(id) => {
             if (current) setConfirmPick({ ask: current, id });
@@ -912,11 +998,27 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                   onTakeDown={() => takePointDown(shownPoint)} onSaveLater={() => savePointLater(shownPoint)}
                 />
               )}
+              {list && runHidden !== list.runId && (
+                <RunPanel
+                  run={list} busy={busy} ended={ended} leads={runLeads} confirming={runConfirm}
+                  onNext={() => nextItem(false)} onSkip={skipItem} onStop={stopList} onReorder={reorderList}
+                  onHide={() => setRunHidden(list.runId)}
+                />
+              )}
               {current ? (
                 <div className="brm-now">
                   {/* THE ASK AS FOUR STEPS (owner, 2026-10-07). "Go with B"
                       is the room's choice and goes straight on; a click on
                       another option still asks first. */}
+                  {pointsResults ? (
+                    <BuildPointsResults
+                      key={`${current.askId}:points`}
+                      ask={current} room={room} busy={busy} ended={ended}
+                      override={highlights[current.askId]} said={pointsSaid[current.askId] || ''}
+                      onToggle={(label) => toggleHighlight(current, label)}
+                      onMove={(then) => moveForward(current, then)}
+                    />
+                  ) : (
                   <AskPath
                     key={current.askId}
                     ask={current} room={room} busy={busy} ended={ended} run={run} api={api}
@@ -927,11 +1029,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                     draft={drafts[current.askId] || null}
                     onDraft={(d) => setDrafts((m) => ({ ...m, [current.askId]: d }))}
                   />
+                  )}
                 </div>
               ) : (
                 room.opening && room.opening.phase === 'opening'
                   ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => setScreen('stage')} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning} />
               )}
             </>
           )}
@@ -965,7 +1068,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               laterTicked={laterTicked} setLaterTicked={setLaterTicked}
               onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
               onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
-              pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead} askOpen={Boolean(current)} openPoints={pointsTab}
+              pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead && !pointVote && !listRunning} askOpen={Boolean(current)} openPoints={pointsTab}
               onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
             />
           )}
@@ -1038,6 +1141,23 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <BuildPointRequest
           kind={dialog.points} initial={defaultSubject(room)} connected={Boolean(room.agent && room.agent.connected)} busy={busy}
           onSend={sendPointRequest} onClose={() => setDialog(null)}
+        />
+      )}
+      {host && pointVote && (() => {
+        const live = pointVote.map((id) => pointsList.find((p) => p.id === id && POINT_OPEN.includes(p.status))).filter(Boolean);
+        return live.length >= 2 ? (
+          <BuildPointsVote
+            key={live.map((p) => p.id).join(',')}
+            points={live} openAsk={openAskOf(room)} busy={busy}
+            onOpen={openPointsVote} onClose={() => setPointVote(null)}
+          />
+        ) : null;
+      })()}
+      {runConfirm && listRunning && !list.claudeDone && (
+        <RunConfirm
+          run={list} busy={busy}
+          onWait={() => setRunConfirm(false)}
+          onSend={async () => { setRunConfirm(false); await nextItem(true); }}
         />
       )}
       {takeDown && (
@@ -1567,6 +1687,9 @@ function HistoryStack({ items }) {
 /** The dock hint's verb: what Space does for the move beside it. */
 function hintVerb(move) {
   if (move.action === 'to-claude') return move.verb || 'send';
+  if (move.action === 'points-send') return 'send';
+  if (move.action === 'run-next') return `send ${move.k}`;
+  if (move.action === 'points-close') return 'close the vote';
   if (move.action === 'close') return 'show results';
   if (move.action === 'spin' || move.action === 'wheel') return 'spin';
   if (move.action === 'open' || move.action === 'vote') return 'open voting';
@@ -1587,7 +1710,7 @@ function hintVerb(move) {
  * window (StageDecide), and a click on an option or a wheel slice opens that
  * window with the pick made (owner, 2026-10-08).
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {} }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
@@ -1595,11 +1718,13 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
   const [settledSpin, setSettledSpin] = useState(lastSpinId);
   const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
-  const m = stageModel(room, current, now, { crewOn, draft, turning: wheelTurning });
+  const m = stageModel(room, current, now, { crewOn, draft, turning: wheelTurning, highlight });
   const [editing, setEditing] = useState(false);
   const [editPick, setEditPick] = useState(null); // an option clicked on the board
   // The window belongs to one ask at results: it goes when that ask moves on.
-  const editable = Boolean(current && current.status === 'results' && !ended && !crewOn);
+  // A vote made from points settles by highlight (T6), not by the send window.
+  const pointsVote = Boolean(current && isPointsVote(current) && !current.wheel && !current.revotedAs);
+  const editable = Boolean(current && current.status === 'results' && !ended && !crewOn && !pointsVote);
   const editKey = current ? `${current.askId}:${current.status}` : '';
   useEffect(() => { setEditing(false); setEditPick(null); }, [editKey]);
   const waiting = waitingCount(room);
@@ -1623,6 +1748,14 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     // A TALKING POINT is up: Take it down (which may offer the ideas a vote) or save it for later.
     if (m.action === 'take-down') { if (m.point) onTakeDown(m.point); return; }
     if (m.action === 'point-later') { if (m.point) onPointLater(m.point); return; }
+    // THE HIGHLIGHT AND THE RUN LIST: the same moves as the Host's rows.
+    if (m.action === 'points-send') { onPointsMove(current, 'send'); return; }
+    if (m.action === 'points-run') { onPointsMove(current, 'run'); return; }
+    if (m.action === 'points-later') { onPointsMove(current, 'later-rest'); return; }
+    if (m.action === 'points-close') { onPointsMove(current, 'close'); return; }
+    if (m.action === 'run-next') { onRunNext(); return; }
+    if (m.action === 'run-skip') { onRunSkip(); return; }
+    if (m.action === 'run-stop') { onRunStop(); return; }
     if (m.action === 'to-claude') {
       // The same move as the Host's Settle press, including a direction the host already changed.
       const go = settleMove(current, draft);
@@ -1635,7 +1768,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       return;
     }
     run(() => api.askAction(m.askId || current.askId, { action: m.action }));
-  }, [busy, run, api, current, editable, wheelTurning, room, onTakeDown, onPointLater]);
+  }, [busy, run, api, current, editable, wheelTurning, room, onTakeDown, onPointLater, onPointsMove, onRunNext, onRunSkip, onRunStop]);
   const act = useCallback(() => doMove(move), [doMove, move]);
   // Space fires the dock's move: never while typing, and never when a focused
   // control would take the Space itself.
@@ -1644,12 +1777,14 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
       if (e.target && e.target.closest && e.target.closest('button, a, [role="button"], [role="dialog"]')) return;
       if (dialogOpen()) return;
+      // Next before Claude has reported the item done is never one stray key away.
+      if (move && move.action === 'run-next' && !move.claudeDone) return;
       e.preventDefault();
       act();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [act]);
+  }, [act, move]);
   // WHO IS IN THE ROOM, on hover (owner, 2026-10-07): the regular stage's
   // lobby list, the same hover, focus, pin and Escape. Only while no ask is
   // up: the list is the joined set, and an ask phase names the waiting set.
@@ -1691,12 +1826,14 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       </section>
     );
   } else if (current) {
-    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={editPick || pickId} onPick={boardPick} />;
+    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={editPick || pickId} onPick={pointsVote ? null : boardPick} />;
   } else if (room.opening && room.opening.phase === 'opening') {
     // THE OPENING (O3): between steps, the wall reads back the brief so far.
     content = <WallBrief room={room} />;
   } else if (m.point) {
     content = <PointStage point={m.point} />;
+  } else if (m.run) {
+    content = <RunStage run={m.run} />;
   } else {
     content = <IdleStage room={room} now={now} host={false} />;
   }
@@ -1726,10 +1863,11 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             </>
           ) : m.status}
           >
+            {!ended && (m.extras || []).map((x) => <button key={x.action} type="button" className="btn ghost" disabled={busy || x.disabled} onClick={() => doMove(x)}>{x.label}</button>)}
             {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy || m.secondary.disabled} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
             {move && <button type="button" className="btn" disabled={busy || move.disabled || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
-            {move && !move.disabled && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
+            {move && !move.disabled && !(move.action === 'run-next' && !move.claudeDone) && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
             <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
               <span className="dock-more-lbl">HOST</span>
               {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}

@@ -1206,6 +1206,28 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     assert.ok((await host('GET', 'state')).body.run, 'the host still sees it');
   });
 
+  console.log('\nTask 5: a builder\'s own screen');
+  await check('T5: a builder\'s phone gets its own points and requests with their fate; nobody else\'s; a plain phone gets none', async () => {
+    seed();
+    await host('POST', 'crew/settings', { enabled: true, modes: ['fork'] });
+    await phone('Priya')('POST', 'crew/builder-key');
+    await phone('Sam')('POST', 'crew/builder-key');
+    await phone('Priya')('POST', 'crew/points/requests', { kind: 'ideas', subject: 'Parking map' });
+    const mine = (await priya('POST', 'points', { points: [pt('Priya idea one'), pt('Priya idea two')] })).body.posted;
+    await sam('POST', 'points', { points: [pt('Sam idea')] });
+    await claude('POST', 'points', { points: [pt('Host Claude point')] });
+    await host('POST', `points/${mine[0]}`, { action: 'later' });
+    const v = (await phone('Priya')('GET', 'state')).body;
+    assert.deepStrictEqual(v.myPoints.items.map((i) => i.text).sort(), ['Priya idea one', 'Priya idea two']);
+    assert.strictEqual(v.myPoints.items.find((i) => i.id === mine[0]).status, 'later');
+    assert.strictEqual(v.myPoints.items.find((i) => i.id === mine[0]).outcome, 'saved for later');
+    assert.strictEqual(v.myPoints.requests.length, 1);
+    assert.strictEqual(v.myPoints.requests[0].subject, 'Parking map');
+    assert.ok(!JSON.stringify(v).includes('Sam idea') && !JSON.stringify(v).includes('Host Claude point'));
+    assert.strictEqual((await phone('Marcus')('GET', 'state')).body.myPoints, undefined, 'a phone that is not a builder gets none');
+    assert.ok(!('points' in (await phone('Sam')('GET', 'state')).body), 'phones still carry no host points list');
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

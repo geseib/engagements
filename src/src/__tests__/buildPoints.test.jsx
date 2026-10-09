@@ -334,13 +334,13 @@ describe('ticks and the action row', () => {
     expect(postsTo('points/send')[0].body).toEqual({ ids: ['f1', 'f2'] });
   });
 
-  test('Put 2 to a vote posts the ids and leaves the picks to the server default', async () => {
+  test('Put 2 to a vote opens the window; nothing is posted until Open voting (the window is Task 5)', async () => {
     await openRoom(RESEARCH_STATE());
     tick('Finding number 1');
     tick('Finding number 2');
     fireEvent.click(within(panel()).getByRole('button', { name: 'Put 2 to a vote' }));
-    await waitFor(() => expect(postsTo('points/vote')).toHaveLength(1));
-    expect(postsTo('points/vote')[0].body).toEqual({ ids: ['f1', 'f2'] });
+    expect(await screen.findByRole('dialog', { name: 'Put 2 to a vote' })).toBeInTheDocument();
+    expect(postsTo('points/vote')).toHaveLength(0);
   });
 
   test('Save for later posts later for each ticked point; Show on Stage posts show for one', async () => {
@@ -428,7 +428,7 @@ describe('one orange on the whole Host screen, with Points', () => {
     tick('Finding number 1');
     tick('Finding number 2');
     fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
-    await waitFor(() => expect(postsTo('points/vote')).toHaveLength(1));
+    expect(await screen.findByRole('dialog', { name: 'Put 2 to a vote' })).toBeInTheDocument();
   });
 
   test('Ctrl Enter does nothing while typing, with a dialog open, or when the row does not lead', async () => {

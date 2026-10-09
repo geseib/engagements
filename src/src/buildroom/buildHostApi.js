@@ -27,14 +27,15 @@ export function apiBase() {
 const seg = (value) => encodeURIComponent(String(value));
 
 async function readError(response) {
+  let body = null;
   try {
-    const body = await response.json();
-    if (body && typeof body.error === 'string' && body.error.trim()) return body.error;
-    if (body && typeof body.message === 'string' && body.message.trim()) return body.message;
+    body = await response.json();
   } catch (e) {
     /* an unreadable body says nothing; fall through to the status */
   }
-  return `The server said no (${response.status}).`;
+  if (body && typeof body.error === 'string' && body.error.trim()) return { message: body.error, body };
+  if (body && typeof body.message === 'string' && body.message.trim()) return { message: body.message, body };
+  return { message: `The server said no (${response.status}).`, body };
 }
 
 async function call(path, { method = 'GET', body } = {}) {
@@ -49,8 +50,11 @@ async function call(path, { method = 'GET', body } = {}) {
     throw new Error('That did not reach the server. Check the connection and try again.');
   }
   if (!response.ok) {
-    const err = new Error(await readError(response));
+    const said = await readError(response);
+    const err = new Error(said.message);
     err.status = response.status;
+    // The server's whole answer: a refusal can carry more than a sentence (a run's `needsConfirm`).
+    err.body = said.body;
     throw err;
   }
   try {
@@ -145,6 +149,14 @@ export function buildApi(gameId) {
     sendPoints: (ids) => post('points/send', { ids }),
     /** `{ids (2-8), prompt?, maxPicks?}` → `{ask}`: ticked points to a multi-pick vote. */
     votePoints: (body) => post('points/vote', body),
+    /** The run list (Work through in turn). `{force?, from?}` → `{run}`; 409 `needsConfirm` when Claude has not reported the item done. */
+    runNext: (body = {}) => post('run/next', body),
+    /** The next pending item goes to Later; the one after becomes next. → `{run}` */
+    runSkip: () => post('run/skip'),
+    /** Everything not yet sent goes to Later, and the list closes. → `{run}` */
+    runStop: () => post('run/stop'),
+    /** `{order: [pointIds of every pending item], ver}` → `{run}`; 409 when the list changed. */
+    runReorder: (order, ver) => post('run/reorder', { order, ver }),
     /** The Wi-Fi share: `{on}` or `{dismissOffer: true}` → `{lan}` */
     share: (body) => post('share', body),
     /** → `{key, keyId}`. The key is shown once. */

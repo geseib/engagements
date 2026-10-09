@@ -239,7 +239,7 @@ function resultsLine(ask) {
   return ranked[1] === ranked[0] && ranked[2] === ranked[0] ? `Tied, ${ranked[0]} each` : `Tied, ${ranked[0]} to ${ranked[1]}`;
 }
 
-export function stageModel(room, current, now = Date.now(), { crewOn = false, draft = null, turning = false } = {}) {
+export function stageModel(room, current, now = Date.now(), { crewOn = false, draft = null, turning = false, highlight = null } = {}) {
   const here = (room && room.playerCount) || 0;
   const ended = Boolean(room && room.state === 'ENDED');
   if (ended) {
@@ -254,6 +254,22 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
       status: W.pointUp,
       primary: { action: 'take-down', label: W.takeItDown, point: p },
       secondary: { action: 'point-later', label: W.saveLater, point: p },
+    };
+  }
+  if (!current && room && runRunning(room) && !(room.opening && room.opening.phase === 'opening') && !crewOn) {
+    // THE RUN LIST ON THE STAGE (talking points T7): the room's picks, the current one lit.
+    const run = room.run;
+    const nextItem = runNextItem(run);
+    const doneNow = Boolean(run.claudeDone);
+    return {
+      phase: null, context: { category: W.workingThrough }, run,
+      meter: { heading: W.runLabel, count: runDoneCount(run), of: run.total },
+      status: doneNow ? W.claudeFinishedItem(run.cur) : W.claudeIsWorking(run.cur, run.total),
+      ...(nextItem ? {
+        primary: { action: 'run-next', label: `Next: ${nextItem.k}`, k: nextItem.k, from: run.cur, claudeDone: doneNow },
+        secondary: { action: 'run-skip', label: W.skipItem(nextItem.k) },
+      } : { primary: null }),
+      extras: [{ action: 'run-stop', label: W.stop }],
     };
   }
   if (!current) {
@@ -282,6 +298,20 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
     const total = (current.results && current.results.total) || current.answerCount || 0;
     const meter = { heading: 'Answered', count: total, of: here };
     const w = current.wheel;
+    if (isPointsVote(current) && !w && !current.revotedAs) {
+      // A VOTE MADE FROM POINTS (T6): the same three moves as the Host, Send as the main button.
+      const rows = pointVoteRows(current, room);
+      const live = rows.filter(rowIsLive);
+      if (!live.length) return { phase: 'RESULTS', context, meter, status: W.movedForwardDone, primary: { action: 'points-close', label: W.closeThisVote } };
+      const n = highlightOf(current, room, highlight).length;
+      return {
+        phase: 'RESULTS', context, meter, pointsVote: true,
+        status: `${W.moveForward} \u00b7 ${W.nHighlighted(n)}`,
+        primary: { action: 'points-send', label: sendHighlighted(n), disabled: n < 1 },
+        secondary: { action: 'points-run', label: W.workInTurn, disabled: n < 2 },
+        extras: [{ action: 'points-later', label: W.saveRest }],
+      };
+    }
     const change = { action: 'edit', label: W.change };
     if (w && !current.revotedAs) {
       // THE WHEEL (owner, 2026-10-05): the host can always spin; a person in
@@ -913,6 +943,83 @@ export function pointGroups(room) {
   }
   return out.sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
+
+// ── The vote from points, the highlight, the run list (talking points T5 to T7) ──
+
+/** Picks per person in a points vote: 1 to 5. */
+export const VOTE_PICKS_MAX = 5;
+/** The window opens on 3 picks, or one fewer than the options when that is smaller. */
+export const defaultPicks = (n) => Math.max(1, Math.min(3, n - 1));
+/** A vote the host made from ticked points. */
+export const isPointsVote = (ask) => Boolean(ask && Array.isArray(ask.fromPoints) && ask.fromPoints.length);
+
+/**
+ * The rows of a points vote, most votes first (ties keep the options' order).
+ * Each carries its point, so the page knows what is still the host's to move.
+ */
+export function pointVoteRows(ask, room) {
+  const byId = new Map((((room && room.points && room.points.items) || [])).map((p) => [p.id, p]));
+  const counts = (ask && ask.results && ask.results.options) || [];
+  return ((ask && ask.options) || []).map((o, index) => {
+    const point = byId.get(o.pointId) || null;
+    const r = counts.find((x) => x.label === o.label) || { count: 0 };
+    return { label: o.label, pointId: o.pointId || null, text: (point && point.text) || o.detail || o.title, count: r.count || 0, point, index };
+  }).sort((a, b) => b.count - a.count || a.index - b.index);
+}
+
+/** A voted point the host can still move forward: it is in the vote or already highlighted. */
+export const rowIsLive = (row) => Boolean(row.point) && ['voting', 'queued'].includes(row.point.status);
+
+/**
+ * The top three by votes, and a tie at the cut highlights every tied row.
+ * Rows nobody picked are never highlighted by default.
+ */
+export function defaultHighlight(rows) {
+  const ranked = rows.filter((r) => rowIsLive(r) && r.count > 0);
+  if (!ranked.length) return [];
+  const cut = ranked[Math.min(2, ranked.length - 1)].count;
+  return ranked.filter((r) => r.count >= cut).map((r) => r.label);
+}
+
+/** The labels highlighted now: the host's own choice if they made one, else the default. */
+export function highlightOf(ask, room, override) {
+  const rows = pointVoteRows(ask, room);
+  const live = new Set(rows.filter(rowIsLive).map((r) => r.label));
+  const base = Array.isArray(override) ? override : defaultHighlight(rows);
+  return rows.filter((r) => live.has(r.label) && base.includes(r.label)).map((r) => r.label);
+}
+
+/** A tie at the cut: the rows past the third that share its count (empty when there is none). */
+export function tiedAtCut(rows) {
+  const ranked = rows.filter((r) => rowIsLive(r) && r.count > 0);
+  if (ranked.length <= 3) return [];
+  const cut = ranked[2].count;
+  const tied = ranked.filter((r) => r.count === cut);
+  return tied.length > 1 && ranked[3].count === cut ? tied : [];
+}
+
+/** The ids of the highlighted rows, in vote order: what the server is told. */
+export function highlightedPointIds(ask, room, override) {
+  const on = new Set(highlightOf(ask, room, override));
+  return pointVoteRows(ask, room).filter((r) => on.has(r.label)).map((r) => r.pointId).filter(Boolean);
+}
+
+/** The run list as the host's page holds it: null when there is none. */
+export const runOf = (room) => (room && room.run) || null;
+export const runRunning = (room) => Boolean(room && room.run && room.run.status === 'running');
+export const runDoneCount = (run) => (run ? run.items.filter((x) => x.state === 'done').length : 0);
+/** The next item to send, or null when this is the last. */
+export function runNextItem(run) {
+  if (!run || !run.next) return null;
+  return run.items.find((x) => x.k === run.next) || null;
+}
+/** The item Claude is on (sent, not yet reported), or null. */
+export function runCurrentItem(run) {
+  if (!run) return null;
+  return run.items.find((x) => x.k === run.cur) || null;
+}
+/** "Send these 3 to Claude", or "Send to Claude" for one. */
+export const sendHighlighted = (n) => (n === 1 ? W.sendPlain : W.sendThese(n));
 
 /** What Research… and Ideas… start with: the open ask's question, else Claude's last step, else nothing. */
 export function defaultSubject(room) {

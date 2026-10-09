@@ -2503,6 +2503,8 @@ async function routePlay(ctx, method, parts, body, query) {
     const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
     const view = S.publicView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, me, now: new Date().toISOString() });
     view.crew = C.crewView(room, 'public', me);
+    // A builder's own points and requests, for their lane (talking points T8). Nobody else's.
+    if (room.builders.some((b) => b.PlayerName === me.playerName)) view.myPoints = S.pointsBuilderView(room, me.playerName);
     return reply(200, view);
   }
   if (method !== 'POST') return fail(404, 'Not found');

@@ -8,6 +8,7 @@ import BuildWheel from './BuildWheel';
 import { W } from './words';
 import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS } from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
+import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
 
 /**
@@ -1036,7 +1037,7 @@ export default function BuildPlayer({
   const crew = crewOn ? (
     <>
       <hr className="plr-sep" />
-      <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} />
+      <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} myPoints={view.myPoints} />
     </>
   ) : null;
 
@@ -1069,8 +1070,10 @@ export default function BuildPlayer({
       <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
     </section>
   ) : null;
+  const run = view.run && view.run.status === 'running' ? view.run : null;
   const nowExtras = isEnded ? null : (
     <>
+      {run && ask ? <RunBlock run={run} /> : null}
       {preview && !previewSent && (
         <section className="bpl-ideas bpl-pvnote" aria-label="Claude is showing something">
           <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
@@ -1158,17 +1161,26 @@ export default function BuildPlayer({
     });
   }
 
-  /* No current ask: watch the build. */
+  /* No current ask: watch the build. A point the host put on the Stage comes
+     first (Talk it over), then the host's run list; both replace the heading. */
+  const point = view.shownPoint || null;
   return page({
     volume: 'watch',
     body: (
       <>
         {intro}
         {openBuild}
-        <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
-        <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
+        {point ? <TalkItOver key={`${point.kind}:${point.text}`} point={point} api={api} onResult={onResult} /> : null}
+        {point && run ? <RunBlock run={run} /> : null}
+        {!point && run ? <RunBlock run={run} lead /> : null}
+        {!point && !run ? (
+          <>
+            <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
+            <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
+          </>
+        ) : null}
         {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}
-        {crewOn ? <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} /> : null}
+        {crewOn ? <CrewSection crew={view.crew} api={api} onResult={onResult} builderKey={builderKey} setBuilderKey={setBuilderKey} myPoints={view.myPoints} /> : null}
         <Feed view={view} />
         {nowExtras}
       </>
