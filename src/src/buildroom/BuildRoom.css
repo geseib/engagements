@@ -1221,13 +1221,6 @@
 /* ---- Main menu in the header; the extras fold into the session menu at 480px
    (docs/design/build-room-batch-2-3, B5 and B5a). Tokens only. ---- */
 .brm .brm-mainmenu { flex: 0 0 auto; white-space: nowrap; }
-.brm .brm-more-extras {
-  display: grid; gap: 8px; justify-items: start;
-  padding-bottom: 8px; border-bottom: 1px solid var(--brm-rule);
-}
-.brm .brm-more-extras .brm-askpill, .brm .brm-more-extras .brm-livebuild, .brm .brm-more-extras .brm-codebtn { max-width: 100%; }
-.brm .brm-more-extras .brm-wifiwrap { position: static; width: 100%; }
-.brm .brm-more-extras .brm-wifipanel { position: static; width: auto; max-width: none; margin-top: 8px; }
 @media (max-width: 480px) {
   /* Row one: Main menu, the title, the session menu. Row two: the four screens. */
   .brm .brm-hbar { gap: 8px 10px; padding: 10px 12px; }
@@ -1239,9 +1232,6 @@
 }
 
 /* The Wi-Fi panel opened inside the session menu: one column, no sideways room. */
-.brm .brm-more-extras .brm-wifipanel-apps li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-.brm .brm-more-extras .brm-wifipanel-apps li .brm-btn { justify-self: start; }
-.brm .brm-more-extras .brm-wifipanel { box-sizing: border-box; width: 100%; }
 .brm .brm-agentwrap { display: inline-flex; }
 
 /* THE LATER LIST (batch 2-3, B4): one list; an item says what it is. */

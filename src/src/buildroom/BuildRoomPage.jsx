@@ -377,25 +377,6 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
 
 // ── The room ────────────────────────────────────────────────────────────────
 
-/**
- * LIST NAMES ON THE ROOM METER (owner, 2026-10-09; off by default). Whether the
- * Stage's room meter may list who has joined when the host hovers it. Kept for
- * this room in this browser: the Stage is shown from the host's own page, so
- * that is where the choice is read.
- */
-const listNamesKey = (gameId) => `brm.listNames.${gameId}`;
-function useListNames(gameId) {
-  const read = () => { try { return window.localStorage.getItem(listNamesKey(gameId)) === 'on'; } catch (e) { return false; } };
-  const [on, setOn] = useState(read);
-  const set = useCallback((value) => {
-    setOn(Boolean(value));
-    try {
-      if (value) window.localStorage.setItem(listNamesKey(gameId), 'on'); else window.localStorage.removeItem(listNamesKey(gameId));
-    } catch (e) { /* the choice still holds for this visit */ }
-  }, [gameId]);
-  return [on, set];
-}
-
 export function BuildRoom({ gameId, initialView = 'room' }) {
   const api = useMemo(() => buildApi(gameId), [gameId]);
   // Screenshots are private: fetched with the host's sign-in (buildHostApi).
@@ -503,15 +484,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const openPanel = useCallback((tab = 'players', group = '') => setPanel({ tab, group }), []);
   const closePanel = useCallback(() => setPanel(null), []);
   const [qrOpen, setQrOpen] = useState(false);
-  const [listNames, setListNames] = useListNames(gameId);
   const narrow = useNarrowHeader();
   const playerCount = room ? room.playerCount : undefined;
   useEffect(() => { loadPlayers(); }, [loadPlayers, playerCount]);
-  useEffect(() => {
-    if (!panel) return undefined;
-    const t = setInterval(loadPlayers, POLL_MS);
-    return () => clearInterval(t);
-  }, [panel, loadPlayers]);
   // Backslash opens it (the panel's own listener closes it); never while a dialog is up.
   useSessionPanelKey({ enabled: !panel, onOpen: () => { if (!dialogOpen()) openPanel(); } });
 
@@ -609,7 +584,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // First load, the fallback poll, and the host socket.
   useEffect(() => {
     refresh();
-    const poll = setInterval(refresh, POLL_MS);
+    // The room and the roster are both re-read on the fallback poll, so a missed socket message heals.
+    const poll = setInterval(() => { refresh(); loadPlayers(); }, POLL_MS);
     webSocketClient.onMessage('buildChanged', () => refresh());
     // Claude's live activity carries its own lines: show them, no refetch.
     webSocketClient.onMessage('buildActivity', (msg) => {
@@ -619,6 +595,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     webSocketClient.onMessage('gameEnded', () => refresh());
     // Somebody asked to take a name, or the host's other device removed or restored someone.
     webSocketClient.onMessage('handoverRequested', () => loadPlayers());
+    // The host's OTHER device answered (grant, Not now, Lock again): the strip clears here too.
+    webSocketClient.onMessage('playersChanged', () => loadPlayers());
     webSocketClient.onMessage('playerRemoved', () => { loadPlayers(); refresh(); });
     webSocketClient.onMessage('playerRestored', () => { loadPlayers(); refresh(); });
     webSocketClient.onReconnected(() => { refresh(); loadPlayers(); });
@@ -630,6 +608,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       webSocketClient.offMessage('buildActivity');
       webSocketClient.offMessage('gameEnded');
       webSocketClient.offMessage('handoverRequested');
+      webSocketClient.offMessage('playersChanged');
       webSocketClient.offMessage('playerRemoved');
       webSocketClient.offMessage('playerRestored');
       webSocketClient.onReconnected(null);
@@ -957,9 +936,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           draft={current ? drafts[current.askId] || null : null}
           onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
           onHost={() => setScreen('host')}
-          onSession={() => openPanel()}
+          onSession={() => (panel ? closePanel() : openPanel())}
+          panelOpen={Boolean(panel)}
           askingCount={askingNow.length}
-          listNames={listNames}
+          listNames={Boolean(room.settings && room.settings.listNames)}
           onTakeDown={takePointDown}
           onPointLater={savePointLater}
           highlight={current ? highlights[current.askId] : undefined}
@@ -1182,12 +1162,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           room={room} now={now} ended={ended} busy={busy} run={run} api={api} connected={connection === 'live'}
           roster={roster} reloadPlayers={loadPlayers}
           tab={panel.tab} focusGroup={panel.group} onTab={(t) => setPanel({ tab: t, group: '' })} onClose={closePanel}
-          topLine={narrow ? <HeaderTools {...headerTools} /> : null}
+          topLine={narrow || screen === 'stage' ? <HeaderTools {...headerTools} host /> : null}
           slots={{
             agentChip: <AgentChip room={room} now={now} />,
             autoSwitch: ended ? null : <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />,
           }}
-          listNames={listNames} onListNames={setListNames}
+          listNames={Boolean(room.settings && room.settings.listNames)} onListNames={(on) => run(() => api.saveSettings({ listNames: on }))}
           onConnect={() => dialogFromPanel('connect')}
           onCrew={() => dialogFromPanel('crew')}
           onWrap={() => dialogFromPanel('wrap')}
@@ -1756,7 +1736,7 @@ function hintVerb(move) {
  * window (StageDecide), and a click on an option or a wheel slice opens that
  * window with the pick made (owner, 2026-10-08).
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, onSession = () => {}, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
@@ -1922,7 +1902,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             </button>
             {/* SESSION is last, so it is never the lead. The count lights it when someone
                 asks to take a name; nothing on the Stage names the person. */}
-            <button type="button" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} onClick={onSession} title="Session (\)">
+            <button type="button" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} title="Session (\)">
               <span className="dock-more-lbl">SESSION</span>
               {askingCount > 0 && <span className="brm-screen-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
             </button>

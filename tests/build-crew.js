@@ -445,9 +445,26 @@ const PATCH = 'From 1234567 Mon Sep 17 00:00:00 2001\nSubject: [PATCH] Parking m
   });
   await check('a removed player\'s phone is refused on the play routes (RemovedAt), builders included', async () => {
     store.get(key(`GAME#${GAME}`, 'PLAYER#Ana')).RemovedAt = '2026-10-09T10:00:00Z';
-    assert.strictEqual((await phone('Ana')('GET', 'state')).status, 403);
+    const gone = await phone('Ana')('GET', 'state');
+    assert.strictEqual(gone.status, 403);
+    assert.strictEqual(gone.body.code, 'removed', 'the phone cannot tell removed from moved');
     delete store.get(key(`GAME#${GAME}`, 'PLAYER#Ana')).RemovedAt;
     assert.strictEqual((await phone('Ana')('GET', 'state')).status, 200);
+  });
+  await check('a phone whose name is now on another device is refused with code moved, not removed', async () => {
+    const row = store.get(key(`GAME#${GAME}`, 'PLAYER#Ana'));
+    const was = row.ClientId;
+    row.ClientId = 'the-other-device';
+    const moved = await phone('Ana')('GET', 'state');
+    assert.strictEqual(moved.status, 403);
+    assert.strictEqual(moved.body.code, 'moved');
+    row.ClientId = was;
+    assert.strictEqual((await phone('Ana')('GET', 'state')).status, 200);
+  });
+  await check('a name nobody holds is refused with no code', async () => {
+    const r = await phone('Nobody')('GET', 'state');
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(r.body.code, undefined);
   });
   await check('a closed builder does not take one of the eight seats', async () => {
     const c = store.get(key(`GAME#${GAME}`, 'BUILD#BLD#Sam'));

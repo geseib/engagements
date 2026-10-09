@@ -59,11 +59,25 @@ const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/
 
 const { handoverExpiryFrom, HANDOVER_WINDOW_SECONDS, publicHandoverState } = require('./handover');
 const { callerMayDriveSession } = require('./tenant');
+const { notifyHost } = require('./host-notify');
+const { ApiGatewayManagementApiClient } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
+const apigateway = new ApiGatewayManagementApiClient({
+  endpoint: process.env.WEBSOCKET_API_ENDPOINT
+});
+
 const cors = { 'Access-Control-Allow-Origin': '*' };
+
+/**
+ * The roster moved: tell EVERY host device, so a request strip raised on two of
+ * them clears on both when either answers. Never throws (host-notify.js).
+ */
+const rosterMoved = (gameId, playerName) => notifyHost(db, apigateway, process.env.TABLE_NAME, gameId, {
+  type: 'playersChanged', gameId, playerName, timestamp: new Date().toISOString()
+});
 
 exports.handler = async (event) => {
   try {
@@ -147,6 +161,7 @@ exports.handler = async (event) => {
         };
       }
       console.log(`🔒 Handover closed for ${playerName} in game ${gameId}`);
+      await rosterMoved(gameId, playerName);
       const { HandoverExpiresAt, HandoverForClientId, ...rest } = existing.Item;
       return {
         statusCode: 200,
@@ -211,6 +226,7 @@ exports.handler = async (event) => {
         };
       }
       console.log(`✋ Handover for ${playerName} in game ${gameId} refused`);
+      await rosterMoved(gameId, playerName);
       const {
         HandoverRequestedBy, HandoverRequestedAt, ...rest
       } = existing.Item;
@@ -281,6 +297,7 @@ exports.handler = async (event) => {
     }
 
     console.log(`🔓 Handover opened for ${playerName} in game ${gameId} (${bindToRequester ? 'bound to the requester' : 'open'}), expires ${expiresAt}`);
+    await rosterMoved(gameId, playerName);
 
     return {
       statusCode: 200,

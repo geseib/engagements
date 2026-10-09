@@ -305,7 +305,7 @@ describe('Players', () => {
 describe('the websocket tells the host', () => {
   test('handoverRequested, playerRemoved and playerRestored refetch the roster', async () => {
     await openRoom(hostState());
-    for (const type of ['handoverRequested', 'playerRemoved', 'playerRestored']) {
+    for (const type of ['handoverRequested', 'playerRemoved', 'playerRestored', 'playersChanged']) {
       const before = playerGets().length;
       await act(async () => { onMessage(type)({}); });
       await waitFor(() => expect(playerGets().length).toBeGreaterThan(before));
@@ -315,9 +315,82 @@ describe('the websocket tells the host', () => {
   test('the listeners are put away when the page goes', async () => {
     const { unmount } = (serve(hostState()), render(<BuildRoomPage />));
     unmount();
-    ['handoverRequested', 'playerRemoved', 'playerRestored'].forEach((t) => {
+    ['handoverRequested', 'playerRemoved', 'playerRestored', 'playersChanged'].forEach((t) => {
       expect(webSocketClient.offMessage).toHaveBeenCalledWith(t);
     });
+  });
+});
+
+describe('a second host device', () => {
+  test('a strip raised here clears when the other device answers (playersChanged)', async () => {
+    await openRoom(hostState());
+    roster = ASKING();
+    await act(async () => { onMessage('handoverRequested')({}); });
+    await screen.findByRole('region', { name: 'Someone is asking to take a name' });
+    roster = ROSTER();
+    await act(async () => { onMessage('playersChanged')({}); });
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Someone is asking to take a name' })).toBeNull());
+    expect(sessionButton().textContent).not.toMatch(/\d/);
+  });
+
+  test('the roster is also re-read on the room\'s 8s poll', async () => {
+    jest.useFakeTimers();
+    try {
+      serve(hostState());
+      window.history.pushState({}, '', `/build?gameId=${GAME}`);
+      render(<BuildRoomPage />);
+      await act(async () => { await Promise.resolve(); });
+      await screen.findByText('Volunteer sign-up');
+      const before = playerGets().length;
+      await act(async () => { jest.advanceTimersByTime(8000); });
+      expect(playerGets().length).toBeGreaterThan(before);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('the panel\'s controls', () => {
+  test('the Stage dock\'s SESSION opens and closes it, and says which', async () => {
+    await openRoom(hostState());
+    fireEvent.keyDown(window, { key: '2' });
+    const dockButton = () => within(document.querySelector('.dock')).getByRole('button', { name: /SESSION/ });
+    expect(dockButton()).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(dockButton());
+    expect(panel()).toBeInTheDocument();
+    expect(dockButton()).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(dockButton());
+    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+  });
+
+  test('arrow keys move between the tabs; only the selected tab points at a mounted pane', async () => {
+    await openRoom(hostState());
+    const p = openPanel();
+    const players = within(p).getByRole('tab', { name: /^Players/ });
+    const settings = within(p).getByRole('tab', { name: /^Settings/ });
+    expect(players).toHaveAttribute('aria-controls', 'brm-sp-pane-players');
+    expect(settings).not.toHaveAttribute('aria-controls');
+    expect(document.getElementById('brm-sp-pane-players')).not.toBeNull();
+    fireEvent.keyDown(players, { key: 'ArrowRight' });
+    expect(settings).toHaveAttribute('aria-selected', 'true');
+    expect(settings).toHaveAttribute('aria-controls', 'brm-sp-pane-settings');
+    expect(players).not.toHaveAttribute('aria-controls');
+    expect(document.activeElement).toBe(settings);
+    fireEvent.keyDown(settings, { key: 'ArrowLeft' });
+    expect(players).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(players, { key: 'End' });
+    expect(settings).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(settings, { key: 'Home' });
+    expect(players).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('on the Stage the top line carries the Wi-Fi and connection chips, which the Stage has no header for', async () => {
+    await openRoom(hostState());
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(within(document.querySelector('.dock')).getByRole('button', { name: /SESSION/ }));
+    const top = within(panel()).getByTestId('brm-sp-top');
+    expect(top.querySelector('.brm-wifi')).not.toBeNull();
+    expect(within(top).getByTestId('brm-conn')).toBeInTheDocument();
   });
 });
 
@@ -435,7 +508,7 @@ describe('Settings, in four groups', () => {
     const p = panel();
     expect(within(p).getByText(GAME)).toBeInTheDocument();
     expect(within(p).getByRole('button', { name: 'Copy join link' })).toBeInTheDocument();
-    expect(within(p).getByRole('button', { name: 'Show the QR' })).toBeInTheDocument();
+    expect(within(p).getByRole('button', { name: 'Show the QR on the wall' })).toBeInTheDocument();
     expect(within(p).getByRole('switch', { name: 'Share on this Wi-Fi' })).toBeInTheDocument();
     expect(within(p).getByRole('switch', { name: 'List names on the room meter' })).toHaveAttribute('aria-checked', 'false');
   });
@@ -517,22 +590,29 @@ describe('List names on the room meter', () => {
     expect(document.querySelector('[data-list-kind="joined"]')).toBeNull();
   });
 
-  test('on: the Stage meter lists who has joined, as it did before', async () => {
-    await openRoom(hostState());
-    openSettings();
-    fireEvent.click(within(panel()).getByRole('switch', { name: 'List names on the room meter' }));
-    fireEvent.keyDown(document, { key: 'Escape' });
+  test('on in the room: the Stage meter lists who has joined, as it did before', async () => {
+    await openRoom(hostState({ st: { Settings: { listNames: true } } }));
     fireEvent.keyDown(window, { key: '2' });
     expect(meter()).toBeInTheDocument();
     fireEvent.mouseEnter(meter());
     expect(screen.getByText('Ana')).toBeInTheDocument();
   });
 
-  test('the choice is kept for this room in this browser', async () => {
+  test('the switch saves a room setting on the server, through the settings route, and nothing in the browser', async () => {
     await openRoom(hostState());
     openSettings();
-    fireEvent.click(within(panel()).getByRole('switch', { name: 'List names on the room meter' }));
-    expect(window.localStorage.getItem(`brm.listNames.${GAME}`)).toBe('on');
+    const sw = within(panel()).getByRole('switch', { name: 'List names on the room meter' });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(sw);
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/settings`));
+    expect(lastPost().body).toEqual({ listNames: true });
+    expect(window.localStorage.length).toBe(0);
+  });
+
+  test('another host device sees the same switch state', async () => {
+    await openRoom(hostState({ st: { Settings: { listNames: true } } }));
+    openSettings();
+    expect(within(panel()).getByRole('switch', { name: 'List names on the room meter' })).toHaveAttribute('aria-checked', 'true');
   });
 });
 

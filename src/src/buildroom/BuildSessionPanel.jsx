@@ -273,6 +273,22 @@ export default function BuildSessionPanel({
   };
   const opening = room.opening && room.opening.phase === 'building';
 
+  // Arrow keys, Home and End move between the tabs (the tabs pattern); the selected one is the tab stop.
+  const tabKeys = (e) => {
+    const ids = ['players', 'settings'];
+    const at = ids.indexOf(tab);
+    let next = null;
+    if (e.key === 'ArrowRight') next = ids[(at + 1) % ids.length];
+    else if (e.key === 'ArrowLeft') next = ids[(at + ids.length - 1) % ids.length];
+    else if (e.key === 'Home') next = ids[0];
+    else if (e.key === 'End') next = ids[ids.length - 1];
+    if (!next) return;
+    e.preventDefault();
+    onTab(next);
+    const el = document.getElementById(`brm-sp-tab-${next}`);
+    if (el) el.focus();
+  };
+
   const tabs = [
     { id: 'players', label: W.players, count: rows.length, flag: asking.length ? `${asking.length} asking` : '' },
     { id: 'settings', label: W.settings },
@@ -298,7 +314,9 @@ export default function BuildSessionPanel({
               role="tab"
               id={`brm-sp-tab-${t.id}`}
               aria-selected={tab === t.id}
-              aria-controls={`brm-sp-pane-${t.id}`}
+              aria-controls={tab === t.id ? `brm-sp-pane-${t.id}` : undefined}
+              tabIndex={tab === t.id ? 0 : -1}
+              onKeyDown={tabKeys}
               className={`brm-sp-tab${tab === t.id ? ' is-on' : ''}`}
               onClick={() => onTab(t.id)}
             >
@@ -346,7 +364,7 @@ export default function BuildSessionPanel({
                 </div>
                 <div className="brm-sp-row">
                   <button type="button" className="brm-btn brm-btn--sm" onClick={copyLink}>Copy join link</button>
-                  <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onShowQr)}>Show the QR</button>
+                  <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onShowQr)}>Show the QR on the wall</button>
                   {copied && <span className="brm-hint" role="status">{copied}</span>}
                 </div>
                 {!ended && (

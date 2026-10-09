@@ -939,6 +939,8 @@ export default function BuildPlayer({
   // The host removed this person (Session panel, Remove): the room refuses the
   // phone it had let in. Cleared the moment a read works again (Bring back).
   const [removed, setRemoved] = useState(false);
+  // Or the name was taken by another device (the host let it): 'moved'.
+  const [refusal, setRefusal] = useState('removed');
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [ideaDraft, setIdeaDraft] = useState('');
   const [tab, setTab] = useState('now');
@@ -961,6 +963,7 @@ export default function BuildPlayer({
       setLoadError(null);
       setRemoved(false);
     } else if (r.status === 403 && seen.current) {
+      setRefusal(r.data && r.data.code === 'moved' ? 'moved' : 'removed');
       setRemoved(true);
     } else {
       setLoadError(r.error);
@@ -1022,6 +1025,13 @@ export default function BuildPlayer({
     </ImageLoader.Provider>
   );
 
+  if (removed && refusal === 'moved') {
+    return shell({
+      volume: 'rest',
+      centre: true,
+      body: <p className="plr-lede">This name is on another device now. Join again with another name.</p>,
+    });
+  }
   if (removed) {
     const wasBuilder = Boolean(view && view.crew && view.crew.me);
     return shell({

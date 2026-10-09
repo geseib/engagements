@@ -828,6 +828,8 @@ function agentStatus(stateRow, keys, now) {
 
 const settingsOf = (stateRow) => ({
   reviewAgentAsks: !(stateRow && stateRow.Settings && stateRow.Settings.reviewAgentAsks === false),
+  // Whether the Stage's room meter may list who has joined (owner, 2026-10-09). Off until the host says so.
+  listNames: Boolean(stateRow && stateRow.Settings && stateRow.Settings.listNames === true),
 });
 
 /** What the host (and Claude) sees: everything. */

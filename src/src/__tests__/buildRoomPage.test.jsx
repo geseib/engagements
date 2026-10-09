@@ -2384,12 +2384,11 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
 });
 
 describe('the Stage meter names who is in the room, on hover', () => {
-  // Off by default (owner, 2026-10-09); these turn "List names on the room meter" on.
-  beforeEach(() => window.localStorage.setItem(`brm.listNames.${GAME}`, 'on'));
-  afterEach(() => window.localStorage.clear());
+  // Off by default (owner, 2026-10-09); these rooms have "List names on the room meter" on, a room setting.
+  const named = (o = {}) => hostState({ ...o, st: { Settings: { listNames: true }, ...(o.st || {}) } });
   const meterButton = () => screen.getByRole('button', { name: /^Already joined: 4/ });
   test('hover previews the joined names, leave puts them away, click pins, Escape unpins', async () => {
-    await openRoom(hostState());
+    await openRoom(named());
     fireEvent.keyDown(window, { key: '2' });
     const btn = meterButton();
     expect(screen.queryByText('Already joined')).toBeNull();
@@ -2407,16 +2406,16 @@ describe('the Stage meter names who is in the room, on hover', () => {
   });
 
   test('a pinned list does not come back by itself after an ask ends', async () => {
-    await openRoom(hostState());
+    await openRoom(named());
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(meterButton());
     fireEvent.mouseLeave(meterButton());
     expect(screen.getByText('Already joined')).toBeInTheDocument();
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
-    current = hostState({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } });
+    current = named({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } });
     await act(async () => { handler({}); });
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Already joined/ })).toBeNull());
-    current = hostState({ asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'B' } }] });
+    current = named({ asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'B' } }] });
     await act(async () => { handler({}); });
     await waitFor(() => expect(screen.getByRole('button', { name: /^Already joined/ })).toBeInTheDocument());
     expect(screen.queryByText('Ana')).toBeNull();
@@ -2425,7 +2424,7 @@ describe('the Stage meter names who is in the room, on hover', () => {
   });
 
   test('with an ask up the meter keeps its plain count (no joined list under an ask caption)', async () => {
-    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } }));
+    await openRoom(named({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } }));
     fireEvent.keyDown(window, { key: '2' });
     expect(screen.queryByRole('button', { name: /^Already joined/ })).toBeNull();
     expect(document.querySelector('[data-list-kind="joined"]')).toBeNull();

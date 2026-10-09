@@ -245,14 +245,21 @@ function hostOrAgent(event, ctx) {
   return callerMayDriveSession(event, ctx.meta) ? 'host' : null;
 }
 
-async function playerFrom(ctx, input) {
+/**
+ * The player a phone is, or null. `why` (optional) is filled with the reason a
+ * seat was refused when the phone should be told which: 'removed' (the host took
+ * this person out) or 'moved' (the name is on another device now). A name
+ * nobody holds gets no code.
+ */
+async function playerFrom(ctx, input, why = {}) {
   const playerName = S.cleanText(input.playerName, 60);
   const clientId = String(input.clientId || '').slice(0, 100);
   if (!playerName) return null;
   const r = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: `PLAYER#${playerName}` } }));
   const row = r && r.Item;
-  if (!row || row.Removed || row.RemovedAt) return null;
-  if (row.ClientId && row.ClientId !== clientId) return null;
+  if (!row) return null;
+  if (row.Removed || row.RemovedAt) { why.code = 'removed'; return null; }
+  if (row.ClientId && row.ClientId !== clientId) { why.code = 'moved'; return null; }
   return { playerName };
 }
 
@@ -1091,6 +1098,7 @@ async function postSettings(ctx, body) {
   const room = await loadRoom(ctx);
   const settings = { ...S.settingsOf(room.state) };
   if (b.reviewAgentAsks !== undefined) settings.reviewAgentAsks = Boolean(b.reviewAgentAsks);
+  if (b.listNames !== undefined) settings.listNames = Boolean(b.listNames);
   const set = { Settings: settings };
   if (b.agentName !== undefined) set.AgentName = S.cleanText(b.agentName, S.LIMITS.agentName) || 'Claude Code';
   const st = await touchState(ctx, { set });
@@ -2572,8 +2580,9 @@ async function routePlayCrew(ctx, me, parts, input) {
 async function routePlay(ctx, method, parts, body, query) {
   const [a] = parts;
   const input = method === 'GET' ? (query || {}) : (body || {});
-  const me = await playerFrom(ctx, input);
-  if (!me) return fail(403, 'Join the session first');
+  const why = {};
+  const me = await playerFrom(ctx, input, why);
+  if (!me) return fail(403, 'Join the session first', why.code ? { code: why.code } : undefined);
 
   if (method === 'GET' && a === 'images' && parts[1]) return getImage(ctx, parts[1]);
   if (a === 'crew' && method === 'POST') return routePlayCrew(ctx, me, parts, input);
