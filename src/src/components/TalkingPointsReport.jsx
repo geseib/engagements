@@ -38,6 +38,16 @@ function outcomeText(o) {
   return o.outcome ? o.outcome.charAt(0).toUpperCase() + o.outcome.slice(1) : '';
 }
 
+/** A request still going has not found nothing; only a finished one can say so. */
+function requestNote(q) {
+  const n = q.findings.length;
+  const running = q.status === 'waiting' || q.status === 'working';
+  if (q.kind === 'ideas') return running ? ' \u00b7 still running' : '';
+  if (running) return n ? ` \u00b7 ${plural(n, 'finding')} so far, still running` : ' \u00b7 still running';
+  if (q.status === 'failed') return n ? ` \u00b7 ${plural(n, 'finding')}, stopped early` : ' \u00b7 cancelled';
+  return ` \u00b7 ${n ? plural(n, 'finding') : 'nothing found'}`;
+}
+
 const STATE_TEXT = { done: 'Done', skipped: 'Skipped, to Later', doing: 'Sent, not marked done', pending: 'Not reached' };
 
 export default function TalkingPointsReport({ data }) {
@@ -74,7 +84,7 @@ export default function TalkingPointsReport({ data }) {
               <b>{q.subject}</b>
               <span className="tpr-mut">
                 {q.askedAt ? ` · asked ${time(q.askedAt)}` : ''}
-                {q.kind === 'ideas' ? '' : ` · ${q.findings.length ? plural(q.findings.length, 'finding') : 'nothing found'}`}
+                {requestNote(q)}
                 {q.for !== 'Claude' ? ` · ${q.for}` : ''}
               </span>
             </p>
@@ -135,7 +145,7 @@ export default function TalkingPointsReport({ data }) {
           <h3 className="tpr-h">Shown to the room</h3>
           <ul>
             {shown.map((s) => (
-              <li className="tpr-keep" key={`${s.shownAt}-${s.text}`}>
+              <li className="tpr-keep" key={s.id}>
                 {s.text}
                 <span className="tpr-mut">
                   {' '}From {s.fromBuilder ? s.by : s.kind === 'finding' ? "Claude's research" : 'Claude'}

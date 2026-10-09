@@ -40,4 +40,11 @@ describe('TalkingPointsReport', () => {
     const row = screen.getAllByText('Colour each lot', { selector: 'td' })[0].closest('tr');
     expect(within(row).getByText("Priya's Claude")).toBeInTheDocument();
   });
+
+  it('says a running request is still running, never that it found nothing', () => {
+    const d = { ...data, requests: [{ id: '9', kind: 'research', subject: 'Going', for: 'Claude', status: 'working', askedAt: null, findings: [], ideas: [] }] };
+    render(<TalkingPointsReport data={d} />);
+    expect(screen.getByText(/still running/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing found/)).toBeNull();
+  });
 });

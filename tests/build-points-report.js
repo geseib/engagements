@@ -29,8 +29,11 @@ const BatchWriteCommand = new Cmd('batchWrite');
 const store = new Map();
 const k = (pk, sk) => `${pk}|${sk}`;
 const put = (item) => store.set(k(item.PK, item.SK), item);
+const { createPagedTable } = require('./helpers/paged-table');
+let paged = null; // when set, every call goes through a table that pages at 3 rows
 const fakeDoc = {
   send: async (cmd) => {
+    if (paged) return paged.send(cmd);
     const inp = cmd.input || {};
     if (cmd.type === 'get') return { Item: store.get(k(inp.Key.PK, inp.Key.SK)) };
     if (cmd.type === 'put') { put(inp.Item); return {}; }
@@ -97,22 +100,26 @@ function seedRoom(orgId) {
   store.clear();
   put({ PK, SK: 'METADATA', GameId: GAME, Title: 'Slider build', GameType: 'build', HostName: 'Ada', CreatedAt: '2026-10-09T15:00:00.000Z', ...(orgId ? { orgId } : {}) });
   put({ PK, SK: 'STATE', State: 'LOBBY', StartedAt: '2026-10-09T15:01:00.000Z' });
+  seed(orgId, { SK: 'BUILD#STATE', Rev: 9 });
   // Two research requests, one of which found nothing sourceable; one ideas request.
   seed(orgId, { SK: 'BUILD#PREQ#001', ReqId: 'r1', Kind: 'research', Subject: 'Accessible colour contrast', Status: 'done', Count: 2, CreatedAt: '2026-10-09T15:05:00.000Z' });
   seed(orgId, { SK: 'BUILD#PREQ#002', ReqId: 'r2', Kind: 'research', Subject: 'Salary by street', Status: 'done', Count: 1, CreatedAt: '2026-10-09T15:20:00.000Z' });
   seed(orgId, { SK: 'BUILD#PREQ#003', ReqId: 'r3', Kind: 'ideas', Subject: 'Header total', Status: 'done', Count: 1, CreatedAt: '2026-10-09T15:12:00.000Z' });
   const f = (n, over) => ({ PK, SK: `BUILD#POINT#${n}`, Kind: 'finding', By: 'claude', ByRole: 'agent', Status: 'new', CreatedAt: `2026-10-09T15:0${n}:00.000Z`, ...over });
   seed(orgId, f('001', { Text: 'Body text needs a contrast ratio of at least 4.5:1.', Sources: [{ title: 'WCAG 2.2, Understanding 1.4.3', url: 'https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum' }], RequestId: '001' }));
-  seed(orgId, f('002', { Text: 'Mid oranges on white come out near 2:1.', Sources: [{ title: 'Contrast checker', url: 'https://webaim.org/resources/contrastchecker' }], RequestId: '001', Status: 'voting', Outcome: 'voted 6, run item 3, done', VoteCount: 6, ShownAt: '2026-10-09T15:08:00.000Z' }));
+  seed(orgId, f('002', { Text: 'Mid oranges on white come out near 2:1.', Sources: [{ title: 'Contrast checker', url: 'https://webaim.org/resources/contrastchecker' }], RequestId: '001', Status: 'queued', Outcome: 'voted 1, highlighted', VoteCount: 1, PromotedTo: 'a1', ShownAt: '2026-10-09T15:08:00.000Z' }));
   seed(orgId, f('003', { Text: 'Nothing sourceable on salary by street; nearest is median income by tract.', Sources: [{ title: 'Census', url: 'https://www.census.gov/' }], RequestId: '002' }));
-  seed(orgId, f('004', { Kind: 'talk', Text: 'Add keyboard support so the slider works without a mouse.', Status: 'sent', Outcome: 'voted 9, run item 1, done', VoteCount: 9 }));
-  seed(orgId, f('005', { Kind: 'talk', Text: 'Colour each lot by how long it takes to earn its value.', By: 'Priya', ByRole: 'builder', Status: 'later', Outcome: 'voted 5, saved for later', VoteCount: 5 }));
+  seed(orgId, f('004', { Kind: 'talk', Text: 'Add keyboard support so the slider works without a mouse.', Status: 'sent', Outcome: 'voted 3, run item 1, done', VoteCount: 3, RunItem: 1 }));
+  seed(orgId, f('005', { Kind: 'talk', Text: 'Colour each lot by how long it takes to earn its value.', By: 'Priya', ByRole: 'builder', Status: 'later', Outcome: 'voted 1, saved for later', VoteCount: 1 }));
   seed(orgId, f('006', { Kind: 'talk', Text: 'A point nobody touched.', Status: 'new' }));
   seed(orgId, f('007', { Kind: 'talk', Text: 'The header shows the total in dollars.', Status: 'new', ShownAt: '2026-10-09T15:14:00.000Z' }));
   seed(orgId, f('008', { Kind: 'idea', Text: 'A removed idea.', Status: 'removed' }));
   // Ideas the room sent while point 007 was up: counts only, no names.
   seed(orgId, { SK: 'BUILD#IDEA#001', IdeaId: 'i1', PlayerName: 'Zed Participant', Text: 'hours not dollars', Status: 'new', AboutPoint: '007', CreatedAt: '2026-10-09T15:15:00.000Z' });
   seed(orgId, { SK: 'BUILD#IDEA#002', IdeaId: 'i2', PlayerName: 'Quinn Participant', Text: 'wage view', Status: 'new', AboutPoint: '007', CreatedAt: '2026-10-09T15:15:30.000Z' });
+  seed(orgId, { SK: 'BUILD#IDEA#003', IdeaId: 'i3', PlayerName: 'Zed Participant', Text: 'dismissed one', Status: 'dismissed', AboutPoint: '007', CreatedAt: '2026-10-09T15:16:00.000Z' });
+  // A request Claude is still working on, with nothing yet.
+  seed(orgId, { SK: 'BUILD#PREQ#004', ReqId: 'r4', Kind: 'research', Subject: 'Still going', Status: 'working', Count: 0, CreatedAt: '2026-10-09T15:25:00.000Z' });
   // The vote from points: voters are named on the answer rows and must not leak.
   seed(orgId, {
     SK: 'BUILD#ASK#001', AskId: 'a1', Kind: 'choice', Status: 'decided', Prompt: 'Which should Claude take on next?', MaxPicks: 3, FromPoints: ['004', '002', '005'], Source: 'host',
@@ -143,7 +150,7 @@ function assertSection(tp) {
   check('a section exists for a build room', () => assert.ok(tp));
   const research = tp.requests.filter((q) => q.kind === 'research');
   check('research requests are listed with their subjects, in the order asked', () =>
-    assert.deepStrictEqual(research.map((q) => q.subject), ['Accessible colour contrast', 'Salary by street']));
+    assert.deepStrictEqual(research.map((q) => q.subject), ['Accessible colour contrast', 'Salary by street', 'Still going']));
   const first = research[0];
   check('findings carry their source title, link and site', () => {
     assert.strictEqual(first.findings.length, 2);
@@ -166,6 +173,7 @@ function assertSection(tp) {
     const c = o.find((x) => x.label === 'C');
     assert.strictEqual(c.by, "Priya's Claude");
     assert.strictEqual(c.movedForward, false);
+    assert.strictEqual(o.find((x) => x.label === 'B').movedForward, true, 'highlighted/queued counts as moved forward');
     assert.strictEqual(c.outcome, 'saved for later');
   });
   check('the run list: done with Claude\'s note, skipped to Later', () => {
@@ -184,10 +192,18 @@ function assertSection(tp) {
   });
   check("builders are named on their own points; the counts say whose", () => {
     assert.deepStrictEqual(tp.counts.fromBuilders, [{ name: "Priya's Claude", n: 1 }]);
-    assert.strictEqual(tp.counts.researchRequests, 2);
+    assert.strictEqual(tp.counts.researchRequests, 3);
     assert.strictEqual(tp.counts.ideaRequests, 1);
     assert.strictEqual(tp.counts.votes, 1);
     assert.strictEqual(tp.counts.runs, 1);
+  });
+  check('shown points carry an id (list keys); a dismissed idea is not counted', () => {
+    assert.ok(tp.shown.every((x) => x.id));
+    assert.strictEqual(tp.shown.find((x) => x.text.startsWith('The header')).ideasSent, 2);
+  });
+  check('a request still working is carried as working, with no findings', () => {
+    const g = tp.requests.find((q) => q.subject === 'Still going');
+    assert.ok(g && g.status === 'working' && g.findings.length === 0);
   });
   check('no participant name appears anywhere in the section', () => {
     for (const n of ['Zed', 'Quinn', 'Rae', 'Participant']) assert.ok(!text.includes(n), `leaked ${n}`);
@@ -243,6 +259,47 @@ function assertSection(tp) {
   store.get(k(PK, 'METADATA')).GameType = 'trivia';
   res = await build();
   check('another game type never gets the section', () => assert.strictEqual(parse(res).report.talkingPoints, null));
+
+  say('\n6. Pagination: run and vote rows land past the first page');
+  seedRoom('');
+  paged = createPagedTable({ pageSize: 3 });
+  for (const row of store.values()) paged.put(row);
+  res = await build();
+  const pagedCalls = paged.calls('query').filter((c) => c.input.ExpressionAttributeValues[':sk'] === 'BUILD#');
+  check('the BUILD# read took several pages', () => assert.ok(pagedCalls.length > 3, `only ${pagedCalls.length} pages`));
+  check('the section still has the vote and the run list from the later pages', () => {
+    const tp = parse(res).report.talkingPoints;
+    assert.ok(tp.votes.length === 1 && tp.votes[0].voted === 3, 'vote');
+    assert.ok(tp.run && tp.run.items.length === 2, 'run');
+    assert.strictEqual(tp.requests.filter((q) => q.kind === 'research').length, 3);
+  });
+  paged = null;
+
+  say('\n7. Live or stored');
+  const stamp = (tp) => ({ ...tp, marker: 'stored' });
+  const withStored = async () => {
+    seedRoom('');
+    const live = parse(await build()).report.talkingPoints;
+    const row = store.get(k(PK, 'REPORT'));
+    row.talkingPoints = stamp(live);
+    return row;
+  };
+  await withStored();
+  for (const key of [...store.keys()]) if (/\|BUILD#(POINT#00[1-3]|ASK|ANS|RUN)/.test(key)) store.delete(key);
+  await (async () => {
+    store.delete(k(PK, 'BUILD#STATE'));
+    const tp = parse(await build()).report.talkingPoints;
+    check('a room missing BUILD#STATE (partly expired) keeps the stored section', () => assert.strictEqual(tp.marker, 'stored'));
+  })();
+  await withStored();
+  store.get(k(PK, 'METADATA')).ttl = Math.floor(Date.now() / 1000) - 60;
+  let tp7 = parse(await build()).report.talkingPoints;
+  check('(ttl passed) stored wins over what the table still returns', () => assert.strictEqual(tp7.marker, 'stored'));
+  await withStored();
+  for (const key of [...store.keys()]) if (/\|BUILD#POINT#/.test(key)) store.set(key, { ...store.get(key), Status: 'removed' });
+  for (const key of [...store.keys()]) if (/\|BUILD#(ASK|ANS|RUN)/.test(key)) store.delete(key);
+  tp7 = parse(await build()).report.talkingPoints;
+  check('a living, whole room where every point was removed reports none, not the stale stored copy', () => assert.ok(!tp7 || (tp7.marker !== 'stored' && tp7.votes.length === 0 && !tp7.run && tp7.shown.length === 0 && tp7.requests.every((q) => q.findings.length === 0))));
 
   say(`\n${pass} passed, ${fail} failed`);
   if (fail) process.exitCode = 1;

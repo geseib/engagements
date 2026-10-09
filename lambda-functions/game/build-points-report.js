@@ -32,8 +32,10 @@ function findingView(p, room) {
   };
 }
 
+/** Ideas the room sent while the point was up, counted as the other room views count them: not dismissed or removed. */
+const IDEA_GONE = ['dismissed', 'removed', 'hidden'];
 function ideasAbout(room, pointId) {
-  return (room.ideas || []).filter((i) => i.AboutPoint === pointId).length;
+  return (room.ideas || []).filter((i) => i.AboutPoint === pointId && !IDEA_GONE.includes(i.Status || 'new')).length;
 }
 
 /** "voted 9, run item 1" -> "run item 1": the vote has its own column. */
@@ -55,6 +57,9 @@ function talkingPointsReport(room) {
   for (const a of asks) for (const o of a.Options || []) if (o.pointId) involved.add(o.pointId);
   const run = r.run || null;
   if (run) for (const it of run.Items || []) if (it.pointId) involved.add(it.pointId);
+  // Points whose run item is sent or done moved forward even if the row says only 'voting'.
+  const inRun = new Map();
+  if (run) (run.Items || []).forEach((it, i) => { if (it.pointId) inRun.set(it.pointId, (run.Marks || [])[i] || 'pending'); });
   for (const p of points) {
     const id = S.pointIdOf(p.SK);
     if (wasShown(p) || ['sent', 'later', 'queued', 'voting'].includes(p.Status)) involved.add(id);
@@ -100,7 +105,8 @@ function talkingPointsReport(room) {
         fromBuilder: Boolean(p && p.ByRole === 'builder'),
         isFinding: Boolean(p && p.Kind === 'finding'),
         outcome: p ? plainOutcome(p) : '',
-        movedForward: Boolean(p && ['sent', 'queued'].includes(p.Status)),
+        movedForward: Boolean(p && (['sent', 'queued'].includes(p.Status) || p.PromotedTo || p.RunItem
+          || ['doing', 'done', 'pending'].includes(inRun.get(o.pointId)))),
       };
     }).sort((x, y) => y.votes - x.votes);
     return {
@@ -135,6 +141,7 @@ function talkingPointsReport(room) {
     .filter(wasShown)
     .sort((a, b) => String(a.ShownAt || a.UpdatedAt || '').localeCompare(String(b.ShownAt || b.UpdatedAt || '')))
     .map((p) => ({
+      id: S.pointIdOf(p.SK),
       text: p.Text || '',
       kind: p.Kind,
       by: byLabel(p),

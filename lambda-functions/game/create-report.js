@@ -926,11 +926,30 @@ exports.handler = async (event) => {
             if (entity) buildRows[i] = await decryptItem(reportOrgId, entity, buildRows[i]);
           }
         }
-        talkingPoints = talkingPointsReport(buildStore.roomFromRows(buildRows));
+        const live = talkingPointsReport(buildStore.roomFromRows(buildRows));
+        /*
+          LIVE OR STORED? The rows die with the session, in no particular
+          order, and DynamoDB deletes late. So a live read is trusted only
+          when the room is whole:
+            - METADATA's ttl is before now: the session is over, whatever the
+              table still returns is leftovers;
+            - BUILD#STATE is missing: the room has partly expired (the state
+              row is written first and every row shares a ttl, so a room
+              without it is a room that is going);
+            - no BUILD# rows at all.
+          In any of those the stored section wins when there is one. In a whole,
+          living room the live read wins even when it is empty: a host who
+          removed every point after a report was saved has removed them.
+        */
+        const nowSec = Math.floor(Date.now() / 1000);
+        const expired = Number(gameMetadata.Item.ttl) > 0 && Number(gameMetadata.Item.ttl) < nowSec;
+        const partial = !buildRows.some((row) => row.SK === 'BUILD#STATE');
+        const stored = storedReport && storedReport.talkingPoints;
+        talkingPoints = stored && (expired || partial) ? stored : live;
       } catch (error) {
         console.log('Could not read talking points for report:', error.message);
+        if (storedReport && storedReport.talkingPoints) talkingPoints = storedReport.talkingPoints;
       }
-      if (!talkingPoints && storedReport && storedReport.talkingPoints) talkingPoints = storedReport.talkingPoints;
     }
 
     // Create comprehensive report
