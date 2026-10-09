@@ -64,7 +64,7 @@ import {
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
-  defaultSubject, shownPointIdeas, takeDownIdeas,
+  defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf,
 } from './buildScreens';
 import Stage from '../components/stage/Stage';
 import Rail from '../components/stage/Rail';
@@ -773,7 +773,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (ideas.length >= 2) setTakeDown({ point: p, ideas });
     else hidePoint(p);
   };
-  const shownPoint = room.shownPoint || null;
+  const shownPoint = shownPointOf(room);
 
   return (
     <ImageLoader.Provider value={loadImage}>
@@ -1610,8 +1610,8 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     // its own sentence, as the Host's panel would (owner, 2026-10-08).
     if (m.action === 'edit') { if (editable) setEditing(true); return; }
     // A TALKING POINT is up: Take it down (which may offer the ideas a vote) or save it for later.
-    if (m.action === 'take-down') { if (room.shownPoint) onTakeDown(room.shownPoint); return; }
-    if (m.action === 'point-later') { if (room.shownPoint) onPointLater(room.shownPoint); return; }
+    if (m.action === 'take-down') { if (m.point) onTakeDown(m.point); return; }
+    if (m.action === 'point-later') { if (m.point) onPointLater(m.point); return; }
     if (m.action === 'to-claude') {
       // The same move as the Host's Settle press, including a direction the host already changed.
       const go = settleMove(current, draft);

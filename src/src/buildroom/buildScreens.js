@@ -247,13 +247,13 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
   }
   if (!current && room && room.shownPoint && !(room.opening && room.opening.phase === 'opening') && !crewOn) {
     // A TALKING POINT ON THE STAGE (talking points T4): the host chose it; the room talks it over.
-    const p = room.shownPoint;
+    const p = shownPointOf(room);
     return {
       phase: null, context: { category: W.talkItOver }, point: p,
       meter: { heading: W.ideasOnThis, count: shownPointIdeas(room).length, of: null },
       status: W.pointUp,
-      primary: { action: 'take-down', label: W.takeItDown, pointId: p.id },
-      secondary: { action: 'point-later', label: W.saveLater, pointId: p.id },
+      primary: { action: 'take-down', label: W.takeItDown, point: p },
+      secondary: { action: 'point-later', label: W.saveLater, point: p },
     };
   }
   if (!current) {
@@ -834,9 +834,20 @@ export function pointsOf(room) {
   return { items: p.items || [], requests: p.requests || [], open: Number(p.open) || 0 };
 }
 
+/**
+ * The point on the Stage with its id. The room-safe shownPoint carries no id
+ * (server fix round 1); the host's own Points list does, so join them there.
+ */
+export function shownPointOf(room) {
+  const p = room && room.shownPoint;
+  if (!p) return null;
+  const mine = ((room.points && room.points.items) || []).find((x) => x.status === 'shown');
+  return { ...p, id: p.id || (mine ? mine.id : null) };
+}
+
 /** The ideas the room sent about the point on the Stage, not yet dismissed. */
 export function shownPointIdeas(room) {
-  const p = room && room.shownPoint;
+  const p = shownPointOf(room);
   if (!p) return [];
   return (room.ideas || []).filter((i) => i.aboutPoint === p.id && i.status !== 'dismissed');
 }
