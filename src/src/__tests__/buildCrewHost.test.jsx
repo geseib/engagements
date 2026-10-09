@@ -147,8 +147,11 @@ async function openRoom(state) {
   render(<BuildRoomPage />);
   await screen.findByText('Volunteer sign-up');
 }
-/** The header's session menu (owner, 2026-10-05). */
-const openMore = () => fireEvent.click(screen.getByRole('button', { name: /^More/ }));
+/** The Session panel's Settings (owner, 2026-10-09): the three-dot menu's items live there now. */
+const openMore = () => {
+  fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
+};
 
 async function openCrew(state = hostState()) {
   await openRoom(state);
@@ -235,7 +238,7 @@ describe('the Run crew code switch', () => {
     expect(within(ask).getByText(/Claude may install and run builders' code on this laptop/)).toBeTruthy();
     expect(posts()).toHaveLength(0);
     fireEvent.click(within(ask).getByRole('button', { name: 'Keep it off' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: /Switch Run crew code/ })).toBeNull();
     expect(posts()).toHaveLength(0);
 
     fireEvent.click(sw);
@@ -251,7 +254,7 @@ describe('the Run crew code switch', () => {
     expect(sw.className).toMatch(/is-on/);
     await press(sw);
     await expectPost('crew/settings', { runCrewCode: false });
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: /Switch Run crew code/ })).toBeNull();
   });
 });
 

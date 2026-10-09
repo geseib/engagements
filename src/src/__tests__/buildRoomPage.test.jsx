@@ -115,8 +115,11 @@ function serve(state) {
 const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket'));
 const lastPost = () => posts()[posts().length - 1];
 const path = (c) => c.url.slice(API.length);
-/** The header's session menu (owner, 2026-10-05): Connect, crew, Auto, Wrap up, Report, End. */
-const openMore = () => fireEvent.click(screen.getByRole('button', { name: /^More/ }));
+/** The Session panel's Settings (owner, 2026-10-09): the three-dot menu's items live there now. */
+const openMore = () => {
+  fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
+};
 /** The host's pick asks first (owner, 2026-10-06): confirm it. */
 const confirmPick = () => fireEvent.click(within(screen.getByRole('dialog', { name: /Pick the room's choice\?|Pick an alternate\?/ })).getByRole('button', { name: /^Yes, pick|^Pick / }));
 
@@ -142,7 +145,7 @@ beforeEach(() => {
 describe('loading and live updates', () => {
   test('fetches GET build/state and connects a ticketed host socket', async () => {
     await openRoom(hostState());
-    expect(calls[0]).toMatchObject({ url: `${API}games/${GAME}/build/state`, method: 'GET' });
+    expect(calls.find((c) => c.url.endsWith('/build/state'))).toMatchObject({ url: `${API}games/${GAME}/build/state`, method: 'GET' });
     expect(webSocketClient.connect).toHaveBeenCalledWith(GAME, null, true, expect.objectContaining({ hostTicket: expect.any(Function) }));
   });
 
@@ -175,8 +178,9 @@ describe('the Wi-Fi QR on the wall', () => {
 
   test('a QR left up does not come back when sharing is switched off and on again', async () => {
     await openRoom({ ...hostState(), lan: lan('live') });
+    // The Wi-Fi share's controls live in the Session panel (owner, 2026-10-09); the chip opens it there.
     fireEvent.click(screen.getByTestId('brm-wifi'));
-    fireEvent.click(screen.getByRole('button', { name: 'Show the QR on the wall' }));
+    fireEvent.click(screen.getByRole('button', { name: "Show the build's QR on the wall" }));
     expect(screen.getByRole('dialog', { name: 'Open the build yourself' })).toBeInTheDocument();
     await push('off');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Open the build yourself' })).toBeNull());
@@ -289,6 +293,8 @@ describe('each ask status', () => {
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/004/responses`));
     expect(lastPost().body).toEqual({ text: 'Parking is unclear' });
 
+    // Every host action runs one at a time: wait for the page to be free again before pressing.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open voting' })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Open voting' }));
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'vote' }));
   });
@@ -1055,17 +1061,17 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     });
   });
 
-  test('the session menu holds the once-a-session controls and closes on Escape', async () => {
+  test('the Session panel holds the once-a-session controls and closes on Escape', async () => {
     await openRoom(busy());
     expect(screen.queryByRole('button', { name: 'End session' })).toBeNull();
     openMore();
-    const menu = screen.getByRole('group', { name: 'Session' });
+    const menu = screen.getByRole('dialog', { name: 'Session' });
     ['Connect Claude Code', 'Open to a crew', 'Wrap up', 'Report', 'End session'].forEach((name) => {
       expect(within(menu).getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     });
     expect(within(menu).getByRole('switch', { name: /Auto-open Claude's questions/ })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('group', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
   });
 
   test('the join code in the header shows the QR', async () => {
@@ -2027,7 +2033,7 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(link.querySelector('svg')).not.toBeNull();
     expect(header().querySelector('a, button')).toBe(link);
     openMore();
-    expect(within(screen.getByRole('group', { name: 'Session' })).queryByRole('link', { name: /Main menu/ })).toBeNull();
+    expect(within(screen.getByRole('dialog', { name: 'Session' })).queryByRole('link', { name: /Main menu/ })).toBeNull();
     expect(screen.getAllByRole('link', { name: /Main menu/ })).toHaveLength(1);
   });
 
@@ -2058,12 +2064,11 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(screen.queryByTestId('brm-wrappedbar')).toBeNull();
   });
 
-  test('375px: pressing the join code inside the menu closes it and opens the QR', async () => {
+  test('375px: pressing the join code in the panel\'s top line opens the QR', async () => {
     asNarrow(true);
     await openRoom(hostState());
-    openMore();
-    fireEvent.click(within(screen.getByRole('group', { name: 'Session' })).getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
-    expect(screen.queryByRole('group', { name: 'Session' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
+    fireEvent.click(within(within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top')).getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
     expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
   });
 
@@ -2074,19 +2079,19 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(within(header()).getByText(/Open the build/)).toBeInTheDocument();
   });
 
-  test('375px: Main menu stays; the join code, live build, Wi-Fi and Claude status move into the more menu', async () => {
+  test('375px: Main menu stays; the join code, live build, Wi-Fi and Claude status move to the panel\'s top line', async () => {
     asNarrow(true);
     await openRoom(hostState());
     const h = header();
     expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
     expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
     expect(within(h).queryByText(/Open the build/)).toBeNull();
-    openMore();
-    const menu = screen.getByRole('group', { name: 'Session' });
-    expect(within(menu).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
-    expect(within(menu).getByText(/Open the build/)).toBeInTheDocument();
-    expect(menu.querySelector('.brm-wifi')).not.toBeNull();
-    expect(menu.querySelector('.brm-agentchip')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
+    const top = within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top');
+    expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+    expect(within(top).getByText(/Open the build/)).toBeInTheDocument();
+    expect(top.querySelector('.brm-wifi')).not.toBeNull();
+    expect(top.querySelector('.brm-agentchip')).not.toBeNull();
   });
 });
 
@@ -2205,7 +2210,7 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
     fireEvent.click(within(back).getByRole('button', { name: 'Back to the opening' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/resume`));
     openMore();
-    expect(screen.getByRole('group', { name: 'Session' }).textContent).toMatch('Back to the opening');
+    expect(screen.getByRole('dialog', { name: 'Session' }).textContent).toMatch('Back to the opening');
   });
 });
 
@@ -2379,9 +2384,11 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
 });
 
 describe('the Stage meter names who is in the room, on hover', () => {
+  // Off by default (owner, 2026-10-09); these rooms have "List names on the room meter" on, a room setting.
+  const named = (o = {}) => hostState({ ...o, st: { Settings: { listNames: true }, ...(o.st || {}) } });
   const meterButton = () => screen.getByRole('button', { name: /^Already joined: 4/ });
   test('hover previews the joined names, leave puts them away, click pins, Escape unpins', async () => {
-    await openRoom(hostState());
+    await openRoom(named());
     fireEvent.keyDown(window, { key: '2' });
     const btn = meterButton();
     expect(screen.queryByText('Already joined')).toBeNull();
@@ -2399,16 +2406,16 @@ describe('the Stage meter names who is in the room, on hover', () => {
   });
 
   test('a pinned list does not come back by itself after an ask ends', async () => {
-    await openRoom(hostState());
+    await openRoom(named());
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(meterButton());
     fireEvent.mouseLeave(meterButton());
     expect(screen.getByText('Already joined')).toBeInTheDocument();
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
-    current = hostState({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } });
+    current = named({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } });
     await act(async () => { handler({}); });
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Already joined/ })).toBeNull());
-    current = hostState({ asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'B' } }] });
+    current = named({ asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'B' } }] });
     await act(async () => { handler({}); });
     await waitFor(() => expect(screen.getByRole('button', { name: /^Already joined/ })).toBeInTheDocument());
     expect(screen.queryByText('Ana')).toBeNull();
@@ -2417,7 +2424,7 @@ describe('the Stage meter names who is in the room, on hover', () => {
   });
 
   test('with an ask up the meter keeps its plain count (no joined list under an ask caption)', async () => {
-    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } }));
+    await openRoom(named({ asks: [{ ...CHOICE, Status: 'live' }], st: { CurrentAskId: CHOICE.AskId } }));
     fireEvent.keyDown(window, { key: '2' });
     expect(screen.queryByRole('button', { name: /^Already joined/ })).toBeNull();
     expect(document.querySelector('[data-list-kind="joined"]')).toBeNull();

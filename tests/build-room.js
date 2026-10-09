@@ -330,6 +330,17 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(p.body.current.decision.sentToAgent, true);
   });
 
+  console.log('\nRoom settings: names on the room meter');
+  await check('"List names on the room meter" is a room setting: off by default, saved by the host, shared by every host device', async () => {
+    assert.strictEqual((await hostCall('GET', 'state')).body.settings.listNames, false);
+    const on = await hostCall('POST', 'settings', { listNames: true });
+    assert.strictEqual(on.body.settings.listNames, true);
+    assert.strictEqual(on.body.settings.reviewAgentAsks, true, 'saving one setting changed another');
+    assert.strictEqual((await hostCall('GET', 'state')).body.settings.listNames, true);
+    assert.strictEqual((await agentCall('POST', 'settings', { listNames: false })).status, 403);
+    assert.strictEqual((await hostCall('POST', 'settings', { listNames: false })).body.settings.listNames, false);
+  });
+
   console.log('\nIdeas: suggest, vote, rank');
   let ideasId;
   const QIDEAS = 'What stops someone signing up';

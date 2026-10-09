@@ -887,6 +887,14 @@ body {
    any, or the tab opens with a gap. */
 .setup-h--after { margin-top: 18px; }
 
+/* PlayersList's search and filters, once a room passes twelve. Wraps, never
+   scrolls sideways: at 375px the chips drop under the box. */
+.setup-find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.setup-find__filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.setup-roster__who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.setup-roster__line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.setup-roster__meta { font-size: 12px; color: #B6C2D4; min-width: 0; overflow-wrap: anywhere; }
+
 /* --- Categories ---------------------------------------------------------- */
 .setup-cats { display: flex; flex-wrap: wrap; gap: 7px; }
 

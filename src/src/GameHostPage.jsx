@@ -2134,6 +2134,13 @@ Focus on actionable business strategy insights.`;
       fetchPlayers('websocket-player-restored');
     });
 
+    /* The host's OTHER device answered a name request (grant, Not now, Lock
+       again): the flag on the roster row clears here too. */
+    webSocketClient.onMessage('playersChanged', (data) => {
+      console.log('🔌 Roster changed notification:', data);
+      fetchPlayers('websocket-players-changed');
+    });
+
     // Game state change handlers
     webSocketClient.onMessage('gameStateChanged', (data) => {
       console.log('🔌 Game state changed notification:', data);
@@ -2495,6 +2502,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('handoverRequested');
       webSocketClient.offMessage('playerRemoved');
       webSocketClient.offMessage('playerRestored');
+      webSocketClient.offMessage('playersChanged');
       webSocketClient.offMessage('gameStateChanged');
       webSocketClient.offMessage('questionStarted');
       webSocketClient.offMessage('playerAnswered');

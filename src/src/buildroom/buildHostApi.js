@@ -157,6 +157,15 @@ export function buildApi(gameId) {
     runStop: (body = {}) => post('run/stop', body),
     /** `{order: [pointIds of every pending item], ver}` → `{run}`; 409 when the list changed. */
     runReorder: (order, ver, runId) => post('run/reorder', { order, ver, ...(runId ? { runId } : {}) }),
+    // ── The Session panel's Players (the routes every engagement's Players tab uses) ──
+    /** The roster: `{players, removedPlayers}`. A public route, read with the host's sign-in all the same. */
+    players: () => call(`games/${seg(gameId)}/players`),
+    /** Unlock a name for one handover (`bindToRequester` binds it to the device that asked), `{lock:true}` closes it, `{refuse:true}` answers Not now. */
+    playerHandover: (name, body) => call(`games/${seg(gameId)}/players/${seg(name)}/handover`, { method: 'POST', body }),
+    /** Take a person out of the live counts (`removed: true`) or bring them back (`false`). Nothing they did is lost. */
+    playerRemoved: (name, removed) => call(`games/${seg(gameId)}/players/${seg(name)}/remove`, { method: 'POST', body: { removed } }),
+    /** A builder's Remove: closes the seat, retires their keys, soft-removes the player. */
+    removeBuilder: (name) => post(`crew/builders/${seg(name)}/remove`),
     /** The Wi-Fi share: `{on}` or `{dismissOffer: true}` → `{lan}` */
     share: (body) => post('share', body),
     /** → `{key, keyId}`. The key is shown once. */

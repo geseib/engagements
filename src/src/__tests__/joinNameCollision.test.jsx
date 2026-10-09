@@ -345,6 +345,16 @@ describe('classifyJoinFailure', () => {
     expect(result.playerName).toBe('Chris');
   });
 
+  it('passes the host\'s Not now through, and only when the server said it', () => {
+    expect(
+      classifyJoinFailure(409, { code: 'NAME_TAKEN', playerName: 'Chris', message: 'm', handoverRefused: true }).handoverRefused
+    ).toBe(true);
+    expect(
+      'handoverRefused' in classifyJoinFailure(409, { code: 'NAME_TAKEN', playerName: 'Chris', message: 'm' })
+    ).toBe(false);
+    expect(handoverNote('declined', 'Chris')).toBe('The host said not now.');
+  });
+
   it('still recognises the pre-existing access code refusal', () => {
     // Matched on the exact string join-game.js sends; the access code screen
     // is reached through this and nothing else.
