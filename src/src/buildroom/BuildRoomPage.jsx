@@ -826,7 +826,6 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     const labels = highlightOf(ask, room, override);
     const ids = highlightedPointIds(ask, room, override);
     const rows = pointVoteRows(ask, room);
-    const said = rows.filter((r) => labels.includes(r.label)).map((r) => r.text).join('; ').slice(0, 400);
     const recordOnly = (chosen, text) => run(() => api.askAction(ask.askId, decideBody(ask, { direction: text, chosen, send: false })));
     if (then === 'close') return recordOnly([], W.movedForwardDone);
     if (then !== 'later-rest' && !ids.length) return undefined;
@@ -837,8 +836,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       setPointsSaid((m) => ({ ...m, [ask.askId]: W.savedForLater((out.saved || []).length || rest) }));
       return out;
     }
-    // Sent or started: the vote is settled, so it leaves the Now column like any decided ask.
-    await recordOnly(labels, `${W.movedForwardDone}: ${said}`);
+    // Sent or started: the server settled the vote in the same write, so it has left the Now column.
     return out;
   };
   const list = runOf(room);
@@ -850,7 +848,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     let confirmNeeded = false;
     const out = await run(async () => {
       try {
-        return await api.runNext({ from: list.cur, ...(force ? { force: true } : {}) });
+        return await api.runNext({ from: list.cur, runId: list.runId, ...(force ? { force: true } : {}) });
       } catch (e) {
         // The server's own refusal, when the list moved under us: ask the same question.
         if (e && e.status === 409 && e.body && e.body.needsConfirm) { confirmNeeded = true; return {}; }
@@ -860,9 +858,15 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (confirmNeeded) setRunConfirm(true);
     return out;
   };
-  const skipItem = () => run(() => api.runSkip());
-  const stopList = () => run(() => api.runStop());
-  const reorderList = (order, ver) => run(() => api.runReorder(order, ver));
+  // A refused press (the list moved, or ended) leaves the page behind: read it again.
+  const listCall = async (fn) => {
+    const out = await run(fn);
+    if (out === undefined) await refresh();
+    return out;
+  };
+  const skipItem = () => (list ? listCall(() => api.runSkip({ from: list.cur, runId: list.runId })) : undefined);
+  const stopList = () => (list ? listCall(() => api.runStop({ runId: list.runId })) : undefined);
+  const reorderList = (order, ver, runId) => listCall(() => api.runReorder(order, ver, runId));
   // Next holds the one orange while the list runs and nothing else does: no ask,
   // no opening, no dialog, not the crew board. The Points row and What's next
   // stand aside for it.
@@ -1017,6 +1021,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                       override={highlights[current.askId]} said={pointsSaid[current.askId] || ''}
                       onToggle={(label) => toggleHighlight(current, label)}
                       onMove={(then) => moveForward(current, then)}
+                      quiet={Boolean(pointVote || runConfirm)}
                     />
                   ) : (
                   <AskPath
@@ -1028,6 +1033,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                     onSent={(out) => { setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
                     draft={drafts[current.askId] || null}
                     onDraft={(d) => setDrafts((m) => ({ ...m, [current.askId]: d }))}
+                    quiet={Boolean(pointVote || runConfirm)}
                   />
                   )}
                 </div>

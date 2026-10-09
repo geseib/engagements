@@ -62,7 +62,7 @@ function Item({ it, run, reorder, pendingCount, onMove, dragging, setDragging, o
       {reorder && pending && pendingCount > 1 && (
         <button
           type="button" className="brm-grip" data-grip={it.pointId}
-          aria-label={`${W.moveItemUp(it.text)}. ${W.moveItemDown(it.text)}.`}
+          aria-label={W.reorderItem(it.text)}
           onKeyDown={(e) => {
             if (e.key === 'ArrowUp') { e.preventDefault(); onMove(it.pointId, -1); }
             if (e.key === 'ArrowDown') { e.preventDefault(); onMove(it.pointId, 1); }
@@ -117,8 +117,15 @@ export function RunPanel({
     focusGrip.current = null;
     if (el) el.focus();
   });
-  const send = (order) => onReorder(order, run.ver);
+  // One reorder at a time: a second key press while the first is in flight would send an old ver.
+  const flight = useRef(false);
+  const send = async (order) => {
+    if (flight.current) return;
+    flight.current = true;
+    try { await onReorder(order, run.ver, run.runId); } finally { flight.current = false; }
+  };
   const moveBy = (pointId, delta) => {
+    if (flight.current) return;
     const ids = pend.map((x) => x.pointId);
     const i = ids.indexOf(pointId);
     const j = i + delta;
@@ -170,7 +177,7 @@ export function RunPanel({
       {running && !ended && (
         <ActionRow space={keyed} hint={say}>
           <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={onStop}>{W.stop}</button>
-          {next && <button type="button" className="brm-btn" disabled={busy} onClick={() => onSkip(next)}>{W.skipItem(next.k)}</button>}
+          {next && <button type="button" className="brm-btn" disabled={busy} onClick={onSkip}>{W.skipItem(next.k)}</button>}
           {next && (
             <button
               type="button" className={`brm-btn${orange ? ' brm-btn--primary' : ''}`}

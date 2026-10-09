@@ -264,9 +264,9 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
     return {
       phase: null, context: { category: W.workingThrough }, run,
       meter: { heading: W.runLabel, count: runDoneCount(run), of: run.total },
-      status: doneNow ? W.claudeFinishedItem(run.cur) : W.claudeIsWorking(run.cur, run.total),
+      status: doneNow ? W.claudeFinishedItem(run.cur) : `${W.claudeIsWorking(run.cur, run.total)}${nextItem ? ` \u00b7 ${W.nextWaits(run.cur)}` : ''}`,
       ...(nextItem ? {
-        primary: { action: 'run-next', label: `Next: ${nextItem.k}`, k: nextItem.k, from: run.cur, claudeDone: doneNow },
+        primary: { action: 'run-next', label: W.nextShort(nextItem.k), k: nextItem.k, from: run.cur, claudeDone: doneNow },
         secondary: { action: 'run-skip', label: W.skipItem(nextItem.k) },
       } : { primary: null }),
       extras: [{ action: 'run-stop', label: W.stop }],
@@ -960,15 +960,17 @@ export const isPointsVote = (ask) => Boolean(ask && Array.isArray(ask.fromPoints
 export function pointVoteRows(ask, room) {
   const byId = new Map((((room && room.points && room.points.items) || [])).map((p) => [p.id, p]));
   const counts = (ask && ask.results && ask.results.options) || [];
+  // A point waiting its turn in a list that runs cannot be moved again from here.
+  const waiting = new Set(room && room.run && room.run.status === 'running' ? room.run.items.filter((x) => x.state === 'pending').map((x) => x.pointId) : []);
   return ((ask && ask.options) || []).map((o, index) => {
     const point = byId.get(o.pointId) || null;
     const r = counts.find((x) => x.label === o.label) || { count: 0 };
-    return { label: o.label, pointId: o.pointId || null, text: (point && point.text) || o.detail || o.title, count: r.count || 0, point, index };
+    return { label: o.label, pointId: o.pointId || null, text: (point && point.text) || o.detail || o.title, count: r.count || 0, point, index, inRun: waiting.has(o.pointId) };
   }).sort((a, b) => b.count - a.count || a.index - b.index);
 }
 
 /** A voted point the host can still move forward: it is in the vote or already highlighted. */
-export const rowIsLive = (row) => Boolean(row.point) && ['voting', 'queued'].includes(row.point.status);
+export const rowIsLive = (row) => Boolean(row.point) && !row.inRun && ['voting', 'queued'].includes(row.point.status);
 
 /**
  * The top three by votes, and a tie at the cut highlights every tied row.

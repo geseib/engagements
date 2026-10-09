@@ -136,8 +136,10 @@ function AskWording({ ask, busy, run, api }) {
  * A draft is used only for the same pick (or the same spoken answer) it was
  * written for.
  */
-export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPick, answering = false, setAnswering, onSent, draft = null, onDraft }) {
+export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPick, answering = false, setAnswering, onSent, draft = null, onDraft, quiet = false }) {
   const ref = useRef(null);
+  // A dialog over the Host holds the one orange; this step's main move is outline until it closes.
+  const hot = quiet ? '' : ' brm-btn--primary';
   const [opened, setOpened] = useState(null); // a done step opened by a click
   const [said, setSaid] = useState(''); // a confirmation, in the row's hint slot
   useEffect(() => {
@@ -195,8 +197,8 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
               <button type="button" className="brm-btn" disabled={busy} title="Close it and let the wheel pick from every option" onClick={act('wheel')}>{W.spin}</button>
             )}
             {ideasOpen
-              ? <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('vote', W.votingOpen)}>{W.openVoting}</button>
-              : <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('close', W.resultsUp)}>{W.showResults}</button>}
+              ? <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('vote', W.votingOpen)}>{W.openVoting}</button>
+              : <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('close', W.resultsUp)}>{W.showResults}</button>}
           </ActionRow>
         )}
       </>
@@ -239,7 +241,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
         <ActionRow space={!said} hint={turning ? '' : said || spaceWords}>
           <button type="button" className="brm-btn" disabled={busy || turning} onClick={act('spin')}>{W.spinAgain}</button>
           {change(wheel.landed)}
-          <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || turning || !move || !move.direction} onClick={sendWinner}>
+          <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy || turning || !move || !move.direction} onClick={sendWinner}>
             {turning ? 'The wheel is turning…' : sendLabel}
           </button>
         </ActionRow>
@@ -250,12 +252,12 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
           ? (
             <ActionRow space={!said} hint={said || spaceWords}>
               {change(String(avg))}
-              <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || !move} onClick={sendWinner}>{sendLabel}</button>
+              <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy || !move} onClick={sendWinner}>{sendLabel}</button>
             </ActionRow>
           )
           : (
             <ActionRow hint="Nobody has rated it yet.">
-              <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('reopen')}>Reopen</button>
+              <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('reopen')}>Reopen</button>
             </ActionRow>
           );
       } else if (win) {
@@ -263,14 +265,14 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
           <ActionRow space={!said} hint={said || spaceWords}>
             <button type="button" className="brm-btn" disabled={busy} onClick={act('wheel')}>{W.spin}</button>
             {change(win)}
-            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || !move || !move.direction} onClick={sendWinner}>{sendLabel}</button>
+            <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy || !move || !move.direction} onClick={sendWinner}>{sendLabel}</button>
           </ActionRow>
         );
       } else {
         row = (
           <ActionRow space={!said} hint={said || W.spaceTo('spin the wheel')}>
             {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={act('revote', W.votingAgain)}>{W.voteAgain}</button>}
-            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={act('wheel')}>{W.spin}</button>
+            <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('wheel')}>{W.spin}</button>
           </ActionRow>
         );
       }
@@ -281,7 +283,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     settleBody = (
       <>
         {board}
-        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary={!(wheel && wheel.landed)} spinInRow={Boolean(wheel && wheel.landed)} onSettled={setSettledSpin} />}
+        {host && (wheel || ask.revotedAs) && <WheelPanel ask={ask} busy={busy} run={run} api={api} primary={!quiet && !(wheel && wheel.landed)} spinInRow={Boolean(wheel && wheel.landed)} onSettled={setSettledSpin} />}
         {told}
         {host && !wheel && ask.kind !== 'rating' && (
           <p className="brm-hint">

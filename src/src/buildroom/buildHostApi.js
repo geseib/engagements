@@ -152,11 +152,11 @@ export function buildApi(gameId) {
     /** The run list (Work through in turn). `{force?, from?}` → `{run}`; 409 `needsConfirm` when Claude has not reported the item done. */
     runNext: (body = {}) => post('run/next', body),
     /** The next pending item goes to Later; the one after becomes next. → `{run}` */
-    runSkip: () => post('run/skip'),
+    runSkip: (body = {}) => post('run/skip', body),
     /** Everything not yet sent goes to Later, and the list closes. → `{run}` */
-    runStop: () => post('run/stop'),
+    runStop: (body = {}) => post('run/stop', body),
     /** `{order: [pointIds of every pending item], ver}` → `{run}`; 409 when the list changed. */
-    runReorder: (order, ver) => post('run/reorder', { order, ver }),
+    runReorder: (order, ver, runId) => post('run/reorder', { order, ver, ...(runId ? { runId } : {}) }),
     /** The Wi-Fi share: `{on}` or `{dismissOffer: true}` → `{lan}` */
     share: (body) => post('share', body),
     /** → `{key, keyId}`. The key is shown once. */

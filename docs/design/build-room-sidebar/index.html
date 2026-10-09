@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: the Session panel · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* Owner, 2026-10-09: "we need the sidebar menu like is in the other engagement
+   types ... seeing the players, the ability to unlock a player to allow them to
+   move devices, to remove players". Extends v2.css and the batch 2/3 rules:
+   one orange per screen, primary right-most, Main menu fixed far left, the
+   words of src/src/buildroom/words.js and of SessionSetupPanel.jsx. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .notes,body.is-solo .sec,body.is-solo .real,body.is-solo .devs,body.is-solo .qs,body.is-solo .orangecount,body.is-solo .tbl,body.is-solo .cmp,body.is-solo .applyback{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec p b{color:var(--text)}
+.ico{display:inline-block;width:1em;height:1em;vertical-align:-.15em;flex:none}
+.btn--out{background:transparent;border-color:rgba(244,237,228,.35)}
+.btn--gd{background:transparent;color:var(--danger-text);border-color:transparent}
+.mm{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 11px 0 9px;border-radius:8px;color:var(--text);font:600 14px/1 var(--font-ui);white-space:nowrap;flex:none}
+.mm .ico{font-size:18px;color:var(--muted)}
+.hsep{width:1px;height:26px;background:var(--m-rule);flex:none}
+.livebtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--m-rule);font:600 14px/1 var(--font-ui);color:var(--text);white-space:nowrap}
+.livebtn .ico{color:var(--muted)}
+.focusbtn{outline:3px solid var(--secondary);outline-offset:3px}
+
+/* ---- header: the Session button replaces ··· ---------------------------- */
+.wifi{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 11px;border-radius:999px;border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green);color:var(--m-success-text);font:600 13px/1 var(--font-ui);white-space:nowrap}
+.here{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 11px;border-radius:8px;border:1px solid var(--m-rule);color:var(--text);font:600 14px/1 var(--font-ui);white-space:nowrap}
+.here .ico{color:var(--muted)}
+.sess{display:inline-flex;align-items:center;gap:9px;height:34px;padding:0 10px 0 12px;border-radius:8px;border:1px solid var(--m-rule);color:var(--text);font:800 13px/1 var(--font-ui);letter-spacing:.12em;white-space:nowrap;flex:none}
+.sess kbd{font:700 12px/1 var(--font-ui);letter-spacing:0;color:var(--muted);border:1px solid var(--m-rule);border-radius:4px;padding:2px 5px}
+.sess.is-on{border-color:var(--primary);box-shadow:inset 0 -2px 0 var(--primary);background:var(--surface-2)}
+.cnt{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--primary);color:var(--bg);font:800 12px/1 var(--font-ui);letter-spacing:0}
+.askcue{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:999px;border:1px dashed var(--m-line-amber);background:var(--m-tint-amber);color:var(--primary);font:700 13px/1 var(--font-ui);white-space:nowrap}
+
+/* ---- the Host screen behind (simplified from T1a) ----------------------- */
+.hostb{display:grid;grid-template-columns:430px 1fr 330px;gap:16px;padding:16px;min-height:0}
+.scrim2{position:absolute;inset:60px 0 0 0;background:rgba(6,11,21,.74);z-index:30}
+
+/* ---- the panel ----------------------------------------------------------- */
+.sbar{position:absolute;top:60px;right:0;bottom:0;width:560px;z-index:40;background:#111D33;border-left:2px solid var(--primary);display:flex;flex-direction:column;color:var(--text)}
+.sbar--real{position:relative;top:auto;right:auto;bottom:auto;border-radius:0 12px 12px 0;border:1px solid var(--m-rule);border-left:2px solid var(--primary)}
+.sbh{flex:none;display:flex;align-items:center;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--m-rule)}
+.sbh h2{margin:0;font:800 19px/1 var(--font-display);letter-spacing:.09em;text-transform:uppercase;color:var(--primary)}
+.sbh .ws{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--m-success-text);white-space:nowrap}
+.sbh .ws::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.icb{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--surface-2);border:1px solid var(--m-rule);font:700 15px/1 var(--font-ui);color:var(--text)}
+.sbt{flex:none;display:flex;gap:4px;padding:0 14px;border-bottom:1px solid var(--m-rule)}
+.sbt span{display:inline-flex;align-items:center;gap:8px;padding:13px 10px 12px;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent}
+.sbt span.on{color:var(--text);border-bottom-color:var(--primary)}
+.sbt .c{letter-spacing:0;color:var(--muted);font-weight:700}
+.sbt .flag{letter-spacing:0;text-transform:none;font-weight:700;color:var(--primary)}
+.sbb{flex:1;min-height:0;overflow:hidden;padding:14px 20px 16px;display:flex;flex-direction:column;gap:12px}
+.sbf{flex:none;display:flex;align-items:center;gap:10px;padding:10px 20px;border-top:1px solid var(--m-rule);font-size:13px;color:var(--muted)}
+.sbf kbd,.keys kbd{font:700 12px/1 var(--font-ui);border:1px solid var(--m-rule);border-radius:4px;padding:2px 5px;color:var(--text)}
+
+/* Players */
+.find{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.find .in{flex:1 1 180px;height:36px;padding:0 12px;display:flex;align-items:center;color:var(--muted);font-size:14px;gap:8px}
+.flt{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--m-rule);font-size:13px;color:var(--muted);white-space:nowrap}
+.flt.is-on{color:var(--text);border-color:var(--secondary);background:var(--m-tint-blue)}
+.rh{display:flex;align-items:baseline;gap:10px;margin:4px 0 0}
+.rh h3{margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.rh h3.amber{color:var(--primary)}
+.rh span{font-size:13px;color:var(--muted)}
+.ros{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ros li{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--m-rule)}
+.ros li:last-child{border-bottom:0}
+.ros .d{width:9px;height:9px;border-radius:50%;background:var(--success)}
+.ros .d.away{background:transparent;border:2px solid var(--muted)}
+.ros .who{min-width:0;display:flex;flex-direction:column;gap:3px}
+.ros .nm{display:flex;align-items:center;gap:8px;min-width:0;font:700 15px/1.2 var(--font-ui)}
+.ros .nm i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ros .mt{font-size:13px;color:var(--muted);line-height:1.3}
+.ros .mt b{color:var(--text);font-weight:600}
+.ros .fl{font-size:13px;font-weight:700;color:var(--primary)}
+.ros .acts{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.ros li.ask{background:var(--m-tint-amber);border:1px solid var(--m-line-amber);border-radius:10px;padding:10px 10px;margin-bottom:6px}
+.ros li.gone .nm{color:var(--muted)}
+.ros .tg{height:20px;font-size:12px;padding:0 7px}
+.bsm{min-height:30px;padding:5px 10px;font-size:13px}
+.notes2{font-size:13px;color:var(--muted);margin:0;line-height:1.45}
+.more1{font-size:13px;color:var(--secondary);font-weight:600;padding:6px 0 0}
+
+/* Settings */
+.rule1{margin:0;padding:10px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--m-rule);font-size:13px;line-height:1.45;color:var(--muted)}
+.rule1 b{color:var(--text)}
+.grp{display:flex;flex-direction:column;gap:9px;padding:12px 0 14px;border-top:1px solid var(--m-rule)}
+.grp:first-of-type{border-top:0;padding-top:4px}
+.grp .gh{display:flex;align-items:baseline;gap:10px}
+.grp h3{margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--text)}
+.grp .gq{font-size:13px;color:var(--muted)}
+.srow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:36px}
+.srow .lab{font:600 15px/1.3 var(--font-ui)}
+.srow .val{font-size:13px;color:var(--muted)}
+.code{font:800 26px/1 var(--font-display);color:var(--primary);letter-spacing:.05em}
+.sw{flex:none;width:38px;height:22px;border-radius:11px;background:var(--surface-2);border:1px solid var(--m-rule);position:relative}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted)}
+.sw.on{background:var(--success);border-color:var(--success)}
+.sw.on::after{left:18px;background:var(--bg)}
+.stline{display:inline-flex;align-items:center;gap:7px;font-size:14px}
+.stline::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--primary)}
+.stline.ok::before{background:var(--success)}
+.endrow{margin-top:4px;padding-top:10px;border-top:1px dashed var(--m-rule)}
+.newtag{font:700 12px/1 var(--font-ui);color:var(--secondary);border:1px solid rgba(124,167,230,.55);border-radius:999px;padding:3px 7px}
+
+/* the notice (S6) */
+.notice{position:relative;z-index:20;display:flex;align-items:center;gap:14px;padding:12px 18px;background:linear-gradient(var(--m-tint-amber),var(--m-tint-amber)),#16233A;border-bottom:2px solid var(--primary)}
+.notice .nt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.notice .nt b{font:700 17px/1.3 var(--font-ui)}
+.notice .nt span{font-size:13px;color:var(--muted);line-height:1.4}
+.notice .nt span b{font-size:13px;color:var(--text);font-weight:600}
+.notice .nic{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--primary);color:var(--bg);font:800 17px/1 var(--font-ui)}
+
+/* Stage, from the talking-points page */
+.stg{display:grid;grid-template-columns:1fr 320px;gap:40px;padding:40px 44px 20px;min-height:0}
+.stg .ey{font:800 var(--L-meta)/1 var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--primary);margin-bottom:16px}
+.stg .pq{margin:0;font:800 var(--L-primary)/1.12 var(--font-display);max-width:22ch}
+.stg .sub2{margin:20px 0 0;font-size:var(--L-body);color:var(--muted)}
+.dock .status .sub{display:block;font-size:16px;color:var(--muted);margin-top:6px}
+.dock .more.lit{color:var(--text);border-color:var(--m-line-amber)}
+
+/* Build screen */
+.bscr{padding:22px 28px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.bscr .shotx{flex:1;min-height:0;border-radius:12px;border:1px solid var(--m-rule);background:linear-gradient(135deg,#1B2942,#25375A);display:grid;place-items:center;color:var(--muted);font:600 var(--L-meta)/1.3 var(--font-ui)}
+.bscr .cap2{font-size:var(--L-meta);color:var(--muted)}
+
+/* tables, real-size panes, devices */
+.tbl{max-width:1440px;margin:12px auto 0;padding:0 20px}
+.tbl table{border-collapse:collapse;width:100%;font-size:14px}
+.tbl th,.tbl td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--m-rule)}
+.tbl th{font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tbl td b{font-weight:700}
+.tbl td.go{color:var(--m-success-text)}
+.tbl td.drop{color:var(--danger-text)}
+.real{padding:8px 20px 0;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;max-width:1480px;margin:0 auto}
+.realcol{display:flex;flex-direction:column;gap:8px}
+.cap{font:700 13px/1.3 var(--font-ui);color:var(--muted)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:28px;max-width:1440px;margin:14px auto 0;padding:0 20px}
+.cmp .col2{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:14px 16px}
+.cmp h3{margin:0 0 8px;font:800 15px/1.2 var(--font-ui)}
+.cmp ol{margin:0;padding-left:22px;font-size:14px;line-height:1.55}
+.cmp ol li span{color:var(--muted)}
+.cmp .bad{color:var(--danger-text)}
+.measure{font:600 13px/1.5 var(--font-ui);color:var(--muted);margin:2px 0 0}
+.measure b{color:var(--text)}
+.dev{background:var(--bg);border:1px solid var(--m-rule);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.w375{width:375px;height:780px}
+.w660{width:660px;height:820px}
+.dvhdr{flex:none;height:52px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--m-rule);background:#0C1628;min-width:0}
+.dvhdr .ttl{font:800 15px/1 var(--font-display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.dvhdr .mm{padding:0 6px;height:32px}
+.dvwrap{position:relative;flex:1;min-height:0}
+.dvwrap .sbar{top:0}
+.w375 .sbar{width:100%;border-left:0;border-top:2px solid var(--primary)}
+.w375 .sbh{padding:12px 14px 10px}
+.w375 .sbb{padding:12px 14px}
+.w375 .sbt{padding:0 6px}
+.w375 .ros li{grid-template-columns:12px minmax(0,1fr)}
+.w375 .ros .acts{grid-column:2;justify-content:flex-start}
+.w375 .notice{padding:10px 14px;flex-wrap:wrap}
+.w375 .notice .acts2{display:flex;gap:8px;width:100%;justify-content:flex-end}
+.w660 .sbar{width:560px}
+.devscrim{position:absolute;inset:0;background:rgba(6,11,21,.74);z-index:30}
+.devbody{padding:14px;display:flex;flex-direction:column;gap:10px}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5}
+.qs li b{color:var(--text)}
+.orangecount{font:600 13px/1.5 var(--font-ui);color:var(--muted);margin:8px auto 0;max-width:1440px;padding:0 20px}
+.orangecount b{color:var(--text)}
+.applyback{max-width:1440px;margin:14px auto 0;padding:0 20px}
+.applyback ul{margin:8px 0 0;padding-left:22px;max-width:100ch;font-size:15px;line-height:1.55}
+.applyback li{margin-bottom:6px}
+.applyback li b{color:var(--text)}
+.pop{position:absolute;z-index:45;width:260px;background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.5);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.pop .ph{font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.pop .names{font-size:14px;line-height:1.6}
+.pop a{color:var(--secondary);font-weight:600;font-size:14px;text-decoration:none}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · the Session panel</b>
+<a href="#sec1">S1 Where it opens</a><a href="#sec2">S2 Players</a><a href="#sec3">S3 Settings</a><a href="#sec4">S4 Other tabs</a><a href="#sec5">S5 375 and 660</a><a href="#sec6">S6 Moving devices</a><a href="#back">Apply back</a><a href="#qs">Questions</a>
+<span class="sp"></span><a href="../build-room-batch-2-3/index.html">Batches 2 and 3</a><a href="../build-room-talking-points/index.html">Talking points</a></nav>
+<div class="pg-title"><h1>The Session panel: the same sidebar as the other engagements, with the people in the room first</h1>
+<p>Owner, 2026-10-09: the Build Room needs the sidebar the other engagements have, with everyone in the room, unlocking a name so a person can move to another device, and removing people, but organised better than their Settings tab. And from the same day: a person asked to move devices, and the host screen never told the host. This page draws the panel built from the one the other engagements use (<code>components/stage/SessionSetupPanel.jsx</code>), with the same words: <b>Unlock name</b>, <b>Let them take it</b>, <b>Remove</b>, <b>Bring back</b>. The rules from batches 2 and 3 hold: one orange button on each screen, the main button last on the right, Main menu first on the left. The panel itself never carries orange.</p></div>
+<p class="orangecount" id="orangecount">Checking orange buttons…</p>
+
+<!-- ===================================================================== S1 -->
+<div class="sec" id="sec1"><h2>S1 · How the panel opens, and where it sits</h2>
+<p>In the other engagements the panel opens from <b>SESSION</b>, the last button in the Stage's dock, or with the <b>\</b> key, and slides in from the right edge it opens from. The Build Room has no dock on its Host, Build and History screens, so the same button goes in the header, last on the right, where <b>···</b> is today. On the Stage, which has a dock, it is the dock's last button, as everywhere else. <b>\</b> opens and closes it on all four screens; Esc and the X close it.</p></div>
+
+<div class="frame-h" id="s1a"><h2>S1a · The Host screen, panel closed</h2>
+<p>The header loses <b>···</b> and gains <b>Session \</b>. The "14 here" count becomes a button into the Players tab; the Wi-Fi chip and Claude's status open Settings at their group. Nothing else in the header moves.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" data-frame="S1a Host, closed"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="livebtn">Open the build<i data-i="out"></i></span><span class="wifi">Wi-Fi · live</span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b></span><span class="here"><i data-i="people"></i>14 here</span><span class="sess">SESSION <kbd>\</kbd></span></header>
+<div class="hostb">
+<section class="col">
+<div class="q-item" style="padding:12px 14px"><b>Claude is building</b><span class="hint">Wiring the slider to the totals · Edited Slider.jsx · 3:14</span></div>
+<div class="colh"><h2>What's next</h2><span class="say push" style="font-size:13px;color:var(--muted)">Press <b>Space</b> to do the first</span></div>
+<div class="q-item" style="border-color:var(--m-line-amber)"><div class="row"><div style="flex:1;min-width:0"><b>Ask the room what to build next</b><p class="hint">Ideas, a choice, or a 1 to 5 rating</p></div><span class="btn btn--sm btn--primary focusbtn">New ask</span></div></div>
+<div class="q-item"><div class="row"><div style="flex:1;min-width:0"><b>Talk over a point while Claude builds</b><p class="hint">Tick one in Points, then Show on Stage</p></div><span class="btn btn--sm">Points</span></div></div>
+<div class="composer" style="margin-top:auto"><h3 style="margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Add something</h3>
+<div class="ta" style="min-height:52px;color:var(--muted)">An idea, what the room said out loud, or a note for Claude</div>
+<div class="row"><span class="btn btn--sm btn--ghost">Log it</span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm btn--out push"><i data-i="send"></i>Send to Claude</span></div></div>
+</section>
+<section class="col">
+<div class="colh"><h2>Waiting for you</h2><span class="count">1</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Dana</span><span class="chip">Idea</span><span class="meta push">3:11</span></div><div class="q-text">Let people type their own salary in</div>
+<div class="q-acts"><span class="btn btn--sm btn--ghost">Seen</span><span class="btn btn--sm">Save for later</span><span class="btn btn--sm"><i data-i="send"></i>Send to Claude</span></div></div>
+</section>
+<section class="col"><div style="display:flex;flex-direction:column;gap:6px">
+<div class="q-item" style="padding:10px 12px"><b>Decided · 4</b><span class="hint">Tick to combine</span></div>
+<div class="q-item" style="padding:10px 12px"><b>Timeline · 21</b></div>
+<div class="q-item" style="padding:10px 12px"><b>Asks · 4</b></div>
+</div></section>
+</div>
+<div class="pop" style="right:150px;top:66px"><span class="ph">Here now · 11 of 14</span><span class="names">Amir, Ben, Dana, Hana, Joe, Lena, Marco, Priya, Ruth, Sam, Tom</span><a>All 14 in Players →</a></div>
+<span class="pin" style="left:1392px;top:4px">1</span><span class="pin" style="left:1268px;top:4px">2</span><span class="pin" style="left:1040px;top:4px">3</span><span class="pin" style="left:1158px;top:4px">4</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>Session \</h3><p>The same word as the other engagements' dock button, at the edge the panel opens from. It shows its key, because the key is how a host at a projector opens it without looking. When someone is asking to take a name, a count sits on it (S6).</p></div>
+<div class="note"><h3><b class="n">2</b>"14 here" opens Players</h3><p>Hovering shows who is here now, as the Stage's room meter does (one list, from <code>useRosterReveal</code>). Clicking opens the panel on Players. The room meter on the Stage keeps its hover list and gains the same last line, "All 14 in Players →".</p></div>
+<div class="note"><h3><b class="n">3</b>The Wi-Fi chip stays as a status</h3><p>It says whether the build is shared. Its controls move into Settings, under The room, so they have one home; pressing the chip opens the panel there. The same goes for Claude's status (4), which opens Settings at Claude.</p></div>
+<div class="note"><h3><b class="n">4</b>At 480px and narrower</h3><p>Today the header folds its extras into <b>···</b>. With <b>···</b> gone they fold into the panel's top line instead: the join code, the count, Wi-Fi and Claude's status. See S5.</p></div>
+</div>
+
+<div class="frame-h" id="s1b"><h2>S1b · The panel open, over the Host screen</h2>
+<p>It starts below the header, so Main menu, the four screens and Session itself stay in reach while it is open. Pressing a screen keeps the panel open over the new screen; pressing Session, \, Esc, the X or Close puts it away. It is 560px wide, as in the other engagements. While it is open the screen behind is dimmed and its keys (Space, 1 to 4, P) are held, as the other engagements hold Space.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" data-frame="S1b Host, panel open"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="livebtn">Open the build<i data-i="out"></i></span><span class="wifi">Wi-Fi · live</span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b></span><span class="here"><i data-i="people"></i>14 here</span><span class="sess is-on">SESSION <kbd>\</kbd></span></header>
+<div class="hostb">
+<section class="col">
+<div class="q-item" style="padding:12px 14px"><b>Claude is building</b><span class="hint">Wiring the slider to the totals · Edited Slider.jsx · 3:14</span></div>
+<div class="colh"><h2>What's next</h2></div>
+<div class="q-item" style="border-color:var(--m-line-amber)"><div class="row"><div style="flex:1;min-width:0"><b>Ask the room what to build next</b><p class="hint">Ideas, a choice, or a 1 to 5 rating</p></div><span class="btn btn--sm btn--primary">New ask</span></div></div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">1</span></div><div class="q-item"><div class="q-text">Let people type their own salary in</div></div></section>
+<section class="col"></section>
+</div>
+<div class="scrim2"></div>
+<aside class="sbar">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">?</span><span class="icb">✕</span></div>
+<div class="sbt"><span class="on">Players <b class="c">14</b></span><span>Settings</span></div>
+<div class="sbb">
+<div class="rh"><h3>14 in the room</h3><span>11 here · 3 away · 2 builders</span></div>
+<ul class="ros">
+<li><span class="d"></span><div class="who"><span class="nm"><i>Amir</i></span><span class="mt">Here · joined 2:31 · 3 ideas, 6 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Ben</i></span><span class="mt">Here · joined 2:32 · 1 idea, 6 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Dana</i></span><span class="mt">Here · joined 2:30 · 5 ideas, 7 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d away"></span><div class="who"><span class="nm"><i>Hana</i></span><span class="mt">Away 6 min · joined 2:34 · 0 ideas, 2 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Priya</i><span class="chip chip--green tg">Builder</span></span><span class="mt">Here · joined 2:29 · 2 ideas, 7 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+</ul>
+<div class="more1">9 more, A to Z</div>
+</div>
+<div class="sbf"><kbd>\</kbd> opens and closes this panel <span class="btn bsm btn--ghost push">Close</span></div>
+</aside>
+</div></div></div>
+
+<div class="frame-h" id="s1c"><h2>S1c · On the Stage: SESSION last in the dock</h2>
+<p>The Stage has a dock and no header controls, so the panel opens from the dock, exactly as in the other engagements: <b>HOST</b> goes back to the Host screen, <b>SESSION</b> sits last at the right edge. The panel covers the right of the projection while it is open; it carries names and nothing else private (never an email address), the rule the other engagements already follow.</p></div>
+<div class="tbl"><div class="dockstrip" style="width:1440px"><footer class="dock" style="border:1px solid var(--m-rule);border-radius:10px" data-frame="S1c Stage dock"><div class="status">Claude is building<span class="sub">Wiring the slider to the totals · 3:14</span></div><span class="more">HOST</span><span class="more">SESSION</span></footer></div></div>
+
+<div class="frame-h"><h2>S1d · What leaves the ··· menu</h2>
+<p>Everything. A menu of nine unrelated things was the disorder the owner named in the other engagements' Settings tab, in another place. Each item goes to the one group it belongs to (S3).</p></div>
+<div class="tbl"><table>
+<tr><th>In ··· today</th><th>Goes to</th><th>Why there</th></tr>
+<tr><td>Connect Claude Code</td><td class="go">Settings › Claude</td><td>With Claude's status and Auto-open, the other two things about how Claude works.</td></tr>
+<tr><td>Open to a crew / Crew</td><td class="go">Settings › Crew</td><td>The crew board itself stays on the Host screen, where it already is when a crew is on.</td></tr>
+<tr><td>Running builders' code switch</td><td class="go">Settings › Crew</td><td>It is a crew setting. Shown only when a crew is on.</td></tr>
+<tr><td>Auto-open Claude's questions</td><td class="go">Settings › Claude</td><td>It decides whether Claude's questions skip your review.</td></tr>
+<tr><td>Back to the opening</td><td class="go">Settings › This session</td><td>Shown only while building, as today.</td></tr>
+<tr><td>Wrap up · Report · End session</td><td class="go">Settings › This session</td><td>In that order; End session last, alone, in red text.</td></tr>
+<tr><td>The tucked extras at 480px (join code, count, Wi-Fi, Claude, live build)</td><td class="go">The panel's top line</td><td>See S5.</td></tr>
+<tr><td>··· itself</td><td class="drop">Removed</td><td>One way in, the same as the other engagements.</td></tr>
+</table></div>
+
+<!-- ===================================================================== S2 -->
+<div class="sec" id="sec2"><h2>S2 · Players</h2>
+<p>Everyone who has joined, participants and builders together, because the host needs the whole room in one list. One component, shared with the other engagements: their Players tab and this one are the same rows with a different right-hand column (points and a tick there; ideas and votes here). Same actions, same words, same removed list.</p></div>
+<div class="frame-h" id="s2a"><h2>S2a · The tab at real size, a room of 14</h2>
+<p>A to Z, because a host looking for a person looks for a name. A person asking to take a name sits on top, outside the order, until answered. Search and the filters appear once more than 12 people have joined.</p></div>
+<div class="real">
+<div class="realcol"><span class="cap">560px, as it sits in the panel</span>
+<aside class="sbar sbar--real" id="p-players" style="height:auto">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">?</span><span class="icb">✕</span></div>
+<div class="sbt"><span class="on">Players <b class="c">14</b> <span class="flag">· 1 asking</span></span><span>Settings</span></div>
+<div class="sbb">
+<div class="find"><span class="in"><i data-i="search"></i>Find a person</span><span class="flt is-on">All 14</span><span class="flt">Here 11</span><span class="flt">Away 3</span><span class="flt">Builders 2</span></div>
+<div class="rh"><h3 class="amber">Asking to take a name</h3></div>
+<ul class="ros">
+<li class="ask"><span class="d"></span><div class="who"><span class="nm"><i>Joe</i></span><span class="fl">Someone on another device is asking to take this name</span><span class="mt">Joe is here now · joined 2:41 · 1 idea, 4 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Remove</span><span class="btn bsm">Let them take it</span></span></li>
+</ul>
+<div class="rh"><h3>14 in the room</h3><span>11 here · 3 away · 2 builders</span></div>
+<ul class="ros">
+<li><span class="d"></span><div class="who"><span class="nm"><i>Amir</i></span><span class="mt">Here · joined 2:31 · 3 ideas, 6 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Ben</i></span><span class="mt">Here · joined 2:32 · 1 idea, 6 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Dana</i></span><span class="mt">Here · joined 2:30 · 5 ideas, 7 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d away"></span><div class="who"><span class="nm"><i>Hana</i></span><span class="mt">Away 6 min · joined 2:34 · 0 ideas, 2 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Lena</i></span><span class="fl">Unlocked for one handover</span><span class="mt">Here · joined 2:33 · 2 ideas, 5 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Lock again</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Priya</i><span class="chip chip--green tg">Builder</span></span><span class="mt">Here · joined 2:29 · 2 ideas, 7 votes · on Parking map</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d away"></span><div class="who"><span class="nm"><i>Sam</i><span class="chip chip--green tg">Builder</span></span><span class="mt">Away 2 min · joined 2:29 · 0 ideas, 5 votes · on Totals</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+</ul>
+<div class="more1">7 more, down to Tom</div>
+<div class="rh" style="margin-top:6px"><h3>2 removed from the room</h3></div>
+<p class="notes2">Out of the live counts. Their ideas and votes stay in the session report.</p>
+<ul class="ros">
+<li class="gone"><span class="d away"></span><div class="who"><span class="nm"><i>Kit</i></span><span class="mt">Removed 3:02 · 2 ideas, 3 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Bring back</span></span></li>
+<li class="gone"><span class="d away"></span><div class="who"><span class="nm"><i>Owen</i></span><span class="mt">Removed 2:58 · 0 ideas, 1 vote</span></div><span class="acts"><span class="btn bsm btn--ghost">Bring back</span></span></li>
+</ul>
+</div>
+<div class="sbf"><kbd>\</kbd> opens and closes this panel <span class="btn bsm btn--ghost push">Close</span></div>
+</aside>
+<p class="measure" id="m-players">Measuring…</p>
+</div>
+<div class="notes" style="flex:1;min-width:340px;padding-top:26px;grid-template-columns:1fr">
+<div class="note"><h3><b class="n">1</b>What a row says</h3><p>Name; <b>Builder</b> for a crew member, with the lane they are on; <b>Here</b> or <b>Away 6 min</b> (a hollow dot, so it does not rely on colour); when they joined; ideas sent and votes cast, as counts only. Ideas come from the ideas the room object already holds; votes per person need checking before they are promised (if they are not cheap, the row says ideas only).</p></div>
+<div class="note"><h3><b class="n">2</b>Unlock name, Let them take it</h3><p>The other engagements' one button whose meaning changes. With nobody asking it reads <b>Unlock name</b>: the next device to join with that name may take it, once (for "I'm moving to my laptop", said out loud). When somebody asked from their device it reads <b>Let them take it</b>, and only that device can use it. While a name is unlocked the row says so and offers <b>Lock again</b> (new: the other engagements cannot undo an unlock).</p></div>
+<div class="note"><h3><b class="n">3</b>Remove, Bring back</h3><p>Remove takes a person out of the live counts at once, with no confirm, because Bring back undoes it. Their ideas and votes stay in the report. Removed people sit in their own list below, never mixed in, as in the other engagements. A removed builder: see the questions at the end.</p></div>
+<div class="note"><h3><b class="n">4</b>Nothing orange</h3><p>The panel is a list of decisions about people, none of which should be pressed by reflex. The orange stays with the screen's own lead move, dimmed behind the panel. <b>Let them take it</b> is the strongest button here: filled, not outlined.</p></div>
+</div>
+</div>
+
+<!-- ===================================================================== S3 -->
+<div class="sec" id="sec3"><h2>S3 · Settings, in four groups</h2>
+<p><b>The rule:</b> each group answers one question, in the order a host meets them: who can get in, how Claude works, who builds with you, and how the session ends. Anything that ends something comes last, on its own.</p></div>
+<div class="real">
+<div class="realcol"><span class="cap">560px, a crew on, building</span>
+<aside class="sbar sbar--real" id="p-settings" style="height:auto">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">?</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">14</b></span><span class="on">Settings</span></div>
+<div class="sbb">
+<div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they see</span></div>
+<div class="srow"><span class="code">4443</span><span class="val">engage.seibtribe.us/play · 14 joined</span></div>
+<div class="srow"><span class="btn bsm">Copy join link</span><span class="btn bsm">Show the QR on the wall</span></div>
+<div class="srow"><span class="stline ok">The build is live on this Wi-Fi</span><span class="val">Phone, laptop or tablet · same Wi-Fi</span></div>
+<div class="srow"><span class="btn bsm">Show the build's QR on the wall</span></div>
+<div class="srow"><span class="sw on"></span><span class="lab">List names on the room meter</span><span class="newtag">new</span></div>
+<p class="notes2">Hovering or clicking the room meter lists who has joined. Off, it shows only the count.</p>
+</div>
+<div class="grp"><div class="gh"><h3>Claude</h3><span class="gq">How Claude works with the room</span></div>
+<div class="srow"><span class="stline">Claude is building</span><span class="val">last heard 3:14</span><span class="btn bsm push"><i data-i="lock"></i>Connect Claude Code</span></div>
+<div class="srow"><span class="sw"></span><span class="lab">Auto-open Claude's questions</span></div>
+<p class="notes2">On, Claude's questions open to the room straight away, with no review first. Off, they wait for you in Waiting for you.</p>
+</div>
+<div class="grp"><div class="gh"><h3>Crew</h3><span class="gq">Who builds with you</span></div>
+<div class="srow"><span class="lab">2 builders</span><span class="val">Priya, Sam · 12 following</span><span class="btn bsm push">Crew board</span></div>
+<div class="srow"><span class="sw"></span><span class="lab">Run builders' code on this laptop</span></div>
+<p class="notes2">Claude reads builders' code and runs none of it.</p>
+</div>
+<div class="grp"><div class="gh"><h3>This session</h3><span class="gq">Going back, finishing, stopping</span></div>
+<div class="srow"><span class="btn bsm">Back to the opening</span><span class="val">Start building can be undone; nothing in the brief is lost.</span></div>
+<div class="srow"><span class="btn bsm">Wrap up</span><span class="btn bsm"><i data-i="file"></i>Report</span></div>
+<div class="srow endrow"><span class="btn bsm btn--danger">End session</span><span class="val">Ends it for everyone in the room.</span></div>
+</div>
+<p class="notes2 keys"><kbd>1</kbd>–<kbd>4</kbd> screens · <kbd>P</kbd> Host and back · <kbd>Space</kbd> the lead move · <kbd>\</kbd> this panel · <kbd>Esc</kbd> close</p>
+</div>
+<div class="sbf"><kbd>\</kbd> opens and closes this panel <span class="btn bsm btn--ghost push">Close</span></div>
+</aside>
+<p class="measure" id="m-settings">Measuring…</p>
+</div>
+<div class="notes" style="flex:1;min-width:340px;padding-top:26px;grid-template-columns:1fr">
+<div class="note"><h3><b class="n">1</b>A heading and its question</h3><p>Each group has a one-line question beside its name, so a host scanning for "how do I let someone in" reads the answer before the controls. Notes under a control are one sentence, and only where the control's name is not enough.</p></div>
+<div class="note"><h3><b class="n">2</b>Groups that change with the session</h3><p>No crew: Crew shows one line, "Builders link their own Claude Code and build beside yours. Up to 8.", and <b>Open to a crew</b>. In the opening: Back to the opening is hidden. Ended: The room, Claude and Crew are read-only and This session offers Report only.</p></div>
+<div class="note"><h3><b class="n">3</b>One home for each control</h3><p>The Wi-Fi share's controls live here and nowhere else; the header chip only says whether it is live and opens this group. "Show the QR on the wall" is the room's join QR; "Show the build's QR on the wall" is the Wi-Fi share's. Two different codes, so two different labels.</p></div>
+<div class="note"><h3><b class="n">4</b>End session alone</h3><p>Last in the last group, under a rule, in red text, never beside Report. It keeps today's confirm.</p></div>
+</div>
+</div>
+
+<div class="frame-h"><h2>S3b · Against the other engagements' Settings tab</h2>
+<p>What the owner called "still a bit unorganized", heading by heading, from <code>SessionSetupPanel.jsx</code>.</p></div>
+<div class="cmp">
+<div class="col2"><h3>Other engagements today: ten headings, one scroll</h3><ol>
+<li>Names <span>· privacy</span></li>
+<li>Feedback <span>· what the wall shows</span></li>
+<li>Summary voice and approach <span>· the AI summary</span></li>
+<li>Pace <span>· auto-advance</span></li>
+<li>Scoreboard <span>· a look</span></li>
+<li>Display <span>· a look</span></li>
+<li class="bad">Players join at <span>· seventh, though it is what a host needs first</span></li>
+<li class="bad">Controls on your phone <span>· access again, split from 7</span></li>
+<li class="bad">Session <span>· a projector explainer, Back to Menu, End session, Admin ↗ and Sign out in one row</span></li>
+<li>Keys</li></ol>
+<p class="notes2" style="margin-top:8px">No rule decides the order. Access is split in two and sits below the looks. End session sits beside Sign out. Every toggle carries a paragraph, so the tab is three screens long.</p></div>
+<div class="col2"><h3>Build Room: four groups, one rule</h3><ol>
+<li>The room <span>· who can get in, and what they see</span></li>
+<li>Claude <span>· how Claude works with the room</span></li>
+<li>Crew <span>· who builds with you</span></li>
+<li>This session <span>· going back, finishing, stopping; End session last</span></li></ol>
+<p class="notes2" style="margin-top:8px">Keys move to a single line at the foot. Account things (Admin, Sign out) are not session settings; in the Build Room they are behind Main menu, where they already are.</p></div>
+</div>
+
+<!-- ===================================================================== S4 -->
+<div class="sec" id="sec4"><h2>S4 · Any other tab?</h2>
+<p><b>No. Two tabs: Players and Settings.</b> Each candidate already has a home, and a second home is how controls get lost.</p></div>
+<div class="tbl"><table>
+<tr><th>Candidate</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>Rounds / History</td><td class="drop">Drop</td><td>History is a screen (4), with the Timeline and Asks in the Host screen's right column. The other engagements need Rounds only because they have no such screen.</td></tr>
+<tr><td>Questions</td><td class="drop">Drop</td><td>The Build Room's questions are asks, made from What's next and the starter library on the Host screen.</td></tr>
+<tr><td>Crew</td><td class="drop">Drop</td><td>The crew board is on the Host screen whenever a crew is on; builders are in Players with their tag and lane; the crew settings are in Settings › Crew.</td></tr>
+<tr><td>Claude</td><td class="drop">Drop</td><td>Status and connection fit in one Settings group. What Claude did is the Timeline.</td></tr>
+<tr><td>Players</td><td class="go">Keep</td><td>The owner's ask, and nothing on the Build Room shows the room as a list today.</td></tr>
+<tr><td>Settings</td><td class="go">Keep</td><td>Takes everything from ···.</td></tr>
+</table></div>
+
+<!-- ===================================================================== S5 -->
+<div class="sec" id="sec5"><h2>S5 · At 375px and 660px</h2>
+<p>Below 900px the panel no longer shares the screen: at 660px it keeps its 560px and the screen shows as a dimmed strip to its left; at 375px it takes the whole width under the header. At 480px and narrower the header holds only Main menu, the title and Session, and the panel's top line carries what the header dropped. Measured live below each frame.</p></div>
+<div class="real">
+<div class="realcol"><span class="cap">375px · Players, someone asking</span>
+<div class="dev w375" id="w375" data-frame="S5 375 Players">
+<div class="dvhdr"><span class="mm"><i data-i="house"></i></span><span class="ttl">Billions, made human</span><span class="sess is-on">SESSION <span class="cnt">1</span></span></div>
+<div class="dvwrap"><aside class="sbar">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbb" style="padding-bottom:0;gap:8px;flex:none"><div class="srow" style="min-height:0;gap:8px"><span class="code" style="font-size:20px">4443</span><span class="val">14 here</span><span class="wifi" style="height:28px">Wi-Fi · live</span><span class="dotline dotline--claude">Claude is building</span></div></div>
+<div class="sbt"><span class="on">Players <b class="c">14</b> <span class="flag">· 1 asking</span></span><span>Settings</span></div>
+<div class="sbb">
+<div class="find"><span class="in"><i data-i="search"></i>Find a person</span></div>
+<div class="find"><span class="flt is-on">All 14</span><span class="flt">Away 3</span><span class="flt">Builders 2</span></div>
+<ul class="ros">
+<li class="ask"><span class="d"></span><div class="who"><span class="nm"><i>Joe</i></span><span class="fl">Someone on another device is asking to take this name</span><span class="mt">Joe is here now · joined 2:41</span></div><span class="acts"><span class="btn bsm btn--ghost">Remove</span><span class="btn bsm">Let them take it</span></span></li>
+<li><span class="d"></span><div class="who"><span class="nm"><i>Amir</i></span><span class="mt">Here · joined 2:31 · 3 ideas, 6 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+<li><span class="d away"></span><div class="who"><span class="nm"><i>Hana</i></span><span class="mt">Away 6 min · joined 2:34 · 0 ideas, 2 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+</ul>
+</div>
+<div class="sbf">Esc closes <span class="btn bsm btn--ghost push">Close</span></div>
+</aside></div>
+</div>
+<p class="measure" id="m-w375">Measuring…</p>
+</div>
+<div class="realcol"><span class="cap">660px · Settings</span>
+<div class="dev w660" id="w660" data-frame="S5 660 Settings">
+<div class="dvhdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><span class="here"><i data-i="people"></i>14</span><span class="sess is-on">SESSION <kbd>\</kbd></span></div>
+<div class="dvwrap"><div class="devbody"><div class="q-item"><b>Claude is building</b></div><div class="q-item"><b>What's next</b><span class="btn btn--sm btn--primary" style="align-self:flex-start">New ask</span></div></div><div class="devscrim"></div>
+<aside class="sbar">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">?</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">14</b></span><span class="on">Settings</span></div>
+<div class="sbb">
+<div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in</span></div>
+<div class="srow"><span class="code">4443</span><span class="btn bsm">Copy join link</span><span class="btn bsm">Show the QR on the wall</span></div>
+<div class="srow"><span class="stline ok">The build is live on this Wi-Fi</span></div></div>
+<div class="grp"><div class="gh"><h3>Claude</h3><span class="gq">How Claude works with the room</span></div>
+<div class="srow"><span class="stline">Claude is building</span><span class="btn bsm push">Connect Claude Code</span></div>
+<div class="srow"><span class="sw"></span><span class="lab">Auto-open Claude's questions</span></div></div>
+<div class="grp"><div class="gh"><h3>Crew</h3><span class="gq">Who builds with you</span></div>
+<p class="notes2">Builders link their own Claude Code and build beside yours. Up to 8.</p>
+<div class="srow"><span class="btn bsm">Open to a crew</span></div></div>
+<div class="grp"><div class="gh"><h3>This session</h3><span class="gq">Going back, finishing, stopping</span></div>
+<div class="srow"><span class="btn bsm">Wrap up</span><span class="btn bsm">Report</span></div>
+<div class="srow endrow"><span class="btn bsm btn--danger">End session</span></div></div>
+</div>
+<div class="sbf"><kbd>\</kbd> opens and closes this panel <span class="btn bsm btn--ghost push">Close</span></div>
+</aside></div>
+</div>
+<p class="measure" id="m-w660">Measuring…</p>
+</div>
+</div>
+
+<!-- ===================================================================== S6 -->
+<div class="sec" id="sec6"><h2>S6 · Someone asks to move to another device</h2>
+<p>What happens today: a person joins on a second device with a name already in use, is refused, and taps the button that asks the host. The server sends <code>handoverRequested</code>. The other engagements refetch the roster and flag the row in a closed panel; the Build Room does not listen at all, which is why the owner saw nothing. The ask cannot prove it is the same person (the owner: they "may have just mistakenly picked the same name"), so the words say what is known: <b>someone on another device is asking to take this name</b>, never "Joe wants to move".</p></div>
+
+<div class="frame-h" id="s6a"><h2>S6a · The Host screen: a notice across the top</h2>
+<p>A strip under the header, full width, until it is answered or put away. It never covers What's next. <b>Let them take it</b> is filled but not orange: on the Host screen What's next always has a lead while the session runs, and that keeps the orange. The strip's amber edge and its place at the top do the work of being seen.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px auto 1fr" data-frame="S6a Host, notice"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="livebtn">Open the build<i data-i="out"></i></span><span class="wifi">Wi-Fi · live</span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b></span><span class="here"><i data-i="people"></i>14 here</span><span class="sess">SESSION <span class="cnt">1</span><kbd>\</kbd></span></header>
+<div class="notice"><span class="nic">!</span><div class="nt"><b>Someone on another device is asking to take the name Joe</b><span><b>Joe</b> is here now, joined 2:41. If Joe is moving devices, let them take it: the name keeps its ideas and votes, and the old device stops being Joe. If it is somebody else, Not now leaves Joe as they are.</span></div><span class="btn btn--sm btn--link">See in Players</span><span class="btn btn--sm btn--ghost">Not now</span><span class="btn btn--sm">Let them take it</span></div>
+<div class="hostb">
+<section class="col">
+<div class="q-item" style="padding:12px 14px"><b>Claude is building</b><span class="hint">Wiring the slider to the totals · Edited Slider.jsx · 3:14</span></div>
+<div class="colh"><h2>What's next</h2><span class="say push" style="font-size:13px;color:var(--muted)">Press <b>Space</b> to do the first</span></div>
+<div class="q-item" style="border-color:var(--m-line-amber)"><div class="row"><div style="flex:1;min-width:0"><b>Ask the room what to build next</b><p class="hint">Ideas, a choice, or a 1 to 5 rating</p></div><span class="btn btn--sm btn--primary focusbtn">New ask</span></div></div>
+<div class="q-item"><div class="row"><div style="flex:1;min-width:0"><b>Talk over a point while Claude builds</b><p class="hint">Tick one in Points, then Show on Stage</p></div><span class="btn btn--sm">Points</span></div></div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you</h2><span class="count">1</span></div><div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">Dana</span><span class="chip">Idea</span><span class="meta push">3:11</span></div><div class="q-text">Let people type their own salary in</div></div></section>
+<section class="col"><div style="display:flex;flex-direction:column;gap:6px"><div class="q-item" style="padding:10px 12px"><b>Decided · 4</b></div><div class="q-item" style="padding:10px 12px"><b>Timeline · 21</b></div></div></section>
+</div>
+<span class="pin" style="left:600px;top:62px">1</span><span class="pin" style="left:1200px;top:118px">2</span><span class="pin" style="left:1252px;top:40px">3</span>
+</div></div></div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>What is known, and what each answer does</h3><p>The name asked for; that its holder is here now (or away, which makes a move likelier) and when they joined. One sentence on each answer. No client id and no device detail reach the host: the server keeps those.</p></div>
+<div class="note"><h3><b class="n">2</b>Three answers</h3><p><b>Let them take it</b> grants one handover to the device that asked (the other engagements' <code>bindToRequester</code>) and the strip goes. <b>Not now</b> puts the strip away; the ask stays flagged in Players and the count stays on Session until answered there. <b>See in Players</b> opens the panel at the row. Space does not answer it: Space stays with What's next, so a host advancing the room cannot hand a name over by accident.</p></div>
+<div class="note"><h3><b class="n">3</b>The count on Session</h3><p>On every screen with a header, while any ask is open. Two asks at once: the strip reads "2 people are asking to take a name" and offers See in Players only.</p></div>
+</div>
+
+<div class="frame-h" id="s6b"><h2>S6b · Build and History: a cue with no name</h2>
+<p>Build and History are screens the room sees, header included. So the cue there names nobody and offers no answer: an amber pill and the count on Session. Pressing either opens the panel on Players with the ask on top. History shows the same pill in the same place.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" data-frame="S6b Build, cue"><header class="hdr"><span class="mm"><i data-i="house"></i>Main menu</span><span class="hsep"></span><span class="ttl">Billions, made human</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view is-on">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span class="sp" style="flex:1"></span><span class="askcue">1 asking to take a name</span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b>4443</b></span><span class="here"><i data-i="people"></i>14 here</span><span class="sess">SESSION <span class="cnt">1</span><kbd>\</kbd></span></header>
+<div class="bscr"><div class="shotx">The build, live: Billions, made human</div><p class="cap2">Edited Slider.jsx · 3:14</p></div>
+<span class="pin" style="left:880px;top:4px">1</span>
+</div></div></div>
+<div class="notes"><div class="note"><h3><b class="n">1</b>Why no name here</h3><p>A name clash is often two different people. Putting "someone wants Joe's name" on the wall invites the room to guess who, and to watch the host decide. The decision is the host's; the room needs to know nothing until a phone shows the result.</p></div></div>
+
+<div class="frame-h" id="s6c"><h2>S6c · The Stage: only the count on SESSION</h2>
+<p>The Stage is the projection. Nothing appears in its body. The dock's SESSION carries the count, as the dock's other buttons carry theirs, and is lit with an amber edge; it is the dock's last button, so it is never the lead. The Stage's own lead move keeps the orange.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="grid-template-rows:60px 1fr auto" data-frame="S6c Stage, cue"><header class="hdr"><span class="ttl">Billions, made human</span><span class="sp" style="flex:1"></span><span class="hjoin">Join <b>4443</b> · 14 here</span></header>
+<div class="stg"><div><div class="ey">Your turn</div><h2 class="pq">Which should Claude take on next?</h2><p class="sub2">Pick on your laptop, tablet or phone. 9 of 14 have voted.</p></div><aside class="meter"><span class="lbl">Voted</span><span class="big">9<small> / 14</small></span><span class="bar2"><span style="width:64%"></span></span></aside></div>
+<footer class="dock"><div class="status">Voting is open<span class="sub">9 of 14 have voted</span></div><span class="dbtn dbtn--primary">Show results</span><span class="dockhint">Press <b>Space</b> to show results</span><span class="more">HOST</span><span class="more lit">SESSION <span class="dot">1</span></span></footer>
+<span class="pin" style="left:1330px;top:770px">1</span>
+</div></div></div>
+<div class="notes"><div class="note"><h3><b class="n">1</b>Lit, not loud</h3><p>A host glancing at the dock sees the count; the room sees a number on a button they cannot press. Pressing it, or <b>\</b>, opens the panel on Players with the ask on top (S6d), over the projection, without a name anywhere else.</p></div></div>
+
+<div class="frame-h" id="s6d"><h2>S6d · After each answer</h2>
+<p>The rows as they read in Players, at real size.</p></div>
+<div class="real">
+<div class="realcol"><span class="cap">Let them take it, waiting for the new device</span>
+<aside class="sbar sbar--real" style="height:auto"><div class="sbb"><ul class="ros">
+<li><span class="d"></span><div class="who"><span class="nm"><i>Joe</i></span><span class="fl">Unlocked for the device that asked</span><span class="mt">Here · joined 2:41 · 1 idea, 4 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Lock again</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+</ul></div></aside></div>
+<div class="realcol"><span class="cap">Done: the new device is Joe</span>
+<aside class="sbar sbar--real" style="height:auto"><div class="sbb"><ul class="ros">
+<li><span class="d"></span><div class="who"><span class="nm"><i>Joe</i></span><span class="mt">Here · moved device 3:16 · 1 idea, 4 votes</span></div><span class="acts"><span class="btn bsm btn--ghost">Unlock name</span><span class="btn bsm btn--ghost">Remove</span></span></li>
+</ul></div></aside></div>
+<div class="realcol"><span class="cap">Not now: still asking, strip put away</span>
+<aside class="sbar sbar--real" style="height:auto"><div class="sbb"><ul class="ros">
+<li class="ask"><span class="d"></span><div class="who"><span class="nm"><i>Joe</i></span><span class="fl">Someone on another device is asking to take this name</span><span class="mt">Asked 3:15 · Joe is here now</span></div><span class="acts"><span class="btn bsm btn--ghost">Remove</span><span class="btn bsm">Let them take it</span></span></li>
+</ul></div></aside></div>
+</div>
+<div class="notes">
+<div class="note"><h3><b class="n">1</b>What the build needs</h3><p>The Build Room host listens for <code>handoverRequested</code> (plus <code>playerRemoved</code> and <code>playerRestored</code>, for a second host device), refetches the roster, and raises S6a. The grant, remove and bring-back routes already exist and are host-gated; the panel calls them as <code>GameHostPage.jsx</code> does.</p></div>
+<div class="note"><h3><b class="n">2</b>Lock again and "moved device"</h3><p>Neither exists today. Lock again needs a small host route to close an open grant; "moved device 3:16" needs the grant's use recorded on the row. Both are worth it in both engagements; if not, the row simply drops the line.</p></div>
+<div class="note"><h3><b class="n">3</b>Not now tells the asker nothing</h3><p>There is no refuse route, so the asking device keeps waiting. Its screen should already offer "join with another name"; check it does before shipping Not now.</p></div>
+</div>
+
+<!-- ===================================================================== apply back -->
+<div class="sec" id="back"><h2>To apply back to the other engagements later</h2></div>
+<div class="applyback"><ul>
+<li><b>Group their Settings tab by the same rule.</b> The room (Players join at, Controls on your phone, Names); The round (Feedback, Pace, the summary voice and approach); The screen (Display profile, Scoreboard look, Show how this works on the stage); This session (Back to Menu, then End session alone, last). Admin and Sign out leave the tab for the account menu. Keys become one line at the foot. Notes shrink to one sentence each.</li>
+<li><b>Make a handover ask impossible to miss.</b> Today it is a flag inside a closed panel ("There is no toast" was the decision). Add the count on SESSION and the S6a strip on the host's own screen.</li>
+<li><b>One Players component.</b> Extract the roster from <code>SessionSetupPanel.jsx</code> with <code>rosterRows</code> and <code>departedRows</code>, take the right-hand column as a prop (points and tick there; ideas and votes here), and add Here/Away, joined time and Lock again to both.</li>
+<li><b>A bottom exit.</b> Their panel has an X and no Close at the foot, which the design system asks of every dialog.</li>
+<li><b>One name.</b> Their button says SESSION and their panel says "Session setup". Call both Session.</li>
+</ul></div>
+
+<!-- ===================================================================== questions -->
+<div class="qs" id="qs"><h2 style="font:800 26px/1.2 var(--font-display);margin:0">Questions for the owner</h2><ol>
+<li><b>Removing a builder.</b> Should Remove also take a builder off the crew (their Claude unlinked, their lane closed), or only out of the room's counts, leaving the crew board to manage the crew?</li>
+<li><b>Names on the projected screens.</b> The cue on Build, History and the Stage names nobody (S6b, S6c). Is that right, or would you rather the name showed so you never need to open the panel?</li>
+<li><b>"List names on the room meter"</b> is a new setting, the Build Room's version of the other engagements' Names. Keep it, or leave the room meter as it is and drop the setting?</li>
+</ol></div>
+
+<script>
+(function () {
+  var P = {
+    send: '<path d="M21 3 3 10.2l7.3 2.6L13 20z"/><path d="m10.3 12.8 4.4-4.4"/>',
+    house: '<path d="M4 10.5 12 4l8 6.5V20h-5.5v-5.5h-5V20H4z"/>',
+    out: '<path d="M14 4h6v6"/><path d="m20 4-8.5 8.5"/><path d="M18 14v5H5V6h5"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/>',
+    people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18 14.8c2 .6 3.2 2.3 3.5 5.2"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    file: '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M9 13h6"/><path d="M9 17h6"/>'
+  };
+  document.querySelectorAll('i[data-i]').forEach(function (el) {
+    el.outerHTML = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P[el.getAttribute('data-i')] + '</svg>';
+  });
+  function measure(boxId, outId) {
+    var box = document.getElementById(boxId), out = document.getElementById(outId);
+    if (!box || !out) return;
+    var b = box.getBoundingClientRect(), worst = 0, small = 999;
+    box.querySelectorAll('*').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (!r.width) return;
+      worst = Math.max(worst, r.right - b.right, b.left - r.left);
+      if ([].some.call(el.childNodes, function (n) { return n.nodeType === 3 && n.textContent.trim(); })) {
+        small = Math.min(small, parseFloat(getComputedStyle(el).fontSize));
+      }
+    });
+    var hs = box.scrollWidth > box.clientWidth;
+    out.innerHTML = 'Measured live: <b>' + Math.round(b.width) + 'px</b> wide; widest overflow <b>' + Math.max(0, Math.round(worst)) + 'px</b>; ' +
+      'sideways scroll <b>' + (hs ? 'yes' : 'none') + '</b>; smallest text <b>' + small + 'px</b>.';
+  }
+  function oranges() {
+    var frames = document.querySelectorAll('[data-frame], .sbar--real'), bad = [];
+    frames.forEach(function (f) {
+      var n = f.querySelectorAll('.btn--primary, .dbtn--primary').length;
+      if (n > 1) bad.push((f.getAttribute('data-frame') || f.id || 'panel') + ' (' + n + ')');
+    });
+    var out = document.getElementById('orangecount');
+    if (out) out.innerHTML = 'Checked live: <b>' + frames.length + '</b> frames and panels; ' + (bad.length ? 'more than one orange button in: <b>' + bad.join(', ') + '</b>' : 'none has more than one orange button, and no panel has any.');
+  }
+  window.addEventListener('load', function () {
+    measure('w375', 'm-w375'); measure('w660', 'm-w660'); measure('p-players', 'm-players'); measure('p-settings', 'm-settings'); oranges();
+  });
+})();
+</script>
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

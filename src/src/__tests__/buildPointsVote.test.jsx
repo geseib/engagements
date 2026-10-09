@@ -250,6 +250,11 @@ describe('T5 the vote dialog', () => {
     fireEvent.click(within(panel()).getByRole('button', { name: 'Put 2 to a vote' }));
     const dlg = await screen.findByRole('dialog', { name: 'Put 2 to a vote' });
     expect(within(dlg).getByRole('button', { name: 'Close ask 3 and open the vote' })).toBeInTheDocument();
+    // The ask's step held the orange; with the window over it, the window holds it alone.
+    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(oranges()).toHaveLength(0);
+    fireEvent.click(within(dlg).getAllByRole('button', { name: 'Close' }).pop());
+    expect(oranges()).toHaveLength(1);
   });
 
   test('one orange: the window holds it and the Host screen behind holds none', async () => {
@@ -317,19 +322,19 @@ describe('T6 results: highlight what moves forward', () => {
     expect(bar2.getByRole('button', { name: 'Send to Claude' }).className).toMatch('brm-btn--primary');
   });
 
-  test('Send these 3 posts forward/send with the ids in vote order, then records the vote as decided', async () => {
+  test('Send these 3 posts forward/send with the ids in vote order, and that is the only post (the server settles the vote)', async () => {
     await openRoom(RESULTS());
     fireEvent.click(screen.getByRole('button', { name: 'Send these 3 to Claude' }));
-    await waitFor(() => expect(postsTo('asks/005')).toHaveLength(2));
+    await waitFor(() => expect(postsTo('asks/005')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(postsTo('asks/005')).toHaveLength(1);
     expect(postsTo('asks/005')[0].body).toEqual({ action: 'forward', pointIds: ['p2', 'p1', 'p4'], then: 'send' });
-    expect(postsTo('asks/005')[1].body).toMatchObject({ action: 'decide', sendToAgent: false, chosen: ['B', 'A', 'D'] });
-    expect(postsTo('asks/005')[1].body.direction).toMatch(TEXTS[2]);
   });
 
   test('Work through in turn posts forward/run', async () => {
     await openRoom(RESULTS());
     fireEvent.click(screen.getByRole('button', { name: 'Work through in turn' }));
-    await waitFor(() => expect(postsTo('asks/005')).toHaveLength(2));
+    await waitFor(() => expect(postsTo('asks/005')).toHaveLength(1));
     expect(postsTo('asks/005')[0].body).toEqual({ action: 'forward', pointIds: ['p2', 'p1', 'p4'], then: 'run' });
   });
 
@@ -378,7 +383,7 @@ describe('T6 results: highlight what moves forward', () => {
     const dockButtons = await screen.findAllByRole('button', { name: /Save the rest for later|Work through in turn|Send these 3 to Claude/ });
     expect(dockButtons.map((b) => b.textContent)).toEqual(['Save the rest for later', 'Work through in turn', 'Send these 3 to Claude']);
     fireEvent.click(screen.getByRole('button', { name: 'Work through in turn' }));
-    await waitFor(() => expect(postsTo('asks/005')).toHaveLength(2));
+    await waitFor(() => expect(postsTo('asks/005')).toHaveLength(1));
     expect(postsTo('asks/005')[0].body).toEqual({ action: 'forward', pointIds: ['p2', 'p1', 'p4'], then: 'run' });
   });
 
@@ -446,7 +451,7 @@ describe('T7 the run list on the Host', () => {
     const dlg = await screen.findByRole('dialog', { name: "Claude hasn't finished 2. Send 3 anyway?" });
     fireEvent.click(within(dlg).getByRole('button', { name: 'Send 3 anyway' }));
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
-    expect(postsTo('run/next')[0].body).toEqual({ from: 2, force: true });
+    expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1', force: true });
   });
 
   test('Claude has reported: the row says so, Space presses Next, and no confirm', async () => {
@@ -455,7 +460,7 @@ describe('T7 the run list on the Host', () => {
     expect(oranges().map((b) => b.className.includes('brm-btn--primary') && b.hasAttribute('data-next-primary'))).toEqual([true]);
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
-    expect(postsTo('run/next')[0].body).toEqual({ from: 2 });
+    expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1' });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
@@ -483,9 +488,43 @@ describe('T7 the run list on the Host', () => {
     await openRoom(RUNNING(false));
     fireEvent.click(screen.getByRole('button', { name: 'Skip 3' }));
     await waitFor(() => expect(postsTo('run/skip')).toHaveLength(1));
+    expect(postsTo('run/skip')[0].body).toEqual({ from: 2, runId: 'r1' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Stop' })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(postsTo('run/stop')).toHaveLength(1));
+    expect(postsTo('run/stop')[0].body).toEqual({ runId: 'r1' });
+  });
+
+  test('two quick ArrowDowns send one reorder; a stale ver shows the server\'s sentence and the page reads the list again', async () => {
+    await openRoom(RUNNING(false));
+    const grip = screen.getByRole('region', { name: 'The run list' }).querySelector('[data-grip="p3"]');
+    expect(grip).toHaveAttribute('aria-label', `Reorder ${TEXTS[3]} (arrow keys)`);
+    override = (url) => (url.endsWith('/run/reorder') ? res({ error: 'The list changed; look again' }, false, 409) : null);
+    const gets = () => calls.filter((c) => c.method === 'GET').length;
+    const before = gets();
+    fireEvent.keyDown(grip, { key: 'ArrowDown' });
+    fireEvent.keyDown(grip, { key: 'ArrowDown' });
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch('The list changed; look again'));
+    expect(postsTo('run/reorder')).toHaveLength(1);
+    await waitFor(() => expect(gets()).toBeGreaterThan(before));
+  });
+
+  test('a point waiting in the running list is not a highlight row any more', async () => {
+    await openRoom(RESULTS({ run: RUN({}, false), points: [...voting().slice(0, 4), POINT(5, { Status: 'voting', PromotedTo: '005' })] }));
+    // p3 and p4 wait in the list: they cannot be highlighted from here.
+    expect(row(TEXTS[3])).toBeDisabled();
+    expect(row(TEXTS[4])).toBeDisabled();
+    expect(row(TEXTS[5])).not.toBeDisabled();
+  });
+
+  test('one orange with the vote window open over an ask, and with the confirm open over an ask', async () => {
+    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], points: runPoints(), run: RUN({}, false) }));
+    fireEvent.click(screen.getByRole('button', { name: /^Next: 3/ }));
+    const dlg = await screen.findByRole('dialog', { name: "Claude hasn't finished 2. Send 3 anyway?" });
+    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(oranges()).toHaveLength(0);
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Wait for Claude' }));
+    expect(oranges()).toHaveLength(1);
   });
 
   test('pending items reorder from the keyboard, with the list\'s ver; the first and last stay put', async () => {
@@ -497,7 +536,7 @@ describe('T7 the run list on the Host', () => {
     expect(postsTo('run/reorder')).toHaveLength(0);
     fireEvent.keyDown(grips[0], { key: 'ArrowDown' });
     await waitFor(() => expect(postsTo('run/reorder')).toHaveLength(1));
-    expect(postsTo('run/reorder')[0].body).toEqual({ order: ['p4', 'p3'], ver: 3 });
+    expect(postsTo('run/reorder')[0].body).toEqual({ order: ['p4', 'p3'], ver: 3, runId: 'r1' });
     expect(within(list).getByText(W.reorderNote)).toBeInTheDocument();
   });
 
@@ -509,7 +548,7 @@ describe('T7 the run list on the Host', () => {
     fireEvent.dragOver(items[2]);
     fireEvent.drop(items[2]);
     await waitFor(() => expect(postsTo('run/reorder')).toHaveLength(1));
-    expect(postsTo('run/reorder')[0].body).toEqual({ order: ['p4', 'p3'], ver: 3 });
+    expect(postsTo('run/reorder')[0].body).toEqual({ order: ['p4', 'p3'], ver: 3, runId: 'r1' });
   });
 
   test('the last item: no Next, no Skip; Stop remains', async () => {
@@ -557,7 +596,8 @@ describe('T7b the Stage and room safety', () => {
     expect(m.primary).toMatchObject({ action: 'run-next', label: 'Next: 3', claudeDone: false });
     expect(m.secondary).toMatchObject({ action: 'run-skip', label: 'Skip 3' });
     expect(m.extras.map((x) => x.label)).toEqual(['Stop']);
-    expect(m.status).toBe('Claude is working on 2 of 4');
+    expect(m.status).toBe('Claude is working on 2 of 4 · Next waits until Claude reports 2 done');
+    expect(stageModel(RUNNING(true), null, Date.now()).status).toBe('Claude finished 2');
     expect(m.meter).toMatchObject({ count: 1, of: 4 });
     expect(stageModel(RUNNING(true), null, Date.now()).primary.claudeDone).toBe(true);
   });

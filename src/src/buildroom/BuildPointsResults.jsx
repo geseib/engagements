@@ -27,7 +27,7 @@ import {
 } from './buildScreens';
 
 export default function BuildPointsResults({
-  ask, room, override, onToggle, busy, ended, said = '', onMove,
+  ask, room, override, onToggle, busy, ended, said = '', onMove, quiet = false,
 }) {
   const ref = useRef(null);
   const rows = pointVoteRows(ask, room);
@@ -88,11 +88,11 @@ export default function BuildPointsResults({
             >
               {W.workInTurn}
             </button>
-            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy || n < 1} onClick={() => onMove('send')}>{sendHighlighted(n)}</button>
+            <button type="button" className={`brm-btn${quiet ? '' : ' brm-btn--primary'}`} data-next-primary disabled={busy || n < 1} onClick={() => onMove('send')}>{sendHighlighted(n)}</button>
           </ActionRow>
         ) : (
           <ActionRow hint={W.movedForwardDone}>
-            <button type="button" className="brm-btn brm-btn--primary" data-next-primary disabled={busy} onClick={() => onMove('close')}>{W.closeThisVote}</button>
+            <button type="button" className={`brm-btn${quiet ? '' : ' brm-btn--primary'}`} data-next-primary disabled={busy} onClick={() => onMove('close')}>{W.closeThisVote}</button>
           </ActionRow>
         ))}
       </Step>

@@ -1187,7 +1187,7 @@ function runView(run, audience) {
     kind: it.kind || 'talk',
     site: it.site || '',
     state: marks[i] || 'pending',
-    ...(it.byBuilder ? { by: it.byBuilder } : {}),
+    ...(isHost && it.byBuilder ? { by: it.byBuilder } : {}),
     ...(isHost ? { pointId: it.pointId, sentAt: (run.SentAt || [])[i] || null, doneAt: (run.DoneAt || [])[i] || null, note: it.note || '' } : {}),
   }));
   const out = {

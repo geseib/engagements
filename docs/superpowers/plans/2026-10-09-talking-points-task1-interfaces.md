@@ -96,3 +96,9 @@ All routes under `/games/{id}/build/`. Host = the signed-in host; Claude = the h
 - `later` on a shown point appends "Ideas from the room about it:" with one "- idea" line each (up to 8, no names) to the Later direction.
 - `shownPoint` is `{kind, text, site, from}` (no id) everywhere; phones get `run` only while it is `running` (else null); the host still sees finished/stopped.
 - Plugin 1.13.1: `post_update` with `runItem` (minimum 1) sends `run/done {runItem, runId (remembered from the item), note (the update text, 200 chars)}`.
+
+## Task 5 server changes (fix round 1)
+- `asks/{id}` `forward` with `then: 'send'` or `'run'` now settles the vote in the same request: the ask becomes `decided` (`DecidedAt`, `ClosedAt` if missing), `Decision {direction: 'Moved forward: <option texts>', chosen: <option labels of pointIds>, sendToAgent: false, method: 'vote', as: 'do-now'}`, one `decision` log entry with `forAgent: false` (the only `forAgent` entry is still the send or run item itself), then the queued next ask opens. `later-rest` leaves the ask at `results`. The page makes no second `decide` call.
+- `run/next {force?, from?, runId?}`, `run/skip {from?, runId?}`, `run/stop {runId?}`, `run/reorder {order, ver, runId?}`: a `runId` that is not the current list's is 409 "That list has ended". `run/skip` with `from` not equal to the list's `cur` is 409 "The list has moved on; look again" (as `next`).
+- The room-safe (phone) `run` no longer carries `by` on items; the host view still does.
+- `GET build-play/state` for a builder carries `myPoints {items: [{id, kind, text, status, outcome, createdAt}], requests: [requestView]}`: only their own Claude's points and their own requests (none for a phone that is not a builder). Sealed at rest in a team room, plain to the builder.

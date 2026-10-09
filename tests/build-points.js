@@ -139,7 +139,7 @@ const S = require(path.join(REPO, 'lambda-functions/game/build-store.js'));
 let pass = 0;
 let failed = 0;
 async function check(label, fn) {
-  try { await fn(); console.log(`  PASS  ${label}`); pass++; } catch (e) { console.log(`  FAIL  ${label}\n        ${e.stack.split('\n').slice(0, 3).join('\n        ')}`); failed++; }
+  try { await fn(); console.log(`  PASS  ${label}`); pass++; } catch (e) { console.log(`  FAIL  ${label}\n        ${e.stack.split('\n').slice(0, 8).join('\n        ')}`); failed++; }
 }
 
 const GAME = '4821';
@@ -714,6 +714,7 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
   const answer = (name, askId, choice) => phone(name)('POST', 'respond', { askId, choice });
   const closeAsk = (askId) => host('POST', `asks/${askId}`, { action: 'close' });
   const inbox = async () => (await claude('GET', 'inbox')).body.inbox;
+  const touchNext = async (askId) => { const k = key(`GAME#${GAME}`, 'BUILD#STATE'); const row = store.get(k) || [...store.values()].find((r) => r.SK === 'BUILD#STATE'); row.NextAskId = askId; };
 
   console.log('\nTask 2: vote from points');
   await check('vote: 3 points become a live multi-pick ask (default 3 picks), options carry pointId, points are voting', async () => {
@@ -1027,7 +1028,7 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     await host('POST', 'run', { pointIds: [cp[0], bp[0]] });
     const run = (await phone('Sam')('GET', 'state')).body.run;
     assert.strictEqual(run.items[0].by, undefined);
-    assert.strictEqual(run.items[1].by, 'Priya');
+    assert.strictEqual(run.items[1].by, undefined, 'no name on the public run');
     assert.strictEqual((await priya('POST', 'run/done', { runItem: 1 })).status, 403);
   });
   await check('team room: run items and vote options sealed at rest, still read back; ttl on the run', async () => {
@@ -1226,6 +1227,64 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     assert.ok(!JSON.stringify(v).includes('Sam idea') && !JSON.stringify(v).includes('Host Claude point'));
     assert.strictEqual((await phone('Marcus')('GET', 'state')).body.myPoints, undefined, 'a phone that is not a builder gets none');
     assert.ok(!('points' in (await phone('Sam')('GET', 'state')).body), 'phones still carry no host points list');
+  });
+
+  console.log('\nTask 5 fix round 1');
+  const stateAsk = async (askId) => (await host('GET', 'state')).body.asks.find((a) => a.askId === askId);
+  await check('F1: forward send and run close the ask in one write: decided, chosen labels, one forAgent entry, the queued ask opens', async () => {
+    for (const then of ['send', 'run']) {
+      const { ids, askId } = await votedAsk();
+      const queued = (await host('POST', 'asks', { kind: 'choice', prompt: 'Queued next?', options: ['x', 'y'], draft: true })).body.ask.askId;
+      await touchNext(queued);
+      await closeAsk(askId);
+      const before = rowsOf('BUILD#LOG#').filter((l) => l.ForAgent).length;
+      const r = await host('POST', `asks/${askId}`, { action: 'forward', then, pointIds: [ids[0], ids[1]] });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+      const a = await stateAsk(askId);
+      assert.strictEqual(a.status, 'decided');
+      assert.ok(a.decidedAt && a.closedAt);
+      assert.deepStrictEqual(a.decision.chosen, ['A', 'B']);
+      assert.strictEqual(a.decision.sentToAgent, false);
+      assert.strictEqual(a.decision.method, 'vote');
+      assert.ok(a.decision.direction.startsWith('Moved forward: ') && a.decision.direction.includes('Option 1 text'));
+      const forAgent = rowsOf('BUILD#LOG#').filter((l) => l.ForAgent).length - before;
+      assert.strictEqual(forAgent, 1, `${then}: only the send/run itself is for Claude`);
+      assert.ok(rowsOf('BUILD#LOG#').some((l) => l.Kind === 'decision' && !l.ForAgent && String(l.Text).startsWith('Moved forward: ')));
+      assert.strictEqual((await stateAsk(queued)).status, 'live', 'the queued ask opened');
+      assert.strictEqual((await host('POST', `asks/${askId}`, { action: 'forward', then: 'send', pointIds: [ids[0]] })).status, 409);
+    }
+  });
+  await check('F1: later-rest leaves the ask at results', async () => {
+    const { ids, askId } = await votedAsk();
+    await closeAsk(askId);
+    await host('POST', `asks/${askId}`, { action: 'forward', then: 'later-rest', pointIds: [ids[0]] });
+    assert.strictEqual((await stateAsk(askId)).status, 'results');
+  });
+  await check('F4: skip names its item (from) and the list (runId); a stale press is 409; next, stop and reorder check runId', async () => {
+    const { ids } = await startRun(4);
+    const run = (await host('GET', 'state')).body.run;
+    assert.strictEqual((await host('POST', 'run/skip', { from: 3, runId: run.runId })).status, 409, 'from mismatch');
+    assert.strictEqual((await host('POST', 'run/skip', { from: run.cur, runId: 'old-list' })).body.error, 'That list has ended');
+    for (const [route, b] of [['next', { force: true }], ['stop', {}], ['reorder', { order: [ids[1], ids[2], ids[3]], ver: run.ver }]]) {
+      const r = await host('POST', `run/${route}`, { ...b, runId: 'old-list' });
+      assert.strictEqual(r.status, 409, route);
+      assert.strictEqual(r.body.error, 'That list has ended', route);
+    }
+    assert.strictEqual((await host('POST', 'run/skip', { from: run.cur, runId: run.runId })).status, 200);
+    assert.strictEqual((await host('POST', 'run/stop', { runId: run.runId })).status, 200);
+  });
+  await check('F7: a builder\'s myPoints in a team room is plaintext to the builder and ciphertext at rest', async () => {
+    seed({ orgId: ORG });
+    HA = TEAM_HOST;
+    await host('POST', 'crew/settings', { enabled: true, modes: ['fork'] });
+    await phone('Priya')('POST', 'crew/builder-key');
+    await phone('Priya')('POST', 'crew/points/requests', { kind: 'ideas', subject: 'Sealed lane subject' });
+    await priya('POST', 'points', { points: [pt('Sealed lane point')] });
+    assert.ok(!raw().includes('Sealed lane'), 'ciphertext at rest');
+    const mp = (await phone('Priya')('GET', 'state')).body.myPoints;
+    assert.strictEqual(mp.items[0].text, 'Sealed lane point');
+    assert.strictEqual(mp.requests[0].subject, 'Sealed lane subject');
+    HA = HOST;
   });
 
   console.log(`\n${pass} passed, ${failed} failed`);

@@ -2095,6 +2095,18 @@ async function forwardAction(ctx, room, ask, b) {
       if (p && ['voting', 'queued'].includes(p.Status) && !waiting.has(id)) await put(ctx, released(p, now, counts));
     }
   };
+  // A send or a run settles the vote: decided in one write, recorded for the host, not told to Claude again.
+  const closeVote = async (taken) => {
+    const labels = (ask.Options || []).filter((o) => taken.includes(o.pointId)).map((o) => o.label);
+    const said = (ask.Options || []).filter((o) => taken.includes(o.pointId)).map((o) => o.detail || o.title).join('; ');
+    const direction = S.cleanText(`Moved forward: ${said}`, S.LIMITS.direction);
+    await put(ctx, {
+      ...ask, Status: 'decided', DecidedAt: now, ClosedAt: ask.ClosedAt || now,
+      Decision: { direction, chosen: labels, note: '', sendToAgent: false, method: 'vote', as: 'do-now' },
+    });
+    await logEntry(ctx, { kind: 'decision', text: direction, by: 'host', askId, forAgent: false, spoken: false, as: 'do-now', claudeNote: '', noBrief: false });
+    await openNextIfQueued(ctx, askId);
+  };
   let result;
   if (then === 'send') {
     const dir = S.pointsDirection(got.rows);
@@ -2103,11 +2115,13 @@ async function forwardAction(ctx, room, ask, b) {
     for (const p of got.rows) await put(ctx, repoint(p, 'sent', now, 'sent to Claude', voted(p)));
     await releaseRest(ids);
     result = { sent: ids };
+    await closeVote(ids);
   } else if (then === 'run') {
     const started = await startRun(ctx, room, got.rows, now, (p) => voted(p));
     if (started.response) return started.response;
     await releaseRest(ids);
     result = { run: started.run };
+    await closeVote(ids);
   } else {
     const waiting = S.runPendingIds(room);
     const rest = ask.FromPoints.filter((id) => !ids.includes(id)).map((id) => findPoint(room, id))
@@ -2202,10 +2216,12 @@ async function runStart(ctx, body) {
  * refuse, or `{row, after}`: the new row, and what to do once it is written.
  * A press that lost the race re-reads and decides again (three tries).
  */
-async function mutateRun(ctx, step) {
+async function mutateRun(ctx, step, runId) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const room = await loadRoom(ctx);
     const now = new Date().toISOString();
+    // A press from a screen that holds an older list is refused, not applied to the new one.
+    if (runId && room.run && String(runId) !== String(room.run.RunId)) return fail(409, 'That list has ended');
     const out = step(room, room.run, now);
     if (out.response) return out.response;
     if (await writeRun(ctx, { ...out.row, Ver: (Number(room.run.Ver) || 0) + 1, UpdatedAt: now }, room.run.Ver)) {
@@ -2249,12 +2265,14 @@ async function runNext(ctx, body) {
         await sendRunItem(ctx, row, idx + 1);
       },
     };
-  });
+  }, b.runId);
 }
 
-async function runSkip(ctx) {
+async function runSkip(ctx, body) {
+  const b = body || {};
   return mutateRun(ctx, (room, run, now) => {
     if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
+    if (b.from !== undefined && b.from !== null && Number(b.from) !== Number(run.Cur)) return { response: fail(409, 'The list has moved on; look again') };
     const marks = [...run.Marks];
     const idx = firstPending(marks);
     if (idx < 0) return { response: fail(409, 'Nothing is left to skip') };
@@ -2262,7 +2280,7 @@ async function runSkip(ctx) {
     const finished = noneLeft(marks);
     const row = { ...run, Marks: marks, ...(finished ? { Status: 'finished', FinishedAt: now } : {}) };
     return { row, after: (rm) => toLater(ctx, rm, run, [idx + 1], now) };
-  });
+  }, b.runId);
 }
 
 /** Run items of a list that Claude has not yet heard are cancelled, so they never arrive. */
@@ -2284,7 +2302,8 @@ async function cancelRunRows(ctx, room, runId) {
   }
 }
 
-async function runStop(ctx) {
+async function runStop(ctx, body) {
+  const b = body || {};
   return mutateRun(ctx, (room, run, now) => {
     if (!run || run.Status !== 'running') return { response: fail(409, 'No list is running') };
     const marks = [...run.Marks];
@@ -2296,7 +2315,7 @@ async function runStop(ctx) {
     });
     const row = { ...run, Marks: marks, Status: 'stopped', FinishedAt: now };
     return { row, after: async (rm) => { await cancelRunRows(ctx, rm, run.RunId); await toLater(ctx, rm, run, left, now); } };
-  });
+  }, b.runId);
 }
 
 /** Items that did not get done go to Later as held directions, not lost. */
@@ -2333,7 +2352,7 @@ async function runReorder(ctx, body) {
         }
       },
     };
-  });
+  }, b.runId);
 }
 
 /** Claude reports a run item finished (post_update with runItem). The host's Claude only. */
@@ -2415,8 +2434,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'run' && !b) return hostOnly() || runStart(ctx, body);
   if (a === 'run' && b === 'next' && !c) return hostOnly() || runNext(ctx, body);
   if (a === 'run' && b === 'reorder' && !c) return hostOnly() || runReorder(ctx, body);
-  if (a === 'run' && b === 'skip' && !c) return hostOnly() || runSkip(ctx);
-  if (a === 'run' && b === 'stop' && !c) return hostOnly() || runStop(ctx);
+  if (a === 'run' && b === 'skip' && !c) return hostOnly() || runSkip(ctx, body);
+  if (a === 'run' && b === 'stop' && !c) return hostOnly() || runStop(ctx, body);
   if (a === 'run' && b === 'done' && !c) return role === 'agent' ? runDone(ctx, body) : fail(403, 'Only the host\'s Claude reports a list item done');
   if (a === 'points' && b && !c) return hostOnly() || pointAction(ctx, b, body);
   if (a === 'asks' && !b) return createAsk(ctx, role, body);
