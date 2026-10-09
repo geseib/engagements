@@ -146,6 +146,44 @@ describe('loading the room', () => {
   });
 });
 
+describe('the host takes this phone out of the session (Session panel, 2026-10-09)', () => {
+  const REFUSED = { ok: false, status: 403, json: async () => ({ error: 'Join the session first' }) };
+
+  test('a phone that was in and is now refused says the host took it out, and comes back when brought back', async () => {
+    jest.useFakeTimers();
+    try {
+      serve(baseView());
+      await mount();
+      await screen.findByText('Claude is building');
+      global.fetch.mockImplementation(() => Promise.resolve(REFUSED));
+      await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+      expect(await screen.findByText('The host took you out of this session.')).toBeInTheDocument();
+      expect(screen.queryByText('Join the session first')).toBeNull();
+      // Brought back: the same phone is let in again without a new join.
+      serve(baseView());
+      await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+      await screen.findByText('Claude is building');
+      expect(screen.queryByText('The host took you out of this session.')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('a builder is told their Claude was unlinked', async () => {
+    jest.useFakeTimers();
+    try {
+      serve(baseView({ crew: { enabled: true, builders: [], tasks: [], shares: [], pipeline: {}, me: { name: ME, isBuilder: true } } }));
+      await mount();
+      await screen.findByText('Claude is building');
+      global.fetch.mockImplementation(() => Promise.resolve(REFUSED));
+      await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+      expect(await screen.findByText(/Your Claude was unlinked/)).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
 describe('Ideas (suggest)', () => {
   const live = () => baseView({
     currentAskId: '004',

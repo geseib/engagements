@@ -936,6 +936,9 @@ export default function BuildPlayer({
 }) {
   const [view, setView] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  // The host removed this person (Session panel, Remove): the room refuses the
+  // phone it had let in. Cleared the moment a read works again (Bring back).
+  const [removed, setRemoved] = useState(false);
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [ideaDraft, setIdeaDraft] = useState('');
   const [tab, setTab] = useState('now');
@@ -943,6 +946,7 @@ export default function BuildPlayer({
   // A builder key, held only until "Done" (shown once; never stored).
   const [builderKey, setBuilderKey] = useState(null);
   const seq = useRef(0);
+  const seen = useRef(false);
   const firstScreen = useRef(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -955,9 +959,13 @@ export default function BuildPlayer({
     if (r.ok) {
       setView(r.data);
       setLoadError(null);
+      setRemoved(false);
+    } else if (r.status === 403 && seen.current) {
+      setRemoved(true);
     } else {
       setLoadError(r.error);
     }
+    if (r.ok) seen.current = true;
   }, [apiBase, gameId, playerName, clientId]);
 
   useEffect(() => { load(); }, [load, rev, ended]);
@@ -1013,6 +1021,21 @@ export default function BuildPlayer({
     </ImageViewer.Provider>
     </ImageLoader.Provider>
   );
+
+  if (removed) {
+    const wasBuilder = Boolean(view && view.crew && view.crew.me);
+    return shell({
+      volume: 'rest',
+      centre: true,
+      body: (
+        <>
+          <p className="plr-lede">The host took you out of this session.</p>
+          {wasBuilder && <p className="plr-help">Your Claude was unlinked and your lane closed. What was already merged stays. If the host brings you back, link your Claude again from The crew.</p>}
+          <p className="plr-help">Your ideas and votes stay in the session report.</p>
+        </>
+      ),
+    });
+  }
 
   if (!view) {
     return shell({

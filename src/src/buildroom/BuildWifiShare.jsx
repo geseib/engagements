@@ -55,16 +55,22 @@ function CopyLink({ link }) {
   );
 }
 
-export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall }) {
+/**
+ * `inline` is the Session panel's Settings, The room (docs/design/build-room-sidebar
+ * S3): the same content, laid out in the panel rather than hung from the chip
+ * as a popover, with no X or Done of its own and the wall button named for the
+ * code it shows ("the build's QR", since the room's join QR is a different one).
+ */
+export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall, inline = false }) {
   const s = wifiState(lan, now);
   const on = Boolean(lan && lan.wanted);
   const map = (lan && lan.map) || [];
   const panelRef = useRef(null);
-  useKeepOnScreen(panelRef, true);
+  useKeepOnScreen(panelRef, !inline);
   return (
-    <div className="brm-wifipanel" role="dialog" aria-label="Share on this Wi-Fi" ref={panelRef}>
+    <div className={`brm-wifipanel${inline ? ' brm-wifipanel--inline' : ''}`} {...(inline ? { 'aria-label': 'Share on this Wi-Fi' } : { role: 'dialog', 'aria-label': 'Share on this Wi-Fi' })} ref={panelRef}>
       <div className="brm-wifipanel-top">
-        <h3>Share on this Wi-Fi</h3>
+        {inline ? <h4>Share on this Wi-Fi</h4> : <h3>Share on this Wi-Fi</h3>}
         <label className={`brm-auto${on ? ' is-on' : ''}`}>
           <input
             type="checkbox"
@@ -76,7 +82,7 @@ export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall 
           />
           <span>{on ? 'On' : 'Off'}</span>
         </label>
-        <button type="button" className="brm-wifipanel-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
+        {!inline && <button type="button" className="brm-wifipanel-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>}
       </div>
       <p className="brm-wifipanel-say">Anyone on this Wi-Fi with the link can open the app Claude is running, on a phone, laptop or tablet. Turn it off at any time. Everyone loses it at once.</p>
       {s.state === 'failed' && (
@@ -116,8 +122,8 @@ export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall 
       <div className="brm-wifipanel-foot">
         {s.state === 'failed'
           ? <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>Try again</button>
-          : <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={!on || s.state === 'starting' || s.state === 'waiting' || !map.length} onClick={onShowWall}>Show the QR on the wall</button>}
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onClose}>Done</button>
+          : <button type="button" className={`brm-btn brm-btn--sm${inline ? '' : ' brm-btn--primary'}`} disabled={!on || s.state === 'starting' || s.state === 'waiting' || !map.length} onClick={onShowWall}>{inline ? "Show the build's QR on the wall" : 'Show the QR on the wall'}</button>}
+        {!inline && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onClose}>Done</button>}
       </div>
     </div>
   );

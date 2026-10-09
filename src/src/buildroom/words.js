@@ -73,6 +73,17 @@ export const W = Object.freeze({
   doNow: 'Do now',
   keepInMind: 'Keep in mind',
   askClaude: 'Ask Claude',
+  // The Session panel (docs/design/build-room-sidebar; the same words as the other engagements' Players tab)
+  players: 'Players',
+  settings: 'Settings',
+  unlockName: 'Unlock name',
+  letThemTakeIt: 'Let them take it',
+  lockAgain: 'Lock again',
+  bringBack: 'Bring back',
+  seeInPlayers: 'See in Players',
+  /** The nameless cue on the screens the room sees. */
+  askingToTake: (n) => `${n} asking to take a name`,
+  nPeopleAsking: (n) => `${n} people are asking to take a name`,
   // The way out, the build
   mainMenu: 'Main menu',
   openBuild: 'Open the build',

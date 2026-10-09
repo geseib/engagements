@@ -53,8 +53,11 @@ import { isTypingTarget, dialogOpen } from './useNextFocus';
 import BuildStageDecide from './BuildStageDecide';
 import { useRosterMode, rosterRevealFor } from '../hooks/useRosterReveal';
 import { joinedRoster } from '../config/anonymity';
-import { WifiChip, WifiPanel, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
+import { WifiChip, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
 import { shouldOfferWifi, wifiState } from './wifiShare';
+import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
+import useBuildPlayers, { askingOf } from './useBuildPlayers';
+import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import {
   pluginInstallCommand,
   pluginConnectCommand, projectSlug, cleanFolder, startCommand,
@@ -76,7 +79,7 @@ import RoomMeter from '../components/stage/RoomMeter';
 import Dock from '../components/stage/Dock';
 import { loadProfile } from '../config/displayProfile';
 import {
-  CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLook, EarlyLookDialog, RunCrewCodeSwitch, StageTabs, featuredShare,
+  CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLook, EarlyLookDialog, StageTabs, featuredShare,
 } from './BuildCrew';
 
 export const POLL_MS = 8000;
@@ -374,6 +377,25 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
 
 // ── The room ────────────────────────────────────────────────────────────────
 
+/**
+ * LIST NAMES ON THE ROOM METER (owner, 2026-10-09; off by default). Whether the
+ * Stage's room meter may list who has joined when the host hovers it. Kept for
+ * this room in this browser: the Stage is shown from the host's own page, so
+ * that is where the choice is read.
+ */
+const listNamesKey = (gameId) => `brm.listNames.${gameId}`;
+function useListNames(gameId) {
+  const read = () => { try { return window.localStorage.getItem(listNamesKey(gameId)) === 'on'; } catch (e) { return false; } };
+  const [on, setOn] = useState(read);
+  const set = useCallback((value) => {
+    setOn(Boolean(value));
+    try {
+      if (value) window.localStorage.setItem(listNamesKey(gameId), 'on'); else window.localStorage.removeItem(listNamesKey(gameId));
+    } catch (e) { /* the choice still holds for this visit */ }
+  }, [gameId]);
+  return [on, set];
+}
+
 export function BuildRoom({ gameId, initialView = 'room' }) {
   const api = useMemo(() => buildApi(gameId), [gameId]);
   // Screenshots are private: fetched with the host's sign-in (buildHostApi).
@@ -468,6 +490,30 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const sharingNow = Boolean(room) && ['on', 'quiet'].includes(wifiState(room.lan, now).state);
   const endedNow = Boolean(room) && room.state === 'ENDED';
   useEffect(() => { if (!sharingNow || endedNow) setWallQr(false); }, [sharingNow, endedNow]);
+
+  // ── THE SESSION PANEL (owner, 2026-10-09) ───────────────────────────────
+  // The roster is read here, not in the panel, because the count on SESSION
+  // and the request strip need it while the panel is shut. The websocket says
+  // when it moved (a name asked for, a player removed or brought back, on this
+  // device or the host's other one); the room's own player count is the
+  // fallback when a socket message is missed.
+  const [roster, loadPlayers] = useBuildPlayers(api);
+  const askingNow = askingOf(roster.players);
+  const [panel, setPanel] = useState(null); // {tab: 'players'|'settings', group}
+  const openPanel = useCallback((tab = 'players', group = '') => setPanel({ tab, group }), []);
+  const closePanel = useCallback(() => setPanel(null), []);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [listNames, setListNames] = useListNames(gameId);
+  const narrow = useNarrowHeader();
+  const playerCount = room ? room.playerCount : undefined;
+  useEffect(() => { loadPlayers(); }, [loadPlayers, playerCount]);
+  useEffect(() => {
+    if (!panel) return undefined;
+    const t = setInterval(loadPlayers, POLL_MS);
+    return () => clearInterval(t);
+  }, [panel, loadPlayers]);
+  // Backslash opens it (the panel's own listener closes it); never while a dialog is up.
+  useSessionPanelKey({ enabled: !panel, onOpen: () => { if (!dialogOpen()) openPanel(); } });
 
   // ── THE CONNECTION (owner, 2026-10-04) ────────────────────────────────
   // After a long wait the laptop sleeps, the socket gives up after five
@@ -571,7 +617,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       if (items) setRoom((r) => (r ? { ...r, activity: items } : r));
     });
     webSocketClient.onMessage('gameEnded', () => refresh());
-    webSocketClient.onReconnected(() => refresh());
+    // Somebody asked to take a name, or the host's other device removed or restored someone.
+    webSocketClient.onMessage('handoverRequested', () => loadPlayers());
+    webSocketClient.onMessage('playerRemoved', () => { loadPlayers(); refresh(); });
+    webSocketClient.onMessage('playerRestored', () => { loadPlayers(); refresh(); });
+    webSocketClient.onReconnected(() => { refresh(); loadPlayers(); });
     webSocketClient.connect(gameId, null, true, { hostTicket: () => api.hostTicket() });
     return () => {
       clearInterval(poll);
@@ -579,9 +629,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       webSocketClient.offMessage('buildChanged');
       webSocketClient.offMessage('buildActivity');
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('handoverRequested');
+      webSocketClient.offMessage('playerRemoved');
+      webSocketClient.offMessage('playerRestored');
       webSocketClient.onReconnected(null);
     };
-  }, [api, gameId, refresh]);
+  }, [api, gameId, refresh, loadPlayers]);
 
   // 1-4 pick a screen; P flips between Host and the last screen the room saw.
   // Never while somebody is typing, never with a modifier, never inside a dialog.
@@ -728,6 +781,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const present = isProjected(screen);
   const host = !present;
   const ended = room.state === 'ENDED';
+  // The request strip's two answers: one handover to the device that asked, or Not now.
+  const grantAsker = (name) => run(async () => { await api.playerHandover(name, { bindToRequester: true }); await loadPlayers(); });
+  const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
+  // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
+  const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
+  const headerTools = {
+    room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: setScreen,
+    onWifi: () => openPanel('settings', 'room'),
+    onQr: () => setQrOpen(true),
+    onPlayers: () => openPanel('players'),
+  };
   // The Wi-Fi QR on the wall sits on the Stage, which has no header of its own.
   const wallQrLink = wallQr && sharingNow ? wifiLink(room) : '';
   const asks = room.asks || [];
@@ -893,6 +957,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           draft={current ? drafts[current.askId] || null : null}
           onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
           onHost={() => setScreen('host')}
+          onSession={() => openPanel()}
+          askingCount={askingNow.length}
+          listNames={listNames}
           onTakeDown={takePointDown}
           onPointLater={savePointLater}
           highlight={current ? highlights[current.askId] : undefined}
@@ -906,25 +973,26 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       ) : (
       <>
       <RoomHeader
-        connection={connection}
-        onReconnect={reconnect}
         room={room}
         now={now}
         host={host}
         screen={screen}
         onScreen={setScreen}
-        onWifiWall={() => { setScreen('stage'); setWallQr(true); }}
-        onConnect={() => setDialog('connect')}
-        onWrap={() => setDialog('wrap')}
-        onReport={() => goView('report')}
-        onEnd={() => setDialog('end')}
-        onCrew={() => setDialog('crew')}
-        crew={crew}
-        busy={busy}
-        run={run}
-        api={api}
         ended={ended}
+        connection={connection}
+        onReconnect={reconnect}
+        narrow={narrow}
+        onSession={() => (panel ? closePanel() : openPanel())}
+        panelOpen={Boolean(panel)}
+        askingCount={askingNow.length}
+        onPlayers={() => openPanel('players')}
+        onWifi={() => openPanel('settings', 'room')}
+        onQr={() => setQrOpen(true)}
       />
+      {/* SOMEONE ASKS TO TAKE A NAME (S6a): named, on the Host screen only. */}
+      {screen === 'host' && !ended && (
+        <HandoverStrip asking={askingNow} busy={busy} onGrant={grantAsker} onRefuse={refuseAsker} onSee={() => openPanel('players')} />
+      )}
       {host && error && (
         <div className="brm-alert brm-alert--bar" role="alert">
           {error}
@@ -1106,6 +1174,29 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       </div>
       )}
       </>
+      )}
+
+      {qrOpen && <QrZoom playUrl={`${window.location.origin}/play?gameId=${room.gameId}`} gameId={room.gameId} onClose={() => setQrOpen(false)} />}
+      {panel && (
+        <BuildSessionPanel
+          room={room} now={now} ended={ended} busy={busy} run={run} api={api} connected={connection === 'live'}
+          roster={roster} reloadPlayers={loadPlayers}
+          tab={panel.tab} focusGroup={panel.group} onTab={(t) => setPanel({ tab: t, group: '' })} onClose={closePanel}
+          topLine={narrow ? <HeaderTools {...headerTools} /> : null}
+          slots={{
+            agentChip: <AgentChip room={room} now={now} />,
+            autoSwitch: ended ? null : <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />,
+          }}
+          listNames={listNames} onListNames={setListNames}
+          onConnect={() => dialogFromPanel('connect')}
+          onCrew={() => dialogFromPanel('crew')}
+          onWrap={() => dialogFromPanel('wrap')}
+          onReport={() => goView('report')}
+          onEnd={() => dialogFromPanel('end')}
+          onShowQr={() => setQrOpen(true)}
+          onWifiWall={() => { setScreen('stage'); setWallQr(true); }}
+          wifiLink={wifiLink(room)}
+        />
       )}
 
       {host && dialog === 'connect' && (
@@ -1460,69 +1551,41 @@ function useNarrowHeader() {
   return narrow;
 }
 
-function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, onWrap, onReport, onEnd, onCrew, crew, busy, run, api, ended, connection, onReconnect }) {
-  const waiting = waitingCount(room);
-  const pill = askPill(room);
-  const [qr, setQr] = useState(false);
-  const [wifiOpen, setWifiOpen] = useState(false);
-  const wifiRef = useRef(null);
-  // The panel is a popover: Escape or a click outside puts it away.
-  useEffect(() => {
-    if (!wifiOpen) return undefined;
-    const onDown = (e) => {
-      if (wifiRef.current && wifiRef.current.contains(e.target)) return;
-      setWifiOpen(false);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') setWifiOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [wifiOpen]);
-  // The Stage has no header, so the chip is on the host's screens only.
+/**
+ * The header's right-hand tools, in one place: the live build, the Wi-Fi chip,
+ * Claude's status, the connection, the join code and the joined count. Wide, they
+ * sit in the header; at 480px and narrower they are the Session panel's top line
+ * instead (owner, 2026-10-09: the three-dot menu is gone).
+ */
+function HeaderTools({ room, now, host, ended, connection, onReconnect, onWifi, onQr, onPlayers, pill, onScreen, withPill = true }) {
   const showWifi = host && !ended;
-  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
-  const pick = (close, fn) => () => { close(); fn(); };
-  // At 480px and narrower the extras (join code, ask pill, live build, Wi-Fi,
-  // Claude's status) fold into the session menu so the title keeps room (B5a).
-  const narrow = useNarrowHeader();
-  const tucked = host && narrow;
-  // In the tucked menu a press closes it (onPick); inline there is nothing to close.
-  const askPillButton = (onPick = () => {}) => pill && (
-    <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => { onPick(); onScreen('stage'); }}>
-      {pill.text}
-    </button>
-  );
-  const extras = (onPick = () => {}) => (
+  return (
     <>
-      <LiveBuildButton link={liveBuildLink(room, now)} onPick={onPick} />
-      {showWifi && (
-        <div className="brm-wifiwrap" ref={wifiRef}>
-          <WifiChip lan={room.lan} now={now} open={wifiOpen} onOpen={() => setWifiOpen((o) => !o)} />
-          {wifiOpen && (
-            <WifiPanel
-              lan={room.lan}
-              link={wifiLink(room)}
-              now={now}
-              busy={busy}
-              run={run}
-              api={api}
-              onClose={() => setWifiOpen(false)}
-              onShowWall={() => { setWifiOpen(false); onWifiWall(); }}
-            />
-          )}
-        </div>
+      {withPill && pill && (
+        <button type="button" className={`brm-askpill${pill.results ? ' is-results' : ''}`} title="Show it on the Stage (2)" onClick={() => onScreen('stage')}>
+          {pill.text}
+        </button>
       )}
-      <span onClickCapture={onPick} className="brm-agentwrap"><AgentChip room={room} now={now} /></span>
+      <LiveBuildButton link={liveBuildLink(room, now)} />
+      {showWifi && <WifiChip lan={room.lan} now={now} open={false} onOpen={onWifi} />}
+      <span className="brm-agentwrap"><AgentChip room={room} now={now} /></span>
       {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
-      <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={() => { onPick(); setQr(true); }}>
+      <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={onQr}>
         <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
       </button>
-      <span className="brm-chip">{room.playerCount || 0} joined</span>
+      <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers}>{room.playerCount || 0} joined</button>
     </>
   );
+}
+
+function RoomHeader({
+  room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
+  onSession, panelOpen, askingCount, onPlayers, onWifi, onQr,
+}) {
+  const waiting = waitingCount(room);
+  const pill = askPill(room);
+  const tucked = narrow;
+  const tools = { room, now, host, ended, connection, onReconnect, onWifi, onQr, onPlayers, pill, onScreen };
   return (
     <header className="brm-hbar">
       {/* MAIN MENU (B5, 2026-10-08): always the first control, on every host
@@ -1549,43 +1612,20 @@ function RoomHeader({ room, now, host, screen, onScreen, onWifiWall, onConnect, 
           </button>
         ))}
       </nav>
-      {pill && !tucked && askPillButton()}
+      {/* THE ROOM SEES THIS HEADER on Build and History, so the cue there names
+          nobody: an amber pill and the count on SESSION (S6b). The Host screen
+          has the named strip instead. */}
+      {askingCount > 0 && !host && (
+        <button type="button" className="brm-askpill" onClick={onPlayers}>{W.askingToTake(askingCount)}</button>
+      )}
       <div className="brm-hbar-tools">
-        {!tucked && extras()}
-        {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
-        {host && (
-          <SessionMenu placeKey={wifiOpen}>
-            {(close) => (
-              <>
-                {tucked && (
-                  <div className="brm-more-extras" data-testid="brm-more-extras">
-                    {pill && askPillButton(close)}
-                    {extras(close)}
-                  </div>
-                )}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onConnect)}>
-                  <Icon name="Lock" size={14} /> Connect Claude Code
-                </button>
-                {!ended && (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onCrew)}>
-                    <Icon name="UsersThree" size={14} /> {crew ? 'Crew' : 'Open to a crew'}
-                  </button>
-                )}
-                {crew && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
-                {!ended && <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />}
-                {/* BACK TO THE OPENING (owner, 2026-10-06): Start building can be undone; nothing in the brief is lost. */}
-                {!ended && room.opening && room.opening.phase === 'building' && (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={pick(close, () => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
-                )}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onWrap)}>Wrap up</button>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={pick(close, onReport)}>
-                  <Icon name="FileText" size={14} /> Report
-                </button>
-                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(close, onEnd)}>End session</button>}
-              </>
-            )}
-          </SessionMenu>
-        )}
+        {!tucked && <HeaderTools {...tools} />}
+        {/* SESSION (owner, 2026-10-09): the same word and key as the other
+            engagements, last on the right where the three-dot menu was. */}
+        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession}>
+          SESSION <kbd>\</kbd>
+          {askingCount > 0 && <span className="brm-sess-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
+        </button>
       </div>
     </header>
   );
@@ -1716,7 +1756,7 @@ function hintVerb(move) {
  * window (StageDecide), and a click on an option or a wheel slice opens that
  * window with the pick made (owner, 2026-10-08).
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, onSession = () => {}, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
@@ -1801,7 +1841,9 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const askUp = Boolean(m.phase);
   useEffect(() => { if (askUp) setRosterMode(null); }, [askUp, setRosterMode]);
   const joined = m.phase ? null : joinedRoster({ players: (room.players || []).map((name) => ({ name })) });
-  const joinedWaiting = joined ? { names: joined, mode: reveal, ...handlers } : null;
+  // OFF BY DEFAULT (owner, 2026-10-09): the meter lists who has joined only when
+  // the host turned "List names on the room meter" on in the Session panel.
+  const joinedWaiting = joined && listNames ? { names: joined, mode: reveal, ...handlers } : null;
   const body = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   let content;
@@ -1877,6 +1919,12 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
               <span className="dock-more-lbl">HOST</span>
               {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
+            </button>
+            {/* SESSION is last, so it is never the lead. The count lights it when someone
+                asks to take a name; nothing on the Stage names the person. */}
+            <button type="button" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} onClick={onSession} title="Session (\)">
+              <span className="dock-more-lbl">SESSION</span>
+              {askingCount > 0 && <span className="brm-screen-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
             </button>
           </Dock>
         )}
