@@ -123,6 +123,8 @@ exports.handler = async (event) => {
         scoringConfig: report.scoringConfig,
         questionSetData: report.questionSetData,
         
+        // Build Room only (build-points-report.js); null elsewhere.
+        talkingPoints: report.talkingPoints || null,
         reportGeneratedAt: report.reportGeneratedAt,
         reportVersion: report.reportVersion,
         timestamp: new Date().toISOString()

@@ -10,6 +10,8 @@ const { shapeForLog } = require('./log-shape');
 const { reconcileReport } = require('./report-merge');
 const { surveyResultsPayload } = require('./survey-host');
 const { normalizeNames } = require('./survey-names');
+const { talkingPointsReport } = require('./build-points-report');
+const buildStore = require('./build-store');
 
 /**
  * WHOSE SESSION IS THIS? — off the row, though the route is no longer public.
@@ -896,6 +898,41 @@ exports.handler = async (event) => {
     }
     const surveyResults = liveSurveyResults || (storedReport && storedReport.surveyResults) || null;
 
+    /*
+      A BUILD ROOM'S TALKING POINTS AND RESEARCH. The room rows (BUILD#…) die
+      with the session; the report is what lasts, so this reads them now and
+      the section rides in the REPORT row, sealed like the rest. A rebuild
+      after the rows have expired keeps the stored section rather than
+      overwriting it with nothing (the same rule as the survey results).
+    */
+    let talkingPoints = null;
+    if (gameMetadata.Item.GameType === 'build') {
+      try {
+        const buildRows = [];
+        let startKey;
+        do {
+          const page = await db.send(new QueryCommand({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'BUILD#' },
+            ExclusiveStartKey: startKey,
+          }));
+          buildRows.push(...((page && page.Items) || []));
+          startKey = page && page.LastEvaluatedKey;
+        } while (startKey);
+        if (reportOrgId) {
+          for (let i = 0; i < buildRows.length; i += 1) {
+            const entity = buildStore.entityForSk(String(buildRows[i].SK));
+            if (entity) buildRows[i] = await decryptItem(reportOrgId, entity, buildRows[i]);
+          }
+        }
+        talkingPoints = talkingPointsReport(buildStore.roomFromRows(buildRows));
+      } catch (error) {
+        console.log('Could not read talking points for report:', error.message);
+      }
+      if (!talkingPoints && storedReport && storedReport.talkingPoints) talkingPoints = storedReport.talkingPoints;
+    }
+
     // Create comprehensive report
     const reportData = {
       gameId,
@@ -933,6 +970,10 @@ exports.handler = async (event) => {
       // Names mode even before a close exists to carry it.
       surveyNames,
       surveyResults,
+
+      // Build Room only: findings with sources, votes, the run list, points shown.
+      // null for every other game type and for a room that never used points.
+      talkingPoints,
 
       // Statistics. Reconciled, which for every live session and every report
       // generated inside a week is byte-for-byte the figures computed above —

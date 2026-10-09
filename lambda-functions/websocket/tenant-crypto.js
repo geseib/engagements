@@ -356,6 +356,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
     // `surveyResultsPayload`, which never opens a SURVEY#RESP#/SURVEY#DONE#
     // row, so no respondent name is ever in here to protect).
     'surveyResults',
+    // A Build Room's "Talking points and research" (build-points-report.js):
+    // findings and their sources, the vote options' words, the run list's
+    // notes. Sealed here because the live rows (buildPoint, buildRun) are.
+    'talkingPoints',
   ]),
 
   /** The derived tally: SK=QUESTION#<nnn>#RESULTS.

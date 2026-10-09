@@ -409,6 +409,10 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     items = (await host('GET', 'state')).body.points.items;
     assert.deepStrictEqual(items.map((x) => x.status), ['new', 'new']);
     assert.strictEqual((await host('POST', `points/${p[1]}`, { action: 'hide' })).status, 409);
+    // The report lists what the room saw, so the first showing is stamped and survives coming down.
+    const row = (id) => [...store.values()].find((r) => String(r.SK).startsWith('BUILD#POINT#') && S.pointIdOf(r.SK) === id);
+    assert.ok(row(p[0]).ShownAt && row(p[1]).ShownAt, 'ShownAt stamped');
+    assert.ok(!row(p[0]).Status || row(p[0]).Status === 'new');
   });
   await check('the session ended: a point cannot be posted', async () => {
     seed();

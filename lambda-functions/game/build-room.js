@@ -1975,7 +1975,8 @@ async function pointAction(ctx, pointId, body) {
     await logEntry(ctx, { kind: 'direction', text: dir.value, by: 'host', forAgent: true, as: 'do-now' });
     next = 'sent';
   }
-  const saved = await put(ctx, repoint(p, next, now));
+  // The report lists what the room saw; the status flips back when the point comes down, so the first showing is stamped.
+  const saved = await put(ctx, repoint(p, next, now, undefined, next === 'shown' ? { ShownAt: p.ShownAt || now } : {}));
   return done(ctx, 200, { point: S.pointView(saved), ...(ideas ? { ideasAbout: ideas.length, ideaIds: ideas } : {}) });
 }
 
