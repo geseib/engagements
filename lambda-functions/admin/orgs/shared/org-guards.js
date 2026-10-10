@@ -147,6 +147,24 @@ function callerEmail(event) {
   return clean(a.lambda?.email ?? claims.email ?? '').toLowerCase();
 }
 
+/**
+ * The caller's email ONLY when the authorizer says it is proven, else ''.
+ *
+ * What an invitation is matched against. Cognito lets a signed-in user change
+ * their own `email`, and the new value reaches the ID token unverified; the
+ * invite routes are open to `pending` (anyone who has signed up), so an
+ * unproven address here would let someone claim another person's invitation.
+ * The authorizer sets `emailVerified` from `email_verified` or a federated
+ * sign-in (auth/authorizer.js isEmailVerified). Absent means no.
+ */
+function callerVerifiedEmail(event) {
+  const a = event?.requestContext?.authorizer || {};
+  const claims = a.jwt?.claims || a.claims || {};
+  const flag = a.lambda ? a.lambda.emailVerified : claims.email_verified;
+  if (!(flag === true || flag === 'true')) return '';
+  return callerEmail(event);
+}
+
 /** The caller's display name, best effort. Never load-bearing. */
 function callerName(event) {
   const a = event?.requestContext?.authorizer || {};
@@ -640,7 +658,7 @@ module.exports = {
   db, tableName,
   CORS, json, fail, handlePreflight,
   clean,
-  callerSub, callerEmail, callerName,
+  callerSub, callerEmail, callerVerifiedEmail, callerName,
   BASE58, randomBase58, mintOrgId, isOrgId,
   mintInviteToken, parseInviteToken,
   INVITE_TTL_DAYS, inviteExpiry, isExpired, daysUntilExpiry,

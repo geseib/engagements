@@ -56,10 +56,9 @@ const ROUTES = [
   ['DELETE', 'orgs/{orgId}/invites/{token}'],
   ['PUT', 'orgs/{orgId}/members/{sub}/role'],
   ['DELETE', 'orgs/{orgId}/members/{sub}'],
-  ['POST', 'invites/{token}/accept'],
 ];
 
-console.log('\n1. every org and invite route requires a real, approved account');
+console.log('\n1. every org route requires a real, approved account');
 for (const [method, p] of ROUTES) {
   check(`${method} /${p}`, () =>
     assert.deepStrictEqual(requiredGroupsForRoute(method, p), ['hosts', 'admins'],
@@ -67,6 +66,19 @@ for (const [method, p] of ROUTES) {
   check(`${method} /${p} refuses a pending account`, () =>
     assert.strictEqual(hasPermission(['pending'], requiredGroupsForRoute(method, p)), false,
       'an unapproved signup could act on organisations'));
+}
+
+// The two INVITE routes also admit `pending` (owner, 2026-10-10,
+// docs/design/pending-invite-notice): a person waiting for approval may see and
+// accept an invitation. Never public: an account in no group is still refused.
+// The handler-side guards are pinned in tests/invite-routes-pending.js.
+console.log('\n1b. the two invite routes admit pending, and nobody without a group');
+for (const [method, p] of [['GET', 'invites'], ['POST', 'invites/{token}/accept']]) {
+  check(`${method} /${p}`, () =>
+    assert.deepStrictEqual(requiredGroupsForRoute(method, p), ['pending', 'hosts', 'admins'],
+      `got ${JSON.stringify(requiredGroupsForRoute(method, p))}`));
+  check(`${method} /${p} refuses an account in no group`, () =>
+    assert.strictEqual(hasPermission([], requiredGroupsForRoute(method, p)), false));
 }
 
 // ---------- 2. The concrete paths, which is where it actually broke ----------
@@ -86,8 +98,9 @@ for (const token of POISON_TOKENS) {
     const groups = requiredGroupsForRoute('POST', p);
     assert.notDeepStrictEqual(groups, [],
       'this token made its own accept route public — every pool account, '
-      + 'including an unapproved one, could accept an invitation with it');
-    assert.strictEqual(hasPermission(['pending'], groups), false);
+      + 'including one in no group, could accept an invitation with it');
+    assert.deepStrictEqual(groups, ['pending', 'hosts', 'admins']);
+    assert.strictEqual(hasPermission([], groups), false);
   });
 }
 
