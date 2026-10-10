@@ -1873,7 +1873,9 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
   });
 
   test('tick 2 to 6 in Later: Put to a vote, and What\'s next leads with it; ideas and directions both become options', async () => {
-    await openRoom(hostState({ asks: [DONE], answers: CHOICE_ANSWERS, st: { Brief: BRIEF_AT }, ideas: LATER_IDEAS }));
+    const view = hostState({ asks: [DONE], answers: CHOICE_ANSWERS, st: { Brief: BRIEF_AT }, ideas: LATER_IDEAS });
+    // Option A runs on the laptop: the Share demo nudge is answered, so What's next holds the orange.
+    await openRoom({ ...view, lan: { ...view.lan, offerDismissed: true } });
     const later = () => laterRegion();
     fireEvent.click(within(later()).getByRole('checkbox', { name: 'Tick: Sign up as a pair' }));
     expect(within(later()).getByRole('button', { name: 'Put 1 to a vote' })).toBeDisabled();
@@ -2110,7 +2112,7 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
 
   test('375px: Main menu stays; the join code, live build, Wi-Fi and Claude status move to the panel\'s top line', async () => {
     asNarrow(true);
-    await openRoom(hostState());
+    await openRoom(hostState({ logs: [{ Kind: 'showing', Text: 'Header is live', By: 'agent', Link: 'http://localhost:5173/' }] }));
     const h = header();
     expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
     expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
@@ -2289,9 +2291,23 @@ describe('Claude drafts the brief; the host edits it and uses it (owner, 2026-10
 describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stage P1, P2)", () => {
   const BUILT = { ...CHOICE, AskId: '001', Prompt: 'What are we building?', Status: 'decided', DecidedAt: ago(600), Decision: { direction: 'An app', method: 'vote' } };
   const WHO = { ...CHOICE, AskId: '002', Prompt: 'Who is it for?', Status: 'decided', DecidedAt: ago(300), Decision: { direction: 'Who is it for: Everyone', method: 'host' } };
-  const decidedRoom = () => hostState({ asks: [WHO, BUILT] });
+  // Option A runs on the laptop, so the Share demo nudge would take the orange: answered here.
+  const answered = (view) => ({ ...view, lan: { ...view.lan, offerDismissed: true } });
+  const decidedRoom = () => answered(hostState({ asks: [WHO, BUILT] }));
   const decidedSection = () => screen.getByRole('button', { name: /^Decided/ }).closest('.brm-stackitem');
   const composer = () => screen.getByLabelText('Tell Claude, or log what the room said');
+
+  test('the Share demo nudge takes the one orange from What\'s next while it shows (owner, 2026-10-11)', async () => {
+    await openRoom(hostState({ asks: [WHO, BUILT] }));
+    const col = screen.getByRole('main', { name: 'Now' });
+    const nudge = within(col).getByRole('region', { name: 'Share demo' });
+    expect(within(nudge).getByRole('button', { name: 'Share demo' })).toHaveClass('brm-btn--primary');
+    // What's next stays, as outline, and Space no longer presses it: sharing the laptop is a click.
+    const card = screen.getByRole('region', { name: 'Now' });
+    expect(within(card).getByRole('list', { name: "What's next" })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Ask' })).not.toHaveAttribute('data-next-primary');
+    expect(col.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+  });
 
   test('between asks the Now column says what Claude is doing and leads What\'s next, focused', async () => {
     await openRoom(decidedRoom());

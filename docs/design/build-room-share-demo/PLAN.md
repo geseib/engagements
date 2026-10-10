@@ -1,5 +1,19 @@
 # Build Room: Share demo
 
+## Owner decisions, 2026-10-11 (these override 2026-10-10 where they differ)
+
+1. **The nudge takes the orange.** While the Host screen nudge shows, its Share demo is the
+   screen's one orange and What's next turns outline. An ask, the opening, the starter question,
+   ticked points or a running list still hold the orange over it. Space never presses Share demo:
+   sharing the laptop is always a click.
+2. **The chip's own popover stays** (it reverses 2026-10-09's "controls only in Settings").
+3. **Share demo only when there is a demo to run.** Claude must have shown an app running on the
+   laptop (a local link, an option's link, the wrap-up's link). A screenshot alone is just a
+   picture: no nudge, no chip, no Share demo on Build or in Settings, and phones get no
+   "not shared" line, only the screenshots. One rule, `demoRunnable` in `wifiShare.js`, which
+   matches `lanTargets` in `build-lan.js`. A remote link (planned, see
+   `../build-room-lan-share/LATER.md`) will be a second way to be runnable.
+
 ## Owner decisions, 2026-10-10 (these override the mockup and the text below where they differ)
 
 1. **The nudge appears in both places.** Option A, the Host screen's Now column (D1 A), AND

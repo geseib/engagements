@@ -34,15 +34,27 @@ export function wifiState(lan, now) {
 }
 
 /**
+ * A DEMO TO SHARE: Claude has shown an app running on this laptop (a local
+ * link, an option's, or the wrap-up's; the same list as build-lan.js
+ * lanTargets), or sharing is already on. A screenshot alone is not one: the
+ * room has nothing to open, so it gets the pictures and no Share demo (owner,
+ * 2026-10-11). A remote link, when it comes, is a second way to be runnable.
+ */
+export function demoRunnable(room) {
+  const r = room || {};
+  if (r.lan && r.lan.wanted) return true;
+  const shown = (r.log || []).some((l) => l.by === 'agent' && isLoopback(l.link));
+  const option = (r.asks || []).some((a) => (a.options || []).some((o) => isLoopback(o.url)));
+  const wrapUp = ((r.outcome && r.outcome.links) || []).some((l) => l && isLoopback(l.url));
+  return shown || option || wrapUp;
+}
+
+/**
  * SHARE DEMO's nudge (D1): once, when Claude first shows something running on
- * this laptop (a local link or option) or the first screenshot of it, until
- * the host answers. A mockup is an option's picture, not the running app.
+ * this laptop, until the host answers. Never for a screenshot or a mockup.
  */
 export function shouldOfferDemo(room) {
   const lan = (room && room.lan) || {};
   if (lan.wanted || lan.offerDismissed) return false;
-  const shown = ((room && room.log) || []).some((l) => l.by === 'agent' && isLoopback(l.link));
-  const option = ((room && room.asks) || []).some((a) => (a.options || []).some((o) => isLoopback(o.url)));
-  const shot = ((room && room.images) || []).some((im) => im && im.kind !== 'mockup' && (im.by || 'agent') === 'agent');
-  return shown || option || shot;
+  return demoRunnable(room);
 }

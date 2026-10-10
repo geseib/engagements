@@ -56,7 +56,7 @@ import BuildStageDecide from './BuildStageDecide';
 import { useRosterMode, rosterRevealFor } from '../hooks/useRosterReveal';
 import { joinedRoster } from '../config/anonymity';
 import { ShareDemo, DemoNudge, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
-import { shouldOfferDemo, wifiState } from './wifiShare';
+import { shouldOfferDemo, demoRunnable, wifiState } from './wifiShare';
 import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
 import PendingInvites from '../components/PendingInvites';
 import useBuildPlayers, { askingOf } from './useBuildPlayers';
@@ -981,6 +981,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // stand aside for it.
   const runLeads = listRunning && !current && !(room.opening && room.opening.phase === 'opening') && !onCrew
     && !pointVote && !takeDown && !voteIdeas && !dialog;
+  // The Share demo nudge takes the orange from What's next while it shows (owner,
+  // 2026-10-11); an ask, the opening, the starter question, ticked points or a
+  // running list keep it.
+  const demoLeads = demoOffered && !onCrew && !current && !(room.opening && room.opening.phase === 'opening')
+    && !nowFlags(room).starter && !pointsLead && !listRunning;
 
   return (
     <ImageLoader.Provider value={loadImage}>
@@ -1111,7 +1116,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             <>
               {demoOffered && (
                 <DemoNudge
-                  busy={busy} run={run} api={api} lead={false}
+                  busy={busy} run={run} api={api} lead={demoLeads}
                   picture={nudgeShot ? <BuildImage imageId={nudgeShot.imageId} caption={nudgeShot.caption} className="brm-shot" linked={false} /> : null}
                 />
               )}
@@ -1165,7 +1170,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ) : (
                 room.opening && room.opening.phase === 'opening'
                   ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => setScreen('stage')} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning || demoLeads} />
               )}
             </>
           )}
@@ -1684,7 +1689,8 @@ function useNarrowHeader() {
  * the nudge on Build and History, and Share demo after Not now.
  */
 function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, withPill = true }) {
-  const showWifi = !ended && Boolean(share);
+  // Share demo appears once there is a running app to share (owner, 2026-10-11).
+  const showWifi = !ended && Boolean(share) && demoRunnable(room);
   return (
     <>
       {withPill && pill && (
@@ -2100,7 +2106,7 @@ function BuildScreen({ room, now, ended = false, busy = false, run, api }) {
   const lan = room.lan || {};
   const shareLink = ['on', 'quiet'].includes(wifiState(lan, now).state) ? wifiLink(room) : '';
   const link = shareLink || latest.link;
-  const offerShare = !ended && !lan.wanted && Boolean(latest.link || shot) && Boolean(api);
+  const offerShare = !ended && !lan.wanted && demoRunnable(room) && Boolean(api);
   let shown = link;
   if (shareLink) { try { shown = new URL(shareLink).host; } catch (e) { shown = ''; } }
   return (

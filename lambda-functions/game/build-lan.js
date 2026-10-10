@@ -125,16 +125,10 @@ function lanPublicView(room, now) {
   const open = first ? t(first.local) : '';
   if (open) return { open };
   // SHARE DEMO (docs/design/build-room-share-demo D5 b): not shared, but Claude
-  // has shown this laptop's app or a screenshot of it, so a phone can say why
-  // there is nothing to open. Before anything is shown: null, as before.
-  return shownSomething(room) ? { state: 'off' } : null;
-}
-
-/** Claude has shown a local app (a link, an option, the wrap-up) or a screenshot that is not a mockup. */
-function shownSomething(room) {
-  const r = room || {};
-  if (lanTargets(r).length) return true;
-  return (r.images || []).some((im) => im && im.Kind !== 'mockup' && (im.By || 'agent') === 'agent');
+  // has shown an app running on this laptop, so a phone can say why there is
+  // nothing to open. Screenshots alone are just pictures: null, as before
+  // anything is shown (owner, 2026-10-11).
+  return lanTargets(room).length ? { state: 'off' } : null;
 }
 
 function lanHostView(row, now, { withKey: showKey = false } = {}) {

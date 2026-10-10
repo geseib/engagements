@@ -130,17 +130,18 @@ check('the participants\' Open the build is the newest local link Claude showed'
   // Sharing off, but Claude has shown the app: the phone says so (Share demo D5 b), never null.
   assert.deepStrictEqual(L.lanPublicView({ ...room, lan: liveRow({ Wanted: false }) }, NOW), { state: 'off' });
 });
-check('Share demo (D5 b): "off" once Claude has shown a local app or a screenshot; null before anything is shown', () => {
+check('Share demo (D5 b): "off" once Claude has shown a local app; null before that, screenshots alone included (owner 2026-10-11)', () => {
   const empty = { lan: null, logs: [], asks: [], images: [], state: null };
   assert.strictEqual(L.lanPublicView(empty, NOW), null);
   // A public link is not this laptop's app.
   assert.strictEqual(L.lanPublicView({ ...empty, logs: [{ By: 'agent', Link: 'https://example.com/' }] }, NOW), null);
   // A mockup is an option's picture, not the running app.
   assert.strictEqual(L.lanPublicView({ ...empty, images: [{ ImageId: 'm1', Kind: 'mockup', By: 'agent' }] }, NOW), null);
-  assert.deepStrictEqual(L.lanPublicView({ ...empty, images: [{ ImageId: 'p1', Kind: 'progress', By: 'agent' }] }, NOW), { state: 'off' });
+  // A screenshot is a picture with nothing to open: the phone shows it and says nothing about sharing.
+  assert.strictEqual(L.lanPublicView({ ...empty, images: [{ ImageId: 'p1', Kind: 'progress', By: 'agent' }] }, NOW), null);
   assert.deepStrictEqual(L.lanPublicView({ ...empty, logs: [{ By: 'agent', Link: 'http://localhost:5173/' }] }, NOW), { state: 'off' });
-  // Wanted but not live yet, and live with nothing to forward: still "off" to a phone.
-  assert.deepStrictEqual(L.lanPublicView({ ...empty, lan: { Wanted: true }, images: [{ ImageId: 'p1', Kind: 'progress', By: 'agent' }] }, NOW), { state: 'off' });
+  // Wanted but not live yet: still "off" to a phone.
+  assert.deepStrictEqual(L.lanPublicView({ ...empty, lan: { Wanted: true }, logs: [{ By: 'agent', Link: 'http://localhost:5173/' }] }, NOW), { state: 'off' });
 });
 
 console.log('\nbuild-lan: the host\'s view');

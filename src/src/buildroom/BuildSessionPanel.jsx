@@ -29,6 +29,7 @@ import PlayersList from '../components/stage/PlayersList';
 import { copyText } from '../utils/copyText';
 import { RunCrewCodeSwitch } from './BuildCrew';
 import { SharePanel } from './BuildWifiShare';
+import { demoRunnable } from './wifiShare';
 import { askingOf } from './useBuildPlayers';
 import { W } from './words';
 
@@ -366,7 +367,8 @@ export default function BuildSessionPanel({
                   <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onShowQr)}>Show the QR on the wall</button>
                   {copied && <span className="brm-hint" role="status">{copied}</span>}
                 </div>
-                {!ended && (
+                {/* Share demo once there is a running app to share (owner, 2026-10-11). */}
+                {!ended && demoRunnable(room) && (
                   <SharePanel
                     inline
                     lan={room.lan}

@@ -49,7 +49,10 @@ const CREW_ON = {
   enabled: true, repoUrl: 'https://github.com/george/foodbank', baseBranch: 'build-room/4821', baseCommit: 'e91b04d', modes: ['fork'], runCrewCode: false,
 };
 
-function hostState({ crew = null, st = {}, ideas = [], ended = false } = {}) {
+/** Claude has shown an app running on the laptop: Share demo appears (owner, 2026-10-11). */
+const SHOWN = [{ Kind: 'showing', Text: 'Header is live', By: 'agent', Link: 'http://localhost:5173/' }];
+
+function hostState({ crew = null, st = {}, ideas = [], logs = [], ended = false } = {}) {
   const rows = [
     { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...(crew ? { Crew: crew } : {}), ...st },
     ...(crew ? [
@@ -57,6 +60,7 @@ function hostState({ crew = null, st = {}, ideas = [], ended = false } = {}) {
       { SK: 'BUILD#TASK#001', TaskId: '001', Text: 'Parking map', Detail: '', ClaimedBy: ['Sam'], State: 'open' },
     ] : []),
     ...ideas.map((d, i) => ({ SK: `BUILD#IDEA#${String(i).padStart(13, '0')}#i${i}`, IdeaId: `${i}-i${i}`, Status: 'new', CreatedAt: ago(120), ...d })),
+    ...logs.map((l, i) => ({ SK: `BUILD#LOG#${String(i).padStart(13, '0')}#x${i}`, LogId: `${i}-x${i}`, CreatedAt: ago(300), ...l })),
   ];
   const room = S.roomFromRows(rows);
   const view = S.hostView({
@@ -385,7 +389,7 @@ describe('the panel\'s controls', () => {
   });
 
   test('on the Stage the top line carries the Wi-Fi and connection chips, which the Stage has no header for', async () => {
-    await openRoom(hostState());
+    await openRoom(hostState({ logs: SHOWN }));
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(within(document.querySelector('.dock')).getByRole('button', { name: /SESSION/ }));
     const top = within(panel()).getByTestId('brm-sp-top');
@@ -503,7 +507,7 @@ describe('Settings, in four groups', () => {
   });
 
   test('The room: join code and link, the QR, Share demo, and names on the room meter', async () => {
-    await openRoom(hostState());
+    await openRoom(hostState({ logs: SHOWN }));
     openSettings();
     const p = panel();
     expect(within(p).getByText(GAME)).toBeInTheDocument();
@@ -514,8 +518,15 @@ describe('Settings, in four groups', () => {
     expect(within(p).getByRole('switch', { name: 'List names on the room meter' })).toHaveAttribute('aria-checked', 'false');
   });
 
-  test('the Share demo chip opens its own panel, hanging from the chip (D2, 2026-10-10), not the Session panel', async () => {
+  test('nothing running on the laptop yet: no Share demo in Settings or the header (owner, 2026-10-11)', async () => {
     await openRoom(hostState());
+    expect(screen.queryByTestId('brm-wifi')).toBeNull();
+    openSettings();
+    expect(within(panel()).queryByLabelText('Share demo')).toBeNull();
+  });
+
+  test('the Share demo chip opens its own panel, hanging from the chip (D2, 2026-10-10), not the Session panel', async () => {
+    await openRoom(hostState({ logs: SHOWN }));
     fireEvent.click(screen.getByTestId('brm-wifi'));
     const d = screen.getByRole('dialog', { name: 'Share demo' });
     expect(d.closest('.brm-wifiwrap')).not.toBeNull();
