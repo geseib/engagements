@@ -32,7 +32,7 @@ import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import { copyText } from '../utils/copyText';
 import BuildImage from './BuildImage';
-import { safeHref } from './buildHostApi';
+import { safeHref, pluginSlash } from './buildHostApi';
 import './BuildCrew.css';
 
 // ── Words ───────────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ export function CrewDialog({ crew, gameId, busy, run, api, shareCard, onClose })
         </dl>
       ) : (
         <div className="brm-notice brc-ask">
-          <b>Claude has not shared the repo yet.</b> Ask Claude to share it: type <span className="brm-mono">/engage:share-repo</span> in Claude Code, or paste the card below. Claude cuts a base branch for this session and tells Engage the repo, the branch and the commit.
+          <b>Claude has not shared the repo yet.</b> Ask Claude to share it: type <span className="brm-mono">{pluginSlash('share-repo')}</span> in Claude Code, or paste the card below. Claude cuts a base branch for this session and tells Engage the repo, the branch and the commit.
           {shareCard && <div className="brm-row brm-gap"><Copy text={shareCard.text} label={`Copy "${shareCard.title}"`} /></div>}
         </div>
       )}

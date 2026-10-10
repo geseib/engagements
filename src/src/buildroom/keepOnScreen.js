@@ -47,6 +47,26 @@ export function useKeepOnScreen(ref, open, placeKey) {
     };
     place();
     window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
+    // The anchor can move without a resize: the Stage dock's Space hint comes
+    // and goes with the pointer and slides the HOST button 107px (walked on
+    // test at 659px; the open list ended 91px off the right). Follow it.
+    const anchor = el.parentElement;
+    const where = () => {
+      if (!anchor) return '';
+      const a = anchor.getBoundingClientRect();
+      return `${Math.round(a.left)},${Math.round(a.top)}`;
+    };
+    let last = where();
+    let frame = 0;
+    const watch = () => {
+      const now = where();
+      if (now !== last) { last = now; place(); }
+      frame = window.requestAnimationFrame(watch);
+    };
+    frame = window.requestAnimationFrame(watch);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.cancelAnimationFrame(frame);
+    };
   }, [ref, open, placeKey]);
 }

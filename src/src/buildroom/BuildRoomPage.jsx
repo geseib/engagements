@@ -62,7 +62,7 @@ import useBuildPlayers, { askingOf } from './useBuildPlayers';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import {
   pluginInstallCommand,
-  pluginConnectCommand, projectSlug, cleanFolder, startCommand,
+  pluginConnectCommand, pluginSlash, projectSlug, cleanFolder, startCommand,
   hostImageUrl,
   apiBase, buildApi, createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
@@ -158,7 +158,7 @@ export const PROMPT_CARDS = [
 ];
 export const slashCommand = (name) => `/mcp__engage__${name}`;
 /** With the Engage plugin the same prompts are the plugin's own commands. */
-export const pluginCommand = (name) => `/engage:${name}`;
+export const pluginCommand = (name) => pluginSlash(name);
 
 const askNumber = (askId) => Number(askId) || askId;
 /** The row that told Claude about an ask: the newest that went to it (a sent-later direction), else the decision's own. */
@@ -1457,7 +1457,8 @@ export function agentChipText(agent, now) {
 }
 
 /** What the host does when Claude Code has gone quiet (owner, 2026-10-05). */
-export const CONTINUE_COMMAND = pluginCommand('continue');
+/** Worked out when used: the site's tier names the plugin (window.ENV). */
+export const continueCommand = () => pluginCommand('continue');
 
 /**
  * Claude's status in the header. When Claude Code was here and has stopped
@@ -1482,8 +1483,8 @@ function AgentChip({ room, now }) {
     return <span className={cls} data-testid="brm-agentchip" data-state={st.key} title={tip}>{text}</span>;
   }
   const copy = async () => {
-    const ok = await copyText(CONTINUE_COMMAND);
-    setCopied(ok ? W.copiedPaste : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    const ok = await copyText(continueCommand());
+    setCopied(ok ? W.copiedPaste : `Copy failed. Type ${continueCommand()} into Claude Code.`);
     setTimeout(() => setCopied(''), 4000);
   };
   return (
@@ -1511,18 +1512,18 @@ export function UnheardNotice({ room }) {
   const waiting = unheard(room);
   if (!waiting.length || !agentStopped(room && room.agent)) return null;
   const copy = async () => {
-    const ok = await copyText(CONTINUE_COMMAND);
-    setCopied(ok ? W.copiedPaste : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    const ok = await copyText(continueCommand());
+    setCopied(ok ? W.copiedPaste : `Copy failed. Type ${continueCommand()} into Claude Code.`);
     setTimeout(() => setCopied(''), 5000);
   };
   const n = waiting.length;
   return (
     <div className="brm-notice brm-unheard" role="status" data-testid="brm-unheard">
       <p className="brm-unheard-t">
-        <b>{W.stoppedBefore(n)}</b> Run <code>{CONTINUE_COMMAND}</code> in it.
+        <b>{W.stoppedBefore(n)}</b> Run <code>{continueCommand()}</code> in it.
       </p>
       <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--sm" onClick={copy}>Copy {CONTINUE_COMMAND}</button>
+        <button type="button" className="brm-btn brm-btn--sm" onClick={copy}>Copy {continueCommand()}</button>
         {copied && <span className="brm-hint">{copied}</span>}
       </div>
     </div>
@@ -3373,7 +3374,7 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
             {host && entry.held && <span className="brm-tl-flag">{W.laterHeld}</span>}
-            {host && entry.forAgent && <span className="brm-tl-flag">{entry.as && entry.as !== 'do-now' ? `${claudeKindLabel(entry.as)} · ` : ''}{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${CONTINUE_COMMAND}` : 'Waiting for Claude'}</span>}
+            {host && entry.forAgent && <span className="brm-tl-flag">{entry.as && entry.as !== 'do-now' ? `${claudeKindLabel(entry.as)} · ` : ''}{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${continueCommand()}` : 'Waiting for Claude'}</span>}
           </>
         )}
         {host && !editing && (

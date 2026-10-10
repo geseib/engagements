@@ -16,6 +16,11 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import BuildPlayer from '../buildroom/BuildPlayer';
 import { pipelineLine } from '../buildroom/BuildPlayerCrew';
 
+// These pin prod's plugin names (/engage:…). setupTests.js runs every suite as the
+// test site, whose plugin is engage-test (buildPluginTier.test.js covers the tiers).
+beforeEach(() => { window.ENV = 'production'; });
+afterEach(() => { window.ENV = 'test'; });
+
 const S = require('../../../lambda-functions/game/build-store');
 const C = require('../../../lambda-functions/game/build-crew');
 
