@@ -24,6 +24,13 @@ const mockAuth = {};
 jest.mock('../auth/AuthContext', () => ({ useAuth: () => mockAuth }));
 jest.mock('../auth/navigate', () => ({ navigateTo: jest.fn() }));
 jest.mock('../auth/googleSignIn', () => ({ startGoogleSignIn: jest.fn() }));
+jest.mock('../components/PendingInvites', () => ({
+  __esModule: true,
+  NOT_APPROVAL_NOTE: 'Accepting adds you to the team. Hosting still needs approval.',
+  default: (props) => (
+    <div data-testid="pending-invites" data-note={props.note || ''} data-stay={String(Boolean(props.stay))} />
+  ),
+}));
 
 const { navigateTo } = require('../auth/navigate');
 import PendingApproval, { CHECK_MS } from '../auth/PendingApproval';
@@ -229,5 +236,33 @@ describe('a code never entered is not a dead end', () => {
     fireEvent.change(await screen.findByLabelText(/verification code/i), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('Sign in to see whether you have been approved.')).toBeInTheDocument();
+  });
+});
+
+/*
+  A TEAM INVITATION ON THE WAITING SCREEN (owner, 2026-10-10:
+  docs/design/pending-invite-notice). A pending account may see and accept
+  one; accepting joins the team and does not approve hosting, and the row
+  says so. Placed under "am I in yet?", above "You can still join a session".
+*/
+describe('a team invitation while waiting', () => {
+  test('sits under the approval status, above Join, with the line that says what Accept does', () => {
+    pending();
+    const row = screen.getByTestId('pending-invites');
+    expect(row).toHaveAttribute('data-note', 'Accepting adds you to the team. Hosting still needs approval.');
+    expect(row).toHaveAttribute('data-stay', 'true');
+    const status = screen.getByTestId('approval-status');
+    const join = screen.getByText('You can still join a session');
+    // eslint-disable-next-line no-bitwise
+    expect(status.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // eslint-disable-next-line no-bitwise
+    expect(row.compareDocumentPosition(join) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // rejects: asking the API with no sign-in, which can only answer 401.
+  test('nobody signed in: no invitation row', () => {
+    mockAuth.currentUser = null;
+    pending();
+    expect(screen.queryByTestId('pending-invites')).toBeNull();
   });
 });

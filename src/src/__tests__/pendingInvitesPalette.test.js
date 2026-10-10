@@ -62,6 +62,11 @@ function token(css, block, name) {
   if (!m) throw new Error(`${name} not declared in ${block}`);
   return m[1];
 }
+function hex(name) {                        // a hex token from MY_CSS's .pinv block
+  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
+  if (!m) throw new Error(`${name} not declared in PendingInvites.css`);
+  return m[1];
+}
 function tint(name) {                       // an rgba() layer from MY_CSS
   const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
   if (!m) throw new Error(`${name} not declared in PlatformOrgsPanel.css`);
@@ -77,6 +82,8 @@ const T = {
   text: token(GLOBAL_CSS, DUSK, '--text'),
   muted: token(GLOBAL_CSS, DUSK, '--muted'),
   primary: token(GLOBAL_CSS, ROOT, '--primary'),
+  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
+  success: token(GLOBAL_CSS, ROOT, '--success'),
   danger: token(GLOBAL_CSS, ROOT, '--danger'),
   dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
   dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
@@ -116,26 +123,50 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 describe('the strip, composited on the work field', () => {
   /*
-    Every pairing here sits on ONE stack: the work field, plus this strip's own
-    amber tint. Nothing else nests inside it — it is three elements on a line —
-    which is why this file is short where the panel palettes are long.
+    BLUE, NEVER ORANGE (owner, 2026-10-10: docs/design/pending-invite-notice).
+    Every screen it sits on already has its one orange (Create engagement,
+    Join, Create room, the focused ask). The row is the --secondary blue the
+    Build Room uses for "yours, not urgent": a blue tint, a blue edge, a blue
+    icon, and a neutral Accept.
   */
   const STACK = [T.bg, tint('--pinv-tint')];
+  const BAR = [hex('--pinv-bar'), tint('--pinv-tint')];
 
-  // rejects: deepening the tint until the sentence stops clearing AA, which is
-  // the change somebody makes to "make the warning stand out more".
+  // rejects: deepening the tint until the sentence stops clearing AA.
   test.each([
     ['the organisation name', T.text],
     ['the sentence around it', T.muted],
-    ['the icon', T.primary],
+    ['the icon', T.secondary],
   ])('%s clears AA on the tinted field', (_label, fg) => {
     expect(on(fg, STACK)).toBeGreaterThanOrEqual(AA);
   });
 
-  // rejects: the Accept button losing contrast — it is the one control here and
-  // the whole point of the prompt.
-  test('the filled Accept clears AA', () => {
-    expect(on(T.bg, [T.primary])).toBeGreaterThanOrEqual(AA);
+  test.each([
+    ['the organisation name', T.text],
+    ['the sentence around it', T.muted],
+    ['the icon', T.secondary],
+  ])('%s clears AA on the Build Room bar', (_label, fg) => {
+    expect(on(fg, BAR)).toBeGreaterThanOrEqual(AA);
+  });
+
+  // rejects: the Accept button losing contrast — it is the one control here.
+  test('the neutral Accept clears AA', () => {
+    expect(on(T.text, [T.bg, T.surface])).toBeGreaterThanOrEqual(AA);
+  });
+
+  // rejects: a second orange beside "Create engagement" (WelcomeScreen's
+  // "THE ONE AMBER THING ON THE PAGE"), or on any other screen it joins.
+  test('the stylesheet never reaches for --primary or an amber', () => {
+    const css = stripped(MY_CSS);
+    expect(css).not.toMatch(/--primary/);
+    expect(css).not.toMatch(/246,\s*169,\s*76/);
+  });
+
+  // rejects: Accept painted filled again.
+  test('Accept is neutral: a surface, not a fill', () => {
+    const btn = block(stripped(MY_CSS), '.pinv-btn');
+    expect(btn).toMatch(/background:\s*var\(--surface\)/);
+    expect(btn).toMatch(/color:\s*var\(--text\)/);
   });
 });
 
@@ -190,6 +221,6 @@ describe('the ladder and the theme', () => {
   // data-theme="light" on <html>, so a dusk surface that inherits renders paper
   // tokens under dusk copy — 1.4:1.
   test('the root element declares data-theme="dark" itself', () => {
-    expect(MY_JSX).toMatch(/className="pinv"\s+data-theme="dark"/);
+    expect(MY_JSX).toMatch(/className=\{`pinv pinv--\$\{variant\}[^`]*`\}\s+data-theme="dark"/);
   });
 });

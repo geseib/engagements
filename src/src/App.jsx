@@ -14,6 +14,7 @@ import AdminPage from './AdminPage';
 import BuilderPage from './BuilderPage';
 import HostRemote from './HostRemote';
 import BuildRoomPage from './buildroom/BuildRoomPage';
+import PendingInvites, { NOT_APPROVAL_NOTE } from './components/PendingInvites';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
 import SharedReportPage from './components/SharedReportPage';
@@ -172,6 +173,10 @@ function ProtectedRoute({ children, requireAdmin = false }) {
       }}>
         <h2>Access Pending</h2>
         <p>Your account is awaiting approval to host sessions.</p>
+        {/* A team invitation (owner, 2026-10-10: docs/design/pending-invite-notice). */}
+        <div style={{ width: 'min(560px, 100%)', textAlign: 'left' }}>
+          <PendingInvites stay flush note={NOT_APPROVAL_NOTE} />
+        </div>
         <p>You can still join sessions as a player using game codes.</p>
         <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
           <button 

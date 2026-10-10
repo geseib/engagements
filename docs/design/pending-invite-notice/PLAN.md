@@ -1,5 +1,27 @@
 # Pending team invite: a notice that is not lost
 
+## Owner decisions, 2026-10-10 (these override the frames and questions below)
+
+1. **Build Room: option A.** A slim blue bar under the Build Room header, on the
+   **Host screen only**: never Stage, Build, History, or any phone or participant
+   screen. Not orange. It stays until Accept or expiry.
+2. **Accept only. No Decline**, and no decline route. The mockup's Decline
+   buttons are not built.
+3. **A pending account can see and accept invites.** `GET /invites` and
+   `POST /invites/{token}/accept` admit `pending` as well as hosts and admins.
+   Accepting joins the team and does **not** approve hosting: the account stays
+   `pending`, and the waiting screens say so ("Accepting adds you to the team.
+   Hosting still needs approval.").
+4. **Both waiting screens** (`auth/PendingApproval.jsx` and the App.jsx "Access
+   Pending" block) show the notice, and the dashboard gets the mockup's fixes:
+   the blue row, a neutral Accept (no second orange beside Create engagement),
+   and "1 day left", never "1 days left".
+
+Built as recorded in the commits that follow this note. Security that came
+with decision 3: the two invite handlers now match on the caller's **verified**
+email only (the authorizer passes `emailVerified`; an address a user typed into
+their own Cognito profile no longer matches). See `tests/invite-routes-pending.js`.
+
 Owner, 2026-10-10, from a reviewer: the invite showed only near the top of the
 dashboard and was lost while the person made their first Build Room. Wanted: "a
 persistent notice for a pending team invite".

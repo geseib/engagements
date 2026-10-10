@@ -40,6 +40,13 @@ jest.mock('../WordCloudTest', () => () => <div data-testid="wordcloud" />);
 jest.mock('../auth/AuthPage', () => () => <div data-testid="auth-page" />);
 jest.mock('../components/RootPage', () => () => <div data-testid="root-page" />);
 jest.mock('../marketing/HomePage', () => () => <div data-testid="home-page" />);
+jest.mock('../components/PendingInvites', () => ({
+  __esModule: true,
+  NOT_APPROVAL_NOTE: 'Accepting adds you to the team. Hosting still needs approval.',
+  default: (props) => (
+    <div data-testid="pending-invites" data-note={props.note || ''} data-stay={String(Boolean(props.stay))} />
+  ),
+}));
 
 // Imported AFTER jest.mock above, which jest hoists — the order is required,
 // not accidental. (Was an `import/first` disable directive; see .eslintrc.js
@@ -118,5 +125,15 @@ describe('the Access Pending screen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
     expect(signOut).toHaveBeenCalled();
+  });
+
+  // Owner, 2026-10-10 (docs/design/pending-invite-notice): the invite shows on
+  // both waiting screens, saying plainly that accepting does not approve hosting.
+  test('shows a team invitation, and says Accept does not approve hosting', () => {
+    mockAuthValue = { currentUser: pendingUser, loading: false, signOut: jest.fn() };
+    render(<App />);
+    const row = screen.getByTestId('pending-invites');
+    expect(row).toHaveAttribute('data-note', 'Accepting adds you to the team. Hosting still needs approval.');
+    expect(row).toHaveAttribute('data-stay', 'true');
   });
 });

@@ -793,6 +793,8 @@ describe('create', () => {
   test('creates a build session, starts it, then opens the room', async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({ success: true });
@@ -815,6 +817,8 @@ describe('create', () => {
   test('the room decides by default: no goal needed, and Claude is told the title is only a name', async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({});
@@ -832,6 +836,8 @@ describe('create', () => {
   test("I've set the goal: the goal is required, and it answers What are we making? for the room", async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({});
@@ -853,6 +859,8 @@ describe('create', () => {
   test('switching review off saves the setting after create', async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({});

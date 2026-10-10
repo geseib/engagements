@@ -509,6 +509,9 @@
 /* ---- create ------------------------------------------------------------- */
 .brm.brm-createpage, .brm.brm-loading { display: grid; place-items: start center; padding: 40px 16px; }
 .brm .brm-create { width: min(560px, 100%); }
+/* A team invitation above the form (docs/design/pending-invite-notice R4): the
+   form's width, 14px above it. PendingInvites.css owns its look. */
+.brm.brm-createpage > .pinv { width: min(560px, 100%); margin: 0 0 14px; }
 /* Before you start (2026-10-10, owner: option A): what the laptop needs, one line. */
 .brm .brm-needline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--bg); font-size: var(--brm-t-label); color: var(--muted); }
 .brm .brm-needline a { color: var(--secondary); font-weight: 600; text-decoration: none; white-space: nowrap; }
@@ -715,6 +718,7 @@
   .brm.brm-room--host { height: 100vh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .brm.brm-room--host > .brm-hbar,
   .brm.brm-room--host > .brm-alert,
+  .brm.brm-room--host > .pinv,
   .brm.brm-room--host > .brm-notice { flex: none; }
   .brm.brm-room--host > .brm-host { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
   .brm.brm-room--host .brm-hostcol { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }

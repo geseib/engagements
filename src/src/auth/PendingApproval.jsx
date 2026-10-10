@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { navigateTo } from './navigate';
 import { CheckIcon, ClockIcon } from './AuthChrome';
+import PendingInvites, { NOT_APPROVAL_NOTE } from '../components/PendingInvites';
 import './auth.css';
 
 /**
@@ -211,6 +212,12 @@ const PendingApproval = ({ email, name, onSignOut }) => {
           </div>
         </div>
       )}
+
+      {/* A team invitation (owner, 2026-10-10: docs/design/pending-invite-notice P1).
+          The authorizer lets a pending account see and accept one; accepting joins
+          the team and does not approve hosting, and the row says so. Signed in
+          only: without a token the API can only refuse. */}
+      {currentUser && <PendingInvites stay flush note={approved ? '' : NOT_APPROVAL_NOTE} />}
 
       {/* 1 — the one thing they can do now. */}
       <div className="au-card au-stack au-s20">

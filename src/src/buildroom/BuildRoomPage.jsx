@@ -58,6 +58,7 @@ import { joinedRoster } from '../config/anonymity';
 import { WifiChip, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
 import { shouldOfferWifi, wifiState } from './wifiShare';
 import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
+import PendingInvites from '../components/PendingInvites';
 import useBuildPlayers, { askingOf } from './useBuildPlayers';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import {
@@ -329,6 +330,8 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
 
   return (
     <div className="brm brm-createpage" data-theme="dark">
+      {/* A team invitation, where the reviewer lost it (docs/design/pending-invite-notice R4). */}
+      <PendingInvites stay />
       <form className="brm-card brm-create" onSubmit={submit} aria-labelledby="brm-create-title">
         <div className="brm-dh">
           <h1 id="brm-create-title">New Build Room</h1>
@@ -1028,6 +1031,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onWifi={() => openPanel('settings', 'room')}
         onQr={() => setQrOpen(true)}
       />
+      {/* A TEAM INVITATION (owner, 2026-10-10, option A): a slim bar on the Host
+          screen only. Never Stage, Build or History: the room sees those. */}
+      {screen === 'host' && <PendingInvites variant="bar" stay />}
       {/* SOMEONE ASKS TO TAKE A NAME (S6a): named, on the Host screen only. */}
       {screen === 'host' && !ended && (
         <HandoverStrip asking={askingNow} busy={busy} onGrant={grantAsker} onRefuse={refuseAsker} onSee={() => openPanel('players')} />
