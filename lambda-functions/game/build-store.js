@@ -33,6 +33,8 @@ const OPEN_STATUSES = Object.freeze(['live', 'voting']);
 
 const LOG_KINDS = Object.freeze([
   'progress', 'milestone', 'showing', 'image', 'checkpoint', 'crew', 'base', 'help', 'decision', 'direction', 'verbal', 'idea', 'note', 'ask', 'outcome', 'answer',
+  // One finished piece of Claude's work (a "what Claude is doing" line that ended), with its duration.
+  'step',
 ]);
 /** What Claude may post. Decisions and directions are the host's to write. `answer` answers an Ask Claude. */
 const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint', 'answer']);
@@ -690,6 +692,8 @@ function logView(r) {
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
+    // A finished step carries when it ran; no other entry has this key.
+    ...(r.Kind === 'step' ? { step: { startedAt: r.StartedAt || null, endedAt: r.EndedAt || null, durationMs: Number(r.DurationMs) || 0, source: r.Source || 'claude' } } : {}),
   };
 }
 
@@ -868,6 +872,161 @@ function mergeActivity(kept, incoming) {
 }
 
 const activityView = (row) => ((row && Array.isArray(row.Items)) ? row.Items.slice(-ACTIVITY_KEEP) : []);
+
+
+// ── What Claude is doing, in one short line (owner, 2026-10-10) ─────────────
+// docs/design/build-room-doing (D6). Two sources feed one line:
+//   B  Claude states it (post_update doing/done): wins while fresh;
+//   A  the in-progress item of Claude Code's to-do list (the plugin's hook).
+// The row keeps both (DoingA, DoingB) plus the helper line; the views resolve
+// them. A line that ends becomes ONE `step` timeline entry with its duration.
+const DOING_MAX_CHARS = 50;
+const DOING_HELPER_MAX_CHARS = 60;
+const DOING_MIN_WORDS = 2;
+const DOING_STALE_MS = 3 * 60 * 1000;
+const DOING_B_FRESH_MS = 15 * 60 * 1000;
+const DOING_SOURCES = Object.freeze(['todo', 'claude']);
+// A path, a command, a mention, a link, a file name: never for the room.
+const DOING_UNSAFE = /[/`@\\]|:\/\/|www\.|\.\w{1,5}\b/i;
+
+/**
+ * A line, cleaned for the room: plain words, at most 50 characters (cut at the
+ * last whole word, no ellipsis), at least two words. '' when it must not be
+ * shown (a `/`, backtick, `@`, `://`, a file extension, or too short).
+ */
+function cleanDoingLine(raw, max = DOING_MAX_CHARS) {
+  if (typeof raw !== 'string') return '';
+  let t = cleanText(raw, 400).replace(/\s+/g, ' ').trim();
+  if (!t || DOING_UNSAFE.test(t)) return '';
+  const trail = (x) => x.replace(/[\s.,;:!?-]+$/, '').trim();
+  t = trail(t);
+  if (t.length > max) {
+    const head = t.slice(0, max);
+    t = t[max] === ' ' ? head : head.slice(0, Math.max(0, head.lastIndexOf(' ')));
+    t = trail(t);
+  }
+  return t.split(' ').filter(Boolean).length >= DOING_MIN_WORDS ? t : '';
+}
+
+const stepOf = (line, endedAtMs, text) => {
+  const started = Date.parse(line.startedAt);
+  return {
+    text,
+    startedAt: line.startedAt,
+    endedAt: new Date(endedAtMs).toISOString(),
+    durationMs: Math.max(0, endedAtMs - (Number.isFinite(started) ? started : endedAtMs)),
+    source: line.source,
+  };
+};
+/** History's words: Claude's own past line, else the to-do item's own words ("Done: Build the bar chart"). */
+const stepText = (line) => (line.source === 'claude' && line.past ? line.past : `Done: ${line.past || line.text}`);
+
+const bExpired = (A, B, nowMs) => Boolean(B && A && nowMs - Date.parse(B.at) >= DOING_B_FRESH_MS && Date.parse(A.startedAt) > Date.parse(B.at));
+
+/** The line the room reads: B while fresh, else A, else none. */
+function doingWinner(row, nowMs) {
+  const A = (row && row.DoingA) || null;
+  const B = (row && row.DoingB) || null;
+  if (B && !bExpired(A, B, nowMs)) return B;
+  return A;
+}
+
+/**
+ * One event applied to the doing record. Pure: returns the fields to keep on
+ * BUILD#ACTIVITY, the steps to write, and whether the room-visible line moved.
+ *   input.source   'todo' | 'claude'
+ *   input.doing    the present line (string), when one starts
+ *   input.past     its past form (claude) or the to-do item's own words (todo)
+ *   input.done     true | string: the current line of `source` ended; for claude
+ *                  a string is its past form; for todo a string is the item's words
+ *   input.helper   string sets, '' / null clears, undefined leaves alone
+ *   input.waiting  Claude is waiting for direction: everything ends
+ */
+function applyDoing(prev, input, nowIso) {
+  const nowMs = Date.parse(nowIso);
+  const row = prev || {};
+  let A = row.DoingA || null;
+  let B = row.DoingB || null;
+  let H = row.Helper || null;
+  const before = doingWinner(row, nowMs);
+  const beforeKey = JSON.stringify([before && before.text, H && H.text]);
+  const steps = [];
+  const aVisible = () => !(B && !bExpired(A, B, nowMs));
+  const endA = (text) => {
+    if (A && aVisible()) steps.push(stepOf(A, nowMs, text ? `Done: ${text}` : stepText(A)));
+    // An item finished that was never seen in progress (a batch can hold several): a step with no duration.
+    else if (!A && text && aVisible()) steps.push(stepOf({ startedAt: nowIso, source: 'todo' }, nowMs, `Done: ${text}`));
+    A = null;
+  };
+  const endB = () => { if (B) steps.push(stepOf(B, nowMs, stepText(B))); B = null; };
+  const expire = () => { if (bExpired(A, B, nowMs)) endB(); };
+  const inp = input || {};
+
+  if (inp.waiting) {
+    // B first: A's end is not a step while B was the line the room read.
+    expire();
+    const aWasVisible = aVisible();
+    if (B) endB();
+    if (A && aWasVisible) steps.push(stepOf(A, nowMs, stepText(A)));
+    A = null; B = null; H = null;
+  } else {
+    expire();
+    const src = inp.source === 'claude' ? 'claude' : 'todo';
+    if (typeof inp.doing === 'string' || inp.doing === null) {
+      const text = cleanDoingLine(inp.doing);
+      const past = cleanDoingLine(inp.past) || '';
+      if (src === 'todo') {
+        if (!text) endA();
+        else if (A && A.text === text) A = { ...A, at: nowIso, ...(past ? { past } : {}) };
+        else { endA(); A = { text, ...(past ? { past } : {}), source: 'todo', startedAt: nowIso, at: nowIso }; }
+      } else if (!text) endB();
+      else if (B && B.text === text) B = { ...B, at: nowIso, ...(past ? { past } : {}) };
+      else { endB(); B = { text, ...(past ? { past } : {}), source: 'claude', startedAt: nowIso, at: nowIso }; }
+    }
+    if (inp.done) {
+      const given = typeof inp.done === 'string' ? cleanDoingLine(inp.done) : '';
+      if (src === 'todo') endA(given || undefined);
+      else if (B) { if (given && !B.past) B = { ...B, past: given }; endB(); }
+    }
+    if (inp.helper !== undefined) {
+      const h = inp.helper ? cleanDoingLine(inp.helper, DOING_HELPER_MAX_CHARS) : '';
+      H = h ? { text: h, at: nowIso } : null;
+    }
+    expire();
+  }
+
+  const fields = {
+    ...(A ? { DoingA: A } : {}),
+    ...(B ? { DoingB: B } : {}),
+    ...(H ? { Helper: H } : {}),
+    ActiveAt: nowIso,
+  };
+  const after = doingWinner(fields, nowMs);
+  const changed = steps.length > 0 || JSON.stringify([after && after.text, H && H.text]) !== beforeKey;
+  return { fields, steps, changed };
+}
+
+/** The resolved line for a screen, or null. `lastActiveAt` lets a screen re-derive "stale" as time passes. */
+function doingView(row, nowIso) {
+  const nowMs = Date.parse(nowIso);
+  const w = doingWinner(row, nowMs);
+  if (!w) return null;
+  const active = Date.parse((row && row.ActiveAt) || w.at);
+  return {
+    text: w.text,
+    past: w.past || '',
+    source: w.source,
+    startedAt: w.startedAt,
+    stale: !(nowMs - active <= DOING_STALE_MS),
+    helper: (row.Helper && row.Helper.text) || '',
+    lastActiveAt: (row && row.ActiveAt) || w.at,
+  };
+}
+/** What a phone or the Stage reads: no source details. */
+function doingPublicView(row, nowIso) {
+  const v = doingView(row, nowIso);
+  return v ? { text: v.text, startedAt: v.startedAt, stale: v.stale, helper: v.helper, lastActiveAt: v.lastActiveAt } : null;
+}
 
 
 // ── Talking points, research and ideas ──────────────────────────────────────
@@ -1235,6 +1394,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     settings: settingsOf(room.state),
     agent: agentStatus(room.state, room.keys, now),
     activity: activityView(room.activity),
+    ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
     lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent }),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
@@ -1296,6 +1456,7 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
     images: room.images.map(imageView),
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forRoom),
+    doing: doingPublicView(room.activity, now),
     lan: LAN.lanPublicView(room, now),
     // The room sees a point only when the host shows it, and the run list once it starts.
     shownPoint: shownPointView(room),
@@ -1450,6 +1611,7 @@ module.exports = {
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
+  DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
