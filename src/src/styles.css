@@ -809,14 +809,23 @@ body {
 /* --- Players ------------------------------------------------------------- */
 .setup-roster { list-style: none; margin: 0; padding: 0; }
 .setup-roster__row {
+  /* THREE LINES: (1) rank/dot, the name block, the side cluster (the caller's
+     column and the state tag); (2) the meta, inside the name block; (3) the
+     actions, spanning under the name. The name's track is `minmax(0, 1fr)` and
+     its text wraps with `overflow-wrap: anywhere`, so a long name wraps as
+     words and never collapses to one letter per line. */
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto auto auto;
-  gap: 10px;
-  align-items: center;
-  padding: 7px 0;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: start;
+  padding: 8px 6px;
   border-bottom: 1px solid rgba(155, 168, 190, 0.22);
   font-size: 14px;
 }
+.setup-roster__row--norank { grid-template-columns: minmax(0, 1fr) auto; }
+/* A pending request is the one thing in the list asking to be acted on. */
+.setup-roster__row--asking { background: rgba(246, 169, 76, 0.1); border-radius: 8px; }
 .setup-roster__row:last-child { border-bottom: 0; }
 .setup-roster__rank { color: #B6C2D4; font-weight: 700; }
 .setup-roster__name { min-width: 0; overflow-wrap: anywhere; }
@@ -835,12 +844,27 @@ body {
    The row grid gains a fifth track for this. `minmax(0, 1fr)` on the name is
    what keeps the buttons on screen when somebody types their full name in. */
 .setup-roster__acts {
+  grid-column: 2 / -1;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-left: auto;
+  min-width: 0;
 }
+.setup-roster__row--norank .setup-roster__acts { grid-column: 1 / -1; }
+/* Remove sits alone on the right of its line. */
+.setup-roster__act--remove { margin-left: auto; }
+/* The caller's column and the state tag, top right of line one. */
+.setup-roster__side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.setup-roster__side:empty { display: none; }
 
 /* SMALL, BECAUSE IT SITS IN A 36px ROW, and excluded from the panel's generic
    button rule above so this is the whole declaration rather than an override
@@ -871,14 +895,15 @@ body {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--primary);
-  white-space: nowrap;
+  background: rgba(246, 169, 76, 0.14);
+  border-radius: 6px;
+  padding: 2px 8px;
 }
 
 /* WHO LEFT. Dimmed and struck through — two signals, because opacity alone
    reads as "loading" on a projector. They keep their score in full so the row
    cannot be read as "removing someone zeroed them". */
 .setup-roster__row--gone {
-  grid-template-columns: minmax(0, 1fr) auto auto;
   opacity: 0.65;
 }
 .setup-roster__row--gone .setup-roster__name { text-decoration: line-through; }

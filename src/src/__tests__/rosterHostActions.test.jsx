@@ -222,8 +222,8 @@ describe('the row actions are declared reachable', () => {
     // Hard rule 9. `justify-content: flex-end` inside a clipped cell overflows
     // towards the START of the line, which is the end nobody can scroll to —
     // the failure `rowActionsReachable.test.js` was written for.
-    const acts = block('.setup-roster__acts');
-    expect(acts).toMatch(/margin-left:\s*auto/);
+    const acts = block('.setup-roster__acts'); // the group wraps; Remove alone carries the margin
+    expect(block('.setup-roster__act--remove')).toMatch(/margin-left:\s*auto/);
     expect(acts).not.toMatch(/justify-content:\s*flex-end/);
     // A long name plus two buttons wraps rather than shearing.
     expect(acts).toMatch(/flex-wrap:\s*wrap/);
