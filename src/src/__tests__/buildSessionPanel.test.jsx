@@ -629,6 +629,16 @@ describe('a narrow header (480px and under)', () => {
   });
 });
 
+describe('the request strip advice sits on the buttons it explains', () => {
+  test('Let them take it and Not now carry their own titles', async () => {
+    const ROS = () => { const r = ROSTER(); r.players[1] = person('Dee', { handover: { open: false, requested: true, requestedAt: ago(30) } }); return r; };
+    await openRoom(hostState(), ROS());
+    const strip = screen.getByRole('region', { name: 'Someone is asking to take a name' });
+    expect(within(strip).getByRole('button', { name: 'Let them take it' })).toHaveAttribute('title', 'The name keeps its ideas and votes.');
+    expect(within(strip).getByRole('button', { name: 'Not now' })).toHaveAttribute('title', 'Dee stays as they are.');
+  });
+});
+
 describe('the plugin update notice (owner, 2026-10-10): the Host screen only', () => {
   const OLD = { AgentPlugin: '1.14.0' };
   const CURRENT = { AgentPlugin: S.LATEST_PLUGIN };

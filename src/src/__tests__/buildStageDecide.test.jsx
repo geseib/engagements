@@ -110,6 +110,16 @@ describe('R3: the Stage at results', () => {
     expect(document.querySelector('.dock .kbd')).toBeNull();
   });
 
+  test('the Space hint also shows on keyboard focus in the dock, and goes when focus leaves', async () => {
+    await openStage();
+    const footer = document.querySelector('footer.dock');
+    expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
+    fireEvent.focus(dock().getByRole('button', { name: 'Change before sending' }));
+    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to send');
+    fireEvent.blur(dock().getByRole('button', { name: 'Change before sending' }), { relatedTarget: document.body });
+    expect(footer.querySelector('.brm-dockhint')).toBeNull();
+  });
+
   test('To Claude posts the body the Host panel posts: the room\'s choice, its sentence, as Do now', async () => {
     await openStage();
     fireEvent.click(dock().getByRole('button', { name: 'Send B to Claude' }));

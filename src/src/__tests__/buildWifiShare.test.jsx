@@ -41,7 +41,8 @@ test('none open yet: the panel says guest Wi-Fi often blocks it, and how to test
   render(<WifiPanel lan={quiet} now={NOW} busy={false} run={runNow} api={{ share: jest.fn() }} onClose={() => {}} onShowWall={() => {}} />);
   expect(screen.getByText(/Guest Wi-Fi often blocks this/)).toBeInTheDocument();
   // The VPN and mobile-data advice moved into a tooltip on the test line.
-  expect(screen.getByText('Test it: scan the QR from another device.')).toHaveAttribute('title', 'Same Wi-Fi; no mobile data, no VPN.');
+  // Advice a host needs is visible text, not a title on plain text.
+  expect(screen.getByText('Same Wi-Fi; no mobile data, no VPN.')).toBeInTheDocument();
 });
 
 test("didn't start: the reason, and Try again", () => {

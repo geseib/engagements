@@ -121,7 +121,7 @@ export function HandoverStrip({ asking, busy, onGrant, onRefuse, onSee }) {
         {one ? (
           <>
             <b>{W.wantsName} <span className="brm-strip-name">{name}</span></b>
-            <p title={W.tipHandover(name)}>
+            <p>
               {`${name} is ${one.isConnected ? 'here now' : 'away'}${joined ? ` \u00b7 joined ${joined}` : ''}`}
             </p>
           </>
@@ -131,8 +131,8 @@ export function HandoverStrip({ asking, busy, onGrant, onRefuse, onSee }) {
       </div>
       <div className="brm-strip-acts">
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onSee}>{W.seeInPlayers}</button>
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => onRefuse(name)}>{W.notNow}</button>}
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--solid" disabled={busy} onClick={() => onGrant(name)}>{W.letThemTakeIt}</button>}
+        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipHandoverNotNow(name)} onClick={() => onRefuse(name)}>{W.notNow}</button>}
+        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--solid" disabled={busy} title={W.tipTakeIt} onClick={() => onGrant(name)}>{W.letThemTakeIt}</button>}
       </div>
     </section>
   );

@@ -1657,6 +1657,17 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const phone = JSON.stringify((await playCall('GET', 'state', { playerName: 'Priya', clientId: 'c-priya' })).body);
     assert.ok(!/plugin|1\.14\.0/i.test(phone), `a phone saw the plugin: ${phone.slice(0, 200)}`);
   });
+  await check('a crew builder\'s Claude is told to update its own plugin, not to ask the host', async () => {
+    assert.ok(/update your Engage plugin/.test(S.pluginNoteFor('1.0.0', 'builder')));
+    assert.ok(!/ask the host/.test(S.pluginNoteFor('1.0.0', 'builder')));
+    assert.ok(/ask the host/.test(S.pluginNoteFor('1.0.0', 'agent')));
+  });
+  await check('a refused call (4xx) still carries the update line', async () => {
+    seed();
+    const r = await agentWith('GET', 'asks/999', { 'x-engage-plugin': '1.14.0' });
+    assert.ok(r.status >= 400 && r.status < 500, String(r.status));
+    assert.strictEqual(r.body.pluginNote, S.PLUGIN_OUTDATED_NOTE);
+  });
   await check('the server\'s LATEST_PLUGIN looks like a version', () => {
     assert.ok(/^\d+\.\d+\.\d+$/.test(S.LATEST_PLUGIN));
     assert.strictEqual(S.pluginNoteFor('1.0.0'), S.PLUGIN_OUTDATED_NOTE);

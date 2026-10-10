@@ -65,6 +65,7 @@ let statePoints;
 let postedIds = 0;
 // The server's one line for an out-of-date plugin (copy pass 2026-10-10): set to make GET state carry it.
 let statePluginNote = '';
+let errorPluginNote = '';
 // Claude's project folder, so the plugin writes .engage/brief.md somewhere harmless.
 const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'engage-mcp-'));
 fs.mkdirSync(path.join(PROJECT, '.engage'));
@@ -75,6 +76,7 @@ const server = http.createServer((req, res) => {
     const rec = { method: req.method, url: req.url, auth: req.headers.authorization, plugin: req.headers['x-engage-plugin'], body: raw ? JSON.parse(raw) : undefined };
     requests.push(rec);
     const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+    if (errorPluginNote) return send(404, { error: 'no such ask', pluginNote: errorPluginNote });
     if (failNext401) { failNext401 = false; return send(401, { error: 'Key revoked' }); }
     if (endedNext) { endedNext = false; return send(409, { error: 'This session has ended' }); }
     const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '').replace(/^(asks\/[^?]+)\?waiting=1$/, '$1');
@@ -267,6 +269,14 @@ const hardStop = setTimeout(() => {
     } finally { statePluginNote = ''; }
     const again = await mcp.request('tools/call', { name: 'room_status', arguments: {} });
     assert.ok(!textOf(again).includes('out of date'), 'the note does not stick');
+  });
+  await check('a refused call that carries the update line still shows it', async () => {
+    errorPluginNote = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
+    try {
+      const r = await mcp.request('tools/call', { name: 'room_status', arguments: {} });
+      assert.ok(r.result.isError);
+      assert.strictEqual(r.result.content[r.result.content.length - 1].text, errorPluginNote);
+    } finally { errorPluginNote = ''; }
   });
   await check('ask_room_to_choose posts the contract body and returns labels + badges', async () => {
     requests.length = 0;

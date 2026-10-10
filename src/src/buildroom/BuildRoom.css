@@ -1371,6 +1371,8 @@
   display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
   background: var(--primary); color: var(--bg); font: 800 var(--brm-t-floor)/1 var(--font-ui); letter-spacing: 0;
 }
+.brm .brm-info { width: 20px; height: 20px; margin-left: 6px; padding: 0; border-radius: 50%; border: 1px solid var(--brm-rule); background: none; color: var(--muted); font: 700 var(--brm-t-floor)/1 var(--font-ui); cursor: help; }
+.brm .brm-info:hover, .brm .brm-info:focus-visible { border-color: var(--primary); color: var(--text); }
 .brm .brm-sess-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--primary); }
 .brm .brm-chip--btn { cursor: pointer; font-family: var(--font-ui); color: inherit; }
 .brm .brm-chip--btn:hover, .brm .brm-chip--btn:focus-visible { border-color: var(--primary); }

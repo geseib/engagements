@@ -824,7 +824,7 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
             value={draft}
             onChange={(e) => { setDraft(e.target.value); setSentNote(false); }}
           />
-          <p className="plr-help">The host sees your name and decides what to pass to Claude.</p>
+          <p className="plr-help">{W.talkHelp}</p>
           <button type="button" className="bpl-send" disabled={!text || busy} onClick={send}>
             {busy ? 'Sending…' : 'Send idea'}
           </button>
