@@ -725,6 +725,51 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
 /* ------------------------------------------------------ preview feedback -- */
 
 /** The newest thing Claude is showing, or null. */
+/** A wide screen is a laptop: likelier on a VPN than on mobile data (Share demo D5 laptop). */
+function isLaptop() {
+  try { return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 720px)').matches; } catch (e) { return false; }
+}
+
+/**
+ * SHARE DEMO ON A PHONE, LAPTOP OR TABLET (docs/design/build-room-share-demo D5).
+ * (a) Shared: Open the demo, the one amber button. (b) Not shared, and Claude
+ * has shown something: one honest line, no button (owner 2026-10-10: no "Ask
+ * to try it"). (c) After this device pressed Open the demo: Didn't open? and
+ * what to try. Nothing tells us whether it arrived (that needs a plugin
+ * change, out of scope), so the question is asked once the person has tried.
+ * The screenshots below are the fallback, not a lesser view.
+ */
+function OpenDemo({ lan }) {
+  const open = lan && lan.open ? lan.open : '';
+  const [tried, setTried] = useState('');
+  if (open) {
+    if (tried === open) {
+      return (
+        <section className="bpl-open bpl-open--warn" aria-label={W.demoDidntOpen}>
+          <h2 className="bpl-open-h">{W.demoDidntOpen}</h2>
+          <p className="plr-help">{W.demoMaybeOff(isLaptop())}</p>
+          <p className="plr-help bpl-open-note">{W.wifiSameAdvice}</p>
+          <a className="bpl-open-again" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">{W.tryAgain} ↗</a>
+        </section>
+      );
+    }
+    return (
+      <section className="bpl-open" aria-label={W.openDemo}>
+        <a className="bpl-send bpl-open-btn" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
+        <p className="plr-help bpl-open-note">{W.sameWifiOnly}</p>
+      </section>
+    );
+  }
+  if (lan && lan.state === 'off') {
+    return (
+      <section className="bpl-open bpl-open--off" aria-label={W.openDemo}>
+        <p className="plr-help bpl-open-note">{W.demoNotShared}</p>
+      </section>
+    );
+  }
+  return null;
+}
+
 export function latestPreview(log) {
   const shown = (log || []).filter((e) => e && e.kind === 'showing');
   return shown.length ? shown[shown.length - 1] : null;
@@ -1125,14 +1170,9 @@ export default function BuildPlayer({
   const otherTab = shownTab === 'ideas' ? ideasTab : shownTab === 'history' ? <HistoryTab view={view} api={api} onResult={onResult} now={now} /> : null;
   /* On Now: a word when Claude shows something new (the feedback is on its
      picture in History), and the way to send an idea. */
-  /* OPEN THE BUILD, at the top of Now (mockup L5): the first thing a
-     participant sees while the host shares the build on this Wi-Fi. */
-  const openBuild = !isEnded && view.lan && view.lan.open ? (
-    <section className="bpl-open" aria-label="Open the build">
-      <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">{W.openBuild} ↗</a>
-      <p className="plr-help bpl-open-note">{W.sameWifiOnly}</p>
-    </section>
-  ) : null;
+  /* OPEN THE DEMO, at the top of Now (Share demo D5): the way in while the
+     host shares it, else one honest line above the screenshots. */
+  const openBuild = !isEnded ? <OpenDemo lan={view.lan} /> : null;
   const run = view.run && view.run.status === 'running' ? view.run : null;
   const nowExtras = isEnded ? null : (
     <>

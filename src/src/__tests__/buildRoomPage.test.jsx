@@ -170,7 +170,7 @@ describe('loading and live updates', () => {
   });
 });
 
-describe('the Wi-Fi QR on the wall', () => {
+describe('the demo\'s code on the Stage', () => {
   const lan = (status) => ({
     wanted: status !== 'off', status, open: 2, liveSince: ago(30), offerDismissed: true,
     map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900', link: 'http://192.168.1.20:4900/?k=KEY' }],
@@ -183,14 +183,14 @@ describe('the Wi-Fi QR on the wall', () => {
 
   test('a QR left up does not come back when sharing is switched off and on again', async () => {
     await openRoom({ ...hostState(), lan: lan('live') });
-    // The Wi-Fi share's controls live in the Session panel (owner, 2026-10-09); the chip opens it there.
+    // Share demo (2026-10-10, D2): the chip's own panel puts the code on the Stage.
     fireEvent.click(screen.getByTestId('brm-wifi'));
-    fireEvent.click(screen.getByRole('button', { name: "Show the build's QR on the wall" }));
-    expect(screen.getByRole('dialog', { name: 'Open the build yourself' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show on the Stage' }));
+    expect(screen.getByRole('dialog', { name: 'Try the demo yourself' })).toBeInTheDocument();
     await push('off');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Open the build yourself' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Try the demo yourself' })).toBeNull());
     await push('live');
-    expect(screen.queryByRole('dialog', { name: 'Open the build yourself' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Try the demo yourself' })).toBeNull();
   });
 });
 
@@ -1168,7 +1168,9 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
   });
 
   test('at results the winning vote goes to Claude from the Stage; HOST at the dock\'s edge goes back to the Host', async () => {
-    await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
+    // Share demo already answered, so HOST carries no count (its "demo is ready" line is tested in buildLiveBuild).
+    const st = hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS });
+    await openRoom({ ...st, lan: { ...st.lan, offerDismissed: true } });
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], direction: 'Which header should volunteers see first: Calm photo + calendar' }));

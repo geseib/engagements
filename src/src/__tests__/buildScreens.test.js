@@ -427,7 +427,7 @@ describe('the dock line between asks', () => {
   test('Wi-Fi sharing live adds the one sentence; off or still starting does not', () => {
     const now = Date.now();
     const live = { wanted: true, status: 'live', open: 2, liveSince: new Date(now - 1000).toISOString() };
-    expect(stageModel(room({ lan: live }), null, now).status).toBe('Send an idea any time. Open the build on this Wi-Fi.');
+    expect(stageModel(room({ lan: live }), null, now).status).toBe('Send an idea any time. Open the demo on this Wi-Fi.');
     expect(stageModel(room({ lan: { wanted: true, status: 'starting' } }), null, now).status).toBe('Send an idea any time.');
     expect(stageModel(room(), null, now).status).toBe('Send an idea any time.');
   });

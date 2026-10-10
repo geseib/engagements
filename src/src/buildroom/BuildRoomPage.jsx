@@ -55,8 +55,8 @@ import { isTypingTarget, dialogOpen } from './useNextFocus';
 import BuildStageDecide from './BuildStageDecide';
 import { useRosterMode, rosterRevealFor } from '../hooks/useRosterReveal';
 import { joinedRoster } from '../config/anonymity';
-import { WifiChip, WifiOffer, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
-import { shouldOfferWifi, wifiState } from './wifiShare';
+import { ShareDemo, DemoNudge, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
+import { shouldOfferDemo, wifiState } from './wifiShare';
 import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
 import PendingInvites from '../components/PendingInvites';
 import useBuildPlayers, { askingOf } from './useBuildPlayers';
@@ -783,6 +783,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const host = !present;
   const ended = room.state === 'ENDED';
   const alert = hostAlert(room, seenLocal);
+  // SHARE DEMO (D1 B): on the Stage the nudge is one grey line in the HOST list, never a pop-up.
+  const demoOffered = !ended && shouldOfferDemo(room);
+  const stageAlert = demoOffered ? hostAlert(room, seenLocal, { demoReady: true }) : alert;
+  const nudgeShot = demoOffered ? latestBuild(room).shot : null;
   /**
    * Mark seen on the room (every device of the host hears it); this device counts it at once.
    * A line's ids come oldest first: at most the newest 200 are sent (the room keeps 200, and an
@@ -814,6 +818,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     })();
   };
   const alertGo = (line) => {
+    // The demo line goes to the Host screen, where the nudge leads the Now column.
+    if (line.target.kind === 'share') { setScreen('host'); return; }
     markSeen({ ids: line.ids });
     // Ideas open Waiting for you on the Room filter; an ask opens it on All, so the ask is there to focus.
     setAlertFocus({ target: line.target, filter: line.target.kind === 'ask' ? 'all' : 'room' });
@@ -825,9 +831,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
   // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
   const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
+  const showWall = () => { setScreen('stage'); setWallQr(true); };
+  const share = { busy, run, api, onShowWall: showWall };
   const headerTools = {
-    room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: setScreen,
-    onWifi: () => openPanel('settings', 'room'),
+    room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: setScreen, share,
     onQr: () => setQrOpen(true),
     onPlayers: () => openPanel('players'),
   };
@@ -995,7 +1002,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           draft={current ? drafts[current.askId] || null : null}
           onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
           onHost={() => setScreen('host')}
-          alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
+          alert={stageAlert} onAlertGo={alertGo} onAlertAll={alertAll}
           onSession={() => (panel ? closePanel() : openPanel())}
           panelOpen={Boolean(panel)}
           askingCount={askingNow.length}
@@ -1028,8 +1035,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
         pluginOutdated={Boolean(room.plugin && room.plugin.outdated) && !ended}
         onPlayers={() => openPanel('players')}
-        onWifi={() => openPanel('settings', 'room')}
         onQr={() => setQrOpen(true)}
+        share={{ ...share, nudge: demoOffered && !narrow && (screen === 'build' || screen === 'history') }}
       />
       {/* A TEAM INVITATION (owner, 2026-10-10, option A): a slim bar on the Host
           screen only. Never Stage, Build or History: the room sees those. */}
@@ -1070,7 +1077,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         </div>
       )}
 
-      {screen === 'build' && <BuildScreen room={room} now={now} />}
+      {screen === 'build' && <BuildScreen room={room} now={now} ended={ended} busy={busy} run={run} api={api} />}
       {screen === 'history' && <HistoryScreen room={room} now={now} onOpenAsk={setDetailAskId} />}
       {screen === 'host' && (
       <div className="brm-host">
@@ -1102,7 +1109,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           ) : (
             <>
-              {!ended && shouldOfferWifi(room) && <WifiOffer busy={busy} run={run} api={api} />}
+              {demoOffered && (
+                <DemoNudge
+                  busy={busy} run={run} api={api} lead={false}
+                  picture={nudgeShot ? <BuildImage imageId={nudgeShot.imageId} caption={nudgeShot.caption} className="brm-shot" linked={false} /> : null}
+                />
+              )}
               {unsentAsk && (
                 <p className="brm-notice brm-unsent" role="status">
                   {W.unsentDirection(askNumber(unsentAsk.askId))}
@@ -1241,7 +1253,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onReport={() => goView('report')}
           onEnd={() => dialogFromPanel('end')}
           onShowQr={() => setQrOpen(true)}
-          onWifiWall={() => { setScreen('stage'); setWallQr(true); }}
+          onWifiWall={showWall}
           wifiLink={wifiLink(room)}
         />
       )}
@@ -1326,7 +1338,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onDone={() => { setVoteIdeas(null); setVotePicks(1); setLaterTicked([]); }}
         />
       )}
-      {wallQrLink && <WallBuildQr link={wallQrLink} onClose={() => setWallQr(false)} />}
+      {wallQrLink && <WallBuildQr link={wallQrLink} open={room.lan && room.lan.open} onClose={() => setWallQr(false)} />}
       {detailAskId && askById(room, detailAskId) && (
         <AskDetail ask={askById(room, detailAskId)} entry={toldEntry(room, detailAskId)} held={((room.brief && room.brief.later) || []).some((i) => i.askId === detailAskId)} onClose={() => setDetailAskId(null)} onViewMockup={(label) => openViewer(detailAskId, label, 'history')} />
       )}
@@ -1664,13 +1676,15 @@ function useNarrowHeader() {
 }
 
 /**
- * The header's right-hand tools, in one place: the live build, the Wi-Fi chip,
- * Claude's status, the connection, the join code and the joined count. Wide, they
- * sit in the header; at 480px and narrower they are the Session panel's top line
- * instead (owner, 2026-10-09: the three-dot menu is gone).
+ * The header's right-hand tools, in one place: the live build, the Share demo
+ * chip, Claude's status, the connection, the join code and the joined count.
+ * Wide, they sit in the header; at 480px and narrower they are the Session
+ * panel's top line instead (owner, 2026-10-09: the three-dot menu is gone).
+ * The chip is on every screen with a header (Share demo D1 B, D3): it carries
+ * the nudge on Build and History, and Share demo after Not now.
  */
-function HeaderTools({ room, now, host, ended, connection, onReconnect, onWifi, onQr, onPlayers, pill, onScreen, withPill = true }) {
-  const showWifi = host && !ended;
+function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, withPill = true }) {
+  const showWifi = !ended && Boolean(share);
   return (
     <>
       {withPill && pill && (
@@ -1679,7 +1693,12 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onWifi, 
         </button>
       )}
       <LiveBuildButton link={liveBuildLink(room, now)} />
-      {showWifi && <WifiChip lan={room.lan} now={now} open={false} onOpen={onWifi} />}
+      {showWifi && (
+        <ShareDemo
+          lan={room.lan} link={wifiLink(room)} here={room.playerCount || 0} now={now}
+          busy={share.busy} run={share.run} api={share.api} onShowWall={share.onShowWall} nudge={Boolean(share.nudge)}
+        />
+      )}
       <span className="brm-agentwrap"><AgentChip room={room} now={now} /></span>
       {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
       <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={onQr}>
@@ -1692,12 +1711,12 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onWifi, 
 
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
-  onSession, panelOpen, askingCount, onPlayers, onWifi, onQr, pluginOutdated = false,
-  alert, onAlertGo, onAlertAll,
+  onSession, panelOpen, askingCount, onPlayers, onQr, pluginOutdated = false,
+  alert, onAlertGo, onAlertAll, share,
 }) {
   const pill = askPill(room);
   const tucked = narrow;
-  const tools = { room, now, host, ended, connection, onReconnect, onWifi, onQr, onPlayers, pill, onScreen };
+  const tools = { room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share };
   return (
     <header className="brm-hbar">
       {/* MAIN MENU (B5, 2026-10-08): always the first control, on every host
@@ -2070,26 +2089,42 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
  * newest screenshot and opens the running build in a new tab: the fallback
  * the design keeps anyway (C8).
  */
-function BuildScreen({ room, now }) {
-  const { link, shot } = latestBuild(room);
+function BuildScreen({ room, now, ended = false, busy = false, run, api }) {
+  const latest = latestBuild(room);
+  const { shot } = latest;
   const openViewer = useContext(ViewerContext);
   // A newest screenshot that is a choice ask's option opens the viewer (R2).
   const shotAsk = shot && shot.askId ? askById(room, shot.askId) : null;
   const shotOpt = shotAsk && shotAsk.kind === 'choice' ? (shotAsk.options || []).find((o) => o.label === shot.label) : null;
-  const shareLink = ['on', 'quiet'].includes(wifiState(room.lan, now).state) ? wifiLink(room) : '';
+  // SHARE DEMO (D3, D6): shared, the link is the address every device gets; not, it is this laptop's own.
+  const lan = room.lan || {};
+  const shareLink = ['on', 'quiet'].includes(wifiState(lan, now).state) ? wifiLink(room) : '';
+  const link = shareLink || latest.link;
+  const offerShare = !ended && !lan.wanted && Boolean(latest.link || shot) && Boolean(api);
+  let shown = link;
+  if (shareLink) { try { shown = new URL(shareLink).host; } catch (e) { shown = ''; } }
   return (
     <section className="brm-screenbody brm-buildscreen" aria-label="The build">
       <WallComment comment={freshWallComment(room, now)} />
-      <div className="brm-row">
+      <div className="brm-row brm-buildrow">
         <h2 className="brm-q">{W.buildSoFar}</h2>
-        {link && <span className="brm-push"><OpenLink href={link} label="Open the build" primary /></span>}
+        {safeHref(link) && <span className="brm-push"><OpenLink href={link} label={W.openBuild} primary={!offerShare} /></span>}
+        {offerShare && (
+          <button type="button" className={`brm-btn brm-btn--primary${safeHref(link) ? '' : ' brm-push'}`} disabled={busy} onClick={() => run(() => api.share({ on: true }))}>{W.shareDemo}</button>
+        )}
       </div>
+      {safeHref(link) && (
+        <p className="brm-buildurl">
+          <span className="brm-buildurl-u">{shown}</span>
+          <span className="brm-buildurl-who">{shareLink ? W.anyoneOnWifi : W.onlyThisLaptop}</span>
+        </p>
+      )}
       {shot ? (
         <BuildImage imageId={shot.imageId} caption={shot.caption} className="brm-shot brm-shot--build" onOpen={shotOpt && openViewer ? () => openViewer(shotAsk.askId, shotOpt.label, 'build') : null} />
       ) : (
         <div className="brm-empty">Nothing to show yet.</div>
       )}
-      <BuildScreenQr link={shareLink} />
+      <BuildScreenQr link={shareLink} open={lan.open} />
     </section>
   );
 }

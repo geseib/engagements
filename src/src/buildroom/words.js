@@ -367,16 +367,49 @@ export const W = Object.freeze({
   spinPickHint: 'Spin the wheel, or click one.',
   averageOf5: (avg) => `Average ${avg} of 5`,
   // Copy pass 2026-10-10: Wi-Fi share
-  wifiSay: 'Anyone on this Wi-Fi can open the build. Off closes it for all.',
   wifiWaiting: 'Update the plugin, then restart it.',
   wifiQuietHead: 'Nobody has opened it in 2 minutes.',
   wifiQuietBody: 'Guest Wi-Fi often blocks this.',
   wifiTest: 'Test it: scan the QR from another device.',
   wifiFailsForRoom: 'If it fails for you, it fails for the room. Use screenshots.',
-  wifiOffer: 'Anyone on this Wi-Fi can open it. Off any time.',
-  wallQrScan: 'Scan the code, or press Open the build.',
   sameWifiOnly: 'Same Wi-Fi only.',
-  sameWifi: 'Same Wi-Fi',
+  // SHARE DEMO (docs/design/build-room-share-demo, owner 2026-10-10): "demo" is
+  // what the Wi-Fi shares; "build" stays for this laptop's own link.
+  shareNudgeHead: 'Let everyone try it.',
+  shareNudgeBody: 'Share this demo with people on your Wi-Fi.',
+  shareWho: "People on this Wi-Fi can open this laptop's app. No one else can.",
+  shareWhoShort: 'People on this Wi-Fi can open it. No one else can.',
+  shareDemo: 'Share demo',
+  shareStarting: 'Starting…',
+  shareWaiting: 'Waiting for Claude Code',
+  shareOn: (n) => `Shared \u00b7 ${n} opened`,
+  shareQuiet: 'Shared \u00b7 none opened yet',
+  shareFailed: "Didn't start",
+  shareLiveHead: 'Demo shared on this Wi-Fi',
+  shareOpenedOf: (n, here) => `${n} opened it \u00b7 ${here} here`,
+  shareNotAll: (n, here) => `Not ${n} of ${here}? Some people may be on mobile data or a VPN. They still see screenshots.`,
+  stopSharing: 'Stop sharing',
+  keepSharing: 'Keep sharing',
+  shareShowOnStage: 'Show on the Stage',
+  onlyThisLaptop: 'Only this laptop can open it.',
+  anyoneOnWifi: 'Anyone on this Wi-Fi',
+  /** The Stage's HOST list (option B): one grey line, never a pop-up on the wall. */
+  demoReadyLine: 'The demo is ready to share',
+  alertShare: 'Share \u2192',
+  stageDemoLive: 'The demo is live',
+  stageDemoHead: 'Try the demo yourself',
+  stageDemoScan: 'Scan the code, or press Open the demo.',
+  stageSameWifi: 'Same Wi-Fi as this laptop.',
+  stageOpened: (n) => (n === 1 ? '1 has opened it' : `${n} have opened it`),
+  buildCardSub: (n) => `Same Wi-Fi only \u00b7 ${n === 1 ? '1 has' : `${n} have`} opened it`,
+  hideCode: 'Hide the code',
+  openDemo: 'Open the demo',
+  /** A participant, sharing off (D5 b). No button: the owner ruled out "Ask to try it". */
+  demoNotShared: "The demo runs on the host's laptop. Screenshots are below.",
+  demoDidntOpen: "Didn't open?",
+  /** `laptop`: a wide screen, likelier on a VPN than on mobile data (D5 laptop). */
+  demoMaybeOff: (laptop) => (laptop ? 'You may be on a VPN or another Wi-Fi.' : 'You may be on mobile data or another Wi-Fi.'),
+  tryAgain: 'Try again',
   // Copy pass 2026-10-10: Stage decide
   notSent: 'Not sent. Try again.',
   notAsked: 'Not sent. Your question is still here.',
@@ -469,4 +502,9 @@ export const RETIRED = Object.freeze([
   // The copy pass (2026-10-10): What's next has ONE ask move, W.askRoom.
   { word: 'Ask the room a starter question', enforced: true, task: 'copy-pass' },
   { word: 'Ask the room something new', enforced: true, task: 'copy-pass' },
+  // Share demo (2026-10-10): the nudge and the panel replace the old offer and switch.
+  { word: 'Share on this Wi-Fi', enforced: true, task: 'share-demo' },
+  { word: 'Let the room open it themselves?', enforced: true, task: 'share-demo' },
+  { word: 'Open the build yourself', enforced: true, task: 'share-demo' },
+  { word: 'Wi-Fi ·', prefix: true, enforced: true, task: 'share-demo' },
 ]);

@@ -497,14 +497,14 @@ describe('send an idea', () => {
   });
 });
 
-describe('Open the build (Wi-Fi share)', () => {
+describe('Open the demo (Share demo, docs/design/build-room-share-demo D5)', () => {
   const OPEN = 'http://192.168.1.20:4900/?k=KEY';
   const SHOWING = { logId: 'L9', kind: 'showing', text: 'Header B is live', createdAt: '2026-10-04T12:00:00.000Z', link: 'http://localhost:5173/' };
 
   test('shown while sharing is live, opens in a new tab, says same Wi-Fi', async () => {
     serve(baseView({ lan: { open: OPEN } }));
     await mount();
-    const link = await screen.findByRole('link', { name: 'Open the build ↗' });
+    const link = await screen.findByRole('link', { name: 'Open the demo ↗' });
     expect(link).toHaveAttribute('href', OPEN);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -514,7 +514,7 @@ describe('Open the build (Wi-Fi share)', () => {
   test('at the top of the Now tab, above Watch the build (mockup L5)', async () => {
     serve(baseView({ log: [SHOWING], lan: { open: OPEN } }));
     const { container } = await mount();
-    const link = await screen.findByRole('link', { name: 'Open the build ↗' });
+    const link = await screen.findByRole('link', { name: 'Open the demo ↗' });
     const feed = container.querySelector('.bpl-feed');
     expect(feed).not.toBeNull();
     // eslint-disable-next-line no-bitwise
@@ -525,7 +525,7 @@ describe('Open the build (Wi-Fi share)', () => {
     const shared = { ...SHOWING, link: OPEN };
     serve(baseView({ log: [shared], lan: { open: OPEN } }));
     const { container } = await mount();
-    await screen.findByRole('link', { name: 'Open the build ↗' });
+    await screen.findByRole('link', { name: 'Open the demo ↗' });
     const tickerLink = container.querySelector('.bpl-feed .bpl-lnk');
     expect(tickerLink).toHaveAttribute('href', OPEN);
     expect(tickerLink.textContent).not.toMatch(/k=/);
@@ -536,7 +536,40 @@ describe('Open the build (Wi-Fi share)', () => {
     serve(baseView({ lan: null }));
     await mount();
     await screen.findByRole('button', { name: /Send an idea to the host/ });
-    expect(screen.queryByRole('link', { name: 'Open the build ↗' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open the demo ↗' })).toBeNull();
+  });
+
+  test('(b) not shared, Claude has shown something: one honest line, no button, no amber', async () => {
+    serve(baseView({ log: [SHOWING], lan: { state: 'off' } }));
+    const { container } = await mount();
+    const line = await screen.findByText("The demo runs on the host's laptop. Screenshots are below.");
+    const block = line.closest('section');
+    expect(within(block).queryByRole('link')).toBeNull();
+    expect(within(block).queryByRole('button')).toBeNull();
+    expect(container.querySelector('.bpl-open--off')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: /Ask to try it/ })).toBeNull();
+  });
+
+  test('(b) nothing shown yet: nothing at all', async () => {
+    serve(baseView({ lan: null }));
+    await mount();
+    await screen.findByRole('button', { name: /Send an idea to the host/ });
+    expect(screen.queryByText(/The demo runs on the host's laptop/)).toBeNull();
+  });
+
+  test("(c) after Open the demo: Didn't open?, why, what to try, and Try again, which opens it again", async () => {
+    serve(baseView({ log: [SHOWING], lan: { open: OPEN } }));
+    await mount();
+    const link = await screen.findByRole('link', { name: 'Open the demo ↗' });
+    expect(screen.queryByText("Didn't open?")).toBeNull();
+    fireEvent.click(link);
+    expect(await screen.findByText("Didn't open?")).toBeInTheDocument();
+    expect(screen.getByText(/You may be on (mobile data|a VPN) or another Wi-Fi\./)).toBeInTheDocument();
+    expect(screen.getByText('Same Wi-Fi; no mobile data, no VPN.')).toBeInTheDocument();
+    const again = screen.getByRole('link', { name: 'Try again ↗' });
+    expect(again).toHaveAttribute('href', OPEN);
+    expect(again).not.toHaveClass('bpl-send');
+    expect(screen.queryByRole('link', { name: 'Open the demo ↗' })).toBeNull();
   });
 
   test('the preview note asks to try it first only while sharing is live', async () => {

@@ -28,7 +28,7 @@ import Icon from '../components/Icon';
 import PlayersList from '../components/stage/PlayersList';
 import { copyText } from '../utils/copyText';
 import { RunCrewCodeSwitch } from './BuildCrew';
-import { WifiPanel } from './BuildWifiShare';
+import { SharePanel } from './BuildWifiShare';
 import { askingOf } from './useBuildPlayers';
 import { W } from './words';
 
@@ -367,10 +367,11 @@ export default function BuildSessionPanel({
                   {copied && <span className="brm-hint" role="status">{copied}</span>}
                 </div>
                 {!ended && (
-                  <WifiPanel
+                  <SharePanel
                     inline
                     lan={room.lan}
                     link={wifiLink}
+                    here={room.playerCount || 0}
                     now={now}
                     busy={busy}
                     run={run}

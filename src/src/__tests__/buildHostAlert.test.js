@@ -209,6 +209,23 @@ describe('early looks: one rule, the time of the last version', () => {
   });
 });
 
+describe('the demo is ready to share (docs/design/build-room-share-demo D1 B, owner 2026-10-10)', () => {
+  test('on the Stage only: one grey line, Share →, to the Host screen; never amber', () => {
+    const a = hostAlert(room(), undefined, { demoReady: true });
+    expect(a).toMatchObject({ count: 1, amber: false });
+    expect(a.lines).toEqual([{ key: 'demo', label: 'The demo is ready to share', go: 'Share →', ids: [], target: { kind: 'share' } }]);
+  });
+  test('it comes last, after what Claude waits on, and does not turn the count amber or grey by itself', () => {
+    const a = hostAlert(room({ asks: [ask('1')] }), undefined, { demoReady: true });
+    expect(a.count).toBe(2);
+    expect(a.amber).toBe(true);
+    expect(a.lines.map((l) => l.key)).toEqual(['question', 'demo']);
+  });
+  test('without the flag (Build and History, where the chip carries it), nothing', () => {
+    expect(hostAlert(room())).toMatchObject({ count: 0, lines: [] });
+  });
+});
+
 describe('the Stage\'s "We decided" for a vote that came from Points', () => {
   const pointsVote = (o = {}) => ({
     askId: '012', status: 'decided', prompt: 'Which points go first?', decidedAt: T(5), fromPoints: ['p1', 'p2'],
