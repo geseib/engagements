@@ -4,7 +4,7 @@
 import {
   defaultDirection,
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, settleMove,
-  queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
+  queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine, doingLine, roomStory, filterStory,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
   askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords, decideBody, roomChoice,
 } from '../buildroom/buildScreens';
@@ -619,5 +619,109 @@ describe('the direction carries what the room voted on (owner, 2026-10-10)', () 
   test('the wheel landing on an option carries its detail too', () => {
     const w = { ...ask, wheel: { landed: 'B', slices: [{ id: 'A', label: 'A', text: 'Scroll to scale' }, { id: 'B', label: 'B', text: 'What could it fix?' }] } };
     expect(defaultDirection(w)).toMatch(/What could it fix\? \(Their fortune against real price tags/);
+  });
+});
+
+describe('the doing line (docs/design/build-room-doing D1-D5)', () => {
+  const NOW = Date.parse('2026-10-10T10:30:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  const doing = (over = {}) => ({
+    text: 'Mocking up 3 graph options', past: '', source: 'claude', startedAt: at(250), stale: false, helper: '', lastActiveAt: at(10), ...over,
+  });
+  const room = (d, extra = {}) => ({ agent: { connected: true, listening: false, lastSeenAt: at(5) }, log: [], activity: [], doing: d, ...extra });
+
+  test('the screens prepend Claude is, lower-case the first letter and say how long', () => {
+    expect(doingLine(doing(), NOW)).toMatchObject({ headline: 'Claude is mocking up 3 graph options', stale: false, mins: 4, dur: '4 min', helper: '' });
+    expect(doingLine(doing({ startedAt: at(20) }), NOW).dur).toBe('under 1 min');
+    expect(doingLine(null, NOW)).toBeNull();
+    expect(doingLine(doing({ text: '  ' }), NOW)).toBeNull();
+  });
+
+  test('stale is re-derived from lastActiveAt as time passes, not read from the snapshot', () => {
+    expect(doingLine(doing({ stale: true, lastActiveAt: at(10) }), NOW).stale).toBe(false);
+    const d = doing({ stale: false, lastActiveAt: at(181) });
+    expect(doingLine(d, NOW)).toMatchObject({ stale: true, headline: 'Claude was mocking up 3 graph options' });
+    expect(doingLine(d, NOW - 60 * 1000).stale).toBe(false);
+  });
+
+  test('a line is the building status: headline, the helper as the line, the start as since', () => {
+    const s = claudeState(room(doing({ helper: 'Researching contrast rules' })), NOW);
+    expect(s).toMatchObject({ key: 'building', headline: 'Claude is mocking up 3 graph options', line: 'A helper is researching contrast rules', since: at(250) });
+    expect(s.doing.dur).toBe('4 min');
+  });
+
+  test('a line holds the building status past the old 90 seconds', () => {
+    expect(claudeState(room(doing({ lastActiveAt: at(150) })), NOW).key).toBe('building');
+  });
+
+  test('a stale line is paused, in the past tense, with the same follow-ups as today', () => {
+    const r = room(doing({ lastActiveAt: at(300) }));
+    expect(claudeState(r, NOW)).toMatchObject({ key: 'paused', headline: 'Claude was mocking up 3 graph options', line: 'The host will pick it up again in a moment.' });
+    expect(claudeState(r, NOW, { host: true, continueOn: true }).line).toBe('Copy the Continue prompt to pick it up.');
+    expect(claudeState(r, NOW, { host: true }).line).toBe('');
+  });
+
+  test('Claude waiting for direction is never Claude is: the status stays ready', () => {
+    const r = room(doing(), { agent: { connected: true, listening: true, lastSeenAt: at(5) } });
+    expect(claudeState(r, NOW).key).toBe('waiting');
+  });
+
+  test('no line leaves the status exactly as it was', () => {
+    expect(claudeState(room(null), NOW)).toEqual(claudeState({ ...room(null), doing: undefined }, NOW));
+    expect(claudeState(room(null, { log: [{ by: 'agent', kind: 'progress', text: 'x', createdAt: at(30) }] }), NOW).headline).toBe('Claude is building');
+  });
+
+  describe('History: a finished step groups what it produced', () => {
+    const step = (id, startS, endS, text) => ({
+      logId: id, kind: 'step', text, createdAt: at(endS), by: 'agent', step: { startedAt: at(startS), endedAt: at(endS), durationMs: (startS - endS) * 1000, source: 'todo' },
+    });
+    const log = [
+      step('p1', 2000, 1640, 'Done: Set up the project'),
+      step('p2', 1600, 1000, 'Scaffolded the site'),
+      { logId: 'm1', kind: 'milestone', by: 'agent', text: 'The first page runs', createdAt: at(1200) },
+      { logId: 's1', kind: 'showing', by: 'agent', text: 'The empty dashboard', createdAt: at(1100) },
+      { logId: 'v1', kind: 'verbal', by: 'host', text: 'Between steps', createdAt: at(900) },
+    ];
+
+    test('the step is the entry; its checkpoint and showing hang under it, oldest first', () => {
+      const story = roomStory({ log });
+      expect(story.map((i) => i.type)).toEqual(['said', 'step', 'step']);
+      const s = story[1];
+      expect(s).toMatchObject({ heading: 'Scaffolded the site', dur: '10 min' });
+      expect(s.kids.map((k) => k.text)).toEqual(['The first page runs', 'The empty dashboard']);
+      expect(story[2]).toMatchObject({ heading: 'Done: Set up the project', dur: '6 min', kids: [] });
+    });
+
+    test('a to-do step keeps the item words with Done:, and one under a minute says so', () => {
+      const story = roomStory({ log: [step('q', 30, 0, 'Done: Rename it')] });
+      expect(story[0].heading).toBe('Done: Rename it');
+      expect(story[0].dur).toBe('under 1 min');
+      expect(roomStory({ log: [{ logId: 'z', kind: 'step', text: 'Done: X marks', createdAt: at(0), step: { startedAt: at(0), endedAt: at(0), durationMs: 0 } }] })[0].dur).toBe('');
+    });
+
+    test('commands never reach History: no activity line becomes an entry', () => {
+      expect(roomStory({ log, activity: [{ at: at(5), kind: 'run', text: 'Ran git push' }] }).some((i) => /Ran git/.test(i.heading + i.text))).toBe(false);
+    });
+
+    test('the step in progress sits first, with how long so far; a stale one writes nothing', () => {
+      const live = doingLine(doing({ text: 'Building the bar chart', startedAt: at(125) }), NOW);
+      const top = roomStory({ log, doing: live })[0];
+      expect(top).toMatchObject({ type: 'step', now: true, heading: 'Building the bar chart', dur: '2 min so far' });
+      const stale = doingLine(doing({ lastActiveAt: at(400) }), NOW);
+      expect(roomStory({ log, doing: stale }).some((i) => i.now)).toBe(false);
+    });
+
+    test('the Decisions and Pictures filters still find what a step holds', () => {
+      const dlog = [
+        step('p2', 600, 100, 'Scaffolded the site'),
+        { logId: 'i1', kind: 'image', by: 'agent', text: 'Home', detail: 'img1', createdAt: at(300) },
+      ];
+      const story = roomStory({
+        log: dlog, images: [{ imageId: 'img1', createdAt: at(300) }],
+        asks: [{ askId: '002', status: 'decided', decision: { direction: 'Bars', decidedAt: at(200), chosen: [] }, decidedAt: at(200) }],
+      });
+      expect(filterStory(story, 'decisions').map((i) => i.type)).toEqual(['decided']);
+      expect(filterStory(story, 'pictures').map((i) => i.type)).toEqual(['picture']);
+    });
   });
 });
