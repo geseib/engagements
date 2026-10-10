@@ -811,6 +811,45 @@ function normalizeOutcome(body, by, now) {
   };
 }
 
+// ── The plugin's version (owner, 2026-10-10) ────────────────────────────────
+// The plugin sends its VERSION in X-Engage-Plugin on every call. The server
+// keeps the host's Claude's version on the state row (plain: it is a version,
+// not content), compares it with the one it knows, and tells the host in
+// Session > Claude and Claude in a line of its tool replies. Never the Stage,
+// never a device. tests/engage-plugin-version.js keeps this constant equal to
+// the plugin's own VERSION, so the two move together.
+const LATEST_PLUGIN = '1.15.0';
+const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
+const PLUGIN_HEADER = 'x-engage-plugin';
+
+/** A clean x.y.z or ''. The header is the caller's word; nothing else is kept. */
+const cleanPluginVersion = (v) => (/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(v || '').trim()) ? String(v).trim() : '');
+/** The version a request announced, from any header casing. */
+function pluginVersionOf(event) {
+  const h = (event && event.headers) || {};
+  const k = Object.keys(h).find((x) => x.toLowerCase() === PLUGIN_HEADER);
+  return k ? cleanPluginVersion(h[k]) : '';
+}
+const pluginOlder = (a, b) => {
+  const x = String(a).split('.').map(Number);
+  const y = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i += 1) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0);
+  return false;
+};
+/** The note for Claude's tool replies, or '' when it is current (or did not say). */
+const pluginNoteFor = (version) => (version && pluginOlder(version, LATEST_PLUGIN) ? PLUGIN_OUTDATED_NOTE : '');
+/**
+ * The host's view: what is running, what is current, and whether to say so.
+ * A Claude that has called in but never announced a version is older than the
+ * header itself, so it is out of date.
+ */
+function pluginView(stateRow) {
+  const s = stateRow || {};
+  const running = cleanPluginVersion(s.AgentPlugin);
+  const seen = Boolean(s.AgentSeenAt);
+  return { running, latest: LATEST_PLUGIN, outdated: seen && (!running || pluginOlder(running, LATEST_PLUGIN)) };
+}
+
 function agentStatus(stateRow, keys, now) {
   const s = stateRow || {};
   const seen = s.AgentSeenAt ? Date.parse(s.AgentSeenAt) : NaN;
@@ -1419,6 +1458,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     playerCount: players.length,
     settings: settingsOf(room.state),
     agent: agentStatus(room.state, room.keys, now),
+    // The Session panel's "Claude's plugin is out of date" line. Claude and the room never get it.
+    ...(isAgent ? {} : { plugin: pluginView(room.state) }),
     activity: activityView(room.activity),
     ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
     lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent }),
@@ -1643,6 +1684,7 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
+  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,

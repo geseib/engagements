@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -115,6 +115,10 @@ class ApiError extends Error {
   }
 }
 
+// The server says, in `pluginNote`, when this plugin is older than the current one
+// (it reads the X-Engage-Plugin header below). The line is added to the tool's
+// reply so Claude can tell the host; nothing else changes (copy pass 2026-10-10).
+let PLUGIN_NOTE = '';
 const api_ = (...a) => api(...a);
 async function api(method, path, body, signal) {
   const url = `${CONFIG.api}games/${CONFIG.gameId}/build/${path}`;
@@ -127,6 +131,8 @@ async function api(method, path, body, signal) {
       headers: {
         Authorization: `Bearer ${CONFIG.key}`,
         Accept: 'application/json',
+        // Node's fetch, never a browser: no CORS preflight, so the API's CORS list needs no change.
+        'X-Engage-Plugin': VERSION,
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -145,6 +151,7 @@ async function api(method, path, body, signal) {
   }
   if (data === null) throw new ApiError(res.status, 'Engage returned a response that is not JSON.');
   if (data.brief) rememberBrief(data.brief);
+  PLUGIN_NOTE = typeof data.pluginNote === 'string' ? data.pluginNote.slice(0, 300) : '';
   return data;
 }
 
@@ -1942,13 +1949,19 @@ async function callTool(name, args, ctx) {
   if (!handler) return { content: [{ type: 'text', text: `Unknown tool "${name}".` }], isError: true };
   reloadConfig();
   if (CONFIG.problems.length && name !== 'connect') return { content: [{ type: 'text', text: configHelp() }], isError: true };
+  PLUGIN_NOTE = '';
+  // One line at the end of the reply when the server says the plugin is out of date.
+  const noted = (r) => {
+    if (PLUGIN_NOTE && r && Array.isArray(r.content)) r.content.push({ type: 'text', text: PLUGIN_NOTE });
+    return r;
+  };
   try {
-    return await handler(args && typeof args === 'object' ? args : {}, ctx);
+    return noted(await handler(args && typeof args === 'object' ? args : {}, ctx));
   } catch (e) {
     if (ctx.signal.aborted) throw e;
     if (e instanceof InputError) return { content: [{ type: 'text', text: `Invalid input: ${e.message}` }], isError: true };
     log(`tool ${name} failed:`, e && e.message ? e.message : String(e));
-    return errorResult(e, name);
+    return noted(errorResult(e, name));
   }
 }
 

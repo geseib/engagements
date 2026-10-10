@@ -1178,7 +1178,9 @@ async function agentTouch(ctx, event, role) {
       ExpressionAttributeValues: { ':now': now },
     })).catch(() => {});
   } else {
-    await touchState(ctx, { set: { AgentSeenAt: now } }).catch(() => {});
+    // The plugin's version rides every call (X-Engage-Plugin); the host's Session panel reads it back.
+    const version = S.pluginVersionOf(event);
+    await touchState(ctx, { set: { AgentSeenAt: now, ...(version ? { AgentPlugin: version } : {}) } }).catch(() => {});
   }
   if (auth.agentKeyHash) {
     await db.send(new UpdateCommand({
@@ -2907,6 +2909,12 @@ exports.handler = async (event) => {
           const st = await touchState(ctx);
           await announce(ctx, st.Rev);
         }
+      }
+      // An out-of-date plugin is told so in one line, to read out to the host.
+      // Only when it announced a version (an older one cannot show the line).
+      const pluginNote = S.pluginNoteFor(S.pluginVersionOf(event));
+      if (pluginNote && res.statusCode < 500 && !res.isBase64Encoded) {
+        try { res.body = JSON.stringify({ ...JSON.parse(res.body || '{}'), pluginNote }); } catch { /* not JSON: leave it */ }
       }
       return res;
     }
