@@ -5,6 +5,8 @@
  * NO GEOMETRIC ASSERTIONS: jsdom has no layout engine.
  */
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import {
   render, screen, fireEvent, waitFor, within, act,
 } from '@testing-library/react';
@@ -28,11 +30,13 @@ const GAME = '4821';
 const NOW = new Date().toISOString();
 const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 
-function hostState({ st = {}, asks = [], ideas = [], logs = [], seen } = {}) {
+function hostState({ st = {}, asks = [], ideas = [], logs = [], images = [], seen } = {}) {
   const rows = [
     {
-      SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...st, ...(seen ? { SeenIds: seen.ids || [], SeenAllAt: seen.allAt || '' } : {}),
+      SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...st,
     },
+    ...(seen ? [{ SK: 'BUILD#SEEN', Ids: seen.ids || [], AllAt: seen.allAt || '', V: 1 }] : []),
+    ...images.map((im, i) => ({ SK: `BUILD#IMG#${i}`, ImageId: `im${i}`, Kind: 'mockup', CreatedAt: ago(60), ...im })),
     ...asks.map((a) => ({ SK: `BUILD#ASK#${a.AskId}`, Source: 'agent', CreatedAt: ago(600), ...a })),
     ...logs.map((l, i) => ({ SK: `BUILD#LOG#${String(i).padStart(13, '0')}#x${i}`, LogId: `${i}-x${i}`, CreatedAt: ago(900 - i * 60), ...l })),
     ...ideas.map((d, i) => ({ SK: `BUILD#IDEA#${String(i).padStart(13, '0')}#i${i}`, IdeaId: `${i}-i${i}`, Status: 'new', CreatedAt: ago(120), ...d })),
@@ -346,5 +350,131 @@ describe('the room reads these screens', () => {
     fireEvent.click(stageTrigger());
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(list().closest('[aria-live]')).toBeNull();
+  });
+});
+
+describe('mockups the host asked for, through the real view', () => {
+  const HOST_MOCKUPS = { AskId: '006', Kind: 'choice', Prompt: 'Which look?', Detail: '', Options: [{ label: 'A', title: 'Bold' }, { label: 'B', title: 'Calm' }], MaxPicks: 1, Status: 'proposed', Source: 'host', AskForMockups: true };
+  test('a host-made vote with mockups counts amber once the pictures are in', async () => {
+    await openRoom(hostState({ asks: [HOST_MOCKUPS], images: [{ AskId: '006', Label: 'A' }, { AskId: '006', Label: 'B' }] }), '2');
+    expect(stageTrigger()).toHaveTextContent('HOST · 1');
+    expect(stageTrigger()).toHaveClass('brm-hostalert--amber');
+    fireEvent.click(stageTrigger());
+    expect(within(list()).getByRole('button', { name: /Mockups are ready \(2\)/ })).toBeInTheDocument();
+  });
+  test('and not while a picture is missing', async () => {
+    await openRoom(hostState({ asks: [HOST_MOCKUPS], images: [{ AskId: '006', Label: 'A' }] }), '2');
+    expect(stageTrigger()).toHaveTextContent(/^HOST$/);
+  });
+});
+
+describe('saving seen in chunks', () => {
+  const many = (n) => Array.from({ length: n }, (_, i) => ({ PlayerName: `P${i}`, Text: `Idea ${i}`, CreatedAt: ago(1000 - i) }));
+  test('60 ideas in one line go in two posts of at most 50', async () => {
+    await openRoom(hostState({ ideas: many(60) }), '2');
+    fireEvent.click(stageTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: /new ideas from the room/ }));
+    await waitFor(() => expect(seenPosts().length).toBe(2));
+    seenPosts().forEach((c) => expect(c.body.ids.length).toBeLessThanOrEqual(50));
+    expect(seenPosts().flatMap((c) => c.body.ids)).toHaveLength(60);
+  });
+  test('230 ideas: only the newest 200 are sent, so no older id is pushed back out of the list', async () => {
+    await openRoom(hostState({ ideas: many(230) }), '2');
+    fireEvent.click(stageTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: /new ideas from the room/ }));
+    await waitFor(() => expect(seenPosts().length).toBe(4));
+    const sent = seenPosts().flatMap((c) => c.body.ids);
+    expect(sent).toHaveLength(200);
+    const oldest = current.ideas.slice().sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).slice(0, 30).map((i) => `idea:${i.ideaId}`);
+    oldest.forEach((id) => expect(sent).not.toContain(id));
+  });
+});
+
+describe('the Waiting for you filter follows the line', () => {
+  test('ideas jump turns the filter to Room; an ask jump leaves it on All', async () => {
+    await openRoom(hostState({ asks: [QUESTION], ideas: IDEAS }), '2');
+    fireEvent.click(stageTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: /new ideas from the room/ }));
+    await screen.findByRole('heading', { name: /^Waiting for you/ });
+    expect(within(screen.getByRole('group', { name: 'Show' })).getByRole('button', { name: /^Room/ })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.click(stageTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: /Claude has a question/ }));
+    const card = await screen.findByRole('region', { name: 'Proposed ask 4' });
+    await waitFor(() => expect(document.activeElement).toBe(card));
+    expect(within(screen.getByRole('group', { name: 'Show' })).getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('focus, rollback and closing', () => {
+  test('after Mark all seen the focus is on HOST (Stage) or the Host tab (header)', async () => {
+    await openRoom(hostState({ ideas: IDEAS }), '2');
+    fireEvent.click(stageTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: 'Mark all seen' }));
+    await waitFor(() => expect(document.activeElement).toBe(stageTrigger()));
+  });
+  test('header: the Host tab keeps the focus even though the count is gone', async () => {
+    await openRoom(hostState({ ideas: IDEAS }), '3');
+    fireEvent.click(headerTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: 'Mark all seen' }));
+    await waitFor(() => expect(headerTrigger()).toHaveTextContent(/^Host$/));
+    expect(document.activeElement).toBe(headerTrigger());
+  });
+  test('a failed save puts back only what failed, and reads the room again', async () => {
+    await openRoom(hostState({ asks: [QUESTION], ideas: IDEAS }), '2');
+    fireEvent.click(stageTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: /new ideas from the room/ }));
+    await waitFor(() => expect(seenPosts()).toHaveLength(1));
+    fireEvent.keyDown(window, { key: '2' });
+    const base = authFetch.getMockImplementation();
+    authFetch.mockImplementation(async (url, opts = {}) => (url.endsWith('/build/seen') ? res({ error: 'No' }, false, 500) : base(url, opts)));
+    const reads = calls.filter((c) => c.url.endsWith('/build/state')).length;
+    fireEvent.click(stageTrigger());
+    fireEvent.click(within(list()).getByRole('button', { name: /Claude has a question/ }));
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/build/state')).length).toBeGreaterThan(reads));
+    fireEvent.keyDown(window, { key: '2' });
+    // The ideas stay seen; the question counts again.
+    await waitFor(() => expect(stageTrigger()).toHaveTextContent('HOST · 1'));
+    expect(stageTrigger()).toHaveClass('brm-hostalert--amber');
+  });
+  test('the list closes when the focus leaves it, and when the window loses it (an iframe took the click)', async () => {
+    await openRoom(hostState({ ideas: IDEAS }), '2');
+    fireEvent.click(stageTrigger());
+    fireEvent.focusOut(within(list()).getByRole('button', { name: 'Mark all seen' }), { relatedTarget: document.body });
+    expect(screen.queryByRole('group', { name: 'Waiting for the host' })).toBeNull();
+    fireEvent.click(stageTrigger());
+    expect(list()).toBeInTheDocument();
+    fireEvent.blur(window);
+    expect(screen.queryByRole('group', { name: 'Waiting for the host' })).toBeNull();
+  });
+  test('focus moving between the trigger and its own list does not close it', async () => {
+    await openRoom(hostState({ ideas: IDEAS }), '2');
+    fireEvent.click(stageTrigger());
+    fireEvent.focusOut(stageTrigger(), { relatedTarget: within(list()).getByRole('button', { name: 'Mark all seen' }) });
+    expect(list()).toBeInTheDocument();
+  });
+});
+
+describe('one orange', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../buildroom/BuildRoom.css'), 'utf8');
+  const rules = css.split('}').map((r) => r.trim()).filter(Boolean);
+  const ruleFor = (needle) => rules.filter((r) => r.split('{')[0].includes(needle));
+
+  test('the alert and the lit SESSION never use the one orange; they use their own amber, as outline and text only', () => {
+    const mine = [...ruleFor('brm-hostalert'), ...ruleFor('brm-dock-lit')];
+    expect(mine.length).toBeGreaterThan(4);
+    mine.forEach((r) => expect(r).not.toMatch(/var\(--primary\)/));
+    const amber = ruleFor('brm-hostalert--amber');
+    expect(amber.join(' ')).toMatch(/var\(--brm-alert-amber\)/);
+    amber.forEach((r) => expect(r).not.toMatch(/background:\s*var\(--brm-alert-amber\)/));
+    expect(css).toMatch(/--brm-alert-amber:\s*#[0-9A-Fa-f]{6}/);
+    expect(css.match(/--brm-alert-amber:\s*(#[0-9A-Fa-f]{6})/)[1].toLowerCase()).not.toBe('#f6a94c');
+  });
+
+  test('on the Stage with the alert amber the dock still has exactly one filled button', async () => {
+    await openRoom(hostState({ asks: [QUESTION] }), '2');
+    expect(stageTrigger()).toHaveClass('brm-hostalert--amber');
+    expect(stageTrigger().className).not.toMatch(/\bbtn\b/);
+    expect(dock().querySelectorAll('.btn:not(.ghost)').length).toBeLessThanOrEqual(1);
   });
 });

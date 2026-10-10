@@ -34,9 +34,12 @@ export default function HostAlert({ alert, variant, onHost, onGo, onMarkAll }) {
       if (trigger.current) trigger.current.focus();
     };
     const onDown = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    // A click into an iframe (the live build) fires neither mousedown here nor a focusout: the window itself loses the focus.
+    const onWindowBlur = () => setOpen(false);
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onDown);
-    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown); };
+    window.addEventListener('blur', onWindowBlur);
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown); window.removeEventListener('blur', onWindowBlur); };
   }, [showList]);
 
   const tone = count > 0 ? (alert.amber ? 'amber' : 'grey') : 'none';
@@ -54,14 +57,19 @@ export default function HostAlert({ alert, variant, onHost, onGo, onMarkAll }) {
   const num = count > 0 ? <span className="brm-hostalert-n"><span aria-hidden="true"> · </span><span className="c">{count}</span></span> : null;
 
   return (
-    <span className={`brm-hostalert-wrap brm-hostalert-wrap--${variant}`} ref={wrap}>
+    <span
+      className={`brm-hostalert-wrap brm-hostalert-wrap--${variant}`}
+      ref={wrap}
+      // Focus leaving for somewhere outside closes the list. A null target (a click on nothing focusable) is the mousedown handler's.
+      onBlur={(e) => { if (showList && e.relatedTarget && wrap.current && !wrap.current.contains(e.relatedTarget)) setOpen(false); }}
+    >
       <button
         type="button"
         ref={trigger}
         className={variant === 'stage' ? `dock-more ${cls}` : `brm-screen ${cls}`}
         aria-haspopup={count > 0 ? 'true' : undefined}
         aria-expanded={count > 0 ? showList : undefined}
-        aria-label={count > 0 ? undefined : W.hostScreen}
+        aria-label={count > 0 || variant === 'header' ? undefined : W.hostScreen}
         title={`${W.hostScreen} (1 or P)`}
         onClick={press}
       >
@@ -80,7 +88,7 @@ export default function HostAlert({ alert, variant, onHost, onGo, onMarkAll }) {
             ))}
           </ul>
           <div className="brm-halist-ft">
-            <button type="button" className="brm-halist-btn" onClick={() => { setOpen(false); onMarkAll(); }}>{W.markAllSeen}</button>
+            <button type="button" className="brm-halist-btn" onClick={() => { setOpen(false); onMarkAll(); if (trigger.current) trigger.current.focus(); }}>{W.markAllSeen}</button>
             <button type="button" className="brm-halist-btn brm-halist-push" onClick={host}>{W.hostScreen} · 1</button>
           </div>
         </div>

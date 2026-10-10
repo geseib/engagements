@@ -324,6 +324,8 @@ export const W = Object.freeze({
   alertSee: 'See them →',
   alertReview: 'Review →',
   markAllSeen: 'Mark all seen',
+  /** The Stage's line for a vote made from Points. */
+  decisionRoomChose: (titles) => `The room chose: ${titles.join(', ')}`,
   noNames: 'No names shown to the room.',
   askMockupsFirst: 'Ask Claude for mockups first',
   hiddenUntilMockups: 'Hidden until the mockups are in.',

@@ -45,24 +45,26 @@ function applyUpdate(inp) {
   return { Attributes: inp.ReturnValues === 'UPDATED_OLD' ? (cur || {}) : item };
 }
 
-const hooks = { beforePut: null };
+const hooks = { failSeenPut: false, readBarrier: null };
 const fakeDoc = {
   send: async (cmd) => {
     const inp = cmd.input || {};
     switch (cmd.type) {
       case 'put': {
-        if (hooks.beforePut && inp.Item.SK === 'BUILD#ACTIVITY') hooks.beforePut(inp);
+        if (inp.Item.SK === 'BUILD#SEEN' && hooks.failSeenPut) { const e = new Error('cond'); e.name = 'ConditionalCheckFailedException'; throw e; }
         if (inp.ConditionExpression) {
           const cur = store.get(key(inp.Item.PK, inp.Item.SK));
-          const rev = cur ? cur.DoingRev : undefined;
-          const ok = rev === undefined
-            ? /attribute_not_exists\(DoingRev\)/.test(inp.ConditionExpression)
-            : /DoingRev = :rev/.test(inp.ConditionExpression) && rev === inp.ExpressionAttributeValues[':rev'];
+          const ok = /attribute_not_exists/.test(inp.ConditionExpression)
+            ? !cur
+            : Boolean(cur) && cur.V === inp.ExpressionAttributeValues[':v'];
           if (!ok) { const e = new Error('cond'); e.name = 'ConditionalCheckFailedException'; throw e; }
         }
         store.set(key(inp.Item.PK, inp.Item.SK), JSON.parse(JSON.stringify(inp.Item))); return {};
       }
-      case 'get': return { Item: store.get(key(inp.Key.PK, inp.Key.SK)) };
+      case 'get': {
+        if (hooks.readBarrier && inp.Key.SK === 'BUILD#SEEN') { const item = store.get(key(inp.Key.PK, inp.Key.SK)); await hooks.readBarrier(); return { Item: item }; }
+        return { Item: store.get(key(inp.Key.PK, inp.Key.SK)) };
+      }
       case 'delete': store.delete(key(inp.Key.PK, inp.Key.SK)); return {};
       case 'update': return applyUpdate(inp);
       case 'query': {
@@ -183,6 +185,8 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
  * host-only route, POST build/seen {ids?, all?}. Expectations written by hand.
  */
 const STATE = () => store.get(key(`GAME#${GAME}`, 'BUILD#STATE'));
+const SEEN = () => store.get(key(`GAME#${GAME}`, 'BUILD#SEEN'));
+const barrier = (n) => { let c = 0; let go; const p = new Promise((r) => { go = r; }); return () => { c += 1; if (c >= n) go(); return p; }; };
 const seenOf = async () => (await hostCall('GET', 'state')).body.seen;
 
 (async () => {
@@ -234,10 +238,60 @@ const seenOf = async () => (await hostCall('GET', 'state')).body.seen;
     assert.strictEqual(ids[ids.length - 1], 'idea:4-49');
     assert.ok(!ids.includes('idea:0-0'));
   });
-  await check('the row carries a ttl, like every write', async () => {
+  await check('seen lives on its own row, BUILD#SEEN, with a ttl and a version; the state row only moves its revision', async () => {
     seed();
     await hostCall('POST', 'seen', { ids: ['ask:1-a'] });
-    assert.ok(STATE().ttl > 0);
+    const first = SEEN();
+    assert.ok(first.ttl > 0);
+    assert.strictEqual(first.V, 1);
+    assert.deepStrictEqual(first.Ids, ['ask:1-a']);
+    assert.ok(STATE().Rev >= 1);
+    assert.strictEqual(STATE().SeenIds, undefined);
+    await hostCall('POST', 'seen', { ids: ['ask:2-b'] });
+    assert.strictEqual(SEEN().V, 2);
+  });
+  await check('two devices post at the same instant: both sets of ids are kept (conditional write, retried)', async () => {
+    seed();
+    hooks.readBarrier = barrier(2);
+    const [a, b] = await Promise.all([hostCall('POST', 'seen', { ids: ['ask:1-a', 'idea:1-x'] }), hostCall('POST', 'seen', { ids: ['idea:2-y'] })]);
+    hooks.readBarrier = null;
+    assert.strictEqual(a.status, 200);
+    assert.strictEqual(b.status, 200);
+    assert.deepStrictEqual([...(await seenOf()).ids].sort(), ['ask:1-a', 'idea:1-x', 'idea:2-y']);
+    assert.strictEqual(SEEN().V, 2);
+  });
+  await check('a mark-all racing an ids post keeps the mark and the ids made after it', async () => {
+    seed();
+    hooks.readBarrier = barrier(2);
+    await Promise.all([hostCall('POST', 'seen', { all: true }), hostCall('POST', 'seen', { ids: ['idea:2-y'] })]);
+    hooks.readBarrier = null;
+    const s = await seenOf();
+    assert.ok(s.allAt);
+    assert.ok(s.ids.includes('idea:2-y') || s.ids.length === 0, 'the id is kept or was folded into the mark');
+  });
+  await check('three conflicts in a row give up with 409 and write nothing', async () => {
+    seed();
+    hooks.failSeenPut = true;
+    const r = await hostCall('POST', 'seen', { ids: ['ask:1-a'] });
+    hooks.failSeenPut = false;
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(SEEN(), undefined);
+  });
+
+  console.log('\nmockups ready: the view the alert counts');
+  await check('an AskForMockups ask the host made (Source host) is ready when every picture is in, and says when', async () => {
+    seed();
+    const base = { PK: `GAME#${GAME}`, ttl: 2000000000 };
+    store.set(key(base.PK, 'BUILD#ASK#009'), { ...base, SK: 'BUILD#ASK#009', AskId: '009', Kind: 'choice', Prompt: 'Which look?', Options: [{ label: 'A', title: 'Bold', detail: '', url: '' }, { label: 'B', title: 'Calm', detail: '', url: '' }], MaxPicks: 1, Status: 'proposed', Source: 'host', AskForMockups: true, CreatedAt: '2026-10-10T12:00:00.000Z' });
+    let ask = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === '009');
+    assert.strictEqual(ask.source, 'host');
+    assert.strictEqual(ask.mockups.ready, false);
+    assert.strictEqual(ask.mockups.readyAt, '');
+    store.set(key(base.PK, 'BUILD#IMG#1'), { ...base, SK: 'BUILD#IMG#1', ImageId: 'i1', AskId: '009', Label: 'A', Kind: 'mockup', CreatedAt: '2026-10-10T12:05:00.000Z' });
+    store.set(key(base.PK, 'BUILD#IMG#2'), { ...base, SK: 'BUILD#IMG#2', ImageId: 'i2', AskId: '009', Label: 'B', Kind: 'mockup', CreatedAt: '2026-10-10T12:09:00.000Z' });
+    ask = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === '009');
+    assert.strictEqual(ask.mockups.ready, true);
+    assert.strictEqual(ask.mockups.readyAt, '2026-10-10T12:09:00.000Z', 'the newest picture');
   });
 
   console.log('\nseen: refusals');

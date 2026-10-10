@@ -78,6 +78,8 @@ export function queueItems(room) {
 const isMockupAsk = (a) => a.kind === 'choice' && (a.options || []).length >= 2 && (a.options || []).every((o) => o.imageId);
 /** Claude asked for mockups and has not finished them: the host is not being waited on yet. */
 const mockupsPending = (a) => Boolean(a.mockups && a.mockups.asked && !a.mockups.ready);
+/** Mockups are in: the server says so for an ask made WITH mockups (the host's own vote from ideas included); else Claude's ask with a picture on every option. */
+const mockupsDone = (a) => (a.mockups && a.mockups.asked ? Boolean(a.mockups.ready) : a.source === 'agent' && isMockupAsk(a));
 
 /** An item is unseen when its id was not opened and it was made after the last Mark all seen. */
 function unseenFilter(room, local) {
@@ -96,16 +98,19 @@ export function hostAlert(room, local) {
   const none = { count: 0, amber: false, lines: [] };
   if (!room) return none;
   const fresh = unseenFilter(room, local);
-  const proposed = (room.asks || []).filter((a) => a.status === 'proposed' && a.source === 'agent' && !mockupsPending(a))
-    .map((a) => ({ id: `ask:${a.askId}`, askId: a.askId, at: a.createdAt || '', a }))
+  // Claude's question is an agent ask that is neither mockups nor waiting on mockups. Mockups ready count whoever made the ask
+  // (the host's vote from ideas can ask for them), dated by the last picture so a Mark all seen during the making does not hide them.
+  const proposed = (room.asks || []).filter((a) => a.status === 'proposed' && !mockupsPending(a))
+    .map((a) => ({ id: `ask:${a.askId}`, askId: a.askId, a, at: (mockupsDone(a) && a.mockups && a.mockups.readyAt) || a.createdAt || '' }))
     .filter((x) => fresh(x.id, x.at)).sort(byAt);
-  const questions = proposed.filter((x) => !isMockupAsk(x.a));
-  const mockups = proposed.filter((x) => isMockupAsk(x.a));
+  const questions = proposed.filter((x) => x.a.source === 'agent' && !mockupsDone(x.a) && !isMockupAsk(x.a));
+  const mockups = proposed.filter((x) => mockupsDone(x.a));
   const ideas = (room.ideas || []).filter((i) => i.status === 'new' && i.source !== 'host')
     .map((i) => ({ id: `idea:${i.ideaId}`, at: i.createdAt || '' }))
     .filter((x) => fresh(x.id, x.at)).sort(byAt);
   const looks = ((room.crew && room.crew.enabled && room.crew.shares) || []).filter((s) => s.lane === 'shared' && !s.featured)
-    .map((s) => ({ id: `share:${s.shareId}`, at: s.updatedAt || s.createdAt || '' }))
+    // One rule: a look is as new as its last version. A new version has a new id, so one the host opened counts again.
+    .map((s) => { const at = s.updatedAt || s.createdAt || ''; return { id: `share:${s.shareId}#${at.replace(/\D/g, '').slice(0, 17)}`, at }; })
     .filter((x) => fresh(x.id, x.at)).sort(byAt);
   const ids = (list) => list.map((x) => x.id);
   const lines = [];
@@ -313,6 +318,11 @@ export function latestDecisionLine(room) {
   const d = decided[decided.length - 1];
   if (!d) return '';
   const dir = String(d.decision.direction || '');
+  // A vote made from Points ends "Moved forward: …" (the server's note for the host's list); the Stage says who chose what.
+  if (d.fromPoints && d.fromPoints.length && /^Moved forward:/.test(dir)) {
+    const titles = (d.options || []).filter((o) => (d.decision.chosen || []).includes(o.label)).map((o) => o.title).filter(Boolean);
+    if (titles.length) return W.decisionRoomChose(titles);
+  }
   const q = questionOf(d.prompt);
   return q && dir && !dir.startsWith(q) ? `${q}: ${dir}` : dir;
 }

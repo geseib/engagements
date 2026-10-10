@@ -41,6 +41,8 @@
   --brm-tint-green: rgba(79, 178, 134, 0.14);
   --brm-tint-red: rgba(229, 100, 94, 0.12);
   --brm-line-amber: rgba(246, 169, 76, 0.45);
+  /* The Host alert's amber: text and outline only. The one filled orange (--primary) belongs to the screen's main button. */
+  --brm-alert-amber: #FFD27A;
   --brm-line-blue: rgba(124, 167, 230, 0.55);
   --brm-line-red: rgba(229, 100, 94, 0.45);
 
@@ -1376,7 +1378,7 @@
 .brm .brm-sess-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--primary); }
 .brm .brm-chip--btn { cursor: pointer; font-family: var(--font-ui); color: inherit; }
 .brm .brm-chip--btn:hover, .brm .brm-chip--btn:focus-visible { border-color: var(--primary); }
-.brm .dock-more.brm-dock-lit { box-shadow: inset 0 0 0 2px var(--primary); }
+.brm .dock-more.brm-dock-lit { box-shadow: inset 0 0 0 2px var(--brm-alert-amber); }
 .brm .brm-btn--solid { background: var(--secondary); border-color: var(--secondary); color: var(--bg); font-weight: 700; }
 
 /* The request strip (S6a). */
@@ -1490,9 +1492,9 @@
 .brm .brm-hostalert--stage { gap: 0; letter-spacing: .12em; }
 .brm .brm-hostalert--stage .brm-hostalert-n { letter-spacing: 0; font-size: var(--t-meta); font-weight: 800; }
 .brm .brm-hostalert--grey { color: var(--text); border-color: rgba(155, 168, 190, .55); background: var(--surface); }
-.brm .brm-hostalert--amber { color: var(--primary); border: 2px solid var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-hostalert--amber { color: var(--brm-alert-amber); border: 2px solid var(--brm-alert-amber); background: var(--brm-tint-amber); }
 .brm .brm-hostalert--stage.is-open { box-shadow: 0 0 0 4px rgba(124, 167, 230, .35); }
-.brm .brm-screen.brm-hostalert--amber { border: 0; box-shadow: inset 0 0 0 1px var(--primary); }
+.brm .brm-screen.brm-hostalert--amber { border: 0; box-shadow: inset 0 0 0 1px var(--brm-alert-amber); }
 .brm .brm-screen.brm-hostalert--grey { border: 0; box-shadow: inset 0 0 0 1px rgba(155, 168, 190, .55); }
 .brm .brm-screen.brm-hostalert.is-open { outline: 3px solid rgba(124, 167, 230, .45); outline-offset: 1px; }
 .brm .brm-hostalert--header .c { font: 800 14px/1 var(--font-ui); }

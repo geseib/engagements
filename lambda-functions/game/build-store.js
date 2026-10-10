@@ -321,6 +321,8 @@ const SK = Object.freeze({
   point: (iso) => `BUILD#POINT#${timeKey(iso)}`,
   preq: (iso) => `BUILD#PREQ#${timeKey(iso)}`,
   run: 'BUILD#RUN',
+  // The Host alert's seen: its own row, versioned, so two devices never overwrite each other.
+  seen: 'BUILD#SEEN',
 });
 
 // ── Images (a mockup, the finished product) ──────────────────────────────────
@@ -497,7 +499,7 @@ function transition(ask, action) {
 function roomFromRows(rows) {
   const room = {
     state: null, activity: null, lan: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
-    builders: [], tasks: [], shares: [], comments: [], reviews: [], points: [], preqs: [], run: null,
+    builders: [], tasks: [], shares: [], comments: [], reviews: [], points: [], preqs: [], run: null, seen: null,
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
@@ -515,6 +517,7 @@ function roomFromRows(rows) {
     else if (sk.startsWith('BUILD#POINT#')) room.points.push(r);
     else if (sk.startsWith('BUILD#PREQ#')) room.preqs.push(r);
     else if (sk === SK.run) room.run = r;
+    else if (sk === SK.seen) room.seen = r;
     else if (sk.startsWith('BUILD#BLD#')) room.builders.push(r);
     else if (sk.startsWith('BUILD#TASK#')) room.tasks.push(r);
     else if (sk.startsWith('BUILD#SHR#')) room.shares.push(r);
@@ -654,7 +657,10 @@ function askView(ask, room, audience, me) {
   }
   if (ask.AskForMockups && isHost) {
     const m = mockupProgress(out);
-    out.mockups = { asked: true, have: m.have, total: m.total, ready: ask.Status === 'proposed' && m.total > 0 && m.have === m.total };
+    const ready = ask.Status === 'proposed' && m.total > 0 && m.have === m.total;
+    // When the last picture came in: the Host alert's "made at", so a Mark all seen during the making does not hide it.
+    const readyAt = ready ? room.images.filter((img) => img.AskId === ask.AskId && img.Label).map((img) => img.CreatedAt || '').sort().pop() || '' : '';
+    out.mockups = { asked: true, have: m.have, total: m.total, ready, readyAt };
   }
   if (isHost && room.state && room.state.NextAskId === ask.AskId && ask.Status === 'proposed') out.next = true;
   if (ask.RevoteOf) out.revoteOf = ask.RevoteOf;
@@ -883,9 +889,9 @@ const SEEN_MAX_IDS = 200;
 const SEEN_MAX_PER_POST = 50;
 const SEEN_ID = /^(?:ask|idea|share):[A-Za-z0-9_.#-]{1,80}$/;
 
-const seenOf = (stateRow) => ({
-  ids: Array.isArray(stateRow && stateRow.SeenIds) ? stateRow.SeenIds.filter((x) => typeof x === 'string') : [],
-  allAt: (stateRow && typeof stateRow.SeenAllAt === 'string' && stateRow.SeenAllAt) || '',
+const seenOf = (row) => ({
+  ids: Array.isArray(row && row.Ids) ? row.Ids.filter((x) => typeof x === 'string') : [],
+  allAt: (row && typeof row.AllAt === 'string' && row.AllAt) || '',
 });
 
 /** The body of POST seen → `{ok, all, ids}` or `{error}`. */
@@ -1488,7 +1494,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     playerCount: players.length,
     settings: settingsOf(room.state),
     // Which Host alert items the host has seen, on any of their devices. Never Claude's or a phone's.
-    ...(isAgent ? {} : { seen: seenOf(room.state) }),
+    ...(isAgent ? {} : { seen: seenOf(room.seen) }),
     agent: agentStatus(room.state, room.keys, now),
     // The Session panel's "Claude's plugin is out of date" line. Claude and the room never get it.
     ...(isAgent ? {} : { plugin: pluginView(room.state) }),

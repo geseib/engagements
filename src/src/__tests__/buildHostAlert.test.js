@@ -6,7 +6,9 @@
  * The room sees these screens, so nothing here carries a name or a word a
  * participant typed; only fixed labels and numbers.
  */
-import { hostAlert } from '../buildroom/buildScreens';
+import { hostAlert, latestDecisionLine } from '../buildroom/buildScreens';
+
+const S = require('../../../lambda-functions/game/build-store');
 
 const T = (min) => new Date(Date.UTC(2026, 9, 10, 12, min)).toISOString();
 
@@ -147,5 +149,77 @@ describe('what the room could read', () => {
     });
     const text = JSON.stringify(hostAlert(r));
     ['Priya', 'dark mode', 'Which header', 'Dee', 'Bold banner', 'Marcus', 'map page'].forEach((w) => expect(text).not.toContain(w));
+  });
+});
+
+describe('mockups the host asked for (rebuilt through the real server view)', () => {
+  const view = (rows) => S.hostView({
+    gameId: '4821', meta: { Title: 't' }, sessionState: 'STARTED', room: S.roomFromRows(rows), players: [], now: T(60),
+  });
+  const rows = (pictures) => [
+    { SK: 'BUILD#STATE', Rev: 1 },
+    {
+      SK: 'BUILD#ASK#009', AskId: '009', Kind: 'choice', Prompt: 'Which look?', Options: [{ label: 'A', title: 'Bold' }, { label: 'B', title: 'Calm' }], MaxPicks: 1, Status: 'proposed', Source: 'host', AskForMockups: true, CreatedAt: T(0),
+    },
+    ...pictures.map(([label, at], i) => ({ SK: `BUILD#IMG#${i}`, ImageId: `i${i}`, AskId: '009', Label: label, Kind: 'mockup', CreatedAt: at })),
+  ];
+
+  test('a mockups ask the HOST made (Source host) counts once every picture is in', () => {
+    const v = view(rows([['A', T(5)], ['B', T(9)]]));
+    expect(v.asks[0].source).toBe('host');
+    const a = hostAlert(v);
+    expect(a.count).toBe(1);
+    expect(a.amber).toBe(true);
+    expect(a.lines[0]).toMatchObject({ key: 'mockups', label: 'Mockups are ready (2)', go: 'See them →', ids: ['ask:009'] });
+  });
+
+  test('not counted while Claude is still making them, and never as a question', () => {
+    const v = view(rows([['A', T(5)]]));
+    expect(hostAlert(v)).toMatchObject({ count: 0, lines: [] });
+  });
+
+  test('a Mark all seen during the making does not hide them: they are dated by the last picture', () => {
+    const v = { ...view(rows([['A', T(5)], ['B', T(20)]])), seen: { ids: [], allAt: T(10) } };
+    expect(hostAlert(v).count).toBe(1);
+    const later = { ...v, seen: { ids: [], allAt: T(25) } };
+    expect(hostAlert(later).count).toBe(0);
+  });
+
+  test('the host\'s own proposed vote from ideas is still not counted', () => {
+    const v = view([{ SK: 'BUILD#STATE', Rev: 1 }, { SK: 'BUILD#ASK#010', AskId: '010', Kind: 'choice', Prompt: 'x', Options: [{ label: 'A', title: 'a' }, { label: 'B', title: 'b' }], MaxPicks: 1, Status: 'proposed', Source: 'host', CreatedAt: T(0) }]);
+    expect(hostAlert(v).count).toBe(0);
+  });
+});
+
+describe('early looks: one rule, the time of the last version', () => {
+  test('a new version of a look the host opened counts again; mark-all dates it by that same time', () => {
+    const old = share('1', { updatedAt: T(5) });
+    const idOld = hostAlert(room({ crew: { enabled: true, shares: [old] } })).lines[0].ids[0];
+    const seen = { ids: [idOld], allAt: '' };
+    expect(hostAlert(room({ crew: { enabled: true, shares: [old] }, seen })).count).toBe(0);
+    const newer = { ...old, updatedAt: T(30) };
+    expect(hostAlert(room({ crew: { enabled: true, shares: [newer] }, seen })).count).toBe(1);
+    expect(hostAlert(room({ crew: { enabled: true, shares: [newer] }, seen: { ids: [], allAt: T(10) } })).count).toBe(1);
+    expect(hostAlert(room({ crew: { enabled: true, shares: [old] }, seen: { ids: [], allAt: T(10) } })).count).toBe(0);
+  });
+
+  test('the id is one the server accepts', () => {
+    const id = hostAlert(room({ crew: { enabled: true, shares: [share('12')] } })).lines[0].ids[0];
+    expect(S.normalizeSeen({ ids: [id] })).toMatchObject({ ok: true });
+  });
+});
+
+describe('the Stage\'s "We decided" for a vote that came from Points', () => {
+  const pointsVote = (o = {}) => ({
+    askId: '012', status: 'decided', prompt: 'Which points go first?', decidedAt: T(5), fromPoints: ['p1', 'p2'],
+    options: [{ label: 'A', title: 'Tell the volunteers' }, { label: 'B', title: 'Show the rota' }, { label: 'C', title: 'Print a map' }],
+    decision: { direction: 'Moved forward: Tell the volunteers; Print a map', chosen: ['A', 'C'], method: 'vote' }, ...o,
+  });
+  test('reads "The room chose: <title>, <title>" from the chosen options', () => {
+    expect(latestDecisionLine({ asks: [pointsVote()] })).toBe('The room chose: Tell the volunteers, Print a map');
+  });
+  test('an ordinary decision, or a vote from points the host spoke about, is unchanged', () => {
+    const plain = pointsVote({ fromPoints: undefined, decision: { direction: 'Blue', chosen: ['A'], method: 'vote' }, prompt: 'What colour?' });
+    expect(latestDecisionLine({ asks: [plain] })).toBe('What colour: Blue');
   });
 });

@@ -779,23 +779,40 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const host = !present;
   const ended = room.state === 'ENDED';
   const alert = hostAlert(room, seenLocal);
-  /** Mark seen on the room (every device of the host hears it); this device counts it at once. A failure puts it back and says so. */
+  /**
+   * Mark seen on the room (every device of the host hears it); this device counts it at once.
+   * A line's ids come oldest first: at most the newest 200 are sent (the room keeps 200, and an
+   * older one pushed out would count again), in posts of at most 50. A failure puts back only the
+   * ids that were not saved, says so, and reads the room again.
+   */
   const markSeen = (body) => {
     const before = seenLocal;
-    setSeenLocal((cur) => (body.all ? { ids: [], allAt: new Date().toISOString() } : { ...cur, ids: [...new Set([...cur.ids, ...body.ids])] }));
-    api.markSeen(body).then((out) => {
-      // The server's clock is the one the items were made on.
-      if (body.all && out && out.seen && out.seen.allAt) setSeenLocal((cur) => ({ ...cur, allAt: out.seen.allAt }));
-      return refresh();
-    }).catch((e) => {
-      setSeenLocal(before);
-      errorKind.current = '';
-      setError((e && e.message) || 'That did not work.');
-    });
+    const ids = body.all ? [] : body.ids.slice(-SEEN_KEEP);
+    const posts = body.all ? [{ all: true }] : Array.from({ length: Math.ceil(ids.length / SEEN_POST) }, (_, i) => ({ ids: ids.slice(i * SEEN_POST, (i + 1) * SEEN_POST) }));
+    // The clock here is only for the instant before the server answers; the server's own time replaces it (items are dated on the server's clock, so a skewed laptop would hide or show the wrong ones).
+    setSeenLocal((cur) => (body.all ? { ids: [], allAt: new Date().toISOString() } : { ...cur, ids: [...new Set([...cur.ids, ...ids])] }));
+    (async () => {
+      let saved = 0;
+      try {
+        for (const post of posts) {
+          const out = await api.markSeen(post);
+          saved += post.ids ? post.ids.length : 0;
+          if (post.all && out && out.seen && out.seen.allAt) setSeenLocal((cur) => ({ ...cur, allAt: out.seen.allAt }));
+        }
+        await refresh();
+      } catch (e) {
+        const failed = new Set(ids.slice(saved));
+        setSeenLocal((cur) => (body.all ? { ...cur, allAt: before.allAt } : { ...cur, ids: cur.ids.filter((id) => !failed.has(id) || before.ids.includes(id)) }));
+        errorKind.current = '';
+        setError((e && e.message) || 'That did not work.');
+        await refresh();
+      }
+    })();
   };
   const alertGo = (line) => {
     markSeen({ ids: line.ids });
-    setAlertFocus({ target: line.target });
+    // Ideas open Waiting for you on the Room filter; an ask opens it on All, so the ask is there to focus.
+    setAlertFocus({ target: line.target, filter: line.target.kind === 'ask' ? 'all' : 'room' });
     setScreen('host');
   };
   const alertAll = () => markSeen({ all: true });
@@ -1159,6 +1176,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           ) : (
             <Queue
+              startFilter={alertFocus && alertFocus.filter ? alertFocus.filter : 'all'}
               room={room} current={current} busy={busy} ended={ended} run={run} api={api}
               laterTicked={laterTicked} setLaterTicked={setLaterTicked}
               onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
@@ -1621,6 +1639,8 @@ function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild'
 }
 
 /** True at 480px and narrower. No matchMedia (jsdom, an old browser) reads as wide. */
+const SEEN_POST = 50; // ids per post (the room's limit)
+const SEEN_KEEP = 200; // ids the room keeps
 const NARROW_QUERY = '(max-width: 480px)';
 function useNarrowHeader() {
   const read = () => {
@@ -1685,7 +1705,7 @@ function RoomHeader({
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
       </div>
       <nav className="brm-screens" aria-label="Screens">
-        {SCREENS.map((s) => (s.key === 'host' && screen !== 'host' && alert && alert.count > 0 ? (
+        {SCREENS.map((s) => (s.key === 'host' && screen !== 'host' && alert ? (
           // The Host tab carries the Host alert on Build and History (owner, 2026-10-10); on the Host screen Waiting for you does.
           <HostAlert key={s.key} alert={alert} variant="header" onHost={() => onScreen('host')} onGo={onAlertGo} onMarkAll={onAlertAll} />
         ) : (
@@ -3430,8 +3450,8 @@ function ideaWho(idea) {
  * Claude's asks first, then oldest first. Filters by who it came from; tick
  * ideas to act on several at once, or put them to a vote.
  */
-function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, askOpen = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined }) {
-  const [filter, setFilter] = useState('all');
+function Queue({ startFilter = 'all', room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, askOpen = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined }) {
+  const [filter, setFilter] = useState(startFilter);
   const [ticked, setTicked] = useState([]);
   const [voteOf, setVoteOf] = useState(null);
   const items = queueItems(room);
