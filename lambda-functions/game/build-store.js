@@ -837,7 +837,8 @@ const pluginOlder = (a, b) => {
   return false;
 };
 /** The note for Claude's tool replies, or '' when it is current (or did not say). */
-const pluginNoteFor = (version) => (version && pluginOlder(version, LATEST_PLUGIN) ? PLUGIN_OUTDATED_NOTE : '');
+const PLUGIN_OUTDATED_NOTE_CREW = 'The Engage plugin here is out of date; update your Engage plugin (run the update command from the Connect panel the host shows).';
+const pluginNoteFor = (version, role = 'agent') => (version && pluginOlder(version, LATEST_PLUGIN) ? (role === 'builder' ? PLUGIN_OUTDATED_NOTE_CREW : PLUGIN_OUTDATED_NOTE) : '');
 /**
  * The host's view: what is running, what is current, and whether to say so.
  * A Claude that has called in but never announced a version is older than the
@@ -1688,7 +1689,7 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
-  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,
+  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,

@@ -40,6 +40,7 @@ import MockupViewer, { ViewerContext, backLabelFor } from './MockupViewer';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
 import { W } from './words';
+import InfoTip from './InfoTip';
 import BuildLaterPoints from './BuildLaterPoints';
 import BuildPointRequest from './BuildPointRequest';
 import { PointStage, ShownPointCard, TakeDownOffer } from './BuildPointStage';
@@ -1423,7 +1424,7 @@ function AgentChip({ room, now }) {
   }
   const copy = async () => {
     const ok = await copyText(CONTINUE_COMMAND);
-    setCopied(ok ? `Copied ${CONTINUE_COMMAND}. Paste it into Claude Code.` : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    setCopied(ok ? W.copiedPaste : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
     setTimeout(() => setCopied(''), 4000);
   };
   return (
@@ -1726,7 +1727,8 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
     </div>
   );
   return (
-    <section className="brm-brief" aria-label="The room brief" title={W.tipBrief}>
+    <section className="brm-brief" aria-label="The room brief">
+      <InfoTip text={W.tipBrief} label="About the room brief" />
       <div className="brm-brief-sec">
         <h3 className="brm-h5">Who it is for</h3>
         {ended ? <p>{b.forWhom || 'Not set.'}</p> : (
@@ -1954,6 +1956,8 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
           <Dock
             onMouseEnter={() => setOverDock(true)}
             onMouseLeave={() => setOverDock(false)}
+            onFocus={() => setOverDock(true)}
+            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOverDock(false); }}
             status={liveLink ? (
             <>
               {m.status}
@@ -2284,7 +2288,8 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
         {ask.source === 'agent' && connected && <span className="brm-muted brm-small brm-push">Claude is waiting</span>}
       </div>
       <div className="brm-row brm-gap">
-        <h2 className="brm-h" title={ask.kind === 'choice' ? W.tipEditable : undefined}>Ask {askNumber(ask.askId)} · {KIND_LABEL[ask.kind]}</h2>
+        <h2 className="brm-h">Ask {askNumber(ask.askId)} · {KIND_LABEL[ask.kind]}</h2>
+        {ask.kind === 'choice' && <InfoTip text={W.tipEditable} label="About editing the options" />}
         
       </div>
       {!mockups && stageHint(ask) && <p className="brm-stagehint">{stageHint(ask)}</p>}
@@ -2351,7 +2356,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
         </label>
         {ask.kind === 'choice' && (
           <div className="brm-field">
-            <span className="brm-lbl" title={W.tipLettersKept}>Options</span>
+            <span className="brm-lbl">Options<InfoTip text={W.tipLettersKept} label="About the letters" /></span>
             {options.map((o, i) => (
               <div className="brm-optedit" key={o.label || i}>
                 <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
@@ -3724,7 +3729,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
               <CopyButton text={install} label="Copy" />
               <span className="brm-hint">{W.installNote}</span>
             </div>
-            <p className="brm-hint" title={W.tipMacAllow}>{W.macAllow}</p>
+            <p className="brm-hint">{W.macAllow}<InfoTip text={W.tipMacAllow} label="Why?" /></p>
           </div>
         </li>
 

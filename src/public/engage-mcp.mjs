@@ -145,13 +145,14 @@ async function api(method, path, body, signal) {
   const raw = await res.text();
   let data = null;
   try { data = raw ? JSON.parse(raw) : {}; } catch { data = null; }
+  // The server adds its update line to 4xx answers too: keep it so errorResult's reply carries it.
+  PLUGIN_NOTE = data && typeof data.pluginNote === 'string' ? data.pluginNote.slice(0, 300) : '';
   if (!res.ok) {
     const msg = (data && (data.error || data.message)) || raw.slice(0, 300) || res.statusText;
     throw new ApiError(res.status, String(msg), data);
   }
   if (data === null) throw new ApiError(res.status, 'Engage returned a response that is not JSON.');
   if (data.brief) rememberBrief(data.brief);
-  PLUGIN_NOTE = typeof data.pluginNote === 'string' ? data.pluginNote.slice(0, 300) : '';
   return data;
 }
 

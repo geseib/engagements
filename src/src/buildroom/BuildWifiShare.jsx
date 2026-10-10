@@ -97,7 +97,8 @@ export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall,
           <div className="brm-wifipanel-warn">
             <b>{W.wifiQuietHead}</b> {W.wifiQuietBody}
           </div>
-          <p className="brm-wifipanel-say" title={W.tipWifiSame}>{W.wifiTest}</p>
+          <p className="brm-wifipanel-say">{W.wifiTest}</p>
+          <p className="brm-wifipanel-say">{W.wifiSameAdvice}</p>
           {link && (
             <div className="brm-wifipanel-test">
               <div className="brm-buildqr-qr" role="img" aria-label="QR code to test the build on another device"><QRCodeSVG value={link} size={96} level="M" includeMargin={false} /></div>

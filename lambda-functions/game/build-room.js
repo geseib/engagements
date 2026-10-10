@@ -2915,7 +2915,7 @@ exports.handler = async (event) => {
       }
       // An out-of-date plugin is told so in one line, to read out to the host.
       // Only when it announced a version (an older one cannot show the line).
-      const pluginNote = S.pluginNoteFor(S.pluginVersionOf(event));
+      const pluginNote = S.pluginNoteFor(S.pluginVersionOf(event), role);
       if (pluginNote && res.statusCode < 500 && !res.isBase64Encoded) {
         try { res.body = JSON.stringify({ ...JSON.parse(res.body || '{}'), pluginNote }); } catch { /* not JSON: leave it */ }
       }

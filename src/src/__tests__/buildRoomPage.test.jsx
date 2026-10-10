@@ -1332,7 +1332,7 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
       expect(chip.getAttribute('title')).toBe('Copy, then paste into Claude Code.');
       fireEvent.click(chip);
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('/engage:continue'));
-      expect(await screen.findByText('Copied /engage:continue. Paste it into Claude Code.')).toBeInTheDocument();
+      expect(await screen.findByText('Copied. Paste into Claude Code.')).toBeInTheDocument();
     } finally {
       delete navigator.clipboard;
     }
