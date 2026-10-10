@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: Host · 4 · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* Host · 4 (owner, 2026-10-10): on the projected screens (Stage, Build, and
+   History, which shares Build's header) what waits for the host shows as a
+   count on the way back to the Host screen. Counts and Claude's own words
+   only; never a name or a participant's text. Extends v2.css. One orange per
+   frame: the amber count, or, on the Host screen, the focused ask's button. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .sec,body.is-solo .qs{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec p b{color:var(--text)}
+.lab{font:700 14px/1 var(--font-ui);color:var(--muted);margin:6px 0 -4px 4px}
+
+/* No stray orange in these frames: the join code, the build dot, the
+   on-screen tab and the doing pulse go neutral or blue. */
+.scr .phase--build::before{background:var(--muted)}
+.scr .join .code,.hjoin b{color:var(--text)}
+.pulse{background:var(--secondary);box-shadow:0 0 0 8px var(--m-tint-blue)}
+.view.is-on{box-shadow:inset 0 -2px 0 var(--secondary)}
+.dotline--blue::before{background:var(--secondary)}
+.dotline b{color:var(--text);font-weight:600}
+.vtab.is-on{border-color:var(--secondary);background:var(--m-tint-blue)}
+.doingbig{display:flex;align-items:center;gap:22px}
+.doingbig .q{max-width:none}
+
+/* ---- the count on the Stage dock (Room ladder) ------------------------- */
+.dock .hb{flex:none;display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 18px;border-radius:12px;
+  border:1px solid var(--m-rule);background:transparent;color:var(--muted);font:800 var(--L-meta)/1 var(--font-ui);letter-spacing:.12em}
+.dock .hb .c{letter-spacing:0;font-size:24px}
+.dock .hb--grey{color:var(--text);border-color:rgba(155,168,190,.55);background:var(--surface)}
+.dock .hb--amber{color:var(--primary);border:2px solid var(--primary);background:var(--m-tint-amber)}
+.dock .hb.is-open{box-shadow:0 0 0 4px rgba(124,167,230,.35)}
+.dockstrip{width:1440px;border-radius:10px;overflow:hidden;border:1px solid var(--m-rule);background:var(--bg)}
+.dockstrip .dock{border-top:0}
+
+/* ---- the list, opened in place ----------------------------------------- */
+.al{position:absolute;z-index:45;background:var(--m-drawer);border:1px solid rgba(155,168,190,.45);border-radius:14px;
+  box-shadow:0 18px 50px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden}
+.al ul{list-style:none;margin:0;padding:6px 0}
+.al li{display:grid;grid-template-columns:1fr auto;align-items:center;gap:24px}
+.al li .go{color:var(--secondary);font-weight:700;white-space:nowrap}
+.al li.lead .t{font-weight:800}
+.al .ft{display:flex;align-items:center;border-top:1px solid var(--m-rule);color:var(--muted)}
+.al .ft .push{margin-left:auto}
+.al .ft u{text-decoration:none;color:var(--secondary);font-weight:700}
+/* on the Stage: Room ladder, read from the back */
+.al--stage{right:200px;bottom:calc(var(--dock-h) + 12px);width:720px}
+.al--stage li{min-height:64px;padding:0 24px;font-size:var(--L-body)}
+.al--stage li + li{border-top:1px solid var(--m-rule)}
+.al--stage .ft{padding:14px 24px;font-size:var(--L-meta)}
+/* under the Build header: laptop ladder */
+.al--hdr{top:52px;left:262px;width:500px}
+.al--hdr li{min-height:44px;padding:0 16px;font-size:var(--t-head)}
+.al--hdr li + li{border-top:1px solid var(--m-rule)}
+.al--hdr .ft{padding:10px 16px;font-size:var(--t-label)}
+
+/* ---- the count on the header's Host tab (laptop ladder) ---------------- */
+.view .c{font:800 14px/1 var(--font-ui)}
+.view--amber{color:var(--primary);background:var(--m-tint-amber);box-shadow:inset 0 0 0 1px var(--primary)}
+.view--grey{color:var(--text);box-shadow:inset 0 0 0 1px rgba(155,168,190,.55)}
+.view.is-open{outline:3px solid rgba(124,167,230,.45);outline-offset:1px}
+.hstrip{width:1440px;border-radius:10px;overflow:hidden;border:1px solid var(--m-rule)}
+.hstrip .hdr{height:60px}
+.hdr{gap:12px}
+
+/* ---- A4: the Host screen at that ask ----------------------------------- */
+.q-item.is-focus{border:2px solid var(--secondary);box-shadow:0 0 0 5px rgba(124,167,230,.22)}
+.srcdot--n{background:var(--surface-2);color:var(--text)}
+.colh .count{color:var(--text)}
+
+/* ---- rules ------------------------------------------------------------- */
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45}
+.vt td:first-child{font-weight:700}
+.vt td.why{color:var(--muted);font-size:13px}
+.vt code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px}
+.no{color:var(--danger-text)}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+@media (max-width:700px){.vt{font-size:13px}.vt th,.vt td{padding:8px 6px}}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · Host · 4</b>
+<a href="#a1">A1 Stage dock</a><a href="#a2">A2 Stage list</a><a href="#a3">A3 Build header</a><a href="#a4">A4 At the ask</a><a href="#a5">A5 Nothing new</a><a href="#rules">What counts</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="../build-room-doing/index.html">What Claude is doing</a><a href="../build-room-copy-pass/index.html">Copy pass</a></nav>
+<div class="pg-title"><h1>On the projected screens, a count says what waits for you</h1>
+<p>Owner, 2026-10-10. Stage and Build show "Host · 4" on the way back to the Host screen. Amber when Claude waits on you, grey otherwise. Click it for a short list; each line jumps to where it is handled. No names, no quoted text, no sound, no pop-up.</p></div>
+
+<!-- ===================================================================== A1 -->
+<div class="frame-h" id="a1"><h2>A1 · Stage dock: Host · 4, amber; Host · 2, grey</h2><p>The count replaces today's badge on HOST. Amber: Claude has a question. Grey: only notices and room ideas.</p></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;flex-direction:column;gap:14px">
+<div class="scr">
+<div class="rail"><span class="phase phase--build">Building</span><div class="rail-title"><b>Charity dashboard</b><span>Built with the room</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4821</span></div></div>
+<div class="bar bar--build"></div>
+<div class="main"><div class="content">
+<div class="doingbig"><span class="pulse"></span><h2 class="q">Claude is building the bar chart</h2></div>
+<span class="mins">for 4 min</span>
+<div class="latest" style="margin-top:26px"><div class="k">Just finished</div><div class="t">Built the header</div></div>
+</div>
+<aside class="meter"><span class="lbl">Here</span><span class="big">18<small> / 18</small></span><span class="says">Send an idea any time</span><div class="joinbox"><span class="qr"></span><p>Join<b style="color:var(--text)">4821</b></p></div></aside></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">18 here</div><span class="dbtn dbtn--ghost">Ask the room</span><span class="hb hb--amber">HOST · <span class="c">4</span></span><span class="hb">SESSION</span></footer>
+</div>
+<div class="lab">Grey: nothing from Claude waits</div>
+<div class="dockstrip"><footer class="dock"><div class="status" style="color:var(--muted)">18 here</div><span class="dbtn dbtn--ghost">Ask the room</span><span class="hb hb--grey">HOST · <span class="c">2</span></span><span class="hb">SESSION</span></footer></div>
+</div></div></div>
+
+<!-- ===================================================================== A2 -->
+<div class="frame-h" id="a2"><h2>A2 · The list, open on the Stage</h2><p>Opens above the button. Most urgent first, one line each, a kind folded into one line. Escape or a click outside closes it.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--build">Building</span><div class="rail-title"><b>Charity dashboard</b><span>Built with the room</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4821</span></div></div>
+<div class="bar bar--build"></div>
+<div class="main"><div class="content">
+<div class="doingbig"><span class="pulse"></span><h2 class="q">Claude is building the bar chart</h2></div>
+<span class="mins">for 4 min</span>
+<div class="latest" style="margin-top:26px"><div class="k">Just finished</div><div class="t">Built the header</div></div>
+</div>
+<aside class="meter"><span class="lbl">Here</span><span class="big">18<small> / 18</small></span><span class="says">Send an idea any time</span><div class="joinbox"><span class="qr"></span><p>Join<b style="color:var(--text)">4821</b></p></div></aside></div>
+<div class="al al--stage" role="dialog" aria-label="Waiting for you">
+<ul>
+<li class="lead"><span class="t">Claude has a question</span><span class="go">Open →</span></li>
+<li><span class="t">Mockups are ready (3)</span><span class="go">See them →</span></li>
+<li><span class="t">Claude finished: header built</span><span class="go">See it →</span></li>
+<li><span class="t">3 new ideas from the room</span><span class="go">Review →</span></li>
+</ul>
+<div class="ft"><u>Mark all seen</u><span class="push">Host screen · 1</span></div>
+</div>
+<footer class="dock"><div class="status" style="color:var(--muted)">18 here</div><span class="dbtn dbtn--ghost">Ask the room</span><span class="hb hb--amber is-open">HOST · <span class="c">4</span></span><span class="hb">SESSION</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== A3 -->
+<div class="frame-h" id="a3"><h2>A3 · Build header: the count on the Host tab, and the same list</h2><p>History shares this header, so it gets the same. The list drops under the tab at laptop size.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view view--amber is-open">Host · <span class="c">4</span><kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view is-on">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the bar chart</b></span><span class="hjoin">Join <b>4821</b></span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="build"><div class="urlbar"><div class="vtabs"><span class="vtab is-on">Latest build</span></div><span class="u">http://localhost:5173/</span><span class="btn btn--sm btn--ghost">Reload</span></div>
+<div class="frame"><img src="../build-room-host-redesign/img/preview.svg" alt="The live build"></div></div>
+<div class="al al--hdr" role="dialog" aria-label="Waiting for you">
+<ul>
+<li class="lead"><span class="t">Claude has a question</span><span class="go">Open →</span></li>
+<li><span class="t">Mockups are ready (3)</span><span class="go">See them →</span></li>
+<li><span class="t">Claude finished: header built</span><span class="go">See it →</span></li>
+<li><span class="t">3 new ideas from the room</span><span class="go">Review →</span></li>
+</ul>
+<div class="ft"><u>Mark all seen</u><span class="push">Host screen · 1</span></div>
+</div>
+</div></div></div>
+
+<!-- ===================================================================== A4 -->
+<div class="frame-h" id="a4"><h2>A4 · After "Open →": the Host screen, at that ask</h2><p>Focus lands on Claude's ask; the card stays outlined until the host acts or clicks elsewhere. The item is seen, so the count falls to 3. On the Host screen the tab shows no count: Waiting for you is in view.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is waiting on you</b></span><span class="hjoin">Join <b>4821</b></span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="host">
+<section class="col"><div class="now"><div class="colh"><h2>Now</h2></div>
+<p class="nq">Claude is waiting on you</p>
+<div class="row"><span class="btn">Show the build</span></div></div>
+<div class="composer"><textarea class="ta" placeholder="An idea, what the room said, or a note for Claude"></textarea>
+<div class="routes"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm btn--ghost">Save for later</span></div></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you · 5</h2></div>
+<div class="filters"><span class="flt is-on">All</span><span class="flt">Claude · 2</span><span class="flt">Room · 3</span></div>
+<div class="q-item is-focus" tabindex="-1"><div class="q-top"><span class="srcdot srcdot--n">C</span><span class="src">Claude asks the room</span><span class="chip chip--blue">Choose</span><span class="meta" style="margin-left:auto">Claude is waiting · 40s</span></div>
+<div class="q-text q-text--big">Which header should volunteers see first?</div>
+<div class="thumbs"><figure><img src="../build-room-host-redesign/img/choice-a.svg" alt=""><figcaption><b>A</b> Bold banner</figcaption></figure><figure><img src="../build-room-host-redesign/img/choice-b.svg" alt=""><figcaption><b>B</b> Calm photo</figcaption></figure></div>
+<div class="q-acts"><span class="btn btn--sm btn--primary">Open to the room</span><span class="btn btn--sm">Answer for the room</span></div></div>
+<div class="q-item"><div class="q-top"><span class="srcdot srcdot--n">C</span><span class="src">Claude asks the room</span><span class="chip">Mockups ready</span><span class="meta" style="margin-left:auto">2 min</span></div>
+<div class="q-text">Which graph for monthly giving?</div></div>
+<div class="hint" style="text-align:center">+ 3 ideas from the room</div>
+</section>
+<section class="col"><div class="tabs" style="padding:0"><span class="tab is-on">History</span></div>
+<ul class="hist">
+<li><span class="tm">10:46</span><span class="pt"></span><div class="bd"><b>Claude finished</b> · header built</div></li>
+<li><span class="tm">10:41</span><span class="pt pt--dec"></span><div class="bd"><b>Decided</b> · Ask 2: bars by month</div></li>
+</ul></section>
+</div></div></div></div>
+
+<!-- ===================================================================== A5 -->
+<div class="frame-h" id="a5"><h2>A5 · Nothing new: no count</h2><p>HOST and Host read as today. A click goes straight to the Host screen; no list.</p></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;flex-direction:column;gap:14px">
+<div class="lab">Stage dock</div>
+<div class="dockstrip"><footer class="dock"><div class="status" style="color:var(--muted)">18 here</div><span class="dbtn dbtn--ghost">Ask the room</span><span class="hb">HOST</span><span class="hb">SESSION</span></footer></div>
+<div class="lab">Build header</div>
+<div class="hstrip"><header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view is-on">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the bar chart</b></span><span class="hjoin">Join <b>4821</b></span><span class="btn btn--sm btn--ghost">SESSION</span></header></div>
+</div></div></div>
+
+<!-- ===================================================================== rules -->
+<div class="sec" id="rules"><h2>What counts, and what "seen" means</h2>
+<p>The count is <b>new since seen</b>. "Waiting for you · N" on the Host screen stays the count of what is <b>still to handle</b>. Opening a line marks it seen; the item stays in Waiting for you until the host acts on it.</p>
+<table class="vt">
+<thead><tr><th style="width:22%">Line, in this order</th><th style="width:30%">Counts when</th><th style="width:22%">Jumps to</th><th>Folded</th></tr></thead>
+<tbody>
+<tr><td>Claude has a question</td><td>Claude proposes an ask (<code>status: proposed</code>, <code>source: agent</code>) with no mockups. Claude is blocked on it. <b>Turns the count amber.</b></td><td>That ask in Waiting for you, focused</td><td>"Claude has 2 questions", to the oldest</td></tr>
+<tr><td>Mockups are ready (3)</td><td>A Claude ask's mockups are all in (<code>mockups.ready</code>). Claude waits on this too, so it is <b>amber</b> as well. (3) is the number of pictures.</td><td>That ask, its tiles in view</td><td>Two votes ready: "2 votes are ready"</td></tr>
+<tr><td>Claude finished: header built</td><td>Claude posts a showing or milestone, or a doing line ends. The text is Claude's own done line, already room-safe (build-room-doing). Grey.</td><td>That entry in the History column</td><td>"Claude finished 3 things"</td></tr>
+<tr><td>3 new ideas from the room</td><td>New ideas from participants (<code>status: new</code>, not the host's own), and crew early looks. Never their text or a name. Grey.</td><td>Waiting for you, Room filter on</td><td>Always one line</td></tr>
+<tr><td class="no">Not counted</td><td colspan="3">The host's own drafts and queued ideas (the host made them). A request to take a name: SESSION already carries that nameless count, and the Session panel handles it. Progress posts and the doing line: the screen already shows them.</td></tr>
+</tbody></table>
+<table class="vt">
+<thead><tr><th style="width:22%">Rule</th><th>Decision</th><th style="width:34%">Why</th></tr></thead>
+<tbody>
+<tr><td>Seen</td><td><b>Shared across the host's devices</b>, kept on the room: the ids opened, and the time of the last Mark all seen. An item also leaves the count once it is handled, on any device.</td><td class="why">The wall and the host's phone remote are usually different browsers. Per-browser, the wall would keep showing "Host · 4" after the host had dealt with them on the phone.</td></tr>
+<tr><td>Click</td><td>With a count: the list opens in place. With none: straight to the Host screen. Key 1 always goes straight there.</td><td class="why">The list is a shortcut, never a gate.</td></tr>
+<tr><td>Words</td><td>Claude's own words only, in "Claude finished". Everything else is a fixed label and a number.</td><td class="why">The room reads these screens.</td></tr>
+<tr><td>No noise</td><td>No sound, no pop-up, no animation beyond the number changing.</td><td class="why">Owner, 2026-10-10.</td></tr>
+</tbody></table>
+</div>
+
+<div class="qs" id="qs"><h2>Open questions</h2>
+<ol>
+<li><b>"Open the vote" is a retired word</b> in <code>words.js</code> (it is the act "Open voting"). These frames use "See them →" for the mockups line. Keep that?</li>
+<li><b>Amber for mockups too?</b> Claude waits on both, so these frames turn amber for either. Or amber for a question only?</li>
+<li><b>Count "Claude finished" at all?</b> The Stage already shows "Just finished". Counting it keeps a number up through a busy build. Drop it, and count only what needs the host?</li>
+</ol></div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Room Copy Pass</title>
+<style>
+:root{--bg:#F7F2EA;--surface:#FFFFFF;--line:#E4DACB;--text:#1F2633;--muted:#5F6B7D;--primary:#B4621F;--cut:#2F6F4F;--tip:#2F5C99;--rm:#A23B35;--keep:#5F6B7D}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0F1A2E;--surface:#1B2942;--line:#2B3C5C;--text:#F4EDE4;--muted:#9BA8BE;--primary:#F6A94C;--cut:#6FDAA6;--tip:#8FB7EE;--rm:#EF8C86;--keep:#9BA8BE}}
+:root[data-theme="dark"]{--bg:#0F1A2E;--surface:#1B2942;--line:#2B3C5C;--text:#F4EDE4;--muted:#9BA8BE;--primary:#F6A94C;--cut:#6FDAA6;--tip:#8FB7EE;--rm:#EF8C86;--keep:#9BA8BE}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1080px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:28px;margin:0 0 4px}
+h2{font-size:20px;margin:40px 0 4px}
+h3{font-size:16px;margin:0 0 6px}
+p{margin:6px 0}
+.lede{color:var(--muted);max-width:68ch}
+.src{color:var(--muted);font-size:13px}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:10px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-top:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-top:0}
+td:first-child{width:50%;color:var(--muted)}
+td:nth-child(2){width:38%}
+td small{display:block;font-size:12px;color:var(--muted);margin-top:3px}
+td small.tip{color:var(--tip)}
+.none{color:var(--rm);font-style:italic}
+.why{font-size:12px;font-weight:600;white-space:nowrap}
+.why--cut{color:var(--cut)}.why--tooltip{color:var(--tip)}.why--remove{color:var(--rm)}.why--plain,.why--shorter-word{color:var(--primary)}.why--keep{color:var(--keep)}
+.totals td,.totals th{padding:6px 10px}
+.totals td:first-child{width:auto;color:var(--text)}
+.totals tr.sum td{font-weight:700}
+.merge{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:8px;padding:12px 14px;margin:12px 0}
+.wn{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:10px 0;max-width:460px}
+.wn .ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--bg);font-weight:700}
+.wn > span:nth-child(2){flex:1;display:flex;flex-direction:column}.wn > span:nth-child(2) span{color:var(--muted);font-size:13px}
+.wn button{font:inherit;font-weight:600;border:0;border-radius:6px;padding:6px 14px;background:var(--primary);color:#1F2633}
+ul.rules li,ol li{margin:4px 0}
+code{font-size:13px}
+@media (max-width:640px){table,thead,tbody,tr,th,td{display:block;width:100%!important}thead{display:none}td{border-top:0;padding:4px 10px}tr{border-top:1px solid var(--line);padding:6px 0}}
+</style>
+</head>
+<body>
+<main>
+<h1>Build Room copy pass</h1>
+<p class="lede">A proposal, not a change. Owner, 2026-10-10: follow Orwell's rules, say less, above all on the Stage and in the Build Room; tooltips only where a host needs a sentence once. Nothing here touches code.</p>
+
+<h2>The rules this pass kept</h2>
+<ul class="rules">
+  <li>Labels the vocabulary contract fixes (<code>words.js</code> W and RETIRED) keep their words: Send B to Claude, Change before sending, Save for later, Later, Vote again, Spin the wheel, Main menu, Show results, Open voting, Show on Stage, Talk it over and the rest. Only notes, hints and empty states change.</li>
+  <li>An explanation under a button or a setting is cut to nothing or to six words at most.</li>
+  <li>A sentence the host needs only once moves into a tooltip (marked <span class="why why--tooltip">tooltip</span>, the tooltip text under the proposal).</li>
+  <li>The Stage carries the fewest words: a count, a state, the one move.</li>
+  <li>Laptops, tablets and phones are named only where a device must be: the builder's laptop, the Mac asking about node. Nowhere else.</li>
+  <li>Words are counted by the shown text; <code>{…}</code> stands for a name, a number or a letter and counts as one word. Rows that only say a label again are left out.</li>
+</ul>
+
+<h2>Word counts</h2>
+<table class="totals">
+  <thead><tr><th>Screen</th><th>Rows</th><th>Words now</th><th>Proposed</th><th>Fewer</th><th>Into tooltips</th></tr></thead>
+  <tbody>
+    <tr><td><a href="#host">Host screen: header, Claude line, bars</a></td><td>35</td><td>446</td><td>138</td><td>69%</td><td>42</td></tr>
+    <tr><td><a href="#next">Host screen: What's next and Decided</a></td><td>10</td><td>99</td><td>39</td><td>61%</td><td>0</td></tr>
+    <tr><td><a href="#queue">Host screen: Waiting for you</a></td><td>10</td><td>108</td><td>13</td><td>88%</td><td>27</td></tr>
+    <tr><td><a href="#ask">Host screen: the open ask (path, card, decide)</a></td><td>39</td><td>490</td><td>190</td><td>61%</td><td>16</td></tr>
+    <tr><td><a href="#compose">Host dialogs: Ask the room, Put to a vote</a></td><td>12</td><td>166</td><td>54</td><td>67%</td><td>0</td></tr>
+    <tr><td><a href="#connect">Host dialogs: Connect, Wi-Fi, Wrap up, End</a></td><td>24</td><td>574</td><td>176</td><td>69%</td><td>23</td></tr>
+    <tr><td><a href="#stage">Stage (read from the back of the room)</a></td><td>23</td><td>205</td><td>77</td><td>62%</td><td>0</td></tr>
+    <tr><td><a href="#build">Build screen</a></td><td>3</td><td>25</td><td>10</td><td>60%</td><td>5</td></tr>
+    <tr><td><a href="#history">History screen</a></td><td>3</td><td>23</td><td>3</td><td>87%</td><td>0</td></tr>
+    <tr><td><a href="#session">Session panel: Players, Settings, request strip</a></td><td>12</td><td>162</td><td>55</td><td>66%</td><td>19</td></tr>
+    <tr><td><a href="#points">Points and Later tabs, and their dialogs</a></td><td>22</td><td>354</td><td>101</td><td>71%</td><td>15</td></tr>
+    <tr><td><a href="#player">Participant screens (laptops, tablets and phones)</a></td><td>27</td><td>354</td><td>142</td><td>60%</td><td>0</td></tr>
+    <tr class="sum"><td>All screens</td><td>220</td><td>3006</td><td>998</td><td>67%</td><td>147</td></tr>
+  </tbody>
+</table>
+
+
+<section id="host">
+  <h2>Host screen: header, Claude line, bars</h2>
+  <p class="src">BuildRoomPage.jsx, buildScreens.js claudeState · <b>446</b> words now → <b>138</b> (69% fewer) · 42 words move into tooltips</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Claude is working. Log what the room says, or ask the room yourself.<small>askHint, no ask open: What's next already lists the moves</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>The room can't see this yet. Edit it, then open it.</td><td>Hidden from the room.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room is suggesting. Open voting when you have enough ideas.</td><td>Open voting when ideas slow.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room is answering. Close it when the count settles.<small>names the button the host will press</small></td><td>Show results when answers stop.</td><td><span class="why why--plain">plain</span></td></tr>
+      <tr><td>The room is voting. Close it when the count settles.</td><td>Show results when votes stop.</td><td><span class="why why--plain">plain</span></td></tr>
+      <tr><td>Shape the direction, then send it to Claude.</td><td>Check the words, then send.</td><td><span class="why why--plain">plain</span></td></tr>
+      <tr><td>Claude is ready for the next step<small>shared with the Stage</small></td><td>Claude is ready</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>It finished: {X}.</td><td>Done: {X}.</td><td><span class="why why--shorter-word">shorter word</span></td></tr>
+      <tr><td>Copy the Continue prompt to pick it up.</td><td>Copy the Continue prompt.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Connected to the room. Changes arrive as they happen.<small>Live chip (already a tooltip)</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Changes arrive live.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>The live connection dropped. Click to reconnect now; it also retries on its own.<small>Disconnected chip</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Retries on its own.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>This laptop is offline. The room reconnects when it is back.<small>No internet chip</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Reconnects when the internet returns.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Your sign-in has run out. Sign in again and you come straight back to this room.<small>Signed out chip</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: You come straight back here.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Your sign-in has run out. Sign in again to keep running the room; nothing in it is lost.</td><td>Signed out. Sign in again; nothing is lost.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>When on, Claude's questions open to the room straight away, with no review first<small>Auto switch</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Claude's questions skip your review.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Claude Code has stopped. It has not heard your last direction yet. Run {cmd} in Claude Code and it picks it up.</td><td>Claude Code stopped before your last direction. Run {cmd} in it.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude Code has stopped. Click to copy {cmd}, then paste it into the Claude Code window and press Enter.</td><td><span class="none">nothing</span><small class="tip">Tooltip: Copy, then paste into Claude Code.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Copied. Paste it into Claude Code and press Enter.</td><td>Copied. Paste into Claude Code.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude Code has not connected yet. Use More, then Connect Claude Code.</td><td>Not connected. Open More to connect.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude Code is waiting for your next direction.</td><td>Ready for your direction.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude Code is connected and working.</td><td>Working.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Nothing yet. What Claude does shows up here as it works.<small>activity feed</small></td><td>Nothing yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>This session has ended. The timeline, the wrap-up and the report are still yours to edit.</td><td>Session ended. You can still edit the report.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude has wrapped up. Look over the report, then end the session when the room is done.</td><td>Claude has wrapped up. Check the report, then end the session.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>You had an unsent direction for Ask {n}. It is kept; reopen Ask {n} to send it.</td><td>Ask {n} has an unsent direction. Reopen it to send.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The opening is over and Claude has the brief. Pressed Start building too soon?<small>beside Back to the opening</small></td><td>Started building too soon?</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room votes. A tie goes to the wheel, or to a revote. You can pick one and send it to Claude whenever you like.<small>under the starter question</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Claude starts or builds the project, serves it locally, and puts the link here<small>Preview the work</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Claude runs the project and links it here.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Asked Claude to preview the work.</td><td>Asked Claude for a preview.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Recorded in the timeline: {text}</td><td>Logged: {text}</td><td><span class="why why--shorter-word">shorter word</span></td></tr>
+      <tr><td>An idea, what the room said out loud, or a note for Claude<small>placeholder</small></td><td>An idea, a note, or what the room said</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude is listening. It will act on this straight away.</td><td>Claude acts on this now.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude reads this when it next calls Engage. If it has stopped, paste the Continue prompt into Claude Code.</td><td>Claude reads this when it next checks in.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude reads who it is for and Keep in mind whenever they change. At wrap-up Claude says which rules are worth keeping in the project, and you choose.<small>Room brief</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Claude rereads this when it changes.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Send something to Claude as Keep in mind and it lands here.</td><td>Keep in mind directions land here.</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="next">
+  <h2>Host screen: What's next and Decided</h2>
+  <p class="src">buildScreens.js whatsNextMoves, BuildWhatsNext.jsx · <b>99</b> words now → <b>39</b> (61% fewer)</p>
+  
+  <div class="merge">
+    <h3>The merge: one move, Ask the room</h3>
+    <p>“Ask the room a starter question” and “Ask the room something new” open the same dialog (<code>compose: 'suggest'</code>, the first with <code>library: true</code>, which only moves the cursor). One move replaces both:</p>
+    <div class="wn"><span class="ic">?</span><span><b>Ask the room</b><span>A starter, or your own</span></span><button type="button">Ask</button></div>
+    <p>It opens the Ask the room dialog as now: the ready questions on the left, the form on the right. The title is <code>W.askRoom</code>, a word the contract already owns. Words: 2 moves × (title + hint + button) = 24 → 9.</p>
+  </div>
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Ask the room a starter question · From the question library · Ask it<small>THE MERGE: one move replaces two (see below)</small></td><td>Ask the room · A starter, or your own · Ask</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Ask the room something new · Ideas, a choice, or a 1 to 5 rating · New ask<small>folded into Ask the room</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>{A and B} are ready to compare<small>hint under Open voting on Claude's mockups</small></td><td>{A and B} are ready</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room sent these while you were busy<small>hint under Put {n} ideas to a vote</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Into one prompt you can edit before Claude gets it</td><td>One prompt, yours to edit</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Talk over a point while Claude builds</td><td>Talk over a point</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Tick one in Points, then Show on Stage</td><td>Tick one in Points</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Nothing gets built until Claude Code is connected</td><td>Nothing is built without it</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room picks which one Claude gets</td><td>The room picks one</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Nothing decided yet. Each answer the room settles lands here, ready to combine into one prompt.</td><td>Nothing decided yet.</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="queue">
+  <h2>Host screen: Waiting for you</h2>
+  <p class="src">BuildRoomPage.jsx queue and idea actions · <b>108</b> words now → <b>13</b> (88% fewer) · 27 words move into tooltips</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Nothing waiting. Phones can send an idea at any time, and Claude's questions land here first.</td><td>Nothing waiting.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Not now. They wait on your Later list; nothing goes to Claude.<small>Save for later (bulk)</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Claude hears nothing.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Not now. It waits on your Later list; nothing goes to Claude.<small>Save for later (one)</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Claude hears nothing.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Mark every new one as seen. Nothing goes to Claude.</td><td><span class="none">nothing</span><small class="tip">Tooltip: Marks all as seen.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Mark it as seen. Their phone says so; nothing goes to Claude.<small>Acknowledge</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Their screen says Seen.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>On the Stage for 20 seconds, without a name. Nothing goes to Claude.<small>Show on the wall</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: 20 seconds on the Stage, no name.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Put to a vote (tick another idea first)<small>disabled state</small></td><td>Put to a vote<small class="tip">Tooltip: Tick another idea.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Tick another idea to vote between them</td><td><span class="none">nothing</span><small class="tip">Tooltip: Tick another idea.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Suggestions appear here as phones send them. Anonymous on the wall.</td><td>No ideas yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>+ add what the room said out loud<small>placeholder</small></td><td>+ what the room said</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="ask">
+  <h2>Host screen: the open ask (path, card, decide)</h2>
+  <p class="src">BuildAskPath.jsx, BuildRoomPage.jsx ask card, DecideBox, pick dialog, CLAUDE_KINDS · <b>490</b> words now → <b>190</b> (61% fewer) · 16 words move into tooltips</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Close it and let the wheel pick from every option<small>Spin the wheel</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: The wheel picks from every option.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Opens it to the room again.<small>under Reopen</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Nobody has rated it yet.</td><td>No ratings yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Click another option to pick it instead; you will be asked first.</td><td>Click another option to pick it.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Spin the wheel, ask the room to vote again, or click an option to pick it.<small>names the buttons</small></td><td>Spin the wheel, Vote again, or click one.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Let chance pick, or click an option to pick it yourself.</td><td>Spin the wheel, or click one.</td><td><span class="why why--plain">plain</span></td></tr>
+      <tr><td>Going with {B}, your pick instead of the wheel's {A}</td><td>{B} · your pick, not the wheel's {A}</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Going with {B}, the room's choice, 7 to 4</td><td>{B} · the room's choice, 7 to 4</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Going with {B}, your pick instead of {A}</td><td>{B} · your pick, not {A}</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Going with the average, 3.4 out of 5</td><td>Average 3.4 of 5</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Options can change until someone answers</td><td><span class="none">nothing</span><small class="tip">Tooltip: Editable until someone answers.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Every option has its picture. Open it when you are ready.</td><td>All pictures are in.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Ask {n} is still open. Open next puts this vote on the room's screens as soon as you close ask {n}.</td><td>Opens when you close ask {n}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room cannot see it yet. It is marked Ready when all {n} are in; you open it.</td><td>Hidden until all {n} are in.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Asked Claude for mockups. Each appears under its option as Claude attaches it.</td><td>Asked Claude for mockups.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>No preview for option {B} yet. The room chooses faster from a picture. Claude can make a quick mockup of each.<small>beside Ask Claude for mockups</small></td><td>No picture for {B} yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude is not connected, so it cannot make mockups now. Add a preview URL under Edit, or open the ask without.</td><td>Claude is offline. Add a preview URL, or open without.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Letters are fixed. Claude stamps &quot;Choice A&quot;, &quot;Choice B&quot; on its mockups, so renaming an option keeps its letter.</td><td><span class="none">nothing</span><small class="tip">Tooltip: Renaming keeps the letter.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Edit the question and options</td><td>Edit question</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Take it out of line; it waits here<small>Not next</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Waits here.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>A tie between {A} and {B}. Spin the wheel, or ask the room to vote again.<small>the buttons sit under it</small></td><td>A tie: {A} and {B}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Let chance pick: the wheel holds every option.</td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Someone in the room spins it from their phone. You can always spin it yourself.</td><td>{Name} spins. You can too.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Pick someone else in the room to spin it<small>tooltip on Someone else spins, which says it</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>The room preferred {A} (7 votes). You are picking {B} instead. It is recorded as your pick, not the room's.</td><td>The room preferred {A} (7 votes). {B} goes on record as your pick.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room is tied between {A} and {B}. You are picking {A}. It is recorded as your pick.</td><td>A tie: {A} and {B}. {A} goes on record as your pick.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Yes, pick {B} instead</td><td>Pick {B}</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>For when people talk instead of tapping. Pick what the room said; Claude builds from the sentence below and is told it was said out loud.</td><td>Pick what the room said out loud.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude builds from this sentence, not from the counts. Edit it freely. {7} of {12} answered.</td><td>Claude builds from this sentence. {7} of {12} answered.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>You picked an alternate. The room preferred {A}. This goes on the record as your pick.<small>also in Change before sending on the Stage</small></td><td>Your pick. The room preferred {A}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>What the room said (optional; goes to Claude with the direction)</td><td>What the room said (optional)</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>What people said (optional; goes to Claude with the answer)</td><td>What people said (optional)</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The next thing to build. Claude stops and does it.<small>Do now</small></td><td>Claude stops and does it.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>A rule or a fact for everything from now on. Goes on the brief; Claude does not stop.<small>Keep in mind</small></td><td>A standing rule. Claude keeps going.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Waits on your Later list. Claude hears nothing until you send it.<small>Later (set-only kind)</small></td><td>Claude hears nothing yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>A question. Claude answers on the screen and keeps building.<small>Ask Claude</small></td><td>Claude answers and keeps building.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Goes on your Later list: &quot;{text}&quot;. Claude hears nothing until you send it.</td><td>Goes to Later: &quot;{text}&quot;. Claude hears nothing yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>That did not ask again. Your question is still here; try again.</td><td>Not sent. Your question is still here.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>That did not send. Nothing changed; try again.</td><td>Not sent. Try again.</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="compose">
+  <h2>Host dialogs: Ask the room, Put to a vote</h2>
+  <p class="src">AskComposer, ReadyLibrary, VoteDialog (BuildRoomPage.jsx) · <b>166</b> words now → <b>54</b> (67% fewer)</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Question (shown big on the wall)</td><td>Question</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room rates 1 to 5: 1 means needs work, 5 means great.</td><td>1 needs work · 5 great</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>When it is decided, Claude gets it as<small>the same words as the decide box</small></td><td>Claude gets it as</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Note for Claude (optional; never shown to the room)</td><td>Note for Claude (private)</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Save as a draft; don't open it yet</td><td>Save as a draft</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>You asked this in ask {n}. Ask again if the work has changed since.</td><td>Asked in ask {n}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>No ready questions yet. Tag a Call and Answer or Poll set build-room and its questions appear here.</td><td>No ready questions. Tag a set build-room.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>How people vote · Pick one is the default</td><td>How people vote</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Names are not shown to the room. When you decide, the winner goes to Claude as a direction and each idea is marked as used.</td><td>No names shown to the room.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Ask Claude for a quick mockup of each first</td><td>Ask Claude for mockups first</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The vote waits in your queue, hidden from the room, until Claude has made the mockups. Meanwhile you can ask the room other things. When they are in, the vote is marked Ready and you open it.</td><td>Hidden until the mockups are in.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude Code is not connected, so it cannot make mockups now.</td><td>Claude is offline. No mockups.</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="connect">
+  <h2>Host dialogs: Connect, Wi-Fi, Wrap up, End</h2>
+  <p class="src">ConnectDialog, BuildWifiShare.jsx, WrapDialog, EndDialog · <b>574</b> words now → <b>176</b> (69% fewer) · 23 words move into tooltips</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Claude Code runs on this laptop. The Engage plugin connects it to the room and keeps the project tidy in git: one commit per decision, never pushed.</td><td>Claude Code runs on this laptop and joins the room.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Run it in a terminal. It installs the plugin if it is missing, updates it if it is out of date, or tells you you're all set. Needs Node 18 or later.</td><td>Run it in a terminal. Needs Node 18 or later.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>If your Mac asks whether node may accept incoming connections, click Allow. That is how the room's phones, laptops and tablets on this Wi-Fi reach the build.</td><td>If your Mac asks about node, click Allow.<small class="tip">Tooltip: So the room can open the build on this Wi-Fi.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>A new folder for this build, named for the session. Claude sets up git there: README, DECISIONS and a first commit.</td><td>A new folder with git, named for the session.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>This key is shown once. It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</td><td>Shown once. Lost it? Mint a new one.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Already running Claude Code in the right folder? Paste this into it instead:</td><td>Claude Code already open there? Paste this:</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude Code is connected with the current key. A key was minted {5:07} and last used {5:12}. It was shown once. Minting a new one stops the old key at once.</td><td>Key minted {5:07}, used {5:12}. A new key stops it.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The current key stops working immediately, and Claude Code disconnects until you paste the new command.</td><td>The old key stops at once.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>It makes ~/build-room/{folder}, starts Claude Code there and connects it to this room.</td><td>Makes ~/build-room/{folder} and connects Claude Code.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Run it in Claude Code. Claude reads the room, restates the goal and posts its plan. Claude commits once per decision or milestone, and each turn is kept as a hidden snapshot…<small>Kick off step</small></td><td>Run it in Claude Code.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Run it in Claude Code. It makes the base branch, shares the repo with the room and proposes the first tasks. Claude commits once per decision here, and each turn is kept as a hidden snapshot…<small>crew step</small></td><td>Run it in Claude Code.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Each is a command in Claude Code with the plugin, or a card to paste: {list}. Without the plugin they are {list} and so on.<small>the cards below show the commands</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>One command in the terminal instead, then restart Claude Code. No automatic checkpoints; Claude can still call checkpoint.</td><td>Run this, then restart Claude Code.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Game {id}. The key is never shown in Present mode.<small>Present mode is gone; the Stage never shows keys</small></td><td>Game {id}.</td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Anyone on this Wi-Fi with the link can open the app Claude is running, on a phone, laptop or tablet. Turn it off at any time. Everyone loses it at once.</td><td>Anyone on this Wi-Fi can open the build. Off closes it for all.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude Code has not answered. Update the Engage plugin from Connect Claude Code, then restart Claude Code in the project folder.</td><td>Claude Code has not answered. Update the plugin, then restart it.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>None open yet. It has been on for 2 minutes and no device has opened it. Some Wi-Fi networks (hotels, conferences, guest networks) keep devices apart, so nobody else can reach this laptop.</td><td>Nobody has opened it in 2 minutes. Guest Wi-Fi often blocks this.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Check that everyone is on the same Wi-Fi as this laptop: phones and tablets not on mobile data, laptops not on a work VPN. Try it yourself on another device first: scan the QR below.</td><td>Test it: scan the QR from another device.<small class="tip">Tooltip: Same Wi-Fi; no mobile data, no VPN.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Scan to open the build. If your own device cannot open it either, this Wi-Fi will not work for the room. Use screenshots, as before.</td><td>If it fails for you, it fails for the room. Use screenshots.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Anyone in the room on this laptop's Wi-Fi can open the app Claude is running, on a phone, laptop or tablet. You can turn it off at any time.</td><td>Anyone on this Wi-Fi can open it. Off any time.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude wrote this at wrap-up. Edit anything; it leads the report.</td><td>Claude wrote this. It leads the report.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Phones stop answering, no new asks can open, and Claude's calls are refused from now on. The timeline, the wrap-up and the report stay, and you can still edit them.</td><td>The room and Claude stop. You can still edit the report.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Only want to pause? Leave it open and close the current ask instead.</td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Click anywhere to put it away. Click the link to copy it.<small>QR zoom</small></td><td><span class="none">nothing</span><small class="tip">Tooltip: Click the link to copy it.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="stage">
+  <h2>Stage (read from the back of the room)</h2>
+  <p class="src">buildScreens.js stageModel, roomDockLine, looksWords; BuildRoomPage.jsx IdleStage; BuildPointStage.jsx; BuildWifiShare.jsx wall QR · <b>205</b> words now → <b>77</b> (62% fewer)</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Send an idea from your phone, laptop or tablet.<small>no device needs naming</small></td><td>Send an idea any time.</td><td><span class="why why--plain">plain</span></td></tr>
+      <tr><td>Open the build on the same Wi-Fi.</td><td>Open the build on this Wi-Fi.</td><td><span class="why why--shorter-word">shorter word</span></td></tr>
+      <tr><td>We are framing the build together. Claude is getting ready.</td><td>Framing the build.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Mockups ready · the host opens voting</td><td>Mockups ready</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude made {A, B and C}. Look now; the vote opens next.</td><td>Claude made {A, B and C}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Pick one on your phone, laptop or tablet<small>under Next</small></td><td>Voting opens next</td><td><span class="why why--plain">plain</span></td></tr>
+      <tr><td>Claude is ready for the next step</td><td>Claude is ready</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>It finished: {X}. The host will choose what comes next.</td><td>Done: {X}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The host will choose what comes next.</td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>The host will pick it up again in a moment.<small>under Claude has paused</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>{7} of {12} have answered</td><td>{7} of {12} answered</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>{7} of {12} have voted</td><td>{7} of {12} voted</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>{3} ideas so far</td><td>{3} ideas</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>{Vote} · Ask {3} · Claude asks<small>who asked is host business</small></td><td>{Vote} · Ask {3}</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>This session has ended.</td><td>Session ended.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Talk it over with the people near you. Send an idea about it from your laptop, tablet or phone.<small>also on phones</small></td><td>Talk it over. Send an idea.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>A point is up for the room<small>the heading already says Talk it over</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>{From Claude} · Ideas on this {3}. The Stage goes back to Claude building when you take it down.<small>the second sentence is for the host, not the room</small></td><td>{From Claude} · {3} ideas</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude is working on {2} of {5} · Next waits until Claude reports {2} done</td><td>Claude is on {2} of {5}</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Someone in the room said<small>wall comment</small></td><td>From the room</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>On your phone, laptop or tablet: scan the code, or press Open the build in Engage.<small>wall QR</small></td><td>Scan the code, or press Open the build.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>You need to be on the same Wi-Fi as this laptop.</td><td>Same Wi-Fi only.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Phone, laptop or tablet · same Wi-Fi<small>corner QR</small></td><td>Same Wi-Fi</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="build">
+  <h2>Build screen</h2>
+  <p class="src">BuildRoomPage.jsx BuildScreen · <b>25</b> words now → <b>10</b> (60% fewer) · 5 words move into tooltips</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>What Claude has built so far</td><td>The build so far</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Nothing to show yet. When Claude previews the work, its newest screenshot appears here.</td><td>Nothing to show yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Open full size (new tab) ↗<small>MockupViewer</small></td><td>Full size ↗<small class="tip">Tooltip: Opens in a new tab.</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="history">
+  <h2>History screen</h2>
+  <p class="src">buildScreens.js historyItems, BuildRoomPage.jsx, BuildAskDetail.jsx · <b>23</b> words now → <b>3</b> (87% fewer)</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>What Claude shows, what the room decides and what it says collect here.</td><td>Nothing yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude shared a picture</td><td>Picture</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Click a mockup to look closer.<small>the pointer says it</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="session">
+  <h2>Session panel: Players, Settings, request strip</h2>
+  <p class="src">BuildSessionPanel.jsx · <b>162</b> words now → <b>55</b> (66% fewer) · 19 words move into tooltips</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Someone on another device is asking to take the name {Wi-Fi tester}</td><td>Another device wants the name {Wi-Fi tester}</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>{Wi-Fi tester} is here now, joined {5:07 PM}.</td><td>{Wi-Fi tester} is here now · joined {5:07 PM}</td><td><span class="why why--keep">keep</span></td></tr>
+      <tr><td>If {Wi-Fi tester} is moving devices, let them take it: the name keeps its ideas and votes, and the old device stops being {Wi-Fi tester}. If it is somebody else, Not now leaves {Wi-Fi tester} as they are.</td><td><span class="none">nothing</span><small class="tip">Tooltip: Let them take it: &quot;The name keeps its ideas and votes.&quot; Not now: &quot;{Wi-Fi tester} stays as they are.&quot;</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Out of the live counts. Their ideas and votes stay in the session report.</td><td>Their ideas and votes stay in the report.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Who can get in, and what they see<small>subhead under The room</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Hovering or clicking the room meter on the Stage lists who has joined. Off, it shows only the count.</td><td>Off: the Stage shows only the count.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>How Claude works with the room<small>subhead under Claude</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>On, Claude's questions open to the room straight away, with no review first. Off, they wait for you in Waiting for you.</td><td>On: Claude's questions skip your review.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Who builds with you<small>subhead under Crew</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Builders link their own Claude Code and build beside yours. Up to 8.</td><td>Up to 8 builders, each with their own Claude.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Start building can be undone; nothing in the brief is lost.</td><td>Nothing in the brief is lost.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Ends it for everyone in the room.</td><td>Ends it for everyone.</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="points">
+  <h2>Points and Later tabs, and their dialogs</h2>
+  <p class="src">words.js W (notes and empty states only; every label stays) · <b>354</b> words now → <b>101</b> (71% fewer) · 15 words move into tooltips</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Nothing saved for later. Save for later puts a room idea or a direction here.<small>W.laterEmpty</small></td><td>Nothing saved for later.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>No points yet. Research… asks Claude to look something up on the web and bring back findings with their sources. Ideas… asks for where the build could go next. Claude may add one to three talking points of its own as it finishes a step. Nothing here reaches the Stage until you show it.<small>W.pointsEmpty</small></td><td>No points yet.<small class="tip">Tooltip: Research…: &quot;Claude looks it up and cites sources.&quot; Ideas…: &quot;Where the build could go next.&quot;</small></td><td><span class="why why--tooltip">tooltip</span></td></tr>
+      <tr><td>Claude hands this to a helper and keeps building. Three to six findings come back to Points, each with the pages it came from. The room sees nothing until you show it.<small>W.researchNote</small></td><td>Findings come back here, with sources.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Four to eight ideas for where to go next, tied to what the room has built and decided. The room sees nothing until you show it.<small>W.ideasNote</small></td><td>Four to eight ideas come back here.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude is not connected. Claude will start when it reconnects.<small>W.claudeAway</small></td><td>Claude starts when it reconnects.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>{Research} waits: {X}. Claude will start when it reconnects.<small>W.requestWaits</small></td><td>{Research} waits: {X}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>{20} is the most. Remove or save some first.<small>W.pointsFull</small></td><td>{20} at most. Remove some first.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Closing this window keeps the point up.<small>W.takeDownClose</small></td><td>The point stays up.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Either way the point comes down and the Stage goes back to Claude building.<small>W.takeDownEither</small></td><td>Either way, the point comes down.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The options, as people will see them<small>W.voteOptionsHead</small></td><td>Options</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Options never say who posted them on the Stage or on anyone's laptop, tablet or phone. Sources stay with the host.<small>W.voteOptionsNote</small></td><td>No names or sources shown.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>1 to 5. Each pick counts as one vote.<small>W.picksRule</small></td><td>1 to 5</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The top 3 by votes are highlighted. Click a row to change that. Claude will be told the highlighted ones, in this order.<small>W.highlightNote</small></td><td>Claude gets the highlighted ones, in order.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>A tie at the cut: {A} and {B}, {3} each. Both are highlighted. Clear one, or keep both.<small>W.highlightTie</small></td><td>Tie at the cut: {A} and {B}. Both highlighted.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Nothing is highlighted. Click a row to highlight it.<small>W.highlightNone</small></td><td>Click a row to highlight it.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Next: the run list, or one direction to Claude<small>W.nextMoves: the buttons say it</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Claude is working on {2}. Next waits until Claude reports it done.<small>W.claudeIsOnItem</small></td><td>Claude is on {2}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude is working on {5}, the last one.<small>W.claudeLastItem</small></td><td>Claude is on {5}, the last.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Drag the grip, or focus it and use the arrow keys, to reorder. Skipped items go to Later.<small>W.reorderNote; the grip keeps its aria-label</small></td><td>Skipped items go to Later.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Claude is still on &quot;{text}&quot;. If you send {3} now, Claude gets it next and {2} may be left half done.<small>W.confirmEarlyBody, under the title that asks</small></td><td>{2} may be left half done.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>For your task. Your Claude does it in a helper and keeps building.<small>W.lanePointsNote</small></td><td>For your task.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Nothing yet. Research… and Ideas… send your Claude to look.<small>W.yourPointsNone</small></td><td>Nothing yet.</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="player">
+  <h2>Participant screens (laptops, tablets and phones)</h2>
+  <p class="src">BuildPlayer.jsx, BuildPlayerPoints.jsx, BuildPlayerCrew.jsx, W · <b>354</b> words now → <b>142</b> (60% fewer)</p>
+  
+  <table>
+    <thead><tr><th>Current</th><th>Proposed</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>You're helping build {title} with Claude Code. Answer when a question appears; send ideas any time.</td><td>You're building {title}. Send ideas any time.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Follow the progress here. A question appears when Claude needs the room.<small>under Claude is building</small></td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>Voting opens when the host is ready.</td><td>Voting opens soon.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The wall shows your ideas without your name. Send up to {3}.</td><td>No names on the wall. Up to {3}.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>You can change your pick until the host closes it.</td><td>Change it until voting closes.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Pick up to {2} · {1} of {2} picked. Untick one to change.<small>the button already says Pick up to {2}</small></td><td>{1} of {2} picked</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>You can change your rating until the host closes it.</td><td>Change it until voting closes.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Pick up to {2} ideas you'd build first · {1} of {2} picked. Untick one to change.</td><td>What would you build first? {1} of {2}</td><td><span class="why why--plain">plain</span></td></tr>
+      <tr><td>Nothing yet. Claude's progress shows up here.</td><td>Nothing yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Thanks. Your feedback is with the host.</td><td>Thanks. Sent to the host.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The host sees your name and decides what to pass to Claude.<small>also W.talkHelp</small></td><td>The host sees your name.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Sent to the host, about this point.<small>W.talkIdeaSent</small></td><td>Sent to the host.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The room chose these. Watch the big screen; the build updates as each one is done.<small>W.runWatch</small></td><td>Watch the big screen.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The host shapes this into Claude's next step.</td><td><span class="none">nothing</span></td><td><span class="why why--remove">remove</span></td></tr>
+      <tr><td>What we have built so far</td><td>Built so far</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Nothing yet. What Claude shows and what the room decides collect here.</td><td>Nothing yet.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Works on the same Wi-Fi as the host</td><td>Same Wi-Fi only</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Look and say what you think</td><td>Have a look</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Your Claude was unlinked and your lane closed. What was already merged stays. If the host brings you back, link your Claude again from The crew.</td><td>Your Claude was unlinked. Merged work stays.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Your ideas and votes stay in the session report.</td><td>Your ideas and votes stay in the report.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>No plugin? Ask the host for the install command on the Connect panel.</td><td>No plugin? Ask the host.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>This key is yours, not the host's. Your Claude can read the room, push your branch, share work and get feedback. It cannot merge. You will not see it again; a new key replaces it.</td><td>Shown once. Your Claude can push and share, not merge.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>You need Claude Code on your laptop and access to the project's repo. You build one task on your own branch and show it to the room as you go.</td><td>Needs Claude Code and the repo. One task, your own branch.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>The crew is full ({8} builders). You can still react to their work here.</td><td>The crew is full. You can still react.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Waiting for your laptop. Type the key into Claude Code there.</td><td>Type the key into Claude Code on your laptop.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Two of you on one task is fine. The room compares. Your Claude gets the task as a direction.</td><td>Two on one task is fine.</td><td><span class="why why--cut">cut</span></td></tr>
+      <tr><td>Only you and the host see this until it is on the wall.</td><td>Private until it is on the wall.</td><td><span class="why why--cut">cut</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<h2>Questions for the owner</h2>
+<ol>
+  <li><b>Where does the cursor land in the merged Ask the room?</b> The starter move put it in the ready-question search; the new-ask move put it in the question field. Proposed: the question field, with the ready questions visible beside it. Say if starters should lead instead.</li>
+  <li><b>Tooltips on a laptop only?</b> Hover tooltips do not exist on a touch screen. The host uses a laptop, so this pass puts tooltips on the Host screen only and none on the room's screens. Is a host ever on a tablet?</li>
+  <li><b>The Stage's “Press Space to …” hint.</b> It is for the host but sits on the projected dock. Keep it (it is short), or show it only while the pointer is on the dock?</li>
+</ol>
+</main>
+</body>
+</html>

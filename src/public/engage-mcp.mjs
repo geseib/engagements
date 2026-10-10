@@ -20,7 +20,7 @@
  *   ENGAGE_POLL_MS  (optional) wait_for_room poll interval in ms, default 3000
  */
 
-import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync, readdirSync, rmSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, statSync, lstatSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync, readdirSync, rmSync, renameSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { homedir, networkInterfaces } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.13.1';
+const VERSION = '1.14.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -668,17 +668,19 @@ const TOOLS = [
   },
   {
     name: 'post_update',
-    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at, "answer" to answer a question the room asked you.',
+    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). doing: at the start of each piece of work, 4-7 words starting with an -ing verb ("Scaffolding the site"); done: the past tense of the line that just ENDED ("Scaffolded the site"), sent in the same call as the next doing; never names, paths, commands or links. kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at, "answer" to answer a question the room asked you.',
     inputSchema: {
       type: 'object',
       properties: {
-        text: str('One short sentence for the wall, e.g. "Header B is in place with the bigger CTA".', { minLength: 1, maxLength: 300 }),
+        text: str('One short sentence for the wall (leave it out when you only set doing or done: that changes the headline and adds no timeline row), e.g. "Header B is in place with the bigger CTA".', { minLength: 1, maxLength: 300 }),
         kind: { type: 'string', enum: ['progress', 'milestone', 'showing', 'answer'], description: 'Default "progress". "answer" answers a question the room asked you (THE ROOM ASKS YOU).' },
         detail: str('Optional extra detail shown when the entry is expanded.', { maxLength: 2000 }),
         link: str('Optional PUBLIC http(s) link (e.g. a deployed preview).'),
+        doing: str('What you are doing as this piece of work starts: 4 to 7 words, present tense, starting with an -ing verb, e.g. "Scaffolding the site" or "Mocking up 3 graph options". Never people\'s names, file paths, commands or links. The room sees it as your headline.', { maxLength: 50 }),
+        done: str('Past tense of the line that just ended, 2 to 7 words, e.g. "Scaffolded the site". Same rules as doing.', { maxLength: 50 }),
         runItem: { type: 'integer', minimum: 1, maximum: 1000, description: 'Only when the host\'s run list sent you an item (the direction says RUN LIST ITEM k): the k of the item you just finished. It tells the host this item is done so Next can move on.' },
       },
-      required: ['text'],
+      required: [],
       additionalProperties: false,
     },
   },
@@ -1003,6 +1005,52 @@ function optStr(args, name) {
   if (v === undefined || v === null || v === '') return undefined;
   if (typeof v !== 'string') throw new InputError(`"${name}" must be a string.`);
   return v.trim() || undefined;
+}
+/**
+ * THE ONE REFUSAL RULE for any line the room reads as Claude's headline (a
+ * doing, a done, a helper's job). The server mirrors it; it is exported so the
+ * two cannot drift. A line is refused when it holds a slash or backslash
+ * (a path), a backtick (a command), "@" (a person), "://" or "www." (a link),
+ * or a file extension (".jsx", ".md": a dot, a letter, then up to 4 more
+ * letters or digits). A dotted number ("3.5") is not one.
+ */
+export function unsafeForRoom(text) {
+  return /[\\/`@]|:\/\/|www\.|\.[A-Za-z][A-Za-z0-9]{0,4}\b/i.test(String(text || ''));
+}
+
+/**
+ * Is this a line the room can read? 50 characters, minWords..7 words, no
+ * unsafeForRoom, and (ing) an -ing first word. The -ing check is a shape
+ * check only: "Morning stand up now" and "Nothing to do here" pass it, and an
+ * irregular opening ("Building" yes, "Being" yes, "Wrote" no) is all it knows.
+ * Returns '' when fine, else the reason.
+ */
+export function roomLineProblem(v, { ing, minWords }) {
+  const words = String(v).split(/\s+/).filter(Boolean);
+  if (String(v).length > 50 || words.length < minWords || words.length > 7) return 'length';
+  if (ing && !/^[A-Za-z]+ing$/.test(words[0])) return 'ing';
+  if (unsafeForRoom(v)) return 'unsafe';
+  return '';
+}
+
+/**
+ * The "doing" line the room reads as Claude's headline. Checked here, before
+ * any API call, so Claude gets a plain sentence back and can try again:
+ * 4-7 words, 50 characters at most, nothing unsafeForRoom. "doing" also
+ * starts with an -ing verb; "done" is the past tense, which English will not
+ * let a program check, so only its length is.
+ */
+function doingWords(args, name, ing) {
+  const v = optStr(args, name);
+  if (v === undefined) return undefined;
+  const eg = ing ? '"Scaffolding the site"' : '"Scaffolded the site"';
+  // done mirrors a doing line that may have been short ("Scaffolded the site").
+  const min = ing ? 4 : 2;
+  const why = roomLineProblem(v, { ing, minWords: min });
+  if (why === 'length') throw new InputError(`"${name}" is ${min} to 7 words and 50 characters at most, like ${eg}.`);
+  if (why === 'ing') throw new InputError(`"${name}" starts with an -ing verb, like ${eg}.`);
+  if (why === 'unsafe') throw new InputError(`"${name}" never holds a file name, a path, a command, a link or a person's name; say what you are doing in plain words.`);
+  return v;
 }
 function strList(args, name) {
   const v = args[name];
@@ -1371,7 +1419,8 @@ const HANDLERS = {
     let ask;
     let lastStatus = null;
     for (let n = 0; ; n++) {
-      const res = await api('GET', `asks/${id}`, undefined, ctx.signal);
+      // ?waiting=1: Claude is waiting for the host, so the room's "doing" line ends.
+      const res = await api('GET', `asks/${id}?waiting=1`, undefined, ctx.signal);
       collect(res.inbox);
       ask = res.ask || {};
       if (ask.status === 'decided' || ask.status === 'discarded') break;
@@ -1451,10 +1500,14 @@ const HANDLERS = {
     if (!['progress', 'milestone', 'showing', 'answer'].includes(kind)) throw new InputError('"kind" must be progress, milestone, showing or answer.');
     const link = optStr(args, 'link');
     if (link && !/^https?:\/\//i.test(link)) throw new InputError('"link" must be an http(s) URL.');
-    const body = clean({ kind, text: reqStr(args, 'text'), detail: optStr(args, 'detail'), link });
+    const doing = doingWords(args, 'doing', true);
+    const done = doingWords(args, 'done', false);
+    // A post with only doing and/or done is a headline change, not a timeline row.
+    const text = doing || done ? optStr(args, 'text') : reqStr(args, 'text');
+    const body = clean({ kind, text, detail: optStr(args, 'detail'), link, doing, done });
     await refuseForeignLinks([link]);
     const res = await api('POST', 'log', body, ctx.signal);
-    rememberUpdate(body.text);
+    if (body.text) rememberUpdate(body.text);
     const warn = await linkWarnings([link], { mustAnswer: true });
     const inbox = inboxCollector();
     inbox.take(res);
@@ -1468,7 +1521,7 @@ const HANDLERS = {
         runNote = ` The host's run list did not take item ${runItem} as done (${trunc(e && e.message, 160)}); say so in your next update, then call wait_for_direction.`;
       }
     }
-    return ok(`Posted to the room's timeline (${kind}): ${body.text}${warn}${runNote}`, inbox.items);
+    return ok(body.text ? `Posted to the room's timeline (${kind}): ${body.text}${warn}${runNote}` : `Updated the room's headline (${[doing && 'doing', done && 'done'].filter(Boolean).join(' and ')}). Nothing was added to the timeline.${warn}${runNote}`, inbox.items);
   },
 
   async check_directions(_args, ctx) {
@@ -2096,6 +2149,8 @@ function promptText(name, args) {
 
 const INSTRUCTIONS = `Engage connects you to a live room of people through the host's Build Room session. The host's laptop is usually on a projector, the room follows along on their phones, and you are building something real with them.
 
+ALWAYS say what you are doing: post_update with doing (4-7 words, starts with an -ing verb, "Scaffolding the site") when a piece of work starts, done (past tense of the piece that just ended, "Scaffolded the site") in the same call as the next doing. No names, files, paths or links. Keep your task list current.
+
 How to collaborate:
 - THE OPENING: a new room starts by framing the build (room_status says "PHASE: OPENING"). Then you prepare and listen: set up the project folder, write no product code, read the brief as each step lands, and when an answer is thin propose ONE probing question with ask_room_for_ideas and forStep (the step it probes; it lands on the host's screen for review). When room_status says the room has said enough, draft the one-page brief with draft_brief (a headline and a short summary, in the room's words; invent nothing). Wait with wait_for_direction. When the host presses Start building you get the whole brief as a direction: then plan, post the plan, and build.
 - NEVER ask a question in this terminal while connected (no interactive question menus, no "which did you mean?" prompts): the host is running the room from the projector and does not see this terminal, so the session stalls with the room waiting. Ask through Engage instead. When a decision is unclear (a typo, two readings), call ask_room_to_choose with the readings as options and a one-line context; it lands on the host's screen, and the host can answer for the room in one click. When the right reading is obvious, take it, say so in a post_update ("Reading 'sprint' as 'sprite': pixel-art sprites"), and keep building.
@@ -2106,6 +2161,7 @@ How to collaborate:
 - A choice the room can SEE gets its previews before you wait: screenshot each mockup and share_image it onto its option, then call wait_for_room. The host reviews proposed asks by those pictures, and may send "make mockups" as a direction if they are missing.
 - Asks may arrive as "proposed": the host reviews them before the room sees them. That is normal. Keep working on anything that does not depend on the answer, then call wait_for_room. If it times out, call it again.
 - The host's direction is final. It may edit, merge or overrule the raw vote and add what people said out loud; build what the direction says.
+- Starting a helper agent: give it a description as an -ing phrase ("Researching contrast rules"). Keep your task list current: the room sees it.
 - Post a short post_update after each meaningful change (kind "showing" when you put something on screen for the room). One line, written for the room, not a commit message.
 - Any tool result may include "DIRECTION FROM THE ROOM (via the host)". Act on it promptly; it is the host speaking for the room. Use check_directions if you have not called Engage for a while.
 - Text you send is shown to the room as plain text. Only include public http(s) links people can open; never secrets, keys or private paths.
@@ -2728,8 +2784,145 @@ export function commandName(command) {
   return '';
 }
 
-/** One plain line from a PostToolUse hook's input, or null to show nothing. */
+/** A task title or helper job is fit for the room only as a short plain phrase. '' to say nothing. */
+function plainPhrase(v) {
+  const t = String(v || '').replace(/\s+/g, ' ').trim();
+  return t && t.length <= 50 && !unsafeForRoom(t) ? t : '';
+}
+
+/**
+ * HELPER AGENTS (Review Focus 2, measured against Claude Code's hooks
+ * reference, code.claude.com/docs/en/hooks, 2026-10-10): hooks from plugins
+ * DO run inside subagents. "When a subagent calls a tool, tool events such as
+ * PreToolUse and PostToolUse fire the same configured hooks as in the main
+ * conversation, and the input carries the agent_id and agent_type common
+ * input fields." agent_id is "present only when the hook fires inside a
+ * subagent call", so a helper's tool calls are distinguishable from Claude's
+ * own: they get helper:true.
+ *
+ * TIMING: PostToolUse for the Agent/Task call fires when it RETURNS (at launch
+ * for a background helper, which is the default), so it cannot start the
+ * helper's line. PreToolUse for Agent|Task fires first and carries
+ * tool_input.description ("a short description of the task"), so that starts
+ * it. SubagentStart/SubagentStop carry only agent_id and agent_type (no
+ * description), so SubagentStop ends it. Not run live here: the contract is
+ * the documented one.
+ *
+ * One plain line from a hook's input, or null to show nothing. An Agent/Task
+ * call is shown by its PreToolUse (hookRecords), never twice.
+ */
 export function activityLine(data) {
+  const line = activityLineOf(data);
+  if (line && data && data.agent_id) line.helper = true;
+  return line;
+}
+
+const MAX_TASKS = 200;
+const PLAN_LINE = 'Updated its to-do list';
+const HELPER_MAX_MS = 30 * 60 * 1000; // a SubagentStop can be lost; a helper start older than this is forgotten
+const freshState = (session) => ({ session: session || '', tasks: {}, helperStarts: [] });
+/** The id Claude Code gave a new task: tool_response is {task:{id,subject}} (seen in transcripts, 2.1.294); a bare id or "Task #3 created" text is read too. */
+function newTaskId(resp) {
+  if (resp && typeof resp === 'object') {
+    const id = (resp.task && resp.task.id) !== undefined ? resp.task.id : resp.id !== undefined ? resp.id : resp.taskId;
+    if (id !== undefined && id !== null) return String(id);
+  }
+  const m = /#(\d+)/.exec(typeof resp === 'string' ? resp : '');
+  return m ? m[1] : '';
+}
+
+/**
+ * What one hook call adds to the activity file, and the state to keep.
+ * `state` is {session, tasks:{id:{subject,activeForm,status}}, helperStarts:[iso], todos?}
+ * and is reset when the hook's session_id changes. Pure: no files.
+ *
+ * Claude's own task list arrives two ways: TaskCreate/TaskUpdate (Claude Code
+ * 2.1.x: TaskCreate {subject, description, activeForm}, TaskUpdate {taskId,
+ * status}) and TodoWrite (older and SDK sessions: the whole list each time).
+ * Either way: an item going in_progress becomes doing {source:'todo', text:
+ * activeForm}; going completed becomes {source:'todo', done:true, item:
+ * subject}. A helper's own tasks say nothing about Claude's headline. A
+ * completed task ALWAYS gives a done record: when its subject is not fit for the
+ * room the record carries no words (item ''), so the server still ends the step.
+ * Records are in the order they must be applied: dones before the new doing.
+ */
+export function hookRecords(data, prev, at = new Date().toISOString()) {
+  const d = data || {};
+  const input = d.tool_input || {};
+  const state = prev && typeof prev === 'object' && prev.session === String(d.session_id || '') ? prev : freshState(d.session_id);
+  state.tasks = state.tasks && typeof state.tasks === 'object' ? state.tasks : {};
+  const mk = (extra, text = PLAN_LINE) => ({ at, kind: 'plan', text, ...extra });
+  const doingRec = (text) => mk({ doing: { source: 'todo', text } });
+  const doneRec = (item) => mk({ doing: { source: 'todo', done: true, item: item || '' } });
+  const event = String(d.hook_event_name || 'PostToolUse');
+  const tool = String(d.tool_name || '');
+  const records = [];
+
+  // Helpers are kept by their start times, not counted: one whose stop was lost expires, so the
+  // line cannot stay up forever.
+  const nowMs = Date.parse(at);
+  const liveStarts = () => (Array.isArray(state.helperStarts) ? state.helperStarts : [])
+    .filter((x) => Number.isFinite(Date.parse(x)) && !(nowMs - Date.parse(x) > HELPER_MAX_MS));
+  if (event === 'SubagentStop') {
+    const had = Array.isArray(state.helperStarts) && state.helperStarts.length > 0;
+    const starts = liveStarts();
+    if (!d.agent_type || !had) return { records, state };
+    starts.shift();
+    state.helperStarts = starts;
+    if (starts.length === 0) records.push({ at, kind: 'agent', text: 'A helper agent finished', helperLine: { end: true } });
+    return { records, state };
+  }
+  if (event === 'PreToolUse') {
+    if (!(tool === 'Agent' || tool === 'Task') || d.agent_id) return { records, state };
+    const job = String(input.description || '').replace(/\s+/g, ' ').trim();
+    const ok = job && roomLineProblem(job, { ing: true, minWords: 2 }) === '';
+    state.helperStarts = [...liveStarts(), at];
+    records.push({ at, kind: 'agent', text: 'Asked a helper agent', ...(ok ? { helperLine: { text: job } } : {}) });
+    return { records, state };
+  }
+  if (tool === 'Agent' || tool === 'Task') return { records, state }; // PreToolUse showed it
+
+  if (!d.agent_id && tool === 'TaskCreate') {
+    const id = newTaskId(d.tool_response);
+    if (id && Object.keys(state.tasks).length < MAX_TASKS) {
+      state.tasks[id] = { subject: String(input.subject || ''), activeForm: String(input.activeForm || ''), status: 'pending' };
+    }
+    records.push(mk({}));
+  } else if (!d.agent_id && tool === 'TaskUpdate') {
+    const id = String(input.taskId === undefined ? '' : input.taskId);
+    const task = state.tasks[id] || (id && input.subject ? { subject: String(input.subject), activeForm: String(input.activeForm || ''), status: '' } : null);
+    const status = String(input.status || '');
+    if (task && status === 'in_progress') {
+      const text = plainPhrase(input.activeForm || task.activeForm);
+      if (text) records.push(doingRec(text));
+    } else if (task && status === 'completed' && task.status !== 'completed') {
+      records.push(doneRec(plainPhrase(task.subject)));
+    }
+    if (task && state.tasks[id] && status) state.tasks[id].status = status;
+    if (!records.length) records.push(mk({}));
+  } else if (!d.agent_id && tool === 'TodoWrite') {
+    const todos = (Array.isArray(input.todos) ? input.todos : []).filter((t) => t && typeof t === 'object').slice(0, MAX_TASKS);
+    const active = todos.find((t) => t.status === 'in_progress');
+    const text = active ? plainPhrase(active.activeForm) : '';
+    // Dones first: the finished item closes its step before the next line starts.
+    if (Array.isArray(state.todos)) {
+      for (const t of todos) {
+        if (t.status !== 'completed') continue;
+        const before = state.todos.find((x) => x && x.content === t.content);
+        if (!(before && before.status === 'completed')) records.push(doneRec(plainPhrase(t.content)));
+      }
+    }
+    if (text) records.push(doingRec(text));
+    state.todos = todos.map((t) => ({ content: String(t.content || ''), status: String(t.status || '') }));
+    if (!records.length) records.push(mk({}));
+  } else {
+    const line = activityLine(d);
+    if (line) records.push({ at, ...line });
+  }
+  return { records, state };
+}
+
+function activityLineOf(data) {
   const tool = String((data && data.tool_name) || '');
   const input = (data && data.tool_input) || {};
   const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || 'a file';
@@ -2750,22 +2943,28 @@ export function activityLine(data) {
     }
     case 'WebSearch': return { kind: 'web', text: 'Searched the web' };
     case 'Task': case 'Agent': return { kind: 'agent', text: 'Asked a helper agent' };
-    case 'TodoWrite': return { kind: 'plan', text: 'Updated its to-do list' };
+    case 'TodoWrite': case 'TaskCreate': case 'TaskUpdate': return { kind: 'plan', text: PLAN_LINE };
     default: return null;
   }
 }
 
-/** --activity: the PostToolUse hook. Never fails the tool, never prints. */
+/** --activity: the PostToolUse, PreToolUse and SubagentStop hook. Never fails the tool, never prints. */
 function hookActivity() {
   let data = {};
   try { data = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { /* not JSON */ }
   const dir = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
   if (!existsSync(sessionFile(dir))) return; // not a Build Room project: touch nothing
-  const line = activityLine(data);
-  if (!line) return;
   const file = activityFile(dir);
+  try { if (lstatSync(file).isSymbolicLink()) return; } catch { /* no file yet */ }
   try { if (statSync(file).size > ACTIVITY_FILE_MAX) return; } catch { /* no file yet */ }
-  appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...line }) + '\n');
+  const engage = pathJoin(dir, '.engage');
+  const before = readJson(pathJoin(engage, 'todo-last.json'));
+  const beforeText = JSON.stringify(before); // hookRecords updates what it is given in place
+  const { records, state } = hookRecords(data, before);
+  if (JSON.stringify(state) !== beforeText) {
+    try { safeWrite(dir, engage, 'todo-last.json', JSON.stringify(state)); } catch { /* the list is only a hint */ }
+  }
+  if (records.length) appendFileSync(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
 }
 
 /** Send what the hook wrote since the last round. One round at a time. */
@@ -2778,15 +2977,29 @@ async function pumpActivity() {
     let raw = '';
     try { raw = readFileSync(file, 'utf8'); } catch { return; }
     if (!raw.trim()) return;
-    writeFileSync(file, ''); // taken; a line the hook writes between these two calls is dropped (rare, harmless)
+    // Not configured (yet): leave the lines where the hook put them; they go out once it is.
     reloadConfig();
     if (CONFIG.problems.length) return;
-    const items = raw.split('\n').filter(Boolean)
+    writeFileSync(file, ''); // taken; a line the hook writes between these two calls is dropped (rare, harmless)
+    const all = raw.split('\n').filter(Boolean)
       .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .filter((x) => x && x.text).slice(-25);
+      .filter((x) => x && x.text);
+    const items = all.slice(-25);
     // The server never hands over Claude's inbox on this route (build-room.js),
     // so ignoring the answer cannot swallow a direction.
-    if (items.length) await api('POST', 'activity', { items }, AbortSignal.timeout(8000));
+    // Claude's line and a helper's line travel as ONE ordered list, in file
+    // order, each with its time; the server applies them in that order, so a
+    // done that came before a newer doing still closes its own step:
+    //   { type: 'doing', text, at } | { type: 'done', item, at }
+    //   { type: 'helper', text, at } | { type: 'helper-end', at }
+    // Read from ALL lines, not just the 25 shown, so a long batch cannot lose them.
+    const events = [];
+    for (const i of all) {
+      if (i.doing && i.doing.done) events.push({ type: 'done', item: i.doing.item || '', at: i.at });
+      else if (i.doing && i.doing.text) events.push({ type: 'doing', text: i.doing.text, at: i.at });
+      if (i.helperLine) events.push(i.helperLine.end ? { type: 'helper-end', at: i.at } : { type: 'helper', text: i.helperLine.text, at: i.at });
+    }
+    if (items.length) await api('POST', 'activity', clean({ items, events: events.length ? events.slice(-100) : undefined }), AbortSignal.timeout(8000));
   } catch (e) {
     log('activity post failed:', e && e.message);
   } finally {
@@ -2866,6 +3079,18 @@ skill is how you keep the project something they can open next week and understa
   (\`talking-points.json\`, add and update only, never delete) and one page per Research
   request (\`research/<subject>.md\`, with sources). Commit it with the work; never edit
   another person's folder.
+
+## Say what you are doing
+
+- At the start of each piece of work, call post_update with \`doing\`: 4 to 7 words, starting
+  with an -ing verb ("Scaffolding the site", "Mocking up 3 graph options"). \`done\` is the
+  past tense of the piece that JUST ENDED ("Scaffolded the site"): send it in the same call
+  as the next \`doing\`, or alone when you stop. The room reads it as your headline.
+  A post with only doing or done changes the headline and adds no timeline row.
+- Never people's names, file names, paths, commands or links in either.
+- Keep your task list current: Claude Code shows it to the room. Mark the task you are on
+  in progress, and finished ones completed.
+- When you start a helper agent, describe it as an -ing phrase ("Researching contrast rules").
 
 ## Servers you start
 
@@ -2957,6 +3182,9 @@ function writePlugin(home, root, plug) {
       Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --checkpoint', timeout: 60 }] }],
       // One plain line per tool for the room's live view (hookActivity).
       PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
+      // A helper's line starts when it is asked (PreToolUse carries its description) and ends when it stops.
+      PreToolUse: [{ matcher: 'Agent|Task', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
+      SubagentStop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
     },
   });
   copyFileSync(fileURLToPath(import.meta.url), pathJoin(plug, 'engage-mcp.mjs'));

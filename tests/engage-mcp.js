@@ -75,7 +75,7 @@ const server = http.createServer((req, res) => {
     const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
     if (failNext401) { failNext401 = false; return send(401, { error: 'Key revoked' }); }
     if (endedNext) { endedNext = false; return send(409, { error: 'This session has ended' }); }
-    const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '');
+    const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '').replace(/^(asks\/[^?]+)\?waiting=1$/, '$1');
     if (req.method === 'GET' && (p === 'state' || p === 'state?kickoff=1')) {
       return send(200, {
         gameId: '4321', title: 'Launch site', goal: 'Build a landing page for the meetup', state: 'STARTED',
@@ -273,7 +273,7 @@ const hardStop = setTimeout(() => {
     const r = await mcp.request('tools/call', { name: 'wait_for_room', arguments: { askId: '003', maxWaitSeconds: 5 }, _meta: { progressToken: 'p1' } });
     const t = textOf(r);
     assert.ok(requests.length >= 3, `polled ${requests.length} times`);
-    assert.ok(requests.every(q => q.method === 'GET' && q.url === '/dev/games/4321/build/asks/003'));
+    assert.ok(requests.every(q => q.method === 'GET' && q.url === '/dev/games/4321/build/asks/003?waiting=1'));
     assert.ok(/THE ROOM DECIDED/.test(t) && /keep the logo from A/.test(t), t);
     assert.ok(/never in this terminal/.test(t), 'a decision reminds Claude where questions go');
     // Decided: the decision, not the tally (owner, 2026-10-06: "Claude only needs question/answer").
@@ -294,6 +294,48 @@ const hardStop = setTimeout(() => {
     assert.strictEqual(requests[0].url, '/dev/games/4321/build/log');
     const t = textOf(r);
     assert.ok(/DIRECTION FROM THE ROOM \(via the host\)/.test(t) && /colours are too dark/.test(t), t);
+  });
+  await check('post_update carries doing and done in the body as given', async () => {
+    requests.length = 0;
+    const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'Site is up', doing: 'Mocking up 3 graph options', done: 'Scaffolded the site' } });
+    assert.ok(!r.result.isError, textOf(r));
+    assert.deepStrictEqual(requests[0].body, { kind: 'progress', text: 'Site is up', doing: 'Mocking up 3 graph options', done: 'Scaffolded the site' });
+  });
+  await check('a bad doing or done is refused in plain words before any API call', async () => {
+    for (const [args, re] of [
+      [{ doing: 'Scaffolding' }, /4 to 7 words/],
+      [{ doing: 'Scaffolding the whole site and then the pages' }, /4 to 7 words/],
+      [{ doing: 'Scaffolding the site with a very long winded description here' }, /4 to 7 words/],
+      [{ doing: 'We scaffold the new site now' }, /-ing verb/],
+      [{ doing: 'Editing src/Header.jsx for the room' }, /file name, a path, a command, a link or a person/],
+      [{ doing: 'Reading https://example.com for the team' }, /file name, a path, a command, a link or a person/],
+      [{ done: 'Done' }, /2 to 7 words/],
+      [{ doing: 'Editing Header.jsx for the room' }, /file name/],
+      [{ doing: 'Pinging @george about colours' }, /file name/],
+      [{ doing: 'Fixing the www.thing site now' }, /file name/],
+      [{ done: 'Edited src/Header.jsx for the room' }, /file name, a path, a command, a link or a person/],
+    ]) {
+      requests.length = 0;
+      const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'x', ...args } });
+      assert.ok(r.result.isError && re.test(textOf(r)), JSON.stringify(args) + ' -> ' + textOf(r));
+      assert.strictEqual(requests.length, 0, 'no API call');
+    }
+  });
+  await check('post_update with only doing or done needs no text and sends none', async () => {
+    requests.length = 0;
+    const r = await mcp.request('tools/call', { name: 'post_update', arguments: { doing: 'Mocking up 3 graph options' } });
+    assert.ok(!r.result.isError, textOf(r));
+    assert.deepStrictEqual(requests[0].body, { kind: 'progress', doing: 'Mocking up 3 graph options' });
+    assert.ok(/Nothing was added to the timeline/.test(textOf(r)), textOf(r));
+    const none = await mcp.request('tools/call', { name: 'post_update', arguments: { kind: 'progress' } });
+    assert.ok(none.result.isError && /"text" is required/.test(textOf(none)), textOf(none));
+  });
+  await check('the instructions say the doing line within the first 1800 characters, and name neither todo tool', async () => {
+    const init = await mcp.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } });
+    const text = init.result.instructions;
+    const at = text.indexOf('ALWAYS say what you are doing');
+    assert.ok(at > 0 && at < 1800, `at ${at}`);
+    assert.ok(!/TodoWrite|TaskCreate|TaskUpdate/.test(text));
   });
   await check('wait_for_direction listens until the host sends something, then hands it over', async () => {
     const before = requests.length;

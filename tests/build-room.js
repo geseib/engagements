@@ -571,7 +571,9 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
       { kind: 'edit', text: '' },
     ] });
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    assert.deepStrictEqual(r.body.activity.map((a) => [a.kind, a.text]), [['edit', 'Edited Header.jsx'], ['other', 'Ran npm test']]);
+    assert.strictEqual(r.body.ok, true);
+    assert.strictEqual(r.body.activity, undefined, 'Claude gets no lines back');
+    assert.deepStrictEqual((await hostCall('GET', 'state')).body.activity.map((a) => [a.kind, a.text]), [['edit', 'Edited Header.jsx'], ['other', 'Ran npm test']]);
     assert.ok(sent.length > 0 && sent.every((x) => x.connectionId === 'host-1' && x.message.type === 'buildActivity'), JSON.stringify(sent));
     assert.deepStrictEqual(sent[0].message.items.map((a) => a.text), ['Edited Header.jsx', 'Ran npm test']);
     const h = await hostCall('GET', 'state');
@@ -595,7 +597,8 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   await check('only Claude reports activity, and a laptop clock in the future is pulled back to now', async () => {
     assert.strictEqual((await hostCall('POST', 'activity', { items: [{ kind: 'edit', text: 'x' }] })).status, 403);
     const r = await agentCall('POST', 'activity', { items: [{ at: '2099-01-01T00:00:00.000Z', kind: 'read', text: 'Read App.jsx' }] });
-    const mine = r.body.activity.find((a) => a.text === 'Read App.jsx');
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const mine = (await hostCall('GET', 'state')).body.activity.find((a) => a.text === 'Read App.jsx');
     assert.ok(Date.parse(mine.at) <= Date.now(), mine.at);
     assert.strictEqual((await agentCall('POST', 'activity', { items: 'nope' })).status, 400);
   });

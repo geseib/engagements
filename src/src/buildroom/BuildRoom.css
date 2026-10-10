@@ -1440,23 +1440,40 @@
 .brm .brm-sp .brm-wifipanel--inline { position: static; width: auto; max-width: none; padding: 0; border: 0; box-shadow: none; background: transparent; display: grid; gap: 8px; }
 .brm .brm-sp .brm-wifipanel--inline h4 { margin: 0; font: 600 var(--brm-t-body)/1.3 var(--font-ui); }
 .brm .brm-sp .brm-wifipanel--inline .brm-wifipanel-foot { border-top: 0; padding-top: 0; }
-/* PlayersList's rows (styles.css), placed for this panel: a dot, the name, the actions. */
+/* PlayersList's rows (styles.css), placed for this panel: a dot, the name, the side cluster; the actions on their own line. */
 .brm .brm-sp .setup-roster__row { grid-template-columns: 14px minmax(0, 1fr) auto; }
-.brm .brm-sp .setup-roster__row--gone { grid-template-columns: minmax(0, 1fr) auto; }
-.brm .brm-sp .setup-roster__rank { display: grid; place-items: center; }
+.brm .brm-sp .setup-roster__row--norank { grid-template-columns: minmax(0, 1fr) auto; }
+.brm .brm-sp .setup-roster__rank { display: grid; place-items: center; align-self: center; }
 .brm .brm-sp .setup-roster__name { font-weight: 700; font-size: var(--brm-t-body); }
 .brm .brm-sp .setup-roster__meta { font-size: var(--brm-t-label); }
 .brm .brm-sp .setup-roster__act { min-height: 30px; font-size: var(--brm-t-label); }
-.brm .brm-sp .setup-roster__acts { justify-content: flex-start; }
 
 @media (max-width: 480px) {
   .brm .brm-sp { width: 100%; border-left: 0; border-top: 2px solid var(--primary); }
   .brm .brm-sp-head { padding: 12px 14px 10px; }
   .brm .brm-sp-top, .brm .brm-sp-body, .brm .brm-sp-foot { padding-left: 14px; padding-right: 14px; }
   .brm .brm-sp-tabs { padding: 0 6px; }
-  .brm .brm-sp .setup-roster__row { grid-template-columns: 14px minmax(0, 1fr); }
-  .brm .brm-sp .setup-roster__acts { grid-column: 2; margin-left: 0; }
-  .brm .brm-sp .setup-roster__row--gone { grid-template-columns: minmax(0, 1fr); }
-  .brm .brm-sp .setup-roster__row--gone .setup-roster__acts { grid-column: 1; }
   .brm .brm-strip-acts { margin-left: 0; width: 100%; }
 }
+
+/* What Claude is doing, in one line (docs/design/build-room-doing). */
+.brm .brm-doing { display: grid; gap: 4px; }
+.brm .brm-doing-t { margin: 0; font-size: var(--brm-t-title); line-height: 1.25; color: var(--text); overflow-wrap: anywhere; }
+.brm .brm-doing-t b { font-weight: 700; }
+.brm .brm-doing-src { margin: 0; }
+.brm .brm-doing-helper { margin: 0; font-size: var(--brm-t-body); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-steps { display: grid; gap: 6px; }
+.brm .brm-steps-sum { display: flex; align-items: center; gap: 6px; min-height: 36px; background: none; border: 0; padding: 0; font: inherit; font-size: var(--brm-t-label); color: var(--muted); cursor: pointer; text-align: left; }
+.brm .brm-steps-sum:hover, .brm .brm-steps-sum:focus-visible { color: var(--text); }
+.brm .brm-steps-sum b { color: var(--text); }
+.brm .brm-nowtext.brm-muted { color: var(--muted); }
+/* A finished step in History: its words in body type, what it produced beneath. */
+.brm .brm-story-it--step .brm-story-h { color: var(--text); font-size: var(--brm-st-body); letter-spacing: 0; text-transform: none; }
+.brm .brm-story-it--step .brm-story-h .brm-muted { color: var(--muted); }
+.brm .brm-story-it--step.is-now .brm-story-dot { background: var(--secondary); }
+.brm .brm-story-kids { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-story-kid { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: var(--brm-t-body); }
+.brm .brm-story-kidh { border: 1px solid var(--brm-rule); border-radius: 999px; padding: 0 10px; color: var(--muted); font-size: var(--brm-st-meta); }
+.brm .brm-story-kidt { min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-story-kid .brm-story-tm { min-width: 0; padding-top: 0; }
+.brm .brm-story-kid .brm-story-open { text-transform: none; letter-spacing: 0; font-size: var(--brm-t-body); color: var(--text); }

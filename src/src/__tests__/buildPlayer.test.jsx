@@ -769,3 +769,103 @@ describe('the opening on a phone (owner, 2026-10-06)', () => {
     expect(screen.queryByText(/Shaping the build/)).toBeNull();
   });
 });
+
+describe('what Claude is doing, on a phone or a laptop (docs/design/build-room-doing D3-D5)', () => {
+  const iso = (sec) => new Date(Date.now() - sec * 1000).toISOString();
+  const doing = (over = {}) => ({
+    text: 'Scaffolding the site', startedAt: iso(370), stale: false, helper: '', lastActiveAt: iso(15), ...over,
+  });
+
+  test('D3: the Now view says the line and how long instead of Claude is building', async () => {
+    serve(baseView({ doing: doing({ helper: 'Researching contrast rules' }) }));
+    await mount();
+    expect(await screen.findByRole('heading', { name: 'Claude is scaffolding the site' })).toBeInTheDocument();
+    expect(screen.getByText('for 6 min')).toBeInTheDocument();
+    expect(screen.getByText('A helper is researching contrast rules')).toBeInTheDocument();
+    expect(screen.queryByText('Claude is building')).toBeNull();
+    expect(screen.getByText(/Follow the progress here/)).toBeInTheDocument();
+  });
+
+  test('D3: a shown point still comes first and the line is not the heading then', async () => {
+    serve(baseView({ doing: doing(), shownPoint: { kind: 'talk', text: 'Why a calendar first?', ideas: [] } }));
+    await mount();
+    await screen.findByText('Why a calendar first?');
+    expect(screen.queryByRole('heading', { name: 'Claude is scaffolding the site' })).toBeNull();
+  });
+
+  test('D5: with no line it is Claude is building, as before', async () => {
+    serve(baseView({ doing: null }));
+    await mount();
+    expect(await screen.findByText('Claude is building')).toBeInTheDocument();
+  });
+
+  test('D5: a stale line is Claude was, and the room is told the host has it in hand', async () => {
+    serve(baseView({ doing: doing({ lastActiveAt: iso(400) }) }));
+    await mount();
+    expect(await screen.findByRole('heading', { name: 'Claude was scaffolding the site' })).toBeInTheDocument();
+    expect(screen.getByText('The host will pick it up again in a moment.')).toBeInTheDocument();
+    expect(screen.queryByText(/Follow the progress here/)).toBeNull();
+    expect(screen.queryByText(/^for \d/)).toBeNull();
+  });
+
+  test('D4: History shows steps with what they produced, and the step in progress first', async () => {
+    serve(baseView({
+      doing: doing({ text: 'Building the bar chart', startedAt: iso(125) }),
+      log: [
+        { logId: 'st1', kind: 'step', text: 'Done: Set up the project', createdAt: iso(700), step: { startedAt: iso(1000), endedAt: iso(700), durationMs: 300000, source: 'todo' } },
+        { logId: 'm1', kind: 'milestone', text: 'The first page runs', createdAt: iso(800) },
+      ],
+    }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    const h = screen.getByRole('region', { name: 'History' });
+    const items = h.querySelectorAll('.bpl-story > li');
+    expect(items[0].textContent).toMatch('Building the bar chart');
+    expect(items[0].textContent).toMatch('2 min so far');
+    expect(items[1].textContent).toMatch('Done: Set up the project');
+    expect(items[1].textContent).toMatch('5 min');
+    expect(items[1].textContent).toMatch('The first page runs');
+    expect(items).toHaveLength(2);
+  });
+});
+
+describe('a helper alone, and what a step holds, on a phone (docs/design/build-room-doing)', () => {
+  const iso = (sec) => new Date(Date.now() - sec * 1000).toISOString();
+
+  test('Now keeps Claude is building and shows the helper, with no duration', async () => {
+    serve(baseView({ doing: { text: '', startedAt: null, stale: false, helper: 'Researching contrast rules', lastActiveAt: iso(10) } }));
+    await mount();
+    expect(await screen.findByRole('heading', { name: 'Claude is building' })).toBeInTheDocument();
+    expect(screen.getByText('A helper is researching contrast rules')).toBeInTheDocument();
+    expect(screen.queryByText(/^for \d|under 1 min/)).toBeNull();
+    expect(screen.getByText(/Follow the progress here/)).toBeInTheDocument();
+  });
+
+  test('History: what a step holds keeps its link and the note about my idea', async () => {
+    serve(baseView({
+      log: [
+        { logId: 'st1', kind: 'step', text: 'Scaffolded the site', createdAt: iso(700), step: { startedAt: iso(1000), endedAt: iso(700), durationMs: 300000, source: 'claude' } },
+        { logId: 's1', kind: 'showing', text: 'The calendar runs', createdAt: iso(800), link: 'http://localhost:5173/' },
+      ],
+      decisions: [{ askId: '002', prompt: 'Which next?', direction: 'Reminder texts', decidedAt: iso(750) }],
+      myIdeas: [{ ideaId: 'm1', text: 'Remind them', status: 'promoted', promotedTo: '002' }],
+    }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    const h = screen.getByRole('region', { name: 'History' });
+    expect(within(h).getByRole('link')).toHaveAttribute('href', 'http://localhost:5173/');
+    expect(within(h).getByText('Your idea was in this vote')).toBeInTheDocument();
+  });
+
+  test('the clock only ticks while there is a line', async () => {
+    jest.useFakeTimers();
+    try {
+      const spy = jest.spyOn(global, 'setInterval');
+      serve(baseView({ doing: null }));
+      await mount();
+      const withLine = spy.mock.calls.filter(([, ms]) => ms === 20000).length;
+      expect(withLine).toBe(0);
+      spy.mockRestore();
+    } finally { jest.useRealTimers(); }
+  });
+});

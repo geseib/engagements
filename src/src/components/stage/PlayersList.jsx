@@ -81,7 +81,7 @@ export default function PlayersList({
     [departed, needle]
   );
 
-  const asking = askingFirst ? visible.filter((r) => r.handoverRequested && !r.handoverOpen) : [];
+  const askingRows = askingFirst ? visible.filter((r) => r.handoverRequested && !r.handoverOpen) : [];
   const rest = askingFirst ? visible.filter((r) => !(r.handoverRequested && !r.handoverOpen)) : visible;
 
   /* The name cell. Flat (just the name) unless the caller wants a badge or a
@@ -106,43 +106,51 @@ export default function PlayersList({
 
   const row = (player) => {
     const requested = player.handoverRequested;
+    const asking = requested && !player.handoverOpen;
+    const open = player.handoverOpen;
+    /* ONE STATE AT A TIME. Where the page wires Lock again / Not now (the Build
+       Room) each state shows only its own verbs; where it does not (the other
+       engagements) the old pair stays: Unlock name / Let them take it, Remove. */
+    const showGrant = onLock || onRefuse ? !open : true;
     return (
       <li
         key={player.name}
-        className="setup-roster__row"
+        className={`setup-roster__row${showRank ? '' : ' setup-roster__row--norank'}${asking ? ' setup-roster__row--asking' : ''}`}
         data-testid="roster-row"
         data-done={player.done === null || player.done === undefined ? undefined : String(player.done)}
       >
         {showRank && <span className="setup-roster__rank">{player.rank}</span>}
         {who(player, false)}
-        {renderExtra && renderExtra(player, false)}
-        {/* THE HOST'S DECISIONS ABOUT THIS PERSON. `margin-left: auto` on the
-            group, never `justify-content: flex-end` — hard rule 9. */}
+        <span className="setup-roster__side">
+          {renderExtra && renderExtra(player, false)}
+          {asking && (
+            <span className="setup-roster__flag" data-testid="handover-flag">
+              Asking to take this name
+            </span>
+          )}
+          {open && (
+            <span className="setup-roster__flag" data-testid="handover-flag">
+              Unlocked for one handover
+            </span>
+          )}
+        </span>
+        {/* THE HOST'S DECISIONS ABOUT THIS PERSON, on their own line. Handover
+            verbs on the left, Remove alone on the right by `margin-left: auto`
+            on the button, never `justify-content: flex-end` - hard rule 9. */}
         <span className="setup-roster__acts">
-          {requested && !player.handoverOpen && (
-            <span className="setup-roster__flag" data-testid="handover-flag">
-              asking to take this name
-            </span>
+          {showGrant && (
+            <button
+              type="button"
+              className="setup-roster__act"
+              onClick={() => (requested || !onUnlock ? onGrant(player.name, requested) : onUnlock(player.name))}
+              title={requested
+                ? `Let the person who asked take over "${player.name}" — once`
+                : `Unlock "${player.name}" so one other device can take it — once`}
+            >
+              {requested ? 'Let them take it' : 'Unlock name'}
+            </button>
           )}
-          {player.handoverOpen && (
-            <span className="setup-roster__flag" data-testid="handover-flag">
-              unlocked for one handover
-            </span>
-          )}
-          {/* One button whose MEANING changes with the ask: bound to the
-              asker when somebody asked (only they can spend it), open when
-              the host is acting on something said out loud. */}
-          <button
-            type="button"
-            className="setup-roster__act"
-            onClick={() => (requested || !onUnlock ? onGrant(player.name, requested) : onUnlock(player.name))}
-            title={requested
-              ? `Let the person who asked take over "${player.name}" — once`
-              : `Unlock "${player.name}" so one other device can take it — once`}
-          >
-            {requested ? 'Let them take it' : 'Unlock name'}
-          </button>
-          {onRefuse && requested && (
+          {onRefuse && asking && (
             <button
               type="button"
               className="setup-roster__act"
@@ -152,7 +160,7 @@ export default function PlayersList({
               Not now
             </button>
           )}
-          {onLock && player.handoverOpen && (
+          {onLock && open && (
             <button
               type="button"
               className="setup-roster__act"
@@ -164,7 +172,7 @@ export default function PlayersList({
           )}
           <button
             type="button"
-            className="setup-roster__act"
+            className="setup-roster__act setup-roster__act--remove"
             onClick={() => onRemove(player.name)}
             title={`Take "${player.name}" out of the live counts. Their answers and points stay in the report.`}
           >
@@ -209,10 +217,10 @@ export default function PlayersList({
         <p className="setup-empty">{emptyText}</p>
       ) : (
         <>
-          {asking.length > 0 && (
+          {askingRows.length > 0 && (
             <>
               <h3 className="setup-h" data-testid="asking-heading">Asking to take a name</h3>
-              <ul className="setup-roster" data-testid="asking-list">{asking.map(row)}</ul>
+              <ul className="setup-roster" data-testid="asking-list">{askingRows.map(row)}</ul>
             </>
           )}
           <h3 className="setup-h">{countLabel(rows.length)}</h3>
@@ -238,11 +246,11 @@ export default function PlayersList({
             {visibleGone.map((player) => (
               <li
                 key={player.name}
-                className="setup-roster__row setup-roster__row--gone"
+                className="setup-roster__row setup-roster__row--gone setup-roster__row--norank"
                 data-testid="departed-row"
               >
                 {who(player, true)}
-                {renderExtra && renderExtra(player, true)}
+                <span className="setup-roster__side">{renderExtra && renderExtra(player, true)}</span>
                 <span className="setup-roster__acts">
                   <button
                     type="button"

@@ -366,10 +366,10 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
     orgId: 'org_TEAMteamTEAMteamTEAMte', name: 'Northwind Traders', type: 'team', yourRole: 'owner', plan: 'team',
   };
   const ROW_A = {
-    code: 'AAAA', title: 'Event A', place: '', startsAt: '2026-10-09T09:00', timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
+    code: 'AAAA', title: 'Event A', place: '', startsAt: '2099-10-09T09:00', timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
   };
   const ROW_B = {
-    code: 'BBBB', title: 'Event B', place: '', startsAt: '2026-11-01T10:00', timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
+    code: 'BBBB', title: 'Event B', place: '', startsAt: '2099-11-01T10:00', timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
   };
   const sectionsNav = () => within(screen.getByRole('navigation', { name: 'Sections' }));
 

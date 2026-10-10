@@ -153,15 +153,72 @@ const POST_KINDS = ['progress', 'showing', 'milestone'];
 const timeOf = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? t : NaN; };
 const stripEnd = (text) => String(text || '').trim().replace(/[\s.!?]+$/, '');
 
+// ── What Claude is doing, in one line (owner, 2026-10-10) ───────────────────
+//
+// docs/design/build-room-doing. The server resolves the line (build-store.js
+// doingView); every screen reads it here, so they never disagree.
+
+/** No command and no post for this long, and Claude not waiting: "Claude was …". */
+export const DOING_STALE_MS = 3 * 60 * 1000;
+const lowerFirst = (t) => (t ? t.charAt(0).toLowerCase() + t.slice(1) : '');
+const upperFirst = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
+export const durText = (mins) => (mins < 1 ? 'under 1 min' : `${mins} min`);
+
+/**
+ * The doing line as a screen says it, or null. Stale is re-derived from
+ * `lastActiveAt` as the clock moves; the server's flag is only a snapshot.
+ * @returns {{ text, headline, stale, mins, dur, helper, helperLine, source, startedAt, lastActiveAt }|null}
+ */
+export function doingLine(doing, now) {
+  const text = doing && typeof doing.text === 'string' ? doing.text.trim() : '';
+  const helper = doing && typeof doing.helper === 'string' ? doing.helper.trim() : '';
+  // A helper can work while Claude has no line of its own: text is '' then.
+  if (!text && !helper) return null;
+  const at = new Date(now).getTime();
+  const started = Date.parse(doing.startedAt || '');
+  const active = Date.parse(doing.lastActiveAt || '');
+  // A laptop clock more than 2 min behind the server cannot judge age: trust the server's flag.
+  const skewed = Number.isFinite(active) && at - active < -2 * 60 * 1000;
+  const stale = Number.isFinite(active) && !skewed ? at - active > DOING_STALE_MS : Boolean(doing.stale);
+  const mins = Number.isFinite(started) ? Math.max(0, Math.floor((at - started) / 60000)) : 0;
+  return {
+    text,
+    headline: text ? `${stale ? 'Claude was' : 'Claude is'} ${lowerFirst(text)}` : '',
+    stale,
+    mins,
+    dur: durText(mins),
+    helper,
+    helperLine: helper ? W.helperIs(helper) : '',
+    source: doing.source || '',
+    startedAt: doing.startedAt || null,
+    lastActiveAt: doing.lastActiveAt || null,
+  };
+}
+
 /**
  * `host: true` is the host's own screen: the line speaks to the host, never about
  * them (`continueOn`: the Continue prompt button is on that screen).
  * @returns {{ key: 'building'|'waiting'|'paused'|'none', headline: string, line: string, since: string|null }}
  */
-export function claudeState(room, now, { host = false, continueOn = false } = {}) {
+export function claudeState(room, now, opts = {}) {
+  // A line Claude or its to-do list gave wins, unless Claude is waiting for direction.
+  const dl = room && room.agent && room.agent.listening ? null : doingLine(room && room.doing, now);
+  const st = claudeBase(room, now, opts, dl && dl.text ? dl : null);
+  // A helper alone leaves the headline as it was and adds its own line.
+  return dl && !dl.text && dl.helperLine ? { ...st, helperLine: dl.helperLine } : st;
+}
+
+function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = null) {
   const at = new Date(now).getTime();
   const agent = (room && room.agent) || {};
   const log = (room && room.log) || [];
+  if (dl && !dl.stale) {
+    return { key: 'building', headline: dl.headline, line: dl.helperLine, since: dl.startedAt, doing: dl };
+  }
+  if (dl) {
+    const line = host ? (continueOn ? 'Copy the Continue prompt to pick it up.' : '') : W.hostPicksUp;
+    return { key: 'paused', headline: dl.headline, line, since: null, doing: dl };
+  }
   const posts = log.filter((l) => l.by === 'agent' && POST_KINDS.includes(l.kind) && l.text);
   const lastPost = posts.reduce((best, l) => (!best || timeOf(l.createdAt) >= timeOf(best.createdAt) ? l : best), null);
   const acts = ((room && room.activity) || []).filter((a) => a && Number.isFinite(timeOf(a.at)));
@@ -393,7 +450,7 @@ export function decisionChoices(ask) {
   if (ask && ask.kind === 'choice') {
     return (ask.options || []).map((o) => {
       const res = (r.options || []).find((x) => x.label === o.label) || { count: 0 };
-      return { id: o.label, label: o.label, text: o.title, count: res.count || 0 };
+      return { id: o.label, label: o.label, text: o.title, detail: o.detail || '', count: res.count || 0 };
     });
   }
   if (ask && ask.kind === 'suggest') {
@@ -424,6 +481,20 @@ export function winnerOf(ask) {
  */
 export const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
 export const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
+/**
+ * WHAT THE ROOM VOTED ON, IN FULL (owner, 2026-10-10: "we only pass the title.
+ * it also needs the details or examples since thats what was voted on"). An
+ * option's detail travels with its title into the direction Claude builds from.
+ */
+export const optionAnswer = (title, detail) => {
+  const t = String(title || '').trim();
+  const d = String(detail || '').trim();
+  return d ? `${t} (${d})` : t;
+};
+const optionDetail = (ask, labelOrTitle) => {
+  const o = ((ask && ask.options) || []).find((x) => x.label === labelOrTitle || x.title === labelOrTitle);
+  return o ? o.detail || '' : '';
+};
 
 /**
  * Every Rate ask uses one fixed scale (owner, 2026-10-06), the server's
@@ -439,7 +510,7 @@ export const ratingStep = (n) => (n === 1 ? `1 · ${RATING_SCALE.lowLabel}` : n 
 /** The sentence Claude gets for a pick, however it was picked. */
 export function directionFor(ask, id) {
   const pick = decisionChoices(ask).find((c) => c.id === id);
-  return pick ? questionAnswer(ask.prompt, pick.text) : '';
+  return pick ? questionAnswer(ask.prompt, optionAnswer(pick.text, pick.detail)) : '';
 }
 
 /** How a decision was made, for the record; never sent to Claude. */
@@ -480,11 +551,11 @@ export function defaultDirection(ask) {
   // The question and the answer (owner, 2026-10-06).
   const w = ask && ask.wheel;
   const landed = w && w.landed ? (w.slices || []).find((x) => x.id === w.landed) : null;
-  if (landed) return questionAnswer(ask.prompt, landed.text);
+  if (landed) return questionAnswer(ask.prompt, ask.kind === 'choice' ? optionAnswer(landed.text, optionDetail(ask, landed.label || landed.id)) : landed.text);
   const r = (ask && ask.results) || {};
   if (ask.kind === 'choice') {
     const top = [...(r.options || [])].sort((a, b) => b.count - a.count)[0];
-    return top && top.count ? questionAnswer(ask.prompt, top.title) : '';
+    return top && top.count ? questionAnswer(ask.prompt, optionAnswer(top.title, optionDetail(ask, top.label))) : '';
   }
   if (ask.kind === 'rating') {
     return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
@@ -649,7 +720,7 @@ export function decisionChain(ask) {
   return chain;
 }
 
-export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [] } = {}) {
+export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null } = {}) {
   const items = [];
   const imgById = new Map((images || []).map((im) => [im.imageId, im]));
   // A picture shared within two minutes after Claude showed something belongs to it.
@@ -689,7 +760,31 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
       mine: (myIdeas || []).some((i) => i.promotedTo === d.askId),
     });
   }
-  return items.sort((a, b) => t(b.at) - t(a.at));
+  // A FINISHED STEP (docs/design/build-room-doing D4) is one entry; what Claude
+  // posted while it ran hangs under it, oldest first. Commands never come here.
+  const steps = (log || []).filter((e) => e.kind === 'step' && e.step).map((e) => ({
+    id: e.logId, at: e.step.startedAt || e.createdAt, type: 'step', heading: e.text, text: '', imageIds: [], chain: [], kids: [],
+    dur: stepDur(e.step.durationMs), endAt: e.step.endedAt || e.createdAt,
+  }));
+  const live = doing && doing.text && !doing.stale && Number.isFinite(t(doing.startedAt))
+    ? { id: 'step:now', at: doing.startedAt, type: 'step', now: true, heading: upperFirst(doing.text), text: '', imageIds: [], chain: [], kids: [], dur: W.soFar(doing.dur), endAt: null }
+    : null;
+  const loose = [];
+  for (const it of items) {
+    const home = steps.find((st) => t(it.at) >= t(st.at) && t(it.at) <= t(st.endAt));
+    if (home) home.kids.push(it);
+    else if (live && t(it.at) >= t(live.at)) live.kids.push(it);
+    else loose.push(it);
+  }
+  for (const st of live ? [...steps, live] : steps) st.kids.sort((a, b) => t(a.at) - t(b.at));
+  return [...(live ? [live] : []), ...[...loose, ...steps].sort((a, b) => t(b.at) - t(a.at))];
+}
+
+/** A step's length for History: '' when unknown, 'under 1 min', else 'N min'. */
+function stepDur(ms) {
+  const n = Number(ms) || 0;
+  if (n <= 0) return '';
+  return n < 60000 ? 'under 1 min' : `${Math.floor(n / 60000)} min`;
 }
 
 export const STORY_FILTERS = Object.freeze([
@@ -697,7 +792,9 @@ export const STORY_FILTERS = Object.freeze([
   { key: 'decisions', label: 'Decisions' },
   { key: 'pictures', label: 'Pictures' },
 ]);
-export const filterStory = (items, key) => (key === 'decisions' ? items.filter((i) => i.type === 'decided') : key === 'pictures' ? items.filter((i) => i.imageIds.length) : items);
+// A step holds its own decisions and pictures: the filters look inside.
+const flatStory = (items) => items.flatMap((i) => (i.type === 'step' ? i.kids : [i]));
+export const filterStory = (items, key) => (key === 'decisions' ? flatStory(items).filter((i) => i.type === 'decided') : key === 'pictures' ? flatStory(items).filter((i) => i.imageIds.length) : items);
 
 /** Every picture, newest first, each saying what it was for (C10). */
 export function artifactsOf({ images = [], asks = [] } = {}) {

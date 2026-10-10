@@ -2,8 +2,9 @@
  * The Build Room's four screens: the pure rules (buildroom/buildScreens.js).
  */
 import {
+  defaultDirection,
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, settleMove,
-  queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
+  queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine, doingLine, roomStory, filterStory,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
   askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords, decideBody, roomChoice,
 } from '../buildroom/buildScreens';
@@ -595,5 +596,178 @@ describe('S4: the stage says the mockups are ready', () => {
   test('the words: Two looks, and N looks for more', () => {
     expect(looksWords([{ label: 'A' }, { label: 'B' }])).toMatchObject({ headline: 'Two looks to compare', line: 'Claude made A and B. Look now; the vote opens next.' });
     expect(looksWords([{ label: 'A' }, { label: 'B' }, { label: 'C' }])).toMatchObject({ headline: '3 looks to compare', line: 'Claude made A, B and C. Look now; the vote opens next.' });
+  });
+});
+
+describe('the direction carries what the room voted on (owner, 2026-10-10)', () => {
+  const ask = {
+    kind: 'choice', prompt: 'What should we build next?',
+    options: [
+      { label: 'A', title: 'Scroll to scale', detail: '' },
+      { label: 'B', title: 'What could it fix?', detail: 'Their fortune against real price tags: ending hunger, clean water' },
+    ],
+    results: { options: [{ label: 'A', title: 'Scroll to scale', count: 1 }, { label: 'B', title: 'What could it fix?', count: 3 }] },
+  };
+  test('a winning option sends its title and its detail', () => {
+    expect(defaultDirection(ask)).toBe('What should we build next: What could it fix? (Their fortune against real price tags: ending hunger, clean water)');
+    expect(directionFor(ask, 'B')).toBe(defaultDirection(ask));
+    expect(roomChoice(ask).direction).toBe(defaultDirection(ask));
+  });
+  test('an option without detail sends its title alone', () => {
+    expect(directionFor(ask, 'A')).toBe('What should we build next: Scroll to scale');
+  });
+  test('the wheel landing on an option carries its detail too', () => {
+    const w = { ...ask, wheel: { landed: 'B', slices: [{ id: 'A', label: 'A', text: 'Scroll to scale' }, { id: 'B', label: 'B', text: 'What could it fix?' }] } };
+    expect(defaultDirection(w)).toMatch(/What could it fix\? \(Their fortune against real price tags/);
+  });
+});
+
+describe('the doing line (docs/design/build-room-doing D1-D5)', () => {
+  const NOW = Date.parse('2026-10-10T10:30:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  const doing = (over = {}) => ({
+    text: 'Mocking up 3 graph options', past: '', source: 'claude', startedAt: at(250), stale: false, helper: '', lastActiveAt: at(10), ...over,
+  });
+  const room = (d, extra = {}) => ({ agent: { connected: true, listening: false, lastSeenAt: at(5) }, log: [], activity: [], doing: d, ...extra });
+
+  test('the screens prepend Claude is, lower-case the first letter and say how long', () => {
+    expect(doingLine(doing(), NOW)).toMatchObject({ headline: 'Claude is mocking up 3 graph options', stale: false, mins: 4, dur: '4 min', helper: '' });
+    expect(doingLine(doing({ startedAt: at(20) }), NOW).dur).toBe('under 1 min');
+    expect(doingLine(null, NOW)).toBeNull();
+    expect(doingLine(doing({ text: '  ' }), NOW)).toBeNull();
+  });
+
+  test('stale is re-derived from lastActiveAt as time passes, not read from the snapshot', () => {
+    expect(doingLine(doing({ stale: true, lastActiveAt: at(10) }), NOW).stale).toBe(false);
+    const d = doing({ stale: false, lastActiveAt: at(181) });
+    expect(doingLine(d, NOW)).toMatchObject({ stale: true, headline: 'Claude was mocking up 3 graph options' });
+    expect(doingLine(d, NOW - 60 * 1000).stale).toBe(false);
+  });
+
+  test('a line is the building status: headline, the helper as the line, the start as since', () => {
+    const s = claudeState(room(doing({ helper: 'Researching contrast rules' })), NOW);
+    expect(s).toMatchObject({ key: 'building', headline: 'Claude is mocking up 3 graph options', line: 'A helper is researching contrast rules', since: at(250) });
+    expect(s.doing.dur).toBe('4 min');
+  });
+
+  test('a line holds the building status past the old 90 seconds', () => {
+    expect(claudeState(room(doing({ lastActiveAt: at(150) })), NOW).key).toBe('building');
+  });
+
+  test('a stale line is paused, in the past tense, with the same follow-ups as today', () => {
+    const r = room(doing({ lastActiveAt: at(300) }));
+    expect(claudeState(r, NOW)).toMatchObject({ key: 'paused', headline: 'Claude was mocking up 3 graph options', line: 'The host will pick it up again in a moment.' });
+    expect(claudeState(r, NOW, { host: true, continueOn: true }).line).toBe('Copy the Continue prompt to pick it up.');
+    expect(claudeState(r, NOW, { host: true }).line).toBe('');
+  });
+
+  test('Claude waiting for direction is never Claude is: the status stays ready', () => {
+    const r = room(doing(), { agent: { connected: true, listening: true, lastSeenAt: at(5) } });
+    expect(claudeState(r, NOW).key).toBe('waiting');
+  });
+
+  test('no line leaves the status exactly as it was', () => {
+    expect(claudeState(room(null), NOW)).toEqual(claudeState({ ...room(null), doing: undefined }, NOW));
+    expect(claudeState(room(null, { log: [{ by: 'agent', kind: 'progress', text: 'x', createdAt: at(30) }] }), NOW).headline).toBe('Claude is building');
+  });
+
+  describe('History: a finished step groups what it produced', () => {
+    const step = (id, startS, endS, text) => ({
+      logId: id, kind: 'step', text, createdAt: at(endS), by: 'agent', step: { startedAt: at(startS), endedAt: at(endS), durationMs: (startS - endS) * 1000, source: 'todo' },
+    });
+    const log = [
+      step('p1', 2000, 1640, 'Done: Set up the project'),
+      step('p2', 1600, 1000, 'Scaffolded the site'),
+      { logId: 'm1', kind: 'milestone', by: 'agent', text: 'The first page runs', createdAt: at(1200) },
+      { logId: 's1', kind: 'showing', by: 'agent', text: 'The empty dashboard', createdAt: at(1100) },
+      { logId: 'v1', kind: 'verbal', by: 'host', text: 'Between steps', createdAt: at(900) },
+    ];
+
+    test('the step is the entry; its checkpoint and showing hang under it, oldest first', () => {
+      const story = roomStory({ log });
+      expect(story.map((i) => i.type)).toEqual(['said', 'step', 'step']);
+      const s = story[1];
+      expect(s).toMatchObject({ heading: 'Scaffolded the site', dur: '10 min' });
+      expect(s.kids.map((k) => k.text)).toEqual(['The first page runs', 'The empty dashboard']);
+      expect(story[2]).toMatchObject({ heading: 'Done: Set up the project', dur: '6 min', kids: [] });
+    });
+
+    test('a to-do step keeps the item words with Done:, and one under a minute says so', () => {
+      const story = roomStory({ log: [step('q', 30, 0, 'Done: Rename it')] });
+      expect(story[0].heading).toBe('Done: Rename it');
+      expect(story[0].dur).toBe('under 1 min');
+      expect(roomStory({ log: [{ logId: 'z', kind: 'step', text: 'Done: X marks', createdAt: at(0), step: { startedAt: at(0), endedAt: at(0), durationMs: 0 } }] })[0].dur).toBe('');
+    });
+
+    test('commands never reach History: a run or agent line in the log is not an entry', () => {
+      const noisy = [...log, { logId: 'c1', kind: 'run', by: 'agent', text: 'Ran npm test', createdAt: at(1150) }, { logId: 'c2', kind: 'agent', by: 'agent', text: 'Asked a helper agent', createdAt: at(1120) }];
+      const all = roomStory({ log: noisy }).flatMap((i) => [i, ...(i.kids || [])]);
+      expect(all.some((i) => /Ran npm|helper agent/.test(i.heading + i.text))).toBe(false);
+      expect(all.length).toBeGreaterThan(3);
+    });
+
+    test('a step under two minutes is floored: 119 s is 1 min', () => {
+      expect(roomStory({ log: [step('f', 119, 0, 'Done: Quick')] })[0].dur).toBe('1 min');
+    });
+
+    test('the step in progress sits first, with how long so far; a stale one writes nothing', () => {
+      const live = doingLine(doing({ text: 'Building the bar chart', startedAt: at(125) }), NOW);
+      const top = roomStory({ log, doing: live })[0];
+      expect(top).toMatchObject({ type: 'step', now: true, heading: 'Building the bar chart', dur: '2 min so far' });
+      const stale = doingLine(doing({ lastActiveAt: at(400) }), NOW);
+      expect(roomStory({ log, doing: stale }).some((i) => i.now)).toBe(false);
+    });
+
+    test('the Decisions and Pictures filters still find what a step holds', () => {
+      const dlog = [
+        step('p2', 600, 100, 'Scaffolded the site'),
+        { logId: 'i1', kind: 'image', by: 'agent', text: 'Home', detail: 'img1', createdAt: at(300) },
+      ];
+      const story = roomStory({
+        log: dlog, images: [{ imageId: 'img1', createdAt: at(300) }],
+        asks: [{ askId: '002', status: 'decided', decision: { direction: 'Bars', decidedAt: at(200), chosen: [] }, decidedAt: at(200) }],
+      });
+      expect(filterStory(story, 'decisions').map((i) => i.type)).toEqual(['decided']);
+      expect(filterStory(story, 'pictures').map((i) => i.type)).toEqual(['picture']);
+    });
+  });
+});
+
+describe('a helper with no line of Claude\'s own (docs/design/build-room-doing)', () => {
+  const NOW = Date.parse('2026-10-10T10:30:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  const helperOnly = (over = {}) => ({ text: '', source: '', startedAt: null, stale: false, helper: 'Researching contrast rules', lastActiveAt: at(10), ...over });
+  const room = (d, extra = {}) => ({
+    agent: { connected: true, listening: false, lastSeenAt: at(5) }, log: [], activity: [{ at: at(20), kind: 'run', text: 'Ran npm test' }], doing: d, ...extra,
+  });
+
+  test('doingLine gives a view for a helper alone, with no headline', () => {
+    expect(doingLine(helperOnly(), NOW)).toMatchObject({ text: '', headline: '', helperLine: 'A helper is researching contrast rules' });
+    expect(doingLine({ text: '', helper: '' }, NOW)).toBeNull();
+  });
+
+  test('the status keeps today\'s headline and carries the helper line', () => {
+    const s = claudeState(room(helperOnly()), NOW);
+    expect(s).toMatchObject({ key: 'building', headline: 'Claude is building', helperLine: 'A helper is researching contrast rules' });
+    expect(s.doing).toBeUndefined();
+    expect(claudeState(room(null), NOW).helperLine).toBeUndefined();
+  });
+
+  test('History writes no step in progress for a helper alone', () => {
+    expect(roomStory({ log: [], doing: doingLine(helperOnly(), NOW) }).some((i) => i.now)).toBe(false);
+  });
+});
+
+describe('the doing line against a wrong clock', () => {
+  const NOW = Date.parse('2026-10-10T10:30:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  test('a start in the future counts as 0 min, not negative', () => {
+    expect(doingLine({ text: 'Building it now', startedAt: at(-90), lastActiveAt: at(0) }, NOW).mins).toBe(0);
+  });
+  test('a laptop clock more than 2 min behind the server falls back to the server flag', () => {
+    expect(doingLine({ text: 'Building it now', startedAt: at(-600), lastActiveAt: at(-400), stale: true }, NOW).stale).toBe(true);
+    expect(doingLine({ text: 'Building it now', startedAt: at(-600), lastActiveAt: at(-400), stale: false }, NOW).stale).toBe(false);
+    // Within 2 min of agreeing, the client's own clock rules.
+    expect(doingLine({ text: 'Building it now', startedAt: at(100), lastActiveAt: at(-60), stale: true }, NOW).stale).toBe(false);
   });
 });
