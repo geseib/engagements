@@ -325,7 +325,7 @@ async function check(name, fn) {
     assert.strictEqual(got[2].helper, true); assert.strictEqual(got[2].doing, undefined);
     assert.ok(!JSON.stringify(got).includes('SECRET'));
   });
-  await check('the pump sends the latest doing record beside the items', async () => {
+  await check('the pump sends the latest in-progress doing and every done beside the items', async () => {
     fs.writeFileSync(activityPath, '');
     activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'in_progress']));
     activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
@@ -336,7 +336,9 @@ async function check(name, fn) {
       while (requests.filter((q) => q.url.endsWith('/build/activity')).length === before && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
       const sent = requests.filter((q) => q.url.endsWith('/build/activity')).slice(before)[0];
       assert.ok(sent, 'a batch was sent');
-      assert.deepStrictEqual(sent.body.doing, { source: 'todo', done: true, item: 'Scaffold the site' }, 'the last doing record in the batch');
+      assert.deepStrictEqual(sent.body.doing, { source: 'todo', text: 'Adding the header' }, 'the latest in-progress record, even though a done came before it');
+      assert.deepStrictEqual(sent.body.done.map((d) => d.item), ['Scaffold the site'], 'completed items in order');
+      assert.ok(sent.body.done[0].at);
       assert.ok(sent.body.items.length >= 2);
     } finally { pump.child.kill(); }
   });

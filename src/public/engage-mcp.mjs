@@ -2875,13 +2875,20 @@ async function pumpActivity() {
     writeFileSync(file, ''); // taken; a line the hook writes between these two calls is dropped (rare, harmless)
     reloadConfig();
     if (CONFIG.problems.length) return;
-    const items = raw.split('\n').filter(Boolean)
+    const all = raw.split('\n').filter(Boolean)
       .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .filter((x) => x && x.text).slice(-25);
+      .filter((x) => x && x.text);
+    const items = all.slice(-25);
     // The server never hands over Claude's inbox on this route (build-room.js),
     // so ignoring the answer cannot swallow a direction.
-    const doing = items.map((i) => i.doing).filter(Boolean).pop();
-    if (items.length) await api('POST', 'activity', clean({ items, doing }), AbortSignal.timeout(8000));
+    // Read from ALL lines, not just the 25 sent, so a long batch cannot lose
+    // them. `doing` is the latest in-progress record (text or helper); `done`
+    // is every completed to-do item in order, [{item, at}], because a done must
+    // close its step even when a newer in-progress record follows it.
+    const doings = all.map((i) => i.doing).filter(Boolean);
+    const doing = doings.filter((d) => !d.done).pop();
+    const dones = all.filter((i) => i.doing && i.doing.done).map((i) => ({ item: i.doing.item, at: i.at }));
+    if (items.length) await api('POST', 'activity', clean({ items, doing, done: dones.length ? dones : undefined }), AbortSignal.timeout(8000));
   } catch (e) {
     log('activity post failed:', e && e.message);
   } finally {
