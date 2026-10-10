@@ -1475,11 +1475,8 @@ function AgentChip({ room, now }) {
   const quiet = agentStopped(agent);
   const cls = `brm-agentchip${agent && agent.connected ? ' is-on' : ''}${quiet ? ' is-quiet' : ''}`;
   if (!quiet) {
-    const tip = !agent || !agent.lastSeenAt
-      ? W.chipNever
-      : agent.listening
-        ? W.chipReady
-        : W.chipWorking;
+    // The tooltip says what the label says (Revy review, 2026-10-10): one state, claudeState's.
+    const tip = st.key === 'none' ? W.chipNever : st.key === 'waiting' ? W.chipReady : W.chipWorking;
     return <span className={cls} data-testid="brm-agentchip" data-state={st.key} title={tip}>{text}</span>;
   }
   const copy = async () => {

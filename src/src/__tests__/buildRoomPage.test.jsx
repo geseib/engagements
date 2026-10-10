@@ -1350,7 +1350,9 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
     await openRoom(hostState());
     const chip = screen.getByTestId('brm-agentchip');
     expect(chip.tagName).toBe('SPAN');
-    expect(chip.getAttribute('title')).toBe('Working.');
+    // Connected and quiet reads "Claude is ready"; the tooltip now says the same thing (Revy review, 2026-10-10).
+    expect(chip.textContent).toBe('Claude is ready');
+    expect(chip.getAttribute('title')).toBe('Ready for your direction.');
   });
 });
 

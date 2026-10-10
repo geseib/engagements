@@ -287,7 +287,8 @@ function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = n
   const lastAct = acts.reduce((best, a) => (!best || timeOf(a.at) >= timeOf(best.at) ? a : best), null);
   const agentTimes = log.filter((l) => l.by === 'agent').map((l) => timeOf(l.createdAt)).filter(Number.isFinite);
   const latestMs = Math.max(-Infinity, lastAct ? timeOf(lastAct.at) : -Infinity, ...agentTimes);
-  if (Number.isFinite(latestMs) && at - latestMs <= BUILDING_WINDOW_MS) {
+  // Waiting for direction is ready, even a moment after a post (Revy review, 2026-10-10).
+  if (!agent.listening && Number.isFinite(latestMs) && at - latestMs <= BUILDING_WINDOW_MS) {
     return {
       key: 'building',
       headline: 'Claude is building',

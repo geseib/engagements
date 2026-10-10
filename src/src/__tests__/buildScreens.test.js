@@ -842,3 +842,16 @@ describe('an Ideas ask counts the people who suggested, in the header and the st
     expect(askPathSummaries(suggest({ respondents: undefined }), { playerCount: 4 }).collect).toBe('5 of 5 suggested · 5 ideas');
   });
 });
+
+/* Revy review (2026-10-10): the host said "Claude is building" while its own
+   tooltip said Claude was waiting for direction. Listening wins over the
+   90-second building window, and the tooltip reads the same state. */
+describe('claudeState: Claude waiting for direction is ready, even just after posting', () => {
+  const NOW = Date.parse('2026-10-07T15:00:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  test('a post 30 s ago, then listening: ready', () => {
+    const room = { agent: { connected: true, listening: true, lastSeenAt: at(5) }, log: [{ by: 'agent', kind: 'progress', text: 'The grid', createdAt: at(30) }], activity: [] };
+    expect(claudeState(room, NOW).key).toBe('waiting');
+    expect(claudeState(room, NOW).headline).toBe('Claude is ready');
+  });
+});

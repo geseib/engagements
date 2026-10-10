@@ -1574,6 +1574,8 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     shownPoint: shownPointView(room),
     run: room.run && room.run.Status === 'running' ? runView(room.run, 'public') : null,
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
+    // So a phone says "Claude is ready", not "building", while Claude waits for direction.
+    agentListening: agentStatus(room.state, [], now || new Date().toISOString()).listening,
     mine,
     rev: (room.state && room.state.Rev) || 0,
   };

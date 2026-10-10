@@ -35,7 +35,8 @@ function baseView(over = {}) {
     log: [],
     myIdeas: [],
     outcome: null,
-    agentConnected: false,
+    // Connected by default: most cases are about a room where Claude is at work ("Claude is building").
+    agentConnected: true,
     mine: mineEmpty(),
     rev: 1,
     ...over,
@@ -421,8 +422,19 @@ describe('watching the build', () => {
     expect(container.innerHTML).not.toMatch(/javascript:/);
   });
 
+  // Revy review (2026-10-10): before Claude connected, the phone said "Claude is building" under "Claude Code is not connected".
+  test('not connected: the headline waits for Claude Code; listening: Claude is ready', async () => {
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => baseView({ agentConnected: false }) }));
+    const { unmount } = render(<BuildPlayer gameId={GAME} playerName="Priya" clientId="cid-1" apiBase={API} rev={0} />);
+    expect(await screen.findByRole('heading', { name: 'Waiting for Claude Code' })).toBeInTheDocument();
+    expect(screen.queryByText('Claude is building')).toBeNull();
+    unmount();
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => baseView({ agentConnected: true, agentListening: true }) }));
+    render(<BuildPlayer gameId={GAME} playerName="Priya" clientId="cid-1" apiBase={API} rev={0} />);
+    expect(await screen.findByRole('heading', { name: 'Claude is ready' })).toBeInTheDocument();
+  });
   test('not connected says so', async () => {
-    serve(baseView());
+    serve(baseView({ agentConnected: false }));
     await mount();
     expect(await screen.findByText('Claude Code is not connected')).toBeInTheDocument();
   });

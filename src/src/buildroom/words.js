@@ -269,6 +269,9 @@ export const W = Object.freeze({
   copiedPaste: 'Copied. Paste into Claude Code.',
   chipNever: 'Not connected. Open Session to connect.',
   chipReady: 'Ready for your direction.',
+  // The phone's headline before Claude works (Revy review, 2026-10-10); the host's chip says the same.
+  waitingForClaude: 'Waiting for Claude Code',
+  claudeReady: 'Claude is ready',
   chipWorking: 'Working.',
   nothingYet: 'Nothing yet.',
   endedEdit: 'Session ended. You can still edit the report.',
