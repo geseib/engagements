@@ -281,6 +281,124 @@ async function check(name, fn) {
     }
   });
 
+  console.log('\nthe doing line (Task 2, 2026-10-10)');
+  const todoLast = path.join(project, '.engage', 'todo-last.json');
+  const todo = (...items) => ({ tool_name: 'TodoWrite', tool_input: { todos: items.map(([content, activeForm, status]) => ({ content, activeForm, status })) } });
+  await check('TodoWrite: an in-progress item becomes a doing record; a completed transition becomes a done record', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    assert.strictEqual(activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'in_progress'], ['Add the header', 'Adding the header', 'pending'])).status, 0);
+    let got = linesIn();
+    assert.strictEqual(got.length, 1);
+    assert.strictEqual(got[0].kind, 'plan'); assert.strictEqual(got[0].text, 'Updated its to-do list');
+    assert.deepStrictEqual(got[0].doing, { source: 'todo', text: 'Scaffolding the site' });
+    fs.writeFileSync(activityPath, '');
+    activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
+    got = linesIn();
+    assert.deepStrictEqual(got.map((g) => g.doing), [{ source: 'todo', text: 'Adding the header' }, { source: 'todo', done: true, item: 'Scaffold the site' }]);
+    fs.writeFileSync(activityPath, '');
+    activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
+    assert.deepStrictEqual(linesIn().map((g) => g.doing), [{ source: 'todo', text: 'Adding the header' }], 'already completed: no second done');
+    assert.ok(fs.existsSync(todoLast));
+    assert.strictEqual(fs.readFileSync(path.join(project, '.engage', '.gitignore'), 'utf8').trim(), '*', '.engage/ is git-ignored');
+  });
+  await check('TodoWrite with nothing in progress still writes the plain plan line; paths never reach the room', async () => {
+    fs.writeFileSync(activityPath, '');
+    activityHook(project, todo(['Edit src/a.js', 'Editing src/a.js', 'in_progress']));
+    activityHook(project, todo(['Wrap up', 'Wrapping up', 'pending']));
+    assert.deepStrictEqual(linesIn().map((g) => [g.kind, g.text, g.doing]), [['plan', 'Updated its to-do list', undefined], ['plan', 'Updated its to-do list', undefined]]);
+  });
+  await check('non-todo tools are unchanged (no doing, no helper)', async () => {
+    fs.writeFileSync(activityPath, '');
+    activityHook(project, { tool_name: 'Edit', tool_input: { file_path: '/x/Header.jsx' } });
+    const [l] = linesIn();
+    assert.deepStrictEqual([l.kind, l.text, l.doing, l.helper], ['edit', 'Edited Header.jsx', undefined, undefined]);
+  });
+  const taskHook = (data) => activityHook(project, { session_id: 'S1', ...data });
+  const createTask = (id, subject, activeForm) => taskHook({ tool_name: 'TaskCreate', tool_input: { subject, description: 'd', activeForm }, tool_response: { task: { id, subject } } });
+  await check('TaskCreate/TaskUpdate (Claude Code 2.1.x): in_progress is the doing text, completed is the done item', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    createTask('1', 'Scaffold the site', 'Scaffolding the site');
+    createTask('2', 'Add the header', 'Adding the header');
+    assert.deepStrictEqual(linesIn().map((g) => [g.kind, g.text, g.doing]), [['plan', 'Updated its to-do list', undefined], ['plan', 'Updated its to-do list', undefined]]);
+    fs.writeFileSync(activityPath, '');
+    taskHook({ tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'in_progress' }, tool_response: { success: true, taskId: '1' } });
+    taskHook({ tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'completed' } });
+    taskHook({ tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'completed' } });
+    taskHook({ tool_name: 'TaskUpdate', tool_input: { taskId: '2', status: 'in_progress' } });
+    assert.deepStrictEqual(linesIn().map((g) => g.doing), [
+      { source: 'todo', text: 'Scaffolding the site' }, { source: 'todo', done: true, item: 'Scaffold the site' }, undefined, { source: 'todo', text: 'Adding the header' },
+    ]);
+  });
+  await check('a task id read from "Task #3 created" text, an unknown id is a plain line, a path in a title never reaches the room', async () => {
+    fs.writeFileSync(activityPath, '');
+    taskHook({ tool_name: 'TaskCreate', tool_input: { subject: 'Fix src/a.js', activeForm: 'Fixing src/a.js' }, tool_response: 'Task #3 created successfully: Fix src/a.js' });
+    taskHook({ tool_name: 'TaskUpdate', tool_input: { taskId: '3', status: 'in_progress' } });
+    taskHook({ tool_name: 'TaskUpdate', tool_input: { taskId: '99', status: 'in_progress' } });
+    assert.deepStrictEqual(linesIn().map((g) => [g.text, g.doing]), [['Updated its to-do list', undefined], ['Updated its to-do list', undefined], ['Updated its to-do list', undefined]]);
+  });
+  await check('a new session_id resets the remembered tasks; the state file is written atomically inside .engage', async () => {
+    fs.writeFileSync(activityPath, '');
+    createTask('1', 'Scaffold the site', 'Scaffolding the site');
+    activityHook(project, { session_id: 'S2', tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'in_progress' } });
+    assert.strictEqual(linesIn().pop().doing, undefined, 'S2 does not know S1 task 1');
+    assert.strictEqual(JSON.parse(fs.readFileSync(todoLast, 'utf8')).session, 'S2');
+    assert.deepStrictEqual(fs.readdirSync(path.join(project, '.engage')).filter((f) => f.endsWith('.tmp')), []);
+  });
+  await check('an activity file that is a symlink is not appended to', async () => {
+    const target = path.join(tmp('symlink-target'), 'out.txt'); fs.writeFileSync(target, 'keep');
+    fs.rmSync(activityPath, { force: true }); fs.symlinkSync(target, activityPath);
+    activityHook(project, { tool_name: 'Edit', tool_input: { file_path: '/x/a.js' } });
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), 'keep');
+    fs.unlinkSync(activityPath); fs.writeFileSync(activityPath, '');
+  });
+  await check('more than 200 todos are capped, not stored whole', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    const many = Array.from({ length: 300 }, (_, i) => ['Task ' + i, 'Doing ' + i, 'pending']);
+    taskHook(todo(...many));
+    assert.strictEqual(JSON.parse(fs.readFileSync(todoLast, 'utf8')).todos.length, 200);
+  });
+  const hookEvent = (event, data) => activityHook(project, { session_id: 'S3', hook_event_name: event, ...data });
+  await check('a helper line starts when the Agent call STARTS (PreToolUse description) and ends at SubagentStop', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    hookEvent('PreToolUse', { tool_name: 'Agent', tool_input: { description: 'Researching contrast rules', prompt: 'SECRET' } });
+    hookEvent('PostToolUse', { tool_name: 'Agent', tool_input: { description: 'Researching contrast rules' }, tool_response: { status: 'async_launched' } });
+    hookEvent('PostToolUse', { tool_name: 'Read', agent_id: 'a1', agent_type: 'Explore', tool_input: { file_path: '/x/a.js' } });
+    hookEvent('PostToolUse', { ...todo(['Look', 'Looking', 'in_progress']), agent_id: 'a1' });
+    hookEvent('SubagentStop', { agent_id: 'a1', agent_type: 'Explore' });
+    const got = linesIn();
+    assert.deepStrictEqual(got.map((g) => g.helperLine), [{ text: 'Researching contrast rules' }, undefined, undefined, { end: true }], 'no second line for the launch');
+    assert.strictEqual(got[1].helper, true); assert.strictEqual(got[2].helper, true);
+    assert.strictEqual(got[2].doing, undefined, 'a helper\'s own list adds no doing');
+    assert.ok(!JSON.stringify(got).includes('SECRET'));
+  });
+  await check('a helper described any other way is shown plainly with no helper line; two helpers end the line once, with the last', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    hookEvent('PreToolUse', { tool_name: 'Task', tool_input: { description: 'Look at src/App.jsx' } });
+    hookEvent('PreToolUse', { tool_name: 'Task', tool_input: { description: 'Comparing three chart libraries' } });
+    hookEvent('SubagentStop', { agent_id: 'a1', agent_type: 'Explore' });
+    hookEvent('SubagentStop', { agent_id: 'a2', agent_type: 'Explore' });
+    hookEvent('SubagentStop', { agent_id: 'a3', agent_type: '' });
+    assert.deepStrictEqual(linesIn().map((g) => g.helperLine), [undefined, { text: 'Comparing three chart libraries' }, { end: true }]);
+  });
+  await check('the pump sends doing, helper and done apart, each with its time', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'in_progress']));
+    activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
+    hookEvent('PreToolUse', { tool_name: 'Agent', tool_input: { description: 'Researching contrast rules' } });
+    const before = requests.filter((q) => q.url.endsWith('/build/activity')).length;
+    const pump = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: project, ENGAGE_ACTIVITY_MS: '200' });
+    try {
+      const deadline = Date.now() + 5000;
+      while (requests.filter((q) => q.url.endsWith('/build/activity')).length === before && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+      const sent = requests.filter((q) => q.url.endsWith('/build/activity')).slice(before)[0];
+      assert.ok(sent, 'a batch was sent');
+      assert.deepStrictEqual({ ...sent.body.doing, at: !!sent.body.doing.at }, { source: 'todo', text: 'Adding the header', at: true });
+      assert.deepStrictEqual({ ...sent.body.helper, at: !!sent.body.helper.at }, { text: 'Researching contrast rules', at: true });
+      assert.deepStrictEqual(sent.body.done.map((d) => d.item), ['Scaffold the site']);
+      assert.ok(sent.body.done[0].at);
+    } finally { pump.child.kill(); }
+  });
+
   console.log('\nthe Stop hook');
   // Async on purpose: the fake API lives in THIS process, and spawnSync would
   // block it from answering the hook's request.
@@ -353,6 +471,8 @@ async function check(name, fn) {
     // The live view: one plain line per tool, from a PostToolUse hook on every tool.
     assert.strictEqual(hooks.hooks.PostToolUse[0].matcher, '*');
     assert.ok(/--activity/.test(hooks.hooks.PostToolUse[0].hooks[0].command));
+    assert.strictEqual(hooks.hooks.PreToolUse[0].matcher, 'Agent|Task');
+    assert.ok(/--activity/.test(hooks.hooks.PreToolUse[0].hooks[0].command) && /--activity/.test(hooks.hooks.SubagentStop[0].hooks[0].command));
     assert.ok(/npm run dev|dev server/.test(fs.readFileSync(path.join(plug, 'commands', 'preview.md'), 'utf8')));
     const join = fs.readFileSync(path.join(plug, 'commands', 'join.md'), 'utf8');
     assert.ok(/argument-hint: <key>/.test(join) && /connect with key "\$ARGUMENTS"/.test(join) && /crew_status/.test(join) && /claim_task/.test(join), join);

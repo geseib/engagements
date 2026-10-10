@@ -46,3 +46,8 @@
 
 ### Task 4: Dev, walk, test, prod
 - [ ] Push dev; install plugin 1.14.0 locally; walk with a key in room 4443 (post to-do updates and explicit lines through the API); promote to test (merge) and start prod (owner gate).
+
+## Findings
+
+- **Review Focus 2 (helper agents), measured against the Claude Code hooks reference (code.claude.com/docs/en/hooks), 2026-10-10:** plugin hooks run inside subagents, and the input carries `agent_id` (present only inside a subagent) and `agent_type`, so a helper's tool calls are distinguishable (the plugin marks their lines `helper:true`). PostToolUse for the Agent/Task call fires when it returns, which for a background helper (the default) is at launch, so it cannot start the helper's line. PreToolUse for `Agent|Task` fires first and carries `tool_input.description`; SubagentStart/SubagentStop carry only `agent_id` and `agent_type` (no description). The plugin therefore starts the helper line at PreToolUse and ends it at SubagentStop (a counter of open helpers; the line ends when the last one stops). Documented contract, not run live.
+- **Task tools:** Claude Code 2.1.294 uses TaskCreate `{subject, description, activeForm}` (its result is `{task:{id, subject}}`) and TaskUpdate `{taskId, status}`, not TodoWrite. The plugin handles both.
