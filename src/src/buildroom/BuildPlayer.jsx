@@ -6,7 +6,7 @@ import RatingInput from '../components/survey/RatingInput';
 import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
 import { W } from './words';
-import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS } from './buildScreens';
+import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine } from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
@@ -855,9 +855,9 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
  * decided, what the room said. Feedback on a preview sits on the preview it
  * is about. The same story the wall shows (buildScreens roomStory).
  */
-function HistoryTab({ view, api, onResult }) {
+function HistoryTab({ view, api, onResult, now }) {
   const [filter, setFilter] = useState('all');
-  const story = roomStory({ log: view.log || [], decisions: view.decisions || [], images: view.images || [], myIdeas: view.myIdeas || [] });
+  const story = roomStory({ log: view.log || [], decisions: view.decisions || [], images: view.images || [], myIdeas: view.myIdeas || [], doing: doingLine(view.doing, now) });
   const shown = filterStory(story, filter);
   const preview = latestPreview(view.log);
   const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
@@ -875,7 +875,20 @@ function HistoryTab({ view, api, onResult }) {
           <li key={it.id} className={`bpl-story-it bpl-story-it--${it.type}`}>
             <span className="bpl-ago">{clock(it.at)}</span>
             <div className="bpl-story-body">
-              <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
+              {it.type === 'step' ? (
+                <>
+                  <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b>{it.dur ? ` · ${it.dur}` : ''}</p>
+                  {it.kids.length > 0 && (
+                    <ul className="bpl-kids">
+                      {it.kids.map((k) => (
+                        <li key={k.id}><b>{k.type === 'decided' ? 'Decided' : k.heading}</b>{` · ${k.text}`}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
+              )}
               {it.mine ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
               {it.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={it.text} className="bpl-shot" />)}
               {isHttpUrl(it.link) ? <a className="bpl-link bpl-lnk" href={it.link} target="_blank" rel="noopener noreferrer">{linkText(it.link)}</a> : null}
@@ -944,6 +957,9 @@ export default function BuildPlayer({
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [ideaDraft, setIdeaDraft] = useState('');
   const [tab, setTab] = useState('now');
+  // The doing line counts minutes and goes stale as time passes.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 20000); return () => clearInterval(id); }, []);
   const lastOpenAsk = useRef(null);
   // A builder key, held only until "Done" (shown once; never stored).
   const [builderKey, setBuilderKey] = useState(null);
@@ -1092,7 +1108,7 @@ export default function BuildPlayer({
       onResult={onResult} current={ask} alwaysOpen
     />
   );
-  const otherTab = shownTab === 'ideas' ? ideasTab : shownTab === 'history' ? <HistoryTab view={view} api={api} onResult={onResult} /> : null;
+  const otherTab = shownTab === 'ideas' ? ideasTab : shownTab === 'history' ? <HistoryTab view={view} api={api} onResult={onResult} now={now} /> : null;
   /* On Now: a word when Claude shows something new (the feedback is on its
      picture in History), and the way to send an idea. */
   /* OPEN THE BUILD, at the top of Now (mockup L5): the first thing a
@@ -1200,6 +1216,7 @@ export default function BuildPlayer({
   /* No current ask: watch the build. A point the host put on the Stage comes
      first (Talk it over), then the host's run list; both replace the heading. */
   const point = view.shownPoint || null;
+  const doingNow = doingLine(view.doing, now);
   return page({
     volume: 'watch',
     body: (
@@ -1211,8 +1228,10 @@ export default function BuildPlayer({
         {!point && run ? <RunBlock run={run} lead /> : null}
         {!point && !run ? (
           <>
-            <h1 className="plr-h1 plr-h1--primary">Claude is building</h1>
-            <p className="plr-help bpl-hint">Follow the progress here. A question appears when Claude needs the room.</p>
+            <h1 className="plr-h1 plr-h1--primary">{doingNow ? doingNow.headline : 'Claude is building'}</h1>
+            {doingNow && !doingNow.stale ? <p className="bpl-dur">{`for ${doingNow.dur}`}</p> : null}
+            {doingNow && doingNow.helperLine ? <p className="bpl-helper">{doingNow.helperLine}</p> : null}
+            <p className="plr-help bpl-hint">{doingNow && doingNow.stale ? 'The host will pick it up again in a moment.' : 'Follow the progress here. A question appears when Claude needs the room.'}</p>
           </>
         ) : null}
         {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}

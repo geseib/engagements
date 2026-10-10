@@ -68,7 +68,7 @@ import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
-  queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
+  doingLine, queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
   defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN,
   isPointsVote, highlightOf, highlightedPointIds, rowIsLive, pointVoteRows, runOf, runRunning,
@@ -198,6 +198,7 @@ export function byLabel(entry) {
     case 'direction': return 'To Claude';
     case 'note': return 'Host note';
     case 'milestone': return 'Milestone';
+    case 'step': return 'Step';
     case 'outcome': return 'Wrap-up';
     default: return 'Host';
   }
@@ -1006,7 +1007,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
 
       {screen === 'build' && <BuildScreen room={room} now={now} />}
-      {screen === 'history' && <HistoryScreen room={room} onOpenAsk={setDetailAskId} />}
+      {screen === 'history' && <HistoryScreen room={room} now={now} onOpenAsk={setDetailAskId} />}
       {screen === 'host' && (
       <div className="brm-host">
         {/* NOW: what Claude or the room is doing, with that moment's controls,
@@ -1132,7 +1133,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             screenshots, one open at a time; the open one fills the column and
             scrolls inside itself, so the page never scrolls. */}
         <aside className="brm-hostcol brm-hostcol--stack">
-          {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
+          {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
           <HistoryStack
             items={[
               ...(room.opening && room.opening.phase === 'opening' ? [{
@@ -1287,11 +1288,75 @@ const ACTIVITY_ICON = { edit: 'PencilSimple', read: 'FileText', run: 'Terminal',
  * it. The newest line leads; the host also sees the last few. Quiet after two
  * minutes without a line, so a stale "Editing…" never sits on the wall.
  */
-export function ClaudeActivity({ activity, agent, now, full }) {
+const STEPS_OPEN_KEY = 'brm-steps-open';
+const STEPS_SHOWN = 12;
+const readStepsOpen = () => { try { return window.localStorage.getItem(STEPS_OPEN_KEY) === '1'; } catch (e) { return false; } };
+const writeStepsOpen = (open) => { try { window.localStorage.setItem(STEPS_OPEN_KEY, open ? '1' : '0'); } catch (e) { /* the fold still works */ } };
+
+/** The last twelve commands, newest first, repeats of one line grouped. */
+export function groupSteps(items) {
+  const out = [];
+  for (const a of (items || []).slice(-STEPS_SHOWN).reverse()) {
+    const hit = out.find((g) => g.text === a.text && g.kind === a.kind);
+    if (hit) hit.n += 1; else out.push({ text: a.text, kind: a.kind, at: a.at, n: 1 });
+  }
+  return out;
+}
+
+/**
+ * THE COMMANDS, FOLDED (owner, 2026-10-10): one row with the count and the
+ * newest. Opened, the last twelve with repeats grouped. An opened fold is
+ * remembered for this browser.
+ */
+function StepsFold({ items, now }) {
+  const [open, setOpen] = useState(readStepsOpen);
+  const newest = items[items.length - 1];
+  const groups = open ? groupSteps(items) : [];
+  const toggle = () => { writeStepsOpen(!open); setOpen(!open); };
+  return (
+    <div className="brm-steps" data-testid="brm-steps">
+      <button type="button" className="brm-steps-sum" aria-expanded={open} onClick={toggle}>
+        <Icon name={open ? 'CaretDown' : 'CaretRight'} size={14} />
+        <span>{W.steps} <b>{items.length}</b>{!open && newest ? ` · ${W.stepsLast(newest.text)} · ${agoText(newest.at, now) || 'just now'}` : ''}</span>
+      </button>
+      {open && (
+        <ul className="brm-activity-list">
+          {groups.map((g) => (
+            <li key={`${g.kind}:${g.text}`}>
+              <Icon name={ACTIVITY_ICON[g.kind] || 'Gear'} size={14} />
+              <span>{g.n > 1 ? W.stepRepeat(g.text, g.n) : g.text}</span>
+              <span className="brm-muted brm-small">{agoText(g.at, now)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function ClaudeActivity({ activity, agent, now, full, doing = null }) {
   const items = (activity || []).slice().reverse();
   const latest = items[0];
   const fresh = latest && now - Date.parse(latest.at) < ACTIVITY_FRESH_MS;
-  if (!latest && !(agent && agent.connected)) return null;
+  // The line leads (docs/design/build-room-doing D1); without one, today's panel.
+  const dl = claudeState({ agent, activity, doing }, now, { host: true }).doing || null;
+  if (!latest && !dl && !(agent && agent.connected)) return null;
+  if (dl) {
+    const src = dl.stale
+      ? (agent && agent.lastSeenAt ? W.lastSeen(agoText(agent.lastSeenAt, now)) : '')
+      : dl.source === 'todo' ? W.doingFromTodo : dl.source === 'claude' ? W.doingFromClaude(clockTime(dl.startedAt)) : '';
+    return (
+      <section className={`brm-panel brm-activity${dl.stale ? '' : ' is-live'}`} aria-labelledby="brm-activity-h" aria-live="polite">
+        <h2 className="brm-h5" id="brm-activity-h">Claude Code</h2>
+        <div className="brm-doing" data-testid="brm-doing" data-stale={dl.stale ? 'true' : 'false'}>
+          <p className="brm-doing-t"><b>{dl.headline}</b>{!dl.stale && <span className="brm-muted">{` · ${dl.dur}`}</span>}</p>
+          {src && <p className="brm-doing-src brm-muted brm-small">{src}</p>}
+          {dl.helperLine && <p className="brm-doing-helper">{dl.helperLine}</p>}
+        </div>
+        {full && items.length > 0 && <StepsFold items={activity || []} now={now} />}
+      </section>
+    );
+  }
   return (
     <section className={`brm-panel brm-activity${fresh ? ' is-live' : ''}`} aria-labelledby="brm-activity-h" aria-live="polite">
       <h2 className="brm-h5" id="brm-activity-h">{fresh ? 'Claude Code is working' : 'Claude Code'}</h2>
@@ -1343,7 +1408,7 @@ export const CONTINUE_COMMAND = pluginCommand('continue');
 function AgentChip({ room, now }) {
   const agent = room && room.agent;
   const st = claudeState(room, now);
-  const text = st.key === 'paused' && agent && agent.lastSeenAt ? `${st.headline} · last seen ${agoText(agent.lastSeenAt, now)}` : st.headline;
+  const text = st.key === 'paused' && agent && agent.lastSeenAt ? `${st.headline} · ${W.lastSeen(agoText(agent.lastSeenAt, now))}` : st.key === 'building' && st.doing ? `${st.headline} · ${st.doing.dur}` : st.headline;
   const [copied, setCopied] = useState('');
   const quiet = agentStopped(agent);
   const cls = `brm-agentchip${agent && agent.connected ? ' is-on' : ''}${quiet ? ' is-quiet' : ''}`;
@@ -1974,13 +2039,33 @@ const HISTORY_FILTERS = [
   { key: 'timeline', label: 'Full timeline' },
 ];
 
+/** What a step produced: a small row under it, oldest first. */
+function StoryKid({ kid, onOpen }) {
+  const openable = Boolean(onOpen) && kid.type === 'decided' && kid.askId;
+  return (
+    <li className={`brm-story-kid brm-story-kid--${kid.type}`}>
+      <span className="brm-story-kidh">{kid.type === 'decided' ? 'Decided' : kid.heading}</span>
+      {openable
+        ? <button type="button" className="brm-story-open brm-story-kidt" aria-label={`Open Ask ${askNumber(kid.askId)}`} onClick={() => onOpen(kid.askId)}>{kid.text}</button>
+        : <span className="brm-story-kidt">{kid.text}</span>}
+      <span className="brm-story-tm">{clockTime(kid.at)}</span>
+      {kid.imageIds.length > 0 && (
+        <span className="brm-story-pics">
+          {kid.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={kid.text} className="brm-shot brm-story-pic" />)}
+        </span>
+      )}
+    </li>
+  );
+}
+
 export function StoryItem({ item, onOpen = null }) {
   // A decided item opens its ask's window (History, R1); a click anywhere on
   // it does, except on a link or button of its own.
   const openable = Boolean(onOpen) && item.type === 'decided' && item.askId;
+  const isStep = item.type === 'step';
   return (
     <li
-      className={`brm-story-it brm-story-it--${item.type}${openable ? ' is-openable' : ''}`}
+      className={`brm-story-it brm-story-it--${item.type}${openable ? ' is-openable' : ''}${item.now ? ' is-now' : ''}`}
       onClick={openable ? (e) => { if (!(e.target.closest && e.target.closest('a, button'))) onOpen(item.askId); } : undefined}
     >
       <span className="brm-story-tm">{clockTime(item.at)}</span>
@@ -1988,8 +2073,13 @@ export function StoryItem({ item, onOpen = null }) {
       <div className="brm-story-body">
         {openable
           ? <button type="button" className="brm-story-h brm-story-open" aria-label={`Open Ask ${askNumber(item.askId)}`} onClick={() => onOpen(item.askId)}>{item.heading}</button>
-          : <span className="brm-story-h">{item.heading}</span>}
-        <p className="brm-story-t">{item.text}</p>
+          : <span className="brm-story-h">{item.heading}{isStep && item.dur && <span className="brm-muted">{` · ${item.dur}`}</span>}</span>}
+        {!isStep && <p className="brm-story-t">{item.text}</p>}
+        {isStep && item.kids.length > 0 && (
+          <ul className="brm-story-kids">
+            {item.kids.map((k) => <StoryKid key={k.id} kid={k} onOpen={onOpen} />)}
+          </ul>
+        )}
         {item.chain.length > 0 && (
           <p className="brm-story-chain" aria-label="How it was decided">
             {item.chain.map((c, i) => (
@@ -2012,10 +2102,10 @@ export function StoryItem({ item, onOpen = null }) {
   );
 }
 
-function HistoryScreen({ room, onOpenAsk }) {
+function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
   const [filter, setFilter] = useState('all');
   const asks = room.asks || [];
-  const story = roomStory({ log: room.log || [], asks, images: room.images || [] });
+  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now) });
   const arts = artifactsOf({ images: room.images || [], asks });
   const shown = filterStory(story, filter === 'decisions' ? 'decisions' : 'all');
   const decided = asks
@@ -2855,9 +2945,10 @@ function IdleStage({ room, now, host }) {
           <span className={`brm-sdot brm-sdot--${st.key}`} aria-hidden="true" />
           <h2 className="brm-q">{st.headline}</h2>
         </div>
+        {st.doing && !st.doing.stale && <p className="brm-nowtext brm-muted">{`for ${st.doing.dur}`}</p>}
         {st.line && (
           <p className="brm-nowtext">
-            {st.line}{sinceText && <span className="brm-muted"> · since {sinceText}</span>}
+            {st.line}{sinceText && !st.doing && <span className="brm-muted"> · since {sinceText}</span>}
           </p>
         )}
         {host && st.key === 'none' && <p className="brm-stagehint">Connect Claude Code, then paste the Kick off prompt.</p>}
@@ -2988,7 +3079,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
       {whatsNext
         ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} laterTicked={laterTicked} onMove={onMove} continueOn={quiet && Boolean(CONTINUE_PROMPT)} outline={leadOutline} />
         : <p className="brm-nowline">{line}</p>}
-      {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} full />}
+      {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
       {!ended && (
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn" onClick={onShowBuild} title="Show the room the build (3)">

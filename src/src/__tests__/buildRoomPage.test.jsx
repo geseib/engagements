@@ -45,7 +45,7 @@ const NOW = new Date().toISOString();
 const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 
 /** HostState, computed by build-store.js from rows — never hand-shaped. */
-function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], logs = [], ideas = [], keys = [], activity = null } = {}) {
+function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], logs = [], ideas = [], keys = [], activity = null, doing = null } = {}) {
   const rows = [
     // Building by default; the opening's tests pass st: { Phase: undefined } (owner, 2026-10-06).
     { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...st },
@@ -56,7 +56,7 @@ function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], l
     ...logs.map((l, i) => ({ SK: `BUILD#LOG#${String(i).padStart(13, '0')}#x${i}`, LogId: `${i}-x${i}`, CreatedAt: ago(900 - i * 60), ...l })),
     ...ideas.map((d, i) => ({ SK: `BUILD#IDEA#${String(i).padStart(13, '0')}#i${i}`, IdeaId: `${i}-i${i}`, Status: 'new', CreatedAt: ago(120), ...d })),
     ...keys.map((k) => ({ SK: `BUILD#KEY#${k.KeyId}`, ...k })),
-    ...(activity ? [{ SK: 'BUILD#ACTIVITY', Items: activity }] : []),
+    ...(activity || doing ? [{ SK: 'BUILD#ACTIVITY', Items: activity || [], ...(doing || {}) }] : []),
   ];
   return S.hostView({
     gameId: GAME,
@@ -2567,5 +2567,134 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     expect(send().className).not.toMatch('brm-btn--primary');
     expect(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Save for later' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Queue it' })).toBeNull();
+  });
+});
+
+describe('what Claude is doing, in one line (docs/design/build-room-doing)', () => {
+  const run = (sec, text) => ({ at: ago(sec), kind: 'run', text });
+  const COMMANDS = [
+    run(300, 'Ran git status'), run(200, 'Ran git remote'), run(150, 'Ran git remote'), run(120, 'Ran git remote'),
+    run(60, 'Ran gh repo'), run(20, 'Ran git push'),
+  ];
+  const LINE = (over = {}) => ({
+    ActiveAt: ago(10),
+    DoingB: { text: 'Mocking up 3 graph options', past: 'Mocked up 3 graph options', source: 'claude', startedAt: ago(250), at: ago(10) },
+    ...over,
+  });
+  const panel = () => screen.getByRole('region', { name: /^Claude Code/ });
+  beforeEach(() => { try { window.localStorage.clear(); } catch (e) { /* none */ } });
+
+  test('D1: the header chip is the line and how long, and the panel leads with it', async () => {
+    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is mocking up 3 graph options · 4 min');
+    expect(screen.getByTestId('brm-agentchip')).toHaveAttribute('data-state', 'building');
+    const p = panel();
+    expect(within(p).getByTestId('brm-doing')).toHaveTextContent('Claude is mocking up 3 graph options · 4 min');
+    expect(p).toHaveTextContent(/Claude said this at \d/);
+    expect(within(p).queryByTestId('brm-activity-now')).toBeNull();
+  });
+
+  test('D1: a to-do line says where it came from, and a helper sits under it', async () => {
+    await openRoom(hostState({
+      activity: COMMANDS,
+      doing: { ActiveAt: ago(10), DoingA: { text: 'Setting up the repository', source: 'todo', startedAt: ago(130), at: ago(10) }, Helper: { text: 'Researching contrast rules', at: ago(40) } },
+    }));
+    const p = panel();
+    expect(p).toHaveTextContent("From Claude's to-do list");
+    expect(within(p).getByText('A helper is researching contrast rules')).toBeInTheDocument();
+  });
+
+  test('D1: the commands are one folded row; opened, repeats are grouped, and the fold is remembered', async () => {
+    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    const fold = within(panel()).getByRole('button', { name: /^Steps 6/ });
+    expect(fold).toHaveTextContent('Steps 6 · last: Ran git push');
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+    expect(within(panel()).queryByText('Ran git status')).toBeNull();
+    fireEvent.click(fold);
+    expect(within(panel()).getByText('Ran git remote, 3 times')).toBeInTheDocument();
+    expect(within(panel()).getByText('Ran git status')).toBeInTheDocument();
+    expect(within(panel()).getByRole('button', { name: /^Steps 6/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(window.localStorage.getItem('brm-steps-open')).toBe('1');
+  });
+
+  test('D1: an opened fold stays open on the next visit', async () => {
+    window.localStorage.setItem('brm-steps-open', '1');
+    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    expect(within(panel()).getByText('Ran git remote, 3 times')).toBeInTheDocument();
+  });
+
+  test('D1: the fold works with storage unavailable', async () => {
+    const spy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const set = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    try {
+      await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+      fireEvent.click(within(panel()).getByRole('button', { name: /^Steps 6/ }));
+      expect(within(panel()).getByText('Ran git status')).toBeInTheDocument();
+    } finally { spy.mockRestore(); set.mockRestore(); }
+  });
+
+  test('D1: with no line, the panel is as it was: the newest command leads', async () => {
+    await openRoom(hostState({ activity: COMMANDS }));
+    expect(within(panel()).getByTestId('brm-activity-now')).toHaveTextContent('Ran git push');
+    expect(within(panel()).queryByTestId('brm-doing')).toBeNull();
+    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
+  });
+
+  test('D2: the Stage says the line and how long, the helper beneath, and nothing from the engine room', async () => {
+    await openRoom(hostState({
+      activity: COMMANDS,
+      doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }),
+    }));
+    fireEvent.keyDown(window, { key: '2' });
+    const stage = screen.getByRole('region', { name: 'Claude' });
+    expect(within(stage).getByRole('heading', { name: 'Claude is mocking up 3 graph options' })).toBeInTheDocument();
+    expect(within(stage).getByText('for 4 min')).toBeInTheDocument();
+    expect(within(stage).getByText('A helper is researching contrast rules')).toBeInTheDocument();
+    expect(stage.textContent).not.toMatch(/Ran |Claude said this|to-do list/);
+  });
+
+  test('D5: a stale line is Claude was, the chip says when it was last seen, the Stage tells the room', async () => {
+    await openRoom(hostState({
+      st: { AgentSeenAt: ago(240) },
+      activity: COMMANDS,
+      doing: LINE({ ActiveAt: ago(240), DoingB: { text: 'Scaffolding the site', source: 'claude', startedAt: ago(700), at: ago(240) } }),
+    }));
+    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude was scaffolding the site · last seen 4 min ago');
+    fireEvent.keyDown(window, { key: '2' });
+    const stage = screen.getByRole('region', { name: 'Claude' });
+    expect(within(stage).getByRole('heading', { name: 'Claude was scaffolding the site' })).toBeInTheDocument();
+    expect(within(stage).getByText('The host will pick it up again in a moment.')).toBeInTheDocument();
+    expect(within(stage).queryByText(/^for \d/)).toBeNull();
+  });
+
+  test('D4: History shows a finished step with its time and what it produced; commands never', async () => {
+    await openRoom(hostState({
+      activity: COMMANDS,
+      doing: { ActiveAt: ago(10), DoingA: { text: 'Building the bar chart', source: 'todo', startedAt: ago(125), at: ago(10) } },
+      logs: [
+        {
+          Kind: 'step', Text: 'Done: Set up the project', By: 'agent', CreatedAt: ago(700), StartedAt: ago(1000), EndedAt: ago(700), DurationMs: 300000, Source: 'todo',
+        },
+        { Kind: 'milestone', Text: 'The first page runs', By: 'agent', CreatedAt: ago(800) },
+      ],
+    }));
+    fireEvent.keyDown(window, { key: '4' });
+    const story = screen.getByRole('list', { name: 'The story so far' });
+    const items = [...story.querySelectorAll(':scope > li')];
+    expect(items[0]).toHaveTextContent('Building the bar chart');
+    expect(items[0]).toHaveTextContent('2 min so far');
+    const done = items.find((li) => /Done: Set up the project/.test(li.textContent));
+    expect(done).toHaveTextContent('5 min');
+    expect(within(done).getByText('The first page runs')).toBeInTheDocument();
+    expect(story.textContent).not.toMatch(/Ran git/);
+  });
+
+  test('D1-D5: one orange on the Host screen with a line, folded or open', async () => {
+    await openRoom(hostState({ activity: COMMANDS, doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }) }));
+    const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')];
+    const before = oranges().length;
+    expect(before).toBeLessThanOrEqual(1);
+    fireEvent.click(within(panel()).getByRole('button', { name: /^Steps 6/ }));
+    expect(oranges()).toHaveLength(before);
   });
 });

@@ -1097,3 +1097,11 @@
 .bpl .bpl-lp-btns .bpl-send { flex: 1 1 140px; }
 .bpl .bpl-lp-form { margin: 10px 0 0; padding: 12px; border: 1px solid var(--bpl-rule-strong); border-radius: 12px; }
 .bpl .bpl-lp-chips { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--plr-t-meta); color: var(--bpl-muted); }
+
+/* What Claude is doing, in one line (docs/design/build-room-doing). */
+.bpl .bpl-dur { margin: -4px 0 8px; font-size: var(--plr-t-meta); color: var(--bpl-muted); }
+.bpl .bpl-helper { margin: 0 0 8px; font-size: var(--plr-t-secondary); color: var(--bpl-muted); }
+.bpl .bpl-story-it--step .bpl-story-h { color: var(--text); }
+.bpl .bpl-kids { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.bpl .bpl-kids li { font-size: var(--plr-t-secondary); color: var(--bpl-muted); overflow-wrap: anywhere; }
+.bpl .bpl-kids b { color: var(--text); font-weight: 600; }

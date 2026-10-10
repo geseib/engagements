@@ -153,6 +153,45 @@ const POST_KINDS = ['progress', 'showing', 'milestone'];
 const timeOf = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? t : NaN; };
 const stripEnd = (text) => String(text || '').trim().replace(/[\s.!?]+$/, '');
 
+// ── What Claude is doing, in one line (owner, 2026-10-10) ───────────────────
+//
+// docs/design/build-room-doing. The server resolves the line (build-store.js
+// doingView); every screen reads it here, so they never disagree.
+
+/** No command and no post for this long, and Claude not waiting: "Claude was …". */
+export const DOING_STALE_MS = 3 * 60 * 1000;
+const lowerFirst = (t) => (t ? t.charAt(0).toLowerCase() + t.slice(1) : '');
+const upperFirst = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
+export const durText = (mins) => (mins < 1 ? 'under 1 min' : `${mins} min`);
+
+/**
+ * The doing line as a screen says it, or null. Stale is re-derived from
+ * `lastActiveAt` as the clock moves; the server's flag is only a snapshot.
+ * @returns {{ text, headline, stale, mins, dur, helper, helperLine, source, startedAt, lastActiveAt }|null}
+ */
+export function doingLine(doing, now) {
+  const text = doing && typeof doing.text === 'string' ? doing.text.trim() : '';
+  if (!text) return null;
+  const at = new Date(now).getTime();
+  const started = Date.parse(doing.startedAt || '');
+  const active = Date.parse(doing.lastActiveAt || '');
+  const stale = Number.isFinite(active) ? at - active > DOING_STALE_MS : Boolean(doing.stale);
+  const mins = Number.isFinite(started) ? Math.max(0, Math.floor((at - started) / 60000)) : 0;
+  const helper = typeof doing.helper === 'string' ? doing.helper.trim() : '';
+  return {
+    text,
+    headline: `${stale ? 'Claude was' : 'Claude is'} ${lowerFirst(text)}`,
+    stale,
+    mins,
+    dur: durText(mins),
+    helper,
+    helperLine: helper ? W.helperIs(helper) : '',
+    source: doing.source || '',
+    startedAt: doing.startedAt || null,
+    lastActiveAt: doing.lastActiveAt || null,
+  };
+}
+
 /**
  * `host: true` is the host's own screen: the line speaks to the host, never about
  * them (`continueOn`: the Continue prompt button is on that screen).
@@ -162,6 +201,15 @@ export function claudeState(room, now, { host = false, continueOn = false } = {}
   const at = new Date(now).getTime();
   const agent = (room && room.agent) || {};
   const log = (room && room.log) || [];
+  // A line Claude or its to-do list gave wins, unless Claude is waiting for direction.
+  const dl = agent.listening ? null : doingLine(room && room.doing, now);
+  if (dl && !dl.stale) {
+    return { key: 'building', headline: dl.headline, line: dl.helperLine, since: dl.startedAt, doing: dl };
+  }
+  if (dl) {
+    const line = host ? (continueOn ? 'Copy the Continue prompt to pick it up.' : '') : W.hostPicksUp;
+    return { key: 'paused', headline: dl.headline, line, since: null, doing: dl };
+  }
   const posts = log.filter((l) => l.by === 'agent' && POST_KINDS.includes(l.kind) && l.text);
   const lastPost = posts.reduce((best, l) => (!best || timeOf(l.createdAt) >= timeOf(best.createdAt) ? l : best), null);
   const acts = ((room && room.activity) || []).filter((a) => a && Number.isFinite(timeOf(a.at)));
@@ -663,7 +711,7 @@ export function decisionChain(ask) {
   return chain;
 }
 
-export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [] } = {}) {
+export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null } = {}) {
   const items = [];
   const imgById = new Map((images || []).map((im) => [im.imageId, im]));
   // A picture shared within two minutes after Claude showed something belongs to it.
@@ -703,7 +751,31 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
       mine: (myIdeas || []).some((i) => i.promotedTo === d.askId),
     });
   }
-  return items.sort((a, b) => t(b.at) - t(a.at));
+  // A FINISHED STEP (docs/design/build-room-doing D4) is one entry; what Claude
+  // posted while it ran hangs under it, oldest first. Commands never come here.
+  const steps = (log || []).filter((e) => e.kind === 'step' && e.step).map((e) => ({
+    id: e.logId, at: e.step.startedAt || e.createdAt, type: 'step', heading: e.text, text: '', imageIds: [], chain: [], kids: [],
+    dur: stepDur(e.step.durationMs), endAt: e.step.endedAt || e.createdAt,
+  }));
+  const live = doing && !doing.stale && Number.isFinite(t(doing.startedAt))
+    ? { id: 'step:now', at: doing.startedAt, type: 'step', now: true, heading: upperFirst(doing.text), text: '', imageIds: [], chain: [], kids: [], dur: `${doing.dur} so far`, endAt: null }
+    : null;
+  const loose = [];
+  for (const it of items) {
+    const home = steps.find((st) => t(it.at) >= t(st.at) && t(it.at) <= t(st.endAt));
+    if (home) home.kids.push(it);
+    else if (live && t(it.at) >= t(live.at)) live.kids.push(it);
+    else loose.push(it);
+  }
+  for (const st of live ? [...steps, live] : steps) st.kids.sort((a, b) => t(a.at) - t(b.at));
+  return [...(live ? [live] : []), ...[...loose, ...steps].sort((a, b) => t(b.at) - t(a.at))];
+}
+
+/** A step's length for History: '' when unknown, 'under 1 min', else 'N min'. */
+function stepDur(ms) {
+  const n = Number(ms) || 0;
+  if (n <= 0) return '';
+  return n < 60000 ? 'under 1 min' : `${Math.round(n / 60000)} min`;
 }
 
 export const STORY_FILTERS = Object.freeze([
@@ -711,7 +783,9 @@ export const STORY_FILTERS = Object.freeze([
   { key: 'decisions', label: 'Decisions' },
   { key: 'pictures', label: 'Pictures' },
 ]);
-export const filterStory = (items, key) => (key === 'decisions' ? items.filter((i) => i.type === 'decided') : key === 'pictures' ? items.filter((i) => i.imageIds.length) : items);
+// A step holds its own decisions and pictures: the filters look inside.
+const flatStory = (items) => items.flatMap((i) => (i.type === 'step' ? i.kids : [i]));
+export const filterStory = (items, key) => (key === 'decisions' ? flatStory(items).filter((i) => i.type === 'decided') : key === 'pictures' ? flatStory(items).filter((i) => i.imageIds.length) : items);
 
 /** Every picture, newest first, each saying what it was for (C10). */
 export function artifactsOf({ images = [], asks = [] } = {}) {
