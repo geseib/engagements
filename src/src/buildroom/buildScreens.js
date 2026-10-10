@@ -1119,8 +1119,8 @@ export function pointGroups(room) {
 
 /** Picks per person in a points vote: 1 to 5. */
 export const VOTE_PICKS_MAX = 5;
-/** The window opens on 3 picks, or one fewer than the options when that is smaller. */
-export const defaultPicks = (n) => Math.max(1, Math.min(3, n - 1));
+/** The window opens on one pick (owner, 2026-10-10, after the Revy review: the host wanted one change and the vote allowed three); the stepper goes up to 5. */
+export const defaultPicks = () => 1;
 /** A vote the host made from ticked points. */
 export const isPointsVote = (ask) => Boolean(ask && Array.isArray(ask.fromPoints) && ask.fromPoints.length);
 

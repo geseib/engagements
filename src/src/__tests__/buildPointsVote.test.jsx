@@ -187,10 +187,11 @@ describe('T5 the vote dialog', () => {
     expect(within(opts).getAllByRole('listitem')).toHaveLength(5);
     expect(opts.textContent).toMatch(TEXTS[2]);
     expect(opts.textContent).toMatch("Idea · Priya's Claude");
-    expect(within(dlg).getByRole('group', { name: 'Picks per person' }).textContent).toMatch('3');
+    // Owner, 2026-10-10 (after the Revy review): one pick unless the host steps it up.
+    expect(within(dlg).getByRole('group', { name: 'Picks per person' }).textContent).toMatch('1');
     expect(defaultPicks(2)).toBe(1);
-    expect(defaultPicks(3)).toBe(2);
-    expect(defaultPicks(8)).toBe(3);
+    expect(defaultPicks(3)).toBe(1);
+    expect(defaultPicks(8)).toBe(1);
   });
 
   test('Open voting posts the ids, the question and the picks; the stepper runs 1 to 5', async () => {
@@ -199,8 +200,8 @@ describe('T5 the vote dialog', () => {
     [1, 2, 3, 4, 5].forEach((n) => tick(TEXTS[n]));
     fireEvent.click(within(panel()).getByRole('button', { name: 'Put 5 to a vote' }));
     const dlg = await screen.findByRole('dialog', { name: 'Put 5 to a vote' });
-    fireEvent.click(within(dlg).getByRole('button', { name: 'One more pick' }));
-    fireEvent.click(within(dlg).getByRole('button', { name: 'One more pick' }));
+    // It opens on 1 (owner, 2026-10-10); four steps up reach the most, 5.
+    for (let i = 0; i < 4; i += 1) fireEvent.click(within(dlg).getByRole('button', { name: 'One more pick' }));
     expect(within(dlg).getByRole('button', { name: 'One more pick' })).toBeDisabled();
     fireEvent.change(within(dlg).getByLabelText('The question'), { target: { value: 'What first?' } });
     fireEvent.click(within(dlg).getByRole('button', { name: 'Open voting' }));
