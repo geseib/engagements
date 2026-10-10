@@ -51,3 +51,8 @@
 
 - **Review Focus 2 (helper agents), measured against the Claude Code hooks reference (code.claude.com/docs/en/hooks), 2026-10-10:** plugin hooks run inside subagents, and the input carries `agent_id` (present only inside a subagent) and `agent_type`, so a helper's tool calls are distinguishable (the plugin marks their lines `helper:true`). PostToolUse for the Agent/Task call fires when it returns, which for a background helper (the default) is at launch, so it cannot start the helper's line. PreToolUse for `Agent|Task` fires first and carries `tool_input.description`; SubagentStart/SubagentStop carry only `agent_id` and `agent_type` (no description). The plugin therefore starts the helper line at PreToolUse and ends it at SubagentStop (a counter of open helpers; the line ends when the last one stops). Documented contract, not run live.
 - **Task tools:** Claude Code 2.1.294 uses TaskCreate `{subject, description, activeForm}` (its result is `{task:{id, subject}}`) and TaskUpdate `{taskId, status}`, not TodoWrite. The plugin handles both.
+
+## Next, after the doing line lands (owner, 2026-10-10)
+
+- **Copy pass** (`docs/design/build-room-copy-pass/index.html`, approved): apply every Current → Proposed row. Rulings: the merged "Ask the room" puts the cursor in the question field with the starters beside it; tooltips on the Host screen only (hosts use laptops); "Press Space to …" on the Stage dock shows only while the pointer is on the dock.
+- **Plugin update notice**: the plugin sends its version on every call; when it is older than the current one the host sees one line in Session › Claude ("Claude's plugin is out of date. Update") and a dot on SESSION, and Claude's tool replies tell it to ask the host to update. Never on the Stage or devices.
