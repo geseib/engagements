@@ -2,6 +2,7 @@
  * The Build Room's four screens: the pure rules (buildroom/buildScreens.js).
  */
 import {
+  defaultDirection,
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, settleMove,
   queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine,
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
@@ -595,5 +596,28 @@ describe('S4: the stage says the mockups are ready', () => {
   test('the words: Two looks, and N looks for more', () => {
     expect(looksWords([{ label: 'A' }, { label: 'B' }])).toMatchObject({ headline: 'Two looks to compare', line: 'Claude made A and B. Look now; the vote opens next.' });
     expect(looksWords([{ label: 'A' }, { label: 'B' }, { label: 'C' }])).toMatchObject({ headline: '3 looks to compare', line: 'Claude made A, B and C. Look now; the vote opens next.' });
+  });
+});
+
+describe('the direction carries what the room voted on (owner, 2026-10-10)', () => {
+  const ask = {
+    kind: 'choice', prompt: 'What should we build next?',
+    options: [
+      { label: 'A', title: 'Scroll to scale', detail: '' },
+      { label: 'B', title: 'What could it fix?', detail: 'Their fortune against real price tags: ending hunger, clean water' },
+    ],
+    results: { options: [{ label: 'A', title: 'Scroll to scale', count: 1 }, { label: 'B', title: 'What could it fix?', count: 3 }] },
+  };
+  test('a winning option sends its title and its detail', () => {
+    expect(defaultDirection(ask)).toBe('What should we build next: What could it fix? (Their fortune against real price tags: ending hunger, clean water)');
+    expect(directionFor(ask, 'B')).toBe(defaultDirection(ask));
+    expect(roomChoice(ask).direction).toBe(defaultDirection(ask));
+  });
+  test('an option without detail sends its title alone', () => {
+    expect(directionFor(ask, 'A')).toBe('What should we build next: Scroll to scale');
+  });
+  test('the wheel landing on an option carries its detail too', () => {
+    const w = { ...ask, wheel: { landed: 'B', slices: [{ id: 'A', label: 'A', text: 'Scroll to scale' }, { id: 'B', label: 'B', text: 'What could it fix?' }] } };
+    expect(defaultDirection(w)).toMatch(/What could it fix\? \(Their fortune against real price tags/);
   });
 });

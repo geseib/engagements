@@ -393,7 +393,7 @@ export function decisionChoices(ask) {
   if (ask && ask.kind === 'choice') {
     return (ask.options || []).map((o) => {
       const res = (r.options || []).find((x) => x.label === o.label) || { count: 0 };
-      return { id: o.label, label: o.label, text: o.title, count: res.count || 0 };
+      return { id: o.label, label: o.label, text: o.title, detail: o.detail || '', count: res.count || 0 };
     });
   }
   if (ask && ask.kind === 'suggest') {
@@ -424,6 +424,20 @@ export function winnerOf(ask) {
  */
 export const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
 export const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
+/**
+ * WHAT THE ROOM VOTED ON, IN FULL (owner, 2026-10-10: "we only pass the title.
+ * it also needs the details or examples since thats what was voted on"). An
+ * option's detail travels with its title into the direction Claude builds from.
+ */
+export const optionAnswer = (title, detail) => {
+  const t = String(title || '').trim();
+  const d = String(detail || '').trim();
+  return d ? `${t} (${d})` : t;
+};
+const optionDetail = (ask, labelOrTitle) => {
+  const o = ((ask && ask.options) || []).find((x) => x.label === labelOrTitle || x.title === labelOrTitle);
+  return o ? o.detail || '' : '';
+};
 
 /**
  * Every Rate ask uses one fixed scale (owner, 2026-10-06), the server's
@@ -439,7 +453,7 @@ export const ratingStep = (n) => (n === 1 ? `1 · ${RATING_SCALE.lowLabel}` : n 
 /** The sentence Claude gets for a pick, however it was picked. */
 export function directionFor(ask, id) {
   const pick = decisionChoices(ask).find((c) => c.id === id);
-  return pick ? questionAnswer(ask.prompt, pick.text) : '';
+  return pick ? questionAnswer(ask.prompt, optionAnswer(pick.text, pick.detail)) : '';
 }
 
 /** How a decision was made, for the record; never sent to Claude. */
@@ -480,11 +494,11 @@ export function defaultDirection(ask) {
   // The question and the answer (owner, 2026-10-06).
   const w = ask && ask.wheel;
   const landed = w && w.landed ? (w.slices || []).find((x) => x.id === w.landed) : null;
-  if (landed) return questionAnswer(ask.prompt, landed.text);
+  if (landed) return questionAnswer(ask.prompt, ask.kind === 'choice' ? optionAnswer(landed.text, optionDetail(ask, landed.label || landed.id)) : landed.text);
   const r = (ask && ask.results) || {};
   if (ask.kind === 'choice') {
     const top = [...(r.options || [])].sort((a, b) => b.count - a.count)[0];
-    return top && top.count ? questionAnswer(ask.prompt, top.title) : '';
+    return top && top.count ? questionAnswer(ask.prompt, optionAnswer(top.title, optionDetail(ask, top.label))) : '';
   }
   if (ask.kind === 'rating') {
     return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
