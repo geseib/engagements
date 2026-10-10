@@ -133,7 +133,7 @@ describe('what one press sends is always what the line says (fix round 1)', () =
     expect(rowButtons()).toEqual(['Spin the wheel', 'Change before sending', 'Save for later']);
     expect(primaryOf()).toHaveAttribute('data-next-primary');
     expect(within(row()).getByText('Press Space to save for later')).toBeInTheDocument();
-    expect(screen.getByText('Goes on your Later list: "How should it look and feel: Playful". Claude hears nothing until you send it.')).toBeInTheDocument();
+    expect(screen.getByText('Goes to Later: "How should it look and feel: Playful". Claude hears nothing yet.')).toBeInTheDocument();
     await act(async () => { fireEvent.click(primaryOf()); });
     expect(a.askAction).toHaveBeenCalledWith('004', expect.objectContaining({ action: 'decide', chosen: ['B'], sendToAgent: true, as: 'later' }));
     expect(onSent).toHaveBeenCalledWith({ as: 'later', send: true, direction: 'How should it look and feel: Playful' });

@@ -235,7 +235,7 @@ function SuggestAsk({ ask, mine, api, onResult, shell }) {
       <button type="button" className="plr-btn" disabled={!text || full || busy} onClick={submit}>
         {full ? `${MAX_SUGGESTIONS} of ${MAX_SUGGESTIONS} sent` : busy ? 'Sending…' : 'Suggest'}
       </button>
-      <p className="plr-note plr-note--after bpl-center">Voting opens when the host is ready.</p>
+      <p className="plr-note plr-note--after bpl-center">{W.votingSoon}</p>
     </>
   );
 
@@ -266,7 +266,7 @@ function SuggestAsk({ ask, mine, api, onResult, shell }) {
             />
           </div>
         )}
-        <p className="plr-help">The wall shows your ideas without your name. Send up to {MAX_SUGGESTIONS}.</p>
+        <p className="plr-help">{W.noNamesOnWall(MAX_SUGGESTIONS)}</p>
         <ErrorLine error={error} />
       </>
     ),
@@ -339,7 +339,7 @@ function ChoiceAsk({ ask, mine, api, onResult, shell }) {
       <button type="button" className="plr-btn" disabled={!picks.length || unchanged || busy} onClick={submit}>
         {label}
       </button>
-      <p className="plr-note plr-note--after bpl-center">You can change your pick until the host closes it.</p>
+      <p className="plr-note plr-note--after bpl-center">{W.changeUntilClose}</p>
     </>
   );
 
@@ -351,7 +351,7 @@ function ChoiceAsk({ ask, mine, api, onResult, shell }) {
       <>
         <AskHead ask={ask} word={KIND_WORD.choice} />
         <p className="plr-rule">
-          {multi ? <>Pick up to <b>{max}</b> · {picks.length} of {max} picked.{atLimit ? ' Untick one to change.' : ''}</> : 'Pick one.'}
+          {multi ? W.pickedOf(picks.length, max) : 'Pick one.'}
         </p>
         <div className="bpl-cards" role={multi ? 'group' : 'radiogroup'} aria-label={multi ? `Pick up to ${max}` : 'Pick one'}>
           {(ask.options || []).map((o, i) => {
@@ -398,7 +398,7 @@ function RatingAsk({ ask, mine, api, onResult, shell }) {
   const dock = (
     <>
       <button type="button" className="plr-btn" disabled={!value || unchanged || busy} onClick={submit}>{label}</button>
-      <p className="plr-note plr-note--after bpl-center">You can change your rating until the host closes it.</p>
+      <p className="plr-note plr-note--after bpl-center">{W.changeUntilClose}</p>
     </>
   );
 
@@ -466,8 +466,7 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
         <Eyebrow word="Vote" askId={ask.askId} extra={`pick up to ${max}`} />
         <h2 className="plr-q bpl-text">{ask.prompt}</h2>
         <p className="plr-rule">
-          Pick up to <b>{max}</b> {max === 1 ? 'idea' : 'ideas'} you'd build first · {sel.length} of {max} picked.
-          {atLimit ? ' Untick one to change.' : ''}
+          {W.buildFirst(sel.length, max)}
         </p>
         {responses.length === 0 ? (
           <p className="plr-lede plr-muted">Nothing to vote on yet.</p>
@@ -702,7 +701,7 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
       <BaseNotice crew={crew} log={view.log} />
       <h3 className="plr-lab bpl-feed-h">Watch the build</h3>
       {recent.length === 0 ? (
-        <p className="plr-help">Nothing yet. Claude's progress shows up here.</p>
+        <p className="plr-help">{W.nothingYet}</p>
       ) : (
         <ul className="bpl-ticker">
           {recent.map((e, i) => (
@@ -754,7 +753,7 @@ function PreviewFeedback({ api, preview, sent, onResult }) {
       {/* On its preview, in History (C11): the preview is the line above. */}
       <h3 className="plr-lab">What do you think of the preview?</h3>
       {sent ? (
-        <p className="bpl-ok" role="status">Thanks. Your feedback is with the host.</p>
+        <p className="bpl-ok" role="status">{W.thanksSent}</p>
       ) : (
         <>
           {!changing ? (
@@ -875,13 +874,13 @@ function HistoryTab({ view, api, onResult, now }) {
   );
   return (
     <section className="bpl-history" aria-label="History">
-      <h2 className="plr-h1 bpl-tabh">What we have built so far</h2>
+      <h2 className="plr-h1 bpl-tabh">{W.builtSoFar}</h2>
       <div className="bpl-filters" role="group" aria-label="Show">
         {STORY_FILTERS.map((f) => (
           <button key={f.key} type="button" className={`bpl-filter${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</button>
         ))}
       </div>
-      {!shown.length && <p className="plr-help">{filter === 'decisions' ? 'Nothing decided yet.' : filter === 'pictures' ? 'No pictures yet.' : 'Nothing yet. What Claude shows and what the room decides collect here.'}</p>}
+      {!shown.length && <p className="plr-help">{filter === 'decisions' ? 'Nothing decided yet.' : filter === 'pictures' ? 'No pictures yet.' : W.nothingYet}</p>}
       <ol className="bpl-story">
         {shown.map((it) => (
           <li key={it.id} className={`bpl-story-it bpl-story-it--${it.type}`}>
@@ -1064,8 +1063,8 @@ export default function BuildPlayer({
       body: (
         <>
           <p className="plr-lede">The host took you out of this session.</p>
-          {wasBuilder && <p className="plr-help">Your Claude was unlinked and your lane closed. What was already merged stays. If the host brings you back, link your Claude again from The crew.</p>}
-          <p className="plr-help">Your ideas and votes stay in the session report.</p>
+          {wasBuilder && <p className="plr-help">{W.unlinked}</p>}
+          <p className="plr-help">{W.staysInReport}</p>
         </>
       ),
     });
@@ -1124,7 +1123,7 @@ export default function BuildPlayer({
   const openBuild = !isEnded && view.lan && view.lan.open ? (
     <section className="bpl-open" aria-label="Open the build">
       <a className="bpl-send bpl-open-btn" href={view.lan.open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">{W.openBuild} ↗</a>
-      <p className="plr-help bpl-open-note">Works on the same Wi-Fi as the host</p>
+      <p className="plr-help bpl-open-note">{W.sameWifiOnly}</p>
     </section>
   ) : null;
   const run = view.run && view.run.status === 'running' ? view.run : null;
@@ -1135,7 +1134,7 @@ export default function BuildPlayer({
         <section className="bpl-ideas bpl-pvnote" aria-label="Claude is showing something">
           <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
           {view.lan && view.lan.open && <p className="plr-help">Try it, then say what you think.</p>}
-          <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('history')}>Look and say what you think</button>
+          <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('history')}>{W.haveALook}</button>
         </section>
       )}
       <section className="bpl-ideas">
@@ -1175,8 +1174,7 @@ export default function BuildPlayer({
   if (firstScreen.current === null) firstScreen.current = screenKey;
   const intro = (screenKey === 'watch' || screenKey === firstScreen.current) ? (
     <p className="bpl-intro">
-      You're helping build <span className="bpl-text">{view.title || 'this'}</span> with Claude Code.
-      Answer when a question appears; send ideas any time.
+      {W.playerIntro(view.title || 'this')}
     </p>
   ) : null;
   /* The ask screens draw their own shell (they own the dock); the Now extras
@@ -1211,7 +1209,7 @@ export default function BuildPlayer({
           {ask.wheel ? <PhoneWheel ask={ask} api={api} onResult={onResult} /> : null}
           <Results ask={ask} mine={mine} />
           <Whys whys={ask.results && ask.results.whys} />
-          {!decided ? <p className="plr-help">The host shapes this into Claude's next step.</p> : null}
+          {!decided ? null : null}
           {nowExtras}
           {crew}
           <hr className="plr-sep" />
@@ -1239,7 +1237,7 @@ export default function BuildPlayer({
             <h1 className="plr-h1 plr-h1--primary">{doingNow && doingNow.text ? doingNow.headline : 'Claude is building'}</h1>
             {doingNow && doingNow.text && !doingNow.stale ? <p className="bpl-dur">{W.forDur(doingNow.dur)}</p> : null}
             {doingNow && doingNow.helperLine ? <p className="bpl-helper">{doingNow.helperLine}</p> : null}
-            <p className="plr-help bpl-hint">{doingNow && doingNow.text && doingNow.stale ? W.hostPicksUp : W.buildingHint}</p>
+            {(doingNow && doingNow.text && doingNow.stale ? W.hostPicksUp : W.buildingHint) ? <p className="plr-help bpl-hint">{doingNow && doingNow.text && doingNow.stale ? W.hostPicksUp : W.buildingHint}</p> : null}
           </>
         ) : null}
         {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}

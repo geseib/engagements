@@ -8,6 +8,7 @@ import {
   decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
   askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords, decideBody, roomChoice,
 } from '../buildroom/buildScreens';
+import { W } from '../buildroom/words';
 
 describe('the screens', () => {
   test('Host, Stage, Build and History, on keys 1 to 4', () => {
@@ -100,7 +101,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
       phase: 'ASK',
       context: { category: 'Choose', round: 3, noun: 'Ask' },
       meter: { heading: 'Answered', count: 5, of: 18 },
-      status: '5 of 18 have answered',
+      status: '5 of 18 answered',
       primary: { action: 'close', label: 'Show results' },
       secondary: { action: 'wheel', label: 'Spin the wheel' },
     });
@@ -108,7 +109,7 @@ describe('the Stage screen, as the regular stage draws it', () => {
 
   test('Ideas collecting opens voting; voting closes; results go back to the Host to decide', () => {
     expect(stageModel(room(), { askId: '004', kind: 'suggest', status: 'live', answerCount: 1 }))
-      .toMatchObject({ phase: 'ASK', status: '1 idea so far', primary: { action: 'vote' } });
+      .toMatchObject({ phase: 'ASK', status: '1 idea', primary: { action: 'vote' } });
     expect(stageModel(room(), { askId: '004', kind: 'suggest', status: 'voting', voteCount: 7 }))
       .toMatchObject({ phase: 'VOTE', meter: { heading: 'Voted', count: 7, of: 18 }, primary: { action: 'close' } });
     expect(stageModel(room(), { askId: '004', kind: 'rating', status: 'results', results: { total: 15 } }))
@@ -116,8 +117,8 @@ describe('the Stage screen, as the regular stage draws it', () => {
   });
 
   test('between asks: no chip, who is here, and what Claude is doing, in room-safe words', () => {
-    expect(stageModel(room(), null)).toMatchObject({ phase: null, meter: { heading: 'In the room', count: 18 }, status: 'Send an idea from your phone, laptop or tablet.', primary: null });
-    expect(stageModel(room({ agent: {} }), null).status).toBe('Send an idea from your phone, laptop or tablet.');
+    expect(stageModel(room(), null)).toMatchObject({ phase: null, meter: { heading: 'In the room', count: 18 }, status: 'Send an idea any time.', primary: null });
+    expect(stageModel(room({ agent: {} }), null).status).toBe('Send an idea any time.');
     expect(stageModel(room({ outcome: { summary: 'A sign-up page.' } }), null).status).toBe('Here is what we built.');
   });
 
@@ -344,8 +345,8 @@ describe('the wall during the opening (owner, 2026-10-06)', () => {
   const { stageModel } = require('../buildroom/buildScreens');
   test('says the room is framing the build, not that Claude is building', () => {
     const room = { playerCount: 4, agent: { connected: true }, opening: { phase: 'opening' } };
-    expect(stageModel(room, null).status).toBe('We are framing the build together. Claude is getting ready.');
-    expect(stageModel({ ...room, opening: { phase: 'building' } }, null).status).toBe('Send an idea from your phone, laptop or tablet.');
+    expect(stageModel(room, null).status).toBe('Framing the build.');
+    expect(stageModel({ ...room, opening: { phase: 'building' } }, null).status).toBe('Send an idea any time.');
   });
 });
 
@@ -377,13 +378,13 @@ describe('claudeState: the one status the stage, dock, host line and chip share'
 
   test('waiting: connected or listening with nothing in 90 s names what it finished', () => {
     const s = claudeState(base({ agent: { listening: true, lastSeenAt: at(3) }, log: [post(300, 'The dot grid.')] }), NOW);
-    expect(s).toEqual({ key: 'waiting', headline: 'Claude is ready for the next step', line: 'It finished: The dot grid. The host will choose what comes next.', since: null });
-    expect(claudeState(base(), NOW).line).toBe('The host will choose what comes next.');
+    expect(s).toEqual({ key: 'waiting', headline: 'Claude is ready', line: 'Done: The dot grid.', since: null });
+    expect(claudeState(base(), NOW).line).toBe('');
   });
 
   test('paused: seen before, neither connected nor listening', () => {
     const s = claudeState({ agent: { connected: false, listening: false, lastSeenAt: at(400) }, log: [post(500)] }, NOW);
-    expect(s).toEqual({ key: 'paused', headline: 'Claude has paused', line: 'The host will pick it up again in a moment.', since: null });
+    expect(s).toEqual({ key: 'paused', headline: 'Claude has paused', line: '', since: null });
   });
 
   test('none: Claude never connected', () => {
@@ -398,13 +399,13 @@ describe('claudeState: the one status the stage, dock, host line and chip share'
 
   test('on the host\'s own screen the line never speaks of the host', () => {
     const waiting = base({ agent: { listening: true, lastSeenAt: at(3) }, log: [post(300, 'The dot grid.')] });
-    expect(claudeState(waiting, NOW, { host: true })).toMatchObject({ key: 'waiting', headline: 'Claude is ready for the next step', line: 'It finished: The dot grid.' });
+    expect(claudeState(waiting, NOW, { host: true })).toMatchObject({ key: 'waiting', headline: 'Claude is ready', line: 'Done: The dot grid.' });
     expect(claudeState(base(), NOW, { host: true }).line).toBe('');
     const paused = { agent: { connected: false, listening: false, lastSeenAt: at(400) }, log: [post(500)] };
-    expect(claudeState(paused, NOW, { host: true, continueOn: true }).line).toBe('Copy the Continue prompt to pick it up.');
+    expect(claudeState(paused, NOW, { host: true, continueOn: true }).line).toBe('Copy the Continue prompt.');
     expect(claudeState(paused, NOW, { host: true }).line).toBe('');
     // The Stage keeps its wording, for the room.
-    expect(claudeState(paused, NOW).line).toBe('The host will pick it up again in a moment.');
+    expect(claudeState(paused, NOW).line).toBe('');
     for (const r of [waiting, paused, base({ log: [post(10)] })]) {
       expect(claudeState(r, NOW, { host: true, continueOn: true }).line).not.toMatch(/\bthe host\b/i);
     }
@@ -426,9 +427,9 @@ describe('the dock line between asks', () => {
   test('Wi-Fi sharing live adds the one sentence; off or still starting does not', () => {
     const now = Date.now();
     const live = { wanted: true, status: 'live', open: 2, liveSince: new Date(now - 1000).toISOString() };
-    expect(stageModel(room({ lan: live }), null, now).status).toBe('Send an idea from your phone, laptop or tablet. Open the build on the same Wi-Fi.');
-    expect(stageModel(room({ lan: { wanted: true, status: 'starting' } }), null, now).status).toBe('Send an idea from your phone, laptop or tablet.');
-    expect(stageModel(room(), null, now).status).toBe('Send an idea from your phone, laptop or tablet.');
+    expect(stageModel(room({ lan: live }), null, now).status).toBe('Send an idea any time. Open the build on this Wi-Fi.');
+    expect(stageModel(room({ lan: { wanted: true, status: 'starting' } }), null, now).status).toBe('Send an idea any time.');
+    expect(stageModel(room(), null, now).status).toBe('Send an idea any time.');
   });
 });
 
@@ -444,7 +445,7 @@ describe('the dock never carries Claude\'s status', () => {
     const room = { playerCount: 3, ...rooms[key] };
     expect(claudeState(room, NOW).key).toBe(key);
     const status = stageModel(room, null, NOW).status;
-    expect(status).toBe('Send an idea from your phone, laptop or tablet.');
+    expect(status).toBe('Send an idea any time.');
     expect(status).not.toMatch(/Claude/);
   });
 });
@@ -476,12 +477,12 @@ describe('askPathSummaries: what a folded step says', () => {
     const s = askPathSummaries(a, { pickId: 'B', playerCount: 12 });
     expect(s.ask).toMatch(/^Opened \d{1,2}:\d{2}/);
     expect(s.collect).toBe('11 of 12 voted');
-    expect(s.settle).toBe("Going with B, the room's choice, 7 to 4");
+    expect(s.settle).toBe("B \u00b7 the room's choice, 7 to 4");
   });
   test('an alternate pick says so; a wheel says so', () => {
     const a = { askId: '004', kind: 'choice', status: 'results', prompt: 'Look?', options: [{ label: 'A', title: 'Calm' }, { label: 'B', title: 'Playful' }],
       results: { total: 11, options: [{ label: 'A', title: 'Calm', count: 4 }, { label: 'B', title: 'Playful', count: 7 }] } };
-    expect(askPathSummaries(a, { pickId: 'A', playerCount: 12 }).settle).toBe('Going with A, your pick instead of B');
+    expect(askPathSummaries(a, { pickId: 'A', playerCount: 12 }).settle).toBe('A \u00b7 your pick, not B');
     expect(askPathSummaries({ ...a, wheel: { landed: 'A', spins: [{ landed: 'A' }] } }, { playerCount: 12 }).settle).toBe('The wheel picked A');
   });
 });
@@ -492,8 +493,8 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
     const asks = [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', imageId: 'i1' }, { label: 'B', imageId: 'i2' }] }];
     const ideas = [{ ideaId: 'i1', status: 'new' }, { ideaId: 'i2', status: 'new' }];
     const m = whatsNextMoves(room({ asks, ideas }));
-    expect(m.map((x) => x.key)).toEqual(['vote-mockups', 'vote-ideas', 'starter', 'new-ask', 'tell']);
-    expect(m[0]).toEqual({ key: 'vote-mockups', askId: '005', title: "Open voting on Claude's mockups", hint: 'A and B are ready to compare', button: 'Open voting' });
+    expect(m.map((x) => x.key)).toEqual(['vote-mockups', 'vote-ideas', 'ask-room', 'tell']);
+    expect(m[0]).toEqual({ key: 'vote-mockups', askId: '005', title: "Open voting on Claude's mockups", hint: 'A and B are ready', button: 'Open voting' });
     expect(whatsNextMoves(room({ asks, opening: { phase: 'opening' } })).map((x) => x.key)).not.toContain('vote-mockups');
     expect(whatsNextMoves(room({ asks, outcome: { summary: 'Done.' } })).map((x) => x.key)).not.toContain('vote-mockups');
     expect(whatsNextMoves(room()).map((x) => x.key)).not.toContain('vote-mockups');
@@ -501,13 +502,13 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
   test('the vote-ideas title counts what the dialog takes: six at most', () => {
     const ideas = (n) => Array.from({ length: n }, (_, i) => ({ ideaId: `i${i}`, status: 'new' }));
     expect(whatsNextMoves(room({ ideas: ideas(9) }))[0]).toMatchObject({ key: 'vote-ideas', count: 6, title: 'Put 6 ideas to a vote', hint: '6 of 9 waiting' });
-    expect(whatsNextMoves(room({ ideas: ideas(6) }))[0]).toMatchObject({ count: 6, title: 'Put 6 ideas to a vote', hint: 'The room sent these while you were busy' });
+    expect(whatsNextMoves(room({ ideas: ideas(6) }))[0]).toMatchObject({ count: 6, title: 'Put 6 ideas to a vote', hint: '' });
     expect(whatsNextMoves(room({ ideas: ideas(3) }))[0]).toMatchObject({ count: 3, title: 'Put 3 ideas to a vote' });
   });
   test('two or more new ideas lead', () => {
     const m = whatsNextMoves(room({ ideas: [{ ideaId: 'i1', status: 'new' }, { ideaId: 'i2', status: 'new' }] }), { ticked: 3 });
     expect(m[0]).toMatchObject({ key: 'vote-ideas', count: 2, button: 'To a vote' });
-    expect(m.map((x) => x.key)).toEqual(['vote-ideas', 'combine', 'starter', 'new-ask', 'tell']);
+    expect(m.map((x) => x.key)).toEqual(['vote-ideas', 'combine', 'ask-room', 'tell']);
   });
   test('ticked answers lead when fewer than two ideas wait', () => {
     expect(whatsNextMoves(room(), { ticked: 3 })[0]).toMatchObject({ key: 'combine', count: 3, button: 'Combine' });
@@ -522,7 +523,7 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
   });
   test('otherwise the starter questions lead, and combine is not offered with nothing ticked', () => {
     const m = whatsNextMoves(room(), { ticked: 0 });
-    expect(m.map((x) => x.key)).toEqual(['starter', 'new-ask', 'tell']);
+    expect(m.map((x) => x.key)).toEqual(['ask-room', 'tell']);
   });
 });
 
@@ -554,14 +555,14 @@ describe('fix round 1: honest summaries and combine lines', () => {
     results: { total: 11, options: [{ label: 'A', title: 'Calm', count: 4 }, { label: 'B', title: 'Playful', count: 7 }] }, ...over });
   const tie = { total: 8, options: [{ label: 'A', count: 4 }, { label: 'B', count: 4 }] };
   test('tie, no votes and rating asks say it was the host\'s pick', () => {
-    expect(askPathSummaries(base({ results: tie }), { pickId: 'B' }).settle).toBe('Going with B, your pick');
-    expect(askPathSummaries(base({ results: { total: 0, options: [] } }), { pickId: 'A' }).settle).toBe('Going with A, your pick');
-    expect(askPathSummaries({ askId: '9', kind: 'rating', status: 'results', prompt: 'Rate', results: { total: 3 } }, { pickId: '4' }).settle).toBe('Going with 4, your pick');
+    expect(askPathSummaries(base({ results: tie }), { pickId: 'B' }).settle).toBe('B \u00b7 your pick');
+    expect(askPathSummaries(base({ results: { total: 0, options: [] } }), { pickId: 'A' }).settle).toBe('A \u00b7 your pick');
+    expect(askPathSummaries({ askId: '9', kind: 'rating', status: 'results', prompt: 'Rate', results: { total: 3 } }, { pickId: '4' }).settle).toBe('4 \u00b7 your pick');
   });
   test('wheel equal to the pick, and wheel then a different pick', () => {
     const w = base({ wheel: { landed: 'A', spins: [{ landed: 'A' }] } });
     expect(askPathSummaries(w, { pickId: 'A' }).settle).toBe('The wheel picked A');
-    expect(askPathSummaries(w, { pickId: 'B' }).settle).toBe("Going with B, your pick instead of the wheel's A");
+    expect(askPathSummaries(w, { pickId: 'B' }).settle).toBe("B \u00b7 your pick, not the wheel's A");
   });
   test('collect never reads more voted than the room size', () => {
     expect(askPathSummaries(base(), { playerCount: 9 }).collect).toBe('11 of 11 voted');
@@ -579,7 +580,7 @@ describe('S4: the stage says the mockups are ready', () => {
   const ready = { playerCount: 12, state: 'STARTED', asks: [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', title: 'Calm', imageId: 'i1' }, { label: 'B', title: 'Playful', imageId: 'i2' }] }], images: [] };
   test('stageModel offers Open voting with the ask id', () => {
     const m = stageModel(ready, null, Date.now());
-    expect(m.status).toBe('Mockups ready \u00b7 the host opens voting');
+    expect(m.status).toBe('Mockups ready');
     expect(m.primary).toEqual({ action: 'open', label: 'Open voting', askId: '005' });
   });
   test('not while the opening frames the build, nor on the crew board', () => {
@@ -594,8 +595,8 @@ describe('S4: the stage says the mockups are ready', () => {
     expect(stageModel(ready, { askId: '006', kind: 'rating', status: 'live' }, Date.now()).primary.action).toBe('close');
   });
   test('the words: Two looks, and N looks for more', () => {
-    expect(looksWords([{ label: 'A' }, { label: 'B' }])).toMatchObject({ headline: 'Two looks to compare', line: 'Claude made A and B. Look now; the vote opens next.' });
-    expect(looksWords([{ label: 'A' }, { label: 'B' }, { label: 'C' }])).toMatchObject({ headline: '3 looks to compare', line: 'Claude made A, B and C. Look now; the vote opens next.' });
+    expect(looksWords([{ label: 'A' }, { label: 'B' }])).toMatchObject({ headline: 'Two looks to compare', line: 'Claude made A and B.' });
+    expect(looksWords([{ label: 'A' }, { label: 'B' }, { label: 'C' }])).toMatchObject({ headline: '3 looks to compare', line: 'Claude made A, B and C.' });
   });
 });
 
@@ -656,8 +657,8 @@ describe('the doing line (docs/design/build-room-doing D1-D5)', () => {
 
   test('a stale line is paused, in the past tense, with the same follow-ups as today', () => {
     const r = room(doing({ lastActiveAt: at(300) }));
-    expect(claudeState(r, NOW)).toMatchObject({ key: 'paused', headline: 'Claude was mocking up 3 graph options', line: 'The host will pick it up again in a moment.' });
-    expect(claudeState(r, NOW, { host: true, continueOn: true }).line).toBe('Copy the Continue prompt to pick it up.');
+    expect(claudeState(r, NOW)).toMatchObject({ key: 'paused', headline: 'Claude was mocking up 3 graph options', line: '' });
+    expect(claudeState(r, NOW, { host: true, continueOn: true }).line).toBe('Copy the Continue prompt.');
     expect(claudeState(r, NOW, { host: true }).line).toBe('');
   });
 
@@ -769,5 +770,57 @@ describe('the doing line against a wrong clock', () => {
     expect(doingLine({ text: 'Building it now', startedAt: at(-600), lastActiveAt: at(-400), stale: false }, NOW).stale).toBe(false);
     // Within 2 min of agreeing, the client's own clock rules.
     expect(doingLine({ text: 'Building it now', startedAt: at(100), lastActiveAt: at(-60), stale: true }, NOW).stale).toBe(false);
+  });
+});
+
+describe('copy pass (2026-10-10): the Stage says the fewest words', () => {
+  const NOW = Date.now();
+  const words = (t) => String(t || '').trim().split(/\s+/).filter(Boolean).length;
+  const base = { playerCount: 12, state: 'STARTED', agent: { connected: true } };
+  const live = { wanted: true, status: 'live', open: 2, liveSince: new Date(NOW - 1000).toISOString() };
+  const CHOICE = { askId: '003', kind: 'choice', status: 'live', answerCount: 5, options: [{ label: 'A', title: 'Calm' }, { label: 'B', title: 'Bold' }] };
+  const results = (o = {}) => ({ ...CHOICE, status: 'results', results: { total: 7, options: [{ label: 'A', count: 2 }, { label: 'B', count: 5 }] }, ...o });
+  const ready = { ...base, asks: [{ askId: '005', kind: 'choice', status: 'proposed', options: [{ label: 'A', title: 'Calm', imageId: 'i1' }, { label: 'B', title: 'Bold', imageId: 'i2' }] }] };
+  const waiting = { ...base, agent: { listening: true, lastSeenAt: new Date(NOW - 3000).toISOString() }, log: [{ by: 'agent', kind: 'progress', text: 'The dot grid.', createdAt: new Date(NOW - 300000).toISOString() }] };
+  /** Every sentence the Stage can put on the wall in these states, with the Claude line the room reads. */
+  const stageStrings = () => [
+    stageModel(base, null, NOW).status,
+    stageModel({ ...base, lan: live }, null, NOW).status,
+    stageModel({ ...base, opening: { phase: 'opening' } }, null, NOW).status,
+    stageModel({ ...base, state: 'ENDED' }, null, NOW).status,
+    stageModel(ready, null, NOW).status,
+    looksWords(ready.asks[0].options).line,
+    looksWords(ready.asks[0].options).next,
+    stageModel(base, CHOICE, NOW).status,
+    stageModel(base, { ...CHOICE, status: 'voting', voteCount: 4 }, NOW).status,
+    stageModel(base, { askId: '004', kind: 'suggest', status: 'live', answerCount: 3 }, NOW).status,
+    stageModel(base, results(), NOW).status,
+    stageModel(base, results({ results: { total: 4, options: [{ label: 'A', count: 2 }, { label: 'B', count: 2 }] } }), NOW).status,
+    claudeState(waiting, NOW).headline,
+    claudeState(waiting, NOW).line,
+    W.talkPrompt,
+  ];
+
+  test('no Stage line runs past twelve words, and together they stay under 70', () => {
+    const all = stageStrings();
+    all.forEach((s) => expect(words(s)).toBeLessThanOrEqual(12));
+    const total = all.reduce((n, s) => n + words(s), 0);
+    expect(total).toBeLessThanOrEqual(70);
+  });
+
+  test('the Stage names no device and says nothing the host alone needs', () => {
+    const all = stageStrings().join(' | ');
+    expect(all).not.toMatch(/phone|laptop|tablet/i);
+    expect(all).not.toMatch(/the host (will|opens)/i);
+  });
+
+  test('a paused Claude says nothing about the host to the room', () => {
+    const s = claudeState({ agent: { connected: false, listening: false, lastSeenAt: new Date(NOW - 400000).toISOString() }, log: [] }, NOW);
+    expect(s.line).toBe('');
+    expect(claudeState({ ...base, agent: { listening: true }, log: [] }, NOW).line).toBe('');
+  });
+
+  test('the Space hint is words; it lives only in the dock\'s hover state (see buildStageDecide)', () => {
+    expect(W.spaceTo('send')).toBe('Press Space to send');
   });
 });

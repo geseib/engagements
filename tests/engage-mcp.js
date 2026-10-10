@@ -63,6 +63,8 @@ let stateLan;
 let stateYou;
 let statePoints;
 let postedIds = 0;
+// The server's one line for an out-of-date plugin (copy pass 2026-10-10): set to make GET state carry it.
+let statePluginNote = '';
 // Claude's project folder, so the plugin writes .engage/brief.md somewhere harmless.
 const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'engage-mcp-'));
 fs.mkdirSync(path.join(PROJECT, '.engage'));
@@ -70,7 +72,7 @@ const server = http.createServer((req, res) => {
   let raw = '';
   req.on('data', c => { raw += c; });
   req.on('end', () => {
-    const rec = { method: req.method, url: req.url, auth: req.headers.authorization, body: raw ? JSON.parse(raw) : undefined };
+    const rec = { method: req.method, url: req.url, auth: req.headers.authorization, plugin: req.headers['x-engage-plugin'], body: raw ? JSON.parse(raw) : undefined };
     requests.push(rec);
     const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
     if (failNext401) { failNext401 = false; return send(401, { error: 'Key revoked' }); }
@@ -92,6 +94,7 @@ const server = http.createServer((req, res) => {
         ...(stateLan ? { lan: stateLan } : {}),
         ...(stateYou ? { you: stateYou } : {}),
         ...(statePoints ? { points: statePoints } : {}),
+        ...(statePluginNote ? { pluginNote: statePluginNote } : {}),
       });
     }
     if (req.method === 'POST' && p === 'asks') {
@@ -243,6 +246,27 @@ const hardStop = setTimeout(() => {
     assert.ok(!r.result.isError);
     assert.ok(/Build a landing page/.test(t) && /2 players/.test(t) && /Which header\?/.test(t) && /Call it Summit/.test(t), t);
     assert.ok(!/HOST SECRET NOTE/.test(t));
+  });
+  await check('every call to Engage carries X-Engage-Plugin with the plugin\'s own VERSION', async () => {
+    requests.length = 0;
+    await mcp.request('tools/call', { name: 'room_status', arguments: {} });
+    await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'Header started' } });
+    assert.ok(requests.length >= 2, 'two calls reached the fake API');
+    const version = (fs.readFileSync(SCRIPT, 'utf8').match(/const VERSION = '([^']+)';/) || [])[1];
+    assert.ok(version, 'the plugin declares a VERSION');
+    for (const r of requests) assert.strictEqual(r.plugin, version, `${r.method} ${r.url} sent ${r.plugin}`);
+  });
+  await check('when the server says the plugin is out of date, the reply ends with that one line', async () => {
+    const NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
+    statePluginNote = NOTE;
+    try {
+      const r = await mcp.request('tools/call', { name: 'room_status', arguments: {} });
+      const texts = r.result.content.map((c) => c.text);
+      assert.strictEqual(texts[texts.length - 1], NOTE, texts.join('\n'));
+      // The next call, once the server stops saying it, carries nothing.
+    } finally { statePluginNote = ''; }
+    const again = await mcp.request('tools/call', { name: 'room_status', arguments: {} });
+    assert.ok(!textOf(again).includes('out of date'), 'the note does not stick');
   });
   await check('ask_room_to_choose posts the contract body and returns labels + badges', async () => {
     requests.length = 0;

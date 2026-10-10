@@ -183,7 +183,7 @@ describe('T5 the vote dialog', () => {
     fireEvent.click(within(panel()).getByRole('button', { name: 'Put 5 to a vote' }));
     const dlg = await screen.findByRole('dialog', { name: 'Put 5 to a vote' });
     expect(within(dlg).getByLabelText('The question')).toHaveValue('Which should Claude take on next?');
-    const opts = within(dlg).getByRole('list', { name: 'The options, as people will see them' });
+    const opts = within(dlg).getByRole('list', { name: 'Options' });
     expect(within(opts).getAllByRole('listitem')).toHaveLength(5);
     expect(opts.textContent).toMatch(TEXTS[2]);
     expect(opts.textContent).toMatch("Idea · Priya's Claude");
@@ -284,7 +284,7 @@ describe('T6 results: highlight what moves forward', () => {
     expect(row(TEXTS[5])).toHaveAttribute('aria-pressed', 'false');
     expect(row(TEXTS[3])).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText('3 highlighted')).toBeInTheDocument();
-    expect(screen.getByText(/The top 3 by votes are highlighted\. Click a row to change that\./)).toBeInTheDocument();
+    expect(screen.getByText(/Claude gets the highlighted ones, in order\./)).toBeInTheDocument();
     expect(within(row(TEXTS[2])).getByLabelText('9 votes')).toBeInTheDocument();
   });
 
@@ -293,7 +293,7 @@ describe('T6 results: highlight what moves forward', () => {
     expect(screen.getByText('4 highlighted')).toBeInTheDocument();
     expect(row(TEXTS[4])).toHaveAttribute('aria-pressed', 'true');
     expect(row(TEXTS[5])).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('A tie at the cut: D and E, 6 each. Both are highlighted. Clear one, or keep both.')).toBeInTheDocument();
+    expect(screen.getByText('Tie at the cut: D and E. Both highlighted.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send these 4 to Claude' })).toBeInTheDocument();
   });
 
@@ -437,7 +437,7 @@ describe('T7 the run list on the Host', () => {
     expect(postsTo('run/next')).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: /^Next: 3/ }));
     const dlg = await screen.findByRole('dialog', { name: "Claude hasn't finished 2. Send 3 anyway?" });
-    expect(dlg.textContent).toMatch(`Claude is still on "${TEXTS[1]}"`);
+    expect(dlg.textContent).toMatch('2 may be left half done.');
     expect(oranges()).toHaveLength(0);
     expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
     fireEvent.click(within(dlg).getByRole('button', { name: 'Wait for Claude' }));
@@ -596,7 +596,7 @@ describe('T7b the Stage and room safety', () => {
     expect(m.primary).toMatchObject({ action: 'run-next', label: 'Next: 3', claudeDone: false });
     expect(m.secondary).toMatchObject({ action: 'run-skip', label: 'Skip 3' });
     expect(m.extras.map((x) => x.label)).toEqual(['Stop']);
-    expect(m.status).toBe('Claude is working on 2 of 4 · Next waits until Claude reports 2 done');
+    expect(m.status).toBe('Claude is on 2 of 4');
     expect(stageModel(RUNNING(true), null, Date.now()).status).toBe('Claude finished 2');
     expect(m.meter).toMatchObject({ count: 1, of: 4 });
     expect(stageModel(RUNNING(true), null, Date.now()).primary.claudeDone).toBe(true);
@@ -623,6 +623,7 @@ describe('T7b the Stage and room safety', () => {
     await openRoom(RUNNING(true));
     fireEvent.keyDown(window, { key: '2' });
     await screen.findByRole('region', { name: 'Working through' });
+    fireEvent.mouseEnter(document.querySelector('footer.dock'));
     expect(screen.getByText(/Press/).textContent).toMatch('send 3');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));

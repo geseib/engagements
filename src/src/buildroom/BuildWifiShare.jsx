@@ -12,6 +12,7 @@ import Modal from '../components/Modal';
 import { copyText } from '../utils/copyText';
 import { wifiState } from './wifiShare';
 import { useKeepOnScreen } from './keepOnScreen';
+import { W } from './words';
 
 const LOOPBACK = /^(localhost|[^.]+\.localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i;
 const originOf = (u) => {
@@ -84,23 +85,23 @@ export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall,
         </label>
         {!inline && <button type="button" className="brm-wifipanel-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>}
       </div>
-      <p className="brm-wifipanel-say">Anyone on this Wi-Fi with the link can open the app Claude is running, on a phone, laptop or tablet. Turn it off at any time. Everyone loses it at once.</p>
+      <p className="brm-wifipanel-say">{W.wifiSay}</p>
       {s.state === 'failed' && (
         <div className="brm-wifipanel-err"><b>It didn&apos;t start.</b> {lan.error}</div>
       )}
       {s.state === 'waiting' && (
-        <div className="brm-wifipanel-warn"><b>Claude Code has not answered.</b> Update the Engage plugin from Connect Claude Code, then restart Claude Code in the project folder.</div>
+        <div className="brm-wifipanel-warn"><b>Claude Code has not answered.</b> {W.wifiWaiting}</div>
       )}
       {s.state === 'quiet' && (
         <>
           <div className="brm-wifipanel-warn">
-            <b>None open yet.</b> It has been on for 2 minutes and no device has opened it. Some Wi-Fi networks (hotels, conferences, guest networks) keep devices apart, so nobody else can reach this laptop.
+            <b>{W.wifiQuietHead}</b> {W.wifiQuietBody}
           </div>
-          <p className="brm-wifipanel-say">Check that everyone is on the same Wi-Fi as this laptop: phones and tablets not on mobile data, laptops not on a work VPN. Try it yourself on another device first: scan the QR below.</p>
+          <p className="brm-wifipanel-say" title={W.tipWifiSame}>{W.wifiTest}</p>
           {link && (
             <div className="brm-wifipanel-test">
               <div className="brm-buildqr-qr" role="img" aria-label="QR code to test the build on another device"><QRCodeSVG value={link} size={96} level="M" includeMargin={false} /></div>
-              <p className="brm-wifipanel-say">Scan to open the build. If your own device cannot open it either, this Wi-Fi will not work for the room. Use screenshots, as before.</p>
+              <p className="brm-wifipanel-say">{W.wifiFailsForRoom}</p>
             </div>
           )}
         </>
@@ -133,7 +134,7 @@ export function WifiOffer({ busy, run, api }) {
   return (
     <section className="brm-wifioffer" aria-label="Share the build on this Wi-Fi">
       <p className="brm-wifioffer-t">Let the room open it themselves?</p>
-      <p className="brm-wifioffer-s">Anyone in the room on this laptop&apos;s Wi-Fi can open the app Claude is running, on a phone, laptop or tablet. You can turn it off at any time.</p>
+      <p className="brm-wifioffer-s">{W.wifiOffer}</p>
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>Share on this Wi-Fi</button>
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.share({ dismissOffer: true }))}>Not now</button>
@@ -154,8 +155,8 @@ export function WallBuildQr({ link, onClose }) {
         <div>
           <span className="brm-wallqr-eb">The build is live</span>
           <h2 className="brm-wallqr-h">Open the build yourself</h2>
-          <p className="brm-wallqr-l">On your phone, laptop or tablet: scan the code, or press Open the build in Engage.</p>
-          <p className="brm-wallqr-m">You need to be on the same Wi-Fi as this laptop.</p>
+          <p className="brm-wallqr-l">{W.wallQrScan}</p>
+          <p className="brm-wallqr-m">{W.sameWifiOnly}</p>
           <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
         </div>
       </div>
@@ -168,7 +169,7 @@ export function BuildScreenQr({ link }) {
   return (
     <div className="brm-buildqr">
       <div className="brm-buildqr-qr"><QRCodeSVG value={link} size={96} level="M" includeMargin={false} /></div>
-      <p>Open the build yourself<small>Phone, laptop or tablet · same Wi-Fi</small></p>
+      <p>Open the build yourself<small>{W.sameWifi}</small></p>
     </div>
   );
 }

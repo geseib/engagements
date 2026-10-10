@@ -145,7 +145,6 @@ export default function AskDetail({ ask, entry = null, held = false, onClose, on
         )}
       </div>
       <div className="brm-pa-foot">
-        {ask.kind === 'choice' && (ask.options || []).some((o) => o.imageId) && <span className="brm-hint">Click a mockup to look closer.</span>}
         <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onClose}>Close</button>
       </div>
     </Modal>

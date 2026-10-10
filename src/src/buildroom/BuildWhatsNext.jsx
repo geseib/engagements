@@ -23,7 +23,7 @@ import Icon from '../components/Icon';
 import { whatsNextMoves, claudeState, combineLine, METHOD_WORDS } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 
-const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', starter: 'Question', 'new-ask': 'Plus', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks' };
+const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', 'ask-room': 'Question', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks' };
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');
@@ -99,7 +99,7 @@ export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, end
     if (next.has(id)) next.delete(id); else next.add(id);
     setTicked(next);
   };
-  if (!rows.length) return <p className="brm-empty">Nothing decided yet. Each answer the room settles lands here, ready to combine into one prompt.</p>;
+  if (!rows.length) return <p className="brm-empty">Nothing decided yet.</p>;
   return (
     <div className="brm-decided">
       <ul className="brm-declist">

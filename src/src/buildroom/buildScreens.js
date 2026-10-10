@@ -137,7 +137,7 @@ export function latestBuild(room) {
 /** What the room can do, never a second status; Wi-Fi sharing adds one sentence. */
 function roomDockLine(room, now) {
   const w = wifiState(room && room.lan, now).state;
-  return `Send an idea from your phone, laptop or tablet.${w === 'on' || w === 'quiet' ? ' Open the build on the same Wi-Fi.' : ''}`;
+  return `Send an idea any time.${w === 'on' || w === 'quiet' ? ' Open the build on this Wi-Fi.' : ''}`;
 }
 
 const STAGE_KIND = Object.freeze({ suggest: 'Ideas', choice: 'Choose', rating: 'Rate' });
@@ -216,7 +216,7 @@ function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = n
     return { key: 'building', headline: dl.headline, line: dl.helperLine, since: dl.startedAt, doing: dl };
   }
   if (dl) {
-    const line = host ? (continueOn ? 'Copy the Continue prompt to pick it up.' : '') : W.hostPicksUp;
+    const line = host ? (continueOn ? 'Copy the Continue prompt.' : '') : W.hostPicksUp;
     return { key: 'paused', headline: dl.headline, line, since: null, doing: dl };
   }
   const posts = log.filter((l) => l.by === 'agent' && POST_KINDS.includes(l.kind) && l.text);
@@ -236,17 +236,17 @@ function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = n
   if (agent.listening || agent.connected) {
     return {
       key: 'waiting',
-      headline: 'Claude is ready for the next step',
+      headline: 'Claude is ready',
       line: host
-        ? (lastPost ? `It finished: ${stripEnd(lastPost.text)}.` : '')
-        : (lastPost ? `It finished: ${stripEnd(lastPost.text)}. The host will choose what comes next.` : 'The host will choose what comes next.'),
+        ? (lastPost ? `Done: ${stripEnd(lastPost.text)}.` : '')
+        : (lastPost ? `Done: ${stripEnd(lastPost.text)}.` : ''),
       since: null,
     };
   }
   if (agent.lastSeenAt || lastPost) {
     // The host's own screen never speaks of the host in the third person: it
     // points at the one action that is on the screen, or says nothing.
-    const line = host ? (continueOn ? 'Copy the Continue prompt to pick it up.' : '') : 'The host will pick it up again in a moment.';
+    const line = host ? (continueOn ? 'Copy the Continue prompt.' : '') : W.hostPicksUp;
     return { key: 'paused', headline: 'Claude has paused', line, since: null };
   }
   return { key: 'none', headline: 'Waiting for Claude Code', line: '', since: null };
@@ -300,7 +300,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
   const here = (room && room.playerCount) || 0;
   const ended = Boolean(room && room.state === 'ENDED');
   if (ended) {
-    return { phase: 'ENDED', context: { category: 'Build Room' }, meter: { heading: 'Took part', count: here, of: null }, status: 'This session has ended.', primary: null };
+    return { phase: 'ENDED', context: { category: 'Build Room' }, meter: { heading: 'Took part', count: here, of: null }, status: 'Session ended.', primary: null };
   }
   if (!current && room && room.shownPoint && !(room.opening && room.opening.phase === 'opening') && !crewOn) {
     // A TALKING POINT ON THE STAGE (talking points T4): the host chose it; the room talks it over.
@@ -308,7 +308,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
     return {
       phase: null, context: { category: W.talkItOver }, point: p,
       meter: { heading: W.ideasOnThis, count: shownPointIdeas(room).length, of: null },
-      status: W.pointUp,
+      status: '',
       primary: { action: 'take-down', label: W.takeItDown, point: p },
       secondary: { action: 'point-later', label: W.saveLater, point: p },
     };
@@ -321,7 +321,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
     return {
       phase: null, context: { category: W.workingThrough }, run,
       meter: { heading: W.runLabel, count: runDoneCount(run), of: run.total },
-      status: doneNow ? W.claudeFinishedItem(run.cur) : `${W.claudeIsWorking(run.cur, run.total)}${nextItem ? ` \u00b7 ${W.nextWaits(run.cur)}` : ''}`,
+      status: doneNow ? W.claudeFinishedItem(run.cur) : W.claudeIsWorking(run.cur, run.total),
       ...(nextItem ? {
         primary: { action: 'run-next', label: W.nextShort(nextItem.k), k: nextItem.k, from: run.cur, claudeDone: doneNow },
         secondary: { action: 'run-skip', label: W.skipItem(nextItem.k) },
@@ -333,7 +333,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
     const agent = (room && room.agent) || {};
     const status = room && room.outcome && room.outcome.summary ? 'Here is what we built.'
       // The opening (owner, 2026-10-06): the room frames the build first.
-      : room && room.opening && room.opening.phase === 'opening' ? 'We are framing the build together. Claude is getting ready.'
+      : room && room.opening && room.opening.phase === 'opening' ? 'Framing the build.'
         : roomDockLine(room, now);
     // MOCKUPS TO LOOK AT (host-flow S4): the pictures are in, the vote is not
     // open; the host's one move is to open it.
@@ -343,7 +343,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
     if (looks) {
       return {
         phase: null, context: { category: 'Build Room' }, meter: { heading: 'In the room', count: here, of: null },
-        status: 'Mockups ready \u00b7 the host opens voting',
+        status: 'Mockups ready',
         primary: { action: 'open', label: W.openVoting, askId: looks.ask.askId },
       };
     }
@@ -421,17 +421,17 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
   const instead = { action: 'wheel', label: W.spin };
   if (current.status === 'voting') {
     const voted = current.voteCount || 0;
-    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} have voted`, primary: { action: 'close', label: W.showResults }, secondary: instead };
+    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} voted`, primary: { action: 'close', label: W.showResults }, secondary: instead };
   }
   const answered = current.answerCount || 0;
   if (current.kind === 'suggest') {
     return {
-      phase: 'ASK', context, meter: { heading: 'Ideas', count: answered, of: null }, status: `${answered} ${answered === 1 ? 'idea' : 'ideas'} so far`,
+      phase: 'ASK', context, meter: { heading: 'Ideas', count: answered, of: null }, status: `${answered} ${answered === 1 ? 'idea' : 'ideas'}`,
       primary: { action: 'vote', label: W.openVoting }, ...(answered >= 2 ? { secondary: instead } : {}),
     };
   }
   return {
-    phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: here }, status: `${answered} of ${here} have answered`,
+    phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: here }, status: `${answered} of ${here} answered`,
     primary: { action: 'close', label: W.showResults }, ...(current.kind === 'choice' ? { secondary: instead } : {}),
   };
 }
@@ -665,11 +665,11 @@ export const agentStopped = (agent) => Boolean(agent && agent.lastSeenAt && !age
  * CLAUDE_GETS (build-store.js) holds the same keys.
  */
 export const CLAUDE_KINDS = Object.freeze([
-  { key: 'do-now', label: 'Do now', hint: 'The next thing to build. Claude stops and does it.' },
-  { key: 'keep', label: 'Keep in mind', hint: 'A rule or a fact for everything from now on. Goes on the brief; Claude does not stop.' },
+  { key: 'do-now', label: 'Do now', hint: 'Claude stops and does it.' },
+  { key: 'keep', label: 'Keep in mind', hint: 'A standing rule. Claude keeps going.' },
   // Held, not sent (owner, 2026-10-06: "only when I send it").
-  { key: 'later', label: W.later, hint: 'Waits on your Later list. Claude hears nothing until you send it.' },
-  { key: 'ask', label: 'Ask Claude', hint: 'A question. Claude answers on the screen and keeps building.' },
+  { key: 'later', label: W.later, hint: 'Claude hears nothing yet.' },
+  { key: 'ask', label: 'Ask Claude', hint: 'Claude answers and keeps building.' },
 ]);
 /** The kinds the host may choose: Later is a list, never a way Claude takes a direction. */
 export const HOST_KINDS = Object.freeze(CLAUDE_KINDS.filter((k) => k.key !== 'later'));
@@ -744,7 +744,7 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     if (im && im.askId) continue; // a mockup belongs to its ask's decision
     const near = showings.filter((s) => t(e.createdAt) >= t(s.at) && t(e.createdAt) - t(s.at) <= STORY_GAP_MS).pop();
     if (near) near.imageIds.push(e.detail);
-    else items.push({ id: e.logId, at: e.createdAt, type: 'picture', heading: im && im.kind === 'final' ? 'The finished product' : 'Claude shared a picture', text: e.text, imageIds: [e.detail], chain: [] });
+    else items.push({ id: e.logId, at: e.createdAt, type: 'picture', heading: im && im.kind === 'final' ? 'The finished product' : 'Picture', text: e.text, imageIds: [e.detail], chain: [] });
   }
   const decided = asks
     ? asks.filter((a) => a.status === 'decided' && a.decision).map((a) => ({ askId: a.askId, direction: a.decision.direction, at: a.decision.decidedAt || a.decidedAt, ask: a }))
@@ -843,13 +843,13 @@ export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
   const leader = winnerOf({ ...ask, wheel: null }); // a unique vote leader only
   let settle = '';
   if (wheel) {
-    settle = !pickId || pickId === wheel ? `The wheel picked ${wheel}` : `Going with ${pickId}, your pick instead of the wheel's ${wheel}`;
+    settle = !pickId || pickId === wheel ? `The wheel picked ${wheel}` : `${pickId} \u00b7 your pick, not the wheel's ${wheel}`;
   } else if (pickId) {
-    if (!leader) settle = `Going with ${pickId}, your pick`;
+    if (!leader) settle = `${pickId} \u00b7 your pick`;
     else if (pickId === leader) {
       const others = ((ask.results && ask.results.options) || []).filter((o) => o.label !== pickId).map((o) => Number(o.count) || 0);
-      settle = `Going with ${pickId}, the room's choice, ${countOf(ask, pickId)} to ${others.length ? Math.max(...others) : 0}`;
-    } else settle = `Going with ${pickId}, your pick instead of ${leader}`;
+      settle = `${pickId} \u00b7 the room's choice, ${countOf(ask, pickId)} to ${others.length ? Math.max(...others) : 0}`;
+    } else settle = `${pickId} \u00b7 your pick, not ${leader}`;
   }
   return { ask: opened, collect, settle };
 }
@@ -867,7 +867,7 @@ export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   if (looks) {
     moves.push({
       key: 'vote-mockups', askId: looks.ask.askId, title: "Open voting on Claude's mockups",
-      hint: `${lettersLine(looks.images.map((i) => i.label))} ${looks.images.length === 1 ? 'is' : 'are'} ready to compare`, button: W.openVoting,
+      hint: `${lettersLine(looks.images.map((i) => i.label))} ${looks.images.length === 1 ? 'is' : 'are'} ready`, button: W.openVoting,
     });
   }
   // CLAUDE'S OWN QUESTION is waiting to be opened (not one still waiting on its mockups).
@@ -881,26 +881,26 @@ export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
     const n = Math.min(ideas.length, VOTE_IDEAS_MAX);
     moves.push({
       key: 'vote-ideas', count: n, title: `Put ${n} ideas to a vote`,
-      hint: ideas.length > n ? `${n} of ${ideas.length} waiting` : 'The room sent these while you were busy', button: 'To a vote',
+      hint: ideas.length > n ? `${n} of ${ideas.length} waiting` : '', button: 'To a vote',
     });
   }
-  if (ticked > 0) moves.push({ key: 'combine', count: ticked, title: `Combine ${ticked} decided ${ticked === 1 ? 'answer' : 'answers'}`, hint: 'Into one prompt you can edit before Claude gets it', button: 'Combine' });
-  moves.push({ key: 'starter', title: 'Ask the room a starter question', hint: 'From the question library', button: 'Ask it' });
-  moves.push({ key: 'new-ask', title: 'Ask the room something new', hint: 'Ideas, a choice, or a 1 to 5 rating', button: 'New ask' });
+  if (ticked > 0) moves.push({ key: 'combine', count: ticked, title: `Combine ${ticked} decided ${ticked === 1 ? 'answer' : 'answers'}`, hint: 'One prompt, yours to edit', button: 'Combine' });
+  // One move for both (copy pass 2026-10-10): the window opens with the cursor in the question and the starters beside it.
+  moves.push({ key: 'ask-room', title: W.askRoom, hint: W.askRoomHint, button: W.askRoomButton });
   moves.push({ key: 'tell', title: 'Tell Claude', hint: 'Do now, keep in mind, or ask Claude', button: 'Write' });
   // THREE OR MORE NEW POINTS (talking points T1): a way to talk while Claude builds. Never the lead.
   const newPoints = ((room && room.points && room.points.items) || []).filter((p) => p.status === 'new').length;
   if (newPoints >= 3 && !room.shownPoint) {
-    moves.push({ key: 'talk-points', title: 'Talk over a point while Claude builds', hint: 'Tick one in Points, then Show on Stage', button: W.points });
+    moves.push({ key: 'talk-points', title: 'Talk over a point', hint: 'Tick one in Points', button: W.points });
   }
   // Nothing runs without Claude: with none connected, that is the first move.
   if (room && room.agent && !room.agent.key && !room.agent.connected && !framing) {
-    moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing gets built until Claude Code is connected', button: 'Connect' });
+    moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing is built without it', button: 'Connect' });
   }
   // TICKED ON THE LATER LIST: the host chose these, so this leads (2 to 6 fit a vote).
   // It deliberately jumps ahead of Connect: ticking is a choice made just now.
   if (laterTicked >= 2 && laterTicked <= VOTE_IDEAS_MAX) {
-    moves.unshift({ key: 'vote-later', count: laterTicked, title: `Put ${laterTicked} from Later to a vote`, hint: 'The room picks which one Claude gets', button: W.openVoting });
+    moves.unshift({ key: 'vote-later', count: laterTicked, title: `Put ${laterTicked} from Later to a vote`, hint: 'The room picks one', button: W.openVoting });
   }
   return moves;
 }
@@ -940,8 +940,8 @@ export function looksWords(images) {
   const n = (images || []).length;
   return {
     headline: `${LOOK_COUNTS[n] || n} looks to compare`,
-    line: `Claude made ${lettersLine((images || []).map((i) => i.label))}. Look now; the vote opens next.`,
-    next: 'Pick one on your phone, laptop or tablet',
+    line: `Claude made ${lettersLine((images || []).map((i) => i.label))}.`,
+    next: 'Voting opens next',
   };
 }
 

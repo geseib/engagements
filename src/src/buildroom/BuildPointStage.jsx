@@ -30,9 +30,8 @@ export function PointStage({ point }) {
 export function ShownPointCard({ point, ideas, busy, ended, onTakeDown, onSaveLater }) {
   return (
     <section className="brm-panel brm-shownpoint" aria-label={W.pointUp}>
-      <h2 className="brm-h5">{W.pointUp}</h2>
       <p className="brm-nowline">{point.text}</p>
-      <p className="brm-hint">{stageFrom(point)} · {W.ideasOnThis} {ideas}. {W.pointUpNote}.</p>
+      <p className="brm-hint">{stageFrom(point)} · {W.nIdeas(ideas)}</p>
       {!ended && (
         <div className="brm-row brm-gap">
           <button type="button" className="brm-btn" disabled={busy} onClick={onSaveLater}>{W.saveLater}</button>

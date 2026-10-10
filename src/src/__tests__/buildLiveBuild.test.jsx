@@ -61,7 +61,7 @@ describe('a picture opens in the app', () => {
     const viewer = await screen.findByRole('dialog', { name: /picture viewer/i });
     expect(within(viewer).getByText('The header, built')).toBeInTheDocument();
     expect(within(viewer).queryByRole('tab')).toBeNull();
-    const full = await within(viewer).findByRole('link', { name: /Open full size/ });
+    const full = await within(viewer).findByRole('link', { name: /Full size/ });
     expect(full).toHaveAttribute('target', '_blank');
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /picture viewer/i })).toBeNull());

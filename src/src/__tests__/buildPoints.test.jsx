@@ -195,7 +195,7 @@ describe('the Points tab beside Later', () => {
   test('forty open points: the panel says so', async () => {
     const many = Array.from({ length: 40 }, (_, i) => TALK(i + 1, { PointId: `t${i + 1}` }));
     await openRoom(hostState({ points: many }));
-    expect(within(panel()).getByText('40 is the most. Remove or save some first.')).toBeInTheDocument();
+    expect(within(panel()).getByText('40 at most. Remove some first.')).toBeInTheDocument();
   });
 });
 
@@ -242,7 +242,7 @@ describe('Research… and Ideas…', () => {
     fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
     fireEvent.click(within(panel()).getByRole('button', { name: 'Ideas…' }));
     const dlg = screen.getByRole('dialog');
-    expect(within(dlg).getByText('Claude is not connected. Claude will start when it reconnects.')).toBeInTheDocument();
+    expect(within(dlg).getByText('Claude starts when it reconnects.')).toBeInTheDocument();
     fireEvent.change(within(dlg).getByLabelText('Ideas about what?'), { target: { value: 'where it goes next' } });
     expect(within(dlg).getByRole('button', { name: 'Send to Claude' })).not.toBeDisabled();
   });
@@ -262,7 +262,7 @@ describe('Research… and Ideas…', () => {
     }));
     fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
     expect(within(panel()).getByText('Claude is researching: keyboard support')).toBeInTheDocument();
-    expect(within(panel()).getByText('Ideas waits: parking costs. Claude will start when it reconnects.')).toBeInTheDocument();
+    expect(within(panel()).getByText('Ideas waits: parking costs.')).toBeInTheDocument();
     fireEvent.click(within(panel()).getAllByRole('button', { name: 'Cancel' })[1]);
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(path(posts()[0])).toMatch(/^points\/requests\/a[12]$/);
@@ -390,11 +390,11 @@ describe('one orange on the whole Host screen, with Points', () => {
 
   test('one ticked: the row holds the one orange and What\'s next leads in outline', async () => {
     await openRoom(RESEARCH_STATE());
-    expect(oranges()[0].textContent).toBe('Ask it');
+    expect(oranges()[0].textContent).toBe('Ask');
     tick('Finding number 1');
     expect(oranges().map((b) => b.textContent)).toEqual(['Send to Claude']);
     tick('Finding number 1');
-    expect(oranges().map((b) => b.textContent)).toEqual(['Ask it']);
+    expect(oranges().map((b) => b.textContent)).toEqual(['Ask']);
   });
 
   test('two ticked: Put 2 to a vote is the only orange', async () => {
@@ -498,7 +498,7 @@ describe('What\'s next points at the tab', () => {
     const room = hostState({ points: [TALK(1), TALK(2), TALK(3)] });
     const moves = whatsNextMoves(room);
     const m = moves.find((x) => x.key === 'talk-points');
-    expect(m.title).toBe('Talk over a point while Claude builds');
+    expect(m.title).toBe('Talk over a point');
     expect(moves[0].key).not.toBe('talk-points');
   });
 
@@ -526,7 +526,8 @@ describe('a point on the Stage', () => {
     const m = stageModel(room, null, Date.now());
     expect(m.point.text).toMatch('Mid oranges');
     expect(m.meter).toEqual({ heading: 'Ideas on this', count: 2, of: null });
-    expect(m.status).toBe('A point is up for the room');
+    // The heading already says Talk it over: the Stage's status line is empty (copy pass 2026-10-10).
+    expect(m.status).toBe('');
     expect(m.primary).toMatchObject({ action: 'take-down', label: 'Take it down' });
     expect(m.secondary).toMatchObject({ action: 'point-later', label: 'Save for later' });
   });
@@ -592,11 +593,12 @@ describe('a point on the Stage', () => {
     expect(stage.textContent).toMatch("From Claude's research");
     expect(within(stage).getByText('Mid oranges on white come out near 2:1.')).toBeInTheDocument();
     expect(within(stage).getByText('Source: webaim.org')).toBeInTheDocument();
-    expect(within(stage).getByText(/Talk it over with the people near you\./)).toBeInTheDocument();
+    expect(within(stage).getByText(/Talk it over\. Send an idea\./)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch('host-only detail');
     expect(document.body.textContent).not.toMatch(/\bAna\b|\bDee\b/);
     expect(screen.getByRole('button', { name: 'Take it down' })).toBeInTheDocument();
-    expect(screen.getByText('A point is up for the room')).toBeInTheDocument();
+    expect(screen.getAllByText('Talk it over').length).toBeGreaterThan(0);
+    expect(screen.queryByText('A point is up for the room')).toBeNull();
   });
 
   test('a builder\'s point is labelled with the builder, nothing else', async () => {
@@ -685,7 +687,7 @@ describe('fix round 1', () => {
     await openRoom(hostState({ points: many }));
     const r = within(panel()).getByRole('button', { name: 'Research…' });
     expect(r).toBeDisabled();
-    expect(r).toHaveAttribute('title', '40 is the most. Remove or save some first.');
+    expect(r).toHaveAttribute('title', '40 at most. Remove some first.');
     expect(within(panel()).getByRole('button', { name: 'Ideas…' })).toBeDisabled();
   });
 
@@ -704,7 +706,7 @@ describe('fix round 1', () => {
     await openRoom(RESEARCH_STATE({ points: [FINDING(1, { Status: 'shown' })], ideas }));
     fireEvent.click(within(screen.getByRole('region', { name: 'A point is up for the room' })).getByRole('button', { name: 'Take it down' }));
     const dlg = await screen.findByRole('dialog');
-    expect(within(dlg).getByText(/Closing this window keeps the point up/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/The point stays up\./)).toBeInTheDocument();
   });
 
   test('shownPointIdeas finds nothing when the point has no id', () => {
