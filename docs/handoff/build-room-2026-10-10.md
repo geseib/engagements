@@ -19,7 +19,8 @@ Promotion rules: test is MERGED into (never fast-forward); prod is a fast-forwar
 2. **Owner calls on Share demo**: (a) should the Host-screen nudge take the one orange from What's next (built: plain)? (b) the header chip now opens its own popover (reverses 2026-10-09 "controls only in Settings") — OK? (c) screenshots-only rooms can share with no address (Claude is never asked for its local link) — leave or prompt Claude?
 3. **Invite**: accounts in NO group (App.jsx "Access Pending") still cannot see invites — owner ruling needed to open the routes to them.
 4. **Not yet seen in a browser**: the Connect window's plugin-version line (owner not signed in on dev in the pane), the Share demo Stage frame and the phones' shared state (need a live plugin LAN share). Walked on test room 5815: the Host nudge (12–647 at 659), the chip popover (16–436 at 659), the Build screen's "Only this laptop can open it.", narrow (≤480) moves the tools into Session.
-5. **Flaky**: tests/engagement-session-list.js once 8 vs 9 (task chip task_525c10e7); hostRemotePreview once under load.
+5. **Remote demo (tunnel) — parked, not requested to build.** Share demo is Wi-Fi only, so people on Zoom or another network get the fallback line and screenshots. The owner raised a tunnel on 2026-10-07 (keeps local backends working) and called it a security issue first; the options and the hardening ideas (the Wi-Fi gateway's key in front, short-lived, ends at wrap-up, or Cloudflare Access) are in `docs/design/build-room-lan-share/LATER.md`. If the owner wants it: mockups and a threat model before any code.
+6. **Flaky**: tests/engagement-session-list.js once 8 vs 9 (task chip task_525c10e7); hostRemotePreview once under load.
 
 ## Owner rulings 2026-10-10 (late)
 
