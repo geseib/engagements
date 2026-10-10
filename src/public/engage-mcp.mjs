@@ -668,7 +668,7 @@ const TOOLS = [
   },
   {
     name: 'post_update',
-    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). doing: at the start of each piece of work, 4-7 words starting with an -ing verb ("Scaffolding the site"); done: the past tense when it ends ("Scaffolded the site"); never names, paths, commands or links. kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at, "answer" to answer a question the room asked you.',
+    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). doing: at the start of each piece of work, 4-7 words starting with an -ing verb ("Scaffolding the site"); done: the past tense of the line that just ENDED ("Scaffolded the site"), sent in the same call as the next doing; never names, paths, commands or links. kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at, "answer" to answer a question the room asked you.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1011,11 +1011,11 @@ function optStr(args, name) {
  * doing, a done, a helper's job). The server mirrors it; it is exported so the
  * two cannot drift. A line is refused when it holds a slash or backslash
  * (a path), a backtick (a command), "@" (a person), "://" or "www." (a link),
- * or a file extension (".jsx", ".md": a dot then 1 to 5 word characters).
- * Known cost: "Mocking up 3.5 options" is refused too; say "three or four".
+ * or a file extension (".jsx", ".md": a dot, a letter, then up to 4 more
+ * letters or digits). A dotted number ("3.5") is not one.
  */
 export function unsafeForRoom(text) {
-  return /[\\/`@]|:\/\/|www\.|\.\w{1,5}\b/i.test(String(text || ''));
+  return /[\\/`@]|:\/\/|www\.|\.[A-Za-z][A-Za-z0-9]{0,4}\b/i.test(String(text || ''));
 }
 
 /**
@@ -1419,7 +1419,8 @@ const HANDLERS = {
     let ask;
     let lastStatus = null;
     for (let n = 0; ; n++) {
-      const res = await api('GET', `asks/${id}`, undefined, ctx.signal);
+      // ?waiting=1: Claude is waiting for the host, so the room's "doing" line ends.
+      const res = await api('GET', `asks/${id}?waiting=1`, undefined, ctx.signal);
       collect(res.inbox);
       ask = res.ask || {};
       if (ask.status === 'decided' || ask.status === 'discarded') break;
@@ -2148,7 +2149,7 @@ function promptText(name, args) {
 
 const INSTRUCTIONS = `Engage connects you to a live room of people through the host's Build Room session. The host's laptop is usually on a projector, the room follows along on their phones, and you are building something real with them.
 
-ALWAYS say what you are doing: post_update with doing (4-7 words, starts with an -ing verb, "Scaffolding the site") when a piece of work starts, done ("Scaffolded the site") when it ends. No names, files, paths or links. Keep your task list current.
+ALWAYS say what you are doing: post_update with doing (4-7 words, starts with an -ing verb, "Scaffolding the site") when a piece of work starts, done (past tense of the piece that just ended, "Scaffolded the site") in the same call as the next doing. No names, files, paths or links. Keep your task list current.
 
 How to collaborate:
 - THE OPENING: a new room starts by framing the build (room_status says "PHASE: OPENING"). Then you prepare and listen: set up the project folder, write no product code, read the brief as each step lands, and when an answer is thin propose ONE probing question with ask_room_for_ideas and forStep (the step it probes; it lands on the host's screen for review). When room_status says the room has said enough, draft the one-page brief with draft_brief (a headline and a short summary, in the room's words; invent nothing). Wait with wait_for_direction. When the host presses Start building you get the whole brief as a direction: then plan, post the plan, and build.
@@ -2818,7 +2819,8 @@ export function activityLine(data) {
 
 const MAX_TASKS = 200;
 const PLAN_LINE = 'Updated its to-do list';
-const freshState = (session) => ({ session: session || '', tasks: {}, helpers: 0 });
+const HELPER_MAX_MS = 30 * 60 * 1000; // a SubagentStop can be lost; a helper start older than this is forgotten
+const freshState = (session) => ({ session: session || '', tasks: {}, helperStarts: [] });
 /** The id Claude Code gave a new task: tool_response is {task:{id,subject}} (seen in transcripts, 2.1.294); a bare id or "Task #3 created" text is read too. */
 function newTaskId(resp) {
   if (resp && typeof resp === 'object') {
@@ -2831,7 +2833,7 @@ function newTaskId(resp) {
 
 /**
  * What one hook call adds to the activity file, and the state to keep.
- * `state` is {session, tasks:{id:{subject,activeForm,status}}, helpers, todos?}
+ * `state` is {session, tasks:{id:{subject,activeForm,status}}, helperStarts:[iso], todos?}
  * and is reset when the hook's session_id changes. Pure: no files.
  *
  * Claude's own task list arrives two ways: TaskCreate/TaskUpdate (Claude Code
@@ -2839,7 +2841,10 @@ function newTaskId(resp) {
  * status}) and TodoWrite (older and SDK sessions: the whole list each time).
  * Either way: an item going in_progress becomes doing {source:'todo', text:
  * activeForm}; going completed becomes {source:'todo', done:true, item:
- * subject}. A helper's own tasks say nothing about Claude's headline.
+ * subject}. A helper's own tasks say nothing about Claude's headline. A
+ * completed task ALWAYS gives a done record: when its subject is not fit for the
+ * room the record carries no words (item ''), so the server still ends the step.
+ * Records are in the order they must be applied: dones before the new doing.
  */
 export function hookRecords(data, prev, at = new Date().toISOString()) {
   const d = data || {};
@@ -2848,22 +2853,30 @@ export function hookRecords(data, prev, at = new Date().toISOString()) {
   state.tasks = state.tasks && typeof state.tasks === 'object' ? state.tasks : {};
   const mk = (extra, text = PLAN_LINE) => ({ at, kind: 'plan', text, ...extra });
   const doingRec = (text) => mk({ doing: { source: 'todo', text } });
-  const doneRec = (item) => mk({ doing: { source: 'todo', done: true, item } });
+  const doneRec = (item) => mk({ doing: { source: 'todo', done: true, item: item || '' } });
   const event = String(d.hook_event_name || 'PostToolUse');
   const tool = String(d.tool_name || '');
   const records = [];
 
+  // Helpers are kept by their start times, not counted: one whose stop was lost expires, so the
+  // line cannot stay up forever.
+  const nowMs = Date.parse(at);
+  const liveStarts = () => (Array.isArray(state.helperStarts) ? state.helperStarts : [])
+    .filter((x) => Number.isFinite(Date.parse(x)) && !(nowMs - Date.parse(x) > HELPER_MAX_MS));
   if (event === 'SubagentStop') {
-    if (!d.agent_type || !(state.helpers > 0)) return { records, state };
-    state.helpers -= 1;
-    if (state.helpers === 0) records.push({ at, kind: 'agent', text: 'A helper agent finished', helperLine: { end: true } });
+    const had = Array.isArray(state.helperStarts) && state.helperStarts.length > 0;
+    const starts = liveStarts();
+    if (!d.agent_type || !had) return { records, state };
+    starts.shift();
+    state.helperStarts = starts;
+    if (starts.length === 0) records.push({ at, kind: 'agent', text: 'A helper agent finished', helperLine: { end: true } });
     return { records, state };
   }
   if (event === 'PreToolUse') {
     if (!(tool === 'Agent' || tool === 'Task') || d.agent_id) return { records, state };
     const job = String(input.description || '').replace(/\s+/g, ' ').trim();
     const ok = job && roomLineProblem(job, { ing: true, minWords: 2 }) === '';
-    state.helpers = (state.helpers || 0) + 1;
+    state.helperStarts = [...liveStarts(), at];
     records.push({ at, kind: 'agent', text: 'Asked a helper agent', ...(ok ? { helperLine: { text: job } } : {}) });
     return { records, state };
   }
@@ -2883,8 +2896,7 @@ export function hookRecords(data, prev, at = new Date().toISOString()) {
       const text = plainPhrase(input.activeForm || task.activeForm);
       if (text) records.push(doingRec(text));
     } else if (task && status === 'completed' && task.status !== 'completed') {
-      const item = plainPhrase(task.subject);
-      if (item) records.push(doneRec(item));
+      records.push(doneRec(plainPhrase(task.subject)));
     }
     if (task && state.tasks[id] && status) state.tasks[id].status = status;
     if (!records.length) records.push(mk({}));
@@ -2892,15 +2904,15 @@ export function hookRecords(data, prev, at = new Date().toISOString()) {
     const todos = (Array.isArray(input.todos) ? input.todos : []).filter((t) => t && typeof t === 'object').slice(0, MAX_TASKS);
     const active = todos.find((t) => t.status === 'in_progress');
     const text = active ? plainPhrase(active.activeForm) : '';
-    if (text) records.push(doingRec(text));
+    // Dones first: the finished item closes its step before the next line starts.
     if (Array.isArray(state.todos)) {
       for (const t of todos) {
         if (t.status !== 'completed') continue;
         const before = state.todos.find((x) => x && x.content === t.content);
-        const item = plainPhrase(t.content);
-        if (item && !(before && before.status === 'completed')) records.push(doneRec(item));
+        if (!(before && before.status === 'completed')) records.push(doneRec(plainPhrase(t.content)));
       }
     }
+    if (text) records.push(doingRec(text));
     state.todos = todos.map((t) => ({ content: String(t.content || ''), status: String(t.status || '') }));
     if (!records.length) records.push(mk({}));
   } else {
@@ -2965,28 +2977,29 @@ async function pumpActivity() {
     let raw = '';
     try { raw = readFileSync(file, 'utf8'); } catch { return; }
     if (!raw.trim()) return;
-    writeFileSync(file, ''); // taken; a line the hook writes between these two calls is dropped (rare, harmless)
+    // Not configured (yet): leave the lines where the hook put them; they go out once it is.
     reloadConfig();
     if (CONFIG.problems.length) return;
+    writeFileSync(file, ''); // taken; a line the hook writes between these two calls is dropped (rare, harmless)
     const all = raw.split('\n').filter(Boolean)
       .map((l) => { try { return JSON.parse(l); } catch { return null; } })
       .filter((x) => x && x.text);
     const items = all.slice(-25);
     // The server never hands over Claude's inbox on this route (build-room.js),
     // so ignoring the answer cannot swallow a direction.
-    // Read from ALL lines, not just the 25 sent, so a long batch cannot lose
-    // them. Claude's line and a helper's line travel apart, each with its time:
-    //   doing  the latest in-progress record: {source:'todo', text, at}
-    //   helper the latest helper change: {text, at} or {end:true, at}
-    //   done   every completed item in order: [{item, at}] (a done must close
-    //          its step even when a newer doing follows it)
-    let doing; let helper; const dones = [];
+    // Claude's line and a helper's line travel as ONE ordered list, in file
+    // order, each with its time; the server applies them in that order, so a
+    // done that came before a newer doing still closes its own step:
+    //   { type: 'doing', text, at } | { type: 'done', item, at }
+    //   { type: 'helper', text, at } | { type: 'helper-end', at }
+    // Read from ALL lines, not just the 25 shown, so a long batch cannot lose them.
+    const events = [];
     for (const i of all) {
-      if (i.doing && i.doing.done) dones.push({ item: i.doing.item, at: i.at });
-      else if (i.doing && i.doing.text) doing = { source: 'todo', text: i.doing.text, at: i.at };
-      if (i.helperLine) helper = { ...i.helperLine, at: i.at };
+      if (i.doing && i.doing.done) events.push({ type: 'done', item: i.doing.item || '', at: i.at });
+      else if (i.doing && i.doing.text) events.push({ type: 'doing', text: i.doing.text, at: i.at });
+      if (i.helperLine) events.push(i.helperLine.end ? { type: 'helper-end', at: i.at } : { type: 'helper', text: i.helperLine.text, at: i.at });
     }
-    if (items.length) await api('POST', 'activity', clean({ items, doing, helper, done: dones.length ? dones : undefined }), AbortSignal.timeout(8000));
+    if (items.length) await api('POST', 'activity', clean({ items, events: events.length ? events.slice(-100) : undefined }), AbortSignal.timeout(8000));
   } catch (e) {
     log('activity post failed:', e && e.message);
   } finally {
@@ -3070,8 +3083,9 @@ skill is how you keep the project something they can open next week and understa
 ## Say what you are doing
 
 - At the start of each piece of work, call post_update with \`doing\`: 4 to 7 words, starting
-  with an -ing verb ("Scaffolding the site", "Mocking up 3 graph options"). When it ends,
-  post \`done\`: the past tense ("Scaffolded the site"). The room reads it as your headline.
+  with an -ing verb ("Scaffolding the site", "Mocking up 3 graph options"). \`done\` is the
+  past tense of the piece that JUST ENDED ("Scaffolded the site"): send it in the same call
+  as the next \`doing\`, or alone when you stop. The room reads it as your headline.
   A post with only doing or done changes the headline and adds no timeline row.
 - Never people's names, file names, paths, commands or links in either.
 - Keep your task list current: Claude Code shows it to the room. Mark the task you are on

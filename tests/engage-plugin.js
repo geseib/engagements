@@ -34,7 +34,7 @@ const server = http.createServer((req, res) => {
     requests.push({ method: req.method, url: req.url, auth: req.headers.authorization, body: raw ? JSON.parse(raw) : undefined });
     const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
     if (req.headers.authorization !== `Bearer ${KEY}`) return send(403, { message: 'Forbidden' });
-    const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '');
+    const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '').replace(/^(asks\/[^?]+)\?waiting=1$/, '$1');
     if (req.method === 'GET' && p === 'state') {
       return send(200, { gameId: '4321', title: 'Sign-up site', goal: 'Pick a shift fast', state: 'STARTED', players: [], playerCount: 0, asks: [], log: [], inbox: [] });
     }
@@ -294,7 +294,7 @@ async function check(name, fn) {
     fs.writeFileSync(activityPath, '');
     activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
     got = linesIn();
-    assert.deepStrictEqual(got.map((g) => g.doing), [{ source: 'todo', text: 'Adding the header' }, { source: 'todo', done: true, item: 'Scaffold the site' }]);
+    assert.deepStrictEqual(got.map((g) => g.doing), [{ source: 'todo', done: true, item: 'Scaffold the site' }, { source: 'todo', text: 'Adding the header' }], 'dones first: the finished item closes before the next line starts');
     fs.writeFileSync(activityPath, '');
     activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
     assert.deepStrictEqual(linesIn().map((g) => g.doing), [{ source: 'todo', text: 'Adding the header' }], 'already completed: no second done');
@@ -328,6 +328,17 @@ async function check(name, fn) {
     assert.deepStrictEqual(linesIn().map((g) => g.doing), [
       { source: 'todo', text: 'Scaffolding the site' }, { source: 'todo', done: true, item: 'Scaffold the site' }, undefined, { source: 'todo', text: 'Adding the header' },
     ]);
+  });
+  await check('a completed task whose title is not fit for the room still gives a done record, with no words (I2)', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    taskHook({ tool_name: 'TaskCreate', tool_input: { subject: 'Fix src/a.js', activeForm: 'Fixing src/a.js' }, tool_response: { task: { id: '7', subject: 'Fix src/a.js' } } });
+    taskHook({ tool_name: 'TaskUpdate', tool_input: { taskId: '7', status: 'completed' } });
+    assert.deepStrictEqual(linesIn().map((g) => g.doing), [undefined, { source: 'todo', done: true, item: '' }]);
+    assert.ok(!JSON.stringify(linesIn()).includes('src/a.js'));
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    activityHook(project, todo(['Fix src/b.js', 'Fixing src/b.js', 'in_progress']));
+    activityHook(project, todo(['Fix src/b.js', 'Fixing src/b.js', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
+    assert.deepStrictEqual(linesIn().map((g) => g.doing), [undefined, { source: 'todo', done: true, item: '' }, { source: 'todo', text: 'Adding the header' }]);
   });
   await check('a task id read from "Task #3 created" text, an unknown id is a plain line, a path in a title never reaches the room', async () => {
     fs.writeFileSync(activityPath, '');
@@ -380,11 +391,33 @@ async function check(name, fn) {
     hookEvent('SubagentStop', { agent_id: 'a3', agent_type: '' });
     assert.deepStrictEqual(linesIn().map((g) => g.helperLine), [undefined, { text: 'Comparing three chart libraries' }, { end: true }]);
   });
-  await check('the pump sends doing, helper and done apart, each with its time', async () => {
+  await check('I4: helpers are kept by start time; a start older than 30 minutes is forgotten, and a lost stop still ends the line', async () => {
+    fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
+    const old = new Date(Date.now() - 31 * 60000).toISOString();
+    fs.writeFileSync(todoLast, JSON.stringify({ session: 'S3', tasks: {}, helperStarts: [old] }));
+    hookEvent('PreToolUse', { tool_name: 'Agent', tool_input: { description: 'Researching contrast rules' } });
+    const st = JSON.parse(fs.readFileSync(todoLast, 'utf8'));
+    assert.strictEqual(st.helperStarts.length, 1, 'the old start expired, the new one is kept');
+    assert.ok(st.helperStarts[0] > old);
+    assert.strictEqual(st.helpers, undefined);
+    hookEvent('SubagentStop', { agent_id: 'a1', agent_type: 'Explore' });
+    assert.deepStrictEqual(linesIn().map((g) => g.helperLine), [{ text: 'Researching contrast rules' }, { end: true }], 'one stop ends it: the expired helper no longer counts');
+    // Only an expired start left, then its stop arrives: the line still ends.
+    fs.writeFileSync(activityPath, '');
+    fs.writeFileSync(todoLast, JSON.stringify({ session: 'S3', tasks: {}, helperStarts: [old] }));
+    hookEvent('SubagentStop', { agent_id: 'a2', agent_type: 'Explore' });
+    assert.deepStrictEqual(linesIn().map((g) => g.helperLine), [{ end: true }]);
+    // No helper known, a stop says nothing.
+    fs.writeFileSync(activityPath, '');
+    hookEvent('SubagentStop', { agent_id: 'a3', agent_type: 'Explore' });
+    assert.deepStrictEqual(linesIn(), []);
+  });
+  await check('the pump sends ONE ordered list of events, in file order, each with its time (I1)', async () => {
     fs.writeFileSync(activityPath, ''); try { fs.unlinkSync(todoLast); } catch { /* none */ }
     activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'in_progress']));
     activityHook(project, todo(['Scaffold the site', 'Scaffolding the site', 'completed'], ['Add the header', 'Adding the header', 'in_progress']));
     hookEvent('PreToolUse', { tool_name: 'Agent', tool_input: { description: 'Researching contrast rules' } });
+    hookEvent('SubagentStop', { agent_id: 'a1', agent_type: 'Explore' });
     const before = requests.filter((q) => q.url.endsWith('/build/activity')).length;
     const pump = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: project, ENGAGE_ACTIVITY_MS: '200' });
     try {
@@ -392,10 +425,28 @@ async function check(name, fn) {
       while (requests.filter((q) => q.url.endsWith('/build/activity')).length === before && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
       const sent = requests.filter((q) => q.url.endsWith('/build/activity')).slice(before)[0];
       assert.ok(sent, 'a batch was sent');
-      assert.deepStrictEqual({ ...sent.body.doing, at: !!sent.body.doing.at }, { source: 'todo', text: 'Adding the header', at: true });
-      assert.deepStrictEqual({ ...sent.body.helper, at: !!sent.body.helper.at }, { text: 'Researching contrast rules', at: true });
-      assert.deepStrictEqual(sent.body.done.map((d) => d.item), ['Scaffold the site']);
-      assert.ok(sent.body.done[0].at);
+      assert.strictEqual(sent.body.doing, undefined); assert.strictEqual(sent.body.helper, undefined); assert.strictEqual(sent.body.done, undefined);
+      assert.deepStrictEqual(sent.body.events.map((e) => ({ ...e, at: !!e.at })), [
+        { type: 'doing', text: 'Scaffolding the site', at: true },
+        { type: 'done', item: 'Scaffold the site', at: true },
+        { type: 'doing', text: 'Adding the header', at: true },
+        { type: 'helper', text: 'Researching contrast rules', at: true },
+        { type: 'helper-end', at: true },
+      ]);
+    } finally { pump.child.kill(); }
+  });
+  await check('M5: with no usable config the pump leaves the lines in the file', async () => {
+    const lone = tmp('lone-project');
+    fs.mkdirSync(path.join(lone, '.engage'));
+    const f = path.join(lone, '.engage', 'activity.jsonl');
+    const line = JSON.stringify({ at: new Date().toISOString(), kind: 'edit', text: 'Edited Header.jsx' }) + '\n';
+    fs.writeFileSync(f, line);
+    const before = requests.length;
+    const pump = mcpChild({ HOME: tmp('lone-home'), CLAUDE_PROJECT_DIR: lone, ENGAGE_ACTIVITY_MS: '200' });
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      assert.strictEqual(fs.readFileSync(f, 'utf8'), line, 'kept until the project is connected');
+      assert.strictEqual(requests.length, before, 'nothing sent');
     } finally { pump.child.kill(); }
   });
 

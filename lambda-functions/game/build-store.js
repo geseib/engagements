@@ -886,8 +886,12 @@ const DOING_MIN_WORDS = 2;
 const DOING_STALE_MS = 3 * 60 * 1000;
 const DOING_B_FRESH_MS = 15 * 60 * 1000;
 const DOING_SOURCES = Object.freeze(['todo', 'claude']);
-// A path, a command, a mention, a link, a file name: never for the room.
-const DOING_UNSAFE = /[/`@\\]|:\/\/|www\.|\.\w{1,5}\b/i;
+// A path, a command, a mention, a link, a file name: never for the room. "3.5" is not a file name.
+// The plugin carries the same rule (unsafeForRoom); tests/build-doing.js holds them equal over one list.
+const DOING_UNSAFE = /[\\/`@]|:\/\/|www\.|\.[A-Za-z][A-Za-z0-9]{0,4}\b/i;
+// A helper line outlives neither a quiet Claude (the SubagentStop may have been lost) nor half an hour.
+const DOING_HELPER_QUIET_MS = 10 * 60 * 1000;
+const DOING_HELPER_MAX_MS = 30 * 60 * 1000;
 
 /**
  * A line, cleaned for the room: plain words, at most 50 characters (cut at the
@@ -908,13 +912,15 @@ function cleanDoingLine(raw, max = DOING_MAX_CHARS) {
   return t.split(' ').filter(Boolean).length >= DOING_MIN_WORDS ? t : '';
 }
 
+// A step never ends before it started (a laptop clock can be behind).
 const stepOf = (line, endedAtMs, text) => {
   const started = Date.parse(line.startedAt);
+  const end = Number.isFinite(started) ? Math.max(endedAtMs, started) : endedAtMs;
   return {
     text,
     startedAt: line.startedAt,
-    endedAt: new Date(endedAtMs).toISOString(),
-    durationMs: Math.max(0, endedAtMs - (Number.isFinite(started) ? started : endedAtMs)),
+    endedAt: new Date(end).toISOString(),
+    durationMs: Math.max(0, end - (Number.isFinite(started) ? started : end)),
     source: line.source,
   };
 };
@@ -931,14 +937,27 @@ function doingWinner(row, nowMs) {
   return A;
 }
 
+/** The helper line, or null once it cannot be trusted: Claude quiet for 10 minutes, or the line 30 minutes old. */
+function helperLive(row, nowMs) {
+  const H = (row && row.Helper) || null;
+  if (!H || !H.text) return null;
+  const at = Date.parse(H.at);
+  if (Number.isFinite(at) && nowMs - at > DOING_HELPER_MAX_MS) return null;
+  const active = Date.parse(row.ActiveAt);
+  if (Number.isFinite(active) && nowMs - active > DOING_HELPER_QUIET_MS) return null;
+  return H;
+}
+
 /**
  * One event applied to the doing record. Pure: returns the fields to keep on
- * BUILD#ACTIVITY, the steps to write, and whether the room-visible line moved.
+ * BUILD#ACTIVITY (DoingA, DoingB, Helper; the caller owns ActiveAt and
+ * DoingRev), the steps to write, and whether the room-visible line moved.
+ * Within one event the order is: done, then doing, then helper.
  *   input.source   'todo' | 'claude'
- *   input.doing    the present line (string), when one starts
- *   input.past     its past form (claude) or the to-do item's own words (todo)
- *   input.done     true | string: the current line of `source` ended; for claude
- *                  a string is its past form; for todo a string is the item's words
+ *   input.done     true | string: the line of `source` that JUST ENDED. For claude a
+ *                  string is that line's past tense ("Scaffolded the site"); for todo
+ *                  a string is the item's own words; true / '' use the line's own text
+ *   input.doing    the line that starts now (string)
  *   input.helper   string sets, '' / null clears, undefined leaves alone
  *   input.waiting  Claude is waiting for direction: everything ends
  */
@@ -947,7 +966,7 @@ function applyDoing(prev, input, nowIso) {
   const row = prev || {};
   let A = row.DoingA || null;
   let B = row.DoingB || null;
-  let H = row.Helper || null;
+  let H = helperLive(row, nowMs);
   const before = doingWinner(row, nowMs);
   const beforeKey = JSON.stringify([before && before.text, H && H.text]);
   const steps = [];
@@ -958,35 +977,38 @@ function applyDoing(prev, input, nowIso) {
     else if (!A && text && aVisible()) steps.push(stepOf({ startedAt: nowIso, source: 'todo' }, nowMs, `Done: ${text}`));
     A = null;
   };
-  const endB = () => { if (B) steps.push(stepOf(B, nowMs, stepText(B))); B = null; };
-  const expire = () => { if (bExpired(A, B, nowMs)) endB(); };
+  const endB = (endMs = nowMs) => { if (B) steps.push(stepOf(B, endMs, stepText(B))); B = null; };
+  // An expired B ended when the to-do list took over, not when somebody next posted.
+  const expire = () => { if (bExpired(A, B, nowMs)) endB(Math.min(nowMs, Math.max(Date.parse(B.at), Date.parse(A.startedAt)))); };
   const inp = input || {};
 
   if (inp.waiting) {
     // B first: A's end is not a step while B was the line the room read.
     expire();
     const aWasVisible = aVisible();
-    if (B) endB();
-    if (A && aWasVisible) steps.push(stepOf(A, nowMs, stepText(A)));
+    // A line the room last heard of long ago ended then, not when Claude finally stopped to wait.
+    const lastMs = Date.parse(row.ActiveAt);
+    const endMs = Number.isFinite(lastMs) && nowMs - lastMs > DOING_STALE_MS ? Math.min(nowMs, lastMs) : nowMs;
+    if (B) endB(endMs);
+    if (A && aWasVisible) steps.push(stepOf(A, endMs, stepText(A)));
     A = null; B = null; H = null;
   } else {
     expire();
     const src = inp.source === 'claude' ? 'claude' : 'todo';
-    if (typeof inp.doing === 'string' || inp.doing === null) {
-      const text = cleanDoingLine(inp.doing);
-      const past = cleanDoingLine(inp.past) || '';
-      if (src === 'todo') {
-        if (!text) endA();
-        else if (A && A.text === text) A = { ...A, at: nowIso, ...(past ? { past } : {}) };
-        else { endA(); A = { text, ...(past ? { past } : {}), source: 'todo', startedAt: nowIso, at: nowIso }; }
-      } else if (!text) endB();
-      else if (B && B.text === text) B = { ...B, at: nowIso, ...(past ? { past } : {}) };
-      else { endB(); B = { text, ...(past ? { past } : {}), source: 'claude', startedAt: nowIso, at: nowIso }; }
-    }
     if (inp.done) {
       const given = typeof inp.done === 'string' ? cleanDoingLine(inp.done) : '';
       if (src === 'todo') endA(given || undefined);
-      else if (B) { if (given && !B.past) B = { ...B, past: given }; endB(); }
+      else if (B) { if (given) B = { ...B, past: given }; endB(); }
+    }
+    if (typeof inp.doing === 'string' || inp.doing === null) {
+      const text = cleanDoingLine(inp.doing);
+      if (src === 'todo') {
+        if (!text) endA();
+        else if (A && A.text === text) A = { ...A, at: nowIso };
+        else { endA(); A = { text, source: 'todo', startedAt: nowIso, at: nowIso }; }
+      } else if (!text) endB();
+      else if (B && B.text === text) B = { ...B, at: nowIso };
+      else { endB(); B = { text, source: 'claude', startedAt: nowIso, at: nowIso }; }
     }
     if (inp.helper !== undefined) {
       const h = inp.helper ? cleanDoingLine(inp.helper, DOING_HELPER_MAX_CHARS) : '';
@@ -999,27 +1021,31 @@ function applyDoing(prev, input, nowIso) {
     ...(A ? { DoingA: A } : {}),
     ...(B ? { DoingB: B } : {}),
     ...(H ? { Helper: H } : {}),
-    ActiveAt: nowIso,
   };
   const after = doingWinner(fields, nowMs);
   const changed = steps.length > 0 || JSON.stringify([after && after.text, H && H.text]) !== beforeKey;
   return { fields, steps, changed };
 }
 
-/** The resolved line for a screen, or null. `lastActiveAt` lets a screen re-derive "stale" as time passes. */
+/**
+ * The resolved line for a screen. `text` is '' when only a helper is running;
+ * null when there is nothing to say. `lastActiveAt` lets a screen re-derive
+ * "stale" as time passes.
+ */
 function doingView(row, nowIso) {
   const nowMs = Date.parse(nowIso);
   const w = doingWinner(row, nowMs);
-  if (!w) return null;
-  const active = Date.parse((row && row.ActiveAt) || w.at);
+  const H = helperLive(row, nowMs);
+  if (!w && !H) return null;
+  const lastActiveAt = (row && row.ActiveAt) || (w && w.at) || H.at;
   return {
-    text: w.text,
-    past: w.past || '',
-    source: w.source,
-    startedAt: w.startedAt,
-    stale: !(nowMs - active <= DOING_STALE_MS),
-    helper: (row.Helper && row.Helper.text) || '',
-    lastActiveAt: (row && row.ActiveAt) || w.at,
+    text: w ? w.text : '',
+    past: (w && w.past) || '',
+    source: w ? w.source : '',
+    startedAt: w ? w.startedAt : null,
+    stale: !(nowMs - Date.parse(lastActiveAt) <= DOING_STALE_MS),
+    helper: H ? H.text : '',
+    lastActiveAt,
   };
 }
 /** What a phone or the Stage reads: no source details. */
@@ -1451,7 +1477,11 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, as, held, ...rest }) => (DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest))
+      .map(({ forAgent, deliveredAt, as, held, step, ...rest }) => ({
+        ...(DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest),
+        // A phone sees when a step ran, not where Claude took it from.
+        ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
+      }))
       .map((l) => ({ ...l, link: forRoom(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
     images: room.images.map(imageView),
