@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: what Claude is doing · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* The doing line (owner, 2026-10-10): one short Claude-written line that says
+   what Claude is doing, on every screen, and a History entry when it is done.
+   Extends v2.css. One orange per frame. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .notes,body.is-solo .sec,body.is-solo .qs{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec p b{color:var(--text)}
+
+.cmp{display:flex;gap:36px;align-items:flex-start}
+.side{display:flex;flex-direction:column;gap:10px}
+.tag{align-self:flex-start;font:800 13px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;padding:7px 11px;border-radius:999px;border:1px solid var(--m-rule);color:var(--muted)}
+.tag--after{color:var(--m-success-text);border-color:rgba(79,178,134,.5);background:var(--m-tint-green)}
+.tag--before{color:var(--danger-text);border-color:rgba(229,100,94,.45);background:var(--m-tint-red)}
+
+/* ---- D1 the header strip and the Claude panel ------------------------- */
+.hstrip{width:1440px;border-radius:10px;overflow:hidden;border:1px solid var(--m-rule)}
+.hstrip .hdr{height:60px}
+.dotline--blue::before{background:var(--secondary)}
+.dotline b{color:var(--text);font-weight:600}
+.dotline--plain::before{background:var(--muted)}
+.lab{font:700 14px/1 var(--font-ui);color:var(--muted);margin:6px 0 -4px 4px}
+
+.cpanel{width:456px;background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.cp-h{display:flex;align-items:center;gap:8px}
+.cp-h h3{margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.cp-h .sp{flex:1}
+.cp-h small{font-size:12px;color:var(--muted)}
+.doing{display:flex;align-items:flex-start;gap:12px}
+.doing .dot{flex:none;margin-top:9px;width:12px;height:12px;border-radius:50%;background:var(--secondary);box-shadow:0 0 0 5px var(--m-tint-blue)}
+.doing .dot--stale{background:var(--muted);box-shadow:none}
+.doing .t{font:800 24px/1.2 var(--font-display)}
+.doing .t span{font:600 15px/1 var(--font-ui);color:var(--muted);white-space:nowrap}
+.doing .src{display:block;margin-top:4px;font:400 12px/1.3 var(--font-ui);color:var(--muted)}
+.helper{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 24px;font-size:15px;color:var(--text)}
+.helper::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;border:2px solid var(--secondary)}
+.helper span{color:var(--muted);font-size:13px}
+.mech{border-top:1px solid var(--m-rule);padding-top:8px}
+.mech .sum{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.mech .sum::before{content:"\25B8";font-size:11px}
+.mech.open .sum::before{content:"\25BE"}
+.mech .sum b{color:var(--text);font-weight:600}
+.mech ul{list-style:none;margin:6px 0 0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:3px}
+.mech li{display:grid;grid-template-columns:1fr auto;gap:10px;font-size:12px;color:var(--muted)}
+.mech li i{font-style:normal;opacity:.8}
+/* Today's panel, as it ships */
+.today h2{margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--text)}
+.today .lead{display:flex;align-items:center;gap:10px;font-size:15px}
+.today .lead span{margin-left:auto;font-size:12px;color:var(--muted)}
+.today ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.today li{display:grid;grid-template-columns:16px 1fr auto;gap:8px;font-size:14px;color:var(--text)}
+.today li::before{content:"\2699";color:var(--muted);font-size:12px}
+.today li span{color:var(--muted);font-size:12px}
+
+/* ---- D2 the Stage ------------------------------------------------------ */
+.scr .phase--build::before{background:var(--muted)}
+.scr .join .code{color:var(--text)}
+.doingbig{display:flex;align-items:center;gap:22px}
+.doingbig .q{max-width:none}
+.latest .t{font-size:var(--L-body)}
+
+/* ---- D3 devices -------------------------------------------------------- */
+.devs{display:flex;gap:36px;align-items:flex-start}
+.phone{width:375px;height:720px;background:var(--bg);border:1px solid var(--m-rule);border-radius:28px;overflow:hidden;display:flex;flex-direction:column}
+.laptop{width:880px;height:560px;background:var(--bg);border:1px solid var(--m-rule);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.ptop{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--m-rule);background:#0C1628;font-size:13px;color:var(--muted)}
+.ptop b{color:var(--text);font:800 15px/1.2 var(--font-display)}
+.ptop .sp{flex:1}
+.pbody{padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+.laptop .pbody{padding:28px 40px;max-width:720px}
+.ph1{margin:0;font:800 28px/1.15 var(--font-display);color:var(--primary)}
+.laptop .ph1{font-size:36px}
+.ph1 small{display:block;margin-top:6px;font:600 15px/1.3 var(--font-ui);color:var(--muted)}
+.phelp{margin:0;font-size:15px;color:var(--muted);line-height:1.45}
+.pbtn{align-self:flex-start;display:inline-flex;align-items:center;height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--m-rule);font:600 15px/1 var(--font-ui)}
+.feed{border-top:1px solid var(--m-rule);padding-top:12px;display:flex;flex-direction:column;gap:10px}
+.feed h4{margin:0;font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.feed .fi{display:grid;grid-template-columns:44px 1fr;gap:8px;font-size:15px;line-height:1.35}
+.feed .fi span{color:var(--muted);font-size:13px}
+
+/* ---- D4 History -------------------------------------------------------- */
+.hist{width:1440px;background:var(--bg);border:1px solid var(--m-rule);border-radius:10px;overflow:hidden}
+.hbody{padding:22px 40px 30px;display:grid;grid-template-columns:1fr 360px;gap:36px}
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:72px 22px 1fr;gap:0 14px;padding:14px 0;border-bottom:1px solid var(--m-rule)}
+.step .tm{font:700 15px/1.3 var(--font-ui);color:var(--muted);text-align:right;padding-top:3px}
+.step .mk{width:14px;height:14px;margin-top:6px;border-radius:50%;background:var(--success)}
+.step.now .mk{background:transparent;border:2px solid var(--secondary)}
+.step .hd{font:800 24px/1.25 var(--font-display)}
+.step .hd span{font:600 15px/1 var(--font-ui);color:var(--muted)}
+.step.now .hd{color:var(--text)}
+.kids{grid-column:3;list-style:none;margin:8px 0 0;padding:0 0 0 2px;display:flex;flex-direction:column;gap:6px}
+.kids li{display:flex;align-items:center;gap:10px;font-size:15px}
+.kids li .chip{min-width:96px;justify-content:center}
+.kids li .at{margin-left:auto;font-size:13px;color:var(--muted)}
+.thumbs{display:flex;gap:8px}
+.thumbs i{width:76px;height:48px;border-radius:6px;background:linear-gradient(135deg,var(--surface-2),var(--surface));border:1px solid var(--m-rule)}
+.sideh{font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.keep{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:14px 16px;font-size:15px;line-height:1.45}
+.keep p{margin:0 0 10px}
+.keep p:last-child{margin:0}
+.keep s{color:var(--muted)}
+
+/* ---- D5 edge states ---------------------------------------------------- */
+.edges{display:grid;grid-template-columns:repeat(3,460px);gap:24px}
+.edge{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;display:flex;flex-direction:column}
+.edge > h3{margin:0;padding:14px 16px 4px;font:800 19px/1.25 var(--font-display)}
+.edge > p{margin:0;padding:0 16px 12px;font-size:13px;color:var(--muted);line-height:1.45}
+.ev{display:grid;grid-template-columns:86px 1fr;gap:10px;padding:12px 16px;border-top:1px solid var(--m-rule);align-items:start}
+.ev .w{font:800 12px/1.3 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-top:3px}
+.ev .l{font:700 17px/1.3 var(--font-display)}
+.ev .l small{display:block;margin-top:3px;font:400 13px/1.35 var(--font-ui);color:var(--muted)}
+.ev .l .h{display:block;margin-top:6px;font:500 14px/1.3 var(--font-ui);color:var(--text)}
+.ev .l .h::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;border:2px solid var(--secondary);margin-right:7px;vertical-align:1px}
+
+/* ---- D6 rules ---------------------------------------------------------- */
+.flowl{display:grid;grid-template-columns:330px 60px 330px 60px 330px;align-items:center;width:1170px}
+.flowl .col2{display:flex;flex-direction:column;gap:10px}
+.flowl .bx{background:var(--surface);border:1px solid var(--m-rule);border-radius:10px;padding:10px 12px;font-size:14px}
+.flowl .bx b{display:block;color:var(--text)}
+.flowl .bx span{color:var(--muted);font-size:13px}
+.flowl .ar{display:grid;place-items:center;color:var(--muted);font:800 28px/1 var(--font-ui)}
+.flowl .big{border:2px solid var(--secondary);padding:14px 16px}
+.flowl .big b{font:800 20px/1.25 var(--font-display)}
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45}
+.vt td:first-child{font-weight:700}
+.vt td.why{color:var(--muted);font-size:13px}
+.vt code{font-size:12.5px;color:var(--text);background:var(--surface);padding:1px 5px;border-radius:4px}
+.ok{color:var(--m-success-text)}
+.no{color:var(--danger-text)}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · what Claude is doing</b>
+<a href="#d1">D1 Host</a><a href="#d2">D2 Stage</a><a href="#d3">D3 Devices</a><a href="#d4">D4 History</a><a href="#d5">D5 Edge states</a><a href="#d6">D6 The rules</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="../build-room-batch-2-3/index.html">One primary, one vocabulary</a><a href="../build-room-history-and-stage-decide/index.html">History</a></nav>
+<div class="pg-title"><h1>One short line says what Claude is doing, on every screen</h1>
+<p>The owner, 2026-10-10: the live list on the Host screen shows only the last few commands. In room 3800 it ended as twelve lines of "Ran gh repo" and "Ran git remote", and the building itself vanished from view. After: Claude writes one line of four to seven words, such as "Scaffolding the site", at the start of each piece of work. When Claude has not written one, the plugin takes the item Claude Code has marked in progress on its own to-do list. That line leads the Host panel, replaces "Claude is building" on the Stage and on laptops, tablets and phones, and becomes a History entry when the work is done. The commands stay on the Host screen only, in small type, folded away.</p></div>
+
+<!-- ===================================================================== D1 -->
+<div class="sec" id="d1"><h2>D1 · Host: the doing line leads the Claude panel</h2>
+<p>The panel's heading becomes the line itself, with how long Claude has been on it. A helper's line sits under it. The commands fold into one summary row, grouped by kind, so six git commands take one row and push nothing else out. The status chip in the header reads the same line, so the host sees it on every screen.</p></div>
+
+<div class="frame-h"><h2>D1a · The header chip</h2><p>Building: the chip is the doing line. Waiting and paused keep today's words.</p></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;flex-direction:column;gap:12px">
+<div class="lab">Today</div>
+<div class="hstrip"><header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--claude">Claude is building</span><span class="hjoin">Join <b style="color:var(--text)">4821</b> · 18 here</span><span class="menu">···</span></header></div>
+<div class="lab">After</div>
+<div class="hstrip"><header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view is-on" style="box-shadow:inset 0 -2px 0 var(--secondary)">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--claude"><b>Claude is mocking up 3 graph options</b> · 4 min</span><span class="hjoin">Join <b style="color:var(--text)">4821</b> · 18 here</span><span class="menu">···</span></header></div>
+</div></div></div>
+
+<div class="frame-h"><h2>D1b · The Claude panel on the Host screen</h2><p>Today the newest command leads and the list scrolls off what matters. After: the line Claude wrote leads, in the panel's largest type. The small grey note under it says where it came from, for the host only. Commands are folded by default; opening them shows the last twelve, grouped.</p></div>
+<div class="fit"><div class="fit-box"><div class="cmp">
+<div class="side"><span class="tag tag--before">Today · room 3800</span>
+<section class="cpanel today"><h2>Claude Code is working</h2>
+<p class="today lead" style="margin:0">Ran gh repo view <span>just now</span></p>
+<ul>
+<li>Ran git remote -v <span>20s</span></li><li>Ran gh repo create <span>40s</span></li><li>Ran git remote add <span>1 min</span></li><li>Ran git push <span>1 min</span></li><li>Ran gh repo view <span>1 min</span></li><li>Ran git remote set-url <span>2 min</span></li><li>Ran git status <span>2 min</span></li>
+</ul></section></div>
+<div class="side"><span class="tag tag--after">After · folded</span>
+<section class="cpanel"><div class="cp-h"><h3>Claude Code</h3><span class="sp"></span><small>connected</small></div>
+<div class="doing"><span class="dot"></span><div class="t">Claude is mocking up 3 graph options <span>· 4 min</span><span class="src">Claude said this at 10:17</span></div></div>
+<div class="mech"><div class="sum">Steps <b>14</b> · last: Ran git push · 20s ago</div></div>
+</section></div>
+<div class="side"><span class="tag tag--after">After · steps open, a helper running</span>
+<section class="cpanel"><div class="cp-h"><h3>Claude Code</h3><span class="sp"></span><small>connected</small></div>
+<div class="doing"><span class="dot"></span><div class="t">Claude is setting up the repository <span>· 2 min</span><span class="src">From Claude's to-do list</span></div></div>
+<div class="helper">A helper is researching contrast rules <span>· 1 min</span></div>
+<div class="mech open"><div class="sum">Steps <b>14</b></div>
+<ul><li>Ran git remote, 6 times <i>20s</i></li><li>Ran gh repo, 4 times <i>1 min</i></li><li>Ran git push <i>1 min</i></li><li>Edited README.md <i>2 min</i></li><li>Created DECISIONS.md <i>2 min</i></li><li>Ran npm install <i>3 min</i></li></ul></div>
+</section></div>
+</div></div></div>
+
+<!-- ===================================================================== D2 -->
+<div class="sec" id="d2"><h2>D2 · Stage: the room reads the line, nothing else from the engine room</h2>
+<p>The line replaces "Claude is building" as the heading. The last thing Claude finished stays beneath it. No commands, no file names, no helper count: the wall shows what Claude is doing and what it just did. Today's dock line, "Claude is building the shift calendar", already does this when Claude has posted; after, it always has a line to show.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--build">Building</span><div class="rail-title"><b>Charity dashboard</b><span>Built with the room</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4821</span></div></div>
+<div class="bar bar--build"></div>
+<div class="main"><div class="content">
+<div class="doingbig"><span class="pulse"></span><h2 class="q">Claude is scaffolding the site</h2></div>
+<span class="mins">for 6 min</span>
+<div class="latest" style="margin-top:26px"><div class="k">Just finished</div><div class="t">Researched social issues · 9 min</div></div>
+<div class="latest" style="border-left-color:var(--m-rule)"><div class="k">Before that</div><div class="t" style="color:var(--muted)">The room chose bars by month</div></div>
+</div>
+<aside class="meter"><span class="lbl">Here</span><span class="big">18<small> / 18</small></span><span class="says">Send an idea from your laptop, tablet or phone any time</span><div class="joinbox"><span class="qr"></span><p>Join on a laptop, tablet or phone<b style="color:var(--text)">4821</b></p></div></aside></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">18 here · 3 ideas with the host</div><span class="dbtn dbtn--ghost">Ask the room</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== D3 -->
+<div class="sec" id="d3"><h2>D3 · Laptops, tablets and phones: the same line in the Now view</h2>
+<p>The heading "Claude is building" becomes the line, with the time on it beneath. The help line and the feed stay as they are. A point the host has shown, or the run list, still comes first, exactly as today.</p></div>
+<div class="fit"><div class="fit-box"><div class="devs">
+<div class="side"><span class="tag">Phone, 375 wide</span>
+<div class="phone"><div class="ptop"><b>Charity dashboard</b><span class="sp"></span>Dee</div>
+<div class="pbody">
+<span class="pbtn">Open the build</span>
+<h1 class="ph1">Claude is scaffolding the site<small>for 6 min</small></h1>
+<p class="phelp">Follow the progress here. A question appears when Claude needs the room.</p>
+<div class="feed"><h4>So far</h4>
+<div class="fi"><span>10:17</span><div>Claude finished: Researched social issues</div></div>
+<div class="fi"><span>10:08</span><div>The room chose bars by month</div></div>
+<div class="fi"><span>10:02</span><div>Claude finished: Set up the project</div></div></div>
+</div></div></div>
+<div class="side"><span class="tag">Laptop or tablet</span>
+<div class="laptop"><div class="ptop"><b>Charity dashboard</b><span class="sp"></span>Dee</div>
+<div class="pbody">
+<span class="pbtn">Open the build</span>
+<h1 class="ph1">Claude is scaffolding the site<small>for 6 min</small></h1>
+<p class="phelp">Follow the progress here. A question appears when Claude needs the room.</p>
+<div class="feed"><h4>So far</h4>
+<div class="fi"><span>10:17</span><div>Claude finished: Researched social issues</div></div>
+<div class="fi"><span>10:08</span><div>The room chose bars by month</div></div></div>
+</div></div></div>
+</div></div></div>
+
+<!-- ===================================================================== D4 -->
+<div class="sec" id="d4"><h2>D4 · History: each finished piece of work is an entry, with what it produced</h2>
+<p>A finished line becomes "10:02 Scaffolded the site · 6 min". The checkpoints, showing posts and images Claude posted while that line was current hang under it. The piece in progress sits at the top, open. Commands never reach History: they are the means, not the work.</p></div>
+<div class="fit"><div class="fit-box"><div class="hist">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view is-on">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the bar chart</b> · 2 min</span><span class="hjoin">Join <b style="color:var(--text)">4821</b> · 18 here</span><span class="menu">···</span></header>
+<div class="hbody">
+<ol class="tl">
+<li class="step now"><span class="tm">10:24</span><span class="mk"></span><div class="hd">Building the bar chart <span>· 2 min so far</span></div></li>
+<li class="step"><span class="tm">10:17</span><span class="mk"></span><div class="hd">Mocked up 3 graph options <span>· 7 min</span></div>
+<ul class="kids"><li><span class="chip chip--blue">Images</span><span class="thumbs"><i></i><i></i><i></i></span><span class="at">10:21</span></li>
+<li><span class="chip chip--green">Decided</span>Ask 4: Which graph? · B, bars by month<span class="at">10:24</span></li></ul></li>
+<li class="step"><span class="tm">10:08</span><span class="mk"></span><div class="hd">Researched social issues <span>· 9 min</span></div>
+<ul class="kids"><li><span class="chip">Points</span>4 findings, with their sources<span class="at">10:16</span></li></ul></li>
+<li class="step"><span class="tm">10:02</span><span class="mk"></span><div class="hd">Scaffolded the site <span>· 6 min</span></div>
+<ul class="kids"><li><span class="chip">Checkpoint</span>The first page runs<span class="at">10:07</span></li>
+<li><span class="chip">Showing</span>The empty dashboard<span class="at">10:08</span></li></ul></li>
+<li class="step"><span class="tm">09:58</span><span class="mk"></span><div class="hd">Set up the project <span>· 4 min</span></div></li>
+</ol>
+<aside><h3 class="sideh">What History keeps</h3>
+<div class="keep">
+<p>Each finished line, past tense, with its start time and how long it took.</p>
+<p>Under it, what it produced: checkpoints, showing posts, images, the decision that ended it.</p>
+<p><s>Ran gh repo create</s>, <s>Ran git remote add</s>, <s>Edited App.jsx</s>: the commands are not History. They stay in the folded list on the Host screen and expire with it.</p>
+<p>A post with no line current (Claude wrote nothing and had no to-do list) stands alone, as today.</p>
+</div></aside>
+</div></div>
+</div></div>
+
+<!-- ===================================================================== D5 -->
+<div class="sec" id="d5"><h2>D5 · Edge states</h2>
+<p>What each screen says when there is no line, when the line has gone stale, and when a helper is working.</p></div>
+<div class="fit"><div class="fit-box"><div class="edges">
+<section class="edge"><h3>No line at all</h3><p>Claude wrote none and keeps no to-do list. Every screen falls back to today's words. The Host panel leads with the newest command, as now.</p>
+<div class="ev"><span class="w">Host</span><div class="l">Claude Code is working<small>Ran git push · 20s ago, with the steps beneath</small></div></div>
+<div class="ev"><span class="w">Stage</span><div class="l">Claude is building<small>The last post, as today: "Claude is building the shift calendar"</small></div></div>
+<div class="ev"><span class="w">Devices</span><div class="l">Claude is building</div></div>
+<div class="ev"><span class="w">History</span><div class="l">Posts stand alone, as today</div></div>
+</section>
+<section class="edge"><h3>A stale line</h3><p>No command and no post for 3 minutes, and Claude is not waiting for direction. The line turns to past tense and says when Claude was last seen. The room is told the host has it in hand.</p>
+<div class="ev"><span class="w">Host</span><div class="l">Claude was scaffolding the site<small>last seen 4 min ago · Copy the Continue prompt to pick it up.</small></div></div>
+<div class="ev"><span class="w">Stage</span><div class="l">Claude was scaffolding the site<small>The host will pick it up again in a moment.</small></div></div>
+<div class="ev"><span class="w">Devices</span><div class="l">Claude was scaffolding the site<small>The host will pick it up again in a moment.</small></div></div>
+<div class="ev"><span class="w">History</span><div class="l">Nothing yet. The entry is written when the line ends.</div></div>
+</section>
+<section class="edge"><h3>A helper is working</h3><p>Claude hands research to a helper and keeps building. The helper's line sits under Claude's, smaller. When Claude itself is only waiting on the helper, the helper's line leads.</p>
+<div class="ev"><span class="w">Host</span><div class="l">Claude is building the bar chart<span class="h">A helper is researching contrast rules</span></div></div>
+<div class="ev"><span class="w">Stage</span><div class="l">Claude is building the bar chart<small>A helper is researching contrast rules</small></div></div>
+<div class="ev"><span class="w">Devices</span><div class="l">Claude is building the bar chart<small>A helper is researching contrast rules</small></div></div>
+<div class="ev"><span class="w">History</span><div class="l">Researched contrast rules · 3 min<small>An entry of its own, marked "by a helper"</small></div></div>
+</section>
+</div></div></div>
+
+<!-- ===================================================================== D6 -->
+<div class="sec" id="d6"><h2>D6 · The rules</h2>
+<p>Two sources, one line. The line Claude states wins while it is fresh; otherwise the in-progress item on Claude Code's to-do list is read by the plugin's hook after each tool call.</p>
+</div><div class="fit" style="max-width:1440px;margin:18px auto 0"><div class="fit-box"><div class="flowl">
+<div class="col2"><div class="bx"><b>B · Claude says it</b><span>At the start of each piece of work, through the plugin: doing and done forms, 4 to 7 words</span></div><div class="bx"><b>A · Claude's to-do list</b><span>The in-progress item's present-tense form, read by the PostToolUse hook</span></div></div>
+<div class="ar">&rarr;</div>
+<div class="bx big"><b>Claude is scaffolding the site</b><span>B while fresh, else A, else today's words</span></div>
+<div class="ar">&rarr;</div>
+<div class="col2"><div class="bx"><b>Host, Stage, devices</b><span>The line, and how long</span></div><div class="bx"><b>History</b><span>The done form, when the line ends</span></div></div>
+</div></div></div>
+<div class="sec" style="border-top:0;margin-top:0">
+<table class="vt">
+<thead><tr><th>Rule</th><th>Decision</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Length</td><td>4 to 7 words, at most 50 characters, as Claude wrote it. Longer is cut at the last whole word that fits, with no ellipsis. Under 2 words is ignored.</td><td class="why">It has to read from the back of the room and fit the header chip at 1440 wide.</td></tr>
+<tr><td>Form</td><td>Starts with a verb ending in -ing: "Scaffolding the site". The screens add "Claude is" and lower-case the first letter. A to-do item already has this form (<code>activeForm</code>).</td><td class="why">One grammar on every screen; the screens never edit Claude's words beyond the first letter.</td></tr>
+<tr><td>Past tense (History)</td><td>B: Claude gives it, with the line ("Scaffolded the site"). A: the plugin derives it from the -ing form with a short list of irregular verbs; when unsure it shows "Done: Scaffold the site", the to-do item's own words.</td><td class="why">Asking costs Claude one more field, once per piece of work. Deriving "Setting up" or "Building" by rule is easy to get wrong.</td></tr>
+<tr><td>Which source wins</td><td>B wins until Claude states another line, waits for direction, or 15 minutes pass while the to-do list moves on. Then A.</td><td class="why">Claude's own line is the better one, but a forgotten one must not sit there all afternoon.</td></tr>
+<tr><td>When a line ends</td><td>Claude states a new line, the to-do item is marked done, or Claude waits for direction. The ended line becomes a History entry with its duration.</td><td class="why">Every end is an event the plugin already sees.</td></tr>
+<tr><td>Stale</td><td>No command and no post for 3 minutes, and not waiting: "Claude was …", with "last seen 4 min ago" on the Host screen only.</td><td class="why">Today's 90-second building window is too short for a long install or a helper's research.</td></tr>
+<tr><td>Room-safe</td><td><span class="ok">Shown:</span> Claude's own words about the work.<br><span class="no">Never:</span> file contents, file names or paths, commands, code, web addresses, people's names. The server drops a line containing <code>/</code>, a backtick, <code>@</code>, <code>://</code> or a file extension, and the screens fall back to the next source.</td><td class="why">The line is written by Claude, so the plugin's instruction is the first guard; the server check is the second. A name cannot be caught by rule, so the instruction says so plainly.</td></tr>
+<tr><td>Commands</td><td>Host screen only, folded, small type, the last twelve, repeats grouped ("Ran git remote, 6 times"). Never on the Stage, devices or in History.</td><td class="why">They are useful for the host to see Claude is alive; they are noise to the room.</td></tr>
+<tr><td>Helpers</td><td>One helper line under Claude's, from the helper's own stated line. Two or more: the newest, and "and 1 more helper".</td><td class="why">The room sees that research is happening without a list.</td></tr>
+</tbody></table>
+</div>
+
+<div class="qs" id="qs"><h2>Open questions</h2>
+<ol>
+<li><b>Past tense for the to-do list source:</b> derive it ("Building" to "Built") with an irregular-verb list, or always show the to-do item's own words ("Done: Build the bar chart")? Derived reads better; the item's own words are never wrong.</li>
+<li><b>Helpers on the wall:</b> should the Stage and the room's devices show the helper line, or keep it on the Host screen only and show just Claude's line to the room?</li>
+<li><b>Commands folded or open:</b> folded by default for every host, or open on the first session and remembered after that?</li>
+</ol></div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>
