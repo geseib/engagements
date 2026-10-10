@@ -148,7 +148,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -172,6 +172,8 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(runItem ? { RunItem: runItem } : {}),
     ...(runId ? { RunId: runId } : {}),
     ...(spoken ? { Spoken: true } : {}),
+    // A finished step (kind 'step'): when it ran and for how long.
+    ...(step ? { StartedAt: step.startedAt, EndedAt: step.endedAt, DurationMs: step.durationMs, Source: step.source } : {}),
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
     ...(forAgent ? { ForAgentAs: kind4 } : {}),
     ...(forAgent && claudeNote ? { ClaudeNote: claudeNote } : {}),
@@ -681,7 +683,22 @@ async function postLog(ctx, role, body) {
   const allowed = role === 'agent' ? S.AGENT_LOG_KINDS : S.HOST_LOG_KINDS;
   if (!allowed.includes(kind)) return fail(400, `kind must be one of ${allowed.join(', ')}`);
   const text = S.cleanText(b.text, S.LIMITS.logText);
-  if (!text) return fail(400, 'Write the update');
+  // Claude's own line (B): `doing` (present, starts a line; `done` with it is that line's
+  // past form) or `done` alone (the current line ended). `helper` sets/clears the helper line.
+  let doingChanged = false;
+  if (role === 'agent' && (b.doing !== undefined || b.done !== undefined || b.helper !== undefined)) {
+    const input = { source: 'claude' };
+    if (typeof b.doing === 'string') { input.doing = b.doing; input.past = typeof b.done === 'string' ? b.done : undefined; } else if (b.done) input.done = b.done;
+    if (b.helper !== undefined) input.helper = b.helper;
+    doingChanged = await applyDoingEvent(ctx, input);
+  }
+  if (!text) {
+    if (doingChanged || b.doing !== undefined || b.done !== undefined || b.helper !== undefined) {
+      if (doingChanged) { const st = await touchState(ctx); await announce(ctx, st.Rev); }
+      return reply(200, { doing: S.doingView(await readActivityRow(ctx), new Date().toISOString()) });
+    }
+    return fail(400, 'Write the update');
+  }
   const row = await logEntry(ctx, {
     kind,
     text,
@@ -1191,7 +1208,9 @@ async function markListening(ctx) {
     ReturnValues: 'UPDATED_OLD',
   }));
   const before = res && res.Attributes && res.Attributes.AgentListeningAt;
-  if (!before || Date.parse(now) - Date.parse(before) > S.AGENT_LISTENING_MS) {
+  // Claude waiting for direction ends whatever it was doing (one step each).
+  const ended = await applyDoingEvent(ctx, { waiting: true }, { onlyIfLive: true }).catch(() => false);
+  if (ended || !before || Date.parse(now) - Date.parse(before) > S.AGENT_LISTENING_MS) {
     const st = await touchState(ctx);
     await announce(ctx, st.Rev);
   }
@@ -1800,18 +1819,75 @@ async function routeBuilder(ctx, method, parts, body, query) {
  * the lines in the message: no Rev bump, no buildChanged, so no phone refetches
  * the room every few seconds while Claude works.
  */
-async function postActivity(ctx, body) {
-  const now = new Date().toISOString();
-  const norm = S.normalizeActivity((body || {}).items, now);
-  if (norm.error) return fail(400, norm.error);
-  if (!norm.value.length) return reply(200, { activity: [] });
+async function readActivityRow(ctx) {
   const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.activity } }));
   // Sealed like every other line in a team's room (tenant-crypto buildActivity).
-  const kept = res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildActivity', res.Item) : res.Item) : null;
-  const items = S.mergeActivity(kept ? kept.Items : [], norm.value);
-  await put(ctx, { SK: S.SK.activity, Items: items, UpdatedAt: now });
+  return res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildActivity', res.Item) : res.Item) : null;
+}
+
+/**
+ * The doing record (docs/design/build-room-doing D6): apply one event, keep the
+ * row (put: session ttl, sealed in a team's room), write a `step` entry for
+ * each line that ended, and tell the room only when what it reads moved.
+ * `items` carries the activity list when the caller has one. Returns whether
+ * the room-visible line or the timeline changed.
+ */
+async function applyDoingEvent(ctx, input, { items, onlyIfLive = false, kept: keptRow, at } = {}) {
+  const now = new Date().toISOString();
+  const kept = keptRow !== undefined ? keptRow : await readActivityRow(ctx);
+  if (onlyIfLive && !(kept && (kept.DoingA || kept.DoingB || kept.Helper))) return false;
+  // `at` is the laptop's time for the event (a step's start or end); never in the future, never older than an hour.
+  const t = Date.parse(at);
+  const eventAt = Number.isFinite(t) ? new Date(Math.min(Math.max(t, Date.parse(now) - 3600000), Date.parse(now))).toISOString() : now;
+  const r = S.applyDoing(kept || {}, input, eventAt);
+  const list = items !== undefined ? items : (kept && kept.Items) || [];
+  // "Stale" counts real time since the last post, whatever time the event claims.
+  await put(ctx, { SK: S.SK.activity, Items: list, UpdatedAt: now, ...r.fields, ActiveAt: now });
+  for (const st of r.steps) {
+    await logEntry(ctx, { kind: 'step', text: st.text, by: 'agent', step: st });
+  }
+  return r.changed;
+}
+
+async function postActivity(ctx, body) {
+  const now = new Date().toISOString();
+  const b = body || {};
+  const norm = S.normalizeActivity(b.items === undefined ? [] : b.items, now);
+  if (norm.error) return fail(400, norm.error);
+  // The to-do list's line (A): { doing: { source, text, at }, helper: { text, at } | { end: true, at },
+  // done: [{ item, at }] }. Each done item closes its step BEFORE the new doing is applied; the
+  // helper line is its own field (a helper inside `doing` is still read). `true` is one unnamed done.
+  const d = b.doing && typeof b.doing === 'object' ? b.doing : null;
+  const hp = b.helper && typeof b.helper === 'object' ? b.helper : null;
+  const dones = (Array.isArray(b.done) ? b.done : (b.done ? [b.done] : []))
+    .map((x) => (x && typeof x === 'object' ? { done: x.item || x.text || true, at: x.at } : { done: x }))
+    .filter((x) => x.done)
+    .slice(0, 25);
+  if (!norm.value.length && !d && !hp && !dones.length) return reply(200, { activity: [] });
+  const kept = await readActivityRow(ctx);
+  const items = norm.value.length ? S.mergeActivity(kept ? kept.Items : [], norm.value) : ((kept && kept.Items) || []);
+  let changed = false;
+  let fresh = kept;
+  for (const x of dones) {
+    changed = (await applyDoingEvent(ctx, { source: 'todo', done: x.done }, { items, kept: fresh, at: x.at })) || changed;
+    fresh = undefined;
+  }
+  const helper = hp ? (hp.end ? '' : hp.text) : (d && d.helper !== undefined ? d.helper : undefined);
+  if (d || hp || !dones.length) {
+    const input = {
+      source: d && d.source === 'claude' ? 'claude' : 'todo',
+      ...(d && typeof d.text === 'string' ? { doing: d.text, past: d.past } : {}),
+      ...(helper !== undefined ? { helper } : {}),
+    };
+    changed = (await applyDoingEvent(ctx, input, { items, kept: fresh, at: (d && d.at) || (hp && hp.at) })) || changed;
+  }
   await toHosts(db, TABLE(), ctx.gameId, { type: 'buildActivity', gameId: ctx.gameId, items }).catch(() => {});
-  return reply(200, { activity: items });
+  if (changed) {
+    const st = await touchState(ctx);
+    await announce(ctx, st.Rev);
+  }
+  const after = await readActivityRow(ctx);
+  return reply(200, { activity: items, doing: S.doingView(after, new Date().toISOString()) });
 }
 
 /**
