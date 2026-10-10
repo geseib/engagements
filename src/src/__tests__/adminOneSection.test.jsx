@@ -365,6 +365,9 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
   const TEAM = {
     orgId: 'org_TEAMteamTEAMteamTEAMte', name: 'Northwind Traders', type: 'team', yourRole: 'owner', plan: 'team',
   };
+  // Both rows must read as UPCOMING: EventsPanel files anything dated before
+  // today under Past, against the real clock. A near date silently expired on
+  // 2026-10-10 and hid Event A; 2099 keeps them upcoming, A still before B.
   const ROW_A = {
     code: 'AAAA', title: 'Event A', place: '', startsAt: '2099-10-09T09:00', timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
   };

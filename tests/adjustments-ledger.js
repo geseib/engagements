@@ -382,7 +382,9 @@ const ORG_B = 'org_2222222222222222222222';
   await check('codes: create, list, one name at a time, retire once', async () => {
     assert.strictEqual((await createCode({ code: 'x', percentOff: 10 })).statusCode, 400, 'too short');
     assert.strictEqual((await createCode({ code: 'AUTUMN25', maxUses: 100 })).statusCode, 400, 'gives nothing');
-    const res = await createCode({ code: 'autumn25', percentOff: 25, months: 2, maxUses: 100, validUntil: '2026-11-30', note: 'campaign' });
+    // validUntil far ahead: list status compares it to the real date, so a near
+    // one turns this 'active' assertion into 'expired' once the day passes.
+    const res = await createCode({ code: 'autumn25', percentOff: 25, months: 2, maxUses: 100, validUntil: '2099-11-30', note: 'campaign' });
     assert.strictEqual(res.statusCode, 201, res.body);
     assert.deepStrictEqual([bodyOf(res).code.code, bodyOf(res).code.status, bodyOf(res).code.uses], ['AUTUMN25', 'active', 0]);
     assert.strictEqual((await createCode({ code: 'AUTUMN25', percentOff: 5 })).statusCode, 409);

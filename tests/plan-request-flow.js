@@ -325,7 +325,9 @@ const ORG_B = 'org_2222222222222222222222';
   const meta = () => store.get(key(`ORG#${ORG}`, 'METADATA'));
   const index = () => store.get(key('ORGS', `ORG#${ORG}`));
   const queueRows = (status) => [...store.values()].filter((r) => r.PK === 'ORGS' && String(r.SK).startsWith(`PLANREQ#${status}#`));
-  const seedCode = (code, extra = {}) => store.set(key('ORGS', `CODE#${code}`), { PK: 'ORGS', SK: `CODE#${code}`, RecordType: 'CODE', code, percentOff: 30, months: 3, maxUses: 50, uses: 12, validUntil: '2026-12-31', createdAt: '2026-08-01T00:00:00Z', ...extra });
+  // The default code must stay redeemable: approval checks validUntil against
+  // the real date. LAUNCH50 below overrides it with a past date on purpose.
+  const seedCode = (code, extra = {}) => store.set(key('ORGS', `CODE#${code}`), { PK: 'ORGS', SK: `CODE#${code}`, RecordType: 'CODE', code, percentOff: 30, months: 3, maxUses: 50, uses: 12, validUntil: '2099-12-31', createdAt: '2026-08-01T00:00:00Z', ...extra });
   const adjRows = () => [...store.values()].filter((r) => r.PK === `ORG#${ORG}` && String(r.SK).startsWith('ADJ#'));
 
   await check('only an OWNER can ask; an admin is refused', async () => {
