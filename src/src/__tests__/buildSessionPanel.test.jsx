@@ -268,7 +268,7 @@ describe('Players', () => {
     r.players[0] = person('Ana', { handover: { open: true, requested: false } });
     await openRoom(hostState(), r);
     openPanel();
-    expect(within(rowOf('Ana')).getByTestId('handover-flag').textContent).toMatch(/unlocked/);
+    expect(within(rowOf('Ana')).getByTestId('handover-flag').textContent).toMatch(/Unlocked/);
     fireEvent.click(within(rowOf('Ana')).getByRole('button', { name: 'Lock again' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/players/Ana/handover`));
     expect(lastPost().body).toEqual({ lock: true });

@@ -116,7 +116,7 @@ describe('Lock again and Not now', () => {
     );
     expect(within(rowFor('Amir')).queryByRole('button', { name: 'Lock again' })).toBeNull();
     const lena = rowFor('Lena');
-    expect(within(lena).getByTestId('handover-flag').textContent).toBe('unlocked for one handover');
+    expect(within(lena).getByTestId('handover-flag').textContent).toBe('Unlocked for one handover');
     fireEvent.click(within(lena).getByRole('button', { name: 'Lock again' }));
     expect(onLock).toHaveBeenCalledWith('Lena');
   });
@@ -131,7 +131,7 @@ describe('Lock again and Not now', () => {
     );
     expect(within(rowFor('Amir')).queryByRole('button', { name: 'Not now' })).toBeNull();
     const joe = rowFor('Joe');
-    expect(within(joe).getByTestId('handover-flag').textContent).toBe('asking to take this name');
+    expect(within(joe).getByTestId('handover-flag').textContent).toBe('Asking to take this name');
     fireEvent.click(within(joe).getByRole('button', { name: 'Not now' }));
     expect(onRefuse).toHaveBeenCalledWith('Joe');
   });
@@ -249,5 +249,97 @@ describe('a long room', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'P05' } });
     expect(screen.getByRole('heading', { name: '20 players' })).toBeInTheDocument();
     expect(names()).toEqual(['P05']);
+  });
+});
+
+describe('one state at a time (Build Room wiring)', () => {
+  const buttons = (name) => within(rowFor(name)).getAllByRole('button').map((b) => b.textContent);
+  const wired = () => render(
+    <PlayersList
+      rows={rows([
+        { name: 'Amir' },
+        { name: 'Joe', handover: { requested: true } },
+        { name: 'Lena', handover: { open: true } },
+      ])}
+      onLock={() => {}}
+      onRefuse={() => {}}
+    />
+  );
+
+  test('Normal: no tag, Unlock name and Remove', () => {
+    wired();
+    expect(buttons('Amir')).toEqual(['Unlock name', 'Remove']);
+    expect(within(rowFor('Amir')).queryByTestId('handover-flag')).toBeNull();
+  });
+
+  test('Asking: the tag, Let them take it, Not now, Remove', () => {
+    wired();
+    expect(buttons('Joe')).toEqual(['Let them take it', 'Not now', 'Remove']);
+    expect(within(rowFor('Joe')).getByTestId('handover-flag').textContent).toBe('Asking to take this name');
+  });
+
+  test('Unlocked: only Lock again and Remove', () => {
+    wired();
+    expect(buttons('Lena')).toEqual(['Lock again', 'Remove']);
+    expect(within(rowFor('Lena')).getByTestId('handover-flag').textContent).toBe('Unlocked for one handover');
+  });
+
+  test('an asking row is marked so it can be tinted; the others are not', () => {
+    wired();
+    expect(rowFor('Joe').className).toContain('setup-roster__row--asking');
+    expect(rowFor('Amir').className).not.toContain('setup-roster__row--asking');
+  });
+
+  test('without onLock/onRefuse (other engagements) an unlocked name keeps its old buttons', () => {
+    render(<PlayersList rows={rows([{ name: 'Lena', handover: { open: true } }])} />);
+    expect(buttons('Lena')).toEqual(['Unlock name', 'Remove']);
+  });
+
+  test('the tag sits in the side cluster, the actions in their own line, Remove marked', () => {
+    wired();
+    const joe = rowFor('Joe');
+    expect(joe.querySelector('.setup-roster__side').contains(within(joe).getByTestId('handover-flag'))).toBe(true);
+    const acts = joe.querySelector('.setup-roster__acts');
+    expect(acts.parentElement).toBe(joe);
+    expect(within(joe).getByRole('button', { name: 'Remove' }).className).toContain('setup-roster__act--remove');
+  });
+});
+
+describe('the row layout cannot squeeze the name (CSS contract)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const CSS = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+  const BRM = fs.readFileSync(path.join(__dirname, '..', 'buildroom', 'BuildRoom.css'), 'utf8');
+  const block = (css, selector) => {
+    const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = css.match(new RegExp(`(^|\\})\\s*${esc}\\s*\\{([^}]*)\\}`, 'm'));
+    if (!m) throw new Error(`No rule for "${selector}"`);
+    return m[2];
+  };
+
+  test('the name track is minmax(0, 1fr) in the base row and the Build Room row', () => {
+    expect(block(CSS, '.setup-roster__row')).toMatch(/grid-template-columns:[^;]*minmax\(0,\s*1fr\)/);
+    expect(block(BRM, '.brm .brm-sp .setup-roster__row')).toMatch(/minmax\(0,\s*1fr\)/);
+  });
+
+  test('a long name wraps as text, never one character per line', () => {
+    const name = block(CSS, '.setup-roster__name');
+    expect(name).toMatch(/min-width:\s*0/);
+    expect(name).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(name).not.toMatch(/word-break:\s*break-all/);
+  });
+
+  test('actions are their own full-width line that wraps; Remove alone takes margin-left auto', () => {
+    const acts = block(CSS, '.setup-roster__acts');
+    expect(acts).toMatch(/grid-column:\s*2\s*\/\s*-1/);
+    expect(acts).toMatch(/flex-wrap:\s*wrap/);
+    expect(acts).not.toMatch(/justify-content:\s*flex-end/);
+    expect(acts).not.toMatch(/margin-left:\s*auto/);
+    expect(block(CSS, '.setup-roster__act--remove')).toMatch(/margin-left:\s*auto/);
+  });
+
+  test('the tag is a 12px floor chip, the asking row a tinted wash', () => {
+    expect(block(CSS, '.setup-roster__flag')).toMatch(/font-size:\s*12px/);
+    expect(block(CSS, '.setup-roster__row--asking')).toMatch(/background:/);
   });
 });
