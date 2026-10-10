@@ -49,7 +49,7 @@ export const postGenerationBatch = async (url, payload, options = {}) => {
     } catch (networkError) {
       if (attempt < maxRetries) {
         const delay = 2000 * (attempt + 1);
-        onStatus(`⏳ ${label}: network error, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${maxRetries})...`);
+        onStatus(`${label}: network error, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${maxRetries})...`);
         await sleep(delay);
         continue;
       }
@@ -83,7 +83,7 @@ export const postGenerationBatch = async (url, payload, options = {}) => {
       const delay = status === 429
         ? 30000 + attempt * 15000 + Math.random() * 5000
         : 3000 * (attempt + 1);
-      onStatus(`⏳ ${label}: HTTP ${status}${lambdaError ? ` (${lambdaError})` : ''} - retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${maxRetries})...`);
+      onStatus(`${label}: HTTP ${status}${lambdaError ? ` (${lambdaError})` : ''} - retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${maxRetries})...`);
       await sleep(delay);
       continue;
     }
@@ -215,7 +215,7 @@ export const pollGenerationJob = async (url, jobId, options = {}) => {
         lost.partialItems = [];
         throw lost;
       }
-      onStatus(`⏳ ${label}: reconnecting...`);
+      onStatus(`${label}: reconnecting...`);
       continue;
     }
 
