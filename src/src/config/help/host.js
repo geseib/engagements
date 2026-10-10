@@ -598,7 +598,7 @@ const plan = {
 /*
   THE BUILD ROOM. Claims are taken from the code, not the plan:
   WelcomeScreen.jsx (the door and its one line), buildroom/words.js (needLine,
-  installNote, wifiSay, wrapUpSaved), buildroom/pluginTier.js (one plugin per
+  installNote, shareWho, wrapUpSaved), buildroom/pluginTier.js (one plugin per
   tier) and buildroom/buildHostApi.js (the two commands the Connect window
   shows). Words the room sees on its own screens live in words.js, not here.
 */
@@ -654,7 +654,7 @@ const buildRoom = {
         {
           t: 'list',
           items: [
-            { title: 'Share on this Wi-Fi', text: 'Anyone on the same Wi-Fi can open the build while it runs. Guest Wi-Fi often blocks this; test it from another device first.' },
+            { title: 'Share demo', text: 'When Claude first shows the app, the Build Room asks once whether to share it. Share demo lets people on this Wi-Fi open this laptop\'s app on their phones, laptops and tablets; no one else can. Nothing is shared until you press it. Guest Wi-Fi often blocks this; test it from another device first. Anyone who cannot reach it still sees the screenshots.' },
             { title: 'Wrap up', text: 'A summary, what was built, links and next steps, written by Claude or by you, saved into the report. Check the report, then end the session.' },
             { title: 'Save report', text: 'Keeps the report as a PDF, as for any session. The code stays in the project folder on your laptop.' },
           ],

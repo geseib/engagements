@@ -31,6 +31,43 @@ describe('words.js', () => {
     expect(W.savedLater).toBe('Saved for later');
   });
 
+  test('Share demo (owner, 2026-10-10): "demo" for what the Wi-Fi shares, "build" for this laptop\'s link', () => {
+    expect(W.shareNudgeHead).toBe('Let everyone try it.');
+    expect(W.shareNudgeBody).toBe('Share this demo with people on your Wi-Fi.');
+    expect(W.shareWho).toBe("People on this Wi-Fi can open this laptop's app. No one else can.");
+    expect(W.shareDemo).toBe('Share demo');
+    expect(W.notNow).toBe('Not now');
+    expect(W.shareStarting).toBe('Starting…');
+    expect(W.shareOn(11)).toBe('Shared · 11 opened');
+    expect(W.shareQuiet).toBe('Shared · none opened yet');
+    expect(W.shareFailed).toBe("Didn't start");
+    expect(W.shareLiveHead).toBe('Demo shared on this Wi-Fi');
+    expect(W.shareOpenedOf(11, 18)).toBe('11 opened it · 18 here');
+    expect(W.shareNotAll(11, 18)).toBe('Not 11 of 18? Some people may be on mobile data or a VPN. They still see screenshots.');
+    expect(W.stopSharing).toBe('Stop sharing');
+    expect(W.keepSharing).toBe('Keep sharing');
+    expect(W.shareShowOnStage).toBe('Show on the Stage');
+    expect(W.showOnStage).toBe('Show on Stage');
+    expect(W.onlyThisLaptop).toBe('Only this laptop can open it.');
+    expect(W.anyoneOnWifi).toBe('Anyone on this Wi-Fi');
+    expect(W.demoReadyLine).toBe('The demo is ready to share');
+    expect(W.stageDemoHead).toBe('Try the demo yourself');
+    expect(W.stageDemoScan).toBe('Scan the code, or press Open the demo.');
+    expect(W.stageSameWifi).toBe('Same Wi-Fi as this laptop.');
+    expect(W.stageOpened(11)).toBe('11 have opened it');
+    expect(W.hideCode).toBe('Hide the code');
+    expect(W.openDemo).toBe('Open the demo');
+    expect(W.demoNotShared).toBe("The demo runs on the host's laptop. Screenshots are below.");
+    expect(W.demoDidntOpen).toBe("Didn't open?");
+    expect(W.demoMaybeOff(false)).toBe('You may be on mobile data or another Wi-Fi.');
+    expect(W.demoMaybeOff(true)).toBe('You may be on a VPN or another Wi-Fi.');
+    expect(W.tryAgain).toBe('Try again');
+    // Retired with the nudge: the old offer and the switch's sentence.
+    expect(W.wifiOffer).toBeUndefined();
+    expect(W.wifiSay).toBeUndefined();
+    expect(RETIRED.filter((r) => r.enforced).map((r) => r.word)).toEqual(expect.arrayContaining(['Share on this Wi-Fi', 'Let the room open it themselves?', 'Open the build yourself']));
+  });
+
   test('Later is not a kind', () => {
     expect(KIND_WORDS).toEqual(['Do now', 'Keep in mind', 'Ask Claude']);
   });

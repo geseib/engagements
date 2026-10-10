@@ -1,5 +1,23 @@
 # Build Room: Share demo
 
+## Owner decisions, 2026-10-10 (these override the mockup and the text below where they differ)
+
+1. **The nudge appears in both places.** Option A, the Host screen's Now column (D1 A), AND
+   option B, a popover hanging from the header Share demo chip on Build and History (D1 B). On
+   the Stage it is one grey line in the HOST alert list, never an orange. "Not now" folds it into
+   the chip; Share demo stays reachable from the chip, the Build screen and Settings (D3) without
+   asking again.
+2. **Wording.** "Demo" when shared on the Wi-Fi ("Share demo", "Open the demo", "Stop sharing");
+   "build" for the host's own laptop link ("Open the build", "Only this laptop can open it.").
+   So the header and Build screen keep "Open the build"; "Open on this laptop" is not used.
+3. **No participant "Ask to try it" button.** So no `lan.asks`, and no count on the chip.
+4. **Out of scope:** telling Claude to post its local link when only screenshots exist, and any
+   per-device "didn't open" tag that needs a plugin change. No change to `engage-mcp.mjs`.
+   Participant (c) is therefore shown on this device after it pressed Open the demo, not
+   detected by the gateway.
+5. **Opt-in.** Nothing shares without the host pressing Share demo.
+
+
 Owner, 2026-10-10, after a reviewer's session: Wi-Fi sharing stayed off all session. The room saw
 only screenshots, and the demo was opened in the end from a localhost link on the host's Mac.
 Direction: nudge when the first build is ready ("Let everyone try it. Share this demo with people

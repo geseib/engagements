@@ -123,7 +123,18 @@ function lanPublicView(room, now) {
   }
   const first = room && room.lan && (room.lan.Map || [])[0];
   const open = first ? t(first.local) : '';
-  return open ? { open } : null;
+  if (open) return { open };
+  // SHARE DEMO (docs/design/build-room-share-demo D5 b): not shared, but Claude
+  // has shown this laptop's app or a screenshot of it, so a phone can say why
+  // there is nothing to open. Before anything is shown: null, as before.
+  return shownSomething(room) ? { state: 'off' } : null;
+}
+
+/** Claude has shown a local app (a link, an option, the wrap-up) or a screenshot that is not a mockup. */
+function shownSomething(room) {
+  const r = room || {};
+  if (lanTargets(r).length) return true;
+  return (r.images || []).some((im) => im && im.Kind !== 'mockup' && (im.By || 'agent') === 'agent');
 }
 
 function lanHostView(row, now, { withKey: showKey = false } = {}) {

@@ -1,11 +1,15 @@
 /**
- * BUILD ROOM WI-FI SHARE: the host's side (docs/design/build-room-lan-share/,
- * mockups L1-L4). The chip in the header, its panel (a popover: the room keeps
- * running behind it), the one-time offer on the Host screen, the QR on the
- * wall and on the Build screen. Copy names laptops, tablets and phones, never
- * phones alone (owner, 2026-10-07).
+ * SHARE DEMO: the host's side of the Wi-Fi share (docs/design/build-room-share-demo,
+ * D1-D6, owner 2026-10-10; built on docs/design/build-room-lan-share). The chip
+ * in the header and the panel that hangs from it, the nudge on the Host screen,
+ * the code on the Stage and the card on the Build screen.
+ *
+ * Owner rulings 2026-10-10: "demo" is what the Wi-Fi shares (Share demo, Open
+ * the demo, Stop sharing); "build" is this laptop's own link. Opt-in: nothing
+ * shares until the host presses Share demo. Not now folds the nudge into the
+ * chip, which still offers it without asking again.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
@@ -34,13 +38,16 @@ export function wifiLink(room) {
 export function WifiChip({ lan, now, onOpen, open }) {
   const s = wifiState(lan, now);
   return (
-    <button type="button" className={`brm-wifi brm-wifi--${s.state}${open ? ' is-open' : ''}`} aria-expanded={Boolean(open)} onClick={onOpen} data-testid="brm-wifi">
+    <button type="button" className={`brm-wifi brm-wifi--${s.state}${open ? ' is-open' : ''}`} aria-expanded={Boolean(open)} aria-haspopup="dialog" onClick={onOpen} data-testid="brm-wifi">
       {s.label}
     </button>
   );
 }
 
 const APP_NAMES = ['Latest build', 'Second app', 'Third app', 'Fourth app'];
+
+/** What a person reads of a Wi-Fi link: its host and port. The key is never shown, only copied. */
+const shownAddress = (link) => { try { return new URL(String(link)).host; } catch (e) { return ''; } };
 
 function CopyLink({ link }) {
   const [said, setSaid] = useState('');
@@ -56,121 +63,217 @@ function CopyLink({ link }) {
   );
 }
 
+/** The address the room opens, its QR, who can reach it, and Copy (D2). */
+function Address({ link, note, copy = true }) {
+  if (!link) return null;
+  return (
+    <div className="brm-wifipanel-addr">
+      <div className="brm-buildqr-qr brm-wifipanel-qr" role="img" aria-label="QR code to open the demo on another device"><QRCodeSVG value={link} size={72} level="M" includeMargin={false} /></div>
+      <p className="brm-wifipanel-u">{shownAddress(link)}<small>{note}</small></p>
+      {copy ? <CopyLink link={link} /> : <span />}
+    </div>
+  );
+}
+
 /**
- * `inline` is the Session panel's Settings, The room (docs/design/build-room-sidebar
- * S3): the same content, laid out in the panel rather than hung from the chip
- * as a popover, with no X or Done of its own and the wall button named for the
- * code it shows ("the build's QR", since the room's join QR is a different one).
+ * THE PANEL (D1 B, D2, D2 quiet), one element in every state. As a popover it
+ * hangs from the chip with an X and a bottom exit; `inline` is the Session
+ * panel's Settings (D3: Share demo stays reachable there), with no X and no
+ * Not now. `offer` is the nudge: its Not now also tells the room not to ask
+ * again. `here` is who is in the room.
  */
-export function WifiPanel({ lan, link, now, busy, run, api, onClose, onShowWall, inline = false }) {
+export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, onShowWall, offer = false, inline = false }) {
   const s = wifiState(lan, now);
-  const on = Boolean(lan && lan.wanted);
   const map = (lan && lan.map) || [];
   const panelRef = useRef(null);
-  useKeepOnScreen(panelRef, !inline);
+  useKeepOnScreen(panelRef, !inline, s.state);
+  const share = (on) => run(() => api.share({ on }));
+  const notNow = () => {
+    if (offer) run(() => api.share({ dismissOffer: true }));
+    onClose();
+  };
+  const primary = inline ? '' : ' brm-btn--primary';
+  const live = s.state === 'on' || s.state === 'quiet';
+  const Head = inline ? 'h4' : 'h3';
+  const head = live ? W.shareLiveHead : s.state === 'off' ? (inline ? W.shareDemo : W.shareNudgeHead) : W.shareDemo;
+  let body;
+  let foot;
+  if (s.state === 'off') {
+    body = (
+      <>
+        {!inline && <p className="brm-wifipanel-lede">{W.shareNudgeBody}</p>}
+        <p className="brm-wifipanel-say">{W.shareWho}</p>
+      </>
+    );
+    foot = (
+      <>
+        {!inline && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={notNow}>{W.notNow}</button>}
+        <button type="button" className={`brm-btn brm-btn--sm${primary}${inline ? '' : ' brm-push'}`} disabled={busy} onClick={() => share(true)}>{W.shareDemo}</button>
+      </>
+    );
+  } else if (s.state === 'failed') {
+    body = <div className="brm-wifipanel-err"><b>It didn&apos;t start.</b> {lan.error}</div>;
+    foot = (
+      <>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
+        <button type="button" className={`brm-btn brm-btn--sm${primary} brm-push`} disabled={busy} onClick={() => share(true)}>{W.tryAgain}</button>
+      </>
+    );
+  } else if (s.state === 'starting' || s.state === 'waiting') {
+    body = s.state === 'waiting'
+      ? <div className="brm-wifipanel-warn"><b>Claude Code has not answered.</b> {W.wifiWaiting}</div>
+      : <p className="brm-wifipanel-say" role="status">{W.shareStarting}</p>;
+    foot = <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>;
+  } else if (s.state === 'quiet') {
+    body = (
+      <>
+        <div className="brm-wifipanel-warn">
+          <b>{W.wifiQuietHead}</b> {W.wifiQuietBody}
+          <ul>
+            <li>{W.wifiTest}</li>
+            <li>{W.wifiSameAdvice}</li>
+          </ul>
+        </div>
+        <Address link={link} note={W.wifiFailsForRoom} copy={false} />
+      </>
+    );
+    foot = (
+      <>
+        {!inline && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onClose}>{W.keepSharing}</button>}
+        {/* Sharing that reaches nobody only exposes the laptop: Stop is the move (D2 quiet). */}
+        <button type="button" className={`brm-btn brm-btn--sm${primary}${inline ? '' : ' brm-push'}`} disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p className="brm-wifipanel-stat">{W.shareOpenedOf(s.open, here)}</p>
+        <Address link={link} note={W.shareWhoShort} />
+        {s.open < here && <p className="brm-wifipanel-say">{W.shareNotAll(s.open, here)}</p>}
+      </>
+    );
+    foot = (
+      <>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
+        <button type="button" className={`brm-btn brm-btn--sm${primary} brm-push`} disabled={!link} onClick={onShowWall}>{W.shareShowOnStage}</button>
+      </>
+    );
+  }
   return (
-    <div className={`brm-wifipanel${inline ? ' brm-wifipanel--inline' : ''}`} {...(inline ? { 'aria-label': 'Share on this Wi-Fi' } : { role: 'dialog', 'aria-label': 'Share on this Wi-Fi' })} ref={panelRef}>
+    <div
+      className={`brm-wifipanel${inline ? ' brm-wifipanel--inline' : ''}`}
+      {...(inline ? { 'aria-label': W.shareDemo } : { role: 'dialog', 'aria-label': W.shareDemo })}
+      ref={panelRef}
+    >
       <div className="brm-wifipanel-top">
-        {inline ? <h4>Share on this Wi-Fi</h4> : <h3>Share on this Wi-Fi</h3>}
-        <label className={`brm-auto${on ? ' is-on' : ''}`}>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="Share on this Wi-Fi"
-            checked={on}
-            disabled={busy}
-            onChange={(e) => run(() => api.share({ on: e.target.checked }))}
-          />
-          <span>{on ? 'On' : 'Off'}</span>
-        </label>
+        <Head>{head}</Head>
         {!inline && <button type="button" className="brm-wifipanel-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>}
       </div>
-      <p className="brm-wifipanel-say">{W.wifiSay}</p>
-      {s.state === 'failed' && (
-        <div className="brm-wifipanel-err"><b>It didn&apos;t start.</b> {lan.error}</div>
-      )}
-      {s.state === 'waiting' && (
-        <div className="brm-wifipanel-warn"><b>Claude Code has not answered.</b> {W.wifiWaiting}</div>
-      )}
-      {s.state === 'quiet' && (
-        <>
-          <div className="brm-wifipanel-warn">
-            <b>{W.wifiQuietHead}</b> {W.wifiQuietBody}
-          </div>
-          <p className="brm-wifipanel-say">{W.wifiTest}</p>
-          <p className="brm-wifipanel-say">{W.wifiSameAdvice}</p>
-          {link && (
-            <div className="brm-wifipanel-test">
-              <div className="brm-buildqr-qr" role="img" aria-label="QR code to test the build on another device"><QRCodeSVG value={link} size={96} level="M" includeMargin={false} /></div>
-              <p className="brm-wifipanel-say">{W.wifiFailsForRoom}</p>
-            </div>
-          )}
-        </>
-      )}
-      {s.state === 'on' && (
-        <p className="brm-wifipanel-stat"><b>{s.open}</b> devices opened it in the last 5 minutes</p>
-      )}
-      {map.length > 0 && (
+      {body}
+      {live && map.length > 1 && (
         <ul className="brm-wifipanel-apps">
           {map.map((m, i) => (
             <li key={m.lan}>
               <span className="brm-wifipanel-k">{APP_NAMES[i] || `App ${i + 1}`}</span>
-              <span className="brm-wifipanel-u" title={m.local}>{m.lan}</span>
+              <span className="brm-wifipanel-u" title={m.local}>{shownAddress(m.lan)}</span>
               {m.link && <CopyLink link={m.link} />}
             </li>
           ))}
         </ul>
       )}
-      <div className="brm-wifipanel-foot">
-        {s.state === 'failed'
-          ? <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>Try again</button>
-          : <button type="button" className={`brm-btn brm-btn--sm${inline ? '' : ' brm-btn--primary'}`} disabled={!on || s.state === 'starting' || s.state === 'waiting' || !map.length} onClick={onShowWall}>{inline ? "Show the build's QR on the wall" : 'Show the QR on the wall'}</button>}
-        {!inline && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onClose}>Done</button>}
-      </div>
+      <div className="brm-wifipanel-foot">{foot}</div>
     </div>
   );
 }
 
-export function WifiOffer({ busy, run, api }) {
+/**
+ * THE CHIP AND ITS POPOVER. `nudge` (D1 B, on Build and History) hangs the
+ * panel open from the chip until the host answers it or closes it here; the
+ * X, Escape or a click elsewhere fold it back into the chip for this device.
+ */
+export function ShareDemo({ lan, link, here, now, busy, run, api, onShowWall, nudge = false }) {
+  const [open, setOpen] = useState(false);
+  const [folded, setFolded] = useState(false);
+  const wrap = useRef(null);
+  const shown = open || (nudge && !folded);
+  const close = () => { setOpen(false); setFolded(true); };
+  useEffect(() => {
+    if (!shown) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      close();
+      const b = wrap.current && wrap.current.querySelector('button.brm-wifi');
+      if (b) b.focus();
+    };
+    const onDown = (e) => { if (wrap.current && !wrap.current.contains(e.target)) close(); };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown); };
+  }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <section className="brm-wifioffer" aria-label="Share the build on this Wi-Fi">
-      <p className="brm-wifioffer-t">Let the room open it themselves?</p>
-      <p className="brm-wifioffer-s">{W.wifiOffer}</p>
+    <span className="brm-wifiwrap" ref={wrap}>
+      <WifiChip lan={lan} now={now} open={shown} onOpen={() => (shown ? close() : setOpen(true))} />
+      {shown && (
+        <SharePanel
+          lan={lan} link={link} here={here} now={now} busy={busy} run={run} api={api}
+          offer={!(lan && lan.offerDismissed)} onClose={close}
+          onShowWall={() => { close(); onShowWall(); }}
+        />
+      )}
+    </span>
+  );
+}
+
+/** THE NUDGE ON THE HOST SCREEN (D1 A): the top of the Now column, until the host answers. */
+/** `lead`: Share demo is the screen's one orange; false while something else on the Host screen leads. */
+export function DemoNudge({ busy, run, api, picture = null, lead = true }) {
+  return (
+    <section className="brm-wifioffer" aria-label={W.shareDemo}>
+      <p className="brm-wifioffer-t">{W.shareNudgeHead}</p>
+      <p className="brm-wifioffer-s">{W.shareNudgeBody}</p>
+      {picture && <div className="brm-wifioffer-pic">{picture}</div>}
+      <p className="brm-wifioffer-who">{W.shareWho}</p>
       <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>Share on this Wi-Fi</button>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.share({ dismissOffer: true }))}>Not now</button>
+        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => run(() => api.share({ dismissOffer: true }))}>{W.notNow}</button>
+        <button type="button" className={`brm-btn${lead ? ' brm-btn--primary' : ''} brm-push`} disabled={busy} onClick={() => run(() => api.share({ on: true }))}>{W.shareDemo}</button>
       </div>
     </section>
   );
 }
 
-/** The QR on the wall. Modal gives Escape; this adds the X and the bottom Close. */
-export function WallBuildQr({ link, onClose }) {
+/**
+ * THE STAGE WHILE SHARED (D4): the code, three short lines and how many
+ * opened it, a number and never a name. Modal gives Escape; the X and Hide the
+ * code close it.
+ */
+export function WallBuildQr({ link, open = 0, onClose }) {
   return (
-    <Modal overlayClassName="brm-wallqr" contentClassName="brm-wallqr-card" onClose={onClose} label="Open the build yourself">
+    <Modal overlayClassName="brm-wallqr" contentClassName="brm-wallqr-card" onClose={onClose} label={W.stageDemoHead}>
       <button type="button" className="brm-wallqr-x" aria-label="Close the QR" onClick={onClose}><Icon name="X" size={16} /></button>
       <div className="brm-wallqr-body">
-        <div className="brm-qrzoom-qr brm-wallqr-qr" role="img" aria-label="QR code to open the build">
+        <div className="brm-qrzoom-qr brm-wallqr-qr" role="img" aria-label="QR code to open the demo">
           <QRCodeSVG value={link} size={512} level="M" includeMargin={false} />
         </div>
         <div>
-          <span className="brm-wallqr-eb">The build is live</span>
-          <h2 className="brm-wallqr-h">Open the build yourself</h2>
-          <p className="brm-wallqr-l">{W.wallQrScan}</p>
-          <p className="brm-wallqr-m">{W.sameWifiOnly}</p>
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
+          <span className="brm-wallqr-eb">{W.stageDemoLive}</span>
+          <h2 className="brm-wallqr-h">{W.stageDemoHead}</h2>
+          <p className="brm-wallqr-l">{W.stageDemoScan}</p>
+          <p className="brm-wallqr-m">{W.stageSameWifi}</p>
+          <p className="brm-wallqr-n">{W.stageOpened(Number(open) || 0)}</p>
+          <button type="button" className="brm-btn brm-btn--primary" onClick={onClose}>{W.hideCode}</button>
         </div>
       </div>
     </Modal>
   );
 }
 
-export function BuildScreenQr({ link }) {
+/** The Build screen's card while shared (D6): the QR and the count. */
+export function BuildScreenQr({ link, open = 0 }) {
   if (!link) return null;
   return (
     <div className="brm-buildqr">
       <div className="brm-buildqr-qr"><QRCodeSVG value={link} size={96} level="M" includeMargin={false} /></div>
-      <p>Open the build yourself<small>{W.sameWifi}</small></p>
+      <p>{W.stageDemoHead}<small>{W.buildCardSub(Number(open) || 0)}</small></p>
     </div>
   );
 }

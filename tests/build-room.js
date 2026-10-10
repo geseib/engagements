@@ -1382,7 +1382,8 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await hostCall('POST', 'share', { on: false });
     await hostCall('POST', 'share', { on: true });
     let v = (await playCall('GET', 'state', priya)).body;
-    assert.strictEqual(v.lan, null);
+    // Claude has shown the app, so the phone hears "off" (Share demo D5 b): never a link, never the key.
+    assert.deepStrictEqual(v.lan, { state: 'off' });
     assert.ok(!JSON.stringify(v).includes('abcdefghijklmnopqrstuv'));
     assert.strictEqual((await hostCall('GET', 'state')).body.lan.status, 'starting');
     await report(LIVE({ key: 'bbbbbbbbbbbbbbbbbbbbbb' }));
@@ -1417,7 +1418,8 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.ok(v.log.some((l) => l.link === 'http://192.168.1.20:4900/b?k=abcdefghijklmnopqrstuv'));
     await hostCall('POST', 'share', { on: false });
     v = (await playCall('GET', 'state', priya)).body;
-    assert.strictEqual(v.lan, null);
+    // Claude has shown the app, so the phone hears "off" (Share demo D5 b): never a link, never the key.
+    assert.deepStrictEqual(v.lan, { state: 'off' });
     assert.ok(!JSON.stringify(v).includes('192.168.1.20'));
   });
   await check('the host sees each address with its link and the count; Claude sees no key', async () => {
@@ -1438,7 +1440,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await report(LIVE());
     const k = key(`GAME#${GAME}`, 'BUILD#LAN');
     store.set(k, { ...store.get(k), ReportedAt: new Date(Date.now() - 60000).toISOString() });
-    assert.strictEqual((await playCall('GET', 'state', priya)).body.lan, null);
+    assert.deepStrictEqual((await playCall('GET', 'state', priya)).body.lan, { state: 'off' });
   });
   await check('map key order in storage does not make a repeat report look changed', async () => {
     seed();

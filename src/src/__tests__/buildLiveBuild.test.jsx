@@ -110,3 +110,90 @@ describe('the live build', () => {
     expect(within(document.querySelector('footer.dock')).getByRole('link', { name: 'Open the build in a new tab' })).toHaveAttribute('href', 'http://localhost:5173/');
   });
 });
+
+/**
+ * SHARE DEMO on the page (docs/design/build-room-share-demo, owner 2026-10-10):
+ * the nudge on the Host screen AND hanging from the chip on Build and History,
+ * one grey line on the Stage, and the Build screen saying who can open it.
+ */
+describe('Share demo', () => {
+  const KEY = 'KEYkeyKEYkeyKEYkey1234';
+  const LAN_LIVE = {
+    SK: 'BUILD#LAN', Wanted: true, Status: 'live', ReportedAt: ago(5), LiveSince: ago(60), Open: 3, Key: KEY, WantedAt: ago(70),
+    Map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }],
+  };
+  const DISMISSED = { SK: 'BUILD#LAN', Wanted: false, OfferDismissedAt: ago(30) };
+  const posted = (path) => authFetch.mock.calls.filter(([u, o]) => u.endsWith(path) && o && o.method === 'POST').map(([, o]) => JSON.parse(o.body));
+  const buildScreen = () => document.querySelector('.brm-buildscreen');
+
+  test('the Build screen, not shared: only this laptop can open it; Open the build plain, Share demo the one amber button', async () => {
+    await open([base, SHOWING, SHOT, DISMISSED], '3');
+    const b = within(buildScreen());
+    expect(b.getByText('Only this laptop can open it.')).toBeInTheDocument();
+    expect(b.getByText('http://localhost:5173/')).toBeInTheDocument();
+    const link = b.getByRole('link', { name: 'Open the build' });
+    expect(link).toHaveAttribute('href', 'http://localhost:5173/');
+    expect(link).not.toHaveClass('brm-btn--primary');
+    const share = b.getByRole('button', { name: 'Share demo' });
+    expect(share).toHaveClass('brm-btn--primary');
+    expect(buildScreen().querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    fireEvent.click(share);
+    await waitFor(() => expect(posted('/build/share')).toEqual([{ on: true }]));
+  });
+
+  test('the Build screen, shared: Open the build opens the shared address, for anyone on this Wi-Fi, with the card and the count', async () => {
+    await open([base, SHOWING, SHOT, LAN_LIVE], '3');
+    const b = within(buildScreen());
+    const link = b.getByRole('link', { name: 'Open the build' });
+    expect(link).toHaveAttribute('href', `http://192.168.1.20:4900/?k=${KEY}`);
+    expect(link).toHaveClass('brm-btn--primary');
+    expect(b.getByText('Anyone on this Wi-Fi')).toBeInTheDocument();
+    expect(b.getByText('192.168.1.20:4900')).toBeInTheDocument();
+    expect(b.queryByText('Only this laptop can open it.')).toBeNull();
+    expect(b.queryByRole('button', { name: 'Share demo' })).toBeNull();
+    expect(b.getByText('Same Wi-Fi only · 3 have opened it')).toBeInTheDocument();
+    // The header chip counts who opened it.
+    expect(screen.getByTestId('brm-wifi')).toHaveTextContent('Shared · 3 opened');
+  });
+
+  test('the first screenshot alone brings the nudge: on Build and History it hangs from the chip (D1 B)', async () => {
+    await open([base, SHOT], '3');
+    let d = screen.getByRole('dialog', { name: 'Share demo' });
+    expect(within(d).getByText('Let everyone try it.')).toBeInTheDocument();
+    expect(d.closest('.brm-wifiwrap')).not.toBeNull();
+    fireEvent.keyDown(window, { key: '4' });
+    d = screen.getByRole('dialog', { name: 'Share demo' });
+    expect(within(d).getByText('Share this demo with people on your Wi-Fi.')).toBeInTheDocument();
+  });
+
+  test('on the Host screen the nudge leads the Now column (D1 A), with no popover; Not now asks the room never again', async () => {
+    await open([base, SHOWING, SHOT], '1');
+    expect(screen.queryByRole('dialog', { name: 'Share demo' })).toBeNull();
+    const card = screen.getByRole('region', { name: 'Share demo' });
+    expect(card.closest('[aria-label="Now"]')).not.toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(posted('/build/share')).toEqual([{ dismissOffer: true }]));
+  });
+
+  test('after Not now: no nudge anywhere, the chip still reads Share demo and opens the same words', async () => {
+    await open([base, SHOWING, SHOT, DISMISSED], '1');
+    expect(screen.queryByRole('region', { name: 'Share demo' })).toBeNull();
+    fireEvent.keyDown(window, { key: '3' });
+    expect(screen.queryByRole('dialog', { name: 'Share demo' })).toBeNull();
+    const chip = screen.getByTestId('brm-wifi');
+    expect(chip).toHaveTextContent('Share demo');
+    fireEvent.click(chip);
+    const d = screen.getByRole('dialog', { name: 'Share demo' });
+    expect(within(d).getByText('Let everyone try it.')).toBeInTheDocument();
+  });
+
+  test('on the Stage: one grey line in the HOST list, never a pop-up; it goes to the Host screen', async () => {
+    await open([base, SHOWING, SHOT], '2');
+    expect(screen.queryByRole('dialog', { name: 'Share demo' })).toBeNull();
+    const hostBtn = within(document.querySelector('footer.dock')).getByRole('button', { name: /HOST/ });
+    expect(hostBtn).not.toHaveClass('brm-hostalert--amber');
+    fireEvent.click(hostBtn);
+    fireEvent.click(screen.getByRole('button', { name: /The demo is ready to share/ }));
+    expect(await screen.findByRole('region', { name: 'Share demo' })).toBeInTheDocument();
+  });
+});

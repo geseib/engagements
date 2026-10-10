@@ -92,9 +92,9 @@ function unseenFilter(room, local) {
 const byAt = (x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
 
 /**
- * @returns {{count: number, amber: boolean, lines: Array<{key: string, label: string, go: string, ids: string[], target: {kind: 'ask', id: string}|{kind: 'waiting'}}>}}
+ * @returns {{count: number, amber: boolean, lines: Array<{key: string, label: string, go: string, ids: string[], target: {kind: 'ask', id: string}|{kind: 'waiting'}|{kind: 'share'}}>}}
  */
-export function hostAlert(room, local) {
+export function hostAlert(room, local, { demoReady = false } = {}) {
   const none = { count: 0, amber: false, lines: [] };
   if (!room) return none;
   const fresh = unseenFilter(room, local);
@@ -118,8 +118,11 @@ export function hostAlert(room, local) {
   if (mockups.length) lines.push({ key: 'mockups', label: W.alertMockups(mockups.length, mockups[0].a.options.length), go: W.alertSee, ids: ids(mockups), target: { kind: 'ask', id: mockups[0].askId } });
   if (ideas.length) lines.push({ key: 'ideas', label: W.alertIdeas(ideas.length), go: W.alertReview, ids: ids(ideas), target: { kind: 'waiting' } });
   if (looks.length) lines.push({ key: 'looks', label: W.alertLooks(looks.length), go: W.alertReview, ids: ids(looks), target: { kind: 'waiting' } });
+  // SHARE DEMO on the Stage (docs/design/build-room-share-demo D1 B): one grey line, last; the
+  // page passes `demoReady` for the Stage only (Build and History carry it on the header chip).
+  if (demoReady) lines.push({ key: 'demo', label: W.demoReadyLine, go: W.alertShare, ids: [], target: { kind: 'share' } });
   return {
-    count: questions.length + mockups.length + ideas.length + looks.length,
+    count: questions.length + mockups.length + ideas.length + looks.length + (demoReady ? 1 : 0),
     amber: questions.length + mockups.length > 0,
     lines,
   };
@@ -199,7 +202,7 @@ export function latestBuild(room) {
 /** What the room can do, never a second status; Wi-Fi sharing adds one sentence. */
 function roomDockLine(room, now) {
   const w = wifiState(room && room.lan, now).state;
-  return `Send an idea any time.${w === 'on' || w === 'quiet' ? ' Open the build on this Wi-Fi.' : ''}`;
+  return `Send an idea any time.${w === 'on' || w === 'quiet' ? ' Open the demo on this Wi-Fi.' : ''}`;
 }
 
 const STAGE_KIND = Object.freeze({ suggest: 'Ideas', choice: 'Choose', rating: 'Rate' });

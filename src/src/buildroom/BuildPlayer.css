@@ -1046,6 +1046,18 @@
   text-decoration: none;
 }
 .bpl .bpl-open .bpl-open-note { margin: 8px 0 0; text-align: center; }
+/* Share demo D5 b and c: not shared, or shared but out of reach. No amber, no green. */
+.bpl .bpl-open--off, .bpl .bpl-open--warn { border-color: var(--bpl-rule-strong); background: transparent; }
+.bpl .bpl-open--off .bpl-open-note { margin: 0; text-align: left; }
+.bpl .bpl-open--warn { border-color: var(--bpl-amber-edge); }
+.bpl .bpl-open--warn .bpl-open-h { margin: 0 0 4px; font-size: var(--plr-t-body); font-weight: 800; }
+.bpl .bpl-open--warn .plr-help { margin: 4px 0 0; }
+.bpl .bpl-open--warn .bpl-open-note { text-align: left; }
+.bpl .bpl-open-again {
+  display: flex; align-items: center; justify-content: center; min-height: var(--bpl-tap); margin: 10px 0 0;
+  border: 1px solid var(--bpl-rule-strong); border-radius: 12px; color: var(--text); font-weight: 700; text-decoration: none;
+}
+.bpl .bpl-open-again:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
 /* THE OPENING ON A PHONE (mockup O4): step N of 9, as a row of short bars.
    --primary on --bg for the filled steps, --surface for the rest. */

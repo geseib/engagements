@@ -502,23 +502,24 @@ describe('Settings, in four groups', () => {
     expect(end.closest('.brm-sp-end').querySelectorAll('button')).toHaveLength(1);
   });
 
-  test('The room: join code and link, the QR, the Wi-Fi share, and names on the room meter', async () => {
+  test('The room: join code and link, the QR, Share demo, and names on the room meter', async () => {
     await openRoom(hostState());
     openSettings();
     const p = panel();
     expect(within(p).getByText(GAME)).toBeInTheDocument();
     expect(within(p).getByRole('button', { name: 'Copy join link' })).toBeInTheDocument();
     expect(within(p).getByRole('button', { name: 'Show the QR on the wall' })).toBeInTheDocument();
-    expect(within(p).getByRole('switch', { name: 'Share on this Wi-Fi' })).toBeInTheDocument();
+    // Share demo stays reachable here after Not now (D3).
+    expect(within(p).getByLabelText('Share demo')).toBeInTheDocument();
     expect(within(p).getByRole('switch', { name: 'List names on the room meter' })).toHaveAttribute('aria-checked', 'false');
   });
 
-  test('the Wi-Fi chip opens the panel at its group; its controls are nowhere else', async () => {
+  test('the Share demo chip opens its own panel, hanging from the chip (D2, 2026-10-10), not the Session panel', async () => {
     await openRoom(hostState());
     fireEvent.click(screen.getByTestId('brm-wifi'));
-    expect(within(panel()).getByRole('tab', { name: /^Settings/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('dialog', { name: 'Share on this Wi-Fi' })).toBeNull();
-    expect(within(panel()).getByRole('switch', { name: 'Share on this Wi-Fi' })).toBeInTheDocument();
+    const d = screen.getByRole('dialog', { name: 'Share demo' });
+    expect(d.closest('.brm-wifiwrap')).not.toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
   });
 
   test('Claude: Connect Claude Code opens its dialog and puts the panel away', async () => {
