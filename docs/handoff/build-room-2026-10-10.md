@@ -9,7 +9,7 @@ Read this first in a new session. Worktree: `.claude/worktrees/affectionate-boum
 | **prod** | `324fd05d` **waiting at ApprovalForProd** (owner) | Everything below through the doing line. Prod itself is still on the late-September release: the earlier run `a011c0fc` was approved but failed `npm test` on the expiring Events fixture (fixed since). |
 | **test** | `324fd05d` (checked on room 4465) | History window, Stage decide, UX batches 2-3, talking points (plugin flow), Session panel, three-line player rows, option detail to Claude, the doing line (plugin 1.14.0). |
 | **dev** | `86e2298f` (walked) | test + copy pass (Orwell) + plugin update notice (plugin 1.15.0). |
-| **branch head** | `ade44c8c` (not pushed) | dev + Host · N alert (+ "The room chose: …" on the Stage). Full gates were running when this was written — rerun them before pushing. |
+| **branch head** | `ade44c8c` (not pushed) | dev + Host · N alert (+ "The room chose: …" on the Stage). Gates PASSED 2026-10-10: 467 jest suites / 11470 tests, 294 backend suites, lint 0 errors, build, copy and twin guards. Ready to push to dev. |
 
 Promotion rules: test is MERGED into (never fast-forward); prod is a fast-forward of test (`git push origin origin/test:refs/heads/prod`) and halts at the owner's gate. Watch pipelines with `AWS_PROFILE=adminaccess` (the owner must `aws sso login --profile adminaccess` when it expires — the CLI then returns nothing/errors).
 
