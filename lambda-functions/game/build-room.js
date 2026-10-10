@@ -1131,6 +1131,38 @@ async function postSettings(ctx, body) {
   return reply(200, { settings });
 }
 
+/**
+ * The Host alert's seen (owner, 2026-10-10): ids the host opened, or all of it
+ * up to now. Its own row (BUILD#SEEN), versioned: a write is conditional on the
+ * version it read, and a conflict (another device wrote first) re-reads and
+ * merges, up to 3 tries. The revision moves through touchState only.
+ */
+async function postSeen(ctx, body) {
+  const norm = S.normalizeSeen(body);
+  if (norm.error) return fail(400, norm.error);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.seen } }));
+    const row = (got && got.Item) || null;
+    const cur = S.seenOf(row);
+    const v = (row && Number(row.V)) || 0;
+    const next = norm.all
+      ? { Ids: [], AllAt: new Date().toISOString() }
+      : { Ids: S.mergeSeen(cur.ids, norm.ids), AllAt: cur.allAt };
+    try {
+      await put(ctx, { SK: S.SK.seen, ...next, V: v + 1 }, row
+        ? { ConditionExpression: '#v = :v', ExpressionAttributeNames: { '#v': 'V' }, ExpressionAttributeValues: { ':v': v } }
+        : { ConditionExpression: 'attribute_not_exists(PK)' });
+    } catch (e) {
+      if (e && e.name === 'ConditionalCheckFailedException') continue;
+      throw e;
+    }
+    const st = await touchState(ctx);
+    await announce(ctx, st.Rev);
+    return reply(200, { seen: S.seenOf(next) });
+  }
+  return fail(409, 'That changed while you saved it. Try again.');
+}
+
 async function mintAgentKey(ctx, event, body) {
   const room = await loadRoom(ctx);
   const now = new Date().toISOString();
@@ -2668,6 +2700,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'images' && !b) return postImage(ctx, role, body);
   if (a === 'images' && b) return hostOnly() || imageAction(ctx, b, body);
   if (a === 'settings' && !b) return hostOnly() || postSettings(ctx, body);
+  if (a === 'seen' && !b) return hostOnly() || postSeen(ctx, body);
   if (a === 'keys' && !b) return hostOnly() || mintAgentKey(ctx, event, body);
   if (a === 'keys' && b && c === 'revoke') return hostOnly() || revokeAgentKey(ctx, b);
   return fail(404, 'Not found');

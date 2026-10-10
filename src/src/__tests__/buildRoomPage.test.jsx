@@ -987,11 +987,14 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     ideas: [{ PlayerName: 'Jordan', Text: 'Dark mode' }],
   });
 
-  test('Host, Stage, Build and History in the header; Host counts what waits, as a number', async () => {
+  test('Host, Stage, Build and History in the header; Host counts what waits, as a number, on the screens the room sees (the Host alert)', async () => {
     await openRoom(busy());
     const nav = screen.getByRole('navigation', { name: 'Screens' });
-    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Host2 waiting', 'Stage', 'Build', 'History']);
+    // On the Host screen itself, Waiting for you carries the count.
+    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Host', 'Stage', 'Build', 'History']);
     expect(within(nav).getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(nav).getByRole('button', { name: 'Build' }));
+    expect(within(screen.getByRole('navigation', { name: 'Screens' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Host · 2', 'Stage', 'Build', 'History']);
   });
 
   test('the ask pill names the open ask and its count, and opens the Stage', async () => {
@@ -999,7 +1002,7 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     const pill = screen.getByRole('button', { name: 'Ask 3 · 3 of 4' });
     fireEvent.click(pill);
     expect(screen.getByRole('region', { name: 'Current ask' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Host screen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^HOST/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull();
   });
 
