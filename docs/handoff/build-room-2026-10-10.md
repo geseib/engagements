@@ -7,16 +7,16 @@ Read this first in a new session. Worktree: `.claude/worktrees/affectionate-boum
 | Tier | Commit | What it carries |
 |---|---|---|
 | **prod** | `324fd05d` **waiting at ApprovalForProd** (owner) | Everything below through the doing line. Prod itself is still on the late-September release: the earlier run `a011c0fc` was approved but failed `npm test` on the expiring Events fixture (fixed since). |
-| **test** | `324fd05d` (checked on room 4465) | History window, Stage decide, UX batches 2-3, talking points (plugin flow), Session panel, three-line player rows, option detail to Claude, the doing line (plugin 1.14.0). |
-| **dev** | `86e2298f` (walked) | test + copy pass (Orwell) + plugin update notice (plugin 1.15.0). |
-| **branch head** | `ade44c8c` (not pushed) | dev + Host · N alert (+ "The room chose: …" on the Stage). Gates PASSED 2026-10-10: 467 jest suites / 11470 tests, 294 backend suites, lint 0 errors, build, copy and twin guards. Ready to push to dev. |
+| **test** | `9e2f35ed` (merge of dev `12bb9a0d`, deployed 2026-10-10) | Everything on dev below. Not yet walked on test. |
+| **dev** | `12bb9a0d` | `324fd05d` + copy pass (Orwell) + plugin update notice (1.15.0) + Host · N alert and "The room chose: …" + phone picture viewer portalled out of the shell (iOS put Back/close under the header). |
+| **branch head** | = dev | Nothing unpushed. |
 
 Promotion rules: test is MERGED into (never fast-forward); prod is a fast-forward of test (`git push origin origin/test:refs/heads/prod`) and halts at the owner's gate. Watch pipelines with `AWS_PROFILE=adminaccess` (the owner must `aws sso login --profile adminaccess` when it expires — the CLI then returns nothing/errors).
 
 ## Next, in order
 
-1. **Push `ade44c8c` to dev** after gates; walk the Host · N alert on room 4443: amber when a question or ready mockups wait, grey otherwise; the list folds by kind and each line jumps (ideas → Waiting for you on Room; asks → that card); Mark all seen; seen shared across devices; nothing named on Stage/Build; **measure the list at ~660 and 375 px**; check "The room chose: …" on the Stage after a vote from Points.
-2. **Promote dev → test** (copy pass, update notice, alert), check test, then prod at the owner's gate.
+1. **Walk on test** (`9e2f35ed`; was: push to dev, done). On a phone: tap a mockup, Back and close must sit at the top. Walk the Host · N alert on room 4443: amber when a question or ready mockups wait, grey otherwise; the list folds by kind and each line jumps (ideas → Waiting for you on Room; asks → that card); Mark all seen; seen shared across devices; nothing named on Stage/Build; **measure the list at ~660 and 375 px**; check "The room chose: …" on the Stage after a vote from Points.
+2. **Prod**: fast-forward to test's head (`git push origin origin/test:refs/heads/prod`) once the owner has looked at test; halts at the owner's gate.
 3. **Plugin per tier** — proposed, **awaiting the owner's yes**: prod stays `engage`; dev serves `engage-dev`, test `engage-test` (same file, name from the tier); the installer installs the tier it was run from beside prod; `/engage-<tier>:connect` writes `enabledPlugins` in the project's `.claude/settings.local.json` (own tier on, others off); each plugin's hooks/tools act only for a project connected to its own tier; the Connect window shows the tier's own commands. Claude Code docs (plugins/install, plugins/loading): one plugin id can't hold two versions; scopes control enablement only; differently named plugins coexist. Verify by test: both plugins' hooks fire; per-folder enable takes effect without restart.
 4. **Reviewer feedback** (owner mentioned, not yet pasted): a persistent notice for a pending team invite (so it isn't lost while someone creates their first Build Room), and clear setup/requirements for Claude Code before starting (Claude Code, Node 18+, the plugin, where to run the command). Ask the owner to paste it, then mockups → plan.
 5. **Expiring test dates** — a separate session (task_8e0ea9d6, started by the owner) is fixing nine test files with hard-coded 2026 dates; check its result before the next promotion.
