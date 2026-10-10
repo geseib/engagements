@@ -1000,7 +1000,10 @@ function applyDoing(prev, input, nowIso) {
       if (src === 'todo') endA(given || undefined);
       else if (B) { if (given) B = { ...B, past: given }; endB(); }
     }
-    if (typeof inp.doing === 'string' || inp.doing === null) {
+    // A line that cannot go on screen (a file name, a link, too short) is IGNORED,
+    // never taken as "the line ended": the line the room is reading stays (dev walk, 2026-10-10).
+    const refused = typeof inp.doing === 'string' && inp.doing.trim() !== '' && !cleanDoingLine(inp.doing);
+    if (!refused && (typeof inp.doing === 'string' || inp.doing === null)) {
       const text = cleanDoingLine(inp.doing);
       if (src === 'todo') {
         if (!text) endA();
@@ -1012,7 +1015,8 @@ function applyDoing(prev, input, nowIso) {
     }
     if (inp.helper !== undefined) {
       const h = inp.helper ? cleanDoingLine(inp.helper, DOING_HELPER_MAX_CHARS) : '';
-      H = h ? { text: h, at: nowIso } : null;
+      // Same rule for the helper: an unsafe helper line leaves the current one alone.
+      if (h || !inp.helper) H = h ? { text: h, at: nowIso } : null;
     }
     expire();
   }

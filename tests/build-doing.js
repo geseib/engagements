@@ -249,16 +249,15 @@ const say = (b) => agentCall('POST', 'log', { kind: 'progress', text: 'Working o
     h = await hostDoing();
     assert.strictEqual(h.text, 'Scaffolding the site', 'B still wins');
   });
-  await check('an unsafe B line is refused; the line falls back to A and B\'s old step is kept', async () => {
+  await check('an unsafe B line is refused in words and changes nothing (dev walk, 2026-10-10)', async () => {
     const before = steps().length;
+    const h0 = await hostDoing();
     const r = await say({ doing: 'Editing src/App.jsx now', done: 'Scaffolded the site' });
-    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.status, 400);
+    assert.match(String(r.body.error || r.body.message), /can't go on screen/);
     const h = await hostDoing();
-    assert.strictEqual(h.text, 'Writing the tests', 'fell back to the to-do item');
-    assert.strictEqual(h.source, 'todo');
-    const s = steps();
-    assert.strictEqual(s.length, before + 1);
-    assert.strictEqual(s[s.length - 1].Text, 'Scaffolded the site');
+    assert.strictEqual(h && h.text, h0 && h0.text, 'the line the room reads is unchanged');
+    assert.strictEqual(steps().length, before, 'no step written');
   });
   await check('an unsafe to-do line is dropped too', async () => {
     seed();
@@ -631,6 +630,26 @@ const say = (b) => agentCall('POST', 'log', { kind: 'progress', text: 'Working o
     try { r = await listen(); } finally { hooks.beforePut = null; console.error = orig; }
     assert.strictEqual(r.status, 200);
     assert.ok(seen.some((m) => /doing/i.test(m) && /table unavailable/.test(m)), JSON.stringify(seen));
+  });
+
+  console.log('\na line that cannot go on screen (dev walk, 2026-10-10)');
+  await check('a refused doing line leaves the current line alone and is refused in words', async () => {
+    seed();
+    await say({ doing: 'Mocking up three graph options' });
+    const r = await hostCall('POST', 'log', { kind: 'progress', doing: 'Editing Header.jsx for the room' }, agentCtx());
+    assert.strictEqual(r.status, 400);
+    assert.match(String(r.body.error || r.body.message), /can't go on screen/);
+    const st = (await hostCall('GET', 'state')).body;
+    assert.strictEqual(st.doing.text, 'Mocking up three graph options');
+    assert.strictEqual(steps().length, 0);
+  });
+  await check('an unsafe to-do line in the plugin\'s events is ignored, not taken as an end', async () => {
+    seed();
+    await hostCall('POST', 'activity', { items: [], events: [{ type: 'doing', text: 'Scaffolding the site', at: new Date().toISOString() }] }, agentCtx());
+    await hostCall('POST', 'activity', { items: [], events: [{ type: 'doing', text: 'Fixing App.jsx layout now', at: new Date().toISOString() }] }, agentCtx());
+    const st = (await hostCall('GET', 'state')).body;
+    assert.strictEqual(st.doing.text, 'Scaffolding the site');
+    assert.strictEqual(steps().length, 0);
   });
 
   console.log('\nttl and sealing');

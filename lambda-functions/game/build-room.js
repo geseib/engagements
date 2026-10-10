@@ -689,6 +689,9 @@ async function postLog(ctx, role, body) {
   const doingPost = role === 'agent' && (b.doing !== undefined || b.done !== undefined || b.helper !== undefined);
   let doingChanged = false;
   if (doingPost) {
+    // Say so when a line cannot go on screen, rather than answer ok and drop it.
+    const unshown = ['doing', 'done', 'helper'].find((k) => typeof b[k] === 'string' && b[k].trim() && !S.cleanDoingLine(b[k]));
+    if (unshown) return fail(400, `That ${unshown} line can't go on screen: use 2 to 7 plain words, with no file names, links, commands or @names`);
     const input = { source: 'claude' };
     if (typeof b.done === 'string' || b.done === true) input.done = b.done;
     if (typeof b.doing === 'string') input.doing = b.doing;
