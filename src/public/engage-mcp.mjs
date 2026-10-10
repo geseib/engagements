@@ -21,7 +21,7 @@
  */
 
 import { readFileSync, writeFileSync, appendFileSync, statSync, lstatSync, mkdirSync, existsSync, copyFileSync, readlinkSync, realpathSync, readdirSync, rmSync, renameSync } from 'node:fs';
-import { join as pathJoin, resolve as pathResolve, sep as pathSep } from 'node:path';
+import { join as pathJoin, resolve as pathResolve, sep as pathSep, dirname } from 'node:path';
 import { homedir, networkInterfaces } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
 import http from 'node:http';
@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -46,6 +46,43 @@ function log(...args) {
 }
 
 // ---------------------------------------------------------------------------
+// The tier this plugin belongs to
+// ---------------------------------------------------------------------------
+
+/*
+ * ONE PLUGIN PER TIER (owner, 2026-10-10). Prod's plugin keeps the name
+ * engage; the dev and test sites install engage-dev and engage-test beside
+ * it. It is one file: the install command names the tier (--tier), and the
+ * installed copy reads it from tier.json beside itself. With neither, it is
+ * prod, which is what every install before 1.16.0 was. Each tier keeps its own
+ * plugin folder, its own API (~/.engage/config-<tier>.json; prod keeps
+ * config.json) and acts only in a folder connected to its own tier.
+ */
+const TIERS = ['dev', 'test', 'prod'];
+function tierFromArgs(argv) {
+  const i = argv.indexOf('--tier');
+  return i >= 0 && TIERS.includes(argv[i + 1]) ? argv[i + 1] : null;
+}
+const TIER = tierFromArgs(process.argv)
+  || (() => {
+    try {
+      const t = JSON.parse(readFileSync(pathJoin(dirname(fileURLToPath(import.meta.url)), 'tier.json'), 'utf8')).tier;
+      return TIERS.includes(t) ? t : null;
+    } catch { return null; }
+  })()
+  || 'prod';
+const nameFor = (tier) => (tier === 'prod' ? 'engage' : `engage-${tier}`);
+const idFor = (tier) => `${nameFor(tier)}@${nameFor(tier)}-local`;
+/** engage, engage-dev or engage-test: the plugin name, so its slash commands are /<name>:<command>. */
+const PLUGIN_NAME = nameFor(TIER);
+const MARKETPLACE = `${PLUGIN_NAME}-local`;
+/** A slash command of THIS tier's plugin. */
+const slash = (command) => `/${PLUGIN_NAME}:${command}`;
+const SKILL_NAME = `${PLUGIN_NAME}:build-room`;
+/** A folder's tier: what connect stamped in session.json; a folder connected before 1.16.0 is prod's. */
+const tierOf = (session) => (session && TIERS.includes(session.tier) ? session.tier : 'prod');
+
+// ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
@@ -54,8 +91,8 @@ function log(...args) {
 const projectDir = () => process.env.CLAUDE_PROJECT_DIR || process.cwd();
 /** Per project: which Build Room this folder is connected to. Never committed. */
 const sessionFile = (dir = projectDir()) => pathJoin(dir, '.engage', 'session.json');
-/** Per laptop: the Engage API this install talks to (written by --install-plugin). */
-const globalFile = () => pathJoin(homedir(), '.engage', 'config.json');
+/** Per laptop and tier: the Engage API this install talks to (written by --install-plugin). */
+const globalFile = () => pathJoin(homedir(), '.engage', TIER === 'prod' ? 'config.json' : `config-${TIER}.json`);
 
 function readJson(file) {
   try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return null; }
@@ -69,13 +106,17 @@ function readJson(file) {
  *   3. the API alone from ~/.engage/config.json.
  */
 function readConfig() {
-  const local = readJson(sessionFile()) || {};
+  const found = readJson(sessionFile()) || {};
+  // A folder connected to another tier belongs to that tier's plugin: this one leaves it alone.
+  const otherTier = found.key && tierOf(found) !== TIER ? tierOf(found) : null;
+  const local = otherTier ? {} : found;
   const global = readJson(globalFile()) || {};
   const key = (process.env.ENGAGE_KEY || local.key || '').trim();
   let api = (process.env.ENGAGE_API || local.api || global.api || '').trim();
   const problems = [];
   let gameId = null;
-  if (!key) problems.push('No session key yet. Connect this project to a Build Room: in Claude Code, /engage:connect <key> (plugin), or set ENGAGE_KEY.');
+  if (!key && otherTier) problems.push(`This folder is connected to a ${otherTier} Build Room, and this is the ${TIER} plugin. Use ${'/' + nameFor(otherTier)}:… here, or connect this folder to a ${TIER} room with ${slash('connect')} <key>.`);
+  else if (!key) problems.push(`No session key yet. Connect this project to a Build Room: in Claude Code, ${slash('connect')} <key> (plugin), or set ENGAGE_KEY.`);
   else {
     const m = /^eng_(\d+)_(.+)$/.exec(key);
     if (!m) problems.push('ENGAGE_KEY does not look like an Engage session key (expected eng_<gameId>_<secret>).');
@@ -98,7 +139,7 @@ function configHelp() {
     ...CONFIG.problems.map(p => `- ${p}`),
     '',
     'How to fix: the host opens the session\'s Build Room page in Engage and mints a key under',
-    '"Connect Claude Code". With the Engage plugin installed, connect with: /engage:connect eng_1234_…',
+    `"Connect Claude Code". With the Engage plugin installed, connect with: ${slash('connect')} eng_1234_…`,
     '(or call the connect tool with that key). Without the plugin, run the claude mcp add command the page shows.',
   ].join('\n');
 }
@@ -590,7 +631,7 @@ const TOOLS = [
     description: 'Read the Engage Build Room: the goal, how many people are in the room, the current ask and its status, recent decisions and the recent timeline. Call this at the start of a session and whenever you need to re-orient. Also delivers any pending directions from the host.',
     inputSchema: {
       type: 'object',
-      properties: { kickoff: { type: 'boolean', description: 'true only when starting the session with the kickoff steps (/engage:kickoff): the host\'s Connect panel then shows the session has kicked off.' } },
+      properties: { kickoff: { type: 'boolean', description: 'true only when starting the session with the kickoff steps (' + slash('kickoff') + '): the host\'s Connect panel then shows the session has kicked off.' } },
       additionalProperties: false,
     },
   },
@@ -733,7 +774,7 @@ const TOOLS = [
   },
   {
     name: 'connect',
-    description: 'Connect this project to a Build Room with the session key the host gives you (eng_<code>_…). Saves it in .engage/session.json in this project (never committed), checks it works, and from then on every Engage tool and the version-control checkpoints use it. Call this when the host says /engage:connect or pastes a key.',
+    description: 'Connect this project to a Build Room with the session key the host gives you (eng_<code>_…). Saves it in .engage/session.json in this project (never committed), checks it works, and from then on every Engage tool and the version-control checkpoints use it. Call this when the host says ' + slash('connect') + ' or pastes a key.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1551,14 +1592,16 @@ const HANDLERS = {
     const key = reqStr(args, 'key').trim();
     const m = /^eng_(\d+)_[A-Za-z0-9_-]+$/.exec(key);
     if (!m) throw new InputError('That does not look like a session key (expected eng_<code>_…). Copy it from the Build Room\'s Connect Claude Code panel.');
-    let api = (optStr(args, 'api') || process.env.ENGAGE_API || (readJson(sessionFile()) || {}).api || (readJson(globalFile()) || {}).api || '').trim();
+    const before = readJson(sessionFile()) || {};
+    let api = (optStr(args, 'api') || process.env.ENGAGE_API || (tierOf(before) === TIER ? before.api : '') || (readJson(globalFile()) || {}).api || '').trim();
     if (!/^https?:\/\//i.test(api)) throw new InputError('I do not know the Engage API address yet. Pass api (it is in the Connect panel\'s command), or reinstall the plugin with --api.');
     api = api.replace(/\/+$/, '') + '/';
     const dir = pathJoin(projectDir(), '.engage');
     mkdirSync(dir, { recursive: true });
     // Everything in .engage/ stays out of git: the key is a secret.
     writeFileSync(pathJoin(dir, '.gitignore'), '*\n');
-    writeFileSync(sessionFile(), JSON.stringify({ key, api, connectedAt: new Date().toISOString() }, null, 2) + '\n', { mode: 0o600 });
+    writeFileSync(sessionFile(), JSON.stringify({ key, api, tier: TIER, connectedAt: new Date().toISOString() }, null, 2) + '\n', { mode: 0o600 });
+    const plugins = usePluginHere(projectDir());
     reloadConfig();
     let st;
     try { st = await api_('GET', 'state', undefined, ctx.signal); } catch (e) {
@@ -1568,8 +1611,9 @@ const HANDLERS = {
     const startLine = start.error ? `Could not set up git here: ${start.error}`
       : start.fresh ? `Started a new project here: a git repository on main with README.md, DECISIONS.md and .gitignore, committed as "Start: ${s(st.title) || start.name}".`
         : start.stayed || `This folder already had work in it, so the room's work goes on the branch ${start.branch}; its main is untouched.`;
-    return ok(`Connected this project (${projectDir()}) to Build Room ${m[1]}.\n${startLine}\n\n${renderState(st)}\n\n` +
-      'How to keep this project tidy is in the engage:build-room skill: one commit per decision or milestone with the commit tool, DECISIONS.md and README.md kept current, and every turn saved as a hidden snapshot automatically.', st.inbox);
+    const pluginLine = plugins.error ? `\nCould not switch this folder to the ${PLUGIN_NAME} plugin (${plugins.error}). The other tiers' plugins still leave this folder alone.` : '';
+    return ok(`Connected this project (${projectDir()}) to Build Room ${m[1]}.\n${startLine}${pluginLine}\n\n${renderState(st)}\n\n` +
+      'How to keep this project tidy is in the ' + SKILL_NAME + ' skill: one commit per decision or milestone with the commit tool, DECISIONS.md and README.md kept current, and every turn saved as a hidden snapshot automatically.', st.inbox);
   },
 
   /**
@@ -2013,7 +2057,7 @@ function promptText(name, args) {
       return [
         'We are starting a Build Room session in Engage: a live room is watching on a projector and will help decide what we build.',
         '',
-        '0. Follow the engage:build-room skill for this project: one commit per decision or milestone with the commit tool, README.md and DECISIONS.md kept current, and every server you start noted in .engage/servers.txt.',
+        '0. Follow the ' + SKILL_NAME + ' skill for this project: one commit per decision or milestone with the commit tool, README.md and DECISIONS.md kept current, and every server you start noted in .engage/servers.txt.',
         '1. Call room_status with kickoff true. Read the goal, how many people are here, and anything already decided. If it says PHASE: OPENING, the room is still framing the build: set up the project, propose at most one probing question if an answer is thin (ask_room_for_ideas with forStep), then call wait_for_direction until the host presses Start building. Do steps 2 to 6 only after that.',
         '2. Restate the goal to me in one or two plain sentences.',
         '2b. Check for servers left running by an earlier session (for example lsof -iTCP -sTCP:LISTEN on macOS or Linux). Tell me about any; do not stop them unless I ask. Pick a port nothing else is using for this project.',
@@ -2066,7 +2110,7 @@ function promptText(name, args) {
       ].join('\n');
     case 'wrap-up':
       return [
-        'We are wrapping up the Build Room session. Follow the closing steps in the engage:build-room skill:',
+        'We are wrapping up the Build Room session. Follow the closing steps in the ' + SKILL_NAME + ' skill:',
         '',
         'A. Call room_status to review the goal and the decisions the room made.',
         'B. Screenshot the finished result (one or two screens) and share_image each with kind "final"; they go on the What we built screen and into the report.',
@@ -2184,7 +2228,7 @@ How to collaborate:
 - Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here: the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too, on their laptops, tablets and phones.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
-- After you implement each decision, call commit with a plain first line ("Add the calm header") and the decision's askId; it goes into DECISIONS.md and the room's timeline. Not after every edit: each turn is already kept as a hidden snapshot. The engage:build-room skill has the rules.
+- After you implement each decision, call commit with a plain first line ("Add the calm header") and the decision's askId; it goes into DECISIONS.md and the room's timeline. Not after every edit: each turn is already kept as a hidden snapshot. The ${SKILL_NAME} skill has the rules.
 - Talking points: after a meaningful step you may post 1 to 3 talking points with post_points (kind "talk": a choice you made, a trade-off, a question worth discussing, tied to what you just did). It is optional; you may post none. A Research or Ideas request from the host arrives as a direction: hand it to a background helper agent, keep building, and post what comes back with post_points and the request's requestId, then done: true. Research needs at least one http(s) source on every finding; never invent one. Never name people in the room. The plugin keeps a record in build-room/ in the project and commit includes it.
 - When you have nothing left to do — after wrap_up above all — call wait_for_direction and keep calling it. The host sees "Claude is listening" and can steer you from the Build Room screen.
 
@@ -2504,7 +2548,35 @@ function lanLoop() {
 // Version control (git) — the checkpoint tool and the plugin's Stop hook
 // ---------------------------------------------------------------------------
 
-const DEFAULT_GITIGNORE = ['node_modules/', 'dist/', 'build/', '.env', '.env.*', '.DS_Store', '.engage/', ''].join('\n');
+/**
+ * THIS FOLDER RUNS THIS TIER'S PLUGIN (owner, 2026-10-10). With engage and
+ * engage-dev both installed, connect switches this tier's plugin on and the
+ * other tiers' off for this project only, in .claude/settings.local.json,
+ * keeping whatever else is there. That file is never committed: new projects
+ * ignore it, and an existing repository gets it in .git/info/exclude.
+ */
+function usePluginHere(dir) {
+  const file = pathJoin(dir, '.claude', 'settings.local.json');
+  try {
+    const cur = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+    if (!cur || typeof cur !== 'object' || Array.isArray(cur)) return { error: 'its .claude/settings.local.json is not a JSON object' };
+    const enabled = { ...(cur.enabledPlugins && typeof cur.enabledPlugins === 'object' ? cur.enabledPlugins : {}) };
+    for (const t of TIERS) enabled[idFor(t)] = t === TIER;
+    mkdirSync(pathJoin(dir, '.claude'), { recursive: true });
+    writeFileSync(file, JSON.stringify({ ...cur, enabledPlugins: enabled }, null, 2) + '\n');
+    const info = pathJoin(dir, '.git', 'info');
+    if (existsSync(info) && statSync(info).isDirectory()) {
+      const exclude = pathJoin(info, 'exclude');
+      const has = existsSync(exclude) ? readFileSync(exclude, 'utf8') : '';
+      if (!has.split('\n').includes('.claude/settings.local.json')) appendFileSync(exclude, `${has && !has.endsWith('\n') ? '\n' : ''}.claude/settings.local.json\n`);
+    }
+    return { ok: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+const DEFAULT_GITIGNORE = ['node_modules/', 'dist/', 'build/', '.env', '.env.*', '.DS_Store', '.engage/', '.claude/settings.local.json', ''].join('\n');
 
 function git(dir, args) {
   return execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -2607,7 +2679,8 @@ export function projectSlug(title) {
 function startProject(dir, { title = '', goal = '' } = {}) {
   try { git(dir, ['--version']); } catch { return { error: 'git is not installed on this machine.' }; }
   const name = projectSlug(title);
-  const ignoreLocal = new Set(['.engage', '.DS_Store']);
+  // .claude holds the folder's plugin switch, written by connect just before this.
+  const ignoreLocal = new Set(['.engage', '.claude', '.DS_Store']);
   const files = readdirSync(dir).filter((n) => !ignoreLocal.has(n));
   const who = gitIdentity(dir);
   const writeIfMissing = (file, body) => { if (!existsSync(pathJoin(dir, file))) writeFileSync(pathJoin(dir, file), body); };
@@ -2740,6 +2813,9 @@ function rememberUpdate(text) {
  * exists) — an unrelated project is never touched — and never fails the turn:
  * whatever happens, it exits 0 and prints nothing to stdout.
  */
+/** A Build Room folder connected to THIS tier (a hook of every installed tier's plugin fires in every folder). */
+const ownFolder = (dir) => tierOf(readJson(sessionFile(dir))) === TIER;
+
 async function hookCheckpoint() {
   let input = '';
   try { input = readFileSync(0, 'utf8'); } catch { /* no stdin */ }
@@ -2749,6 +2825,7 @@ async function hookCheckpoint() {
   // which may be a subfolder Claude cd'ed into.
   const dir = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
   if (!existsSync(sessionFile(dir))) return;
+  if (!ownFolder(dir)) return; // another tier's plugin keeps this folder
   process.env.CLAUDE_PROJECT_DIR = dir;
   reloadConfig();
   let note = '';
@@ -2968,6 +3045,7 @@ function hookActivity() {
   try { data = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { /* not JSON */ }
   const dir = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
   if (!existsSync(sessionFile(dir))) return; // not a Build Room project: touch nothing
+  if (!ownFolder(dir)) return; // another tier's plugin keeps this folder
   const file = activityFile(dir);
   try { if (lstatSync(file).isSymbolicLink()) return; } catch { /* no file yet */ }
   try { if (statSync(file).size > ACTIVITY_FILE_MAX) return; } catch { /* no file yet */ }
@@ -3037,7 +3115,7 @@ async function pumpActivity() {
  * The API is remembered every time, so the same laptop can move from the dev
  * site to the test site and back.
  */
-const PLUGIN_ID = 'engage@engage-local';
+const PLUGIN_ID = idFor(TIER);
 
 /**
  * THE SKILL (owner, 2026-10-06: "this should all be documented in the plugin
@@ -3069,7 +3147,7 @@ skill is how you keep the project something they can open next week and understa
 ## Commits: one per decision or milestone
 
 - Every turn is already saved as a hidden snapshot (\`refs/engage/snapshots/*\`). It is not
-  on the branch, so do not commit just to save work. \`/engage:restore\` brings one back.
+  on the branch, so do not commit just to save work. \`${slash('restore')}\` brings one back.
 - Commit with the **commit** tool when you have finished something the room can name:
   - after building a room decision (pass its askId), or
   - at a milestone (it runs, a feature works end to end).
@@ -3154,18 +3232,18 @@ screen says Claude is waiting.
 
 ## Closing
 
-Use this from \`/engage:wrap-up\`, or as soon as any Engage call says the session has ended:
+Use this from \`${slash('wrap-up')}\`, or as soon as any Engage call says the session has ended:
 
 ${CLOSE_STEPS.join('\n')}
 `;
 
 /** What Claude Code reports for the Engage plugin, or why it cannot say. */
-function installedPlugin(claude) {
+function installedPlugin(claude, id = PLUGIN_ID) {
   const probe = claude(['--version']);
   if (probe.error) return { claude: false };
   const r = claude(['plugin', 'list', '--json']);
   try {
-    const entry = (JSON.parse(r.stdout || '[]') || []).find((p) => p && p.id === PLUGIN_ID);
+    const entry = (JSON.parse(r.stdout || '[]') || []).find((p) => p && p.id === id);
     return entry
       ? { claude: true, installed: true, version: String(entry.version || ''), enabled: entry.enabled !== false }
       : { claude: true, installed: false };
@@ -3178,13 +3256,13 @@ function writePlugin(home, root, plug) {
   for (const d of [pathJoin(root, '.claude-plugin'), pathJoin(plug, '.claude-plugin'), pathJoin(plug, 'commands'), pathJoin(plug, 'hooks'), pathJoin(plug, 'skills', 'build-room')]) mkdirSync(d, { recursive: true });
   const w = (file, body) => writeFileSync(file, typeof body === 'string' ? body : JSON.stringify(body, null, 2) + '\n');
   w(pathJoin(root, '.claude-plugin', 'marketplace.json'), {
-    name: 'engage-local',
+    name: MARKETPLACE,
     owner: { name: 'Engage' },
-    metadata: { description: 'The Engage Build Room plugin, installed from your Engage session page.' },
-    plugins: [{ name: 'engage', source: './engage', description: 'Build with the room: Engage Build Room for Claude Code.' }],
+    metadata: { description: `The Engage Build Room plugin${TIER === 'prod' ? '' : ` for the ${TIER} site`}, installed from your Engage session page.` },
+    plugins: [{ name: PLUGIN_NAME, source: `./${PLUGIN_NAME}`, description: 'Build with the room: Engage Build Room for Claude Code.' }],
   });
   w(pathJoin(plug, '.claude-plugin', 'plugin.json'), {
-    name: 'engage',
+    name: PLUGIN_NAME,
     version: VERSION,
     description: 'Build with the room: ask a live audience through Engage, take their direction, and keep the project tidy in git, one clean commit per decision.',
     author: { name: 'Engage' },
@@ -3202,11 +3280,13 @@ function writePlugin(home, root, plug) {
     },
   });
   copyFileSync(fileURLToPath(import.meta.url), pathJoin(plug, 'engage-mcp.mjs'));
+  // The installed copy knows its tier from this, not from a flag.
+  w(pathJoin(plug, 'tier.json'), { tier: TIER });
   writeFileSync(pathJoin(plug, 'skills', 'build-room', 'SKILL.md'), BUILD_ROOM_SKILL);
   const cmd = (name, description, hint, body) => w(pathJoin(plug, 'commands', `${name}.md`),
     `---\ndescription: ${description}\n${hint ? `argument-hint: ${hint}\n` : ''}---\n\n${body}\n`);
   cmd('connect', 'Connect this project to an Engage Build Room', '<session key>',
-    'Connect this project to the Engage Build Room: call the engage connect tool with key "$ARGUMENTS". Then tell me the room\'s goal in one line, and suggest I use /engage:kickoff.');
+    'Connect this project to the Engage Build Room: call the engage connect tool with key "$ARGUMENTS". Then tell me the room\'s goal in one line, and suggest I use ' + slash('kickoff') + '.');
   for (const p of PROMPTS.filter((x) => x.name !== 'connect')) {
     const arg = p.arguments && p.arguments[0];
     const body = promptText(p.name, arg ? { [arg.name]: '$ARGUMENTS' } : {});
@@ -3217,11 +3297,13 @@ function writePlugin(home, root, plug) {
 function installPlugin(argv) {
   const apiArg = argv[argv.indexOf('--api') + 1];
   const home = pathJoin(homedir(), '.engage');
-  const root = pathJoin(home, 'claude-plugin');
-  const plug = pathJoin(root, 'engage');
+  const root = pathJoin(home, TIER === 'prod' ? 'claude-plugin' : `claude-plugin-${TIER}`);
+  const plug = pathJoin(root, PLUGIN_NAME);
   const out = (...lines) => process.stdout.write(lines.join('\n') + '\n');
   const claude = (args) => spawnSync('claude', args, { encoding: 'utf8' });
   const NEXT = ['', 'Next: on the Build Room page, mint a key and copy the connect command.'];
+  // Which plugin this is, when it is not prod's: prod's engage is never touched from here.
+  const tierNote = TIER === 'prod' ? '' : `This is the ${TIER} site's plugin, ${PLUGIN_NAME}, beside prod's engage: its commands are ${slash('connect')}, ${slash('kickoff')} and the rest.`;
 
   // Which Engage site this laptop talks to: remembered on every run.
   let apiNote = '';
@@ -3232,6 +3314,15 @@ function installPlugin(argv) {
     mkdirSync(home, { recursive: true });
     writeFileSync(globalFile(), JSON.stringify({ api }, null, 2) + '\n');
     if (before && before !== api) apiNote = `It now talks to ${api} (it was ${before}).`;
+  }
+
+  // Before 1.16.0 every site installed "engage": one put there from THIS site still talks to it.
+  if (TIER !== 'prod' && apiArg) {
+    let prodApi = '';
+    try { prodApi = JSON.parse(readFileSync(pathJoin(home, 'config.json'), 'utf8')).api || ''; } catch { /* none */ }
+    if (prodApi && prodApi.replace(/\/+$/, '') === apiArg.replace(/\/+$/, '') && installedPlugin(claude, idFor('prod')).installed) {
+      apiNote = [apiNote, `Your engage plugin was installed from this site before each site had its own, so it still talks to it. Run the prod site's install command to make it prod's again, or turn it off: /plugin disable ${idFor('prod')}`].filter(Boolean).join('\n');
+    }
   }
 
   const have = installedPlugin(claude);
@@ -3248,6 +3339,7 @@ function installPlugin(argv) {
     } else {
       out(`You're all set: the Engage plugin ${VERSION} is installed and on.`);
     }
+    if (tierNote) out(tierNote);
     if (apiNote) out(apiNote);
     out(...NEXT);
     return;
@@ -3259,6 +3351,7 @@ function installPlugin(argv) {
     out(`Wrote the Engage plugin ${VERSION} to ${plug}.`, '', 'The claude command is not on PATH here. In Claude Code, run:');
     out(`  /plugin marketplace add ${root}`);
     out(`  /plugin install ${PLUGIN_ID}`);
+    if (tierNote) out(tierNote);
     if (apiNote) out(apiNote);
     out(...NEXT);
     return;
@@ -3266,7 +3359,7 @@ function installPlugin(argv) {
 
   const manual = (why) => out(`Could not finish automatically (${why}). In Claude Code run: /plugin marketplace add ${root} then /plugin install ${PLUGIN_ID}`);
   const add = claude(['plugin', 'marketplace', 'add', root]);
-  if (add.status !== 0) claude(['plugin', 'marketplace', 'update', 'engage-local']);
+  if (add.status !== 0) claude(['plugin', 'marketplace', 'update', MARKETPLACE]);
 
   if (have.installed) {
     const from = have.version || 'an unknown version';
@@ -3279,6 +3372,7 @@ function installPlugin(argv) {
     if (inst.status === 0) out(`Installed the Engage plugin ${VERSION} in Claude Code.`);
     else manual((inst.stderr || inst.stdout || '').trim().slice(0, 200));
   }
+  if (tierNote) out(tierNote);
   if (apiNote) out(apiNote);
   out(...NEXT);
 }
@@ -3309,7 +3403,7 @@ async function handleRequest(msg) {
       return reply(id, {
         protocolVersion,
         capabilities: { tools: {}, prompts: {} },
-        serverInfo: { name: 'engage', version: VERSION },
+        serverInfo: { name: PLUGIN_NAME, version: VERSION },
         instructions: INSTRUCTIONS,
       });
     }

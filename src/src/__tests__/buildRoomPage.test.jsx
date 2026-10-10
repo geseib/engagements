@@ -20,6 +20,11 @@ import webSocketClient from '../WebSocketClient';
 import BuildRoomPage, { BuildCreate, stageHint, ConnectPanel } from '../buildroom/BuildRoomPage';
 import reloadPage from '../utils/reloadPage';
 
+// These pin prod's plugin names (/engage:…). setupTests.js runs every suite as the
+// test site, whose plugin is engage-test (buildPluginTier.test.js covers the tiers).
+beforeEach(() => { window.ENV = 'production'; });
+afterEach(() => { window.ENV = 'test'; });
+
 jest.mock('../utils/reloadPage', () => ({ __esModule: true, default: jest.fn() }));
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn(), getAuthToken: jest.fn(async () => 'id-token') }));

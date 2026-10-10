@@ -21,6 +21,11 @@ import BuildRoomPage from '../buildroom/BuildRoomPage';
 import { buildApi } from '../buildroom/buildHostApi';
 import { feedbackDraft } from '../buildroom/BuildCrew';
 
+// These pin prod's plugin names (/engage:…). setupTests.js runs every suite as the
+// test site, whose plugin is engage-test (buildPluginTier.test.js covers the tiers).
+beforeEach(() => { window.ENV = 'production'; });
+afterEach(() => { window.ENV = 'test'; });
+
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn(), getAuthToken: jest.fn(async () => 'id-token') }));
 jest.mock('../WebSocketClient', () => ({
   __esModule: true,

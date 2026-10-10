@@ -255,6 +255,20 @@ export function safeHref(value) {
  * site and register it with the real API base and the freshly minted key.
  */
 /**
+ * ONE PLUGIN PER TIER (owner, 2026-10-10): the site's tier, from the
+ * window.ENV its config.js sets (development / test / production). Prod when
+ * it is unset (a local dev server, the tests). engage-mcp.mjs names the
+ * plugin the same way: engage, engage-dev, engage-test.
+ */
+export function siteTier() {
+  const env = typeof window !== 'undefined' ? window.ENV : '';
+  return env === 'development' ? 'dev' : env === 'test' ? 'test' : 'prod';
+}
+export const pluginName = () => (siteTier() === 'prod' ? 'engage' : `engage-${siteTier()}`);
+/** A slash command of this site's plugin: /engage:kickoff, /engage-dev:kickoff … */
+export const pluginSlash = (command) => `/${pluginName()}:${command}`;
+
+/**
  * THE PLUGIN ROUTE (recommended). Once per laptop: fetch the server and let it
  * install the Engage plugin for Claude Code — the server, the slash commands
  * and the hook that checkpoints every turn in git. No key in it, so it can be
@@ -264,12 +278,12 @@ export function pluginInstallCommand({ origin, api }) {
   const site = String(origin || '').replace(/\/+$/, '');
   return [
     `curl -fsSL ${site}/engage-mcp.mjs -o ~/.engage-mcp.mjs \\`,
-    `  && node ~/.engage-mcp.mjs --install-plugin --api ${api}`,
+    `  && node ~/.engage-mcp.mjs --install-plugin --api ${api}${siteTier() === 'prod' ? '' : ` --tier ${siteTier()}`}`,
   ].join('\n');
 }
 
 /** Each session, with the plugin: one line typed into Claude Code. */
-export const pluginConnectCommand = (key) => `/engage:connect ${key}`;
+export const pluginConnectCommand = (key) => `${pluginSlash('connect')} ${key}`;
 
 /**
  * THE START CAP (owner, 2026-10-06): a folder named for the project. The same
@@ -284,7 +298,7 @@ export function projectSlug(title) {
 /** What a host may type as the folder name: the slug's own alphabet, nothing a shell would read. */
 export const cleanFolder = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 /** One paste into a terminal: make the folder, start Claude Code in it, connect. */
-export const startCommand = (folder, key) => `mkdir -p ~/build-room/${folder} && cd ~/build-room/${folder} && claude "/engage:connect ${key}"`;
+export const startCommand = (folder, key) => `mkdir -p ~/build-room/${folder} && cd ~/build-room/${folder} && claude "${pluginSlash('connect')} ${key}"`;
 
 export function connectCommand({ origin, api, key }) {
   const site = String(origin || '').replace(/\/+$/, '');

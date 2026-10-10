@@ -4,6 +4,7 @@ import Icon from '../components/Icon';
 import { mintBuilderKey, claimTask, react } from './buildPlayApi';
 import { LanePoints } from './BuildPlayerPoints';
 import { W } from './words';
+import { pluginSlash } from './buildHostApi';
 
 /**
  * CREW MODE ON THE PHONE (docs/design/build-room-crew/FLOWS.md, storyboard
@@ -123,7 +124,7 @@ export function BaseNotice({ crew, log }) {
 /* ---------------------------------------------------------- the key -- */
 
 function KeyCard({ keyText, onDone }) {
-  const line = `/engage:connect ${keyText}`;
+  const line = `${pluginSlash('connect')} ${keyText}`;
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {

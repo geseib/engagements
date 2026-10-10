@@ -67,8 +67,8 @@ const server = http.createServer((req, res) => {
 const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `engage-${name}-`));
 const gitIn = (dir, ...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
 
-function mcpChild(env) {
-  const child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH, HOME: env.HOME || process.env.HOME, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+function mcpChild(env, script = SCRIPT) {
+  const child = spawn(process.execPath, [script], { env: { PATH: process.env.PATH, HOME: env.HOME || process.env.HOME, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
   let buf = '';
   let id = 0;
@@ -602,6 +602,101 @@ async function check(name, fn) {
     const r = await m2.call('connect', { key: KEY });
     m2.child.kill();
     assert.ok(!r.isError, r.text);
+  });
+
+  // ── One plugin per tier (owner, 2026-10-10) ─────────────────────────────
+  // Prod keeps "engage"; the dev site installs "engage-dev" beside it. Each
+  // acts only in a folder connected to its own tier, and connect switches the
+  // folder's plugins so only its own runs there.
+  console.log('\none plugin per tier');
+  const devRoot = path.join(home, '.engage', 'claude-plugin-dev');
+  const devPlug = path.join(devRoot, 'engage-dev');
+  const devScript = path.join(devPlug, 'engage-mcp.mjs');
+  const snapshots = (dir) => (gitIn(dir, 'for-each-ref', '--format=%(refname)', 'refs/engage/snapshots') || '').split('\n').filter((r) => r && !r.endsWith('/latest')).length;
+  const hookWith = (script, dir) => new Promise((resolve) => {
+    const c = spawn(process.execPath, [script, '--checkpoint'], { env: { PATH: process.env.PATH, HOME: home }, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stderr = '';
+    c.stderr.on('data', (d) => { stderr += d; });
+    c.on('close', (status) => resolve({ status, stderr }));
+    c.stdin.end(JSON.stringify({ cwd: dir, session_id: 's1', hook_event_name: 'Stop' }));
+  });
+  let devFolder = null;
+
+  await check('the dev site installs engage-dev beside prod, and leaves prod alone', async () => {
+    const prodConfig = fs.readFileSync(path.join(home, '.engage', 'config.json'), 'utf8');
+    fs.writeFileSync(claudeState, JSON.stringify(entry(VERSION))); // prod's engage is installed and current
+    fs.writeFileSync(claudeLog, '');
+    const r = spawnSync(process.execPath, [SCRIPT, '--install-plugin', '--api', API, '--tier', 'dev'],
+      { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home }, encoding: 'utf8', timeout: 20000 });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const calls = fs.readFileSync(claudeLog, 'utf8').trim().split('\n');
+    assert.ok(calls.includes(`plugin marketplace add ${devRoot}`), calls.join(' | '));
+    assert.ok(calls.includes('plugin install engage-dev@engage-dev-local'), calls.join(' | '));
+    assert.ok(!calls.some((c) => /engage@engage-local/.test(c) && !/^plugin list/.test(c)), `touched prod: ${calls.join(' | ')}`);
+    const market = JSON.parse(fs.readFileSync(path.join(devRoot, '.claude-plugin', 'marketplace.json'), 'utf8'));
+    assert.strictEqual(market.name, 'engage-dev-local');
+    assert.deepStrictEqual(market.plugins.map((p) => [p.name, p.source]), [['engage-dev', './engage-dev']]);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(devPlug, '.claude-plugin', 'plugin.json'), 'utf8')).name, 'engage-dev');
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(devPlug, 'tier.json'), 'utf8')), { tier: 'dev' });
+    assert.ok(/\/engage-dev:kickoff/.test(fs.readFileSync(path.join(devPlug, 'commands', 'connect.md'), 'utf8')));
+    const skill = fs.readFileSync(path.join(devPlug, 'skills', 'build-room', 'SKILL.md'), 'utf8');
+    assert.ok(/\/engage-dev:wrap-up/.test(skill) && !/\/engage:/.test(skill), 'the skill names its own commands');
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.engage', 'config-dev.json'), 'utf8')), { api: API });
+    assert.strictEqual(fs.readFileSync(path.join(home, '.engage', 'config.json'), 'utf8'), prodConfig, "prod's API is untouched");
+    assert.ok(/This is the dev site's plugin, engage-dev, beside prod's engage/.test(r.stdout), r.stdout);
+    // The prod plugin on this laptop talks to this same site (installed from it before 1.16.0): say so.
+    assert.ok(/Your engage plugin was installed from this site/.test(r.stdout) && /plugin disable engage@engage-local/.test(r.stdout), r.stdout);
+  });
+
+  await check('connect from engage-dev stamps the tier and runs only engage-dev in that folder', async () => {
+    devFolder = tmp('devfolder');
+    fs.mkdirSync(path.join(devFolder, '.claude'));
+    fs.writeFileSync(path.join(devFolder, '.claude', 'settings.local.json'), JSON.stringify({ permissions: { allow: ['Bash(ls)'] } }));
+    const m = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: devFolder }, devScript);
+    await m.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+    const r = await m.call('connect', { key: KEY });
+    m.child.kill();
+    assert.ok(!r.isError, r.text);
+    const session = JSON.parse(fs.readFileSync(path.join(devFolder, '.engage', 'session.json'), 'utf8'));
+    assert.strictEqual(session.tier, 'dev');
+    assert.strictEqual(session.api, API);
+    const settings = JSON.parse(fs.readFileSync(path.join(devFolder, '.claude', 'settings.local.json'), 'utf8'));
+    assert.deepStrictEqual(settings.enabledPlugins, { 'engage@engage-local': false, 'engage-dev@engage-dev-local': true, 'engage-test@engage-test-local': false });
+    assert.deepStrictEqual(settings.permissions, { allow: ['Bash(ls)'] }, 'what was there stays');
+    // A folder holding only .claude is still a fresh project, and the switch is never committed.
+    assert.strictEqual(gitIn(devFolder, 'rev-parse', '--abbrev-ref', 'HEAD'), 'main');
+    assert.ok(/^\.claude\/settings\.local\.json$/m.test(fs.readFileSync(path.join(devFolder, '.gitignore'), 'utf8')));
+    assert.ok(!gitIn(devFolder, 'ls-files').split('\n').includes('.claude/settings.local.json'));
+  });
+
+  await check("prod's plugin leaves a dev folder alone: no snapshot, and its tools say whose folder it is", async () => {
+    fs.writeFileSync(path.join(devFolder, 'page.html'), '<p>one</p>\n');
+    const before = snapshots(devFolder);
+    const prodHook = await hookWith(SCRIPT, devFolder);
+    assert.strictEqual(prodHook.status, 0, prodHook.stderr);
+    assert.strictEqual(snapshots(devFolder), before, "prod's Stop hook snapshotted a dev folder");
+    const m = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: devFolder });
+    await m.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+    const st = await m.call('room_status', {});
+    m.child.kill();
+    assert.ok(st.isError && /connected to a dev Build Room, and this is the prod plugin/.test(st.text) && /\/engage-dev:/.test(st.text), st.text);
+    const devHook = await hookWith(devScript, devFolder);
+    assert.strictEqual(devHook.status, 0, devHook.stderr);
+    assert.strictEqual(snapshots(devFolder), before + 1, "engage-dev's own Stop hook takes the snapshot");
+  });
+
+  await check('a folder connected before 1.16.0 (no tier) stays with prod, and engage-dev leaves it alone', async () => {
+    const before = snapshots(project);
+    fs.writeFileSync(path.join(project, 'legacy.txt'), 'x\n');
+    const file = path.join(project, '.engage', 'session.json');
+    const session = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.strictEqual(session.tier, 'prod', 'connect stamps the tier');
+    delete session.tier; // as a plugin before 1.16.0 wrote it
+    fs.writeFileSync(file, JSON.stringify(session), { mode: 0o600 });
+    await hookWith(devScript, project);
+    assert.strictEqual(snapshots(project), before);
+    await hookWith(SCRIPT, project);
+    assert.strictEqual(snapshots(project), before + 1);
   });
 
   server.close();
