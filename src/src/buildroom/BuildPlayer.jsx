@@ -861,6 +861,18 @@ function HistoryTab({ view, api, onResult, now }) {
   const shown = filterStory(story, filter);
   const preview = latestPreview(view.log);
   const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
+  // One body for a top-level item and for what a step holds.
+  const body = (it) => (
+    <>
+      <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
+      {it.mine ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
+      {it.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={it.text} className="bpl-shot" />)}
+      {isHttpUrl(it.link) ? <a className="bpl-link bpl-lnk" href={it.link} target="_blank" rel="noopener noreferrer">{linkText(it.link)}</a> : null}
+      {preview && it.type === 'showed' && it.id === preview.logId && view.state !== 'ENDED' && (
+        <PreviewFeedback key={preview.logId} api={api} preview={preview} sent={previewSent} onResult={onResult} />
+      )}
+    </>
+  );
   return (
     <section className="bpl-history" aria-label="History">
       <h2 className="plr-h1 bpl-tabh">What we have built so far</h2>
@@ -880,21 +892,11 @@ function HistoryTab({ view, api, onResult, now }) {
                   <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b>{it.dur ? ` · ${it.dur}` : ''}</p>
                   {it.kids.length > 0 && (
                     <ul className="bpl-kids">
-                      {it.kids.map((k) => (
-                        <li key={k.id}><b>{k.type === 'decided' ? 'Decided' : k.heading}</b>{` · ${k.text}`}</li>
-                      ))}
+                      {it.kids.map((k) => <li key={k.id}>{body(k)}</li>)}
                     </ul>
                   )}
                 </>
-              ) : (
-                <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
-              )}
-              {it.mine ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
-              {it.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={it.text} className="bpl-shot" />)}
-              {isHttpUrl(it.link) ? <a className="bpl-link bpl-lnk" href={it.link} target="_blank" rel="noopener noreferrer">{linkText(it.link)}</a> : null}
-              {preview && it.type === 'showed' && it.id === preview.logId && view.state !== 'ENDED' && (
-                <PreviewFeedback key={preview.logId} api={api} preview={preview} sent={previewSent} onResult={onResult} />
-              )}
+              ) : body(it)}
             </div>
           </li>
         ))}
@@ -959,7 +961,13 @@ export default function BuildPlayer({
   const [tab, setTab] = useState('now');
   // The doing line counts minutes and goes stale as time passes.
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 20000); return () => clearInterval(id); }, []);
+  const hasDoing = Boolean(view && view.doing);
+  useEffect(() => {
+    if (!hasDoing) return undefined;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 20000);
+    return () => clearInterval(id);
+  }, [hasDoing]);
   const lastOpenAsk = useRef(null);
   // A builder key, held only until "Done" (shown once; never stored).
   const [builderKey, setBuilderKey] = useState(null);
@@ -1228,10 +1236,10 @@ export default function BuildPlayer({
         {!point && run ? <RunBlock run={run} lead /> : null}
         {!point && !run ? (
           <>
-            <h1 className="plr-h1 plr-h1--primary">{doingNow ? doingNow.headline : 'Claude is building'}</h1>
-            {doingNow && !doingNow.stale ? <p className="bpl-dur">{`for ${doingNow.dur}`}</p> : null}
+            <h1 className="plr-h1 plr-h1--primary">{doingNow && doingNow.text ? doingNow.headline : 'Claude is building'}</h1>
+            {doingNow && doingNow.text && !doingNow.stale ? <p className="bpl-dur">{W.forDur(doingNow.dur)}</p> : null}
             {doingNow && doingNow.helperLine ? <p className="bpl-helper">{doingNow.helperLine}</p> : null}
-            <p className="plr-help bpl-hint">{doingNow && doingNow.stale ? 'The host will pick it up again in a moment.' : 'Follow the progress here. A question appears when Claude needs the room.'}</p>
+            <p className="plr-help bpl-hint">{doingNow && doingNow.text && doingNow.stale ? W.hostPicksUp : W.buildingHint}</p>
           </>
         ) : null}
         {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : null}

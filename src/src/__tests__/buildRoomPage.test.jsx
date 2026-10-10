@@ -2698,3 +2698,35 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
     expect(oranges()).toHaveLength(before);
   });
 });
+
+describe('a helper alone, and what a step holds (docs/design/build-room-doing)', () => {
+  const run = (sec, text) => ({ at: ago(sec), kind: 'run', text });
+  const ACTS = [run(60, 'Ran npm install'), run(20, 'Ran npm test')];
+  const helperOnly = () => ({ text: '', past: '', source: '', startedAt: null, stale: false, helper: 'Researching contrast rules', lastActiveAt: ago(10) });
+
+  test('the panel, chip and Stage keep today\'s words and show the helper', async () => {
+    await openRoom({ ...hostState({ activity: ACTS }), doing: helperOnly() });
+    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
+    const panel = screen.getByRole('region', { name: /^Claude Code/ });
+    expect(within(panel).getByText('A helper is researching contrast rules')).toBeInTheDocument();
+    expect(within(panel).getByTestId('brm-activity-now')).toHaveTextContent('Ran npm test');
+    fireEvent.keyDown(window, { key: '2' });
+    const stage = screen.getByRole('region', { name: 'Claude' });
+    expect(within(stage).getByRole('heading', { name: 'Claude is building' })).toBeInTheDocument();
+    expect(within(stage).getByText('A helper is researching contrast rules')).toBeInTheDocument();
+  });
+
+  test('History: a link a step holds stays a link', async () => {
+    await openRoom(hostState({
+      logs: [
+        {
+          Kind: 'step', Text: 'Scaffolded the site', By: 'agent', CreatedAt: ago(700), StartedAt: ago(1000), EndedAt: ago(700), DurationMs: 300000, Source: 'claude',
+        },
+        { Kind: 'showing', Text: 'The calendar runs', By: 'agent', Link: 'http://localhost:5173/', CreatedAt: ago(800) },
+      ],
+    }));
+    fireEvent.keyDown(window, { key: '4' });
+    const story = screen.getByRole('list', { name: 'The story so far' });
+    expect(within(story).getByRole('link', { name: /localhost/ })).toHaveAttribute('href', 'http://localhost:5173/');
+  });
+});

@@ -699,8 +699,15 @@ describe('the doing line (docs/design/build-room-doing D1-D5)', () => {
       expect(roomStory({ log: [{ logId: 'z', kind: 'step', text: 'Done: X marks', createdAt: at(0), step: { startedAt: at(0), endedAt: at(0), durationMs: 0 } }] })[0].dur).toBe('');
     });
 
-    test('commands never reach History: no activity line becomes an entry', () => {
-      expect(roomStory({ log, activity: [{ at: at(5), kind: 'run', text: 'Ran git push' }] }).some((i) => /Ran git/.test(i.heading + i.text))).toBe(false);
+    test('commands never reach History: a run or agent line in the log is not an entry', () => {
+      const noisy = [...log, { logId: 'c1', kind: 'run', by: 'agent', text: 'Ran npm test', createdAt: at(1150) }, { logId: 'c2', kind: 'agent', by: 'agent', text: 'Asked a helper agent', createdAt: at(1120) }];
+      const all = roomStory({ log: noisy }).flatMap((i) => [i, ...(i.kids || [])]);
+      expect(all.some((i) => /Ran npm|helper agent/.test(i.heading + i.text))).toBe(false);
+      expect(all.length).toBeGreaterThan(3);
+    });
+
+    test('a step under two minutes is floored: 119 s is 1 min', () => {
+      expect(roomStory({ log: [step('f', 119, 0, 'Done: Quick')] })[0].dur).toBe('1 min');
     });
 
     test('the step in progress sits first, with how long so far; a stale one writes nothing', () => {
@@ -723,5 +730,44 @@ describe('the doing line (docs/design/build-room-doing D1-D5)', () => {
       expect(filterStory(story, 'decisions').map((i) => i.type)).toEqual(['decided']);
       expect(filterStory(story, 'pictures').map((i) => i.type)).toEqual(['picture']);
     });
+  });
+});
+
+describe('a helper with no line of Claude\'s own (docs/design/build-room-doing)', () => {
+  const NOW = Date.parse('2026-10-10T10:30:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  const helperOnly = (over = {}) => ({ text: '', source: '', startedAt: null, stale: false, helper: 'Researching contrast rules', lastActiveAt: at(10), ...over });
+  const room = (d, extra = {}) => ({
+    agent: { connected: true, listening: false, lastSeenAt: at(5) }, log: [], activity: [{ at: at(20), kind: 'run', text: 'Ran npm test' }], doing: d, ...extra,
+  });
+
+  test('doingLine gives a view for a helper alone, with no headline', () => {
+    expect(doingLine(helperOnly(), NOW)).toMatchObject({ text: '', headline: '', helperLine: 'A helper is researching contrast rules' });
+    expect(doingLine({ text: '', helper: '' }, NOW)).toBeNull();
+  });
+
+  test('the status keeps today\'s headline and carries the helper line', () => {
+    const s = claudeState(room(helperOnly()), NOW);
+    expect(s).toMatchObject({ key: 'building', headline: 'Claude is building', helperLine: 'A helper is researching contrast rules' });
+    expect(s.doing).toBeUndefined();
+    expect(claudeState(room(null), NOW).helperLine).toBeUndefined();
+  });
+
+  test('History writes no step in progress for a helper alone', () => {
+    expect(roomStory({ log: [], doing: doingLine(helperOnly(), NOW) }).some((i) => i.now)).toBe(false);
+  });
+});
+
+describe('the doing line against a wrong clock', () => {
+  const NOW = Date.parse('2026-10-10T10:30:00.000Z');
+  const at = (sec) => new Date(NOW - sec * 1000).toISOString();
+  test('a start in the future counts as 0 min, not negative', () => {
+    expect(doingLine({ text: 'Building it now', startedAt: at(-90), lastActiveAt: at(0) }, NOW).mins).toBe(0);
+  });
+  test('a laptop clock more than 2 min behind the server falls back to the server flag', () => {
+    expect(doingLine({ text: 'Building it now', startedAt: at(-600), lastActiveAt: at(-400), stale: true }, NOW).stale).toBe(true);
+    expect(doingLine({ text: 'Building it now', startedAt: at(-600), lastActiveAt: at(-400), stale: false }, NOW).stale).toBe(false);
+    // Within 2 min of agreeing, the client's own clock rules.
+    expect(doingLine({ text: 'Building it now', startedAt: at(100), lastActiveAt: at(-60), stale: true }, NOW).stale).toBe(false);
   });
 });

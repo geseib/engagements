@@ -828,3 +828,44 @@ describe('what Claude is doing, on a phone or a laptop (docs/design/build-room-d
     expect(items).toHaveLength(2);
   });
 });
+
+describe('a helper alone, and what a step holds, on a phone (docs/design/build-room-doing)', () => {
+  const iso = (sec) => new Date(Date.now() - sec * 1000).toISOString();
+
+  test('Now keeps Claude is building and shows the helper, with no duration', async () => {
+    serve(baseView({ doing: { text: '', startedAt: null, stale: false, helper: 'Researching contrast rules', lastActiveAt: iso(10) } }));
+    await mount();
+    expect(await screen.findByRole('heading', { name: 'Claude is building' })).toBeInTheDocument();
+    expect(screen.getByText('A helper is researching contrast rules')).toBeInTheDocument();
+    expect(screen.queryByText(/^for \d|under 1 min/)).toBeNull();
+    expect(screen.getByText(/Follow the progress here/)).toBeInTheDocument();
+  });
+
+  test('History: what a step holds keeps its link and the note about my idea', async () => {
+    serve(baseView({
+      log: [
+        { logId: 'st1', kind: 'step', text: 'Scaffolded the site', createdAt: iso(700), step: { startedAt: iso(1000), endedAt: iso(700), durationMs: 300000, source: 'claude' } },
+        { logId: 's1', kind: 'showing', text: 'The calendar runs', createdAt: iso(800), link: 'http://localhost:5173/' },
+      ],
+      decisions: [{ askId: '002', prompt: 'Which next?', direction: 'Reminder texts', decidedAt: iso(750) }],
+      myIdeas: [{ ideaId: 'm1', text: 'Remind them', status: 'promoted', promotedTo: '002' }],
+    }));
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    const h = screen.getByRole('region', { name: 'History' });
+    expect(within(h).getByRole('link')).toHaveAttribute('href', 'http://localhost:5173/');
+    expect(within(h).getByText('Your idea was in this vote')).toBeInTheDocument();
+  });
+
+  test('the clock only ticks while there is a line', async () => {
+    jest.useFakeTimers();
+    try {
+      const spy = jest.spyOn(global, 'setInterval');
+      serve(baseView({ doing: null }));
+      await mount();
+      const withLine = spy.mock.calls.filter(([, ms]) => ms === 20000).length;
+      expect(withLine).toBe(0);
+      spy.mockRestore();
+    } finally { jest.useRealTimers(); }
+  });
+});

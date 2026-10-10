@@ -1340,7 +1340,8 @@ export function ClaudeActivity({ activity, agent, now, full, doing = null }) {
   const fresh = latest && now - Date.parse(latest.at) < ACTIVITY_FRESH_MS;
   // The line leads (docs/design/build-room-doing D1); without one, today's panel.
   const dl = claudeState({ agent, activity, doing }, now, { host: true }).doing || null;
-  if (!latest && !dl && !(agent && agent.connected)) return null;
+  const helperLine = dl ? '' : claudeState({ agent, activity, doing }, now, { host: true }).helperLine || '';
+  if (!latest && !dl && !helperLine && !(agent && agent.connected)) return null;
   if (dl) {
     const src = dl.stale
       ? (agent && agent.lastSeenAt ? W.lastSeen(agoText(agent.lastSeenAt, now)) : '')
@@ -1360,6 +1361,7 @@ export function ClaudeActivity({ activity, agent, now, full, doing = null }) {
   return (
     <section className={`brm-panel brm-activity${fresh ? ' is-live' : ''}`} aria-labelledby="brm-activity-h" aria-live="polite">
       <h2 className="brm-h5" id="brm-activity-h">{fresh ? 'Claude Code is working' : 'Claude Code'}</h2>
+      {helperLine && <p className="brm-doing-helper">{helperLine}</p>}
       {latest ? (
         <p className="brm-activity-now" data-testid="brm-activity-now">
           <Icon name={ACTIVITY_ICON[latest.kind] || 'Gear'} size={18} />
@@ -2044,11 +2046,12 @@ function StoryKid({ kid, onOpen }) {
   const openable = Boolean(onOpen) && kid.type === 'decided' && kid.askId;
   return (
     <li className={`brm-story-kid brm-story-kid--${kid.type}`}>
-      <span className="brm-story-kidh">{kid.type === 'decided' ? 'Decided' : kid.heading}</span>
+      <span className="brm-story-kidh">{kid.type === 'decided' ? W.decided : kid.heading}</span>
       {openable
         ? <button type="button" className="brm-story-open brm-story-kidt" aria-label={`Open Ask ${askNumber(kid.askId)}`} onClick={() => onOpen(kid.askId)}>{kid.text}</button>
         : <span className="brm-story-kidt">{kid.text}</span>}
       <span className="brm-story-tm">{clockTime(kid.at)}</span>
+      {safeHref(kid.link) && <a className="brm-story-kidlink" href={safeHref(kid.link)} target="_blank" rel="noopener noreferrer">{kid.link}</a>}
       {kid.imageIds.length > 0 && (
         <span className="brm-story-pics">
           {kid.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={kid.text} className="brm-shot brm-story-pic" />)}
@@ -2945,7 +2948,8 @@ function IdleStage({ room, now, host }) {
           <span className={`brm-sdot brm-sdot--${st.key}`} aria-hidden="true" />
           <h2 className="brm-q">{st.headline}</h2>
         </div>
-        {st.doing && !st.doing.stale && <p className="brm-nowtext brm-muted">{`for ${st.doing.dur}`}</p>}
+        {st.doing && !st.doing.stale && <p className="brm-nowtext brm-muted">{W.forDur(st.doing.dur)}</p>}
+        {st.helperLine && <p className="brm-nowtext brm-muted">{st.helperLine}</p>}
         {st.line && (
           <p className="brm-nowtext">
             {st.line}{sinceText && !st.doing && <span className="brm-muted"> · since {sinceText}</span>}

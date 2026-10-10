@@ -21,6 +21,10 @@ export const W = Object.freeze({
   stepRepeat: (text, n) => `${text}, ${n} times`,
   lastSeen: (ago) => `last seen ${ago}`,
   hostPicksUp: 'The host will pick it up again in a moment.',
+  forDur: (d) => `for ${d}`,
+  soFar: (d) => `${d} so far`,
+  decided: 'Decided',
+  buildingHint: 'Follow the progress here. A question appears when Claude needs the room.',
   // Moving an ask on
   showResults: 'Show results',
   openVoting: 'Open voting',

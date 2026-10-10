@@ -171,16 +171,19 @@ export const durText = (mins) => (mins < 1 ? 'under 1 min' : `${mins} min`);
  */
 export function doingLine(doing, now) {
   const text = doing && typeof doing.text === 'string' ? doing.text.trim() : '';
-  if (!text) return null;
+  const helper = doing && typeof doing.helper === 'string' ? doing.helper.trim() : '';
+  // A helper can work while Claude has no line of its own: text is '' then.
+  if (!text && !helper) return null;
   const at = new Date(now).getTime();
   const started = Date.parse(doing.startedAt || '');
   const active = Date.parse(doing.lastActiveAt || '');
-  const stale = Number.isFinite(active) ? at - active > DOING_STALE_MS : Boolean(doing.stale);
+  // A laptop clock more than 2 min behind the server cannot judge age: trust the server's flag.
+  const skewed = Number.isFinite(active) && at - active < -2 * 60 * 1000;
+  const stale = Number.isFinite(active) && !skewed ? at - active > DOING_STALE_MS : Boolean(doing.stale);
   const mins = Number.isFinite(started) ? Math.max(0, Math.floor((at - started) / 60000)) : 0;
-  const helper = typeof doing.helper === 'string' ? doing.helper.trim() : '';
   return {
     text,
-    headline: `${stale ? 'Claude was' : 'Claude is'} ${lowerFirst(text)}`,
+    headline: text ? `${stale ? 'Claude was' : 'Claude is'} ${lowerFirst(text)}` : '',
     stale,
     mins,
     dur: durText(mins),
@@ -197,12 +200,18 @@ export function doingLine(doing, now) {
  * them (`continueOn`: the Continue prompt button is on that screen).
  * @returns {{ key: 'building'|'waiting'|'paused'|'none', headline: string, line: string, since: string|null }}
  */
-export function claudeState(room, now, { host = false, continueOn = false } = {}) {
+export function claudeState(room, now, opts = {}) {
+  // A line Claude or its to-do list gave wins, unless Claude is waiting for direction.
+  const dl = room && room.agent && room.agent.listening ? null : doingLine(room && room.doing, now);
+  const st = claudeBase(room, now, opts, dl && dl.text ? dl : null);
+  // A helper alone leaves the headline as it was and adds its own line.
+  return dl && !dl.text && dl.helperLine ? { ...st, helperLine: dl.helperLine } : st;
+}
+
+function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = null) {
   const at = new Date(now).getTime();
   const agent = (room && room.agent) || {};
   const log = (room && room.log) || [];
-  // A line Claude or its to-do list gave wins, unless Claude is waiting for direction.
-  const dl = agent.listening ? null : doingLine(room && room.doing, now);
   if (dl && !dl.stale) {
     return { key: 'building', headline: dl.headline, line: dl.helperLine, since: dl.startedAt, doing: dl };
   }
@@ -757,8 +766,8 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     id: e.logId, at: e.step.startedAt || e.createdAt, type: 'step', heading: e.text, text: '', imageIds: [], chain: [], kids: [],
     dur: stepDur(e.step.durationMs), endAt: e.step.endedAt || e.createdAt,
   }));
-  const live = doing && !doing.stale && Number.isFinite(t(doing.startedAt))
-    ? { id: 'step:now', at: doing.startedAt, type: 'step', now: true, heading: upperFirst(doing.text), text: '', imageIds: [], chain: [], kids: [], dur: `${doing.dur} so far`, endAt: null }
+  const live = doing && doing.text && !doing.stale && Number.isFinite(t(doing.startedAt))
+    ? { id: 'step:now', at: doing.startedAt, type: 'step', now: true, heading: upperFirst(doing.text), text: '', imageIds: [], chain: [], kids: [], dur: W.soFar(doing.dur), endAt: null }
     : null;
   const loose = [];
   for (const it of items) {
@@ -775,7 +784,7 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
 function stepDur(ms) {
   const n = Number(ms) || 0;
   if (n <= 0) return '';
-  return n < 60000 ? 'under 1 min' : `${Math.round(n / 60000)} min`;
+  return n < 60000 ? 'under 1 min' : `${Math.floor(n / 60000)} min`;
 }
 
 export const STORY_FILTERS = Object.freeze([
