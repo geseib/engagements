@@ -158,6 +158,9 @@ export function laterItems(room) {
   return [...ideas, ...dirs].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
+/** How many people suggested on an Ideas ask (the server's respondents; an older server sends only the ideas). */
+const suggestedBy = (ask) => Number(ask.respondents ?? ask.answerCount) || 0;
+
 /** The open ask the header pill names, or null: "Ask 3 · 5 of 18" / "Ask 3 · results". */
 export function askPill(room) {
   if (!room || !room.currentAskId) return null;
@@ -165,7 +168,7 @@ export function askPill(room) {
   if (!ask || !['live', 'voting', 'results'].includes(ask.status)) return null;
   const n = Number(ask.askId) || ask.askId;
   if (ask.status === 'results') return { text: `Ask ${n} · results`, results: true };
-  const count = ask.kind === 'suggest' && ask.status === 'voting' ? ask.voteCount : ask.answerCount;
+  const count = ask.kind === 'suggest' ? (ask.status === 'voting' ? ask.voteCount : suggestedBy(ask)) : ask.answerCount;
   return { text: `Ask ${n} · ${count || 0} of ${room.playerCount || 0}`, results: false };
 }
 
@@ -901,8 +904,14 @@ const countOf = (ask, label) => {
 export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
   const opened = ask.openedAt ? `Opened ${clockOf(ask.openedAt)}` : 'Opened';
   const total = (ask.results && ask.results.total) || 0;
-  const verb = ask.kind === 'suggest' ? 'answered' : ask.kind === 'rating' ? 'rated' : 'voted';
-  const collect = `${total} of ${Math.max(Number(playerCount) || 0, total)} ${verb}`;
+  const of = (n) => Math.max(Number(playerCount) || 0, n);
+  let collect;
+  if (ask.kind === 'suggest') {
+    // Revy review (2026-10-10): the people who suggested, as the header pill counts them; then the ideas, then any votes.
+    const people = suggestedBy(ask);
+    const ideas = Number(ask.answerCount) || 0;
+    collect = `${people} of ${of(people)} suggested \u00b7 ${ideas} ${ideas === 1 ? 'idea' : 'ideas'}${total ? ` \u00b7 ${total} voted` : ''}`;
+  } else collect = `${total} of ${of(total)} ${ask.kind === 'rating' ? 'rated' : 'voted'}`;
   const wheel = ask.wheel && ask.wheel.landed;
   const leader = winnerOf({ ...ask, wheel: null }); // a unique vote leader only
   let settle = '';

@@ -824,3 +824,21 @@ describe('copy pass (2026-10-10): the Stage says the fewest words', () => {
     expect(W.spaceTo('send')).toBe('Press Space to send');
   });
 });
+
+/* Revy review (2026-10-10): after three people suggested, the header said
+   "3 of 3" while the folded step said "0 of 3 answered" (it counted votes).
+   Both now count the people who suggested; the step adds ideas and votes. */
+describe('an Ideas ask counts the people who suggested, in the header and the step alike', () => {
+  const suggest = (extra) => ({ askId: '3', kind: 'suggest', status: 'live', prompt: 'What else?', answerCount: 5, respondents: 3, voteCount: 0, results: { total: 0 }, ...extra });
+  test('the header pill', () => {
+    expect(askPill({ currentAskId: '3', playerCount: 4, asks: [suggest()] }).text).toBe('Ask 3 · 3 of 4');
+  });
+  test('the step: who suggested and how many ideas, then the votes once voting starts', () => {
+    expect(askPathSummaries(suggest(), { playerCount: 4 }).collect).toBe('3 of 4 suggested · 5 ideas');
+    expect(askPathSummaries(suggest({ status: 'voting', voteCount: 2, results: { total: 2 } }), { playerCount: 4 }).collect).toBe('3 of 4 suggested · 5 ideas · 2 voted');
+    expect(askPathSummaries(suggest({ answerCount: 1, respondents: 1 }), { playerCount: 4 }).collect).toBe('1 of 4 suggested · 1 idea');
+  });
+  test('an older server without respondents: the ideas stand in', () => {
+    expect(askPathSummaries(suggest({ respondents: undefined }), { playerCount: 4 }).collect).toBe('5 of 5 suggested · 5 ideas');
+  });
+});

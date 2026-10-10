@@ -557,7 +557,9 @@ function tally(ask, room) {
     const ranked = visible
       .map((r) => ({ respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player', votes: count.get(r.RespId) || 0 }))
       .sort((a, b) => b.votes - a.votes || 0);
-    return { total: votes.length, responses: resps.length, ranked, count };
+    // The people who suggested: one each, however many ideas, and only the room's own (not the host's, not a promoted idea).
+    const respondents = new Set(resps.filter((r) => (r.Source || 'player') === 'player').map((r) => r.PlayerName || r.RespId)).size;
+    return { total: votes.length, responses: resps.length, respondents, ranked, count };
   }
   const answers = forAsk(room.answers, askId);
   const whys = answers
@@ -603,6 +605,7 @@ function askView(ask, room, audience, me) {
     decidedAt: ask.DecidedAt || null,
     answerCount: ask.Kind === 'suggest' ? t.responses : t.total,
     voteCount: ask.Kind === 'suggest' ? t.total : null,
+    respondents: ask.Kind === 'suggest' ? t.respondents : null,
     responses: [],
     results: null,
     decision: null,
