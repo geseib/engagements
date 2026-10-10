@@ -78,9 +78,9 @@ async function seal(ctx, item) {
   return encryptItem(ctx.orgId, entity, item);
 }
 
-async function put(ctx, item) {
+async function put(ctx, item, condition) {
   const row = { PK: ctx.pk, ...item, ttl: ctx.ttl };
-  await db.send(new PutCommand({ TableName: TABLE(), Item: await seal(ctx, row) }));
+  await db.send(new PutCommand({ TableName: TABLE(), Item: await seal(ctx, row), ...(condition || {}) }));
   return row;
 }
 
@@ -683,19 +683,24 @@ async function postLog(ctx, role, body) {
   const allowed = role === 'agent' ? S.AGENT_LOG_KINDS : S.HOST_LOG_KINDS;
   if (!allowed.includes(kind)) return fail(400, `kind must be one of ${allowed.join(', ')}`);
   const text = S.cleanText(b.text, S.LIMITS.logText);
-  // Claude's own line (B): `doing` (present, starts a line; `done` with it is that line's
-  // past form) or `done` alone (the current line ended). `helper` sets/clears the helper line.
+  // Claude's own line (B): `done` is the past tense of the line that JUST ENDED, `doing` the
+  // line that starts now (either, or both: done is applied first). `helper` sets/clears the
+  // helper line.
+  const doingPost = role === 'agent' && (b.doing !== undefined || b.done !== undefined || b.helper !== undefined);
   let doingChanged = false;
-  if (role === 'agent' && (b.doing !== undefined || b.done !== undefined || b.helper !== undefined)) {
+  if (doingPost) {
     const input = { source: 'claude' };
-    if (typeof b.doing === 'string') { input.doing = b.doing; input.past = typeof b.done === 'string' ? b.done : undefined; } else if (b.done) input.done = b.done;
+    if (typeof b.done === 'string' || b.done === true) input.done = b.done;
+    if (typeof b.doing === 'string') input.doing = b.doing;
     if (b.helper !== undefined) input.helper = b.helper;
-    doingChanged = await applyDoingEvent(ctx, input);
+    const res = await applyDoingEvents(ctx, [{ input }]);
+    if (res.busy) return fail(409, DOING_BUSY);
+    doingChanged = res.changed;
   }
   if (!text) {
-    if (doingChanged || b.doing !== undefined || b.done !== undefined || b.helper !== undefined) {
+    if (doingPost) {
       if (doingChanged) { const st = await touchState(ctx); await announce(ctx, st.Rev); }
-      return reply(200, { doing: S.doingView(await readActivityRow(ctx), new Date().toISOString()) });
+      return reply(200, { ok: true });
     }
     return fail(400, 'Write the update');
   }
@@ -1209,7 +1214,7 @@ async function markListening(ctx) {
   }));
   const before = res && res.Attributes && res.Attributes.AgentListeningAt;
   // Claude waiting for direction ends whatever it was doing (one step each).
-  const ended = await applyDoingEvent(ctx, { waiting: true }, { onlyIfLive: true }).catch(() => false);
+  const ended = await endDoingForWaiting(ctx);
   if (ended || !before || Date.parse(now) - Date.parse(before) > S.AGENT_LISTENING_MS) {
     const st = await touchState(ctx);
     await announce(ctx, st.Rev);
@@ -1825,28 +1830,107 @@ async function readActivityRow(ctx) {
   return res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildActivity', res.Item) : res.Item) : null;
 }
 
+const DOING_BUSY = 'The doing line was busy; try again';
+const DOING_TRIES = 3;
+
 /**
- * The doing record (docs/design/build-room-doing D6): apply one event, keep the
- * row (put: session ttl, sealed in a team's room), write a `step` entry for
- * each line that ended, and tell the room only when what it reads moved.
- * `items` carries the activity list when the caller has one. Returns whether
- * the room-visible line or the timeline changed.
+ * The doing record (docs/design/build-room-doing D6): apply events IN ORDER to
+ * BUILD#ACTIVITY, keep the row (put: session ttl, sealed in a team's room),
+ * write a `step` entry for each line that ended, and say whether the room-
+ * visible line or the timeline changed.
+ *
+ * Three routes write this row (the pump, the log, the wait polls), each as a
+ * read-modify-write, so the put is conditional on DoingRev: a writer that lost
+ * the race reads again and re-applies (up to 3 tries; then `busy`). The steps
+ * are written only after the put succeeded, so a lost race never writes one.
+ *
+ *   events    [{ input, at }]: S.applyDoing inputs; `at` is the laptop's time for
+ *             the event, held between the previous event and now, never older
+ *             than an hour
+ *   items     normalized activity lines to merge into the row's list
+ *   onlyIfLive  do nothing unless a line or helper exists (the wait polls)
  */
-async function applyDoingEvent(ctx, input, { items, onlyIfLive = false, kept: keptRow, at } = {}) {
-  const now = new Date().toISOString();
-  const kept = keptRow !== undefined ? keptRow : await readActivityRow(ctx);
-  if (onlyIfLive && !(kept && (kept.DoingA || kept.DoingB || kept.Helper))) return false;
-  // `at` is the laptop's time for the event (a step's start or end); never in the future, never older than an hour.
-  const t = Date.parse(at);
-  const eventAt = Number.isFinite(t) ? new Date(Math.min(Math.max(t, Date.parse(now) - 3600000), Date.parse(now))).toISOString() : now;
-  const r = S.applyDoing(kept || {}, input, eventAt);
-  const list = items !== undefined ? items : (kept && kept.Items) || [];
-  // "Stale" counts real time since the last post, whatever time the event claims.
-  await put(ctx, { SK: S.SK.activity, Items: list, UpdatedAt: now, ...r.fields, ActiveAt: now });
-  for (const st of r.steps) {
-    await logEntry(ctx, { kind: 'step', text: st.text, by: 'agent', step: st });
+async function applyDoingEvents(ctx, events, { items, onlyIfLive = false } = {}) {
+  for (let attempt = 1; attempt <= DOING_TRIES; attempt += 1) {
+    const kept = await readActivityRow(ctx);
+    if (onlyIfLive && !(kept && (kept.DoingA || kept.DoingB || kept.Helper))) return { changed: false, items: (kept && kept.Items) || [] };
+    const nowIso = new Date().toISOString();
+    const nowMs = Date.parse(nowIso);
+    const steps = [];
+    let changed = false;
+    let row = kept || {};
+    let lastMs = nowMs - 3600000;
+    for (const ev of events) {
+      const t = Date.parse(ev.at);
+      const eventMs = Math.min(Math.max(Number.isFinite(t) ? t : nowMs, lastMs), nowMs);
+      lastMs = eventMs;
+      const eventIso = new Date(eventMs).toISOString();
+      const r = S.applyDoing(row, ev.input, eventIso);
+      const { DoingA, DoingB, Helper, ...rest } = row;
+      row = { ...rest, ...r.fields, ActiveAt: eventIso };
+      steps.push(...r.steps);
+      changed = r.changed || changed;
+    }
+    const list = items && items.length ? S.mergeActivity(kept ? kept.Items : [], items) : ((kept && kept.Items) || []);
+    const rev = kept && Number.isInteger(kept.DoingRev) ? kept.DoingRev : null;
+    const { DoingA, DoingB, Helper } = row;
+    try {
+      // "Stale" counts real time since the last post, whatever time the events claim.
+      await put(ctx, {
+        SK: S.SK.activity,
+        Items: list,
+        UpdatedAt: nowIso,
+        ...(DoingA ? { DoingA } : {}),
+        ...(DoingB ? { DoingB } : {}),
+        ...(Helper ? { Helper } : {}),
+        ActiveAt: nowIso,
+        DoingRev: (rev || 0) + 1,
+      }, rev === null
+        ? { ConditionExpression: 'attribute_not_exists(DoingRev)' }
+        : { ConditionExpression: 'DoingRev = :rev', ExpressionAttributeValues: { ':rev': rev } });
+    } catch (e) {
+      if (e && e.name === 'ConditionalCheckFailedException') {
+        if (attempt < DOING_TRIES) continue;
+        return { busy: true, changed: false, items: list };
+      }
+      throw e;
+    }
+    for (const st of steps) {
+      await logEntry(ctx, { kind: 'step', text: st.text, by: 'agent', step: st });
+    }
+    return { changed, items: list };
   }
-  return r.changed;
+  return { busy: true, changed: false, items: [] };
+}
+
+/** Claude is waiting for direction (wait_for_direction or wait_for_room): the line ends. A failure is logged, never swallowed. */
+async function endDoingForWaiting(ctx) {
+  try {
+    const r = await applyDoingEvents(ctx, [{ input: { waiting: true } }], { onlyIfLive: true });
+    if (r.busy) console.error('BUILD ROOM: the doing line stayed busy; it was not ended at the wait');
+    return Boolean(r.changed);
+  } catch (e) {
+    console.error('BUILD ROOM: ending the doing line at the wait failed:', e && e.message);
+    return false;
+  }
+}
+
+/**
+ * The pump's events, in file order: { type: 'doing', text, at } | { type: 'done', item, at } |
+ * { type: 'helper', text, at } | { type: 'helper-end', at }. The to-do list's line is source
+ * 'todo'; an empty `item` on a done ends the line under its own words.
+ */
+function doingEventsOf(raw) {
+  const inputs = [];
+  for (const e of raw.slice(-100)) {
+    if (!e || typeof e !== 'object') continue;
+    const at = e.at;
+    if (e.type === 'doing' && typeof e.text === 'string') inputs.push({ input: { source: 'todo', doing: e.text }, at });
+    else if (e.type === 'done') inputs.push({ input: { source: 'todo', done: typeof e.item === 'string' && e.item ? e.item : true }, at });
+    else if (e.type === 'helper' && typeof e.text === 'string') inputs.push({ input: { source: 'todo', helper: e.text }, at });
+    else if (e.type === 'helper-end') inputs.push({ input: { source: 'todo', helper: '' }, at });
+  }
+  return inputs;
 }
 
 async function postActivity(ctx, body) {
@@ -1854,40 +1938,18 @@ async function postActivity(ctx, body) {
   const b = body || {};
   const norm = S.normalizeActivity(b.items === undefined ? [] : b.items, now);
   if (norm.error) return fail(400, norm.error);
-  // The to-do list's line (A): { doing: { source, text, at }, helper: { text, at } | { end: true, at },
-  // done: [{ item, at }] }. Each done item closes its step BEFORE the new doing is applied; the
-  // helper line is its own field (a helper inside `doing` is still read). `true` is one unnamed done.
-  const d = b.doing && typeof b.doing === 'object' ? b.doing : null;
-  const hp = b.helper && typeof b.helper === 'object' ? b.helper : null;
-  const dones = (Array.isArray(b.done) ? b.done : (b.done ? [b.done] : []))
-    .map((x) => (x && typeof x === 'object' ? { done: x.item || x.text || true, at: x.at } : { done: x }))
-    .filter((x) => x.done)
-    .slice(0, 25);
-  if (!norm.value.length && !d && !hp && !dones.length) return reply(200, { activity: [] });
-  const kept = await readActivityRow(ctx);
-  const items = norm.value.length ? S.mergeActivity(kept ? kept.Items : [], norm.value) : ((kept && kept.Items) || []);
-  let changed = false;
-  let fresh = kept;
-  for (const x of dones) {
-    changed = (await applyDoingEvent(ctx, { source: 'todo', done: x.done }, { items, kept: fresh, at: x.at })) || changed;
-    fresh = undefined;
-  }
-  const helper = hp ? (hp.end ? '' : hp.text) : (d && d.helper !== undefined ? d.helper : undefined);
-  if (d || hp || !dones.length) {
-    const input = {
-      source: d && d.source === 'claude' ? 'claude' : 'todo',
-      ...(d && typeof d.text === 'string' ? { doing: d.text, past: d.past } : {}),
-      ...(helper !== undefined ? { helper } : {}),
-    };
-    changed = (await applyDoingEvent(ctx, input, { items, kept: fresh, at: (d && d.at) || (hp && hp.at) })) || changed;
-  }
-  await toHosts(db, TABLE(), ctx.gameId, { type: 'buildActivity', gameId: ctx.gameId, items }).catch(() => {});
-  if (changed) {
+  if (b.events !== undefined && !Array.isArray(b.events)) return fail(400, 'events must be a list');
+  const events = doingEventsOf(b.events || []);
+  if (!norm.value.length && !events.length) return reply(200, { ok: true });
+  const res = await applyDoingEvents(ctx, events, { items: norm.value });
+  if (res.busy) return fail(409, DOING_BUSY);
+  await toHosts(db, TABLE(), ctx.gameId, { type: 'buildActivity', gameId: ctx.gameId, items: res.items }).catch(() => {});
+  if (res.changed) {
     const st = await touchState(ctx);
     await announce(ctx, st.Rev);
   }
-  const after = await readActivityRow(ctx);
-  return reply(200, { activity: items, doing: S.doingView(after, new Date().toISOString()) });
+  // Claude is told nothing back: the room's view is for the room.
+  return reply(200, { ok: true });
 }
 
 /**
@@ -2548,6 +2610,11 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   }
   if (method === 'GET' && a === 'images' && b && !c) return getImage(ctx, b);
   if (method === 'GET' && a === 'asks' && b && !c) {
+    // wait_for_room polls here: Claude is waiting for the host, so its line ends.
+    if (role === 'agent' && query && query.waiting === '1' && await endDoingForWaiting(ctx)) {
+      const st = await touchState(ctx);
+      await announce(ctx, st.Rev);
+    }
     const room = await loadRoom(ctx);
     const ask = findAsk(room, b);
     if (!ask) return fail(404, `No ask ${b}`);

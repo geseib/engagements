@@ -75,7 +75,7 @@ const server = http.createServer((req, res) => {
     const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
     if (failNext401) { failNext401 = false; return send(401, { error: 'Key revoked' }); }
     if (endedNext) { endedNext = false; return send(409, { error: 'This session has ended' }); }
-    const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '');
+    const p = req.url.replace(/^\/dev\/games\/4321\/build\//, '').replace(/^(asks\/[^?]+)\?waiting=1$/, '$1');
     if (req.method === 'GET' && (p === 'state' || p === 'state?kickoff=1')) {
       return send(200, {
         gameId: '4321', title: 'Launch site', goal: 'Build a landing page for the meetup', state: 'STARTED',
@@ -273,7 +273,7 @@ const hardStop = setTimeout(() => {
     const r = await mcp.request('tools/call', { name: 'wait_for_room', arguments: { askId: '003', maxWaitSeconds: 5 }, _meta: { progressToken: 'p1' } });
     const t = textOf(r);
     assert.ok(requests.length >= 3, `polled ${requests.length} times`);
-    assert.ok(requests.every(q => q.method === 'GET' && q.url === '/dev/games/4321/build/asks/003'));
+    assert.ok(requests.every(q => q.method === 'GET' && q.url === '/dev/games/4321/build/asks/003?waiting=1'));
     assert.ok(/THE ROOM DECIDED/.test(t) && /keep the logo from A/.test(t), t);
     assert.ok(/never in this terminal/.test(t), 'a decision reminds Claude where questions go');
     // Decided: the decision, not the tally (owner, 2026-10-06: "Claude only needs question/answer").
