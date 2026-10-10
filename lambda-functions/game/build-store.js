@@ -876,6 +876,31 @@ const settingsOf = (stateRow) => ({
   listNames: Boolean(stateRow && stateRow.Settings && stateRow.Settings.listNames === true),
 });
 
+// ── What the host has seen of the Host alert (owner, 2026-10-10) ───────────
+// Kept on the room, so the wall and the host's phone agree: the item ids the
+// host opened, and the time of the last Mark all seen. Ids only: no text, no names.
+const SEEN_MAX_IDS = 200;
+const SEEN_MAX_PER_POST = 50;
+const SEEN_ID = /^(?:ask|idea|share):[A-Za-z0-9_.#-]{1,80}$/;
+
+const seenOf = (stateRow) => ({
+  ids: Array.isArray(stateRow && stateRow.SeenIds) ? stateRow.SeenIds.filter((x) => typeof x === 'string') : [],
+  allAt: (stateRow && typeof stateRow.SeenAllAt === 'string' && stateRow.SeenAllAt) || '',
+});
+
+/** The body of POST seen → `{ok, all, ids}` or `{error}`. */
+function normalizeSeen(body) {
+  const b = body || {};
+  if (b.all === true) return { ok: true, all: true, ids: [] };
+  if (!Array.isArray(b.ids) || !b.ids.length) return { error: 'Say which items were seen, or all' };
+  if (b.ids.length > SEEN_MAX_PER_POST) return { error: `${SEEN_MAX_PER_POST} items at a time at most` };
+  if (!b.ids.every((x) => typeof x === 'string' && SEEN_ID.test(x))) return { error: 'Those are not item ids' };
+  return { ok: true, all: false, ids: [...new Set(b.ids)] };
+}
+
+/** The seen list after adding `ids`: de-duplicated, the newest SEEN_MAX_IDS kept. */
+const mergeSeen = (current, ids) => [...current.filter((x) => !ids.includes(x)), ...ids].slice(-SEEN_MAX_IDS);
+
 /** What the host (and Claude) sees: everything. */
 // ── What Claude Code is doing (owner, 2026-10-04) ─────────────────────────
 // The plugin's PostToolUse hook writes one plain line per tool Claude uses
@@ -1462,6 +1487,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     players,
     playerCount: players.length,
     settings: settingsOf(room.state),
+    // Which Host alert items the host has seen, on any of their devices. Never Claude's or a phone's.
+    ...(isAgent ? {} : { seen: seenOf(room.state) }),
     agent: agentStatus(room.state, room.keys, now),
     // The Session panel's "Claude's plugin is out of date" line. Claude and the room never get it.
     ...(isAgent ? {} : { plugin: pluginView(room.state) }),
@@ -1688,7 +1715,7 @@ module.exports = {
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
-  roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf,
+  roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,

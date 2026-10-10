@@ -1131,6 +1131,20 @@ async function postSettings(ctx, body) {
   return reply(200, { settings });
 }
 
+/** The Host alert's seen (owner, 2026-10-10): ids the host opened, or all of it up to now. Kept on the room for every device. */
+async function postSeen(ctx, body) {
+  const norm = S.normalizeSeen(body);
+  if (norm.error) return fail(400, norm.error);
+  const room = await loadRoom(ctx);
+  const cur = S.seenOf(room.state);
+  const set = norm.all
+    ? { SeenAllAt: new Date().toISOString(), SeenIds: [] }
+    : { SeenIds: S.mergeSeen(cur.ids, norm.ids) };
+  const st = await touchState(ctx, { set });
+  await announce(ctx, st.Rev);
+  return reply(200, { seen: S.seenOf(st) });
+}
+
 async function mintAgentKey(ctx, event, body) {
   const room = await loadRoom(ctx);
   const now = new Date().toISOString();
@@ -2668,6 +2682,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'images' && !b) return postImage(ctx, role, body);
   if (a === 'images' && b) return hostOnly() || imageAction(ctx, b, body);
   if (a === 'settings' && !b) return hostOnly() || postSettings(ctx, body);
+  if (a === 'seen' && !b) return hostOnly() || postSeen(ctx, body);
   if (a === 'keys' && !b) return hostOnly() || mintAgentKey(ctx, event, body);
   if (a === 'keys' && b && c === 'revoke') return hostOnly() || revokeAgentKey(ctx, b);
   return fail(404, 'Not found');

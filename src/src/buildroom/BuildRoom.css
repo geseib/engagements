@@ -1480,3 +1480,52 @@
 .brm .brm-story-kidt { min-width: 0; overflow-wrap: anywhere; }
 .brm .brm-story-kid .brm-story-tm { min-width: 0; padding-top: 0; }
 .brm .brm-story-kid .brm-story-open { text-transform: none; letter-spacing: 0; font-size: var(--brm-t-body); color: var(--text); }
+
+/* ---- THE HOST ALERT (docs/design/build-room-host-alert, owner 2026-10-10) ----
+   A count on the Stage dock's HOST and on the Build / History header's Host.
+   Amber (text and outline, never a fill that competes with the one orange)
+   while Claude waits on the host, grey otherwise. The list opens in place. */
+.brm .brm-hostalert-wrap { position: relative; flex: none; display: inline-flex; }
+.brm .brm-hostalert .c { letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.brm .brm-hostalert--stage { gap: 0; letter-spacing: .12em; }
+.brm .brm-hostalert--stage .brm-hostalert-n { letter-spacing: 0; font-size: var(--t-meta); font-weight: 800; }
+.brm .brm-hostalert--grey { color: var(--text); border-color: rgba(155, 168, 190, .55); background: var(--surface); }
+.brm .brm-hostalert--amber { color: var(--primary); border: 2px solid var(--primary); background: var(--brm-tint-amber); }
+.brm .brm-hostalert--stage.is-open { box-shadow: 0 0 0 4px rgba(124, 167, 230, .35); }
+.brm .brm-screen.brm-hostalert--amber { border: 0; box-shadow: inset 0 0 0 1px var(--primary); }
+.brm .brm-screen.brm-hostalert--grey { border: 0; box-shadow: inset 0 0 0 1px rgba(155, 168, 190, .55); }
+.brm .brm-screen.brm-hostalert.is-open { outline: 3px solid rgba(124, 167, 230, .45); outline-offset: 1px; }
+.brm .brm-hostalert--header .c { font: 800 14px/1 var(--font-ui); }
+.brm .brm-screens .brm-hostalert-wrap { display: inline-flex; }
+
+.brm .brm-halist {
+  position: absolute; z-index: 45; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid rgba(155, 168, 190, .45); border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+}
+.brm .brm-halist ul { list-style: none; margin: 0; padding: 6px 0; }
+.brm .brm-halist li + li { border-top: 1px solid var(--brm-rule); }
+.brm .brm-halist-line {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; width: 100%;
+  background: none; border: 0; color: var(--text); text-align: left; cursor: pointer; font: inherit;
+}
+.brm .brm-halist-line:hover, .brm .brm-halist-line:focus-visible { background: var(--surface-2); outline: none; }
+.brm .brm-halist-line:focus-visible { box-shadow: inset 0 0 0 2px var(--secondary); }
+.brm .brm-halist li.lead .t { font-weight: 800; }
+.brm .brm-halist-line .go { color: var(--secondary); font-weight: 700; white-space: nowrap; }
+.brm .brm-halist-ft { display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--brm-rule); color: var(--muted); }
+.brm .brm-halist-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--secondary); font-weight: 700; cursor: pointer; }
+.brm .brm-halist-btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.brm .brm-halist-push { margin-left: auto; color: var(--muted); font-weight: 600; }
+/* on the Stage: Room ladder, read from the back; opens above the dock */
+.brm .brm-halist--stage { right: 0; bottom: calc(100% + 12px); width: min(720px, calc(100vw - 32px)); }
+.brm .brm-halist--stage .brm-halist-line { min-height: 64px; padding: 0 24px; font-size: var(--L-body); }
+.brm .brm-halist--stage .brm-halist-ft { padding: 14px 24px; font-size: var(--L-meta); }
+/* under the header: laptop ladder; drops under the Host tab */
+.brm .brm-halist--header { top: calc(100% + 8px); left: 0; width: min(500px, calc(100vw - 32px)); }
+.brm .brm-halist--header .brm-halist-line { min-height: 44px; padding: 0 16px; font-size: var(--brm-t-head); }
+.brm .brm-halist--header .brm-halist-ft { padding: 10px 16px; font-size: var(--brm-t-label); }
+
+/* The Host screen, at the ask the alert jumped to (A4). */
+.brm .brm-proposed[data-alert-ask]:focus { outline: none; border-color: var(--secondary); box-shadow: 0 0 0 2px var(--secondary), 0 0 0 7px rgba(124, 167, 230, .22); }
+.brm #brm-waiting-h:focus { outline: 2px solid var(--secondary); outline-offset: 4px; border-radius: 4px; }

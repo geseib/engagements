@@ -39,6 +39,7 @@ import AskDetail from './BuildAskDetail';
 import MockupViewer, { ViewerContext, backLabelFor } from './MockupViewer';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
+import HostAlert from './BuildHostAlert';
 import { W } from './words';
 import InfoTip from './InfoTip';
 import BuildLaterPoints from './BuildLaterPoints';
@@ -69,7 +70,7 @@ import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
-  doingLine, queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
+  doingLine, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
   defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN,
   isPointsVote, highlightOf, highlightedPointIds, rowIsLive, pointVoteRows, runOf, runRunning,
@@ -394,6 +395,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     setScreenState(next);
   }, []);
   const [view, setView] = useState(initialView);
+  // THE HOST ALERT (owner, 2026-10-10): what this device has just marked seen (before the server answers), and the line to jump to.
+  const [seenLocal, setSeenLocal] = useState({ ids: [], allAt: '' });
+  const [alertFocus, setAlertFocus] = useState(null);
   // WHICH ANSWER GOES TO CLAUDE (owner, 2026-10-06): the winner unless the
   // host picks another ("choose this instead"), on the Stage or the Host.
   const [pick, setPick] = useState(null); // {askId, id}
@@ -745,6 +749,20 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     } catch (e) { /* the view still changes */ }
   };
 
+  // ── The Host alert (owner, 2026-10-10) ───────────────────────────────────
+  // A line on the Stage or the Build / History header jumps to where the host
+  // handles it. `alertFocus` is that request; it is served once the Host screen
+  // has rendered the target, and then cleared.
+  useEffect(() => {
+    if (!alertFocus || screen !== 'host' || !room) return;
+    const t = alertFocus.target;
+    const el = (t.kind === 'ask' && document.querySelector(`[data-alert-ask="${t.id}"]`)) || document.getElementById('brm-waiting-h');
+    if (!el) return;
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+    el.focus({ preventScroll: true });
+    setAlertFocus(null);
+  }, [alertFocus, screen, room]);
+
   if (!room) {
     return (
       <div className="brm brm-loading" data-theme="dark">
@@ -760,6 +778,27 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const present = isProjected(screen);
   const host = !present;
   const ended = room.state === 'ENDED';
+  const alert = hostAlert(room, seenLocal);
+  /** Mark seen on the room (every device of the host hears it); this device counts it at once. A failure puts it back and says so. */
+  const markSeen = (body) => {
+    const before = seenLocal;
+    setSeenLocal((cur) => (body.all ? { ids: [], allAt: new Date().toISOString() } : { ...cur, ids: [...new Set([...cur.ids, ...body.ids])] }));
+    api.markSeen(body).then((out) => {
+      // The server's clock is the one the items were made on.
+      if (body.all && out && out.seen && out.seen.allAt) setSeenLocal((cur) => ({ ...cur, allAt: out.seen.allAt }));
+      return refresh();
+    }).catch((e) => {
+      setSeenLocal(before);
+      errorKind.current = '';
+      setError((e && e.message) || 'That did not work.');
+    });
+  };
+  const alertGo = (line) => {
+    markSeen({ ids: line.ids });
+    setAlertFocus({ target: line.target });
+    setScreen('host');
+  };
+  const alertAll = () => markSeen({ all: true });
   // The request strip's two answers: one handover to the device that asked, or Not now.
   const grantAsker = (name) => run(async () => { await api.playerHandover(name, { bindToRequester: true }); await loadPlayers(); });
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
@@ -935,6 +974,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           draft={current ? drafts[current.askId] || null : null}
           onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
           onHost={() => setScreen('host')}
+          alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
           onSession={() => (panel ? closePanel() : openPanel())}
           panelOpen={Boolean(panel)}
           askingCount={askingNow.length}
@@ -964,6 +1004,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onSession={() => (panel ? closePanel() : openPanel())}
         panelOpen={Boolean(panel)}
         askingCount={askingNow.length}
+        alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
         pluginOutdated={Boolean(room.plugin && room.plugin.outdated) && !ended}
         onPlayers={() => openPanel('players')}
         onWifi={() => openPanel('settings', 'room')}
@@ -1099,7 +1140,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
             them), then the room's ideas (C1, C2). */}
         <section className="brm-hostcol" aria-labelledby="brm-waiting-h">
-          <h2 className="brm-h5" id="brm-waiting-h">
+          <h2 className="brm-h5" id="brm-waiting-h" tabIndex={-1}>
             Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
           </h2>
           <UnheardNotice room={room} />
@@ -1627,8 +1668,8 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onWifi, 
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
   onSession, panelOpen, askingCount, onPlayers, onWifi, onQr, pluginOutdated = false,
+  alert, onAlertGo, onAlertAll,
 }) {
-  const waiting = waitingCount(room);
   const pill = askPill(room);
   const tucked = narrow;
   const tools = { room, now, host, ended, connection, onReconnect, onWifi, onQr, onPlayers, pill, onScreen };
@@ -1644,7 +1685,10 @@ function RoomHeader({
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
       </div>
       <nav className="brm-screens" aria-label="Screens">
-        {SCREENS.map((s) => (
+        {SCREENS.map((s) => (s.key === 'host' && screen !== 'host' && alert && alert.count > 0 ? (
+          // The Host tab carries the Host alert on Build and History (owner, 2026-10-10); on the Host screen Waiting for you does.
+          <HostAlert key={s.key} alert={alert} variant="header" onHost={() => onScreen('host')} onGo={onAlertGo} onMarkAll={onAlertAll} />
+        ) : (
           <button
             key={s.key}
             type="button"
@@ -1654,9 +1698,8 @@ function RoomHeader({
             onClick={() => onScreen(s.key)}
           >
             {s.label}
-            {s.key === 'host' && waiting > 0 && <span className="brm-screen-n">{waiting}<span className="brm-sr"> waiting</span></span>}
           </button>
-        ))}
+        )))}
       </nav>
       {/* THE ROOM SEES THIS HEADER on Build and History, so the cue there names
           nobody: an amber pill and the count on SESSION (S6b). The Host screen
@@ -1804,7 +1847,7 @@ function hintVerb(move) {
  * window (StageDecide), and a click on an option or a wheel slice opens that
  * window with the pick made (owner, 2026-10-08).
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, alert, onAlertGo, onAlertAll, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
   // "Press Space to ..." is for the host at the dock: it shows only while the pointer is on the dock (copy pass 2026-10-10).
@@ -1823,7 +1866,6 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const editable = Boolean(current && current.status === 'results' && !ended && !crewOn && !pointsVote);
   const editKey = current ? `${current.askId}:${current.status}` : '';
   useEffect(() => { setEditing(false); setEditPick(null); }, [editKey]);
-  const waiting = waitingCount(room);
   const liveLink = liveBuildLink(room, now);
   // A click on an option or a wheel slice at results opens the send window
   // with that pick made; while the room is still answering it asks first, as before.
@@ -1971,10 +2013,8 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             {move && <button type="button" className="btn" disabled={busy || move.disabled || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
             {overDock && move && !move.disabled && !(move.action === 'run-next' && !move.claudeDone) && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
-            <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
-              <span className="dock-more-lbl">HOST</span>
-              {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
-            </button>
+            {/* HOST carries the Host alert (owner, 2026-10-10): a count, amber while Claude waits, a short list on click. */}
+            <HostAlert alert={alert} variant="stage" onHost={onHost} onGo={onAlertGo} onMarkAll={onAlertAll} />
             {/* SESSION is last, so it is never the lead. The count lights it when someone
                 asks to take a name; nothing on the Stage names the person. */}
             <button type="button" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} title="Session (\)">
@@ -2278,7 +2318,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   };
 
   return (
-    <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`}>
+    <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`} data-alert-ask={ask.askId} tabIndex={-1}>
       <div className="brm-row brm-gap">
         <span className="brm-chip brm-chip--amber">{ask.source === 'agent' ? 'Proposed by Claude' : ask.fromIdeas ? `Your vote, from ${ask.fromIdeas.length} ideas` : 'Draft'} · not shown to the room</span>
         {mockups && (mockups.ready

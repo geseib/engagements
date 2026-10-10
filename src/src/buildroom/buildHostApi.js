@@ -132,6 +132,8 @@ export function buildApi(gameId) {
     askFromIdeas: (body) => post('asks-from-ideas', body),
     /** Acknowledge every new idea at once (owner, 2026-10-05). */
     acknowledgeAll: () => post('ideas/acknowledge-all'),
+    /** The Host alert's seen, kept on the room: `{ids}` or `{all: true}` → `{seen}`. */
+    markSeen: (body) => post('seen', body),
     /** Take the room comment off the wall before its time is up. */
     clearWall: () => post('ideas/wall/clear'),
     /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */

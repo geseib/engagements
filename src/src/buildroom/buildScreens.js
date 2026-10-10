@@ -66,6 +66,60 @@ export function queueItems(room) {
   return [...claude, ...rest];
 }
 
+// ── The Host alert (docs/design/build-room-host-alert, owner 2026-10-10) ────
+// What waits on the host, for the two screens the room sees. A count and a few
+// folded lines of FIXED words: never a name, never a word a participant typed.
+// Claude's question and mockups ready turn it amber (Claude is blocked on the
+// host); ideas and early looks are grey. "Claude finished", the host's own
+// drafts and queued ideas, and takeover requests (SESSION carries those) are
+// not counted. "Seen" is kept on the room (room.seen) so every device agrees;
+// `local` is this device's just-seen items, applied before the server answers.
+
+const isMockupAsk = (a) => a.kind === 'choice' && (a.options || []).length >= 2 && (a.options || []).every((o) => o.imageId);
+/** Claude asked for mockups and has not finished them: the host is not being waited on yet. */
+const mockupsPending = (a) => Boolean(a.mockups && a.mockups.asked && !a.mockups.ready);
+
+/** An item is unseen when its id was not opened and it was made after the last Mark all seen. */
+function unseenFilter(room, local) {
+  const seen = (room && room.seen) || {};
+  const ids = new Set([...(seen.ids || []), ...((local && local.ids) || [])]);
+  const allAt = [seen.allAt, local && local.allAt].filter(Boolean).sort().pop() || '';
+  return (id, at) => !ids.has(id) && !(allAt && at && String(at) <= allAt);
+}
+
+const byAt = (x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
+
+/**
+ * @returns {{count: number, amber: boolean, lines: Array<{key: string, label: string, go: string, ids: string[], target: {kind: 'ask', id: string}|{kind: 'waiting'}}>}}
+ */
+export function hostAlert(room, local) {
+  const none = { count: 0, amber: false, lines: [] };
+  if (!room) return none;
+  const fresh = unseenFilter(room, local);
+  const proposed = (room.asks || []).filter((a) => a.status === 'proposed' && a.source === 'agent' && !mockupsPending(a))
+    .map((a) => ({ id: `ask:${a.askId}`, askId: a.askId, at: a.createdAt || '', a }))
+    .filter((x) => fresh(x.id, x.at)).sort(byAt);
+  const questions = proposed.filter((x) => !isMockupAsk(x.a));
+  const mockups = proposed.filter((x) => isMockupAsk(x.a));
+  const ideas = (room.ideas || []).filter((i) => i.status === 'new' && i.source !== 'host')
+    .map((i) => ({ id: `idea:${i.ideaId}`, at: i.createdAt || '' }))
+    .filter((x) => fresh(x.id, x.at)).sort(byAt);
+  const looks = ((room.crew && room.crew.enabled && room.crew.shares) || []).filter((s) => s.lane === 'shared' && !s.featured)
+    .map((s) => ({ id: `share:${s.shareId}`, at: s.updatedAt || s.createdAt || '' }))
+    .filter((x) => fresh(x.id, x.at)).sort(byAt);
+  const ids = (list) => list.map((x) => x.id);
+  const lines = [];
+  if (questions.length) lines.push({ key: 'question', label: W.alertQuestion(questions.length), go: W.alertOpen, ids: ids(questions), target: { kind: 'ask', id: questions[0].askId } });
+  if (mockups.length) lines.push({ key: 'mockups', label: W.alertMockups(mockups.length, mockups[0].a.options.length), go: W.alertSee, ids: ids(mockups), target: { kind: 'ask', id: mockups[0].askId } });
+  if (ideas.length) lines.push({ key: 'ideas', label: W.alertIdeas(ideas.length), go: W.alertReview, ids: ids(ideas), target: { kind: 'waiting' } });
+  if (looks.length) lines.push({ key: 'looks', label: W.alertLooks(looks.length), go: W.alertReview, ids: ids(looks), target: { kind: 'waiting' } });
+  return {
+    count: questions.length + mockups.length + ideas.length + looks.length,
+    amber: questions.length + mockups.length > 0,
+    lines,
+  };
+}
+
 /** The queue's filter chips (C1), with counts. */
 export const QUEUE_FILTERS = Object.freeze([
   { key: 'all', label: 'All' },
