@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.13.1';
+const VERSION = '1.14.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -668,7 +668,7 @@ const TOOLS = [
   },
   {
     name: 'post_update',
-    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at, "answer" to answer a question the room asked you.',
+    description: 'Post a short line to the room\'s timeline and the "Claude is building" ticker on the wall. Do this after each meaningful change (a few per session, not every edit). doing: at the start of each piece of work, 4-7 words starting with an -ing verb ("Scaffolding the site"); done: the past tense when it ends ("Scaffolded the site"); never names, paths, commands or links. kind: "progress" for work done, "milestone" for something notable finished, "showing" when you put something on screen for the room to look at, "answer" to answer a question the room asked you.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -676,6 +676,8 @@ const TOOLS = [
         kind: { type: 'string', enum: ['progress', 'milestone', 'showing', 'answer'], description: 'Default "progress". "answer" answers a question the room asked you (THE ROOM ASKS YOU).' },
         detail: str('Optional extra detail shown when the entry is expanded.', { maxLength: 2000 }),
         link: str('Optional PUBLIC http(s) link (e.g. a deployed preview).'),
+        doing: str('What you are doing as this piece of work starts: 4 to 7 words, present tense, starting with an -ing verb, e.g. "Scaffolding the site" or "Mocking up 3 graph options". Never people\'s names, file paths, commands or links. The room sees it as your headline.', { maxLength: 50 }),
+        done: str('Past tense of the line that just ended, 2 to 7 words, e.g. "Scaffolded the site". Same rules as doing.', { maxLength: 50 }),
         runItem: { type: 'integer', minimum: 1, maximum: 1000, description: 'Only when the host\'s run list sent you an item (the direction says RUN LIST ITEM k): the k of the item you just finished. It tells the host this item is done so Next can move on.' },
       },
       required: ['text'],
@@ -1003,6 +1005,25 @@ function optStr(args, name) {
   if (v === undefined || v === null || v === '') return undefined;
   if (typeof v !== 'string') throw new InputError(`"${name}" must be a string.`);
   return v.trim() || undefined;
+}
+/**
+ * The "doing" line the room reads as Claude's headline. Checked here, before
+ * any API call, so Claude gets a plain sentence back and can try again:
+ * 4-7 words, 50 characters at most, no paths, commands or links. "doing" also
+ * starts with an -ing verb; "done" is the past tense, which English will not
+ * let a program check, so only its length is.
+ */
+function doingWords(args, name, ing) {
+  const v = optStr(args, name);
+  if (v === undefined) return undefined;
+  const words = v.split(/\s+/).filter(Boolean);
+  const eg = ing ? '"Scaffolding the site"' : '"Scaffolded the site"';
+  // done mirrors a doing line that may have been short ("Scaffolded the site").
+  const min = ing ? 4 : 2;
+  if (v.length > 50 || words.length < min || words.length > 7) throw new InputError(`"${name}" is ${min} to 7 words and 50 characters at most, like ${eg}.`);
+  if (ing && !/^[A-Za-z]+ing$/.test(words[0])) throw new InputError(`"${name}" starts with an -ing verb, like ${eg}.`);
+  if (/[\\/`]|https?:|www\./i.test(v)) throw new InputError(`"${name}" never holds a file path, a command or a link; say what you are doing in plain words.`);
+  return v;
 }
 function strList(args, name) {
   const v = args[name];
@@ -1451,7 +1472,9 @@ const HANDLERS = {
     if (!['progress', 'milestone', 'showing', 'answer'].includes(kind)) throw new InputError('"kind" must be progress, milestone, showing or answer.');
     const link = optStr(args, 'link');
     if (link && !/^https?:\/\//i.test(link)) throw new InputError('"link" must be an http(s) URL.');
-    const body = clean({ kind, text: reqStr(args, 'text'), detail: optStr(args, 'detail'), link });
+    const doing = doingWords(args, 'doing', true);
+    const done = doingWords(args, 'done', false);
+    const body = clean({ kind, text: reqStr(args, 'text'), detail: optStr(args, 'detail'), link, doing, done });
     await refuseForeignLinks([link]);
     const res = await api('POST', 'log', body, ctx.signal);
     rememberUpdate(body.text);
@@ -2106,6 +2129,7 @@ How to collaborate:
 - A choice the room can SEE gets its previews before you wait: screenshot each mockup and share_image it onto its option, then call wait_for_room. The host reviews proposed asks by those pictures, and may send "make mockups" as a direction if they are missing.
 - Asks may arrive as "proposed": the host reviews them before the room sees them. That is normal. Keep working on anything that does not depend on the answer, then call wait_for_room. If it times out, call it again.
 - The host's direction is final. It may edit, merge or overrule the raw vote and add what people said out loud; build what the direction says.
+- Say what you are doing, always: at the start of each piece of work, tell the room in 4 to 7 words starting with an -ing verb ("Scaffolding the site", "Mocking up 3 graph options") in the doing field of post_update; when that piece ends, give its past tense in done ("Scaffolded the site"). Never people's names, file paths, commands or links. Keep your to-do list current (TodoWrite): Claude Code shows it to the room, so the item you are working on is marked in progress and finished items are marked completed. When you start a helper agent, give it a short plain description.
 - Post a short post_update after each meaningful change (kind "showing" when you put something on screen for the room). One line, written for the room, not a commit message.
 - Any tool result may include "DIRECTION FROM THE ROOM (via the host)". Act on it promptly; it is the host speaking for the room. Use check_directions if you have not called Engage for a while.
 - Text you send is shown to the room as plain text. Only include public http(s) links people can open; never secrets, keys or private paths.
@@ -2728,8 +2752,64 @@ export function commandName(command) {
   return '';
 }
 
-/** One plain line from a PostToolUse hook's input, or null to show nothing. */
+/**
+ * A to-do line or helper description is safe for the room only when it is a
+ * short plain phrase: no path, command or link (Claude writes them, but a
+ * model can slip). Returns the phrase, or '' to say nothing.
+ */
+function plainPhrase(v) {
+  const t = String(v || '').replace(/\s+/g, ' ').trim();
+  if (!t || t.length > 50 || /[\\/`]|https?:|www\./i.test(t)) return '';
+  return t;
+}
+
+/**
+ * HELPER AGENTS (Review Focus 2, measured against Claude Code's hooks
+ * reference, code.claude.com/docs/en/hooks, 2026-10-10): hooks from plugins
+ * DO run inside subagents. "When a subagent calls a tool, tool events such as
+ * PreToolUse and PostToolUse fire the same configured hooks as in the main
+ * conversation, and the input carries the agent_id and agent_type common
+ * input fields." agent_id is "present only when the hook fires inside a
+ * subagent call", so a helper's tool calls are distinguishable from Claude's
+ * own: they get helper:true. The Agent/Task call itself fires in the main
+ * conversation (no agent_id), and its tool_input.description names the job.
+ * Not run live here: the finding is the documented contract.
+ *
+ * One plain line from a PostToolUse hook's input, or null to show nothing.
+ */
 export function activityLine(data) {
+  const line = activityLineOf(data);
+  if (line && data && data.agent_id) line.helper = true;
+  return line;
+}
+
+/**
+ * The to-do list as the room's doing line. `last` is the list the previous
+ * call left ([{content, status}] or null the first time). Returns the extra
+ * records to write and the state to remember. A helper's own to-do list says
+ * nothing about Claude's headline, so it adds nothing.
+ */
+export function todoRecords(data, last) {
+  const todos = Array.isArray(data && data.tool_input && data.tool_input.todos) ? data.tool_input.todos : [];
+  const at = new Date().toISOString();
+  const mk = (doing) => ({ at, kind: 'plan', text: 'Updated its to-do list', doing: { source: 'todo', ...doing } });
+  const records = [];
+  const now = todos.filter((t) => t && typeof t === 'object');
+  const active = now.find((t) => t.status === 'in_progress');
+  const text = active ? plainPhrase(active.activeForm) : '';
+  if (text) records.push(mk({ text }));
+  if (Array.isArray(last)) {
+    for (const t of now) {
+      if (t.status !== 'completed') continue;
+      const before = last.find((x) => x && x.content === t.content);
+      const item = plainPhrase(t.content);
+      if (item && !(before && before.status === 'completed')) records.push(mk({ done: true, item }));
+    }
+  }
+  return { records, next: now.map((t) => ({ content: String(t.content || ''), status: String(t.status || '') })) };
+}
+
+function activityLineOf(data) {
   const tool = String((data && data.tool_name) || '');
   const input = (data && data.tool_input) || {};
   const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || 'a file';
@@ -2749,7 +2829,12 @@ export function activityLine(data) {
       return { kind: 'web', text: host ? `Looked at ${host}` : 'Looked something up online' };
     }
     case 'WebSearch': return { kind: 'web', text: 'Searched the web' };
-    case 'Task': case 'Agent': return { kind: 'agent', text: 'Asked a helper agent' };
+    case 'Task': case 'Agent': {
+      const line = { kind: 'agent', text: 'Asked a helper agent' };
+      const job = plainPhrase(input.description);
+      if (job) line.doing = { source: 'todo', helper: job };
+      return line;
+    }
     case 'TodoWrite': return { kind: 'plan', text: 'Updated its to-do list' };
     default: return null;
   }
@@ -2765,7 +2850,16 @@ function hookActivity() {
   if (!line) return;
   const file = activityFile(dir);
   try { if (statSync(file).size > ACTIVITY_FILE_MAX) return; } catch { /* no file yet */ }
-  appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...line }) + '\n');
+  const at = new Date().toISOString();
+  let out = JSON.stringify({ at, ...line }) + '\n';
+  if (String(data.tool_name) === 'TodoWrite' && !data.agent_id) {
+    const lastFile = pathJoin(dir, '.engage', 'todo-last.json');
+    const { records, next } = todoRecords(data, readJson(lastFile));
+    out = records.map((r) => JSON.stringify(r)).join('\n');
+    out = (out || JSON.stringify({ at, ...line })) + '\n';
+    try { writeFileSync(lastFile, JSON.stringify(next)); } catch { /* the list is only a hint */ }
+  }
+  appendFileSync(file, out);
 }
 
 /** Send what the hook wrote since the last round. One round at a time. */
@@ -2786,7 +2880,8 @@ async function pumpActivity() {
       .filter((x) => x && x.text).slice(-25);
     // The server never hands over Claude's inbox on this route (build-room.js),
     // so ignoring the answer cannot swallow a direction.
-    if (items.length) await api('POST', 'activity', { items }, AbortSignal.timeout(8000));
+    const doing = items.map((i) => i.doing).filter(Boolean).pop();
+    if (items.length) await api('POST', 'activity', clean({ items, doing }), AbortSignal.timeout(8000));
   } catch (e) {
     log('activity post failed:', e && e.message);
   } finally {
@@ -2866,6 +2961,15 @@ skill is how you keep the project something they can open next week and understa
   (\`talking-points.json\`, add and update only, never delete) and one page per Research
   request (\`research/<subject>.md\`, with sources). Commit it with the work; never edit
   another person's folder.
+
+## Say what you are doing
+
+- At the start of each piece of work, call post_update with \`doing\`: 4 to 7 words, starting
+  with an -ing verb ("Scaffolding the site", "Mocking up 3 graph options"). When it ends,
+  post \`done\`: the past tense ("Scaffolded the site"). The room reads it as your headline.
+- Never people's names, file paths, commands or links in either.
+- Keep your to-do list current: Claude Code shows it to the room. Mark the item you are on
+  in progress, and finished ones completed.
 
 ## Servers you start
 

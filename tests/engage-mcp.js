@@ -295,6 +295,29 @@ const hardStop = setTimeout(() => {
     const t = textOf(r);
     assert.ok(/DIRECTION FROM THE ROOM \(via the host\)/.test(t) && /colours are too dark/.test(t), t);
   });
+  await check('post_update carries doing and done in the body as given', async () => {
+    requests.length = 0;
+    const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'Site is up', doing: 'Mocking up 3 graph options', done: 'Scaffolded the site' } });
+    assert.ok(!r.result.isError, textOf(r));
+    assert.deepStrictEqual(requests[0].body, { kind: 'progress', text: 'Site is up', doing: 'Mocking up 3 graph options', done: 'Scaffolded the site' });
+  });
+  await check('a bad doing or done is refused in plain words before any API call', async () => {
+    for (const [args, re] of [
+      [{ doing: 'Scaffolding' }, /4 to 7 words/],
+      [{ doing: 'Scaffolding the whole site and then the pages' }, /4 to 7 words/],
+      [{ doing: 'Scaffolding the site with a very long winded description here' }, /4 to 7 words/],
+      [{ doing: 'We scaffold the new site now' }, /-ing verb/],
+      [{ doing: 'Editing src/Header.jsx for the room' }, /path, a command or a link/],
+      [{ doing: 'Reading https://example.com for the team' }, /path, a command or a link/],
+      [{ done: 'Done' }, /2 to 7 words/],
+      [{ done: 'Edited src/Header.jsx for the room' }, /path, a command or a link/],
+    ]) {
+      requests.length = 0;
+      const r = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'x', ...args } });
+      assert.ok(r.result.isError && re.test(textOf(r)), JSON.stringify(args) + ' -> ' + textOf(r));
+      assert.strictEqual(requests.length, 0, 'no API call');
+    }
+  });
   await check('wait_for_direction listens until the host sends something, then hands it over', async () => {
     const before = requests.length;
     const r = await mcp.request('tools/call', { name: 'wait_for_direction', arguments: { maxWaitSeconds: 30 } });
