@@ -15,6 +15,7 @@ import React, { createContext, useCallback, useEffect, useRef, useState } from '
 import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import BuildImage, { useImageUrl } from './BuildImage';
+import { W } from './words';
 
 /** `(askId, label, from) => void`, or null where a surface has no viewer. */
 export const ViewerContext = createContext(null);
@@ -35,7 +36,7 @@ export function backLabelFor(from, askId) {
 function FullSize({ imageId }) {
   const url = useImageUrl(imageId);
   if (!url) return null;
-  return <a className="brm-viewer-full" href={url} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Open full size (new tab) ↗</a>;
+  return <a className="brm-viewer-full" href={url} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">{W.fullSize}</a>;
 }
 
 /** One picture on its own (a screenshot, not a choice): the picture, its caption, Back. */

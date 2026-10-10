@@ -77,7 +77,6 @@ export default function BuildPointsResults({
             {tied.length ? W.highlightTie(tied.map((r) => r.label), tied[0].count) : n ? W.highlightNote : W.highlightNone}
           </p>
         )}
-        {live.length > 0 && <p className="brm-then">{W.nextMoves}</p>}
         {!ended && (live.length > 0 ? (
           <ActionRow space={!said && n > 0} hint={said || (n > 0 ? W.spaceTo('send') : '')}>
             <button type="button" className="brm-btn" disabled={busy || rest < 1} onClick={() => onMove('later-rest')}>{W.saveRest}</button>

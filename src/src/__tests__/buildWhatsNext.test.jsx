@@ -25,7 +25,7 @@ test('What\'s next: the lead move is focused and says what it does', () => {
   expect(lead).toHaveAttribute('data-next-primary');
   fireEvent.click(lead);
   expect(onMove).toHaveBeenCalledWith('combine');
-  expect(screen.getByText('Claude is ready for the next step')).toBeInTheDocument();
+  expect(screen.getByText('Claude is ready')).toBeInTheDocument();
   expect(screen.getByText('Combine 2 decided answers')).toBeInTheDocument();
 });
 
@@ -33,11 +33,23 @@ test('What\'s next: every move is one row, and only the lead is the primary', ()
   const onMove = jest.fn();
   render(<WhatsNext room={{ asks: [], ideas: [], agent: { connected: true }, log: [] }} now={NOW} ticked={new Set()} onMove={onMove} />);
   const list = screen.getByRole('list', { name: "What's next" });
-  expect(within(list).getAllByRole('listitem')).toHaveLength(3);
-  expect(screen.getByRole('button', { name: 'Ask it' })).toHaveAttribute('data-next-primary');
-  expect(screen.getByRole('button', { name: 'New ask' })).not.toHaveAttribute('data-next-primary');
+  expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+  expect(screen.getByRole('button', { name: 'Ask' })).toHaveAttribute('data-next-primary');
+  expect(screen.getByRole('button', { name: 'Write' })).not.toHaveAttribute('data-next-primary');
   fireEvent.click(screen.getByRole('button', { name: 'Write' }));
   expect(onMove).toHaveBeenCalledWith('tell');
+});
+
+test('What\'s next: ONE move asks the room, in the contract\'s words (copy pass 2026-10-10)', () => {
+  const onMove = jest.fn();
+  render(<WhatsNext room={{ asks: [], ideas: [], agent: { connected: true }, log: [] }} now={NOW} ticked={new Set()} onMove={onMove} />);
+  const row = screen.getByText('Ask the room').closest('li');
+  expect(within(row).getByText('A starter, or your own')).toBeInTheDocument();
+  // The two old moves are gone, so there is exactly one row that asks the room.
+  expect(screen.queryByText('Ask the room a starter question')).toBeNull();
+  expect(screen.queryByText('Ask the room something new')).toBeNull();
+  fireEvent.click(within(row).getByRole('button', { name: 'Ask' }));
+  expect(onMove).toHaveBeenCalledWith('ask-room');
 });
 
 test('What\'s next never takes the focus from a box the host is typing in', () => {
@@ -94,14 +106,14 @@ test('decidedAnswer: the answer alone, never the question again', () => {
 test('What\'s next on the host\'s screen: Claude\'s line is not about the host', () => {
   const room = { asks: [], ideas: [], agent: { connected: true }, log: [{ by: 'agent', kind: 'progress', text: 'Header B is live.', createdAt: '2026-10-07T14:50:00Z' }] };
   render(<WhatsNext room={room} now={NOW} ticked={new Set()} onMove={jest.fn()} />);
-  expect(screen.getByText('It finished: Header B is live.')).toBeInTheDocument();
+  expect(screen.getByText('Done: Header B is live.')).toBeInTheDocument();
   expect(screen.queryByText(/The host will choose/)).toBeNull();
 });
 
 test('What\'s next: a paused Claude points at the Continue prompt only when it is on the screen', () => {
   const room = { asks: [], ideas: [], agent: { connected: false, listening: false, lastSeenAt: '2026-10-07T14:40:00Z' }, log: [] };
   const { rerender } = render(<WhatsNext room={room} now={NOW} ticked={new Set()} onMove={jest.fn()} continueOn />);
-  expect(screen.getByText('Copy the Continue prompt to pick it up.')).toBeInTheDocument();
+  expect(screen.getByText('Copy the Continue prompt.')).toBeInTheDocument();
   rerender(<WhatsNext room={room} now={NOW} ticked={new Set()} onMove={jest.fn()} />);
   expect(screen.queryByText(/Continue prompt/)).toBeNull();
 });
@@ -117,7 +129,7 @@ test('Decided: ticking does not pull the focus when the lead move changes', () =
     );
   }
   render(<Harness />);
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask it' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' }));
   const box = screen.getByRole('checkbox', { name: /What are we building/ });
   box.focus();
   fireEvent.click(box);

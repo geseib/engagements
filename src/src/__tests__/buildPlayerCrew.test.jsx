@@ -182,7 +182,7 @@ describe('becoming a builder', () => {
     });
     await mount('Dee');
     const join = screen.getByRole('region', { name: 'Want to build too?' });
-    expect(within(join).getByText(/You need Claude Code on your laptop and access to the project's repo/)).toBeInTheDocument();
+    expect(within(join).getByText(/Needs Claude Code and the repo\./)).toBeInTheDocument();
     expect(within(join).getByText('Everyone else: just follow along here.')).toBeInTheDocument();
     // One shared repo, a branch each: the phone never talks about forks or patches.
     expect(document.body.textContent).not.toMatch(/fork|patch/i);
@@ -191,7 +191,7 @@ describe('becoming a builder', () => {
 
     const card = await screen.findByRole('region', { name: 'Your builder key' });
     expect(within(card).getByText(`/engage:connect ${KEY}`)).toBeInTheDocument();
-    expect(within(card).getByText('No plugin? Ask the host for the install command on the Connect panel.')).toBeInTheDocument();
+    expect(within(card).getByText('No plugin? Ask the host.')).toBeInTheDocument();
     expect(within(card).getByText(/shown once/)).toBeInTheDocument();
 
     const writeText = jest.fn(() => Promise.resolve());
@@ -218,7 +218,7 @@ describe('becoming a builder', () => {
     serve(phoneView('Dee', { builders: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] }));
     await mount('Dee');
     const join = screen.getByRole('region', { name: 'Want to build too?' });
-    expect(within(join).getByText(/The crew is full \(8 builders\)/)).toBeInTheDocument();
+    expect(within(join).getByText(/The crew is full\./)).toBeInTheDocument();
     expect(within(join).queryByRole('button')).toBeNull();
   });
 });
@@ -260,7 +260,7 @@ describe('a builder\'s phone', () => {
     serve(view);
     await mount('Priya');
     const look = screen.getByRole('article', { name: 'Early look: Parking map' });
-    expect(within(look).getByText('Only you and the host see this until it is on the wall.')).toBeInTheDocument();
+    expect(within(look).getByText('Private until it is on the wall.')).toBeInTheDocument();
     expect(within(look).getByText(/Yours · v2/)).toBeInTheDocument();
     expect(within(look).queryByRole('button', { name: 'Looks right' })).toBeNull();
     expect(look.className).toMatch(/bpl-el--private/);
@@ -278,7 +278,7 @@ describe('a builder\'s phone', () => {
   test('on the wall, the notice goes', async () => {
     serve(phoneView('Priya'));
     await mount('Priya');
-    expect(screen.queryByText(/Only you and the host/)).toBeNull();
+    expect(screen.queryByText(/Private until it is on the wall/)).toBeNull();
   });
 });
 

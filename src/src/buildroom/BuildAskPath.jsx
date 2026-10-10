@@ -60,14 +60,14 @@ export function settleSummary(ask, pickId, summaries) {
     return `"${t.length > 40 ? `${t.slice(0, 40).trimEnd()}…` : t}"`;
   };
   const landed = ask.wheel && ask.wheel.landed;
-  if (landed) return !pickId || pickId === landed ? `The wheel picked ${said(landed)}` : `Going with ${said(pickId)}, your pick instead of the wheel's ${said(landed)}`;
+  if (landed) return !pickId || pickId === landed ? `The wheel picked ${said(landed)}` : `${said(pickId)} \u00b7 your pick, not the wheel's ${said(landed)}`;
   if (!pickId) return '';
   const leader = winnerOf({ ...ask, wheel: null });
-  if (!leader) return `Going with ${said(pickId)}, your pick`;
-  if (leader !== pickId) return `Going with ${said(pickId)}, your pick instead of ${said(leader)}`;
+  if (!leader) return `${said(pickId)} \u00b7 your pick`;
+  if (leader !== pickId) return `${said(pickId)} \u00b7 your pick, not ${said(leader)}`;
   const votes = (choices.find((c) => c.id === pickId) || { count: 0 }).count;
   const next = Math.max(0, ...choices.filter((c) => c.id !== pickId).map((c) => c.count));
-  return `Going with ${said(pickId)}, the room's choice, ${votes} to ${next}`;
+  return `${said(pickId)} \u00b7 the room's choice, ${votes} to ${next}`;
 }
 
 /** As the Stage dock: never on a rating, and an Ideas ask needs two ideas first. */
@@ -194,7 +194,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
             <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
             {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
             {canSpinInstead(ask) && (
-              <button type="button" className="brm-btn" disabled={busy} title="Close it and let the wheel pick from every option" onClick={act('wheel')}>{W.spin}</button>
+              <button type="button" className="brm-btn" disabled={busy} title={W.tipWheelAll} onClick={act('wheel')}>{W.spin}</button>
             )}
             {ideasOpen
               ? <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('vote', W.votingOpen)}>{W.openVoting}</button>
@@ -207,7 +207,6 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     collectBody = (
       <div className="brm-path-row">
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={act('reopen')}>Reopen</button>
-        <span className="brm-hint">Opens it to the room again.</span>
       </div>
     );
   }
@@ -256,7 +255,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
             </ActionRow>
           )
           : (
-            <ActionRow hint="Nobody has rated it yet.">
+            <ActionRow hint={W.noRatingsYet}>
               <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('reopen')}>Reopen</button>
             </ActionRow>
           );
@@ -287,9 +286,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
         {told}
         {host && !wheel && ask.kind !== 'rating' && (
           <p className="brm-hint">
-            {win ? 'Click another option to pick it instead; you will be asked first.'
-              : tied.length >= 2 ? 'Spin the wheel, ask the room to vote again, or click an option to pick it.'
-                : 'Let chance pick, or click an option to pick it yourself.'}
+            {win ? W.clickToPick : tied.length >= 2 ? W.tiePickHint : W.spinPickHint}
           </p>
         )}
         {then(['4 Change before sending'])}
@@ -303,7 +300,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
         {board}
         {/* The wheel to spin again, or with none yet: spin it, or vote again on a tie. */}
         {ask.kind !== 'rating' && <WheelPanel ask={ask} busy={busy} run={run} api={api} />}
-        {ask.kind !== 'rating' && <p className="brm-hint">Click another option to pick it instead; you will be asked first.</p>}
+        {ask.kind !== 'rating' && <p className="brm-hint">{W.clickToPick}</p>}
       </>
     );
   }
@@ -322,7 +319,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   let settleTitle = 'Settle';
   if (stateOf('settle') === 'done') {
     if (answering) settleTitle = 'You answer for the room';
-    else if (ask.kind === 'rating') settleTitle = `Going with the average, ${avg !== null ? avg : pickId} out of 5`;
+    else if (ask.kind === 'rating') settleTitle = W.averageOf5(avg !== null ? avg : pickId);
     else settleTitle = settleSummary(ask, pickId, sums) || 'Settled';
   }
   const shown = (name) => stateOf(name) !== 'next';

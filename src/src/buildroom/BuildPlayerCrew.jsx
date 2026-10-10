@@ -3,6 +3,7 @@ import BuildImage from './BuildImage';
 import Icon from '../components/Icon';
 import { mintBuilderKey, claimTask, react } from './buildPlayApi';
 import { LanePoints } from './BuildPlayerPoints';
+import { W } from './words';
 
 /**
  * CREW MODE ON THE PHONE (docs/design/build-room-crew/FLOWS.md, storyboard
@@ -141,11 +142,8 @@ function KeyCard({ keyText, onDone }) {
         <Icon name={copied ? 'Check' : 'Copy'} size={16} />
         <span>{copied ? 'Copied' : 'Copy'}</span>
       </button>
-      <p className="plr-help">No plugin? Ask the host for the install command on the Connect panel.</p>
-      <p className="plr-help">
-        This key is yours, not the host&apos;s. Your Claude can read the room, push your branch, share work and get feedback. It cannot merge.
-        You will not see it again; a new key replaces it.
-      </p>
+      <p className="plr-help">{W.crewNoPlugin}</p>
+      <p className="plr-help">{W.crewKeyNote}</p>
       <button type="button" className="bpl-send" onClick={onDone}>Done</button>
     </section>
   );
@@ -183,10 +181,10 @@ function JoinCard({ crew, api, setBuilderKey, onResult }) {
         <span>Want to build too?</span>
       </h3>
       {full ? (
-        <p className="plr-help">The crew is full ({MAX_BUILDERS} builders). You can still react to their work here.</p>
+        <p className="plr-help">{W.crewFull}</p>
       ) : (
         <>
-          <p className="bpl-join-tx">You need Claude Code on your laptop and access to the project&apos;s repo. You build one task on your own branch and show it to the room as you go.</p>
+          <p className="bpl-join-tx">{W.crewNeeds}</p>
           <p className="bpl-join-tx">Everyone else: just follow along here.</p>
           <button type="button" className="bpl-send" disabled={busy} onClick={mint}>
             {busy ? 'Making your key…' : 'I have Claude Code'}
@@ -264,7 +262,7 @@ function YourLane({ crew, api, setBuilderKey, onResult, myPoints }) {
       <p className={`bpl-lstatus bpl-lstatus--${status}`}>{BUILDER_STATUS[status] || status}</p>
       {flagged && b.note ? <p className="bpl-text bpl-lnote">{b.note}</p> : null}
       {b.branch ? <p className="plr-help">Your branch: <code className="bpl-mono">{b.branch}</code></p> : null}
-      {status === 'setting-up' ? <p className="plr-help">Waiting for your laptop. Type the key into Claude Code there.</p> : null}
+      {status === 'setting-up' ? <p className="plr-help">{W.crewWaiting}</p> : null}
       {feedback ? (
         <div className="bpl-fb">
           <p className="bpl-fb-h">Feedback on {feedback.title} · from the host</p>
@@ -283,7 +281,7 @@ function YourLane({ crew, api, setBuilderKey, onResult, myPoints }) {
       ) : (
         <p className="plr-help">No open tasks. The host adds them.</p>
       )}
-      <p className="plr-help">Two of you on one task is fine. The room compares. Your Claude gets the task as a direction.</p>
+      <p className="plr-help">{W.crewTwo}</p>
       <button type="button" className="bpl-textbtn" disabled={busy} onClick={mint}>
         {busy ? 'Making a new key…' : 'Lost the key? Make a new one'}
       </button>
@@ -402,7 +400,7 @@ function EarlyLook({ share, me, api, onResult }) {
       </p>
       <h3 className="bpl-h bpl-text">{share.title}</h3>
       {own && !share.featured ? (
-        <p className="bpl-private">Only you and the host see this until it is on the wall.</p>
+        <p className="bpl-private">{W.crewPrivate}</p>
       ) : null}
       {(v.imageIds || []).map((id) => <BuildImage key={id} imageId={id} alt={`${share.title}, v${v.v}`} className="bpl-shot" />)}
       {v.summary ? <p className="bpl-text bpl-el-sum">{v.summary}</p> : null}

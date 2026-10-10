@@ -101,12 +101,12 @@ function useCrowded(ref, deps) {
 }
 
 export default function Dock({
-  status, hint, kbd, onSetup, onAgenda, complete = false, notice = false, progress = null, children,
+  status, hint, kbd, onSetup, onAgenda, complete = false, notice = false, progress = null, children, ...rest
 }) {
   const ref = useRef(null);
   useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, notice, progress, children]);
   return (
-    <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined}>
+    <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined} {...rest}>
       {status && (
         <span
           className={`status${complete ? ' go' : ''}${notice ? ' notice' : ''}`}

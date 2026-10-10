@@ -82,6 +82,9 @@ async function openStage(r = baseRows()) {
   fireEvent.keyDown(window, { key: '2' });
 }
 const dock = () => within(document.querySelector('footer.dock'));
+/** "Press Space to ..." shows only while the pointer is on the dock (copy pass 2026-10-10). */
+const overDock = () => { fireEvent.mouseEnter(document.querySelector('footer.dock')); };
+const leaveDock = () => { fireEvent.mouseLeave(document.querySelector('footer.dock')); };
 const openEdit = async () => {
   fireEvent.click(dock().getByRole('button', { name: 'Change before sending' }));
   return screen.findByRole('dialog', { name: 'Change before sending' });
@@ -95,8 +98,14 @@ describe('R3: the Stage at results', () => {
     // Same order as the Host: the change is to the left of the main button.
     const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.trim());
     expect(names.indexOf('Change before sending')).toBeLessThan(names.indexOf('Send B to Claude'));
+    // Never on the Stage until the pointer is on the dock.
+    expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
+    overDock();
     const hint = document.querySelector('.dock .brm-dockhint');
     expect(hint.textContent).toBe('Press Space to send');
+    leaveDock();
+    expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
+    overDock();
     expect(hint.querySelector('b').textContent).toBe('Space');
     expect(document.querySelector('.dock .kbd')).toBeNull();
   });
@@ -140,12 +149,14 @@ describe('R3: the Stage at results', () => {
     expect(dock().queryByRole('button', { name: /to Claude$/ })).toBeNull();
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
+    overDock();
     expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to spin');
   });
 
   test('a set that says Later: the same button as the Host, Save for later, and nothing goes to Claude', async () => {
     await openStage(baseRows({ ...ASK, ClaudeGets: 'later' }));
     expect(dock().queryByRole('button', { name: 'Send B to Claude' })).toBeNull();
+    overDock();
     expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to save for later');
     fireEvent.click(dock().getByRole('button', { name: 'Save for later' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], as: 'later' }));
@@ -191,6 +202,7 @@ describe('R3: the Stage at results', () => {
     expect(turning).toBeDisabled();
     expect(dock().queryByRole('button', { name: /Send B to Claude/ })).toBeNull();
     expect(dock().getByRole('button', { name: 'Spin again' })).toBeDisabled();
+    overDock();
     expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
     expect(document.querySelector('.dock .status').textContent).not.toMatch(/\bB\b/);
     fireEvent.keyDown(window, { key: ' ' });
@@ -229,6 +241,7 @@ describe('R3: the Stage at results', () => {
     // A wheel already still on arrival is settled.
     await waitFor(() => expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeEnabled());
     expect(dock().getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
+    overDock();
     expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to send');
   });
 
@@ -364,7 +377,7 @@ describe('R4: the Change before sending window', () => {
     fireEvent.change(within(win).getByRole('textbox', { name: 'Direction for Claude' }), { target: { value: 'My words' } });
     failNext = 'The server is down';
     fireEvent.click(within(win).getByRole('button', { name: 'Send B to Claude' }));
-    expect(await within(win).findByRole('alert')).toHaveTextContent(/did not send/i);
+    expect(await within(win).findByRole('alert')).toHaveTextContent(/not sent/i);
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('My words');
   });
 });
@@ -421,7 +434,7 @@ describe('R5: Re-ask', () => {
     failNext = 'Nope';
     fireEvent.change(within(form).getByLabelText('Option B'), { target: { value: 'Bold' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Ask again' }));
-    expect(await within(form).findByRole('alert')).toHaveTextContent(/did not ask again/i);
+    expect(await within(form).findByRole('alert')).toHaveTextContent(/not sent/i);
     expect(within(form).getByLabelText('Option B').value).toBe('Bold');
   });
 });

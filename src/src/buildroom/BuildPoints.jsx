@@ -150,8 +150,8 @@ export default function BuildPoints({
     <section className="brm-points" aria-label={W.points}>
       {!ended && (
         <div className="brm-row brm-gap brm-ptop">
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : undefined} onClick={() => onRequest('research')}><Icon name="MagnifyingGlass" size={14} /> {W.research}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : undefined} onClick={() => onRequest('ideas')}><Icon name="Lightbulb" size={14} /> {W.ideasAsk}</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.researchTip} onClick={() => onRequest('research')}><Icon name="MagnifyingGlass" size={14} /> {W.research}</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.ideasTip} onClick={() => onRequest('ideas')}><Icon name="Lightbulb" size={14} /> {W.ideasAsk}</button>
           {full && <span className="brm-hint" role="status">{W.pointsFull(POINTS_OPEN_MAX)}</span>}
         </div>
       )}
