@@ -25,8 +25,8 @@ const manual = {
           items: [
             { title: 'Title', text: 'The short version, for lists and for the round header.' },
             { title: 'Question', text: 'The full text, as the room will read it.' },
-            { title: 'Four options', text: 'A, B, C and D. Make the wrong ones plausible or the round is not a round.' },
-            { title: 'Correct answer', text: 'Which of the four. Getting this wrong is the worst bug a set can have — it is wrong in public, with points attached.' },
+            { title: 'Options', text: 'A to D, and E and F when the question needs them: up to six. Make the wrong ones plausible or the round is not a round.' },
+            { title: 'Correct answer', text: 'Which option is right. Getting this wrong is the worst bug a set can have — it is wrong in public, with points attached.' },
             { title: 'Answer details', text: 'The explanation, revealed with the answer. This is the reveal field — see below.' },
             { title: 'Category and difficulty', text: 'Used for filtering and for pacing.' },
           ],

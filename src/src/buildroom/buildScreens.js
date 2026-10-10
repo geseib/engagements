@@ -158,6 +158,9 @@ export function laterItems(room) {
   return [...ideas, ...dirs].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
+/** How many people suggested on an Ideas ask (the server's respondents; an older server sends only the ideas). */
+const suggestedBy = (ask) => Number(ask.respondents ?? ask.answerCount) || 0;
+
 /** The open ask the header pill names, or null: "Ask 3 · 5 of 18" / "Ask 3 · results". */
 export function askPill(room) {
   if (!room || !room.currentAskId) return null;
@@ -165,7 +168,7 @@ export function askPill(room) {
   if (!ask || !['live', 'voting', 'results'].includes(ask.status)) return null;
   const n = Number(ask.askId) || ask.askId;
   if (ask.status === 'results') return { text: `Ask ${n} · results`, results: true };
-  const count = ask.kind === 'suggest' && ask.status === 'voting' ? ask.voteCount : ask.answerCount;
+  const count = ask.kind === 'suggest' ? (ask.status === 'voting' ? ask.voteCount : suggestedBy(ask)) : ask.answerCount;
   return { text: `Ask ${n} · ${count || 0} of ${room.playerCount || 0}`, results: false };
 }
 
@@ -284,7 +287,8 @@ function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = n
   const lastAct = acts.reduce((best, a) => (!best || timeOf(a.at) >= timeOf(best.at) ? a : best), null);
   const agentTimes = log.filter((l) => l.by === 'agent').map((l) => timeOf(l.createdAt)).filter(Number.isFinite);
   const latestMs = Math.max(-Infinity, lastAct ? timeOf(lastAct.at) : -Infinity, ...agentTimes);
-  if (Number.isFinite(latestMs) && at - latestMs <= BUILDING_WINDOW_MS) {
+  // Waiting for direction is ready, even a moment after a post (Revy review, 2026-10-10).
+  if (!agent.listening && Number.isFinite(latestMs) && at - latestMs <= BUILDING_WINDOW_MS) {
     return {
       key: 'building',
       headline: 'Claude is building',
@@ -901,8 +905,14 @@ const countOf = (ask, label) => {
 export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
   const opened = ask.openedAt ? `Opened ${clockOf(ask.openedAt)}` : 'Opened';
   const total = (ask.results && ask.results.total) || 0;
-  const verb = ask.kind === 'suggest' ? 'answered' : ask.kind === 'rating' ? 'rated' : 'voted';
-  const collect = `${total} of ${Math.max(Number(playerCount) || 0, total)} ${verb}`;
+  const of = (n) => Math.max(Number(playerCount) || 0, n);
+  let collect;
+  if (ask.kind === 'suggest') {
+    // Revy review (2026-10-10): the people who suggested, as the header pill counts them; then the ideas, then any votes.
+    const people = suggestedBy(ask);
+    const ideas = Number(ask.answerCount) || 0;
+    collect = `${people} of ${of(people)} suggested \u00b7 ${ideas} ${ideas === 1 ? 'idea' : 'ideas'}${total ? ` \u00b7 ${total} voted` : ''}`;
+  } else collect = `${total} of ${of(total)} ${ask.kind === 'rating' ? 'rated' : 'voted'}`;
   const wheel = ask.wheel && ask.wheel.landed;
   const leader = winnerOf({ ...ask, wheel: null }); // a unique vote leader only
   let settle = '';
@@ -1109,8 +1119,8 @@ export function pointGroups(room) {
 
 /** Picks per person in a points vote: 1 to 5. */
 export const VOTE_PICKS_MAX = 5;
-/** The window opens on 3 picks, or one fewer than the options when that is smaller. */
-export const defaultPicks = (n) => Math.max(1, Math.min(3, n - 1));
+/** The window opens on one pick (owner, 2026-10-10, after the Revy review: the host wanted one change and the vote allowed three); the stepper goes up to 5. */
+export const defaultPicks = () => 1;
 /** A vote the host made from ticked points. */
 export const isPointsVote = (ask) => Boolean(ask && Array.isArray(ask.fromPoints) && ask.fromPoints.length);
 

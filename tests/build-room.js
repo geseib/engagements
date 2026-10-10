@@ -422,6 +422,11 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const idea = (await hostCall('GET', 'state')).body.ideas.find((i) => i.text === 'A big friendly map');
     assert.strictEqual((await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'suggest' })).status, 200);
     for (const t of ['one', 'two', 'three']) assert.strictEqual((await playCall('POST', 'respond', { ...priya, askId: ask.askId, text: t })).status, 200);
+    // Revy review (2026-10-10): the header said 3 of 3 while the step said 0 answered. Ideas count
+    // every suggestion (4: the promoted idea and Priya's three); the people who suggested are 1.
+    const live = (await hostCall('GET', 'state')).body.asks.find((a) => a.askId === ask.askId);
+    assert.strictEqual(live.answerCount, 4);
+    assert.strictEqual(live.respondents, 1);
     await hostCall('POST', `asks/${ask.askId}`, { action: 'vote' });
     const p = await playCall('GET', 'state', priya);
     const promoted = p.body.current.responses.find((r) => r.text === 'A big friendly map');

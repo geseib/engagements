@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import Icon from '../Icon';
 import { ratingSteps, rovingIndex } from './surveyAnswers';
 
 /**
@@ -8,7 +9,7 @@ import { ratingSteps, rovingIndex } from './surveyAnswers';
  * A radiogroup with a ROVING tab stop: one Tab lands on the chosen step (or
  * the first, before anything is chosen), and the arrow keys move the choice
  * with the focus — the way a native radio group behaves, which is what a
- * keyboard user already knows. Stars are the same buttons drawn as glyphs;
+ * keyboard user already knows. Stars are the same buttons drawn as Phosphor stars;
  * the digit stays in the accessible name ("4 of 5"), so a screen reader never
  * hears "star, star, star".
  *
@@ -62,7 +63,7 @@ export default function RatingInput({ question, value, onChange }) {
               onClick={() => onChange(step)}
               onKeyDown={(e) => onKeyDown(e, i)}
             >
-              {stars ? '★' : step}
+              {stars ? <Icon name="Star" weight="fill" size="1em" aria-hidden="true" /> : step}
             </button>
           );
         })}

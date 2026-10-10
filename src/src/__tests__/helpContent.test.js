@@ -250,3 +250,69 @@ describe('§7 what counts toward a plan', () => {
     });
   });
 });
+
+/*
+  THE HELP, HELD TO TODAY'S PRODUCT (2026-10-10 pass). Each case below was a
+  sentence the guides said that the code no longer does, or a feature the code
+  ships that no guide named.
+*/
+describe('§8 the guides match what ships', () => {
+  const corpus = () => allGuides().map((g) => guideText(g)).join(' ');
+  const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2705}\u{2728}\u{274C}\u{2B50}\u{23E9}-\u{23FA}]/u;
+
+  test('no guide carries an emoji (icons come from components/Icon.jsx)', () => {
+    allGuides().forEach((guide) => expect(guideText(guide)).not.toMatch(EMOJI));
+  });
+
+  test('the welcome screen button is "Create engagement", not "Create session"', () => {
+    // rejects: the button name before WelcomeScreen.jsx renamed it.
+    expect(corpus()).not.toMatch(/choose create session/);
+    expect(corpus()).toMatch(/create engagement/);
+  });
+
+  test('polls and wavelength score nobody; trivia pays a speed bonus', () => {
+    // rejects: get-results.js "a poll scores nobody" and wavelength.js
+    // "Players have no scores" contradicted by a participation/overlap row.
+    const scoring = guideText(GUIDE_BY_ID['player-scoring']);
+    expect(scoring).not.toMatch(/participation/);
+    expect(scoring).not.toMatch(/landing on a word other people also chose/);
+    expect(scoring).toMatch(/speed bonus|faster/);
+  });
+
+  test('a poll is answered by picking, rating or yes/no, not only a text box', () => {
+    const playing = guideText(GUIDE_BY_ID['player-playing']);
+    expect(playing).not.toMatch(/poll a text box, but there is no right answer/);
+    expect(playing).toMatch(/yes or no/);
+    expect(playing).toMatch(/survey/);
+  });
+
+  test('trivia may carry up to six options', () => {
+    expect(corpus()).toMatch(/up to six/);
+    expect(guideText(GUIDE_BY_ID['builder-manual'])).not.toMatch(/four options a, b, c and d\./);
+  });
+
+  test('saved reports outlive the session and are found under Reports', () => {
+    const reporting = guideText(GUIDE_BY_ID['host-reporting']);
+    expect(reporting).toMatch(/keep for 1 year/);
+    expect(reporting).toMatch(/reports/);
+  });
+
+  test('the Build Room has a guide: the tier plugin, Node 18 and git', () => {
+    const guide = GUIDE_BY_ID['host-build-room'];
+    expect(guide).toBeDefined();
+    expect(ROLE_ID_BY_GUIDE_ID['host-build-room']).toBe('host');
+    const text = guideText(guide);
+    expect(text).toMatch(/node 18/);
+    expect(text).toMatch(/git/);
+    expect(text).toMatch(/connect/);
+    expect(text).toMatch(/laptops, tablets and phones/);
+  });
+
+  test('the console guide names the team sections and the Engage ones', () => {
+    const text = guideText(GUIDE_BY_ID['admin-getting-started']);
+    expect(text).toMatch(/plan & usage/);
+    expect(text).toMatch(/members/);
+    expect(text).toMatch(/moderation/);
+    expect(text).not.toMatch(/its six sections/);
+  });
+});

@@ -258,7 +258,9 @@ function evt({ method = 'POST', sub = '', email = '', name = '', orgId = '', rol
   return {
     requestContext: {
       http: { method },
-      authorizer: { lambda: { userId: sub, email, name, orgId, orgRole: role, groups } },
+      // The authorizer always says whether the address is proven (auth/authorizer.js
+      // isEmailVerified); a real sign-in's is. tests/invite-routes-pending.js covers 'false'.
+      authorizer: { lambda: { userId: sub, email, emailVerified: 'true', name, orgId, orgRole: role, groups } },
     },
     pathParameters: pathParams,
     body: body === undefined ? undefined : JSON.stringify(body),

@@ -1241,7 +1241,7 @@ export default function BuildPlayer({
         {!point && run ? <RunBlock run={run} lead /> : null}
         {!point && !run ? (
           <>
-            <h1 className="plr-h1 plr-h1--primary">{doingNow && doingNow.text ? doingNow.headline : 'Claude is building'}</h1>
+            <h1 className="plr-h1 plr-h1--primary">{doingNow && doingNow.text ? doingNow.headline : !view.agentConnected ? W.waitingForClaude : view.agentListening ? W.claudeReady : 'Claude is building'}</h1>
             {doingNow && doingNow.text && !doingNow.stale ? <p className="bpl-dur">{W.forDur(doingNow.dur)}</p> : null}
             {doingNow && doingNow.helperLine ? <p className="bpl-helper">{doingNow.helperLine}</p> : null}
             {(doingNow && doingNow.text && doingNow.stale ? W.hostPicksUp : W.buildingHint) ? <p className="plr-help bpl-hint">{doingNow && doingNow.text && doingNow.stale ? W.hostPicksUp : W.buildingHint}</p> : null}

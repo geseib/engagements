@@ -4,28 +4,35 @@
    Scoped under `.pinv`, like `.pmode`, `.porgs` and `.team`, so it declares no
    global class a later import would inherit.
 
-   Colour is tokens only, from the dusk set this app already uses. The values
-   are the ones TeamPanel.css measured — same surfaces, so the same ratios:
+   BLUE, NEVER ORANGE (owner, 2026-10-10: docs/design/pending-invite-notice).
+   It joins screens that each already have their one orange — Create
+   engagement, Join, Create room, the focused ask — so the row is the
+   --secondary blue the Build Room uses for "yours, not urgent", and Accept is
+   neutral. Two shapes: the row, and `.pinv--bar`, full width under the Build
+   Room header on the Host screen.
 
-     --text        #F4EDE4 on --bg #0F1A2E, over the amber tint    > AA
-     --muted       #9BA8BE on the same stack                       > AA
-     --primary     #F6A94C on --bg                        9.14:1   the icon
-     --bg          #0F1A2E on --primary                   8.86:1   Accept
-     --danger-text #EF8C86 on --bg                        7.26:1   a refusal
+     --text      #F4EDE4 on --bg + blue tint        > AA
+     --muted     #9BA8BE on the same stack          > AA
+     --secondary #7CA7E6 on --bg + tint   ≈ 7.0:1   the icon and edge
+     --text      on --surface                       the neutral Accept
+     --danger-text #EF8C86 on --bg        7.26:1    a refusal
 
    Asserted in __tests__/pendingInvitesPalette.test.js.
 
-   ONE ROW PER INVITATION, not a card. This sits above somebody's own work on
-   the screen they use to start a session; it has to be answerable at a glance
-   and then gone, rather than occupying the top of the page.
+   ONE ROW PER INVITATION, not a card. It has to be answerable at a glance and
+   then gone, rather than occupying the top of the page.
    ========================================================================== */
 
 .pinv {
   --pinv-t-floor: 12px;
   --pinv-t-label: 13px;
   --pinv-t-body: 15px;
-  --pinv-rule: rgba(246, 169, 76, .38);
-  --pinv-tint: rgba(246, 169, 76, .08);
+  --pinv-rule: rgba(124, 167, 230, .38);
+  --pinv-tint: rgba(124, 167, 230, .08);
+  --pinv-ok-rule: rgba(79, 178, 134, .4);
+  --pinv-ok-tint: rgba(79, 178, 134, .09);
+  --pinv-btn-rule: rgba(155, 168, 190, .55);
+  --pinv-bar: #0F1E36;
 
   display: flex;
   flex-direction: column;
@@ -37,48 +44,75 @@
 .pinv *::before,
 .pinv *::after { box-sizing: border-box; }
 
-.pinv :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+.pinv :focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 3px; }
 
 .pinv-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 10px 12px;
   flex-wrap: wrap;
   padding: 10px 12px;
   border: 1px solid var(--pinv-rule);
-  border-left-width: 3px;
+  border-left: 3px solid var(--secondary);
   border-radius: 6px;
   background: var(--pinv-tint);
   color: var(--muted);
   font: 400 var(--pinv-t-label)/1.5 var(--font-ui);
 }
 
-.pinv-icon { flex: none; display: inline-flex; }
+.pinv-icon { flex: none; display: inline-flex; color: var(--secondary); }
 
-.pinv-text { flex: 1 1 260px; min-width: 0; }
+/* The words take the width; the button drops to its own line, right-aligned,
+   when they need it. The inviter's address breaks anywhere rather than
+   pushing the page sideways at 375px. */
+.pinv-text { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
 .pinv-text b { color: var(--text); font-weight: 600; }
 
 .pinv-when { color: var(--muted); }
+.pinv-what { display: block; margin-top: 2px; }
 
 .pinv-btn {
   flex: none;
+  margin-left: auto;
   min-height: 28px;
   padding: 0 14px;
   border-radius: 6px;
-  border: 1px solid var(--primary);
-  background: var(--primary);
-  color: var(--bg);
+  border: 1px solid var(--pinv-btn-rule);
+  background: var(--surface);
+  color: var(--text);
   font: 600 var(--pinv-t-label)/1 var(--font-ui);
   cursor: pointer;
   white-space: nowrap;
 }
-.pinv-btn:hover:not(:disabled) { filter: brightness(1.06); }
-.pinv-btn:disabled { opacity: .5; cursor: not-allowed; }
+.pinv-btn:hover:not(:disabled) { border-color: var(--secondary); }
+.pinv-btn:disabled { opacity: .55; cursor: not-allowed; }
 
 .pinv-error {
+  flex-basis: 100%;
   margin: 0;
   color: var(--danger-text);
   font-size: var(--pinv-t-label);
+}
+
+.pinv-row--ok { border-color: var(--pinv-ok-rule); border-left-color: var(--success); background: var(--pinv-ok-tint); }
+.pinv-row--ok .pinv-icon { color: var(--success); }
+
+/* Inside a page that spaces its own children (the waiting screens). */
+.pinv--flush { margin: 0; }
+
+/* ── The Build Room bar (option A) ──────────────────────────────────────────
+   Full width under the header, Host screen only. No radius, no side borders,
+   a rule underneath, and its own ground so the tint reads the same over the
+   room's page as it does in the mockup. */
+.pinv--bar { margin: 0; gap: 0; }
+.pinv--bar .pinv-row {
+  border-radius: 0;
+  border-width: 0 0 1px 3px;
+  padding: 7px 18px;
+  background: linear-gradient(var(--pinv-tint), var(--pinv-tint)), var(--pinv-bar);
+}
+@media (max-width: 480px) {
+  .pinv--bar .pinv-row { padding: 8px 12px; }
 }
 
 /* ── The standalone accept page ────────────────────────────────────────────

@@ -109,9 +109,9 @@ test('Timeline: every entry but host notes, with links', () => {
   expect(screen.queryByText('Private: chase Dee')).toBeNull();
 });
 
-test('Ideas from the room and who took part', () => {
+test('Unprompted ideas and who took part', () => {
   render(<BuildReport state={state()} />);
-  const ideas = section('Ideas from the room');
+  const ideas = section('Unprompted ideas');
   expect(within(ideas).getByText('A parking map')).toBeInTheDocument();
   expect(within(ideas).getByText('Used')).toBeInTheDocument();
   expect(within(ideas).getByText('Dismissed')).toBeInTheDocument();
@@ -143,7 +143,9 @@ test('an empty room still renders every section with an honest empty state', () 
   render(<BuildReport state={empty} />);
   expect(screen.getByText(/No wrap-up yet/)).toBeInTheDocument();
   expect(screen.getByText('The room was not asked anything.')).toBeInTheDocument();
-  expect(screen.getByText('No ideas were sent.')).toBeInTheDocument();
+  // Revy review (2026-10-10): "No ideas were sent" sat beside six suggestions under Decisions.
+  expect(screen.getByText('No unprompted ideas were sent.')).toBeInTheDocument();
+  expect(screen.queryByText('Ideas from the room')).toBeNull();
   expect(screen.getByText('Nobody joined from a phone.')).toBeInTheDocument();
 });
 

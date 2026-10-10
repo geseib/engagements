@@ -109,7 +109,7 @@ export function guideText(guide) {
  * searching a corpus is a filter, which is the second reason the guides are
  * data.
  *
- * Substring rather than fuzzy: the corpus is nineteen guides, the queries are
+ * Substring rather than fuzzy: the corpus is twenty guides, the queries are
  * words like "qr", "handover", "reveal", and a fuzzy matcher on a set this
  * small returns everything. Title matches sort first because someone typing
  * "scoring" wants the scoring guide, not the eight guides that mention points.

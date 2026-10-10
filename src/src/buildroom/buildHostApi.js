@@ -17,6 +17,7 @@
 import { authFetch } from '../auth/authFetch';
 import { requestEndSession } from '../utils/endSession';
 import { requestHostTicket } from '../utils/hostTicketClient';
+import { siteTier, pluginSlash } from './pluginTier';
 
 /** `window.API_BASE`, always ending in exactly one slash. */
 export function apiBase() {
@@ -254,19 +255,9 @@ export function safeHref(value) {
  * The one command the host pastes (PLAN §7): fetch the MCP server from this
  * site and register it with the real API base and the freshly minted key.
  */
-/**
- * ONE PLUGIN PER TIER (owner, 2026-10-10): the site's tier, from the
- * window.ENV its config.js sets (development / test / production). Prod when
- * it is unset (a local dev server, the tests). engage-mcp.mjs names the
- * plugin the same way: engage, engage-dev, engage-test.
- */
-export function siteTier() {
-  const env = typeof window !== 'undefined' ? window.ENV : '';
-  return env === 'development' ? 'dev' : env === 'test' ? 'test' : 'prod';
-}
-export const pluginName = () => (siteTier() === 'prod' ? 'engage' : `engage-${siteTier()}`);
-/** A slash command of this site's plugin: /engage:kickoff, /engage-dev:kickoff … */
-export const pluginSlash = (command) => `/${pluginName()}:${command}`;
+// ONE PLUGIN PER TIER: siteTier, pluginName and pluginSlash live in pluginTier.js
+// (the marketing page reads them without this module); re-exported here.
+export { siteTier, pluginName, pluginSlash } from './pluginTier';
 
 /**
  * THE PLUGIN ROUTE (recommended). Once per laptop: fetch the server and let it

@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: Share demo · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* SHARE DEMO (owner, 2026-10-10, after a session where Wi-Fi sharing stayed
+   off and the room only saw screenshots). Extends v2.css and the Wi-Fi share
+   mockups (../build-room-lan-share). One orange element per frame: every
+   other amber (join code, phase dot, on-tab underline) goes neutral here. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .sec,body.is-solo .qs,body.is-solo .row-wrap,body.is-solo .fitrow{display:none !important}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.frame-h .rec{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--m-success-text);border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green)}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec p b{color:var(--text)}
+.lab{font:700 14px/1 var(--font-ui);color:var(--muted);margin:6px 0 -4px 4px}
+
+/* No stray orange */
+.scr .phase--build::before{background:var(--muted)}
+.scr .join .code,.hjoin b,.joinbox b{color:var(--text)}
+.view.is-on{box-shadow:inset 0 -2px 0 var(--secondary)}
+.dotline--blue::before{background:var(--secondary)}
+.dotline b{color:var(--text);font-weight:600}
+.vtab.is-on{border-color:var(--secondary);background:var(--m-tint-blue)}
+.pulse{background:var(--secondary);box-shadow:0 0 0 8px var(--m-tint-blue)}
+
+/* ---- header tools: the live-build button and the share chip ------------ */
+.hdr{gap:12px}
+.lb{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--m-rule);background:var(--surface-2);font:600 13px/1 var(--font-ui);color:var(--text);white-space:nowrap}
+.lb small{color:var(--muted);font-weight:500;font-size:12px}
+.sh{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--m-rule);font:600 13px/1 var(--font-ui);color:var(--text);white-space:nowrap;background:var(--surface)}
+.sh::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);opacity:.7}
+.sh b{font-weight:800}
+.sh--on{color:var(--m-success-text);border-color:rgba(79,178,134,.5);background:var(--m-tint-green)}
+.sh--on::before{background:var(--success);opacity:1}
+.sh--starting{color:var(--secondary);border-color:rgba(124,167,230,.55);background:var(--m-tint-blue)}
+.sh--starting::before{background:var(--secondary);opacity:1}
+.sh--quiet{color:var(--danger-text);border-color:rgba(229,100,94,.45);background:var(--m-tint-red)}
+.sh--quiet::before{background:var(--danger);opacity:1}
+.sh--failed{color:var(--danger-text);border-color:rgba(229,100,94,.45);background:var(--m-tint-red)}
+.sh--failed::before{background:var(--danger);opacity:1}
+.sh .ask{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--surface-2);color:var(--text);font-size:12px;font-weight:800}
+.sh.is-open,.lb.is-open{box-shadow:0 0 0 2px var(--secondary)}
+
+/* ---- the nudge ---------------------------------------------------------- */
+.nudge{display:flex;flex-direction:column;gap:10px;border:1px solid rgba(124,167,230,.55);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface);border-radius:12px;padding:14px 16px}
+.nudge .t{margin:0;font:800 19px/1.25 var(--font-ui)}
+.nudge .s{margin:0;font-size:15px;line-height:1.4}
+.nudge .who{margin:0;font-size:13px;color:var(--muted);line-height:1.45;display:flex;gap:8px;align-items:flex-start}
+.nudge .who::before{content:"";flex:none;margin-top:4px;width:10px;height:10px;border-radius:2px;border:2px solid var(--muted);border-top-width:4px}
+.nudge .acts{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.nudge .acts .btn{min-height:34px}
+.nudge img{display:block;width:100%;border-radius:8px;border:1px solid var(--m-rule)}
+
+/* the popover form (option B and the chip's panel) */
+.pop{position:absolute;z-index:45;width:min(420px,calc(100vw - 32px));background:var(--m-drawer);border:1px solid rgba(155,168,190,.45);border-radius:14px;padding:16px 18px;
+  display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.pop::before{content:"";position:absolute;top:-7px;right:var(--tip,60px);width:12px;height:12px;background:var(--m-drawer);border-left:1px solid rgba(155,168,190,.45);border-top:1px solid rgba(155,168,190,.45);transform:rotate(45deg)}
+.pop .top{display:flex;align-items:center;gap:10px}
+.pop h3{margin:0;font:800 19px/1.2 var(--font-ui)}
+.pop .x{margin-left:auto;flex:none;width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted);font-weight:800}
+.pop .say{margin:0;font-size:13px;color:var(--muted);line-height:1.45}
+.pop .say b{color:var(--text)}
+.pop .stat{display:flex;align-items:baseline;gap:8px;font-size:15px}
+.pop .stat b{font:800 30px/1 var(--font-display);color:var(--m-success-text)}
+.pop .stat span{color:var(--muted);font-size:13px}
+.pop .addr{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:10px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg)}
+.pop .addr .qr{width:88px;height:88px;padding:6px;background-size:10px 10px;box-shadow:inset 0 0 0 6px #fff}
+.pop .addr .u{font:600 15px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.pop .addr .u small{display:block;word-break:normal;font:500 12px/1.4 var(--font-ui);color:var(--muted);margin-top:4px}
+.pop .warn{border:1px solid rgba(229,100,94,.45);background:var(--m-tint-red);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5}
+.pop .warn b{color:var(--danger-text)}
+.pop .warn ul{margin:6px 0 0;padding-left:18px;color:var(--text)}
+.pop .foot{display:flex;gap:8px;align-items:center;justify-content:flex-end;border-top:1px solid var(--m-rule);padding-top:12px;flex-wrap:wrap}
+.pop .foot .left{margin-right:auto}
+
+/* ---- Build screen ------------------------------------------------------- */
+.urlbar .u small{color:var(--muted);margin-left:8px;font-family:var(--font-ui)}
+.urlbar .local{color:var(--muted)}
+.bs-row{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--m-rule);background:var(--bg)}
+.bs-row h2{margin:0;font:800 24px/1.1 var(--font-display)}
+.bs-row .bnote{color:var(--muted);font-size:15px}
+.bs-wrap{display:grid;grid-template-rows:auto 44px 1fr;min-height:0}
+.bs-card{position:absolute;left:18px;bottom:18px;display:flex;align-items:center;gap:16px;background:rgba(12,22,40,.95);border:1px solid var(--m-rule);border-radius:14px;padding:14px 18px;font-size:18px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:620px}
+.bs-card p{margin:0;line-height:1.35}
+.bs-card small{display:block;color:var(--muted);font-size:15px}
+.bs-card--on{border-color:rgba(79,178,134,.5)}
+.bs-card .btn{font-size:15px}
+
+/* ---- Stage (Room ladder) ------------------------------------------------ */
+.demo-stage{display:grid;grid-template-columns:auto 1fr;gap:56px;align-items:center;padding:10px 0 0}
+.demo-stage .qr--big{width:400px;height:400px}
+.demo-stage h2{margin:0 0 18px;font:800 var(--L-hero)/1.02 var(--font-display);max-width:12ch}
+.demo-stage .l{margin:0 0 12px;font-size:var(--L-secondary);line-height:1.25}
+.demo-stage .m{margin:0;font-size:var(--L-body);color:var(--muted)}
+.demo-stage .count{margin-top:28px;font-size:var(--L-meta);color:var(--m-success-text);font-weight:700}
+
+/* ---- participants ------------------------------------------------------- */
+.row-wrap{display:flex;gap:34px;justify-content:center;flex-wrap:wrap;padding:10px 20px 6px}
+.ph{width:395px;height:812px;background:var(--bg);border:10px solid #050A14;border-radius:40px;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.ph .ph-body{gap:12px}
+.ph-cap{max-width:395px;text-align:center;font-size:13px;color:var(--muted);margin:12px auto 0}
+.ph-cap b{color:var(--text)}
+.po{display:flex;flex-direction:column;gap:8px;border:1px solid var(--m-rule);background:var(--surface);border-radius:14px;padding:14px}
+.po .btn{justify-content:center;font-size:17px;min-height:50px}
+.po p{margin:0;font-size:14px;line-height:1.45}
+.po .m{color:var(--muted);font-size:13px}
+.po--on{border-color:rgba(79,178,134,.5);background:linear-gradient(var(--m-tint-green),var(--m-tint-green)),var(--surface)}
+.po--on p{text-align:center}
+.po--warn{border-color:rgba(229,100,94,.45)}
+.po h4{margin:0;font:800 16px/1.3 var(--font-ui)}
+.ph-shot{border-radius:10px;border:1px solid var(--m-rule);display:block;width:100%}
+.ph-fb{display:flex;gap:8px}
+.ph-fb .btn{flex:1;justify-content:center}
+.ph-tabs span.is-on{color:var(--text);box-shadow:inset 0 2px 0 var(--secondary)}
+.eb{font:800 13px/1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.lap{width:1100px;margin:0 auto;border:12px solid #050A14;border-bottom-width:28px;border-radius:16px;background:var(--bg);box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}
+.lap-bar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#0A1222;border-bottom:1px solid var(--m-rule)}
+.lap-bar i{width:10px;height:10px;border-radius:50%;background:var(--surface-2)}
+.lap-bar .ad{flex:1;margin-left:8px;padding:6px 12px;border-radius:8px;background:var(--surface);font:500 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.lap-top{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--m-rule)}
+.lap-top b{font-size:17px}
+.lap-tabs{display:flex;gap:4px;margin-left:auto}
+.lap-tabs span{padding:7px 14px;border-radius:8px;font:700 14px/1 var(--font-ui);color:var(--muted)}
+.lap-tabs span.is-on{color:var(--text);background:var(--m-tint-blue)}
+.lap-body{display:grid;grid-template-columns:360px 1fr;gap:26px;padding:22px}
+
+/* ---- the fit check: the same popovers at 660 and 375 ------------------- */
+.fitrow{display:flex;gap:30px;flex-wrap:wrap;padding:10px 20px;justify-content:center;align-items:flex-start}
+.vp{border:1px dashed rgba(155,168,190,.45);border-radius:10px;background:#0C1628;position:relative;padding:60px 16px 16px;overflow:hidden}
+.vp .tag{position:absolute;top:10px;left:16px;font:700 12px/1 var(--font-ui);color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.vp--660{width:660px}
+.vp--375{width:375px}
+.vp .pop{position:relative;width:100%;max-width:420px;margin-left:auto}
+.vp .pop::before{display:none}
+
+/* ---- tables ------------------------------------------------------------- */
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45}
+.vt td:first-child{font-weight:700}
+.vt code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+@media (max-width:700px){.vt{font-size:13px}.vt th,.vt td{padding:8px 6px}}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · Share demo</b>
+<a href="#d1a">D1 Nudge · A</a><a href="#d1b">D1 Nudge · B</a><a href="#d2">D2 Sharing on</a><a href="#d2q">D2 Nobody can reach it</a><a href="#d3">D3 After Not now</a><a href="#d4">D4 Stage</a><a href="#d5">D5 Phones</a><a href="#d5l">D5 Laptop</a><a href="#d6">D6 Build, shared</a><a href="#fit">Fit at 660 / 375</a><a href="#data">States and data</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="../build-room-lan-share/index.html">Wi-Fi share (2026-10-07)</a><a href="../build-room-host-alert/index.html">Host · 4</a></nav>
+<div class="pg-title"><h1>Let everyone try it: a Share demo the host sees, and an honest fallback</h1>
+<p>Owner, 2026-10-10. In the last session Wi-Fi sharing stayed off; the room saw only screenshots and the demo was opened on the host's Mac. When the first build is ready, the host is asked once, clearly, and can always come back to it. Sharing stays opt-in: it opens this laptop's app to the Wi-Fi. The host sees who could open it; people who can't get the screenshots and a plain reason.</p></div>
+
+<!-- ===================================================================== D1 A -->
+<div class="frame-h" id="d1a"><h2>D1 · Option A: the nudge in the Now column</h2><p>The first time Claude shows a running app, or the first screenshot of one, the Now card leads with the nudge. It stays until the host answers. Share demo is the one amber button on the screen.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude showed the first board</b></span><span class="lb">Open on this laptop ↗</span><span class="sh">Share demo</span><span class="hjoin">Join <b>6717</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="host">
+<section class="col"><div class="colh"><h2>Now</h2></div>
+<div class="nudge">
+<p class="t">Let everyone try it.</p>
+<p class="s">Share this demo with people on your Wi-Fi.</p>
+<img src="../build-room-lan-share/img/board.svg" alt="The first board, as Claude showed it">
+<p class="who">People on this Wi-Fi can open this laptop's app. No one else can.</p>
+<div class="acts"><span class="btn btn--ghost">Not now</span><span class="btn btn--primary">Share demo</span></div>
+</div>
+<div class="composer"><textarea class="ta" placeholder="An idea, what the room said, or a note for Claude"></textarea>
+<div class="routes"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm btn--ghost">Save for later</span></div></div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you · 2</h2></div>
+<div class="filters"><span class="flt is-on">All</span><span class="flt">Claude · 0</span><span class="flt">Room · 2</span></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">From the room</span><span class="meta" style="margin-left:auto">1 min</span></div><div class="q-text">Can the winning row flash?</div></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">From the room</span><span class="meta" style="margin-left:auto">2 min</span></div><div class="q-text">Bigger counters for the projector</div></div>
+</section>
+<section class="col"><div class="tabs" style="padding:0"><span class="tab is-on" style="border-bottom-color:var(--secondary)">History</span></div>
+<ul class="hist">
+<li><span class="tm">10:42</span><span class="pt pt--room"></span><div class="bd"><b>Claude showed</b> · the first board<img src="../build-room-lan-share/img/board.svg" alt=""></div></li>
+<li><span class="tm">10:31</span><span class="pt pt--dec"></span><div class="bd"><b>Decided</b> · Ask 1: four in a row</div></li>
+</ul></section>
+</div></div></div></div>
+
+<!-- ===================================================================== D1 B -->
+<div class="frame-h" id="d1b"><h2>D1 · Option B: the nudge hangs from the header chip <span class="rec">Recommended</span></h2><p>The same words, as a popover under the <b>Share demo</b> chip, on whichever host screen is open: Host, Build or History. On the Stage, the HOST count gains one grey line, "The demo is ready to share". Not now folds the popover back into the chip it came from, so the host sees where it lives.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view is-on">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude showed the first board</b></span><span class="lb">Open on this laptop ↗</span><span class="sh is-open">Share demo</span><span class="hjoin">Join <b>6717</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="bs-wrap">
+<div class="bs-row"><h2>What Claude has built so far</h2></div>
+<div class="urlbar"><div class="vtabs"><span class="vtab is-on">Latest build</span></div><span class="u">http://localhost:5173/<small>On this laptop only</small></span></div>
+<div class="frame"><img src="../build-room-lan-share/img/board.svg" alt="The first board"></div>
+</div>
+<div class="pop" style="top:54px;right:200px;--tip:56px" role="dialog" aria-label="Share demo">
+<div class="top"><h3>Let everyone try it.</h3><span class="x">✕</span></div>
+<p class="say" style="font-size:15px;color:var(--text)">Share this demo with people on your Wi-Fi.</p>
+<p class="say">People on this Wi-Fi can open this laptop's app. No one else can.</p>
+<div class="foot"><span class="btn btn--ghost">Not now</span><span class="btn btn--primary">Share demo</span></div>
+</div>
+</div></div></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;flex-direction:column;gap:14px">
+<div class="lab">Option B on the Stage: one grey line in the HOST list (from Host · 4). Never a pop-up on the wall.</div>
+<div class="scr" style="height:430px;grid-template-rows:1fr auto">
+<div class="main"><div class="content"><div class="building"><span class="pulse"></span><h2 class="q">Claude is building the counters</h2></div><span class="mins">for 2 min</span></div></div>
+<div class="pop" style="right:200px;bottom:130px;width:720px;padding:0;gap:0"><ul style="list-style:none;margin:0;padding:6px 0">
+<li style="display:flex;align-items:center;min-height:64px;padding:0 24px;font-size:var(--L-body)"><span>The demo is ready to share</span><span style="margin-left:auto;color:var(--secondary);font-weight:700">Share →</span></li>
+<li style="display:flex;align-items:center;min-height:64px;padding:0 24px;font-size:var(--L-body);border-top:1px solid var(--m-rule)"><span>2 new ideas from the room</span><span style="margin-left:auto;color:var(--secondary);font-weight:700">Review →</span></li></ul></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">18 here</div><span class="dbtn dbtn--ghost">Ask the room</span><span class="dbtn dbtn--ghost" style="box-shadow:0 0 0 4px rgba(124,167,230,.35)">HOST · 2</span><span class="dbtn dbtn--ghost">SESSION</span></footer>
+</div>
+</div></div></div>
+
+<!-- ===================================================================== D2 -->
+<div class="frame-h" id="d2"><h2>D2 · Sharing on: who has opened it, the address, Stop sharing</h2><p>The chip turns green and counts the devices that opened it (<code>lan.open</code>, last 5 minutes). The panel shows the same count against the room, the address and its QR. Show on the Stage is the one amber button; Stop sharing sits left, plain.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the counters</b></span><span class="lb">Open the build ↗</span><span class="sh sh--on is-open">Shared · <b>11</b> opened</span><span class="hjoin">Join <b>6717</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="host">
+<section class="col"><div class="colh"><h2>Now</h2></div>
+<div class="now"><p class="nq">Claude is building the counters</p><p class="hint">for 2 min</p></div>
+<div class="composer"><textarea class="ta" placeholder="An idea, what the room said, or a note for Claude"></textarea>
+<div class="routes"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm btn--ghost">Save for later</span></div></div>
+</section>
+<section class="col"><div class="colh"><h2>Waiting for you · 2</h2></div>
+<div class="q-item"><div class="q-top"><span class="srcdot">R</span><span class="src">From the room</span><span class="meta" style="margin-left:auto">1 min</span></div><div class="q-text">Can the winning row flash?</div></div>
+</section>
+<section class="col"></section>
+</div>
+<div class="pop" style="top:54px;right:200px;--tip:70px" role="dialog" aria-label="Share demo">
+<div class="top"><h3>Demo shared on this Wi-Fi</h3><span class="x">✕</span></div>
+<div class="stat"><b>11</b> opened it <span>· 18 here</span></div>
+<div class="addr"><span class="qr"></span><div class="u">192.168.1.20:4900<small>People on this Wi-Fi can open it. No one else can.</small></div><span class="btn btn--sm btn--ghost">Copy</span></div>
+<p class="say">Not 11 of 18? Some people may be on mobile data or a VPN. They still see screenshots.</p>
+<div class="foot"><span class="btn btn--ghost left">Stop sharing</span><span class="btn btn--primary">Show on the Stage</span></div>
+</div>
+</div></div></div>
+
+<!-- ===================================================================== D2 quiet -->
+<div class="frame-h" id="d2q"><h2>D2 · Nobody can reach it, and the chip's states</h2><p>Live for 2 minutes and nobody has opened it: the Wi-Fi probably keeps devices apart (guest Wi-Fi, a firewall). The chip turns red and the panel says what to try, in the words already in <code>words.js</code>. Stop sharing becomes the main move: sharing that reaches nobody only exposes the laptop.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="height:620px">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the counters</b></span><span class="lb">Open the build ↗</span><span class="sh sh--quiet is-open">Shared · none opened yet</span><span class="hjoin">Join <b>6717</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="host"><section class="col"><div class="now"><p class="nq">Claude is building the counters</p></div></section><section class="col"></section><section class="col"></section></div>
+<div class="pop" style="top:54px;right:200px;--tip:90px" role="dialog" aria-label="Share demo">
+<div class="top"><h3>Demo shared on this Wi-Fi</h3><span class="x">✕</span></div>
+<div class="warn"><b>Nobody has opened it in 2 minutes.</b> Guest Wi-Fi often blocks this.
+<ul><li>Test it: scan the QR from another device.</li><li>Same Wi-Fi; no mobile data, no VPN.</li></ul></div>
+<div class="addr"><span class="qr"></span><div class="u">192.168.1.20:4900<small>If it fails for you, it fails for the room. Use screenshots.</small></div><span></span></div>
+<div class="foot"><span class="btn btn--ghost left">Keep sharing</span><span class="btn btn--primary">Stop sharing</span></div>
+</div>
+</div></div></div>
+<div class="fit"><div class="fit-box"><div style="width:1440px;display:grid;grid-template-columns:repeat(6,1fr);gap:12px">
+<div class="card" style="align-items:flex-start"><span class="sh">Share demo</span><p class="hint">Off. Click opens the nudge's words with Share demo. <code>!lan.wanted</code></p></div>
+<div class="card" style="align-items:flex-start"><span class="sh">Share demo <span class="ask">3</span></span><p class="hint">Off, and 3 people pressed "Ask to try it". A number, never a name.</p></div>
+<div class="card" style="align-items:flex-start"><span class="sh sh--starting">Starting…</span><p class="hint">Wanted, plugin not yet live (up to 15 s).</p></div>
+<div class="card" style="align-items:flex-start"><span class="sh sh--on">Shared · <b>11</b> opened</span><p class="hint">Live. <code>lan.open</code>.</p></div>
+<div class="card" style="align-items:flex-start"><span class="sh sh--quiet">Shared · none opened yet</span><p class="hint">Live 2 min, 0 open.</p></div>
+<div class="card" style="align-items:flex-start"><span class="sh sh--failed">Didn't start</span><p class="hint">Panel shows <code>lan.error</code> and Try again.</p></div>
+</div></div></div>
+
+<!-- ===================================================================== D3 -->
+<div class="frame-h" id="d3"><h2>D3 · After Not now: still one click away, never asked again</h2><p>Not now is no longer final. The nudge is gone for good, but <b>Share demo</b> stays in the header on every host screen, on the Build screen beside the link, and in Session → Settings. The only thing that brings the chip forward is the room: "Ask to try it" puts a count on it. On the Build screen, Share demo is the amber button; the laptop link is plain and says where it works.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view is-on">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the counters</b></span><span class="lb">Open on this laptop ↗</span><span class="sh">Share demo <span class="ask">3</span></span><span class="hjoin">Join <b>6717</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="bs-wrap" style="position:relative">
+<div class="bs-row"><h2>What Claude has built so far</h2><span class="bnote" style="margin-left:auto">Only this laptop can open it.</span><span class="btn btn--ghost">Open on this laptop ↗</span><span class="btn btn--primary">Share demo</span></div>
+<div class="urlbar"><div class="vtabs"><span class="vtab is-on">Latest build</span></div><span class="u">http://localhost:5173/<small>On this laptop only</small></span></div>
+<div class="frame"><img src="../build-room-lan-share/img/board.svg" alt="The newest screenshot"></div>
+</div>
+</div></div></div>
+
+<!-- ===================================================================== D4 -->
+<div class="frame-h" id="d4"><h2>D4 · The Stage, while sharing: how the room opens it</h2><p>Shown when the host presses Show on the Stage, and only while sharing is live. Room ladder, three short lines. The count is a number, never a name. When sharing stops, the card goes with it.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--build">Building</span><div class="rail-title"><b>Monday build session</b><span>Built with the room</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">6717</span></div></div>
+<div class="bar bar--build"></div>
+<div class="main"><div class="content">
+<div class="demo-stage"><span class="qr qr--big"></span>
+<div><span class="eyebrow" style="color:var(--m-success-text)">The demo is live</span>
+<h2 style="margin-top:14px">Try the demo yourself</h2>
+<p class="l">Scan the code, or press Open the demo.</p>
+<p class="m">Same Wi-Fi as this laptop.</p>
+<p class="count">11 have opened it</p></div></div>
+</div>
+<aside class="meter"><span class="lbl">Here</span><span class="big">18<small> / 18</small></span><span class="says">Send an idea any time</span><div class="joinbox"><span class="qr"></span><p>Join<b>6717</b></p></div></aside></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">Claude is building the counters</div><span class="dbtn dbtn--primary">Hide the code</span><span class="dbtn dbtn--ghost">HOST</span><span class="dbtn dbtn--ghost">SESSION</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== D5 -->
+<div class="frame-h" id="d5"><h2>D5 · On a phone (375): sharing on, sharing off, and shared but out of reach</h2><p>A tablet is the same page, wider. The screenshot is always there underneath: it is the fallback, not a lesser view.</p></div>
+<div class="row-wrap">
+<div><div class="ph"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Claude is building</div></div>
+<div class="ph-body">
+<div class="po po--on"><span class="btn btn--primary">Open the demo ↗</span><p class="m">Same Wi-Fi only.</p></div>
+<span class="eb">Claude is showing · 10:42</span>
+<p class="q" style="font-size:22px;margin:0">The first board</p>
+<img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
+<p class="hint">Try it, then say what you think.</p>
+<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div>
+</div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<p class="ph-cap"><b>(a) Sharing on.</b> The one amber button. It reads <code>view.lan.open</code>.</p></div>
+
+<div><div class="ph"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Claude is building</div></div>
+<div class="ph-body">
+<div class="po"><p>The demo runs on the host's laptop. Screenshots are below.</p><span class="btn">Ask to try it</span></div>
+<span class="eb">Claude is showing · 10:42</span>
+<p class="q" style="font-size:22px;margin:0">The first board</p>
+<img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
+<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div>
+</div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<p class="ph-cap"><b>(b) Not shared.</b> One honest line, the screenshots, and "Ask to try it" (pressed: "Asked. The host sees it."). No amber.</p></div>
+
+<div><div class="ph"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Claude is building</div></div>
+<div class="ph-body">
+<div class="po po--warn"><h4>Didn't open?</h4><p>You may be on mobile data or another Wi-Fi.</p><p class="m">Same Wi-Fi; no mobile data, no VPN.</p><span class="btn">Try again ↗</span></div>
+<span class="eb">Claude is showing · 10:42</span>
+<p class="q" style="font-size:22px;margin:0">The first board</p>
+<img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
+<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div>
+</div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<p class="ph-cap"><b>(c) Shared, out of reach.</b> This device pressed Open the demo and the laptop never saw it arrive within 20 s. The screenshot stays below.</p></div>
+</div>
+
+<!-- ===================================================================== D5 laptop -->
+<div class="frame-h" id="d5l"><h2>D5 · A participant on a laptop: out of reach on a work VPN</h2><p>The same Now tab, laid out wide. Laptops are the likeliest to be on a VPN, so the line names it.</p></div>
+<div class="row-wrap" style="display:block">
+<div class="lap"><div class="lap-bar"><i></i><i></i><i></i><span class="ad">engage.seibtribe.us/play/6717</span></div>
+<div class="lap-top"><b>Monday build session</b><span class="hint">Claude is building</span><div class="lap-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<div class="lap-body">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div class="po po--warn"><h4>Didn't open?</h4><p>You may be on a VPN or another Wi-Fi.</p><p class="m">Same Wi-Fi; no mobile data, no VPN.</p><span class="btn">Try again ↗</span></div>
+<span class="eb">Claude is showing · 10:42</span>
+<p class="q" style="font-size:22px;margin:0">The first board</p>
+<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div>
+</div>
+<img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
+</div></div>
+</div>
+
+<!-- ===================================================================== D6 -->
+<div class="frame-h" id="d6"><h2>D6 · The Build screen while shared: the address the room can use</h2><p>Open the build now opens the shared address, the same one every device gets. The card bottom-left carries the QR and the count; the address bar says who can reach it. Compare D3: off, it is "Open on this laptop" and "On this laptop only".</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view is-on">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the counters</b></span><span class="lb">Open the build ↗</span><span class="sh sh--on">Shared · <b>11</b> opened</span><span class="hjoin">Join <b>6717</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="bs-wrap" style="position:relative">
+<div class="bs-row"><h2>What Claude has built so far</h2><span class="btn btn--primary" style="margin-left:auto">Open the build ↗</span></div>
+<div class="urlbar"><div class="vtabs"><span class="vtab is-on">Latest build</span></div><span class="u">http://192.168.1.20:4900/<small>Anyone on this Wi-Fi</small></span></div>
+<div class="frame"><img src="../build-room-lan-share/img/board.svg" alt="The newest screenshot">
+<div class="bs-card bs-card--on"><span class="qr"></span><p>Try the demo yourself<small>Same Wi-Fi only · 11 have opened it</small></p></div></div>
+</div>
+</div></div></div>
+
+<!-- ===================================================================== fit -->
+<div class="frame-h" id="fit"><h2>Fit: the nudge and the panel at 660px and 375px</h2><p>Both are <code>width: min(420px, 100vw - 32px)</code> and kept on screen by <code>keepOnScreen.js</code>. At 375 the buttons wrap right-aligned, primary still last. Measure in the build: rect against <code>innerWidth</code>.</p></div>
+<div class="fitrow">
+<div class="vp vp--660"><span class="tag">660px</span>
+<div class="pop" role="dialog" aria-label="Share demo"><div class="top"><h3>Let everyone try it.</h3><span class="x">✕</span></div>
+<p class="say" style="font-size:15px;color:var(--text)">Share this demo with people on your Wi-Fi.</p>
+<p class="say">People on this Wi-Fi can open this laptop's app. No one else can.</p>
+<div class="foot"><span class="btn btn--ghost">Not now</span><span class="btn btn--primary">Share demo</span></div></div></div>
+<div class="vp vp--375"><span class="tag">375px</span>
+<div class="pop" role="dialog" aria-label="Share demo"><div class="top"><h3>Demo shared on this Wi-Fi</h3><span class="x">✕</span></div>
+<div class="stat"><b>11</b> opened it <span>· 18 here</span></div>
+<div class="addr"><span class="qr"></span><div class="u">192.168.1.20:4900<small>People on this Wi-Fi can open it. No one else can.</small></div><span class="btn btn--sm btn--ghost">Copy</span></div>
+<div class="foot"><span class="btn btn--ghost left">Stop sharing</span><span class="btn btn--primary">Show on the Stage</span></div></div></div>
+</div>
+
+<!-- ===================================================================== data -->
+<div class="sec" id="data"><h2>States and what they read</h2>
+<table class="vt">
+<thead><tr><th style="width:20%">State</th><th style="width:32%">Reads</th><th>Shows</th></tr></thead>
+<tbody>
+<tr><td>Demo ready, not offered</td><td><code>shouldOfferDemo(room)</code>: Claude has shown a local link <b>or a screenshot</b>; <code>!lan.wanted</code>; <code>!lan.offerDismissed</code></td><td>D1 nudge (A or B). Stage: one grey line in the HOST list.</td></tr>
+<tr><td>Not now</td><td><code>lan.offerDismissed</code></td><td>D3: chip "Share demo", Build screen button, Settings. Never re-offered.</td></tr>
+<tr><td>Room asking</td><td><code>lan.asks</code> (new: count of distinct players who pressed Ask to try it, cleared when shared)</td><td>The chip's grey count.</td></tr>
+<tr><td>Starting / waiting / failed</td><td><code>wifiState(lan, now)</code> as today</td><td>Chip states; panel with <code>lan.error</code> and Try again.</td></tr>
+<tr><td>Live</td><td><code>lan.status = live</code>, <code>lan.open</code>, <code>room.playerCount</code>, <code>wifiLink(room)</code></td><td>D2 green chip and panel, D4, D6.</td></tr>
+<tr><td>Nobody can reach it</td><td>live, <code>open = 0</code>, <code>now - liveSince ≥ 2 min</code></td><td>D2 red chip; Stop sharing becomes the primary.</td></tr>
+<tr><td>Participant (a)</td><td><code>view.lan.open</code></td><td>Open the demo.</td></tr>
+<tr><td>Participant (b)</td><td><code>view.lan</code> is null or <code>{ state: 'off' }</code> while Claude has shown something</td><td>The honest line, screenshots, Ask to try it.</td></tr>
+<tr><td>Participant (c)</td><td>Pressed Open the demo, and <code>view.lan.reached</code> (new: this player's tag seen by the gateway) still false 20 s later</td><td>Didn't open? and the screenshot.</td></tr>
+</tbody></table>
+</div>
+
+<div class="qs" id="qs"><h2>Open questions</h2>
+<ol>
+<li><b>"Demo" or "build"?</b> These frames use the owner's "demo" for everything shared ("Share demo", "Open the demo") and keep "Open the build" for the host's own link. Rename <code>W.openBuild</code> to "Open the demo" everywhere instead?</li>
+<li><b>Ask to try it.</b> It gives people off the share a voice and is the only thing that brings the chip forward after Not now. Keep it, or is that the nagging the owner ruled out?</li>
+<li><b>Only screenshots, no link.</b> The gateway needs a local address to forward. When Claude has shown only screenshots, Share demo would also tell Claude "the host wants the demo shared: post its local link". Agreed?</li>
+<li><b>(c) needs the gateway to report which device arrived</b> (a per-player tag on the link). Without it, (c) falls back to a plain "Didn't open?" link always shown under the button. Worth the plugin bump?</li>
+</ol></div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

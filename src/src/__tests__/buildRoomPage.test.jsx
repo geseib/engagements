@@ -507,7 +507,8 @@ describe('the host side panel', () => {
 
 describe('Connect Claude Code', () => {
   test('the key is shown once, inside a command with the real API base', async () => {
-    await openRoom(hostState());
+    // Claude runs the latest plugin, so step 1 keeps its usual title (an older one reads "Update the Engage plugin").
+    await openRoom(hostState({ st: { AgentPlugin: S.LATEST_PLUGIN } }));
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     // The four steps, in the order they are done (owner, 2026-10-04).
@@ -792,6 +793,8 @@ describe('create', () => {
   test('creates a build session, starts it, then opens the room', async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({ success: true });
@@ -814,6 +817,8 @@ describe('create', () => {
   test('the room decides by default: no goal needed, and Claude is told the title is only a name', async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({});
@@ -831,6 +836,8 @@ describe('create', () => {
   test("I've set the goal: the goal is required, and it answers What are we making? for the room", async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({});
@@ -852,6 +859,8 @@ describe('create', () => {
   test('switching review off saves the setting after create', async () => {
     calls = [];
     authFetch.mockImplementation(async (url, opts = {}) => {
+      // The invitation row above the form reads its own list; not a create call.
+      if (url === `${API}invites`) return res({ invites: [] });
       calls.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
       if (url.endsWith('games')) return res({ gameId: '5150' }, true, 201);
       return res({});
@@ -1350,7 +1359,9 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
     await openRoom(hostState());
     const chip = screen.getByTestId('brm-agentchip');
     expect(chip.tagName).toBe('SPAN');
-    expect(chip.getAttribute('title')).toBe('Working.');
+    // Connected and quiet reads "Claude is ready"; the tooltip now says the same thing (Revy review, 2026-10-10).
+    expect(chip.textContent).toBe('Claude is ready');
+    expect(chip.getAttribute('title')).toBe('Ready for your direction.');
   });
 });
 
@@ -2062,6 +2073,14 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(within(header()).getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
     fireEvent.click(within(bar).getByRole('button', { name: 'End session' }));
     expect(screen.getByRole('dialog', { name: 'End this session?' })).toBeInTheDocument();
+  });
+
+  // Revy review (2026-10-10): the host saved the wrap-up and the bar said Claude had.
+  test('a wrap-up the host saved says so, not that Claude wrapped up', async () => {
+    await openRoom(hostState({ st: { Outcome: { summary: 'A connect four game.', built: [], links: [], nextSteps: [], by: 'host', updatedAt: ago(30) } } }));
+    const bar = screen.getByTestId('brm-wrappedbar');
+    expect(bar.textContent).toMatch('Wrap-up saved. Check the report, then end the session.');
+    expect(bar.textContent).not.toMatch('Claude');
   });
 
   test('ended: the bar no longer carries it; the header still does', async () => {

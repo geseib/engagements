@@ -34,7 +34,7 @@ const KEY = 'eng_4821_7Hq2vX9mK3sLabcdef';
 function rows({ builders = ['Priya', 'Sam'], featured = true, base = false, lane = 'reviewed' } = {}) {
   const out = [
     {
-      SK: 'BUILD#STATE',
+      SK: 'BUILD#STATE', AgentSeenAt: T(29),
       Rev: 9,
       Crew: {
         enabled: true,

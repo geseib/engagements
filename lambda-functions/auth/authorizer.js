@@ -449,7 +449,18 @@ function requiredGroupsForRoute(method, path) {
   // invited is by definition not in the organisation inviting them.
   const MY_INVITES_ROUTE = /^invites$/;
   const INVITE_ROUTE = /^invites\/[^/]+\/accept$/;
-  if (ORG_ROUTE.test(path) || INVITE_ROUTE.test(path) || MY_INVITES_ROUTE.test(path)) {
+  // THE TWO INVITE ROUTES ALSO ADMIT `pending` (owner, 2026-10-10:
+  // docs/design/pending-invite-notice). A person waiting for approval may see
+  // and accept an invitation; accepting joins the team and changes no Cognito
+  // group, so it does not approve hosting. `pending` is anyone who has signed
+  // up, so the handlers carry the weight: each matches the invitation against
+  // the caller's VERIFIED address from the token (`emailVerified` below), and
+  // the accept route is single-use and checks expiry. Every org route stays
+  // hosts/admins. tests/invite-routes-pending.js pins both halves.
+  if (INVITE_ROUTE.test(path) || MY_INVITES_ROUTE.test(path)) {
+    return ['pending', 'hosts', 'admins'];
+  }
+  if (ORG_ROUTE.test(path)) {
     return ['hosts', 'admins'];
   }
 
@@ -824,6 +835,17 @@ async function agentKeyContext(event, token) {
   };
 }
 
+/** True when the ID token's email is proven: verified, or from a federated IdP. */
+function isEmailVerified(decoded) {
+  const v = decoded && decoded.email_verified;
+  if (v === true || v === 'true') return true;
+  let ids = decoded && decoded.identities;
+  if (typeof ids === 'string') {
+    try { ids = JSON.parse(ids); } catch (e) { ids = null; }
+  }
+  return Array.isArray(ids) && ids.length > 0;
+}
+
 // Main handler — HTTP API payload 2.0 simple response
 exports.handler = async (event) => {
   try {
@@ -845,6 +867,14 @@ exports.handler = async (event) => {
     const decoded = await verifyToken(token);
     const username = decoded['cognito:username'] || decoded.sub;
     const email = decoded.email;
+    // WHETHER THAT ADDRESS IS PROVEN. Cognito lets a signed-in user change their
+    // own `email`; the new value rides in the next ID token with
+    // `email_verified: false`. The invite routes match an invitation to this
+    // address, so they must ignore an unproven one (org-guards
+    // callerVerifiedEmail). A federated sign-in carries `identities`: its
+    // address is Google's, rewritten on every sign-in, and its hosted-UI tokens
+    // lack the scope that edits attributes.
+    const emailVerified = isEmailVerified(decoded) ? 'true' : 'false';
 
     // Get user groups
     const groups = await getUserGroups(username);
@@ -883,6 +913,7 @@ exports.handler = async (event) => {
         userId: decoded.sub,
         username,
         email,
+        emailVerified,
         // The person's own name, when the token carries one — who did it, in
         // the audit log (admin/shared/audit-log.js actorFromEvent).
         name: decoded.name || '',
@@ -907,6 +938,7 @@ module.exports.verifyToken = verifyToken;
 module.exports.getUserGroups = getUserGroups;
 module.exports.agentKeyContext = agentKeyContext;
 module.exports.hasPermission = hasPermission;
+module.exports.isEmailVerified = isEmailVerified;
 module.exports.requiredGroupsForRoute = requiredGroupsForRoute;
 module.exports.getUserMemberships = getUserMemberships;
 module.exports.getDefaultOrgId = getDefaultOrgId;

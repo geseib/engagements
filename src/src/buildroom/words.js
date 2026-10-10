@@ -269,10 +269,15 @@ export const W = Object.freeze({
   copiedPaste: 'Copied. Paste into Claude Code.',
   chipNever: 'Not connected. Open Session to connect.',
   chipReady: 'Ready for your direction.',
+  // The phone's headline before Claude works (Revy review, 2026-10-10); the host's chip says the same.
+  waitingForClaude: 'Waiting for Claude Code',
+  claudeReady: 'Claude is ready',
   chipWorking: 'Working.',
   nothingYet: 'Nothing yet.',
   endedEdit: 'Session ended. You can still edit the report.',
   wrappedUp: 'Claude has wrapped up. Check the report, then end the session.',
+  // When the host wrote or saved it (outcome.by), Revy review 2026-10-10.
+  wrapUpSaved: 'Wrap-up saved. Check the report, then end the session.',
   unsentDirection: (n) => `Ask ${n} has an unsent direction. Reopen it to send.`,
   startedTooSoon: 'Started building too soon?',
   tipPreview: 'Claude runs the project and links it here.',
@@ -412,6 +417,19 @@ export const W = Object.freeze({
   pluginOutdated: "Claude's plugin is out of date.",
   pluginUpdate: 'Update',
   pluginDotSr: "Claude's plugin is out of date",
+  // Before you start 2026-10-10: Connect step 1 says which plugin Claude runs (room.plugin)
+  pluginCheckTitle: 'Check for the latest Engage plugin',
+  pluginUpdateTitle: 'Update the Engage plugin',
+  pluginLatest: 'Latest',
+  pluginUnknown: "Claude's version shows here once it connects.",
+  pluginRunning: "Claude's plugin",
+  pluginOlder: (v) => `older than ${v}`,
+  pluginCurrent: 'The latest.',
+  pluginRerun: 'Run it again, then restart Claude Code in the project folder.',
+  installElsewhere: 'Install on another laptop',
+  // Before you start 2026-10-10: the New Build Room page (owner: option A)
+  needLine: 'The laptop that runs Claude Code needs Node 18 or later and git.',
+  beforeYouStart: 'Before you start',
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */

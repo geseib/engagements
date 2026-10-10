@@ -58,12 +58,17 @@ async function acceptInvite(event) {
   const sub = G.callerSub(event);
   if (!sub) return G.fail(403, 'Sign in to accept an invitation.');
 
-  const email = G.callerEmail(event);
+  // The VERIFIED address, from the token — never a body field. This route is
+  // open to `pending` accounts (anyone who has signed up), and Cognito lets a
+  // user set their own email; an unproven one must not match.
+  const email = G.callerVerifiedEmail(event);
   if (!email) {
-    // Fail closed. An invitation is addressed to a mailbox; with no mailbox on
-    // the caller there is nothing to match it against, and "no email" must
-    // never mean "matches anything".
-    return G.fail(403, 'Your account has no email address, so an invitation cannot be matched to it.');
+    // Fail closed. An invitation is addressed to a mailbox; with no proven
+    // mailbox on the caller there is nothing to match it against, and "no
+    // email" must never mean "matches anything".
+    return G.fail(403, G.callerEmail(event)
+      ? 'Confirm your email address first, then accept the invitation.'
+      : 'Your account has no email address, so an invitation cannot be matched to it.');
   }
 
   const parsed = G.parseInviteToken(event?.pathParameters?.token);

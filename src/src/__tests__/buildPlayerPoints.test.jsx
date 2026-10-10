@@ -29,7 +29,7 @@ const OPTS = [1, 2, 3, 4, 5].map((n, i) => ({ label: String.fromCharCode(65 + i)
 function rows({
   ask = null, shown = null, run = null, points = [], preqs = [], crew = false,
 } = {}) {
-  const out = [{ SK: 'BUILD#STATE', Rev: 9, ...(ask ? { CurrentAskId: ask.AskId } : {}), ...(crew ? { Crew: { enabled: true, repoUrl: 'https://github.com/george/foodbank', baseBranch: 'build-room/4821', baseCommit: 'e91b04d', runCrewCode: true } } : {}) }];
+  const out = [{ SK: 'BUILD#STATE', Rev: 9, AgentSeenAt: T(29), ...(ask ? { CurrentAskId: ask.AskId } : {}), ...(crew ? { Crew: { enabled: true, repoUrl: 'https://github.com/george/foodbank', baseBranch: 'build-room/4821', baseCommit: 'e91b04d', runCrewCode: true } } : {}) }];
   if (ask) out.push({ SK: `BUILD#ASK#${ask.AskId}`, Source: 'host', CreatedAt: T(1), ...ask });
   for (const p of points) out.push({ SK: `BUILD#POINT#${p.PointId.padStart(13, '0')}`, ...p });
   for (const r of preqs) out.push({ SK: `BUILD#PREQ#${r.ReqId.padStart(13, '0')}`, ...r });

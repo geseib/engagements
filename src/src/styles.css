@@ -2214,12 +2214,6 @@ body {
   line-height: 1.6;
 }
 
-.ai-discussion-questions li:before {
-  content: "💡";
-  position: absolute;
-  left: 0;
-}
-
 .ai-next-steps li:before {
   content: "→";
   position: absolute;
@@ -4030,14 +4024,6 @@ body {
   font-size: 0.85rem;
   color: #6c757d;
   margin-top: 10px;
-}
-
-.common-count::before {
-  content: "🔄 ";
-}
-
-.unique-count::before {
-  content: "✨ ";
 }
 
 /* Wavelength Statistics in Report */
@@ -6110,13 +6096,6 @@ body {
   color: #555;
 }
 
-.ai-preview-questions li:before {
-  content: "💡";
-  position: absolute;
-  left: 0;
-  font-size: 0.8rem;
-}
-
 /* Debug Mode Styles */
 .debug-section {
   background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%);
@@ -6481,11 +6460,6 @@ body {
   border-radius: 6px;
   color: #333;
   line-height: 1.5;
-}
-
-.ai-conversation-starters li:before {
-  content: "💬 ";
-  margin-right: 8px;
 }
 
 .ai-next-steps li:before {

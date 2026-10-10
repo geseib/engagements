@@ -11,7 +11,7 @@
  * that button.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import PendingInvites from '../components/PendingInvites';
 
 jest.mock('../auth/authFetch', () => ({
@@ -84,17 +84,18 @@ describe('accepting', () => {
     await waitFor(() => expect(onAccepted).toHaveBeenCalled());
   });
 
-  // rejects: swallowing a refusal. An expired or revoked invitation answers 410
-  // or 404, and a button that silently does nothing reads as a broken product.
+  // rejects: swallowing a refusal. A button that silently does nothing reads
+  // as a broken product. (A refusal with nothing to retry — 403, 404, 410 —
+  // swaps Accept for OK; see 'the notice, as the owner ruled it'.)
   it('shows what the server said when it refuses', async () => {
     global.fetch = jest.fn(async (url, init) => (init && init.method === 'POST'
-      ? { ok: false, status: 410, json: async () => ({ error: 'That invitation has expired. Ask for a new one.' }) }
+      ? { ok: false, status: 409, json: async () => ({ error: 'That invitation was just used. Refresh and try again.' }) }
       : { ok: true, status: 200, json: async () => ({ invites: [INVITE] }) }));
     render(<PendingInvites onAccepted={jest.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: /accept/i }));
     expect(await screen.findByRole('alert'))
-      .toHaveTextContent('That invitation has expired. Ask for a new one.');
-    // and it lets them try the other one rather than staying stuck
+      .toHaveTextContent('That invitation was just used. Refresh and try again.');
+    // and it lets them try again rather than staying stuck
     expect(screen.getByRole('button', { name: /accept/i })).not.toBeDisabled();
   });
 });
@@ -120,5 +121,109 @@ describe('when the lookup fails', () => {
     const { container } = render(<PendingInvites />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     expect(container.querySelector('.pinv')).toBeNull();
+  });
+});
+
+/*
+  THE NOTICE THAT IS NOT LOST (owner, 2026-10-10: docs/design/pending-invite-notice).
+  Blue, never orange; Accept only (no Decline); "1 day left"; a bar shape for the
+  Build Room Host screen; a line that says what Accept does on the waiting
+  screens; the joined line where the page does not reload; gone at expiry;
+  read again when the person comes back to the tab.
+*/
+describe('the notice, as the owner ruled it', () => {
+  // rejects: "1 days left" on the last day (daysUntilExpiry rounds up).
+  it('says "1 day left", not "1 days left"', async () => {
+    serve([{ ...INVITE, daysUntilExpiry: 1 }]);
+    render(<PendingInvites />);
+    expect(await screen.findByText(/· 1 day left/)).toBeInTheDocument();
+    expect(screen.queryByText(/1 days left/)).toBeNull();
+  });
+
+  it('says "expires today" on day 0', async () => {
+    serve([{ ...INVITE, daysUntilExpiry: 0 }]);
+    render(<PendingInvites />);
+    expect(await screen.findByText(/expires today/)).toBeInTheDocument();
+  });
+
+  // rejects: a Decline button (owner: Accept only; there is no decline route).
+  it('offers Accept and nothing else', async () => {
+    serve([INVITE]);
+    render(<PendingInvites />);
+    await screen.findByText('Northwind Learning');
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Accept']);
+  });
+
+  it('draws the bar shape when asked', async () => {
+    serve([INVITE]);
+    const { container } = render(<PendingInvites variant="bar" />);
+    await screen.findByText('Northwind Learning');
+    expect(container.querySelector('.pinv.pinv--bar')).not.toBeNull();
+  });
+
+  it('carries the line that says what Accept does', async () => {
+    serve([INVITE]);
+    render(<PendingInvites note="Accepting adds you to the team. Hosting still needs approval." />);
+    expect(await screen.findByText('Accepting adds you to the team. Hosting still needs approval.')).toBeInTheDocument();
+  });
+
+  // rejects: a reload on a page that should keep its place (Build Room, waiting screen).
+  it('stays: says who you joined, then draws nothing', async () => {
+    jest.useFakeTimers();
+    try {
+      serve([INVITE]);
+      const { container } = render(<PendingInvites stay />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept' }));
+      expect(await screen.findByRole('status')).toHaveTextContent('You joined Northwind Learning.');
+      expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
+      act(() => { jest.advanceTimersByTime(6000); });
+      expect(container.querySelector('.pinv')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // rejects: an Accept that can never work, left on screen.
+  it('a 410 drops Accept for OK, and OK clears the row', async () => {
+    global.fetch = jest.fn(async (url, init) => (init && init.method === 'POST'
+      ? { ok: false, status: 410, json: async () => ({ error: 'That invitation has expired. Ask for a new one.' }) }
+      : { ok: true, status: 200, json: async () => ({ invites: [INVITE] }) }));
+    const { container } = render(<PendingInvites stay />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That invitation has expired. Ask for a new one.');
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(container.querySelector('.pinv')).toBeNull();
+  });
+
+  // rejects: a server's internal error text on the screen.
+  it('a 500 says it plainly and keeps Accept', async () => {
+    global.fetch = jest.fn(async (url, init) => (init && init.method === 'POST'
+      ? { ok: false, status: 500, json: async () => ({ error: 'Could not accept that invitation: ValidationException blah' }) }
+      : { ok: true, status: 200, json: async () => ({ invites: [INVITE] }) }));
+    render(<PendingInvites stay />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Could not accept that invitation\.$/);
+    expect(screen.getByRole('button', { name: 'Accept' })).not.toBeDisabled();
+  });
+
+  it('draws nothing for an invitation past its expiry time', async () => {
+    serve([
+      { ...INVITE, token: 'org_x.old', orgName: 'Halcyon', expiresAt: new Date(Date.now() - 1000).toISOString() },
+      { ...INVITE, expiresAt: new Date(Date.now() + 86400000).toISOString() },
+    ]);
+    render(<PendingInvites />);
+    expect(await screen.findByText('Northwind Learning')).toBeInTheDocument();
+    expect(screen.queryByText('Halcyon')).toBeNull();
+  });
+
+  // rejects: a room open for hours that never hears of a new invitation.
+  it('reads the list again when the person comes back to the tab', async () => {
+    serve([]);
+    render(<PendingInvites />);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    serve([INVITE]);
+    act(() => { window.dispatchEvent(new Event('focus')); });
+    expect(await screen.findByText('Northwind Learning')).toBeInTheDocument();
   });
 });

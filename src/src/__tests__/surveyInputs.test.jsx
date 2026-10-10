@@ -134,7 +134,10 @@ describe('RatingInput', () => {
     expect(radios[1]).toHaveAttribute('aria-label', '2 of 5');
     expect(radios[1]).toHaveAttribute('aria-checked', 'true');
     expect(radios[1].tabIndex).toBe(0);
-    expect(radios[0].textContent).toBe('★');
+    // A Phosphor star (components/Icon.jsx), not the U+2605 glyph: the digit
+    // stays in the accessible name, the drawing is the design system's.
+    expect(radios[0].textContent).toBe('');
+    expect(radios[0].querySelector('svg.ws-icon')).not.toBeNull();
     fireEvent.keyDown(radios[1], { key: 'ArrowRight' });
     expect(onChange).toHaveBeenLastCalledWith(3);
   });

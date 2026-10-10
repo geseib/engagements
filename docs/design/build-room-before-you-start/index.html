@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: before you start</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<style>
+/* Before you start (reviewer, 2026-10-10; owner's earlier ask for clear setup).
+   Frame 1 uses the marketing page's own tokens (marketing/MarketingShell.css:17-91,
+   BuildRoomPage.css). Frames 2-3 use the Build Room's (BuildRoom.css:32-54).
+   One orange per frame: the section kicker on the marketing page (the page's
+   own convention, no orange button in the section); in the Connect window the
+   one primary button the state calls for. */
+.frame-h{max-width:1480px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:100ch}
+.sec{max-width:1480px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:100ch}
+.sec p b{color:var(--text)}
+.frow{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;padding:8px 20px 0;max-width:1480px;margin:0 auto}
+.lab{font:700 13px/1 var(--font-ui);color:var(--muted);margin:0 0 8px 2px}
+
+/* ================= FRAME 1: the marketing page ========================== */
+.mk{
+  --mk-bg:#0F1A2E;--mk-surface:#1B2942;--mk-surface-2:#25375A;--mk-text:#F4EDE4;--mk-muted:#9BA8BE;
+  --mk-amber:#F6A94C;--mk-blue:#7CA7E6;--mk-rule:rgba(244,237,228,.14);--mk-rule-strong:rgba(244,237,228,.26);
+  --mk-wash-a:rgba(15,26,46,.9);--mk-wash-b:#1E2D48;--mk-term:#0A0F18;--mk-term-text:#D9DEE7;
+  --mk-t-floor:12px;--mk-t-label:13px;--mk-t-body:17px;--mk-t-lead:21px;--mk-t-head:30px;--mk-t-title:44px;
+  --mk-gutter:24px;--mk-radius:16px;--mk-radius-sm:10px;
+  container-type:inline-size;background:#16233B;color:var(--mk-text);font:400 var(--mk-t-body)/1.55 var(--font-ui);
+  border:1px solid var(--m-rule);border-radius:10px;overflow:hidden
+}
+.mk *{box-sizing:border-box}
+.mk h2,.mk h3,.mk h4{margin:0;font-family:var(--font-display);font-weight:800;line-height:1.14}
+.mk p{margin:0}
+.mk-nav{display:flex;align-items:center;gap:28px;height:64px;padding:0 var(--mk-gutter);background:rgba(15,26,46,.86);border-bottom:1px solid var(--mk-rule);font-size:15px;color:var(--mk-muted)}
+.mk-nav b{font:800 21px var(--font-display);color:var(--mk-text);margin-right:auto}
+.mk-shell{max-width:1160px;margin:0 auto;padding:0 var(--mk-gutter)}
+.mk-ctx{padding:40px 0 34px;background:var(--mk-wash-a);color:var(--mk-muted);font-size:15px;border-bottom:1px solid var(--mk-rule)}
+.mk-ctx i{font-style:normal;opacity:.7}
+.mk-sec{padding:96px 0;background:var(--mk-wash-b)}
+.mk-kicker{font-size:var(--mk-t-label);font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--mk-amber)}
+.mk-title{font-size:var(--mk-t-title);line-height:1.08;letter-spacing:-.018em;margin-top:12px!important;max-width:22ch}
+.mk-lead{font-size:var(--mk-t-lead);line-height:1.45;color:var(--mk-muted);margin-top:18px!important;max-width:58ch}
+.bys{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:36px 58px;margin-top:48px;align-items:start}
+.bys h3{font-size:22px}
+.need{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:0}
+.need li{display:grid;grid-template-columns:22px 1fr;gap:12px;padding:14px 0;border-top:1px solid var(--mk-rule)}
+.need li:last-child{border-bottom:1px solid var(--mk-rule)}
+.need .ck{width:20px;height:20px;margin-top:4px;border:1.5px solid var(--mk-muted);border-radius:5px}
+.need b{display:block;font-weight:700}
+.need span{color:var(--mk-muted);font-size:15px}
+.need code,.mk code{font:14px ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--mk-text);background:rgba(244,237,228,.08);border-radius:5px;padding:1px 5px}
+.time{margin-top:28px!important;padding:16px 18px;border:1px solid var(--mk-rule);border-radius:var(--mk-radius-sm);background:var(--mk-surface)}
+.time b{display:block;font:800 19px var(--font-display);margin-bottom:4px}
+.time span{color:var(--mk-muted);font-size:15px}
+.steps3{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:22px}
+.steps3 > li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:16px}
+.steps3 .sn{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--mk-rule-strong);border-radius:50%;font-weight:800}
+.steps3 h4{font-size:19px;line-height:34px}
+.steps3 p{color:var(--mk-muted);font-size:15px;margin-top:6px!important}
+.steps3 p b{color:var(--mk-text);font-weight:600}
+.cmd{margin:10px 0 0;background:var(--mk-term);color:var(--mk-term-text);border:1px solid var(--mk-rule);border-radius:var(--mk-radius-sm);padding:12px 14px;font:13px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.cmdrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px}
+.mk-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 16px;border-radius:999px;border:1px solid var(--mk-rule-strong);background:transparent;color:var(--mk-text);font:700 15px var(--font-ui)}
+.mk a.lk{color:var(--mk-blue);font-weight:600;text-decoration:none;font-size:15px}
+.chg{margin-top:56px;padding-top:40px;border-top:1px solid var(--mk-rule)}
+.chg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:18px}
+.chg-col{padding:22px 24px;border:1px solid var(--mk-rule);border-radius:var(--mk-radius);background:var(--mk-surface)}
+.chg-col h4{font-size:17px;font-family:var(--font-ui)}
+.chg-col dl{margin:12px 0 0;display:grid;gap:12px}
+.chg-col dt{font:14px ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--mk-text);overflow-wrap:anywhere}
+.chg-col dd{margin:2px 0 0;color:var(--mk-muted);font-size:15px}
+.chg-foot{margin-top:18px!important;color:var(--mk-muted);font-size:15px;max-width:80ch}
+.chg-foot b{color:var(--mk-text);font-weight:600}
+.mk-cta{padding:56px 0;background:var(--mk-wash-a);border-top:1px solid var(--mk-rule);color:var(--mk-muted);font-size:15px}
+.mk-cta i{font-style:normal;opacity:.7}
+@container (max-width:720px){
+  .mk{--mk-gutter:16px;--mk-t-title:32px;--mk-t-lead:18px;--mk-t-body:16px}
+  .mk-nav{gap:14px;height:56px}
+  .mk-nav span{display:none}
+  .mk-sec{padding:56px 0}
+  .bys,.chg-grid{grid-template-columns:minmax(0,1fr)}
+  .bys{margin-top:32px;gap:40px}
+  .steps3 > li{grid-template-columns:28px minmax(0,1fr);gap:12px}
+  .steps3 .sn{width:28px;height:28px;font-size:14px}
+  .steps3 h4{line-height:28px;font-size:18px}
+  .chg{margin-top:40px;padding-top:28px}
+  .chg-col{padding:18px}
+}
+.phone{width:375px;flex:none}
+.phone .mk{border-radius:22px}
+
+/* ================= FRAMES 2-3: the Build Room's dialogs ================ */
+.brm{
+  --brm-term:#0A0F18;--brm-term-text:#D9DEE7;--brm-rule:rgba(155,168,190,.22);--brm-line-amber:rgba(246,169,76,.45);
+  --brm-t-floor:12px;--brm-t-label:13px;--brm-t-body:15px;--brm-t-head:19px;--brm-t-title:24px;
+  color:var(--text);font:400 var(--brm-t-body)/1.5 var(--font-ui)
+}
+.dscrim{background:rgba(6,11,21,.55);padding:24px 16px;border-radius:10px;border:1px solid var(--m-rule)}
+.w660{width:660px}.w375{width:375px}
+.w375 .dscrim{padding:12px 8px}
+.brm-modal{background:var(--surface);border:1px solid var(--brm-rule);border-radius:14px;padding:22px}
+.w375 .brm-modal{padding:16px}
+.brm-dh{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.brm-dh h1{margin:0;font:700 var(--brm-t-title)/1.2 var(--font-ui)}
+.brm-x{margin-left:auto;width:32px;height:32px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--brm-rule);color:var(--muted)}
+.brm-sub{margin:0 0 12px;color:var(--muted);font-size:var(--brm-t-label)}
+.brm-steps{margin:8px 0 6px;padding:0;list-style:none;display:grid;gap:16px}
+.brm-steps li{display:flex;gap:10px;align-items:flex-start}
+.brm-n{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--surface-2);color:var(--text)}
+li.is-done .brm-n{background:var(--success);color:var(--bg)}
+li.is-wait .brm-n{background:transparent;border:1.5px dashed var(--primary);color:var(--primary)}
+li.is-old .brm-n{background:transparent;border:1.5px solid var(--danger-text);color:var(--danger-text)}
+.brm-step-body{flex:1;min-width:0;display:grid;gap:8px}
+.brm-step-title{font-weight:700;line-height:24px}
+.brm-hint{color:var(--muted);font-size:var(--brm-t-label)}
+.brm-cmd{margin:0;background:var(--brm-term);color:var(--brm-term-text);border:1px solid var(--brm-rule);border-radius:10px;padding:12px 14px;font:13px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.brm-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.brm-btn{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:5px 10px;border-radius:8px;border:1px solid var(--brm-rule);background:var(--surface-2);color:var(--text);font:600 var(--brm-t-label) var(--font-ui)}
+.brm-btn--primary{background:var(--primary);border-color:var(--primary);color:var(--bg)}
+.brm-btn--ghostdanger{background:transparent;color:var(--danger-text);border-color:rgba(229,100,94,.45)}
+.brm-push{margin-left:auto}
+.mono{font:13px ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.brm-input{min-height:32px;padding:4px 10px;border-radius:8px;border:1px solid var(--brm-rule);background:var(--bg);color:var(--text);font:var(--brm-t-body) var(--font-ui);width:180px}
+/* NEW: the version line under step 1's title */
+.ver{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;margin:0;font-size:var(--brm-t-body)}
+.ver .k{color:var(--muted);font-size:var(--brm-t-label)}
+.ver b{font-weight:700;font-variant-numeric:tabular-nums}
+.ver .ok{color:var(--m-success-text);font-weight:600;font-size:var(--brm-t-label)}
+.ver .old{color:var(--danger-text)}
+.ver .sep{color:var(--muted)}
+.brm-fold{color:var(--secondary);font-size:var(--brm-t-label);font-weight:600}
+.brm-fold::before{content:"› ";}
+.rest li .brm-step-title{font-weight:600;color:var(--muted)}
+.rest li.is-done .brm-step-title{color:var(--text)}
+.brm-foot{display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--brm-rule)}
+.brm-foot .brm-btn{min-height:36px;padding:7px 14px;font-size:var(--brm-t-body)}
+
+/* the create page (BuildRoom.css:498-499) */
+.brm-createpage{display:grid;place-items:start center;padding:28px 16px;background:var(--bg);border:1px solid var(--m-rule);border-radius:10px}
+.brm-create{width:min(560px,100%);background:var(--surface);border:1px solid var(--brm-rule);border-radius:14px;padding:22px}
+.w375 .brm-create{padding:16px}
+.brm-lbl{display:block;font-size:var(--brm-t-label);color:var(--muted);font-weight:600;margin:0 0 5px}
+.brm-field{display:block;margin:0 0 14px}
+.brm-field .brm-input{width:100%}
+.brm-check{display:flex;gap:10px;align-items:flex-start;margin:4px 0}
+.brm-check .rd{width:16px;height:16px;margin-top:3px;border-radius:50%;border:1.5px solid var(--muted);flex:none}
+.brm-check .rd.on{border:5px solid var(--primary)}
+/* NEW (A): the one-line need, under the subtitle */
+.needline{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:10px 12px;border:1px solid var(--brm-rule);border-radius:10px;background:var(--bg);font-size:var(--brm-t-label);color:var(--muted)}
+.needline b{color:var(--text);font-weight:600}
+.needline a{color:var(--secondary);font-weight:600;text-decoration:none;white-space:nowrap}
+.ab{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;font:800 12px var(--font-ui);letter-spacing:.06em;background:var(--m-tint-blue);color:var(--secondary)}
+.ab.rec{background:var(--m-tint-green);color:var(--m-success-text)}
+.notes{padding:20px 20px 64px}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><a href="../build-room-host-redesign/index.html">Host redesign</a><a href="../build-room-copy-pass/index.html">Copy pass</a><a href="../build-room-host-alert/index.html">Host alert</a><span class="here">Before you start</span><span class="sp"></span><a href="PLAN.md">PLAN.md</a></nav>
+<header class="pg-title">
+  <h1>Build Room: before you start</h1>
+  <p>Reviewer, 2026-10-10: the public page names the plugin and says nothing about installing it; that appears only after a room exists. Owner, earlier: clear needs for Claude Code before starting. Three frames. Every path and file below is read from <code>src/public/engage-mcp.mjs</code> (installPlugin, writePlugin, connect, usePluginHere, startProject).</p>
+</header>
+
+<!-- =================================================================== -->
+<section class="sec">
+  <h2>1 · The public Build Room page: a "Before you start" section</h2>
+  <p>It replaces today's "What you need" section (<code>marketing/BuildRoomPage.jsx:84-96</code>) in the same place, between "Where it fits" and the closing call to action, with <code>id="before-you-start"</code> so the create page can link to it. Today's line about participants survives as the lead. The two lines about the Stage and the Build screen move up into the loop section's "Test" step or go; they are not setup. <b>The install command is on the public page.</b> It carries no key (<code>buildHostApi.js:271-283</code> says so), so a host can set up the laptop before they have an account.</p>
+</section>
+
+<div class="frame-h"><h2>1a · Laptop, 1440 wide</h2><p>The amber kicker is the section's one orange; there is no orange button inside it (the page's primary, "Create a host account", is in the call to action below).</p></div>
+<div class="fit"><div class="fit-box" style="width:1440px"><div class="mk" id="mk-desk"></div></div></div>
+
+<div class="frame-h"><h2>1b · Phone, 375 wide</h2><p>People read this page on laptops, tablets and phones. On a phone the section is a single column with a 16px gutter; the commands wrap inside their boxes rather than widening the page.</p></div>
+<div class="frow"><div class="phone"><div class="mk" id="mk-phone"></div></div></div>
+
+<template id="mk-src">
+  <div class="mk-nav"><b>Engage</b><span>How it works</span><span>Use cases</span><span>Reports</span><span>Sign in</span></div>
+  <div class="mk-ctx"><div class="mk-shell"><i>… "Where it fits" ends above …</i></div></div>
+  <section class="mk-sec" id="before-you-start">
+    <div class="mk-shell">
+      <p class="mk-kicker">Before you start</p>
+      <h2 class="mk-title">Set up the host's laptop once.</h2>
+      <p class="mk-lead">Only the host needs this. Everyone else joins from laptops, tablets and phones with a QR code or session code, and needs no account.</p>
+
+      <div class="bys">
+        <div>
+          <h3>What you need</h3>
+          <ul class="need">
+            <li><span class="ck"></span><div><b>Claude Code, installed and signed in</b><span>On the laptop that will run the build.</span></div></li>
+            <li><span class="ck"></span><div><b>Node 18 or later</b><span>Check with <code>node --version</code>.</span></div></li>
+            <li><span class="ck"></span><div><b>Git</b><span>Each room's project is a git repository.</span></div></li>
+            <li><span class="ck"></span><div><b>A terminal on that laptop</b><span>The commands are for macOS and Linux.</span></div></li>
+          </ul>
+          <p class="time"><b>About five minutes the first time</b><span>After that, under a minute per room.</span></p>
+        </div>
+
+        <div>
+          <h3>Three steps</h3>
+          <ol class="steps3">
+            <li><span class="sn">1</span><div>
+              <h4>Install the Engage plugin</h4>
+              <p>Once per laptop. Run this in a terminal:</p>
+              <pre class="cmd">curl -fsSL https://engage.seibtribe.us/engage-mcp.mjs -o ~/.engage-mcp.mjs \
+  &amp;&amp; node ~/.engage-mcp.mjs --install-plugin --api https://tlx3bee2sa.execute-api.us-east-1.amazonaws.com/prod/</pre>
+              <div class="cmdrow"><span class="mk-btn">Copy</span><a class="lk" href="#">Read the file first</a></div>
+              <p>It downloads one file from this site and adds the plugin to Claude Code. Every room's Connect window shows the same command: run it again to update.</p>
+            </div></li>
+            <li><span class="sn">2</span><div>
+              <h4>Create a room</h4>
+              <p>Sign in as a host and choose <b>Build Room</b>. Give it a title; the room can decide what to build.</p>
+            </div></li>
+            <li><span class="sn">3</span><div>
+              <h4>Paste the start command</h4>
+              <p>In the room, open <b>Connect Claude Code</b>, mint a key and copy the start command. Paste it into the terminal:</p>
+              <pre class="cmd">mkdir -p ~/build-room/food-bank &amp;&amp; cd ~/build-room/food-bank &amp;&amp; claude "/engage:connect eng_1234_…"</pre>
+              <p>It makes the project folder and starts Claude Code in it. Then type <code>/engage:kickoff</code>.</p>
+            </div></li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="chg">
+        <h3>What it changes on the laptop</h3>
+        <div class="chg-grid">
+          <div class="chg-col"><h4>Once, when you install</h4><dl>
+            <div><dt>~/.engage-mcp.mjs</dt><dd>The plugin's one file, downloaded from this site.</dd></div>
+            <div><dt>~/.engage/claude-plugin/</dt><dd>The plugin: its commands, hooks and skill.</dd></div>
+            <div><dt>~/.engage/config.json</dt><dd>The address of this Engage site.</dd></div>
+            <div><dt>Claude Code's plugin list</dt><dd>Engage, added as a local plugin.</dd></div>
+          </dl></div>
+          <div class="chg-col"><h4>Each room</h4><dl>
+            <div><dt>~/build-room/&lt;name&gt;/</dt><dd>A new folder with git, a README.md and a DECISIONS.md.</dd></div>
+            <div><dt>&lt;name&gt;/.engage/</dt><dd>The room's key. Never committed.</dd></div>
+            <div><dt>&lt;name&gt;/.claude/settings.local.json</dt><dd>Turns the Engage plugin on for this folder. Never committed.</dd></div>
+          </dl></div>
+        </div>
+        <p class="chg-foot"><b>Nothing else.</b> The plugin acts only in a folder connected to a room. There it saves a hidden git snapshot after each turn and sends the room one plain line per step Claude takes.</p>
+      </div>
+    </div>
+  </section>
+  <div class="mk-cta"><div class="mk-shell"><i>… "Bring the room into the build." and Create a host account follow …</i></div></div>
+</template>
+
+<!-- =================================================================== -->
+<section class="sec">
+  <h2>2 · Connect Claude Code, step 1: the plugin's version</h2>
+  <p>Only what the server knows: <b>running</b> is the version Claude's plugin sent with its last request (<code>x-engage-plugin</code> header, stored as AgentPlugin), <b>latest</b> is LATEST_PLUGIN (<code>build-store.js:830</code>, today 1.16.0). The room already sends both as <code>room.plugin</code> (<code>build-store.js:856-860, 1503</code>). The line names <b>Claude</b>, not "this laptop": the browser showing the window may not be the laptop running Claude Code. The update command <b>is</b> the install command; installPlugin rewrites and updates when the version differs. Steps 2-4 are as today and drawn short.</p>
+</section>
+
+<div class="frame-h"><h2>2a · Not yet known: Claude has never connected</h2><p><code>!agent.lastSeenAt</code>. Only the latest is known. The mint button stays the one orange, as today.</p></div>
+<div class="frow"><div class="w660"><p class="lab">~660</p><div id="c-unknown-660"></div></div><div class="w375"><p class="lab">375</p><div id="c-unknown-375"></div></div></div>
+
+<div class="frame-h"><h2>2b · Up to date</h2><p><code>plugin.running &amp;&amp; !plugin.outdated</code>. Step 1 ticks green. The command folds away behind "Install on another laptop", since nothing here needs it. No orange: nothing is waiting.</p></div>
+<div class="frow"><div class="w660"><p class="lab">~660</p><div id="c-ok-660"></div></div><div class="w375"><p class="lab">375</p><div id="c-ok-375"></div></div></div>
+
+<div class="frame-h"><h2>2c · Out of date</h2><p><code>plugin.outdated</code>. The window opens here from the Host screen's "Update" (<code>dialog === 'connect-install'</code>), focused on step 1's Copy, which is the one orange. When Claude connected without saying a version (older than the header), <b>running</b> is empty: the line reads "Claude's plugin: older than 1.16.0" (drawn at 375).</p></div>
+<div class="frow"><div class="w660"><p class="lab">~660 · running 1.15.0</p><div id="c-old-660"></div></div><div class="w375"><p class="lab">375 · running not sent</p><div id="c-old-375"></div></div></div>
+
+<!-- =================================================================== -->
+<section class="sec">
+  <h2>3 · The New Build Room page: A/B</h2>
+  <p>A host who lacks Node or git finds out at the terminal, after the room exists. <b>A</b> adds one line under the subtitle, linking to the public section. <b>B</b> leaves the page as it is and relies on the public page and the Connect window. A full checklist was considered and dropped: four ticks on a form about the room's title and audience is the wrong place, and the laptop that creates the room need not be the one that runs Claude.</p>
+</section>
+<div class="frow" style="padding-top:20px">
+  <div class="w660"><p class="lab">A · one line <span class="ab rec">RECOMMENDED</span></p><div id="n-a"></div></div>
+  <div class="w660"><p class="lab">B · as today</p><div id="n-b"></div></div>
+</div>
+<div class="frow" style="padding-top:20px"><div class="w375"><p class="lab">A at 375</p><div id="n-a375"></div></div></div>
+
+<div class="notes">
+  <div class="note"><h3>Recommendation</h3><p>Frame 1 with the install command on the public page; frame 2 as drawn; frame 3 option A. A costs one line and saves the host a dead end in front of a room. The empty room's "How a Build Room works" strip keeps its four steps, with step 1 corrected to name the install (see PLAN).</p></div>
+  <div class="note"><h3>On dev and test</h3><p>Every name in frame 1 follows the site: <code>~/.engage/claude-plugin-dev/</code>, <code>~/.engage/config-dev.json</code>, <code>--tier dev</code> and <code>/engage-dev:connect</code> on dev; the same with <code>-test</code> on test. The page reads them from siteTier(), as the Connect window does.</p></div>
+  <div class="note"><h3>Unverified, for the owner</h3><p>"About five minutes … under a minute per room" is an estimate, not a measurement. "The commands are for macOS and Linux": the commands use curl, <code>~</code> and <code>mkdir -p</code>; Windows (WSL or not) was never tested.</p></div>
+</div>
+
+<script>
+(function(){
+  var src=document.getElementById('mk-src').innerHTML;
+  document.getElementById('mk-desk').innerHTML=src;
+  document.getElementById('mk-phone').innerHTML=src;
+
+  var INSTALL='curl -fsSL https://engage.seibtribe.us/engage-mcp.mjs -o ~/.engage-mcp.mjs \\\n  && node ~/.engage-mcp.mjs --install-plugin --api https://tlx3bee2sa.execute-api.us-east-1.amazonaws.com/prod/';
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+  function cmd(){return '<pre class="brm-cmd">'+esc(INSTALL)+'</pre>'}
+  function step1(state,running){
+    if(state==='unknown') return '<li><span class="brm-n">1</span><div class="brm-step-body">'
+      +'<span class="brm-step-title">Check for the latest Engage plugin</span>'
+      +'<p class="ver"><span><span class="k">Latest</span> <b>1.16.0</b></span><span class="k">Claude\'s version shows here once it connects.</span></p>'
+      +cmd()+'<div class="brm-row"><span class="brm-btn">Copy</span><span class="brm-hint">Run it in a terminal. Needs Node 18 or later.</span></div>'
+      +'<p class="brm-hint" style="margin:0">If your Mac asks about node, click Allow. <span style="color:var(--secondary)">Why?</span></p></div></li>';
+    if(state==='ok') return '<li class="is-done"><span class="brm-n">✓</span><div class="brm-step-body">'
+      +'<span class="brm-step-title">Check for the latest Engage plugin</span>'
+      +'<p class="ver"><span><span class="k">Claude\'s plugin</span> <b>1.16.0</b></span><span class="ok">The latest.</span></p>'
+      +'<span class="brm-fold">Install on another laptop</span></div></li>';
+    var line = running
+      ? '<span><span class="k">Claude\'s plugin</span> <b class="old">'+running+'</b></span><span class="sep">·</span><span><span class="k">Latest</span> <b>1.16.0</b></span>'
+      : '<span><span class="k">Claude\'s plugin</span> <b class="old">older than 1.16.0</b></span>';
+    return '<li class="is-old"><span class="brm-n">1</span><div class="brm-step-body">'
+      +'<span class="brm-step-title">Update the Engage plugin</span>'
+      +'<p class="ver">'+line+'</p>'
+      +cmd()+'<div class="brm-row"><span class="brm-btn brm-btn--primary">Copy</span><span class="brm-hint">Run it again, then restart Claude Code in the project folder.</span></div></div></li>';
+  }
+  function rest(state){
+    var on=state!=='unknown';
+    var s2 = on
+      ? '<li class="is-done"><span class="brm-n">✓</span><div class="brm-step-body"><span class="brm-step-title">Mint a key and copy the start command</span><span class="brm-hint">Key minted 10:42, used 10:44. A new key stops it.</span><div class="brm-row"><span class="brm-btn">Mint a new key and copy the command</span><span class="brm-btn brm-btn--ghostdanger brm-push">Revoke key</span></div></div></li>'
+      : '<li class="is-wait"><span class="brm-n">2</span><div class="brm-step-body"><span class="brm-step-title">Mint a key and copy the start command</span><div class="brm-row"><span class="brm-lbl" style="margin:0">Project folder</span><span class="mono">~/build-room/</span><span class="brm-input">food-bank</span></div><span class="brm-hint">A new folder with git, named for the session.</span><div class="brm-row"><span class="brm-btn brm-btn--primary">Mint a key and copy the command</span></div></div></li>';
+    var s3 = '<li class="'+(on?'is-done':'')+'"><span class="brm-n">'+(on?'✓':'3')+'</span><div class="brm-step-body"><span class="brm-step-title">Paste it into a terminal</span><span class="brm-hint">'+(on?'Claude Code has called in.':'Makes ~/build-room/food-bank and connects Claude Code.')+'</span></div></li>';
+    var s4 = '<li class="'+(on?'is-done':'')+'"><span class="brm-n">'+(on?'✓':'4')+'</span><div class="brm-step-body"><span class="brm-step-title">Kick off</span>'+(on?'<span class="brm-hint">Claude has kicked off.</span>':'')+'</div></li>';
+    return '<ol class="brm-steps rest" style="margin-top:0">'+s2+s3+s4+'</ol>';
+  }
+  function modal(state,running){
+    return '<div class="brm dscrim"><div class="brm-modal">'
+      +'<div class="brm-dh"><h1>Connect Claude Code</h1><span class="brm-x">✕</span></div>'
+      +'<p class="brm-sub">Claude Code runs on this laptop and joins the room.</p>'
+      +'<ol class="brm-steps">'+step1(state,running)+'</ol>'+rest(state)
+      +'<div class="brm-foot"><span class="brm-hint" style="align-self:center">More commands for later ›</span><span class="brm-btn brm-push">Done</span></div>'
+      +'</div></div>';
+  }
+  function put(id,html){document.getElementById(id).innerHTML=html}
+  put('c-unknown-660',modal('unknown'));put('c-unknown-375',modal('unknown'));
+  put('c-ok-660',modal('ok'));put('c-ok-375',modal('ok'));
+  put('c-old-660',modal('old','1.15.0'));put('c-old-375',modal('old',''));
+
+  function create(withLine){
+    return '<div class="brm brm-createpage"><div class="brm-create">'
+      +'<div class="brm-dh"><h1>New Build Room</h1><span class="brm-x">✕</span></div>'
+      +'<p class="brm-sub">A room of people and your own Claude Code build something together. Claude asks the room at real decision points; you shape every answer before it reaches Claude.</p>'
+      +(withLine?'<p class="needline"><span>The laptop that runs Claude Code needs <b>Node 18 or later</b> and <b>git</b>.</span><a class="brm-push" href="#">Before you start</a></p>':'')
+      +'<label class="brm-field"><span class="brm-lbl">Title</span><span class="brm-input" style="display:block;color:var(--muted)">Volunteer sign-up for the food bank</span></label>'
+      +'<div class="brm-field"><span class="brm-lbl">What to build</span><div class="brm-check"><span class="rd on"></span>The room decides</div><div class="brm-check"><span class="rd"></span>I\'ve set the goal</div></div>'
+      +'<label class="brm-field"><span class="brm-lbl">Goal (optional): a starting idea for the room</span><span class="brm-input" style="display:block;height:64px"></span></label>'
+      +'<div class="brm-field"><span class="brm-lbl">Who can join</span><div class="brm-check"><span class="rd on"></span>Anyone with the code</div><div class="brm-check"><span class="rd"></span>Private: an access code as well</div></div>'
+      +'<div class="brm-row" style="margin-top:6px"><span class="brm-btn">Cancel</span><span class="brm-btn brm-btn--primary brm-push">Create room</span></div>'
+      +'</div></div>';
+  }
+  put('n-a',create(true));put('n-b',create(false));put('n-a375',create(true));
+})();
+</script>
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

@@ -42,7 +42,9 @@ async function listMyInvites(event) {
   const sub = G.callerSub(event);
   if (!sub) return G.fail(403, 'Sign in to see your invitations.');
 
-  const email = G.callerEmail(event);
+  // VERIFIED only: this route is open to `pending` accounts, and an address a
+  // user typed into their own profile must not reveal someone else's invites.
+  const email = G.callerVerifiedEmail(event);
   /*
     NO EMAIL, NO INVITATIONS — and an empty list rather than an error.
 

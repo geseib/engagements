@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pending invite notice · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* Pending team invite: one quiet notice wherever a signed-in person can lose
+   it. NOT orange anywhere: every screen here already has its one orange
+   (Create engagement, Join, Create room, the focused ask's button). The
+   notice is the --secondary blue the Build Room already uses for "yours, not
+   urgent" (chip--blue, flt.is-on, q-item.is-focus). */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .sec,body.is-solo .qs{display:none}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:100ch}
+.frame-h p b{color:var(--text)}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:100ch}
+.sec p b{color:var(--text)}
+.lab{font:700 13px/1 var(--font-ui);color:var(--muted);margin:14px 0 8px;letter-spacing:.04em}
+.lab--no{color:var(--danger-text)}
+.true{padding:0 20px;display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;max-width:1480px}
+.true>div{min-width:0;max-width:100%}
+.dev{border:1px dashed rgba(155,168,190,.4);border-radius:12px;background:var(--bg);overflow:hidden}
+.dev--375{width:375px;max-width:100%}
+.dev--660{width:660px;max-width:100%}
+.dev--1100{width:1100px;max-width:100%}
+
+/* ===================================================================== the notice
+   One component, two shapes:
+     .inv        a row, as today's PendingInvites (dashboard, pending page,
+                 New Build Room page, Session panel)
+     .inv--bar   full-bleed under the Build Room header (option A)          */
+.inv{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;padding:10px 12px;border:1px solid rgba(124,167,230,.38);
+  border-left-width:3px;border-left-color:var(--secondary);border-radius:6px;background:rgba(124,167,230,.08);
+  color:var(--muted);font:400 13px/1.5 var(--font-ui)}
+.inv .ico{flex:none;display:inline-flex;color:var(--secondary)}
+.inv .tx{flex:1 1 260px;min-width:0;overflow-wrap:anywhere}
+.inv .tx b{color:var(--text);font-weight:600}
+.inv .tx .what{display:block;margin-top:2px}
+.inv .acts{flex:none;display:flex;gap:8px;margin-left:auto}
+.inv .ib{min-height:28px;padding:0 14px;border-radius:6px;font:600 13px/1 var(--font-ui);white-space:nowrap;display:inline-flex;align-items:center;cursor:pointer}
+.inv .ib--quiet{border:1px solid transparent;background:transparent;color:var(--muted)}
+.inv .ib--quiet:hover{color:var(--text)}
+.inv .ib--go{border:1px solid rgba(155,168,190,.55);background:var(--surface);color:var(--text)}
+.inv .ib--go:hover{border-color:var(--secondary)}
+.inv .ib[disabled]{opacity:.55;cursor:not-allowed}
+.inv .err{flex-basis:100%;margin:0;color:var(--danger-text)}
+.inv--ok{border-left-color:var(--success);border-color:rgba(79,178,134,.4);background:rgba(79,178,134,.09)}
+.inv--ok .ico{color:var(--m-success-text)}
+.inv--bar{border-radius:0;border-width:0 0 1px 3px;border-bottom-color:var(--m-rule);padding:7px 18px;background:#0F1E36}
+.inv-stack{display:flex;flex-direction:column;gap:8px}
+.gone{border:1px dashed rgba(155,168,190,.35);border-radius:6px;padding:10px 12px;color:var(--muted);font:italic 13px/1.4 var(--font-ui)}
+
+/* the Build Room host screen with the bar: header, bar, body */
+.scr2--bar{grid-template-rows:60px auto 1fr}
+.hdr{gap:12px}
+.scr2 .join .code,.hjoin b{color:var(--text)}
+.view.is-on{box-shadow:inset 0 -2px 0 var(--secondary)}
+.dotline--blue::before{background:var(--secondary)}
+.dotline b{color:var(--text);font-weight:600}
+.q-item.is-focus{border:2px solid var(--secondary);box-shadow:0 0 0 5px rgba(124,167,230,.22)}
+.srcdot--n{background:var(--surface-2);color:var(--text)}
+.colh .count{color:var(--text)}
+.sessbtn{position:relative}
+.sdot{display:inline-block;width:8px;height:8px;margin-left:6px;border-radius:50%;background:var(--secondary)}
+
+/* option B: the Session panel (laptop ladder) */
+.spn{position:absolute;z-index:30;top:60px;right:0;bottom:0;width:440px;background:var(--m-drawer);border-left:1px solid rgba(155,168,190,.45);
+  box-shadow:-18px 0 50px rgba(0,0,0,.45);display:flex;flex-direction:column}
+.sp-h{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--m-rule)}
+.sp-h h3{margin:0;font:800 19px/1 var(--font-ui)}
+.sp-h .ws{font-size:12px;color:var(--m-success-text)}
+.sp-h .x{margin-left:auto;color:var(--muted);font-weight:800}
+.sp-inv{padding:12px 16px;border-bottom:1px solid var(--m-rule)}
+.sp-inv .k{font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.spn .tabs{padding:0 12px}
+.spn .tab.is-on{border-bottom-color:var(--secondary)}
+.sp-body{padding:12px 16px;display:flex;flex-direction:column;gap:10px;color:var(--muted);font-size:14px}
+.sp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--m-rule)}
+.sp-row b{color:var(--text)}
+.scrim2{position:absolute;inset:60px 0 0 0;background:var(--m-scrim);z-index:25}
+
+/* ===================================================================== dashboard (wel-) */
+.wel{width:1440px;height:900px;background:var(--bg);border-radius:10px;box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden;font-size:16px}
+.wel-top{display:flex;align-items:center;gap:14px;max-width:62rem;margin:0 auto;padding:20px 0}
+.wel-brand{font:800 18px/1 var(--font-display);display:flex;gap:10px;align-items:center}
+.wel-brand i{width:24px;height:24px;border-radius:6px;background:var(--surface-2);display:inline-block}
+.wel-who{margin-left:auto;display:flex;gap:12px;align-items:center;color:var(--muted);font-size:14px}
+.wel-who .sw{border:1px solid rgba(155,168,190,.34);border-radius:8px;padding:6px 10px;color:var(--text)}
+.wel-shell{max-width:62rem;margin:0 auto;padding-top:18px}
+.wel-shell > .inv{margin-bottom:18px}
+.wel-split{display:grid;grid-template-columns:1.4fr 1fr;gap:28px}
+.wel-k{font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin:0}
+.wel h1{font:800 38px/1.1 var(--font-display);margin:8px 0}
+.wel h2{font:800 24px/1.15 var(--font-display);margin:8px 0}
+.wel .lede{color:var(--muted);margin:0 0 18px}
+.wact{border:1px solid rgba(155,168,190,.2);border-radius:10px;padding:14px 16px;margin-bottom:10px;background:var(--surface)}
+.wact b{display:block;font-size:17px}
+.wact span{color:var(--muted);font-size:14px}
+.wact.is-primary{background:var(--primary);border-color:var(--primary);color:var(--bg)}
+.wact.is-primary span{color:rgba(15,26,46,.8)}
+.cells{display:flex;gap:10px;margin:14px 0}
+.cells i{width:58px;height:70px;border-radius:10px;border:1px solid rgba(155,168,190,.34);background:var(--surface)}
+.flag{position:absolute;z-index:5;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--danger-deep);color:#fff;font:800 13px/1 var(--font-ui)}
+
+/* ===================================================================== pending page (au-) */
+.au{background:var(--bg);color:var(--text);font-size:16px}
+.au-col{max-width:560px;margin:0 auto;padding:28px 20px 40px;display:flex;flex-direction:column;gap:20px}
+.au-top{display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--m-rule);font:800 16px/1 var(--font-display)}
+.au-top span{margin-left:auto;font:600 14px/1 var(--font-ui);color:var(--muted)}
+.au-pill{align-self:flex-start;display:inline-flex;gap:7px;align-items:center;padding:6px 12px;border-radius:999px;border:1px solid var(--primary);color:var(--primary);font:700 13px/1 var(--font-ui)}
+.au h1{margin:0;font:800 30px/1.15 var(--font-display)}
+.au .mut{color:var(--muted);margin:10px 0 0;font-size:15px}
+.au-notice{display:flex;gap:12px;padding:14px 16px;border-radius:10px;border:1px solid var(--m-rule);border-left:3px solid var(--muted);background:var(--surface)}
+.au-notice h3{margin:0 0 3px;font-size:16px}
+.au-notice p{margin:0;font-size:14px;color:var(--muted)}
+.au-card{background:var(--surface);border:1px solid var(--m-rule);border-radius:14px;padding:20px}
+.au-card h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.au-card p{margin:8px 0 0;color:var(--muted);font-size:14px}
+.au-btn{display:flex;justify-content:center;align-items:center;min-height:52px;border-radius:10px;font:700 16px/1 var(--font-ui);margin-top:14px;border:2px solid transparent}
+.au-btn--p{background:var(--primary);color:var(--bg)}
+.au-btn--g{border-color:rgba(155,168,190,.34)}
+.au-btn--sm{min-height:36px;font-size:14px;width:auto;padding:0 14px;display:inline-flex}
+.au .inv{font-size:14px}
+.au .inv .tx{flex-basis:220px}
+
+/* the New Build Room page */
+.brc{background:var(--bg);padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.brc .inv{width:min(560px,100%)}
+.brc-card{width:min(560px,100%);background:var(--surface);border:1px solid var(--m-rule);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.brc-card h1{margin:0;font:800 24px/1.2 var(--font-display);display:flex}
+.brc-card h1 span{margin-left:auto;color:var(--muted);font-size:16px}
+.brc-card .f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+.brc-card .in{height:38px;border-radius:8px;border:1px solid var(--m-rule);background:var(--bg)}
+.brc-card .row{display:flex;gap:8px}
+
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45}
+.vt td:first-child{font-weight:700}
+.vt td.why{color:var(--muted);font-size:13px}
+.vt code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px}
+.no{color:var(--danger-text)}
+.yes{color:var(--m-success-text)}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:100ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+.fact{max-width:1440px;margin:18px auto 0;padding:14px 18px;border:1px solid rgba(229,100,94,.45);background:var(--m-tint-red);border-radius:10px;color:var(--text);font-size:14px;line-height:1.55}
+.fact b{color:var(--danger-text)}
+.fact code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px}
+@media (max-width:700px){.vt{font-size:13px}.vt th,.vt td{padding:8px 6px}.true{padding:0 8px}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="users" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="9" r="3.2"/><circle cx="5.5" cy="10.5" r="2.4"/><circle cx="18.5" cy="10.5" r="2.4"/><path d="M6.5 19c.8-2.8 3-4.3 5.5-4.3s4.7 1.5 5.5 4.3"/><path d="M1.5 18c.5-1.8 1.9-2.9 3.6-3.1M22.5 18c-.5-1.8-1.9-2.9-3.6-3.1"/></g></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></g></symbol>
+</svg>
+
+<nav class="pg-nav"><b style="color:var(--muted)">Pending team invite</b>
+<a href="#p1">P1 Pending page</a><a href="#r1">R1 Host · bar (A)</a><a href="#r2">R2 Host · dot (B)</a><a href="#r3">R3 Narrow</a><a href="#r4">R4 New Build Room</a><a href="#d1">D1 Dashboard</a><a href="#s1">S1 States</a><a href="#where">Where, never</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="PLAN.md">PLAN.md</a><a href="../build-room-host-alert/index.html">Host · 4</a></nav>
+<div class="pg-title"><h1>A team invite stays in view until it is answered</h1>
+<p>Owner, 2026-10-10, from a reviewer: the invite showed only near the top of the dashboard, and was lost while they made their first Build Room. One quiet blue line, on every screen the invited person works in, never on a screen the room sees. Never orange.</p></div>
+
+<div class="fact"><b>Checked in the code, before anything here is built.</b>
+(1) <b>Accepting does not approve anybody.</b> <code>admin/orgs/accept-invite.js</code> writes the MEMBER row, the user's reverse row, deletes both invite rows, sets <code>defaultOrgId</code> if unset, and flips a personal org to a team. It never calls Cognito; the account's groups are unchanged. Only <code>admin/manage-users.js</code> moves <code>pending</code> → <code>hosts</code>, and only for the platform <code>admins</code> group (<code>shared/require-admin.js</code>).
+(2) <b>Today a pending person cannot even see the invite.</b> <code>auth/authorizer.js:450-453</code> gives <code>GET /invites</code> and <code>POST /invites/{token}/accept</code> to <code>['hosts','admins']</code> only, so both answer 403 on either waiting screen, and <code>PendingInvites</code> stays silent by design.
+(3) <b>There are two waiting screens.</b> New sign-ups are in the <code>pending</code> group and see <code>auth/PendingApproval.jsx</code> ("Your account exists. It cannot host yet."). The App.jsx "Access Pending" block (lines 160-175) is reached only by a signed-in account with none of pending, hosts, admins. P1 draws the first; the second gets the same row.
+(4) <b>There is no Decline.</b> No route exists; only the team's admin can revoke (<code>revoke-invite.js</code>). Decline below is proposed.
+(5) Invites last <b>14 days</b> (<code>INVITE_TTL_DAYS</code>); the list hides expired ones on read; <code>daysUntilExpiry</code> rounds up, so today's row says <b>"1 days left"</b> on the last day.</div>
+
+<!-- ===================================================================== P1 -->
+<div class="frame-h" id="p1"><h2>P1 · Waiting for approval, with an invite</h2>
+<p>Under "am I in yet?", above "You can still join a session". Join stays the one amber thing. The second line says what Accept does, because here the honest answer is <b>not</b> "you can host now". Needs the authorizer to let <code>pending</code> reach the two invite routes (open question 1).</p></div>
+<div class="true">
+<div><div class="lab">Laptop column (true size)</div>
+<div class="dev dev--660 au">
+<div class="au-top">Engagements<span>Sign out</span></div>
+<div class="au-col">
+<span class="au-pill"><svg width="16" height="16"><use href="#clock"/></svg> Not approved yet</span>
+<div><h1>Your account exists. It cannot host yet.</h1>
+<p class="mut">Someone with admin rights at your organisation has to approve it first. We cannot do that from here and we cannot tell you when they will.</p></div>
+<div class="au-notice"><svg width="18" height="18" style="flex:none;color:var(--muted)"><use href="#clock"/></svg><div><h3>This page will tell you the moment you are approved.</h3><p>It checks every 30 seconds while it is open; last checked at 10:42. No need to sign out and back in.</p><span class="au-btn au-btn--g au-btn--sm" style="margin-top:12px">Check now</span></div></div>
+<div class="inv" role="region" aria-label="Invitations">
+<span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left
+<span class="what">Accepting adds you to the team. Hosting still needs approval.</span></span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span>
+</div>
+<div class="au-card"><h2>You can still join a session</h2><p>Approval is only about <em>hosting</em>. If a session is running right now, your code works.</p>
+<div class="cells" style="margin:14px 0 0"><i></i><i></i><i></i><i></i></div>
+<span class="au-btn au-btn--p">Join</span></div>
+</div></div></div>
+
+<div><div class="lab">Phone, 375px (true size)</div>
+<div class="dev dev--375 au">
+<div class="au-top">Engagements<span>Sign out</span></div>
+<div class="au-col" style="padding:20px 16px 28px">
+<span class="au-pill"><svg width="16" height="16"><use href="#clock"/></svg> Not approved yet</span>
+<h1 style="font-size:26px">Your account exists. It cannot host yet.</h1>
+<div class="inv">
+<span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left
+<span class="what">Accepting adds you to the team. Hosting still needs approval.</span></span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span>
+</div>
+<div class="lab" style="margin:0">If the owner rules that Accept approves (open question 2), the second line becomes:</div>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · 9 days left<span class="what">Accepting lets you host.</span></span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+</div></div></div>
+</div>
+
+<!-- ===================================================================== R1 -->
+<div class="frame-h" id="r1"><h2>R1 · Build Room Host screen, option A: a slim bar under the header (recommended)</h2>
+<p>One line, 42px, full width, <b>Host screen only</b>. Blue edge, neutral Accept: the orange on this screen stays the focused ask's "Open to the room". It stays until Accept, Decline or expiry. Two invites: two lines.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2 scr2--bar">
+<header class="hdr"><span class="btn btn--sm btn--ghost">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is waiting on you</b></span><span class="hjoin">Join <b>4821</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION <kbd style="font-size:11px;color:var(--muted)">\</kbd></span></header>
+<div class="inv inv--bar">
+<span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span>
+</div>
+<div class="host">
+<section class="col"><div class="now"><div class="colh"><h2>Now</h2></div>
+<p class="nq">Claude is waiting on you</p>
+<div class="row"><span class="btn">Show the build</span></div></div>
+<div class="composer"><textarea class="ta" placeholder="An idea, what the room said, or a note for Claude"></textarea>
+<div class="routes"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm btn--ghost">Save for later</span></div></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you · 3</h2></div>
+<div class="filters"><span class="flt is-on">All</span><span class="flt">Claude · 1</span><span class="flt">Room · 2</span></div>
+<div class="q-item is-focus"><div class="q-top"><span class="srcdot srcdot--n">C</span><span class="src">Claude asks the room</span><span class="chip chip--blue">Choose</span><span class="meta" style="margin-left:auto">Claude is waiting · 40s</span></div>
+<div class="q-text q-text--big">Which header should volunteers see first?</div>
+<div class="thumbs"><figure><img src="../build-room-host-redesign/img/choice-a.svg" alt=""><figcaption><b>A</b> Bold banner</figcaption></figure><figure><img src="../build-room-host-redesign/img/choice-b.svg" alt=""><figcaption><b>B</b> Calm photo</figcaption></figure></div>
+<div class="q-acts"><span class="btn btn--sm btn--primary">Open to the room</span><span class="btn btn--sm">Answer for the room</span></div></div>
+<div class="hint" style="text-align:center">+ 2 ideas from the room</div>
+</section>
+<section class="col"><div class="tabs" style="padding:0"><span class="tab is-on">History</span></div>
+<ul class="hist">
+<li><span class="tm">10:46</span><span class="pt"></span><div class="bd"><b>Claude finished</b> · header built</div></li>
+<li><span class="tm">10:41</span><span class="pt pt--dec"></span><div class="bd"><b>Decided</b> · Ask 2: bars by month</div></li>
+</ul></section>
+</div></div></div></div>
+
+<!-- ===================================================================== R2 -->
+<div class="frame-h" id="r2"><h2>R2 · Option B: a blue dot on SESSION, the invite at the top of the Session panel</h2>
+<p>The dot and the panel's invite line show on the Host screen only (the panel also opens over Build and History, which the room sees). The plugin-outdated dot already lives on SESSION in amber; this one is blue. Quieter than A, and that is its flaw: a dot is what got lost.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2">
+<header class="hdr"><span class="btn btn--sm btn--ghost">Main menu</span><span class="ttl">Charity dashboard</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the bar chart</b></span><span class="hjoin">Join <b>4821</b></span><span class="chip">18 joined</span><span class="btn btn--sm sessbtn" style="border-color:var(--secondary)">SESSION <kbd style="font-size:11px;color:var(--muted)">\</kbd><span class="sdot" title=""></span></span></header>
+<div class="host" style="filter:saturate(.9)">
+<section class="col"><div class="now"><div class="colh"><h2>Now</h2></div><p class="nq">Claude is building the bar chart</p><div class="row"><span class="btn">Show the build</span></div></div>
+<div class="composer"><textarea class="ta" placeholder="An idea, what the room said, or a note for Claude"></textarea><div class="routes"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span></div></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you · 2</h2></div><div class="q-item"><div class="q-top"><span class="srcdot srcdot--n">R</span><span class="src">Idea from the room</span></div><div class="q-text">Add a donate button on every page</div><div class="q-acts"><span class="btn btn--sm btn--primary">Send to Claude</span></div></div></section>
+<section class="col"></section>
+</div>
+<div class="scrim2"></div>
+<aside class="spn" aria-label="Session">
+<div class="sp-h"><h3>Session</h3><span class="ws">Connected</span><span class="x">✕</span></div>
+<div class="sp-inv"><p class="k">Invitation</p>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div></div>
+<div class="tabs"><span class="tab is-on">Players <b style="color:var(--muted)">18</b></span><span class="tab">Settings</span></div>
+<div class="sp-body"><div class="sp-row"><b>Ana</b> · Here · joined 10:12</div><div class="sp-row"><b>Ben</b> · Here · joined 10:13</div><div class="sp-row"><b>Chloe</b> · Away · joined 10:15</div></div>
+</aside>
+</div></div></div>
+
+<!-- ===================================================================== R3 -->
+<div class="frame-h" id="r3"><h2>R3 · Option A at 660px and 375px (true size)</h2>
+<p>The row wraps: the words take the width, the buttons drop to their own line, right-aligned, Accept right-most. Nothing scrolls sideways; the inviter's address breaks anywhere if it must.</p></div>
+<div class="true">
+<div><div class="lab">660px: header, bar, top of the Host screen</div>
+<div class="dev dev--660">
+<header class="hdr" style="height:56px"><span class="btn btn--sm btn--ghost">Main menu</span><span class="ttl" style="max-width:150px">Charity dashboard</span><span style="flex:1"></span><span class="hjoin">Join <b style="font-size:20px">4821</b></span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="inv inv--bar"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+<div style="padding:14px 16px"><div class="now"><div class="colh"><h2>Now</h2></div><p class="nq" style="font-size:20px">Claude is waiting on you</p></div></div>
+</div></div>
+<div><div class="lab">375px</div>
+<div class="dev dev--375">
+<header class="hdr" style="height:52px;padding:0 12px"><span class="btn btn--sm btn--ghost">Main menu</span><span style="flex:1"></span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="inv inv--bar" style="padding:8px 12px"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+<div style="padding:12px"><div class="now"><div class="colh"><h2>Now</h2></div><p class="nq" style="font-size:19px">Claude is waiting on you</p></div></div>
+</div></div>
+<div><div class="lab">Option B's panel at 375px</div>
+<div class="dev dev--375" style="background:var(--m-drawer)">
+<div class="sp-h"><h3>Session</h3><span class="ws">Connected</span><span class="x" style="margin-left:auto;color:var(--muted)">✕</span></div>
+<div class="sp-inv"><p class="k" style="font:800 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px">Invitation</p>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div></div>
+</div></div>
+</div>
+
+<!-- ===================================================================== R4 -->
+<div class="frame-h" id="r4"><h2>R4 · New Build Room: the same row above the form</h2>
+<p>This is the exact moment the reviewer lost it. Same row, same words. "Create room" stays the one amber thing.</p></div>
+<div class="true">
+<div><div class="lab">660px</div>
+<div class="dev dev--660 brc">
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+<div class="brc-card"><h1>New Build Room<span>✕</span></h1>
+<p style="margin:0;color:var(--muted);font-size:14px">A room of people and your own Claude Code build something together.</p>
+<div class="f">Title<div class="in"></div></div><div class="f">What to build<div class="in"></div></div>
+<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary" style="margin-left:auto">Create room</span></div></div>
+</div></div>
+<div><div class="lab">375px</div>
+<div class="dev dev--375 brc">
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+<div class="brc-card"><h1>New Build Room<span>✕</span></h1><div class="f">Title<div class="in"></div></div>
+<div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary" style="margin-left:auto">Create room</span></div></div>
+</div></div>
+</div>
+
+<!-- ===================================================================== D1 -->
+<div class="frame-h" id="d1"><h2>D1 · The dashboard: today, and with the small change</h2>
+<p><b>Today</b> the row is amber with a filled amber Accept, a second orange beside "Create engagement" (whose own comment says it is "THE ONE AMBER THING ON THE PAGE"). <b>Change</b>: the same blue row as everywhere else, Accept neutral, Decline beside it, "1 day left". Same place, above the split.</p></div>
+<div class="fit"><div class="fit-box"><div style="display:flex;flex-direction:column;gap:18px">
+<div class="lab">Today (<code>PendingInvites.css</code> as shipped) <span class="lab--no">· two oranges</span></div>
+<div class="wel" style="height:470px;position:relative">
+<div class="wel-top"><span class="wel-brand"><i></i>Engagements</span><span class="wel-who"><span class="sw">Personal ▾</span>Amara Reyes<span>Question sets &amp; team</span></span></div>
+<div class="wel-shell">
+<div class="inv" style="border-color:rgba(246,169,76,.38);border-left-color:rgba(246,169,76,.38);background:rgba(246,169,76,.08);margin-bottom:18px">
+<span class="ico" style="color:var(--primary)"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 1 days left</span>
+<span class="acts"><button class="ib" style="background:var(--primary);color:var(--bg);border:1px solid var(--primary)">Accept</button></span></div>
+<div class="wel-split"><section><p class="wel-k">New session</p><h1>Start an engagement</h1><p class="lede">Two ways in. Either one puts a four-digit code on the screen for the room to join with.</p>
+<div class="wact is-primary"><b>Create engagement</b><span>Choose the format, the question set and which categories the room gets.</span></div></section>
+<section><p class="wel-k">Already running</p><h2>Rejoin a session</h2><div class="cells"><i></i><i></i><i></i><i></i></div></section></div>
+</div>
+<span class="flag" style="left:1188px;top:96px">1</span><span class="flag" style="left:206px;top:290px">2</span>
+</div>
+<div class="lab">With the change</div>
+<div class="wel" style="height:470px">
+<div class="wel-top"><span class="wel-brand"><i></i>Engagements</span><span class="wel-who"><span class="sw">Personal ▾</span>Amara Reyes<span>Question sets &amp; team</span></span></div>
+<div class="wel-shell">
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span>
+<span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 1 day left</span>
+<span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+<div class="wel-split"><section><p class="wel-k">New session</p><h1>Start an engagement</h1><p class="lede">Two ways in. Either one puts a four-digit code on the screen for the room to join with.</p>
+<div class="wact is-primary"><b>Create engagement</b><span>Choose the format, the question set and which categories the room gets.</span></div></section>
+<section><p class="wel-k">Already running</p><h2>Rejoin a session</h2><div class="cells"><i></i><i></i><i></i><i></i></div></section></div>
+</div></div>
+</div></div></div>
+
+<!-- ===================================================================== S1 -->
+<div class="frame-h" id="s1"><h2>S1 · States, at 660px and 375px (true size)</h2>
+<p>Every surface uses the same row, so every surface has the same states. After any answer, nothing is left behind.</p></div>
+<div class="true">
+<div class="dev dev--660" style="padding:16px;background:var(--bg)">
+<div class="inv-stack">
+<div class="lab" style="margin:0">Waiting</div>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span><span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span><span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+<div class="lab" style="margin:6px 0 0">Last day</div>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span><span class="tx"><b>Northwind Learning</b> invited you to join as a team admin · dana@northwind.org · expires today</span><span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span></div>
+<div class="lab" style="margin:6px 0 0">Pressed Accept</div>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span><span class="tx"><b>Northwind Learning</b> invited you to join as a host · dana@northwind.org · 9 days left</span><span class="acts"><button class="ib ib--quiet" disabled>Decline</button><button class="ib ib--go" disabled>Joining…</button></span></div>
+<div class="lab" style="margin:6px 0 0">Accepted: one line, then nothing (Build Room, pending page). The dashboard reloads instead, as today, so the team switcher shows the team.</div>
+<div class="inv inv--ok" role="status"><span class="ico"><svg width="16" height="16"><use href="#check"/></svg></span><span class="tx"><b>You joined Northwind Learning.</b></span></div>
+<div class="gone">…after 6 seconds: nothing drawn</div>
+<div class="lab" style="margin:6px 0 0">Declined, or past its expiry time while the page is open: nothing drawn, at once</div>
+<div class="gone">nothing drawn</div>
+</div></div>
+<div class="dev dev--375" style="padding:14px;background:var(--bg)">
+<div class="inv-stack">
+<div class="lab" style="margin:0">Error, can try again (500, network)</div>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span><span class="tx"><b>Northwind Learning</b> invited you to join as a host · 9 days left</span><span class="acts"><button class="ib ib--quiet">Decline</button><button class="ib ib--go">Accept</button></span><p class="err" role="alert">Could not accept that invitation.</p></div>
+<div class="lab" style="margin:6px 0 0">Error, nothing to retry (410 expired)</div>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span><span class="tx"><b>Northwind Learning</b> invited you to join as a host</span><p class="err" role="alert">That invitation has expired. Ask for a new one.</p><span class="acts"><button class="ib ib--go">OK</button></span></div>
+<div class="lab" style="margin:6px 0 0">Error, nothing to retry (403 other address)</div>
+<div class="inv"><span class="ico"><svg width="16" height="16"><use href="#users"/></svg></span><span class="tx"><b>Northwind Learning</b> invited you to join as a host</span><p class="err" role="alert">That invitation was sent to a different email address.</p><span class="acts"><button class="ib ib--go">OK</button></span></div>
+<div class="lab" style="margin:6px 0 0">Loading the list fails</div>
+<div class="gone">nothing drawn (as today: silent, retried on the next load and on return to the tab)</div>
+</div></div>
+</div>
+
+<!-- ===================================================================== where -->
+<div class="sec" id="where"><h2>Where it shows, and where it never does</h2>
+<table class="vt">
+<thead><tr><th style="width:24%">Surface</th><th style="width:16%">Shows?</th><th>How</th><th style="width:32%">Why</th></tr></thead>
+<tbody>
+<tr><td>Dashboard (WelcomeScreen)</td><td class="yes">Yes, as today</td><td>Row above the split. Blue, neutral Accept, Decline.</td><td class="why">One orange: Create engagement.</td></tr>
+<tr><td>Waiting for approval (PendingApproval) and App.jsx "Access Pending"</td><td class="yes">Yes, new</td><td>Row under the approval status, with the line that says what Accept does.</td><td class="why">Needs the authorizer change (open question 1).</td></tr>
+<tr><td>New Build Room (BuildCreate)</td><td class="yes">Yes, new</td><td>Row above the form card.</td><td class="why">Where the reviewer lost it.</td></tr>
+<tr><td>Build Room, Host screen</td><td class="yes">Yes, new</td><td>A: bar under the header (recommended). B: blue dot on SESSION and a line atop the panel.</td><td class="why">The laptop screen only the host reads.</td></tr>
+<tr><td class="no">Stage, Build, History</td><td class="no">Never</td><td>No bar, no dot, no panel line, even when the host opens Session over Build or History.</td><td class="why">Projected. A team's name and an inviter's address are not the room's business.</td></tr>
+<tr><td class="no">Player phones, the host's phone remote</td><td class="no">Never</td><td>-</td><td class="why">One place to answer is enough; the remote is for running the room.</td></tr>
+</tbody></table>
+</div>
+
+<div class="qs" id="qs"><h2>Open questions for the owner</h2>
+<ol>
+<li><b>Show invites to a person still waiting for approval?</b> Today the authorizer refuses them both invite routes. Allowing <code>pending</code> on <code>GET /invites</code> and the accept route is safe on its face (the handler matches the caller's verified email), but it is a deliberate change to a block written to keep <code>pending</code> out.</li>
+<li><b>Should accepting an invite approve the account?</b> Today it does not: the person joins the team and still cannot host until platform staff approve. If yes, any team owner or admin can in effect approve hosts on the platform (and the team's plan then pays for them). P1 draws both lines.</li>
+<li><b>Decline: add it?</b> It needs a new route (<code>POST /invites/{token}/decline</code>, deleting both rows as revoke does). Does the team's admin see "Declined" in their Invited list, or does the line simply go?</li>
+<li><b>A or B in the Build Room?</b> Recommended A: the problem was a notice that got lost, and a dot is the easiest thing to stop seeing. A costs one 42px line on the Host screen only, for at most 14 days.</li>
+</ol></div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>
