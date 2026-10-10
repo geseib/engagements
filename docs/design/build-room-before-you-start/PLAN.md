@@ -1,5 +1,25 @@
 # Build Room: before you start — plan
 
+## Owner decisions, 2026-10-10 (these override the mockup where they differ)
+
+1. **No install command on the public page.** It appears only when signed in,
+   in the room's Connect window, as today. The public "Before you start"
+   section lists what you need (Claude Code signed in, Node 18+, git, a
+   terminal on the laptop that runs Claude), the steps in words, and what it
+   writes on the laptop, and says the command is in the room's Connect window
+   once you are signed in. (Open question 1: answered "no".) Because the
+   command now lives in a room, the steps run Create a room → Install the
+   plugin → Paste the start command.
+2. **No time estimate.** "About five minutes …" was never measured; dropped.
+   (Open question 2.)
+3. **New Build Room page: option A**, the one line about Node 18+ and git with
+   a link to the public section.
+4. **Connect window step 1 shows the plugin version** from
+   `room.plugin {running, latest, outdated}` in the three drawn states (not yet
+   known; up to date with the command folded; out of date with Copy as the one
+   orange). The empty room's "How a Build Room works" first step names the
+   install, as suggested below. (Open question 5: fold, as drawn.)
+
 Reviewer, 2026-10-10: the public Build Room page names the plugin and gives no
 install or connection details; they appear only after a room exists. Owner,
 earlier: "clear setup/requirements for Claude Code before starting: Claude

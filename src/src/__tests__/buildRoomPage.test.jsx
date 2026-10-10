@@ -507,7 +507,8 @@ describe('the host side panel', () => {
 
 describe('Connect Claude Code', () => {
   test('the key is shown once, inside a command with the real API base', async () => {
-    await openRoom(hostState());
+    // Claude runs the latest plugin, so step 1 keeps its usual title (an older one reads "Update the Engage plugin").
+    await openRoom(hostState({ st: { AgentPlugin: S.LATEST_PLUGIN } }));
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     // The four steps, in the order they are done (owner, 2026-10-04).

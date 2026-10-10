@@ -227,6 +227,18 @@
 }
 .brm .brm-steps li.is-done .brm-n { background: var(--success); color: var(--bg); }
 .brm .brm-steps li.is-wait .brm-n { background: transparent; border: 1.5px dashed var(--primary); color: var(--primary); }
+/* Before you start (2026-10-10): Connect step 1's plugin version. Out of
+   date: the step's number and Claude's version in --danger-text (6.1:1 on
+   --surface), never --danger. Up to date: "The latest." in success text. */
+.brm .brm-steps li.is-old .brm-n { background: transparent; border: 1.5px solid var(--danger-text); color: var(--danger-text); }
+.brm .brm-ver { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin: 0; font-size: var(--brm-t-body); }
+.brm .brm-ver-k { color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-ver b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.brm .brm-ver .brm-ver-old { color: var(--danger-text); }
+.brm .brm-ver-ok { color: var(--brm-success-text); font-weight: 600; font-size: var(--brm-t-label); }
+.brm .brm-verfold { display: grid; gap: 8px; min-width: 0; }
+.brm .brm-verfold > summary { cursor: pointer; color: var(--secondary); font-size: var(--brm-t-label); font-weight: 600; width: fit-content; }
+.brm .brm-verfold > summary:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 4px; }
 /* Connect Claude Code: each step carries its own title, command and copy
    button (ConnectPanel, 2026-10-04). min-width 0 lets a long command scroll
    inside its box instead of widening the dialog. */
@@ -497,6 +509,11 @@
 /* ---- create ------------------------------------------------------------- */
 .brm.brm-createpage, .brm.brm-loading { display: grid; place-items: start center; padding: 40px 16px; }
 .brm .brm-create { width: min(560px, 100%); }
+/* Before you start (2026-10-10, owner: option A): what the laptop needs, one line. */
+.brm .brm-needline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--bg); font-size: var(--brm-t-label); color: var(--muted); }
+.brm .brm-needline a { color: var(--secondary); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.brm .brm-needline a:hover { text-decoration: underline; }
+.brm .brm-needline a:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 4px; }
 .brm .brm-loading p { margin: 0; }
 
 /* ---- Present: the wall gets bigger -------------------------------------- */

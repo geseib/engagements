@@ -112,7 +112,7 @@ export function stageHint(ask) {
 
 /** The first-run strip on an empty room. */
 export const HOW_IT_WORKS = [
-  'Connect Claude Code: mint a key and paste one command.',
+  'Connect Claude Code: install the plugin, then paste one command.',
   'Paste the Kick off prompt into Claude Code.',
   'Claude asks the room. You shape each answer and send it back.',
   'Wrap up, then share the report.',
@@ -335,6 +335,7 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
           <a className="brm-x" href="/" aria-label="Close"><Icon name="X" size={16} /></a>
         </div>
         <p className="brm-sub">A room of people and your own Claude Code build something together. Claude asks the room at real decision points; you shape every answer before it reaches Claude.</p>
+        <p className="brm-needline"><span>{W.needLine}</span><a className="brm-push" href="/build-room#before-you-start">{W.beforeYouStart}</a></p>
         <label className="brm-field">
           <span className="brm-lbl">Title</span>
           <input className="brm-input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="Volunteer sign-up for the food bank" />
@@ -3728,7 +3729,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
   const installStep = useRef(null);
   useEffect(() => {
     if (!atInstall || !installStep.current) return;
-    const btn = installStep.current.querySelector('button');
+    const btn = installStep.current.querySelector('summary, button');
     if (btn) btn.focus();
     if (installStep.current.scrollIntoView) installStep.current.scrollIntoView({ block: 'nearest' });
   }, [atInstall]);
@@ -3742,6 +3743,23 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
   const crew = Boolean(room.crew && room.crew.enabled);
   const command = minted ? connectCommand({ origin: window.location.origin, api: apiBase(), key: minted.key }) : '';
   const install = pluginInstallCommand({ origin: window.location.origin, api: apiBase() });
+  // THE PLUGIN'S VERSION (docs/design/build-room-before-you-start, owner
+  // 2026-10-10): what the server knows from room.plugin. Out of date: Copy is
+  // the one orange. Up to date: the command folds away. Otherwise only the
+  // latest is known, until Claude calls in.
+  const plugin = room.plugin || {};
+  const latest = plugin.latest || '';
+  const ver = plugin.outdated && latest ? 'old' : plugin.running && !plugin.outdated ? 'ok' : 'unknown';
+  const installBody = (
+    <>
+      <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
+      <div className="brm-row brm-gap">
+        <CopyButton text={install} label="Copy" className={`brm-btn brm-btn--sm${ver === 'old' ? ' brm-btn--primary' : ''}`} />
+        <span className="brm-hint">{ver === 'old' ? W.pluginRerun : W.installNote}</span>
+      </div>
+      {ver !== 'old' && <p className="brm-hint">{W.macAllow}<InfoTip text={W.tipMacAllow} label="Why?" /></p>}
+    </>
+  );
   const connectLine = minted ? pluginConnectCommand(minted.key) : '';
   // THE START CAP (owner, 2026-10-06): a new folder named for the project,
   // ~/build-room/<name>; the host may rename it before copying.
@@ -3778,16 +3796,41 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
       <p className="brm-sub">{W.connectIntro}</p>
 
       <ol className="brm-steps brm-steps--connect">
-        <li className={step(connected, false)} ref={installStep} data-step="install">
+        <li className={ver === 'old' ? 'is-old' : step(connected, false)} ref={installStep} data-step="install">
           <span className="brm-n">1</span>
           <div className="brm-step-body">
-            <span className="brm-step-title">Check for the latest Engage plugin</span>
-            <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
-            <div className="brm-row brm-gap">
-              <CopyButton text={install} label="Copy" />
-              <span className="brm-hint">{W.installNote}</span>
-            </div>
-            <p className="brm-hint">{W.macAllow}<InfoTip text={W.tipMacAllow} label="Why?" /></p>
+            <span className="brm-step-title">{ver === 'old' ? W.pluginUpdateTitle : W.pluginCheckTitle}</span>
+            {ver === 'unknown' && latest && (
+              <p className="brm-ver" data-testid="brm-ver">
+                <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
+                <span className="brm-ver-k">{W.pluginUnknown}</span>
+              </p>
+            )}
+            {ver === 'ok' && (
+              <p className="brm-ver" data-testid="brm-ver">
+                <span><span className="brm-ver-k">{W.pluginRunning}</span> <b>{plugin.running}</b></span>
+                <span className="brm-ver-ok">{W.pluginCurrent}</span>
+              </p>
+            )}
+            {ver === 'old' && (
+              <p className="brm-ver" data-testid="brm-ver">
+                {plugin.running ? (
+                  <>
+                    <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{plugin.running}</b></span>
+                    <span className="brm-ver-k" aria-hidden="true">·</span>
+                    <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
+                  </>
+                ) : (
+                  <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{W.pluginOlder(latest)}</b></span>
+                )}
+              </p>
+            )}
+            {ver === 'ok' ? (
+              <details className="brm-verfold">
+                <summary>{W.installElsewhere}</summary>
+                {installBody}
+              </details>
+            ) : installBody}
           </div>
         </li>
 
