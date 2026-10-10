@@ -1,5 +1,5 @@
 /**
- * THE SIX HOST GUIDES.
+ * THE SEVEN HOST GUIDES.
  *
  * Only one of these existed. It had also drifted from the product in two ways
  * that mattered, both of which came from restating things the code already
@@ -54,7 +54,7 @@ const quickStart = {
         {
           t: 'steps',
           items: [
-            'Choose Create session on the welcome screen.',
+            'Choose Create engagement on the welcome screen.',
             'Give it an event title — this is what the room sees on the big screen.',
             'Pick the kind of session, and a question set of that kind.',
             'Narrow it by category if you want a subset of the questions.',
@@ -106,6 +106,10 @@ const quickStart = {
         { t: 'phases', gameType: 'call-and-answer' },
         { t: 'p', text: 'Trivia is shorter — there is nothing to vote on, so it goes straight to the answer.' },
         { t: 'phases', gameType: 'trivia' },
+        {
+          t: 'p',
+          text: 'A poll is one question at a time, with the result live on the main screen. A survey has no rounds: you open it, people answer at their own pace, and you close it when the room is done.',
+        },
         {
           t: 'keys',
           items: [
@@ -499,6 +503,10 @@ const reporting = {
           t: 'p',
           text: 'You can generate it at any point, during the session or after it. It is not a final action and running it does not end anything.',
         },
+        {
+          t: 'p',
+          text: 'Save report keeps it as a PDF: Keep for 90 days, or Keep for 1 year. A saved report outlives the session. Find it again under Reports on the welcome screen, with the link and passkey for anyone without an account.',
+        },
       ],
     },
     {
@@ -509,7 +517,7 @@ const reporting = {
           t: 'note',
           tone: 'warn',
           title: 'Sessions expire',
-          text: 'A session is kept for 90 days from creation, or for 7 days once it has started, whichever comes first. If the results matter, generate the report and save it — do not plan to come back for it in six months.',
+          text: 'A session is kept for 90 days from creation, or for 7 days once it has started, whichever comes first. If the results matter, save the report while the session still exists.',
         },
       ],
     },
@@ -587,10 +595,79 @@ const plan = {
   ],
 };
 
+/*
+  THE BUILD ROOM. Claims are taken from the code, not the plan:
+  WelcomeScreen.jsx (the door and its one line), buildroom/words.js (needLine,
+  installNote, wifiSay, wrapUpSaved), buildroom/pluginTier.js (one plugin per
+  tier) and buildroom/buildHostApi.js (the two commands the Connect window
+  shows). Words the room sees on its own screens live in words.js, not here.
+*/
+const buildRoom = {
+  id: 'host-build-room',
+  title: 'Build Room',
+  icon: 'Wrench',
+  summary: 'Build something with your Claude Code while the room suggests and votes. You decide.',
+  sections: [
+    {
+      title: 'What it is',
+      icon: 'Wrench',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Claude Code runs on your laptop and joins the room. People join with the four-digit code on laptops, tablets and phones. Claude asks the room for ideas, choices and ratings; the room answers; you decide what Claude builds next.',
+        },
+      ],
+    },
+    {
+      title: 'Before you start',
+      icon: 'ListChecks',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            'Claude Code, on the laptop you will host from.',
+            'Node 18 or later, and git, on that laptop.',
+            'The Engage plugin for Claude Code. Each site has its own: engage on engage.seibtribe.us, engage-test on the test site, engage-dev on the dev site.',
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Connecting Claude',
+      icon: 'Terminal',
+      blocks: [
+        {
+          t: 'steps',
+          items: [
+            { title: 'Open Build Room', text: 'From the welcome screen. Name the build, and say who sets the goal: the room, or you.' },
+            { title: 'Install the plugin', text: 'The Connect window shows one command. Run it in a terminal, once per laptop. Run it again when the room says the plugin is out of date.' },
+            { title: 'Start Claude Code', text: 'The second command makes a new folder under ~/build-room, with git, and starts Claude Code there already connected.' },
+            { title: 'Kick off', text: 'Paste the Kick off prompt. Claude reads the room, says what it plans, and starts.' },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'During and after',
+      icon: 'FlagCheckered',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Share on this Wi-Fi', text: 'Anyone on the same Wi-Fi can open the build while it runs. Guest Wi-Fi often blocks this; test it from another device first.' },
+            { title: 'Wrap up', text: 'A summary, what was built, links and next steps, written by Claude or by you, saved into the report. Check the report, then end the session.' },
+            { title: 'Save report', text: 'Keeps the report as a PDF, as for any session. The code stays in the project folder on your laptop.' },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 export const HOST_ROLE = {
   id: 'host',
   title: 'For hosts',
   icon: 'GameController',
   blurb: 'Running a session in front of a room.',
-  guides: [quickStart, gameSetup, running, playerManagement, reporting, plan],
+  guides: [quickStart, gameSetup, running, playerManagement, reporting, buildRoom, plan],
 };

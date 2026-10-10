@@ -74,7 +74,7 @@ const troubleshooting = {
           items: [
             { title: 'Signed in but cannot create anything', text: 'The account is in the pending group. An admin has to move it to hosts.' },
             { title: 'Password reset never arrives', text: 'An account that signs in with Google has no password to reset. Use the Google button. Same for an account created by an admin that has never exchanged its temporary password.' },
-            { title: 'Access denied on the admin console', text: 'The console requires the admins group. Hosts do not get it.' },
+            { title: 'A console section is missing', text: 'The console shows what your role in the team allows. Plan & usage and Data & privacy are for team owners and admins; the Engage sections need the admins group and the switcher on Engage.' },
           ],
         },
         {
@@ -93,7 +93,7 @@ const troubleshooting = {
           t: 'note',
           tone: 'warn',
           title: 'Sessions expire on a timer',
-          text: '90 days from creation, or 7 days once it has started — whichever comes first. A session that has gone is gone. Generate the report while the session still exists.',
+          text: '90 days from creation, or 7 days once it has started — whichever comes first. A session that has gone is gone. Save its report while it still exists: a saved report is kept 90 days or a year, under Reports.',
         },
       ],
     },

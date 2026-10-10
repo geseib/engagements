@@ -14,7 +14,7 @@ const gettingStarted = {
   id: 'admin-getting-started',
   title: 'Getting started',
   icon: 'Gear',
-  summary: 'The console, its six sections, and what each of them owns.',
+  summary: 'The console\'s sections, who sees which, and what each of them owns.',
   sections: [
     {
       title: 'What the console is for',
@@ -22,18 +22,18 @@ const gettingStarted = {
       blocks: [
         {
           t: 'p',
-          text: 'Hosts run sessions. Admins look after the things sessions are made of — the question sets, the prompts the AI uses, the people allowed to host, and the shared archive.',
+          text: 'The console shows what your role allows in the team or space you are working in. Engage staff switch to Engage, at the top of the console, for the Engage sections; the two are never on screen together.',
         },
         {
           t: 'table',
-          head: ['Section', 'What lives there'],
+          head: ['Section', 'Who sees it', 'What lives there'],
           rows: [
-            ['Question sets', 'Every set on this environment. Create, edit, import, delete.'],
-            ['Sessions', 'What hosts have actually run.'],
-            ['Prompts', 'Generation prompts build questions; analysis prompts are what the AI says afterwards.'],
-            ['Archive', 'A shared store that all three environments read and write.'],
-            ['Users', 'Registration lands people in pending. Somebody has to move them.'],
-            ['Settings', 'Three switches, stored in this browser only.'],
+            ['Question sets, Sessions, Public library', 'Everyone in a team or space', 'The sets, what was run, and sets other organisations have published.'],
+            ['Members', 'Teams', 'Who can build and run sessions here.'],
+            ['Prompts', 'Team owners and admins, read-only', 'What the AI is told. Only Engage staff change prompts.'],
+            ['Plan & usage, Data & privacy', 'Team owners and admins, and your own space', 'What this month costs; who has opened what, and how to take everything with you.'],
+            ['Organisations, Observability, Plan requests, Discount codes, Shared library, Prompts, Public library, Moderation, Accounts, Archive', 'Engage staff, switched to Engage', 'Running the platform. A team\'s content is not reachable from here.'],
+            ['Settings', 'Everyone, at the foot of the menu', 'Three switches, stored in this browser only.'],
           ],
         },
       ],
@@ -44,13 +44,13 @@ const gettingStarted = {
       blocks: [
         {
           t: 'p',
-          text: 'Check Users. Registration puts new people in the pending group and leaves them there — a host who has signed up and cannot create anything is almost always someone nobody moved into hosts.',
+          text: 'Check Accounts. Registration puts new people in the pending group and leaves them there — a host who has signed up and cannot create anything is almost always someone nobody moved into hosts.',
         },
         {
           t: 'table',
           head: ['Group', 'Can'],
           rows: [
-            ['admins', 'Everything, including this console.'],
+            ['admins', 'Engage staff: the Engage sections of this console.'],
             ['hosts', 'Create and run sessions, and manage their own question sets.'],
             ['pending', 'Sign in and nothing else. Waiting for an admin.'],
           ],
@@ -65,7 +65,7 @@ const gettingStarted = {
           t: 'note',
           tone: 'warn',
           title: '90 days, or 7 once started',
-          text: 'Session data is kept 90 days from creation, or 7 days once the session has started, whichever comes first. The Sessions list is not an archive — anything worth keeping needs its report generated while the session still exists.',
+          text: 'Session data is kept 90 days from creation, or 7 days once the session has started, whichever comes first. The Sessions list is not an archive. Save the report while the session still exists; a saved report is kept 90 days or a year.',
         },
       ],
     },
@@ -311,7 +311,7 @@ What the room said, and what it adds up to.
           items: [
             { title: 'Default', text: 'Each kind of session has a default prompt — the one used when nothing more specific is linked.' },
             { title: 'Active or draft', text: 'Only active prompts are offered where a prompt is chosen. Draft keeps a prompt without putting it in front of anyone.' },
-            { title: 'Editing', text: 'Prompts can be edited at any time. The change applies to the next round that runs, not to summaries already generated.' },
+            { title: 'Editing', text: 'Engage staff edit prompts, switched to Engage. Team owners and admins can read them. A change applies to the next round that runs, not to summaries already generated.' },
           ],
         },
         {
@@ -378,7 +378,7 @@ const aiBuilders = {
         {
           t: 'list',
           items: [
-            'Do the four options actually differ, and is exactly one of them right?',
+            'Do the options actually differ, and is exactly one of them right?',
             'Is the withheld detail filled in on rounds that promise a reveal?',
             'Are the categories ones you actually want, or twenty near-duplicates?',
             'Does the tone match the room it is for?',
@@ -417,7 +417,7 @@ const gameManagement = {
           t: 'note',
           tone: 'warn',
           title: 'It is not a backup',
-          text: 'Rows disappear on expiry — 90 days from creation, or 7 days once the session has started. Anything that matters gets its report generated and saved elsewhere.',
+          text: 'Rows disappear on expiry — 90 days from creation, or 7 days once the session has started. Anything that matters gets its report saved; saved reports are listed under Reports.',
         },
       ],
     },
@@ -484,6 +484,6 @@ export const ADMIN_ROLE = {
   id: 'admin',
   title: 'For admins',
   icon: 'Gear',
-  blurb: 'Question sets, prompts, users and the shared archive.',
+  blurb: 'The console: question sets, members, plans, prompts and the shared archive.',
   guides: [gettingStarted, questionSets, prompts, aiBuilders, gameManagement, settings],
 };

@@ -35,7 +35,7 @@ export const HOW_STEPS = [
     n: 3,
     title: 'Ask',
     text: [
-      'The question goes up on the front screen and onto every phone at the same moment. Trivia shows four options; call and answer shows a box to write in.',
+      'The question goes up on the front screen and onto every laptop, tablet and phone at the same moment. Trivia shows its options; call and answer shows a box to write in.',
       'You can see how many people have answered before you move on, so nobody is cut off mid-sentence.',
     ],
     slot: 'trivia-host',
@@ -76,7 +76,7 @@ export const HOW_STEPS = [
 export const HOW_PAGE = {
   kicker: 'How it works',
   title: 'Six steps, from a question set to a report.',
-  lead: 'You run the session from one screen. Everyone else uses the phone already in their hand.',
+  lead: 'You run the session from one screen. Everyone else answers on their own laptop, tablet or phone.',
   profiles: {
     kicker: 'Running it in the room you have',
     title: 'Four display profiles, and a phone as the remote.',
@@ -92,6 +92,6 @@ export const HOW_PAGE = {
   cta: {
     title: 'Try it with your next session.',
     primary: 'Create a host account',
-    secondary: { label: 'See four sessions in detail', href: '/use-cases' },
+    secondary: { label: 'See five sessions in detail', href: '/use-cases' },
   },
 };

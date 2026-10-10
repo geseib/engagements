@@ -168,7 +168,11 @@ describe('the on-page sample report never claims to be a real session', () => {
   });
 
   test('the tour CTA now claims only what /use-cases is (regression check)', () => {
-    expect(howItWorksModule.HOW_PAGE.cta.secondary.label).toBe('See four sessions in detail');
+    // /use-cases has five since the Build Room joined it; the CTA counts them.
+    expect(howItWorksModule.HOW_PAGE.cta.secondary.label).toBe('See five sessions in detail');
+    expect(howItWorksModule.HOW_PAGE.cta.secondary.label).toContain(
+      useCasesModule.USE_CASES_PAGE.title.split(' ')[0].toLowerCase(),
+    );
   });
 
   test('the one remaining owner-vouched usage claim is unaffected (premise check)', () => {

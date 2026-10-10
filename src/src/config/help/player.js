@@ -50,7 +50,7 @@ const gettingStarted = {
           items: [
             { title: 'A question appears', text: 'Type an answer, pick an option, or place a word — depending on the kind of session.' },
             { title: 'Everyone answers', text: 'The host can see how many people are done, but not what you wrote, until the round closes.' },
-            { title: 'Sometimes the room votes', text: 'On open-answer rounds you rank other people\'s answers. Not on trivia.' },
+            { title: 'Sometimes the room votes', text: 'On Call & Answer rounds you rank other people\'s answers. Not on trivia, polls or wavelength.' },
             { title: 'Results', text: 'Scores, the best answers, and a summary the AI wrote from what the room said.' },
           ],
         },
@@ -192,9 +192,10 @@ const playing = {
           t: 'list',
           items: [
             { title: 'Call & Answer', text: 'A text box. Write as much or as little as you like — the interesting answers are usually not the shortest.' },
-            { title: 'Trivia', text: 'Four options. Pick one. There is a right answer and you will see it at the end of the round.' },
-            { title: 'Poll', text: 'A text box, but there is no right answer. The spread of opinion is the point.' },
+            { title: 'Trivia', text: 'Usually four options, up to six. Pick one. There is a right answer and you will see it at the end of the round.' },
+            { title: 'Poll', text: 'One question: pick an option, give a rating, say yes or no, or write a short answer. There is no right answer; the room\'s result goes up on the main screen.' },
             { title: 'Wavelength', text: 'A word or a short phrase. Everyone\'s words become one cloud — the fun is in how much the room overlaps.' },
+            { title: 'Survey', text: 'Several questions you answer at your own pace, then send. You can go back and change your answers until the host closes the survey.' },
           ],
         },
         {
@@ -229,7 +230,7 @@ const playing = {
       blocks: [
         {
           t: 'p',
-          text: 'On open-answer rounds, once everyone has answered the room ranks the answers. You cannot vote for your own.',
+          text: 'On Call & Answer rounds, once everyone has answered the room ranks the answers. You cannot vote for your own.',
         },
         { t: 'h', text: 'Two ways to do it' },
         {
@@ -281,16 +282,17 @@ const scoring = {
       blocks: [
         {
           t: 'p',
-          text: 'It depends on the kind of round, and the host can adjust the weighting for their session — so treat this as the shape of it rather than a rulebook.',
+          text: 'Only Trivia and Call & Answer score.',
         },
         {
           t: 'table',
           head: ['Round', 'Where points come from'],
           rows: [
-            ['Call & Answer', 'Votes from the room. First place is worth more than second, second more than third.'],
-            ['Trivia', 'Getting it right.'],
-            ['Poll', 'Participation — there is no right answer to be right about.'],
-            ['Wavelength', 'Overlap. Landing on a word other people also chose.'],
+            ['Call & Answer', 'Votes from the room: 3 points for each first-place vote, 2 for second, 1 for third.'],
+            ['Trivia', 'Getting it right, plus a speed bonus of up to 5 points: the faster a right answer, the bigger it is.'],
+            ['Poll', 'None. A poll counts opinions; nobody scores.'],
+            ['Wavelength', 'None. The shared word cloud is the result.'],
+            ['Survey', 'None.'],
           ],
         },
         {
