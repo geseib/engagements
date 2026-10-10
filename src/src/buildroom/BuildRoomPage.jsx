@@ -1057,7 +1057,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {/* WRAPPED, NOT YET ENDED (owner, 2026-10-06): the next steps in one place. */}
       {host && !ended && room.outcome && (
         <div className="brm-notice brm-notice--bar brm-row brm-gap" data-testid="brm-wrappedbar">
-          <span>{W.wrappedUp}</span>
+          <span>{room.outcome.by === 'agent' ? W.wrappedUp : W.wrapUpSaved}</span>
           <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={() => goView('report')}>Report</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={() => setDialog('end')}>End session</button>
         </div>

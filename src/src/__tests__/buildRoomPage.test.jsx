@@ -2066,6 +2066,14 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(screen.getByRole('dialog', { name: 'End this session?' })).toBeInTheDocument();
   });
 
+  // Revy review (2026-10-10): the host saved the wrap-up and the bar said Claude had.
+  test('a wrap-up the host saved says so, not that Claude wrapped up', async () => {
+    await openRoom(hostState({ st: { Outcome: { summary: 'A connect four game.', built: [], links: [], nextSteps: [], by: 'host', updatedAt: ago(30) } } }));
+    const bar = screen.getByTestId('brm-wrappedbar');
+    expect(bar.textContent).toMatch('Wrap-up saved. Check the report, then end the session.');
+    expect(bar.textContent).not.toMatch('Claude');
+  });
+
   test('ended: the bar no longer carries it; the header still does', async () => {
     const st = hostState();
     await openRoom({ ...st, state: 'ENDED' });

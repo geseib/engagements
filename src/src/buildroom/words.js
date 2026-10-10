@@ -276,6 +276,8 @@ export const W = Object.freeze({
   nothingYet: 'Nothing yet.',
   endedEdit: 'Session ended. You can still edit the report.',
   wrappedUp: 'Claude has wrapped up. Check the report, then end the session.',
+  // When the host wrote or saved it (outcome.by), Revy review 2026-10-10.
+  wrapUpSaved: 'Wrap-up saved. Check the report, then end the session.',
   unsentDirection: (n) => `Ask ${n} has an unsent direction. Reopen it to send.`,
   startedTooSoon: 'Started building too soon?',
   tipPreview: 'Claude runs the project and links it here.',
