@@ -64,7 +64,7 @@ describe('the question form in a build-room set (C15)', () => {
     expect(within(section).getByLabelText('When decided, Claude gets it as')).toHaveValue('do-now');
     expect(within(section).getByLabelText('Note for Claude')).toHaveValue('Remove the winning item.');
     fireEvent.change(within(section).getByLabelText('When decided, Claude gets it as'), { target: { value: 'keep' } });
-    expect(section.textContent).toMatch('Goes on the brief; Claude does not stop.');
+    expect(section.textContent).toMatch('A standing rule. Claude keeps going.');
     fireEvent.change(within(section).getByLabelText('Note for Claude'), { target: { value: 'Treat it as a rule.' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
     fireEvent.click(screen.getAllByRole('button', { name: /Save as version 2/ })[0]);

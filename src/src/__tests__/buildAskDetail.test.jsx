@@ -41,7 +41,6 @@ test('a decided choice ask: the options with their pictures, the pick outlined, 
   expect(within(dlg).getByText(/Claude was told/)).toBeInTheDocument();
   expect(within(dlg).getByText(/Keep the numbers big/)).toBeInTheDocument();
   expect(within(dlg).getByText(/Do now · sent /)).toBeInTheDocument();
-  expect(within(dlg).getByText('Click a mockup to look closer.')).toBeInTheDocument();
   fireEvent.click(await within(dlg).findByRole('button', { name: /Look closer: Choice B/ }));
   expect(onViewMockup).toHaveBeenCalledWith('B');
 });

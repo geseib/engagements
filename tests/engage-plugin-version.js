@@ -19,7 +19,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const PIN = { version: '1.14.0', sha256: '1e8c499c714c6cf0a7e11ebcfe7ae312f53f1331a1ab97b72486f684efaff14a' };
+const PIN = { version: '1.15.0', sha256: '7e6680f4c840ef1daff6359a8f87f4ab98df9f8694c0b44051964187e6512af8' };
 
 const text = fs.readFileSync(path.join(__dirname, '..', 'src', 'public', 'engage-mcp.mjs'), 'utf8');
 const version = (text.match(/const VERSION = '([^']+)';/) || [])[1];
@@ -46,5 +46,25 @@ check('the code and its version move together', () => {
   assert.ok(newer(version, PIN.version), `VERSION must go up from ${PIN.version}, not to ${version}`);
   assert.fail(`VERSION is bumped to ${version}; now set PIN to { version: '${version}', sha256: '${sha256}' }`);
 });
-console.log(failed ? `\n${failed} failed` : '\n2 passed, 0 failed');
+// ---- The server knows the current version (copy pass 2026-10-10) -----------
+// build-store.js's LATEST_PLUGIN is what the host's Session panel and Claude's
+// tool replies compare the running plugin with. It must be the plugin's own
+// VERSION, so the two move together: bump both or neither.
+check('the server\'s LATEST_PLUGIN is this file\'s VERSION', () => {
+  const store = require('../lambda-functions/game/build-store');
+  assert.strictEqual(store.LATEST_PLUGIN, version, `build-store.js LATEST_PLUGIN is ${store.LATEST_PLUGIN} but engage-mcp.mjs VERSION is ${version}; move them together`);
+});
+
+check('the plugin sends its version on every Engage call, and a browser never does', () => {
+  assert.ok(/'X-Engage-Plugin': VERSION/.test(text), 'engage-mcp.mjs api() must send X-Engage-Plugin: VERSION');
+  const calls = (text.match(/\bfetch\(/g) || []).length;
+  // Two fetches: the Engage API call, and the local gateway probe (localhost, not Engage).
+  assert.ok(calls >= 1);
+  // The browser app (host page, phones) must never carry it: a custom header there needs a CORS allow-list entry.
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? (d.name === 'node_modules' ? [] : walk(path.join(dir, d.name))) : [path.join(dir, d.name)]));
+  const offenders = walk(path.join(__dirname, '..', 'src', 'src')).filter((f) => /\.(jsx?|mjs)$/.test(f) && !f.includes('__tests__') && /X-Engage-Plugin/i.test(fs.readFileSync(f, 'utf8')));
+  assert.deepStrictEqual(offenders, [], `a browser file sends X-Engage-Plugin: ${offenders.join(', ')}`);
+});
+
+console.log(failed ? `\n${failed} failed` : '\nall passed, 0 failed');
 process.exit(failed ? 1 : 0);

@@ -213,6 +213,14 @@
    2. THE SHELL — bar / stage / dock
    ========================================================================== */
 
+/* A layer portalled to <body> (BuildPlayer's picture viewer): the wrapper
+   carries .plr's tokens and theme and lays nothing out, so it is not a
+   100dvh, overflow:hidden column. iOS Safari keeps a fixed box inside the
+   stage's touch scroller, which is why such a layer leaves the shell. */
+.plr.plr-portal {
+  display: contents;
+}
+
 .plr-bar {
   flex: none;
   border-bottom: 1px solid var(--plr-rule);

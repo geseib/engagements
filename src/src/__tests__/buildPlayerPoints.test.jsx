@@ -102,9 +102,9 @@ describe('the vote from points, on a phone', () => {
     expect(screen.getByRole('button', { name: 'Pick up to 3' })).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: /Option text 2/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Option text 1/ }));
-    expect(document.body.textContent).toMatch('2 of 3 picked.');
+    expect(document.body.textContent).toMatch('2 of 3 picked');
     fireEvent.click(screen.getByRole('checkbox', { name: /Option text 4/ }));
-    expect(document.body.textContent).toMatch('3 of 3 picked. Untick one to change.');
+    expect(document.body.textContent).toMatch('3 of 3 picked');
     expect(screen.getByRole('checkbox', { name: /Option text 5/ })).toHaveAttribute('aria-disabled', 'true');
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Pick A \+ B \+ D$/ })); });
     expect(posts('respond')[0].body).toMatchObject({ askId: '005', choice: ['A', 'B', 'D'] });
@@ -122,7 +122,7 @@ describe('a point on the Stage, on a phone: Talk it over', () => {
     expect(within(card).getByText(/From Claude's research/)).toBeInTheDocument();
     expect(within(card).getByText('Mid oranges on white come out near 2:1.')).toBeInTheDocument();
     expect(within(card).getByText('Source: webaim.org')).toBeInTheDocument();
-    expect(within(card).getByText(/Talk it over with the people near you\./)).toBeInTheDocument();
+    expect(within(card).getByText(/Talk it over\. Send an idea\./)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch('host-only detail');
     expect(document.querySelector('a[href*="webaim"]')).toBeNull();
     expect(screen.queryByText('Claude is building')).toBeNull();
@@ -153,7 +153,7 @@ describe('a point on the Stage, on a phone: Talk it over', () => {
     await act(async () => { fireEvent.click(send); });
     expect(posts('idea')).toHaveLength(1);
     expect(posts('idea')[0].body).toEqual({ playerName: 'Dee', clientId: CID, text: 'Use amber for text' });
-    expect(await within(card).findByText('Sent to the host, about this point.')).toBeInTheDocument();
+    expect(await within(card).findByText('Sent to the host.')).toBeInTheDocument();
   });
 
   test('an open question comes first; with no point up the screen is as it was', async () => {
@@ -221,7 +221,7 @@ describe('a builder\'s lane: Research… and Ideas… for their own task', () =>
     const lane = screen.getByRole('region', { name: 'Your lane' });
     expect(within(lane).getByRole('button', { name: 'Research…' })).toBeInTheDocument();
     expect(within(lane).getByRole('button', { name: 'Ideas…' })).toBeInTheDocument();
-    expect(within(lane).getByText('For your task. Your Claude does it in a helper and keeps building.')).toBeInTheDocument();
+    expect(within(lane).getByText('For your task.')).toBeInTheDocument();
     global.fetch.mockReset();
     serve(phoneView('Dee', LANE));
     document.body.innerHTML = '';

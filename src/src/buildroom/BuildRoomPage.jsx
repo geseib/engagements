@@ -39,7 +39,9 @@ import AskDetail from './BuildAskDetail';
 import MockupViewer, { ViewerContext, backLabelFor } from './MockupViewer';
 import BuildWheel from './BuildWheel';
 import { useKeepOnScreen } from './keepOnScreen';
+import HostAlert from './BuildHostAlert';
 import { W } from './words';
+import InfoTip from './InfoTip';
 import BuildLaterPoints from './BuildLaterPoints';
 import BuildPointRequest from './BuildPointRequest';
 import { PointStage, ShownPointCard, TakeDownOffer } from './BuildPointStage';
@@ -68,7 +70,7 @@ import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
-  doingLine, queueItems, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
+  doingLine, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
   defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN,
   isPointsVote, highlightOf, highlightedPointIds, rowIsLive, pointVoteRows, runOf, runRunning,
@@ -98,14 +100,12 @@ export const STATUS_LABEL = {
 
 /** One sentence under each stage: what happens next, and what the host does. Hidden in Present. */
 export function stageHint(ask) {
-  if (!ask) return 'Claude is working. Log what the room says, or ask the room yourself.';
+  if (!ask) return '';
   switch (ask.status) {
-    case 'proposed': return "The room can't see this yet. Edit it, then open it.";
-    case 'live': return ask.kind === 'suggest'
-      ? 'The room is suggesting. Open voting when you have enough ideas.'
-      : 'The room is answering. Close it when the count settles.';
-    case 'voting': return 'The room is voting. Close it when the count settles.';
-    case 'results': return 'Shape the direction, then send it to Claude.';
+    case 'proposed': return W.hintHidden;
+    case 'live': return ask.kind === 'suggest' ? W.hintIdeasSlow : W.hintAnswersStop;
+    case 'voting': return W.hintVotesStop;
+    case 'results': return W.hintCheckWords;
     default: return '';
   }
 }
@@ -395,6 +395,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     setScreenState(next);
   }, []);
   const [view, setView] = useState(initialView);
+  // THE HOST ALERT (owner, 2026-10-10): what this device has just marked seen (before the server answers), and the line to jump to.
+  const [seenLocal, setSeenLocal] = useState({ ids: [], allAt: '' });
+  const [alertFocus, setAlertFocus] = useState(null);
   // WHICH ANSWER GOES TO CLAUDE (owner, 2026-10-06): the winner unless the
   // host picks another ("choose this instead"), on the Stage or the Host.
   const [pick, setPick] = useState(null); // {askId, id}
@@ -699,7 +702,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   }, [sent]);
   const onSent = useCallback(({ as, send, direction }) => {
     const short = direction.length > 80 ? `${direction.slice(0, 80).trimEnd()}…` : direction;
-    if (!send) setSent(`Recorded in the timeline: ${short}`);
+    if (!send) setSent(W.logged(short));
     else if (as === 'later') setSent(`${W.savedLater}: ${short}`);
     else setSent(`Sent to Claude as ${claudeKindLabel(as)}: ${short}`);
   }, []);
@@ -717,7 +720,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       if (kind) setLink(kind);
       errorKind.current = kind;
       setError(kind === 'auth'
-        ? 'Your sign-in has run out. Sign in again to keep running the room; nothing in it is lost.'
+        ? W.signedOut
         : (e.message || 'That did not work.'));
       return undefined;
     } finally {
@@ -746,6 +749,20 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     } catch (e) { /* the view still changes */ }
   };
 
+  // ── The Host alert (owner, 2026-10-10) ───────────────────────────────────
+  // A line on the Stage or the Build / History header jumps to where the host
+  // handles it. `alertFocus` is that request; it is served once the Host screen
+  // has rendered the target, and then cleared.
+  useEffect(() => {
+    if (!alertFocus || screen !== 'host' || !room) return;
+    const t = alertFocus.target;
+    const el = (t.kind === 'ask' && document.querySelector(`[data-alert-ask="${t.id}"]`)) || document.getElementById('brm-waiting-h');
+    if (!el) return;
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+    el.focus({ preventScroll: true });
+    setAlertFocus(null);
+  }, [alertFocus, screen, room]);
+
   if (!room) {
     return (
       <div className="brm brm-loading" data-theme="dark">
@@ -761,6 +778,44 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const present = isProjected(screen);
   const host = !present;
   const ended = room.state === 'ENDED';
+  const alert = hostAlert(room, seenLocal);
+  /**
+   * Mark seen on the room (every device of the host hears it); this device counts it at once.
+   * A line's ids come oldest first: at most the newest 200 are sent (the room keeps 200, and an
+   * older one pushed out would count again), in posts of at most 50. A failure puts back only the
+   * ids that were not saved, says so, and reads the room again.
+   */
+  const markSeen = (body) => {
+    const before = seenLocal;
+    const ids = body.all ? [] : body.ids.slice(-SEEN_KEEP);
+    const posts = body.all ? [{ all: true }] : Array.from({ length: Math.ceil(ids.length / SEEN_POST) }, (_, i) => ({ ids: ids.slice(i * SEEN_POST, (i + 1) * SEEN_POST) }));
+    // The clock here is only for the instant before the server answers; the server's own time replaces it (items are dated on the server's clock, so a skewed laptop would hide or show the wrong ones).
+    setSeenLocal((cur) => (body.all ? { ids: [], allAt: new Date().toISOString() } : { ...cur, ids: [...new Set([...cur.ids, ...ids])] }));
+    (async () => {
+      let saved = 0;
+      try {
+        for (const post of posts) {
+          const out = await api.markSeen(post);
+          saved += post.ids ? post.ids.length : 0;
+          if (post.all && out && out.seen && out.seen.allAt) setSeenLocal((cur) => ({ ...cur, allAt: out.seen.allAt }));
+        }
+        await refresh();
+      } catch (e) {
+        const failed = new Set(ids.slice(saved));
+        setSeenLocal((cur) => (body.all ? { ...cur, allAt: before.allAt } : { ...cur, ids: cur.ids.filter((id) => !failed.has(id) || before.ids.includes(id)) }));
+        errorKind.current = '';
+        setError((e && e.message) || 'That did not work.');
+        await refresh();
+      }
+    })();
+  };
+  const alertGo = (line) => {
+    markSeen({ ids: line.ids });
+    // Ideas open Waiting for you on the Room filter; an ask opens it on All, so the ask is there to focus.
+    setAlertFocus({ target: line.target, filter: line.target.kind === 'ask' ? 'all' : 'room' });
+    setScreen('host');
+  };
+  const alertAll = () => markSeen({ all: true });
   // The request strip's two answers: one handover to the device that asked, or Not now.
   const grantAsker = (name) => run(async () => { await api.playerHandover(name, { bindToRequester: true }); await loadPlayers(); });
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
@@ -812,8 +867,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (key === 'combine') combine();
     else if (key === 'tell') setComposeFocus((n) => n + 1);
     else if (key === 'talk-points') setPointsTab((n) => n + 1);
-    else if (key === 'new-ask') setDialog({ compose: 'suggest' });
-    else if (key === 'starter') setDialog({ compose: 'suggest', library: true });
+    else if (key === 'ask-room') setDialog({ compose: 'suggest' });
     else if (key === 'connect') setDialog('connect');
     else if (key === 'open-proposed') {
       const ask = moveAsk(key);
@@ -937,6 +991,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           draft={current ? drafts[current.askId] || null : null}
           onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
           onHost={() => setScreen('host')}
+          alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
           onSession={() => (panel ? closePanel() : openPanel())}
           panelOpen={Boolean(panel)}
           askingCount={askingNow.length}
@@ -966,6 +1021,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onSession={() => (panel ? closePanel() : openPanel())}
         panelOpen={Boolean(panel)}
         askingCount={askingNow.length}
+        alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
+        pluginOutdated={Boolean(room.plugin && room.plugin.outdated) && !ended}
         onPlayers={() => openPanel('players')}
         onWifi={() => openPanel('settings', 'room')}
         onQr={() => setQrOpen(true)}
@@ -993,14 +1050,14 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {host && ended && (
         <div className="brm-notice brm-notice--bar brm-row brm-gap" data-testid="brm-endedbar">
-          <span>This session has ended. The timeline, the wrap-up and the report are still yours to edit.</span>
+          <span>{W.endedEdit}</span>
         </div>
       )}
-      {!host && ended && <div className="brm-notice brm-notice--bar">This session has ended. The timeline, the wrap-up and the report are still yours to edit.</div>}
+      {!host && ended && <div className="brm-notice brm-notice--bar">{W.endedEdit}</div>}
       {/* WRAPPED, NOT YET ENDED (owner, 2026-10-06): the next steps in one place. */}
       {host && !ended && room.outcome && (
         <div className="brm-notice brm-notice--bar brm-row brm-gap" data-testid="brm-wrappedbar">
-          <span>Claude has wrapped up. Look over the report, then end the session when the room is done.</span>
+          <span>{W.wrappedUp}</span>
           <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={() => goView('report')}>Report</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={() => setDialog('end')}>End session</button>
         </div>
@@ -1041,7 +1098,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               {!ended && shouldOfferWifi(room) && <WifiOffer busy={busy} run={run} api={api} />}
               {unsentAsk && (
                 <p className="brm-notice brm-unsent" role="status">
-                  You had an unsent direction for Ask {askNumber(unsentAsk.askId)}. It is kept; reopen Ask {askNumber(unsentAsk.askId)} to send it.
+                  {W.unsentDirection(askNumber(unsentAsk.askId))}
                 </p>
               )}
               {sent && <p className="brm-sentline" role="status">{sent}</p>}
@@ -1100,7 +1157,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
             them), then the room's ideas (C1, C2). */}
         <section className="brm-hostcol" aria-labelledby="brm-waiting-h">
-          <h2 className="brm-h5" id="brm-waiting-h">
+          <h2 className="brm-h5" id="brm-waiting-h" tabIndex={-1}>
             Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
           </h2>
           <UnheardNotice room={room} />
@@ -1119,6 +1176,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           ) : (
             <Queue
+              startFilter={alertFocus && alertFocus.filter ? alertFocus.filter : 'all'}
               room={room} current={current} busy={busy} ended={ended} run={run} api={api}
               laterTicked={laterTicked} setLaterTicked={setLaterTicked}
               onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
@@ -1170,6 +1228,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           }}
           listNames={Boolean(room.settings && room.settings.listNames)} onListNames={(on) => run(() => api.saveSettings({ listNames: on }))}
           onConnect={() => dialogFromPanel('connect')}
+          onUpdatePlugin={() => dialogFromPanel('connect-install')}
           onCrew={() => dialogFromPanel('crew')}
           onWrap={() => dialogFromPanel('wrap')}
           onReport={() => goView('report')}
@@ -1180,8 +1239,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         />
       )}
 
-      {host && dialog === 'connect' && (
-        <ConnectPanel room={room} gameId={gameId} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+      {host && (dialog === 'connect' || dialog === 'connect-install') && (
+        <ConnectPanel room={room} gameId={gameId} api={api} run={run} busy={busy} atInstall={dialog === 'connect-install'} onClose={() => setDialog(null)} />
       )}
       {host && dialog === 'wrap' && (
         <WrapUpPanel outcome={room.outcome} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
@@ -1213,7 +1272,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} library={Boolean(dialog.library)} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.points && (
         <BuildPointRequest
@@ -1369,7 +1428,7 @@ export function ClaudeActivity({ activity, agent, now, full, doing = null }) {
           <span className="brm-muted brm-small">{agoText(latest.at, now) || 'just now'}</span>
         </p>
       ) : (
-        <p className="brm-hint">Nothing yet. What Claude does shows up here as it works.</p>
+        <p className="brm-hint">{W.nothingYet}</p>
       )}
       {full && items.length > 1 && (
         <ul className="brm-activity-list">
@@ -1416,15 +1475,15 @@ function AgentChip({ room, now }) {
   const cls = `brm-agentchip${agent && agent.connected ? ' is-on' : ''}${quiet ? ' is-quiet' : ''}`;
   if (!quiet) {
     const tip = !agent || !agent.lastSeenAt
-      ? 'Claude Code has not connected yet. Use More, then Connect Claude Code.'
+      ? W.chipNever
       : agent.listening
-        ? 'Claude Code is waiting for your next direction.'
-        : 'Claude Code is connected and working.';
+        ? W.chipReady
+        : W.chipWorking;
     return <span className={cls} data-testid="brm-agentchip" data-state={st.key} title={tip}>{text}</span>;
   }
   const copy = async () => {
     const ok = await copyText(CONTINUE_COMMAND);
-    setCopied(ok ? `Copied ${CONTINUE_COMMAND}. Paste it into Claude Code.` : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    setCopied(ok ? W.copiedPaste : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
     setTimeout(() => setCopied(''), 4000);
   };
   return (
@@ -1433,7 +1492,7 @@ function AgentChip({ room, now }) {
       className={cls}
       data-testid="brm-agentchip"
       data-state={st.key}
-      title={`Claude Code has stopped. Click to copy ${CONTINUE_COMMAND}, then paste it into the Claude Code window and press Enter.`}
+      title={W.tipCopyContinue}
       onClick={copy}
     >
       {copied || text}
@@ -1453,15 +1512,14 @@ export function UnheardNotice({ room }) {
   if (!waiting.length || !agentStopped(room && room.agent)) return null;
   const copy = async () => {
     const ok = await copyText(CONTINUE_COMMAND);
-    setCopied(ok ? 'Copied. Paste it into Claude Code and press Enter.' : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
+    setCopied(ok ? W.copiedPaste : `Copy failed. Type ${CONTINUE_COMMAND} into Claude Code.`);
     setTimeout(() => setCopied(''), 5000);
   };
   const n = waiting.length;
   return (
     <div className="brm-notice brm-unheard" role="status" data-testid="brm-unheard">
       <p className="brm-unheard-t">
-        <b>Claude Code has stopped.</b> It has not heard {n === 1 ? 'your last direction' : `${n} directions`} yet.
-        Run <code>{CONTINUE_COMMAND}</code> in Claude Code and it picks {n === 1 ? 'it' : 'them'} up.
+        <b>{W.stoppedBefore(n)}</b> Run <code>{CONTINUE_COMMAND}</code> in it.
       </p>
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--sm" onClick={copy}>Copy {CONTINUE_COMMAND}</button>
@@ -1472,11 +1530,11 @@ export function UnheardNotice({ room }) {
 }
 
 const CONNECTION = {
-  live: { text: 'Live', title: 'Connected to the room. Changes arrive as they happen.' },
+  live: { text: 'Live', title: W.tipLive },
   connecting: { text: 'Connecting…', title: 'Opening the live connection to the room.' },
-  disconnected: { text: 'Disconnected · Reconnect', title: 'The live connection dropped. Click to reconnect now; it also retries on its own.' },
-  offline: { text: 'No internet · Try again', title: 'This laptop is offline. The room reconnects when it is back.' },
-  signin: { text: 'Signed out · Sign in again', title: 'Your sign-in has run out. Sign in again and you come straight back to this room.' },
+  disconnected: { text: 'Disconnected · Reconnect', title: W.tipDropped },
+  offline: { text: 'No internet · Try again', title: W.tipOffline },
+  signin: { text: 'Signed out · Sign in again', title: W.tipSignedOut },
 };
 
 /**
@@ -1487,7 +1545,7 @@ const CONNECTION = {
 export function AutoSwitch({ settings, busy, run, api }) {
   const auto = settings ? settings.reviewAgentAsks === false : false;
   return (
-    <label className={`brm-auto${auto ? ' is-on' : ''}`} title="When on, Claude's questions open to the room straight away, with no review first">
+    <label className={`brm-auto${auto ? ' is-on' : ''}`} title={W.tipAuto}>
       <input
         type="checkbox"
         role="switch"
@@ -1581,6 +1639,8 @@ function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild'
 }
 
 /** True at 480px and narrower. No matchMedia (jsdom, an old browser) reads as wide. */
+const SEEN_POST = 50; // ids per post (the room's limit)
+const SEEN_KEEP = 200; // ids the room keeps
 const NARROW_QUERY = '(max-width: 480px)';
 function useNarrowHeader() {
   const read = () => {
@@ -1627,9 +1687,9 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onWifi, 
 
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
-  onSession, panelOpen, askingCount, onPlayers, onWifi, onQr,
+  onSession, panelOpen, askingCount, onPlayers, onWifi, onQr, pluginOutdated = false,
+  alert, onAlertGo, onAlertAll,
 }) {
-  const waiting = waitingCount(room);
   const pill = askPill(room);
   const tucked = narrow;
   const tools = { room, now, host, ended, connection, onReconnect, onWifi, onQr, onPlayers, pill, onScreen };
@@ -1645,7 +1705,10 @@ function RoomHeader({
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
       </div>
       <nav className="brm-screens" aria-label="Screens">
-        {SCREENS.map((s) => (
+        {SCREENS.map((s) => (s.key === 'host' && screen !== 'host' && alert ? (
+          // The Host tab carries the Host alert on Build and History (owner, 2026-10-10); on the Host screen Waiting for you does.
+          <HostAlert key={s.key} alert={alert} variant="header" onHost={() => onScreen('host')} onGo={onAlertGo} onMarkAll={onAlertAll} />
+        ) : (
           <button
             key={s.key}
             type="button"
@@ -1655,9 +1718,8 @@ function RoomHeader({
             onClick={() => onScreen(s.key)}
           >
             {s.label}
-            {s.key === 'host' && waiting > 0 && <span className="brm-screen-n">{waiting}<span className="brm-sr"> waiting</span></span>}
           </button>
-        ))}
+        )))}
       </nav>
       {/* THE ROOM SEES THIS HEADER on Build and History, so the cue there names
           nobody: an amber pill and the count on SESSION (S6b). The Host screen
@@ -1672,6 +1734,8 @@ function RoomHeader({
         <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession}>
           SESSION <kbd>\</kbd>
           {askingCount > 0 && <span className="brm-sess-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
+          {/* The plugin is out of date: a dot, on the Host screen only (never on the Stage, Build or History the room sees). */}
+          {host && pluginOutdated && <span className="brm-sess-dot" data-testid="brm-plugin-dot"><span className="brm-sr">{W.pluginDotSr}</span></span>}
         </button>
       </div>
     </header>
@@ -1727,7 +1791,7 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
   );
   return (
     <section className="brm-brief" aria-label="The room brief">
-      <p className="brm-hint">Claude reads who it is for and Keep in mind whenever they change. At wrap-up Claude says which rules are worth keeping in the project, and you choose.</p>
+      <InfoTip text={W.tipBrief} label="About the room brief" />
       <div className="brm-brief-sec">
         <h3 className="brm-h5">Who it is for</h3>
         {ended ? <p>{b.forWhom || 'Not set.'}</p> : (
@@ -1737,7 +1801,7 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
           </form>
         )}
       </div>
-      {section('keep', 'Keep in mind', 'Send something to Claude as Keep in mind and it lands here.')}
+      {section('keep', 'Keep in mind', W.keepLands)}
     </section>
   );
 }
@@ -1803,9 +1867,11 @@ function hintVerb(move) {
  * window (StageDecide), and a click on an option or a wheel slice opens that
  * window with the pick made (owner, 2026-10-08).
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, alert, onAlertGo, onAlertAll, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [qr, setQr] = useState(false);
+  // "Press Space to ..." is for the host at the dock: it shows only while the pointer is on the dock (copy pass 2026-10-10).
+  const [overDock, setOverDock] = useState(false);
   // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
   const spinsOf = (current && current.wheel && current.wheel.spins) || [];
   const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
@@ -1820,7 +1886,6 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const editable = Boolean(current && current.status === 'results' && !ended && !crewOn && !pointsVote);
   const editKey = current ? `${current.askId}:${current.status}` : '';
   useEffect(() => { setEditing(false); setEditPick(null); }, [editKey]);
-  const waiting = waitingCount(room);
   const liveLink = liveBuildLink(room, now);
   // A click on an option or a wheel slice at results opens the send window
   // with that pick made; while the room is still answering it asks first, as before.
@@ -1950,7 +2015,12 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         )}
         meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} waiting={joinedWaiting} />}
         dock={(
-          <Dock status={liveLink ? (
+          <Dock
+            onMouseEnter={() => setOverDock(true)}
+            onMouseLeave={() => setOverDock(false)}
+            onFocus={() => setOverDock(true)}
+            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOverDock(false); }}
+            status={liveLink ? (
             <>
               {m.status}
               {/* A small link, not a button: it must never compete with the main button. */}
@@ -1962,11 +2032,9 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy || m.secondary.disabled} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
             {move && <button type="button" className="btn" disabled={busy || move.disabled || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
-            {move && !move.disabled && !(move.action === 'run-next' && !move.claudeDone) && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
-            <button type="button" className="dock-more" onClick={onHost} aria-label="Host screen" title="Host screen (1 or P)">
-              <span className="dock-more-lbl">HOST</span>
-              {waiting > 0 && <span className="brm-screen-n">{waiting}</span>}
-            </button>
+            {overDock && move && !move.disabled && !(move.action === 'run-next' && !move.claudeDone) && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
+            {/* HOST carries the Host alert (owner, 2026-10-10): a count, amber while Claude waits, a short list on click. */}
+            <HostAlert alert={alert} variant="stage" onHost={onHost} onGo={onAlertGo} onMarkAll={onAlertAll} />
             {/* SESSION is last, so it is never the lead. The count lights it when someone
                 asks to take a name; nothing on the Stage names the person. */}
             <button type="button" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} title="Session (\)">
@@ -2008,13 +2076,13 @@ function BuildScreen({ room, now }) {
     <section className="brm-screenbody brm-buildscreen" aria-label="The build">
       <WallComment comment={freshWallComment(room, now)} />
       <div className="brm-row">
-        <h2 className="brm-q">What Claude has built so far</h2>
+        <h2 className="brm-q">{W.buildSoFar}</h2>
         {link && <span className="brm-push"><OpenLink href={link} label="Open the build" primary /></span>}
       </div>
       {shot ? (
         <BuildImage imageId={shot.imageId} caption={shot.caption} className="brm-shot brm-shot--build" onOpen={shotOpt && openViewer ? () => openViewer(shotAsk.askId, shotOpt.label, 'build') : null} />
       ) : (
-        <div className="brm-empty">Nothing to show yet. When Claude previews the work, its newest screenshot appears here.</div>
+        <div className="brm-empty">Nothing to show yet.</div>
       )}
       <BuildScreenQr link={shareLink} />
     </section>
@@ -2137,7 +2205,7 @@ function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
             {shown.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} />)}
           </ol>
         ) : (
-          <p className="brm-empty">{filter === 'decisions' ? 'Nothing decided yet.' : 'What Claude shows, what the room decides and what it says collect here.'}</p>
+          <p className="brm-empty">{filter === 'decisions' ? 'Nothing decided yet.' : W.nothingYet}</p>
         ))}
       </div>
       <div className="brm-histside">
@@ -2206,7 +2274,6 @@ export function QrZoom({ playUrl, gameId, onClose }) {
         </div>
         <CopyLinkButton url={playUrl} className="brm-qrzoom-url">{playUrl}</CopyLinkButton>
         <div className="brm-qrzoom-code">Code <b>{gameId}</b></div>
-        <p className="brm-qrzoom-hint">Click anywhere to put it away. Click the link to copy it.</p>
       </div>
     </Modal>
   );
@@ -2271,7 +2338,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   };
 
   return (
-    <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`}>
+    <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`} data-alert-ask={ask.askId} tabIndex={-1}>
       <div className="brm-row brm-gap">
         <span className="brm-chip brm-chip--amber">{ask.source === 'agent' ? 'Proposed by Claude' : ask.fromIdeas ? `Your vote, from ${ask.fromIdeas.length} ideas` : 'Draft'} · not shown to the room</span>
         {mockups && (mockups.ready
@@ -2282,9 +2349,10 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
       </div>
       <div className="brm-row brm-gap">
         <h2 className="brm-h">Ask {askNumber(ask.askId)} · {KIND_LABEL[ask.kind]}</h2>
-        {ask.kind === 'choice' && <span className="brm-hint brm-push">Options can change until someone answers</span>}
+        {ask.kind === 'choice' && <InfoTip text={W.tipEditable} label="About editing the options" />}
+        
       </div>
-      {!mockups && <p className="brm-stagehint">{stageHint(ask)}</p>}
+      {!mockups && stageHint(ask) && <p className="brm-stagehint">{stageHint(ask)}</p>}
       {/* WHAT THE ROOM WOULD SEE, then the edits folded (C2): most of
           Claude's asks open as written, so the fields are one click away. */}
       <p className="brm-reviewq">{prompt || ask.prompt}</p>
@@ -2316,20 +2384,18 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
       {mockups && !ended && (
         <p className="brm-hint" role="status">
           {mockups.ready
-            ? (blocking ? `Ask ${askNumber(blocking.askId)} is still open. Open next puts this vote on the room's screens as soon as you close ask ${askNumber(blocking.askId)}.` : 'Every option has its picture. Open it when you are ready.')
-            : `The room cannot see it yet. It is marked Ready when all ${mockups.total} are in; you open it.`}
+            ? (blocking ? W.opensWhenClose(askNumber(blocking.askId)) : W.picturesIn)
+            : W.hiddenUntilIn(mockups.total)}
         </p>
       )}
       {missing.length > 0 && !ended && !mockups && (
         <div className="brm-notice brm-row brm-gap" role="status" data-testid="brm-previews-missing">
           {askedMockups ? (
-            <span>Asked Claude for mockups. Each appears under its option as Claude attaches it.</span>
+            <span>{W.askedMockups}</span>
           ) : (
             <span>
-              <b>No preview for {missing.length === 1 ? `option ${missing[0]}` : `options ${missing.join(', ')}`} yet.</b>{' '}
-              {connected
-                ? 'The room chooses faster from a picture. Claude can make a quick mockup of each.'
-                : 'Claude is not connected, so it cannot make mockups now. Add a preview URL under Edit, or open the ask without.'}
+              <b>{W.noPictureFor(missing.length === 1 ? `option ${missing[0]}` : `options ${missing.join(', ')}`)}</b>
+              {!connected && <>{' '}{W.offlinePreview}</>}
             </span>
           )}
           {connected && !askedMockups && (
@@ -2338,10 +2404,10 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
         </div>
       )}
       <details className="brm-fold brm-editfold" open={editOpen || dirty} onToggle={(e) => setEditOpen(e.currentTarget.open)}>
-        <summary>Edit the question and options</summary>
+        <summary>{W.editQuestion}</summary>
         <div className="brm-editbody">
         <label className="brm-field">
-          <span className="brm-lbl">Question (shown big on the wall)</span>
+          <span className="brm-lbl">Question</span>
           <input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} />
         </label>
         <label className="brm-field">
@@ -2350,7 +2416,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
         </label>
         {ask.kind === 'choice' && (
           <div className="brm-field">
-            <span className="brm-lbl">Options</span>
+            <span className="brm-lbl">Options<InfoTip text={W.tipLettersKept} label="About the letters" /></span>
             {options.map((o, i) => (
               <div className="brm-optedit" key={o.label || i}>
                 <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
@@ -2373,7 +2439,6 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
                 <Icon name="Plus" size={14} /> Add option
               </button>
             )}
-            <div className="brm-notice"><b>Letters are fixed.</b> Claude stamps &quot;Choice A&quot;, &quot;Choice B&quot; on its mockups, so renaming an option keeps its letter.</div>
           </div>
         )}
         </div>
@@ -2386,7 +2451,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
             <button type="button" className={`brm-btn brm-btn--ghost${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={() => setAnswering(true)}>Answer for the room</button>
           )}
           {blocking && (ask.next
-            ? <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title="Take it out of line; it waits here" onClick={() => lineUp('notNext')}>Not next</button>
+            ? <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title={W.tipWaitsHere} onClick={() => lineUp('notNext')}>Not next</button>
             : <button type="button" className="brm-btn" disabled={busy || !prompt.trim()} title={`Opens as soon as ask ${askNumber(blocking.askId)} closes`} onClick={() => lineUp('openNext')}>Open next</button>)}
           <button type="button" className={`brm-btn${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>{openLabel}</button>
         </div>
@@ -2419,7 +2484,7 @@ export function AskStage({ ask, host, busy, ended, run, api, pickId = null, onPi
         <>
           <div className="brm-top">
             <span className="brm-eyebrow">
-              <b>{ask.status === 'voting' ? 'Vote' : KIND_LABEL[ask.kind]}</b> · Ask {askNumber(ask.askId)} · {ask.source === 'agent' ? 'Claude asks' : 'Host asks'}
+              <b>{ask.status === 'voting' ? 'Vote' : KIND_LABEL[ask.kind]}</b> · Ask {askNumber(ask.askId)}
               {ask.status === 'results' && ' · Closed'}
             </span>
           </div>
@@ -2457,15 +2522,13 @@ export function WheelPanel({ ask, busy, run, api, primary = false, spinInRow = f
     return (
       <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
         {tied.length >= 2 ? (
-          <p className="brm-notice"><b>A tie between {tied.map(nameOf).join(' and ')}.</b> Spin the wheel, or ask the room to vote again.</p>
-        ) : (
-          <p className="brm-hint">Let chance pick: the wheel holds every option.</p>
-        )}
+          <p className="brm-notice"><b>{W.tieOf(tied.map(nameOf).join(' and '))}</b></p>
+        ) : null}
         <div className="brm-row brm-gap">
           <button type="button" className={`brm-btn${primary ? ' brm-btn--primary' : ''}`} disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
           {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={() => act('revote')}>{W.voteAgain}</button>}
         </div>
-        <p className="brm-hint">Someone in the room spins it from their phone. You can always spin it yourself.</p>
+        <p className="brm-hint">{W.spinsToo}</p>
       </section>
     );
   }
@@ -2474,7 +2537,7 @@ export function WheelPanel({ ask, busy, run, api, primary = false, spinInRow = f
     <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
       <BuildWheel wheel={w} size="sm" busy={busy} onSpin={spinInRow ? null : () => act('spin')} spinLabel={w.landed ? W.spinAgain : W.spin} spinPrimary={primary} spinSecondary={!primary} onSettled={onSettled} />
       <div className="brm-row brm-gap brm-wheelacts">
-        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Pick someone else in the room to spin it" onClick={() => act('pass')}>Someone else spins</button>
+        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act('pass')}>Someone else spins</button>
       </div>
     </section>
   );
@@ -2513,8 +2576,8 @@ export function PickConfirm({ ask, id, busy, onConfirm, onClose }) {
   const why = v.by === 'wheel' ? 'where the wheel landed' : v.preferred ? `the room's pick, ${v.preferred.count} of ${v.total}` : '';
   let body;
   if (v.isPreferred) body = `${name(v.pick)} is ${why}.`;
-  else if (v.preferred) body = `The room preferred ${name(v.preferred)} (${why}). You are picking ${name(v.pick)} instead. It is recorded as your pick, not the room's.`;
-  else body = `${v.tied.length ? `The room is tied between ${v.tied.join(' and ')}.` : 'The room has not voted yet.'} You are picking ${name(v.pick)}. It is recorded as your pick.`;
+  else if (v.preferred) body = W.preferredLine(name(v.preferred), why, name(v.pick));
+  else body = W.tieRecordLine(name(v.pick), v.tied.length ? W.tieOf(v.tied.join(' and ')) : W.noVotesYet);
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-pick-title">
       <DialogHead id="brm-pick-title" title={v.isPreferred ? W.pickRoomChoice : 'Pick an alternate?'} onClose={onClose} />
@@ -2523,7 +2586,7 @@ export function PickConfirm({ ask, id, busy, onConfirm, onClose }) {
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>
         <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onConfirm}>
-          {v.isPreferred ? W.pick(short(v.pick)) : `Yes, pick ${short(v.pick)} instead`}
+          {W.pick(short(v.pick))}
         </button>
       </div>
     </Modal>
@@ -2603,7 +2666,7 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
   };
   return (
     <div className="brm-suggest">
-      {!sorted.length && <div className="brm-empty">Suggestions appear here as phones send them. Anonymous on the wall.</div>}
+      {!sorted.length && <div className="brm-empty">{W.noSuggestions}</div>}
       <ul className="brm-sugs">
         {sorted.map((r) => (
           <li key={r.respId} className={`brm-sug${r.hidden ? ' is-hidden' : ''}${picking && !r.hidden ? ' is-pickable' : ''}`} onClick={picking && !r.hidden ? cardPick(onPick, r.respId) : undefined}>
@@ -2627,7 +2690,7 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
       {host && !ended && ask.status !== 'results' && (
         <form className="brm-verbal" onSubmit={add}>
           <Icon name="Microphone" size={16} color="var(--success)" />
-          <input className="brm-input" aria-label="Add what the room said" placeholder="+ add what the room said out loud" value={said} maxLength={280} onChange={(e) => setSaid(e.target.value)} />
+          <input className="brm-input" aria-label="Add what the room said" placeholder={W.addSaid} value={said} maxLength={280} onChange={(e) => setSaid(e.target.value)} />
           <button type="submit" className="brm-btn brm-btn--sm" disabled={busy || !said.trim()}>Add</button>
         </form>
       )}
@@ -2787,11 +2850,11 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
     <section className="brm-panel brm-decide" aria-labelledby={`brm-decide-${ask.askId}`}>
       <h2 className="brm-h" id={`brm-decide-${ask.askId}`}>{spoken ? 'Answer for the room' : 'Direction for Claude'}</h2>
       <p className="brm-sub">{spoken
-        ? 'For when people talk instead of tapping. Pick what the room said; Claude builds from the sentence below and is told it was said out loud.'
-        : `Claude builds from this sentence, not from the counts. Edit it freely. ${total} of ${playerCount || 0} answered.`}</p>
+        ? W.saidOutLoud
+        : W.buildsFromSentence(total, playerCount || 0)}</p>
       {alternate && (
         <div className="brm-notice" role="status" data-testid="brm-alternate">
-          <b>You picked an alternate.</b> The room preferred {alternate.preferred.label ? `${alternate.preferred.label} · ` : ''}{alternate.preferred.text}{alternate.by === 'wheel' ? ' (where the wheel landed)' : ''}. This goes on the record as your pick.
+          {W.yourPick(`${alternate.preferred.label ? `${alternate.preferred.label} · ` : ''}${alternate.preferred.text}`)}
         </div>
       )}
       {spoken && ask.kind === 'rating' && (
@@ -2832,7 +2895,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
         </div>
       )}
       <label className="brm-field">
-        <span className="brm-lbl">{spoken ? 'What people said (optional; goes to Claude with the answer)' : 'What the room said (optional; goes to Claude with the direction)'}</span>
+        <span className="brm-lbl">{spoken ? W.saidPeopleOptional : W.saidOptional}</span>
         <input className="brm-input" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder='e.g. "show how many spots are left"' />
       </label>
       <div className="brm-field">
@@ -3022,9 +3085,9 @@ function ShotsPanel({ images, busy, run, api, deleteAs }) {
 
 /** What a direction will do, said honestly: Claude only hears it on a call. */
 export function deliveryLine(agent) {
-  if (agent && agent.listening) return 'Claude is listening. It will act on this straight away.';
+  if (agent && agent.listening) return W.actsNow;
   if (agent && agent.connected) return 'Claude reads this on its next step.';
-  return 'Claude reads this when it next calls Engage. If it has stopped, paste the Continue prompt into Claude Code.';
+  return W.readsNextCheckin;
 }
 
 const CONTINUE_PROMPT = PROMPT_CARDS.find((c) => c.name === 'continue');
@@ -3046,7 +3109,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
   if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
   const agent = room.agent || {};
   const quiet = !(agent.listening || agent.connected);
-  const line = ended ? 'This session has ended.' : claudeState(room, now).headline;
+  const line = ended ? 'Session ended.' : claudeState(room, now).headline;
   // A ROOM THAT BEGINS WITH AN ASK (owner, 2026-10-05): before anything is
   // built, the room picks what to build. The host lists the options or the
   // room suggests; a tie goes to the wheel or a revote (WheelPanel); and the
@@ -3062,14 +3125,13 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
       <h2 className="brm-h5" id="brm-now-h">Now</h2>
       {framed && !ended && (
         <div className="brm-notice brm-row brm-gap" data-testid="brm-backtoopening">
-          <span>The opening is over and Claude has the brief. Pressed Start building too soon?</span>
+          <span>{W.startedTooSoon}</span>
           <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.openingAction('resume', {}))}>Back to the opening</button>
         </div>
       )}
       {starter && (
         <div className="brm-starter">
           <p className="brm-nowline">Start with the room: {STARTER_PROMPT}</p>
-          <p className="brm-hint">The room votes. A tie goes to the wheel, or to a revote. You can pick one and send it to Claude whenever you like.</p>
           <div className="brm-row brm-gap">
             <button type="button" className="brm-btn brm-btn--primary" onClick={() => onCompose('choice', { prompt: STARTER_PROMPT, detail: 'Pick the one you most want to see built today.' })}>
               I&apos;ll list the options
@@ -3095,7 +3157,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
             type="button"
             className="brm-btn"
             disabled={busy || quiet}
-            title={quiet ? 'Connect Claude Code first' : 'Claude starts or builds the project, serves it locally, and puts the link here'}
+            title={quiet ? 'Connect Claude Code first' : W.tipPreview}
             onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text)); if (ok !== undefined) setSent(true); }}
           >
             Preview the work
@@ -3103,7 +3165,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
           {quiet && CONTINUE_PROMPT && <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" />}
         </div>
       )}
-      {sent && <p className="brm-hint" role="status">Asked Claude to preview the work.</p>}
+      {sent && <p className="brm-hint" role="status">{W.askedPreview}</p>}
     </section>
   );
 }
@@ -3200,7 +3262,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 
           ref={box}
           id="brm-compose"
           className="brm-input brm-ta brm-ta--sm"
-          placeholder="An idea, what the room said out loud, or a note for Claude"
+          placeholder={W.logPlaceholder}
           value={text}
           maxLength={2000}
           onChange={(e) => { setText(e.target.value); setSaid(''); }}
@@ -3388,8 +3450,8 @@ function ideaWho(idea) {
  * Claude's asks first, then oldest first. Filters by who it came from; tick
  * ideas to act on several at once, or put them to a vote.
  */
-function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, askOpen = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined }) {
-  const [filter, setFilter] = useState('all');
+function Queue({ startFilter = 'all', room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, askOpen = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined }) {
+  const [filter, setFilter] = useState(startFilter);
   const [ticked, setTicked] = useState([]);
   const [voteOf, setVoteOf] = useState(null);
   const items = queueItems(room);
@@ -3431,7 +3493,7 @@ function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLate
             Put {tickedLive.length} to a vote
           </button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('direct')}><Icon name="PaperPlaneTilt" size={14} /> {W.sendPlain}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. They wait on your Later list; nothing goes to Claude." onClick={() => bulk('later')}>{W.saveLater}</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.tipSavedLater} onClick={() => bulk('later')}>{W.saveLater}</button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('acknowledge')}>Acknowledge</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked([])}>Clear</button>
         </div>
@@ -3440,13 +3502,13 @@ function Queue({ room, current, busy, ended, run, api, laterTicked = [], setLate
       {/* A burst of reactions after Claude shows something: clear them in one go. */}
       {!ended && freshRoom.length >= 2 && !tickedLive.length && (
         <div className="brm-row brm-gap brm-ackall">
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" disabled={busy} title="Mark every new one as seen. Nothing goes to Claude." onClick={() => run(() => api.acknowledgeAll())}>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" disabled={busy} title={W.tipMarkAll} onClick={() => run(() => api.acknowledgeAll())}>
             Acknowledge all {freshRoom.length}
           </button>
         </div>
       )}
 
-      {!items.length && <p className="brm-empty">Nothing waiting. Phones can send an idea at any time, and Claude&apos;s questions land here first.</p>}
+      {!items.length && <p className="brm-empty">{W.nothingWaiting}</p>}
       {items.length > 0 && !shown.length && <p className="brm-hint">Nothing from {QUEUE_FILTERS.find((f) => f.key === filter).label.toLowerCase()} right now.</p>}
 
       {shown.map((x) => (x.type === 'ask' ? (
@@ -3511,19 +3573,19 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
           <SessionMenu label="Ask the room" groupLabel="Ask the room">
             {(close) => (
               <>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || voteCount < 2 || voteCount > 6} title={voteCount < 2 ? 'Tick another idea to vote between them' : undefined} onClick={() => { close(); onVote(); }}>
-                  {voteCount < 2 ? 'Put to a vote (tick another idea first)' : `Put ${voteCount} ideas to a vote`}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || voteCount < 2 || voteCount > 6} title={voteCount < 2 ? W.tipTickAnother : undefined} onClick={() => { close(); onVote(); }}>
+                  {voteCount < 2 ? W.putToAVote : `Put ${voteCount} ideas to a vote`}
                 </button>
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || !canSuggest} title={canSuggest ? undefined : 'Open an Ideas ask first'} onClick={() => { close(); onAct('suggest'); }}>Add to the open Ideas ask</button>
                 {/* WALL (owner, 2026-10-05): on the Stage for 20 seconds, no name. */}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title="On the Stage for 20 seconds, without a name. Nothing goes to Claude." onClick={() => { close(); onAct('wall'); }}>Show on the wall</button>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipWall} onClick={() => { close(); onAct('wall'); }}>Show on the wall</button>
               </>
             )}
           </SessionMenu>
           {/* SAVE FOR LATER (owner, 2026-10-08): the host's "not now", onto the one Later list. Nothing goes to Claude. */}
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Not now. It waits on your Later list; nothing goes to Claude." onClick={() => onAct('later')}>{W.saveLater}</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.tipSavedLater} onClick={() => onAct('later')}>{W.saveLater}</button>
           {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude. */}
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Mark it as seen. Their phone says so; nothing goes to Claude." onClick={() => onAct('acknowledge')}>Acknowledge</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.tipSeen} onClick={() => onAct('acknowledge')}>Acknowledge</button>
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => onAct('dismiss')}>Dismiss</button>
         </div>
       )}
@@ -3564,7 +3626,7 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
       <DialogHead id="brm-vote-title" title={ideas.some((i) => i.laterId) ? W.putToVote(n) : `Put ${n} ideas to a vote`} onClose={onClose} />
       <label className="brm-field"><span className="brm-lbl">Question for the room</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
       <div className="brm-field">
-        <span className="brm-lbl">How people vote · Pick one is the default</span>
+        <span className="brm-lbl">How people vote</span>
         <div className="brm-seg" role="radiogroup" aria-label="How people vote">
           {picks.map((k) => (
             <button key={k} type="button" role="radio" aria-checked={maxPicks === k} className={`brm-segbtn${maxPicks === k ? ' is-on' : ''}`} onClick={() => setMaxPicks(k)}>
@@ -3582,20 +3644,18 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
           </li>
         ))}
       </ul>
-      <p className="brm-hint">Names are not shown to the room. When you decide, the winner goes to Claude as a direction and each idea is marked as used.</p>
+      <p className="brm-hint">{W.noNames}</p>
       <label className="brm-check brm-field">
         <input type="checkbox" checked={mockups} disabled={!connected && !mockups} onChange={(e) => setMockups(e.target.checked)} />
-        Ask Claude for a quick mockup of each first
+        {W.askMockupsFirst}
       </label>
       {mockups && (
-        <div className="brm-notice brm-unheard">
-          The vote waits in your queue, hidden from the room, until Claude has made the mockups. Meanwhile you can ask the room other things. When they are in, the vote is marked Ready and you open it.
-        </div>
+        <div className="brm-notice brm-unheard">{W.hiddenUntilMockups}</div>
       )}
-      {!connected && <p className="brm-hint">Claude Code is not connected, so it cannot make mockups now.</p>}
+      {!connected && <p className="brm-hint">{W.offlineNoMockups}</p>}
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>
-        {!mockups && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ open: false })}>Save as a draft</button>}
+        {!mockups && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ open: false })}>{W.saveDraft}</button>}
         {mockups ? (
           <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</button>
         ) : (
@@ -3624,7 +3684,7 @@ function WallComment({ comment }) {
   if (!comment) return null;
   return (
     <div className="brm-wallcomment" role="status" key={comment.at}>
-      <span className="brm-wallcomment-k">Someone in the room said</span>
+      <span className="brm-wallcomment-k">{W.fromTheRoom}</span>
       <q className="brm-wallcomment-t">{comment.text}</q>
     </div>
   );
@@ -3655,7 +3715,7 @@ function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' })
   );
 }
 
-export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
+export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall = false }) {
   // THE KEY IS SHOWN ONCE: it lives in this component's state only, and is
   // gone when the panel closes. The server stores only its sha256.
   //
@@ -3666,6 +3726,14 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   const [minted, setMinted] = useState(null);
   const [copied, setCopied] = useState('');
   const [confirmMint, setConfirmMint] = useState(false);
+  // Opened from "Claude's plugin is out of date. Update": the cursor starts at the install step.
+  const installStep = useRef(null);
+  useEffect(() => {
+    if (!atInstall || !installStep.current) return;
+    const btn = installStep.current.querySelector('button');
+    if (btn) btn.focus();
+    if (installStep.current.scrollIntoView) installStep.current.scrollIntoView({ block: 'nearest' });
+  }, [atInstall]);
   const agent = room.agent || {};
   const liveKey = agent.key;
   const connected = Boolean(agent.lastSeenAt);
@@ -3709,19 +3777,19 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
       <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} />
-      <p className="brm-sub">Claude Code runs on this laptop. The Engage plugin connects it to the room and keeps the project tidy in git: one commit per decision, never pushed.</p>
+      <p className="brm-sub">{W.connectIntro}</p>
 
       <ol className="brm-steps brm-steps--connect">
-        <li className={step(connected, false)}>
+        <li className={step(connected, false)} ref={installStep} data-step="install">
           <span className="brm-n">1</span>
           <div className="brm-step-body">
             <span className="brm-step-title">Check for the latest Engage plugin</span>
             <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
             <div className="brm-row brm-gap">
               <CopyButton text={install} label="Copy" />
-              <span className="brm-hint">Run it in a terminal. It installs the plugin if it is missing, updates it if it is out of date, or tells you you&apos;re all set. Needs Node 18 or later.</span>
+              <span className="brm-hint">{W.installNote}</span>
             </div>
-            <p className="brm-hint">If your Mac asks whether node may accept incoming connections, click Allow. That is how the room&apos;s phones, laptops and tablets on this Wi-Fi reach the build.</p>
+            <p className="brm-hint">{W.macAllow}<InfoTip text={W.tipMacAllow} label="Why?" /></p>
           </div>
         </li>
 
@@ -3735,33 +3803,31 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
                 <span className="brm-mono">~/build-room/</span>
                 <input className="brm-input brm-input--sm" aria-label="Project folder" value={folder} maxLength={60} onChange={(e) => setFolder(e.target.value)} />
               </span>
-              <span className="brm-hint">A new folder for this build, named for the session. Claude sets up git there: README, DECISIONS and a first commit.</span>
+              <span className="brm-hint">{W.newFolder}</span>
             </label>
             {minted ? (
               <>
                 <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
-                  <div><b>This key is shown once.</b> It only works for this room and stops when you revoke it or the session ends. Lost it? Mint a new one; the old key stops working immediately.</div>
+                  <div><b>{W.shownOnce}</b> {W.lostIt}</div>
                 </div>
                 <pre className="brm-cmd" data-testid="brm-start">{startLine}</pre>
                 <div className="brm-row brm-gap">
                   <CopyButton text={startLine} label="Copy again" />
                   <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
                 </div>
-                <p className="brm-hint">Already running Claude Code in the right folder? Paste this into it instead:</p>
+                <p className="brm-hint">{W.alreadyOpen}</p>
                 <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
                 <div className="brm-row brm-gap"><CopyButton text={connectLine} label="Copy" /></div>
               </>
             ) : liveKey ? (
               <p className="brm-hint brm-block">
-                {connected ? 'Claude Code is connected with the current key. ' : ''}
-                A key was minted {clockTime(liveKey.createdAt)}{liveKey.lastUsedAt ? ` and last used ${clockTime(liveKey.lastUsedAt)}` : ''}. It was shown once.
-                Minting a new one stops the old key at once.
+                {W.keyMinted(clockTime(liveKey.createdAt), liveKey.lastUsedAt ? clockTime(liveKey.lastUsedAt) : '')}
               </p>
             ) : null}
             <div className="brm-row brm-gap">
               {confirmMint ? (
                 <>
-                  <span className="brm-hint">The current key stops working immediately{connected ? ', and Claude Code disconnects until you paste the new command' : ''}.</span>
+                  <span className="brm-hint">{W.oldKeyStops}</span>
                   <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
                   <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>{mintLabel}</button>
                 </>
@@ -3781,7 +3847,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
             <span className="brm-step-title">Paste it into a terminal</span>
             <span className="brm-hint">{connected
               ? 'Claude Code has called in.'
-              : `It makes ~/build-room/${folderName}, starts Claude Code there and connects it to this room.`}</span>
+              : W.makesFolder(folderName)}</span>
           </div>
         </li>
 
@@ -3793,7 +3859,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
             <pre className="brm-cmd" data-testid="brm-kickoff">{kickoff}</pre>
             <div className="brm-row brm-gap">
               <CopyButton text={kickoff} label="Copy" />
-              <span className="brm-hint">Run it in Claude Code. Claude reads the room, restates the goal and posts its plan.{crew ? '' : ' Claude commits once per decision or milestone, and each turn is kept as a hidden snapshot. Nothing is pushed.'}</span>
+              <span className="brm-hint">{W.runInClaude}</span>
             </div>
           </div>
         </li>
@@ -3806,7 +3872,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
               <pre className="brm-cmd" data-testid="brm-share-repo">{shareRepo}</pre>
               <div className="brm-row brm-gap">
                 <CopyButton text={shareRepo} label="Copy" />
-                <span className="brm-hint">Run it in Claude Code. It makes the base branch, shares the repo with the room and proposes the first tasks. Claude commits once per decision here, and each turn is kept as a hidden snapshot. Nothing is pushed.</span>
+                <span className="brm-hint">{W.runInClaude}</span>
               </div>
             </div>
           </li>
@@ -3825,7 +3891,6 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
 
       <details className="brm-alt">
         <summary>More commands for later</summary>
-        <p className="brm-hint">Each is a command in Claude Code with the plugin, or a card to paste: {PROMPT_CARDS.map((p) => pluginCommand(p.name)).join(', ')}. Without the plugin they are {slashCommand('kickoff')} and so on.</p>
         <div className="brm-cards">
           {PROMPT_CARDS.map((p) => (
             <div className="brm-pcard" key={p.name}>
@@ -3840,13 +3905,13 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose }) {
       {minted && (
         <details className="brm-alt">
           <summary>Without the plugin</summary>
-          <p className="brm-hint">One command in the terminal instead, then restart Claude Code. No automatic checkpoints; Claude can still call checkpoint.</p>
+          <p className="brm-hint">{W.runThenRestart}</p>
           <pre className="brm-cmd" data-testid="brm-command">{command}</pre>
           <CopyButton text={command} label="Copy command" />
         </details>
       )}
 
-      <p className="brm-hint">Game {gameId}. The key is never shown in Present mode.</p>
+      <p className="brm-hint">Game {gameId}.</p>
       <div className="brm-row"><button type="button" className="brm-btn brm-push" onClick={onClose}>Done</button></div>
     </Modal>
   );
@@ -3885,7 +3950,7 @@ export function WrapUpPanel({ outcome, api, run, busy, onClose }) {
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-wrap-title">
       <DialogHead id="brm-wrap-title" title="Wrap up" onClose={requestClose} />
-      <p className="brm-sub">{o.by === 'agent' ? 'Claude wrote this at wrap-up. Edit anything; ' : 'What the room built. '}It leads the report.</p>
+      <p className="brm-sub">{o.by === 'agent' ? W.wrapLeadAgent : W.wrapLeadRoom}</p>
       <label className="brm-field"><span className="brm-lbl">Summary</span><textarea className="brm-input brm-ta" value={form.summary} maxLength={4000} onChange={set('summary')} /></label>
       <label className="brm-field"><span className="brm-lbl">What we built (one per line)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.built} onChange={set('built')} /></label>
       <label className="brm-field"><span className="brm-lbl">Links (one per line: label | https://…)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.links} onChange={set('links')} /></label>
@@ -3906,8 +3971,7 @@ function EndDialog({ api, run, busy, onClose }) {
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-end-title">
       <DialogHead id="brm-end-title" title="End this session?" onClose={onClose} />
-      <p>Phones stop answering, no new asks can open, and Claude&apos;s calls are refused from now on. The timeline, the wrap-up and the report stay, and you can still edit them.</p>
-      <p className="brm-hint">Only want to pause? Leave it open and close the current ask instead.</p>
+      <p>{W.endBody}</p>
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep it running</button>
         <button type="button" className="brm-btn brm-btn--dangersolid brm-push" disabled={busy} onClick={end}>End session</button>
@@ -3942,18 +4006,8 @@ export function askedIndex(asks) {
   return (key, prompt) => byKey.get(key) || byWords.get(String(prompt || '').trim().toLowerCase()) || null;
 }
 
-function ReadyLibrary({ api, asks, selectedKey, onPick, autoFocus = false }) {
+function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   const [sets, setSets] = useState(null);
-  // Opened from What's next's starter move: the cursor starts in the library.
-  const search = useRef(null);
-  const focused = useRef(false);
-  useEffect(() => {
-    if (!autoFocus || focused.current || !search.current) return;
-    // Never take the focus from the host typing somewhere else (the composer).
-    if (isTypingTarget(document.activeElement) && document.activeElement !== search.current) { focused.current = true; return; }
-    focused.current = true;
-    search.current.focus();
-  });
   const [active, setActive] = useState('');
   const [loaded, setLoaded] = useState({});
   const [query, setQuery] = useState('');
@@ -3992,7 +4046,7 @@ function ReadyLibrary({ api, asks, selectedKey, onPick, autoFocus = false }) {
   if (!sets.length) {
     return (
       <aside className="brm-lib" aria-label="Ready questions">
-        <p className="brm-hint">No ready questions yet. Tag a Call and Answer or Poll set <b>build-room</b> and its questions appear here.</p>
+        <p className="brm-hint">{W.noReadyQuestions}</p>
       </aside>
     );
   }
@@ -4003,7 +4057,7 @@ function ReadyLibrary({ api, asks, selectedKey, onPick, autoFocus = false }) {
   const cats = [...new Set((items || []).map((it) => it.category))];
   return (
     <aside className="brm-lib" aria-label="Ready questions">
-      <input ref={search} className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <input className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
       {sets.length > 1 && (
         <div className="brm-qfilters" role="group" aria-label="Ready sets">
           {sets.map((st) => (
@@ -4043,8 +4097,11 @@ function ReadyLibrary({ api, asks, selectedKey, onPick, autoFocus = false }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', library = false, asks = [], api, run, busy, onClose }) {
+export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
+  // The window opens with the cursor in the question and the starter questions beside it.
+  const questionRef = useRef(null);
+  useEffect(() => { if (questionRef.current) questionRef.current.focus(); }, []);
   const [prompt, setPrompt] = useState(initialPrompt);
   const [detail, setDetail] = useState(initialDetail);
   const [options, setOptions] = useState([{ title: '', url: '' }, { title: '', url: '' }]);
@@ -4092,7 +4149,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
       <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
       <div className="brm-libgrid">
-        <ReadyLibrary api={api} asks={asks} selectedKey={from ? from.key : ''} onPick={pickReady} autoFocus={library} />
+        <ReadyLibrary api={api} asks={asks} selectedKey={from ? from.key : ''} onPick={pickReady} />
         <form onSubmit={submit}>
           <div className="brm-row brm-gap">
             <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">
@@ -4103,9 +4160,9 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
             {from && <span className="brm-hint brm-push">from {from.setName} · {from.category}</span>}
           </div>
           {from && from.askedIn && (
-            <p className="brm-notice" role="status">You asked this in ask {askNumber(from.askedIn)}. Ask again if the work has changed since.</p>
+            <p className="brm-notice" role="status">{W.askedInAsk(askNumber(from.askedIn))}</p>
           )}
-          <label className="brm-field"><span className="brm-lbl">Question (shown big on the wall)</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
+          <label className="brm-field"><span className="brm-lbl">Question</span><input ref={questionRef} className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
           <label className="brm-field"><span className="brm-lbl">Context (optional)</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} /></label>
           {kind === 'choice' && (
             <div className="brm-field">
@@ -4125,10 +4182,10 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
               {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
             </div>
           )}
-          {kind === 'rating' && <p className="brm-hint">The room rates 1 to 5: 1 means needs work, 5 means great.</p>}
+          {kind === 'rating' && <p className="brm-hint">{W.ratingScale}</p>}
           <div className="brm-field">
-            <span className="brm-lbl">When it is decided, Claude gets it as</span>
-            <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="When it is decided, Claude gets it as">
+            <span className="brm-lbl">{W.claudeGetsAs}</span>
+            <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="Claude gets it as">
               {/* Later is not a kind to choose (owner, 2026-10-08): Save for later is the one way in. A ready question preset to later keeps it. */}
               {CLAUDE_KINDS.filter((k) => k.key !== 'later').map((k) => (
                 <button key={k.key} type="button" role="radio" aria-checked={claudeGets === k.key} className={`brm-segbtn${claudeGets === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => setClaudeGets(k.key)}>{k.label}</button>
@@ -4137,10 +4194,10 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
             <span className="brm-hint">{CLAUDE_KINDS.find((k) => k.key === claudeGets).hint}</span>
           </div>
           <label className="brm-field">
-            <span className="brm-lbl">Note for Claude (optional; never shown to the room)</span>
+            <span className="brm-lbl">{W.noteForClaudePrivate}</span>
             <textarea className="brm-input brm-ta brm-ta--sm" value={claudeNote} maxLength={1000} onChange={(e) => setClaudeNote(e.target.value)} placeholder="How Claude should use the answer" />
           </label>
-          <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Save as a draft; don&apos;t open it yet</label>
+          <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> {W.saveDraft}</label>
           <div className="brm-row brm-gap">
             <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
             <button type="submit" className="brm-btn brm-btn--primary brm-push" disabled={busy || !ready}>{draft ? 'Save draft' : 'Ask the room'}</button>

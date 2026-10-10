@@ -948,17 +948,20 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const r = await hostCall('POST', 'asks-from-ideas', { ideaIds: ids, askForMockups: true });
     const id = r.body.ask.askId;
     assert.strictEqual(r.body.ask.status, 'proposed');
-    assert.deepStrictEqual(r.body.ask.mockups, { asked: true, have: 0, total: 3, ready: false });
+    assert.deepStrictEqual(r.body.ask.mockups, { asked: true, have: 0, total: 3, ready: false, readyAt: '' });
     const p = await playCall('GET', 'state', priya);
     assert.ok(!JSON.stringify(p.body).includes('Which should Claude build next'), `the room cannot see it yet: ${JSON.stringify(p.body)}`);
     const inbox = (await agentCall('GET', 'inbox')).body.inbox;
     assert.ok(inbox.some((d) => /make a quick mockup of options A, B, C/.test(d.text) && d.askId === id), JSON.stringify(inbox));
     for (const label of ['A', 'B']) await agentCall('POST', 'images', { data: PNG.toString('base64'), kind: 'mockup', askId: id, label });
     let ask = (await state()).asks.find((a) => a.askId === id);
-    assert.deepStrictEqual(ask.mockups, { asked: true, have: 2, total: 3, ready: false });
+    assert.deepStrictEqual(ask.mockups, { asked: true, have: 2, total: 3, ready: false, readyAt: '' });
     await agentCall('POST', 'images', { data: PNG.toString('base64'), kind: 'mockup', askId: id, label: 'C' });
     ask = (await state()).asks.find((a) => a.askId === id);
     assert.strictEqual(ask.mockups.ready, true);
+    assert.strictEqual(ask.source, 'host', 'a vote the host made from ideas, which the Host alert must still count');
+    const newest = [...store.values()].filter((r) => String(r.SK).startsWith('BUILD#IMG#') && r.AskId === id).map((r) => r.CreatedAt).sort().pop();
+    assert.strictEqual(ask.mockups.readyAt, newest, 'readyAt is the last picture\'s time');
     assert.strictEqual(ask.status, 'proposed', 'Ready never opens by itself');
   });
   await check('Open next: lined up behind the open ask, opens when it closes', async () => {
@@ -1592,6 +1595,88 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.deepStrictEqual(st.brief.later.map((i) => i.text), ['Secret later alpha', 'Secret later beta']);
     assert.ok(!rawOf().includes('Secret later'), 'the restored Brief is sealed again');
   });
+
+  // ── The plugin update notice (owner, 2026-10-10) ──────────────────────────
+  console.log('\nplugin version: the header, the host view, the note to Claude');
+  const agentWith = (method, proxy, headers, body) => handler({
+    routeKey: `${method} /games/{gameId}/build/{proxy+}`,
+    requestContext: { http: { method }, authorizer: { lambda: agentCtx() } },
+    pathParameters: { gameId: GAME, proxy },
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  }).then((r) => ({ status: r.statusCode, body: JSON.parse(r.body) }));
+  const stateRowOf = () => store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && String(x.SK).includes('STATE') && x.AgentSeenAt);
+
+  await check('an out-of-date plugin: Claude gets one line, the host view says so, and the version is kept plain', async () => {
+    seed();
+    const r = await agentWith('GET', 'state', { 'x-engage-plugin': '1.14.0' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.pluginNote, 'The Engage plugin here is out of date; ask the host to run the update command from Connect.');
+    const host = (await hostCall('GET', 'state')).body;
+    assert.deepStrictEqual(host.plugin, { running: '1.14.0', latest: S.LATEST_PLUGIN, outdated: true });
+    assert.strictEqual(stateRowOf().AgentPlugin, '1.14.0');
+  });
+  await check('a current plugin: no note, not outdated', async () => {
+    seed();
+    const r = await agentWith('GET', 'state', { 'X-Engage-Plugin': S.LATEST_PLUGIN });
+    assert.ok(!('pluginNote' in r.body), 'no note when current');
+    assert.deepStrictEqual((await hostCall('GET', 'state')).body.plugin, { running: S.LATEST_PLUGIN, latest: S.LATEST_PLUGIN, outdated: false });
+  });
+  await check('a newer plugin than the server knows is not outdated', async () => {
+    seed();
+    const r = await agentWith('GET', 'state', { 'x-engage-plugin': '9.0.0' });
+    assert.ok(!('pluginNote' in r.body));
+    assert.strictEqual((await hostCall('GET', 'state')).body.plugin.outdated, false);
+  });
+  await check('a plugin that never says its version (older than the header) is outdated for the host; it cannot show a note', async () => {
+    seed();
+    const r = await agentWith('GET', 'state', {});
+    assert.ok(!('pluginNote' in r.body), 'no header, no note');
+    assert.deepStrictEqual((await hostCall('GET', 'state')).body.plugin, { running: '', latest: S.LATEST_PLUGIN, outdated: true });
+  });
+  await check('no Claude yet: nothing to be out of date', async () => {
+    seed();
+    assert.deepStrictEqual((await hostCall('GET', 'state')).body.plugin, { running: '', latest: S.LATEST_PLUGIN, outdated: false });
+  });
+  await check('a malformed header is not kept and says nothing', async () => {
+    seed();
+    const r = await agentWith('GET', 'state', { 'x-engage-plugin': '1.x; <script>' });
+    assert.ok(!('pluginNote' in r.body));
+    assert.strictEqual((await hostCall('GET', 'state')).body.plugin.running, '');
+    assert.ok(!JSON.stringify([...store.values()]).includes('<script>'));
+  });
+  await check('the update lands: the next call with the current version clears the host line', async () => {
+    seed();
+    await agentWith('GET', 'state', { 'x-engage-plugin': '1.13.0' });
+    assert.strictEqual((await hostCall('GET', 'state')).body.plugin.outdated, true);
+    await agentWith('GET', 'state', { 'x-engage-plugin': S.LATEST_PLUGIN });
+    assert.strictEqual((await hostCall('GET', 'state')).body.plugin.outdated, false);
+  });
+  await check('Claude\'s own view and the phones never carry the plugin or its version', async () => {
+    seed();
+    await agentWith('GET', 'state', { 'x-engage-plugin': '1.14.0' });
+    const claude = (await agentWith('GET', 'state', { 'x-engage-plugin': '1.14.0' })).body;
+    assert.ok(!('plugin' in claude), 'Claude gets the one-line note, not the host view field');
+    const phone = JSON.stringify((await playCall('GET', 'state', { playerName: 'Priya', clientId: 'c-priya' })).body);
+    assert.ok(!/plugin|1\.14\.0/i.test(phone), `a phone saw the plugin: ${phone.slice(0, 200)}`);
+  });
+  await check('a crew builder\'s Claude is told to update its own plugin, not to ask the host', async () => {
+    assert.ok(/update your Engage plugin/.test(S.pluginNoteFor('1.0.0', 'builder')));
+    assert.ok(!/ask the host/.test(S.pluginNoteFor('1.0.0', 'builder')));
+    assert.ok(/ask the host/.test(S.pluginNoteFor('1.0.0', 'agent')));
+  });
+  await check('a refused call (4xx) still carries the update line', async () => {
+    seed();
+    const r = await agentWith('GET', 'asks/999', { 'x-engage-plugin': '1.14.0' });
+    assert.ok(r.status >= 400 && r.status < 500, String(r.status));
+    assert.strictEqual(r.body.pluginNote, S.PLUGIN_OUTDATED_NOTE);
+  });
+  await check('the server\'s LATEST_PLUGIN looks like a version', () => {
+    assert.ok(/^\d+\.\d+\.\d+$/.test(S.LATEST_PLUGIN));
+    assert.strictEqual(S.pluginNoteFor('1.0.0'), S.PLUGIN_OUTDATED_NOTE);
+    assert.strictEqual(S.pluginNoteFor(''), '');
+  });
+
 
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();

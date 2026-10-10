@@ -405,7 +405,7 @@ describe('someone asks to take a name (S6)', () => {
   test('the Host screen gets a strip that names the person and the three answers', async () => {
     await ask();
     const strip = screen.getByRole('region', { name: 'Someone is asking to take a name' });
-    expect(strip.textContent).toMatch(/Someone on another device is asking to take the name/);
+    expect(strip.textContent).toMatch(/Another device wants the name/);
     expect(within(strip).getByText('Dee')).toBeInTheDocument();
     expect(within(strip).getByRole('button', { name: 'See in Players' })).toBeInTheDocument();
     expect(within(strip).getByRole('button', { name: 'Not now' })).toBeInTheDocument();
@@ -532,7 +532,7 @@ describe('Settings, in four groups', () => {
   test('no crew: one line and Open to a crew; a crew: Crew and the Run crew code switch', async () => {
     await openRoom(hostState());
     openSettings();
-    expect(panel().textContent).toMatch(/Builders link their own Claude Code and build beside yours\. Up to 8\./);
+    expect(panel().textContent).toMatch(/Up to 8 builders, each with their own Claude\./);
     expect(within(panel()).queryByRole('switch', { name: /Run crew code/ })).toBeNull();
     fireEvent.click(within(panel()).getByRole('button', { name: 'Open to a crew' }));
     expect(screen.getByRole('dialog', { name: 'Open to a crew' })).toBeInTheDocument();
@@ -626,5 +626,73 @@ describe('a narrow header (480px and under)', () => {
     openPanel();
     const top = within(panel()).getByTestId('brm-sp-top');
     expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+  });
+});
+
+describe('the request strip advice sits on the buttons it explains', () => {
+  test('Let them take it and Not now carry their own titles', async () => {
+    const ROS = () => { const r = ROSTER(); r.players[1] = person('Dee', { handover: { open: false, requested: true, requestedAt: ago(30) } }); return r; };
+    await openRoom(hostState(), ROS());
+    const strip = screen.getByRole('region', { name: 'Someone is asking to take a name' });
+    expect(within(strip).getByRole('button', { name: 'Let them take it' })).toHaveAttribute('title', 'The name keeps its ideas and votes.');
+    expect(within(strip).getByRole('button', { name: 'Not now' })).toHaveAttribute('title', 'Dee stays as they are.');
+  });
+});
+
+describe('the plugin update notice (owner, 2026-10-10): the Host screen only', () => {
+  const OLD = { AgentPlugin: '1.14.0' };
+  const CURRENT = { AgentPlugin: S.LATEST_PLUGIN };
+
+  test('out of date: Session > Claude says so with Update, and SESSION carries a dot', async () => {
+    await openRoom(hostState({ st: OLD }));
+    expect(screen.getByTestId('brm-plugin-dot')).toBeInTheDocument();
+    expect(within(sessionButton()).getByText("Claude's plugin is out of date")).toBeInTheDocument();
+    openSettings();
+    const line = within(panel()).getByTestId('brm-plugin-out');
+    expect(line.textContent).toMatch(/^Claude's plugin is out of date\.\s*Update$/);
+    expect(within(line).getByRole('button', { name: 'Update' })).toBeInTheDocument();
+  });
+
+  test('Update opens Connect Claude Code at the install step and puts the panel away', async () => {
+    await openRoom(hostState({ st: OLD }));
+    openSettings();
+    fireEvent.click(within(within(panel()).getByTestId('brm-plugin-out')).getByRole('button', { name: 'Update' }));
+    const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
+    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    const step = dialog.querySelector('[data-step="install"]');
+    expect(step).not.toBeNull();
+    expect(step.contains(document.activeElement)).toBe(true);
+    expect(within(step).getByTestId('brm-install')).toBeInTheDocument();
+  });
+
+  test('a Claude that never said its version (older than the header) counts as out of date', async () => {
+    await openRoom(hostState());
+    openSettings();
+    expect(within(panel()).getByTestId('brm-plugin-out')).toBeInTheDocument();
+  });
+
+  test('current: no line and no dot', async () => {
+    await openRoom(hostState({ st: CURRENT }));
+    expect(screen.queryByTestId('brm-plugin-dot')).toBeNull();
+    openSettings();
+    expect(within(panel()).queryByTestId('brm-plugin-out')).toBeNull();
+    expect(panel().textContent).not.toMatch(/out of date/);
+  });
+
+  test('never on the Stage, nor on Build or History, which the room sees', async () => {
+    await openRoom(hostState({ st: OLD }));
+    expect(screen.getByTestId('brm-plugin-dot')).toBeInTheDocument();
+    for (const key of ['2', '3', '4']) {
+      fireEvent.keyDown(window, { key });
+      expect(screen.queryByTestId('brm-plugin-dot')).toBeNull();
+      expect(document.body.textContent).not.toMatch(/plugin is out of date/i);
+    }
+    fireEvent.keyDown(window, { key: '1' });
+    expect(screen.getByTestId('brm-plugin-dot')).toBeInTheDocument();
+  });
+
+  test('a finished session says nothing about the plugin', async () => {
+    await openRoom(hostState({ st: OLD, ended: true }));
+    expect(screen.queryByTestId('brm-plugin-dot')).toBeNull();
   });
 });

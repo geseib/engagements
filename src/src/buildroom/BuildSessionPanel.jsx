@@ -120,10 +120,9 @@ export function HandoverStrip({ asking, busy, onGrant, onRefuse, onSee }) {
       <div className="brm-strip-t">
         {one ? (
           <>
-            <b>Someone on another device is asking to take the name <span className="brm-strip-name">{name}</span></b>
+            <b>{W.wantsName} <span className="brm-strip-name">{name}</span></b>
             <p>
-              {`${name} is ${one.isConnected ? 'here now' : 'away'}${joined ? `, joined ${joined}` : ''}. `}
-              {`If ${name} is moving devices, let them take it: the name keeps its ideas and votes, and the old device stops being ${name}. If it is somebody else, Not now leaves ${name} as they are.`}
+              {`${name} is ${one.isConnected ? 'here now' : 'away'}${joined ? ` \u00b7 joined ${joined}` : ''}`}
             </p>
           </>
         ) : (
@@ -132,8 +131,8 @@ export function HandoverStrip({ asking, busy, onGrant, onRefuse, onSee }) {
       </div>
       <div className="brm-strip-acts">
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onSee}>{W.seeInPlayers}</button>
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => onRefuse(name)}>{W.notNow}</button>}
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--solid" disabled={busy} onClick={() => onGrant(name)}>{W.letThemTakeIt}</button>}
+        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipHandoverNotNow(name)} onClick={() => onRefuse(name)}>{W.notNow}</button>}
+        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--solid" disabled={busy} title={W.tipTakeIt} onClick={() => onGrant(name)}>{W.letThemTakeIt}</button>}
       </div>
     </section>
   );
@@ -170,7 +169,7 @@ export default function BuildSessionPanel({
   tab, onTab, focusGroup = '', onClose,
   topLine = null, slots = {},
   listNames, onListNames,
-  onConnect, onCrew, onWrap, onReport, onEnd, onShowQr, onWifiWall, wifiLink = '',
+  onConnect, onUpdatePlugin, onCrew, onWrap, onReport, onEnd, onShowQr, onWifiWall, wifiLink = '',
 }) {
   const panelRef = useRef(null);
   const rootRef = useRef(null);
@@ -343,7 +342,7 @@ export default function BuildSessionPanel({
                 ]}
                 countLabel={(n) => `${n} in the room`}
                 summary={summary}
-                departedNote="Out of the live counts. Their ideas and votes stay in the session report."
+                departedNote={W.departedNote}
                 emptyText="Nobody has joined yet."
                 renderBadge={(r) => (r.builder ? <span className="brm-chip brm-chip--live brm-sp-tag">Builder</span> : null)}
                 renderMeta={(r, gone) => (gone
@@ -357,7 +356,7 @@ export default function BuildSessionPanel({
           {tab === 'settings' && (
             <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
               <div className="brm-sp-grp" data-group="room">
-                <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they see</span></div>
+                <div className="brm-sp-gh"><h3>The room</h3></div>
                 <div className="brm-sp-row">
                   <span className="brm-code" aria-label={`Join code ${room.gameId}`}>{room.gameId}</span>
                   <span className="brm-hint">{`${window.location.host}/play · ${room.playerCount || 0} joined`}</span>
@@ -385,12 +384,12 @@ export default function BuildSessionPanel({
                   tag="new"
                   checked={Boolean(listNames)}
                   onChange={onListNames}
-                  note="Hovering or clicking the room meter on the Stage lists who has joined. Off, it shows only the count."
+                  note={W.roomMeterNote}
                 />
               </div>
 
               <div className="brm-sp-grp" data-group="claude">
-                <div className="brm-sp-gh"><h3>Claude</h3><span>How Claude works with the room</span></div>
+                <div className="brm-sp-gh"><h3>Claude</h3></div>
                 <div className="brm-sp-row">
                   {slots.agentChip}
                   {!ended && (
@@ -399,12 +398,19 @@ export default function BuildSessionPanel({
                     </button>
                   )}
                 </div>
+                {/* The plugin is older than the current one: one line, here only (never the Stage or a device). */}
+                {!ended && room.plugin && room.plugin.outdated && (
+                  <p className="brm-hint brm-sp-note" data-testid="brm-plugin-out">
+                    {W.pluginOutdated}{' '}
+                    <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={pick(onUpdatePlugin)}>{W.pluginUpdate}</button>
+                  </p>
+                )}
                 {!ended && slots.autoSwitch}
-                {!ended && <p className="brm-hint brm-sp-note">On, Claude&apos;s questions open to the room straight away, with no review first. Off, they wait for you in Waiting for you.</p>}
+                {!ended && <p className="brm-hint brm-sp-note">{W.autoNote}</p>}
               </div>
 
               <div className="brm-sp-grp" data-group="crew">
-                <div className="brm-sp-gh"><h3>Crew</h3><span>Who builds with you</span></div>
+                <div className="brm-sp-gh"><h3>Crew</h3></div>
                 {crew ? (
                   <>
                     <div className="brm-sp-row">
@@ -416,7 +422,7 @@ export default function BuildSessionPanel({
                   </>
                 ) : (
                   <>
-                    <p className="brm-hint brm-sp-note">Builders link their own Claude Code and build beside yours. Up to 8.</p>
+                    <p className="brm-hint brm-sp-note">{W.crewNote}</p>
                     {!ended && <div className="brm-sp-row"><button type="button" className="brm-btn brm-btn--sm" onClick={pick(onCrew)}>Open to a crew</button></div>}
                   </>
                 )}
@@ -427,7 +433,7 @@ export default function BuildSessionPanel({
                 {!ended && opening && (
                   <div className="brm-sp-row">
                     <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
-                    <span className="brm-hint">Start building can be undone; nothing in the brief is lost.</span>
+                    <span className="brm-hint">{W.startUndoNote}</span>
                   </div>
                 )}
                 <div className="brm-sp-row">
@@ -437,7 +443,7 @@ export default function BuildSessionPanel({
                 {!ended && (
                   <div className="brm-sp-row brm-sp-end">
                     <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(onEnd)}>End session</button>
-                    <span className="brm-hint">Ends it for everyone in the room.</span>
+                    <span className="brm-hint">{W.endsForAll}</span>
                   </div>
                 )}
               </div>

@@ -217,7 +217,7 @@ describe('Ideas (suggest)', () => {
     await mount();
     expect(await screen.findByText('Yours so far (1 of 3)')).toBeInTheDocument();
     expect(screen.getByText('Having to make an account first')).toBeInTheDocument();
-    expect(screen.getByText(/without your name/)).toBeInTheDocument();
+    expect(screen.getByText('No names on the wall. Up to 3.')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Your suggestion'), { target: { value: '  Parking ' } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Suggest' })); });
@@ -384,7 +384,7 @@ describe('results and decided', () => {
     }));
     await mount();
     expect(await screen.findByText('4 votes')).toBeInTheDocument();
-    expect(screen.getByText("The host shapes this into Claude's next step.")).toBeInTheDocument();
+    expect(screen.queryByText(/shapes this into/)).toBeNull();
     expect(screen.queryByText('Sent to Claude')).toBeNull();
   });
 });
@@ -496,7 +496,7 @@ describe('Open the build (Wi-Fi share)', () => {
     expect(link).toHaveAttribute('href', OPEN);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-    expect(screen.getByText('Works on the same Wi-Fi as the host')).toBeInTheDocument();
+    expect(screen.getByText('Same Wi-Fi only.')).toBeInTheDocument();
   });
 
   test('at the top of the Now tab, above Watch the build (mockup L5)', async () => {
@@ -534,20 +534,20 @@ describe('Open the build (Wi-Fi share)', () => {
     first.unmount();
     serve(baseView({ log: [SHOWING], lan: null }));
     await mount();
-    await screen.findByRole('button', { name: 'Look and say what you think' });
+    await screen.findByRole('button', { name: 'Have a look' });
     expect(screen.queryByText('Try it, then say what you think.')).toBeNull();
   });
 });
 
 describe('guidance', () => {
-  const intro = /You're helping build\s*Food bank sign-up\s*with Claude Code\. Answer when a question appears; send ideas any time\./;
+  const intro = /You're building Food bank sign-up\. Send ideas any time\./;
 
   test('the first screen says what this is, and each screen says what to do next', async () => {
     serve(baseView({ currentAskId: '003', current: ask({ options: CHOICE_OPTS, maxPicks: 1 }) }));
     const { container } = await mount();
     await screen.findByText('Bold banner');
     expect(container.querySelector('.bpl-intro').textContent).toMatch(intro);
-    expect(screen.getByText('You can change your pick until the host closes it.')).toBeInTheDocument();
+    expect(screen.getByText('Change it until voting closes.')).toBeInTheDocument();
   });
 
   test('the intro steps aside once the screen moves on, and is always on the watch screen', async () => {
@@ -564,7 +564,7 @@ describe('guidance', () => {
     });
     await screen.findByText('Parking');
     expect(container.querySelector('.bpl-intro')).toBeNull();
-    expect(screen.getByText(/ideas you'd build first/)).toBeInTheDocument();
+    expect(screen.getByText(/What would you build first\?/)).toBeInTheDocument();
   });
 
   test('no emoji anywhere on any screen', async () => {
@@ -599,7 +599,7 @@ describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
     serve(baseView({ log: [SHOWING] }));
     await mount();
     // On Now, a note; the feedback is on the preview, in History (C11).
-    fireEvent.click(screen.getByRole('button', { name: 'Look and say what you think' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Have a look' }));
     const card = screen.getByRole('region', { name: 'Feedback on the preview' });
     fireEvent.click(within(card).getByRole('button', { name: 'Looks good' }));
     await waitFor(() => expect(posts('idea').length).toBe(1));
@@ -610,7 +610,7 @@ describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
     serve(baseView({ log: [SHOWING] }));
     await mount();
     // On Now, a note; the feedback is on the preview, in History (C11).
-    fireEvent.click(screen.getByRole('button', { name: 'Look and say what you think' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Have a look' }));
     const card = screen.getByRole('region', { name: 'Feedback on the preview' });
     fireEvent.click(within(card).getByRole('button', { name: 'Needs a change' }));
     const send = within(card).getByRole('button', { name: 'Send' });
@@ -625,9 +625,9 @@ describe('feedback on what Claude is showing (owner, 2026-10-04)', () => {
     serve(baseView({ log: [SHOWING], myIdeas: [{ ideaId: 'i1', text: 'On the preview "Header B is live": Looks good', status: 'new', aboutLogId: 'L9' }] }));
     const { unmount } = await mount();
     // Sent already: no note on Now; History still thanks you.
-    expect(screen.queryByRole('button', { name: 'Look and say what you think' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Have a look' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
-    expect(within(screen.getByRole('region', { name: 'Feedback on the preview' })).getByText(/Your feedback is with the host/)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Feedback on the preview' })).getByText(/Sent to the host\./)).toBeInTheDocument();
     unmount();
     serve(baseView({ log: [] }));
     await mount();
@@ -783,7 +783,7 @@ describe('what Claude is doing, on a phone or a laptop (docs/design/build-room-d
     expect(screen.getByText('for 6 min')).toBeInTheDocument();
     expect(screen.getByText('A helper is researching contrast rules')).toBeInTheDocument();
     expect(screen.queryByText('Claude is building')).toBeNull();
-    expect(screen.getByText(/Follow the progress here/)).toBeInTheDocument();
+    expect(screen.queryByText(/Follow the progress here/)).toBeNull();
   });
 
   test('D3: a shown point still comes first and the line is not the heading then', async () => {
@@ -803,7 +803,7 @@ describe('what Claude is doing, on a phone or a laptop (docs/design/build-room-d
     serve(baseView({ doing: doing({ lastActiveAt: iso(400) }) }));
     await mount();
     expect(await screen.findByRole('heading', { name: 'Claude was scaffolding the site' })).toBeInTheDocument();
-    expect(screen.getByText('The host will pick it up again in a moment.')).toBeInTheDocument();
+    expect(screen.queryByText(/pick it up/)).toBeNull();
     expect(screen.queryByText(/Follow the progress here/)).toBeNull();
     expect(screen.queryByText(/^for \d/)).toBeNull();
   });
@@ -838,7 +838,7 @@ describe('a helper alone, and what a step holds, on a phone (docs/design/build-r
     expect(await screen.findByRole('heading', { name: 'Claude is building' })).toBeInTheDocument();
     expect(screen.getByText('A helper is researching contrast rules')).toBeInTheDocument();
     expect(screen.queryByText(/^for \d|under 1 min/)).toBeNull();
-    expect(screen.getByText(/Follow the progress here/)).toBeInTheDocument();
+    expect(screen.queryByText(/Follow the progress here/)).toBeNull();
   });
 
   test('History: what a step holds keeps its link and the note about my idea', async () => {

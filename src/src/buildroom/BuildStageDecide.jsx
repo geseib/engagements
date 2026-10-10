@@ -73,7 +73,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   const decide = async (kind) => {
     const out = await attempt(
       () => api.askAction(ask.askId, decideBody(ask, { direction, chosen: pick ? [pick] : [], as: kind })),
-      'That did not send. Nothing changed; try again.',
+      W.notSent,
     );
     if (out !== undefined) { onSent({ as: kind, send: true, direction: direction.trim() }); onClose(); }
   };
@@ -91,7 +91,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
       detail: form.detail.trim(),
       ...(ask.kind === 'choice' ? { options: filled.map((o) => ({ title: o.title.trim(), detail: o.detail.trim(), url: o.url.trim() })) } : {}),
     };
-    const out = await attempt(() => api.reask(ask.askId, body), 'That did not ask again. Your question is still here; try again.');
+    const out = await attempt(() => api.reask(ask.askId, body), W.notAsked);
     if (out !== undefined) onClose();
   };
   const setOpt = (i, patch) => setForm((f) => ({ ...f, options: f.options.map((o, j) => (j === i ? { ...o, ...patch } : o)) }));
@@ -189,7 +189,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
         )}
         {alternate && (
           <div className="brm-notice" role="status" data-testid="brm-alternate">
-            <b>You picked an alternate.</b> The room preferred {alternate.preferred.label ? `${alternate.preferred.label} · ` : ''}{alternate.preferred.text}{alternate.by === 'wheel' ? ' (where the wheel landed)' : ''}. This goes on the record as your pick.
+            {W.yourPick(`${alternate.preferred.label ? `${alternate.preferred.label} · ` : ''}${alternate.preferred.text}`)}
           </div>
         )}
         <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => setDirection(e.target.value)} placeholder="What should Claude do now?" />

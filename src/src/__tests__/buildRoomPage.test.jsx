@@ -161,7 +161,7 @@ describe('loading and live updates', () => {
 
   test('the connected chip reads from state.agent', async () => {
     await openRoom(hostState());
-    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is ready for the next step');
+    expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is ready');
   });
 });
 
@@ -214,7 +214,7 @@ describe('each ask status', () => {
     await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'proposed' }] }));
     const note = screen.getByTestId('brm-previews-missing');
     // A carries a preview link; only B has nothing to show.
-    expect(note.textContent).toMatch(/No preview for option B yet\./);
+    expect(note.textContent).toMatch(/No picture for option B yet\./);
     fireEvent.click(within(note).getByRole('button', { name: 'Ask Claude for mockups' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
     expect(lastPost().body.text).toMatch(/^Before ask 3 opens to the room: make a quick mockup of option B, /);
@@ -355,7 +355,7 @@ describe('each ask status', () => {
     expect(screen.getByText('3.5')).toBeInTheDocument();
     expect(within(screen.getByText('Reasons').closest('div')).getByText('Warmer colours please')).toBeInTheDocument();
     goWith();
-    expect(screen.getByText('Going with the average, 3.5 out of 5')).toBeInTheDocument();
+    expect(screen.getByText('Average 3.5 of 5')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How close is this: 3.5 out of 5 (5 is great, 1 needs work)');
   });
 
@@ -375,8 +375,8 @@ describe('each ask status', () => {
     fireEvent.keyDown(window, { key: '2' });
     const stage = screen.getByRole('region', { name: 'Claude' });
     expect(within(stage).getAllByRole('heading', { level: 2 })).toHaveLength(1);
-    expect(within(stage).getByRole('heading', { name: 'Claude is ready for the next step' })).toBeInTheDocument();
-    expect(within(stage).getByText('It finished: Header B is live. The host will choose what comes next.')).toBeInTheDocument();
+    expect(within(stage).getByRole('heading', { name: 'Claude is ready' })).toBeInTheDocument();
+    expect(within(stage).getByText('Done: Header B is live.')).toBeInTheDocument();
     expect(within(stage).getByText('We decided')).toBeInTheDocument();
     expect(within(stage).getByText(/Go with B, keep A's logo/)).toBeInTheDocument();
     // The head count is the stage meter's, shown once; the idle stage adds none.
@@ -397,7 +397,7 @@ describe('each ask status', () => {
     expect(within(stage).getByText('The dot grid')).toBeInTheDocument();
     expect(within(stage).getByText(/· since /)).toBeInTheDocument();
     // The dock says what the room can do, never a second status.
-    expect(screen.getByText('Send an idea from your phone, laptop or tablet.')).toBeInTheDocument();
+    expect(screen.getByText('Send an idea any time.')).toBeInTheDocument();
     expect(screen.queryByText(/Claude is building\. Send/)).toBeNull();
   });
 
@@ -531,7 +531,7 @@ describe('Connect Claude Code', () => {
     expect(command.textContent).toContain(`--env ENGAGE_API=${API}`);
     expect(command.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
     expect(command.textContent).toContain('claude mcp add engage');
-    expect(within(dialog).getByText(/This key is shown once/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Shown once\./)).toBeInTheDocument();
     // The plugin route: install once (no key in it), then one line per session.
     const install = within(dialog).getByTestId('brm-install');
     expect(install.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
@@ -573,7 +573,7 @@ describe('Connect Claude Code', () => {
     openMore();
     fireEvent.click(screen.getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:preview', '/engage:wrap-up', '/engage:share-repo', '/mcp__engage__kickoff'].forEach((slash) => {
+    ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:preview', '/engage:wrap-up', '/engage:share-repo'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
     });
     // Step 1 (install) and step 4 (kick off), then one per prompt card.
@@ -625,10 +625,10 @@ describe('Connect Claude Code', () => {
   test('with Claude connected on a live key, minting again warns that it disconnects', async () => {
     const mintKey = jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' }));
     panel({ agent: { lastSeenAt: ago(5), key: { keyId: 'k1', createdAt: ago(600) } } }, { mintKey });
-    expect(screen.getByText(/Claude Code is connected with the current key/)).toBeInTheDocument();
+    expect(screen.getByText(/Key minted .*A new key stops it\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Mint a new key and copy the command' }));
     expect(mintKey).not.toHaveBeenCalled();
-    expect(screen.getByText(/Claude Code disconnects until you paste the new command/)).toBeInTheDocument();
+    expect(screen.getByText('The old key stops at once.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
     expect(mintKey).not.toHaveBeenCalled();
   });
@@ -662,9 +662,9 @@ describe('after Claude wraps up, and what next', () => {
 
   test('Tell Claude posts a direction and says honestly when Claude will read it', async () => {
     await openRoom(hostState({ st: { AgentListeningAt: ago(3) } }));
-    expect(screen.getByTestId('brm-agentchip').textContent).toBe('Claude is ready for the next step');
+    expect(screen.getByTestId('brm-agentchip').textContent).toBe('Claude is ready');
     const panel = screen.getByRole('region', { name: 'Add something' });
-    expect(within(panel).getByText('Claude is listening. It will act on this straight away.')).toBeInTheDocument();
+    expect(within(panel).getByText('Claude acts on this now.')).toBeInTheDocument();
     fireEvent.change(within(panel).getByLabelText(/Tell Claude/), { target: { value: 'Make the button green' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
@@ -674,7 +674,7 @@ describe('after Claude wraps up, and what next', () => {
 
   test('when Claude has gone quiet, the panel offers the Continue prompt', async () => {
     await openRoom(hostState({ st: { AgentSeenAt: ago(3600) } }));
-    expect(within(screen.getByRole('region', { name: 'Add something' })).getByText(/If it has stopped, paste the Continue prompt/)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Add something' })).getByText('Claude reads this when it next checks in.')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Now' })).getByRole('button', { name: /Copy the Continue prompt/ })).toBeInTheDocument();
   });
 });
@@ -987,11 +987,14 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     ideas: [{ PlayerName: 'Jordan', Text: 'Dark mode' }],
   });
 
-  test('Host, Stage, Build and History in the header; Host counts what waits, as a number', async () => {
+  test('Host, Stage, Build and History in the header; Host counts what waits, as a number, on the screens the room sees (the Host alert)', async () => {
     await openRoom(busy());
     const nav = screen.getByRole('navigation', { name: 'Screens' });
-    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Host2 waiting', 'Stage', 'Build', 'History']);
+    // On the Host screen itself, Waiting for you carries the count.
+    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Host', 'Stage', 'Build', 'History']);
     expect(within(nav).getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(nav).getByRole('button', { name: 'Build' }));
+    expect(within(screen.getByRole('navigation', { name: 'Screens' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Host · 2', 'Stage', 'Build', 'History']);
   });
 
   test('the ask pill names the open ask and its count, and opens the Stage', async () => {
@@ -999,7 +1002,7 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     const pill = screen.getByRole('button', { name: 'Ask 3 · 3 of 4' });
     fireEvent.click(pill);
     expect(screen.getByRole('region', { name: 'Current ask' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Host screen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^HOST/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull();
   });
 
@@ -1089,7 +1092,7 @@ describe('S4: the Stage says there are mockups to look at', () => {
   test('What\'s next on the Host leads with the same move, and it opens the vote', async () => {
     await openRoom(hostState({ asks: [READY] }));
     expect(screen.getByText("Open voting on Claude's mockups")).toBeInTheDocument();
-    expect(screen.getByText('A and B are ready to compare')).toBeInTheDocument();
+    expect(screen.getByText('A and B are ready')).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: 'Open voting' });
     expect(btn).toHaveAttribute('data-next-primary');
     fireEvent.click(btn);
@@ -1101,12 +1104,12 @@ describe('S4: the Stage says there are mockups to look at', () => {
     fireEvent.keyDown(window, { key: '2' });
     const stage = screen.getByRole('region', { name: 'Mockups to compare' });
     expect(stage.textContent).toMatch('Two looks to compare');
-    expect(stage.textContent).toMatch('Claude made A and B. Look now; the vote opens next.');
+    expect(stage.textContent).toMatch('Claude made A and B.');
     expect(stage.textContent).toMatch('Next');
-    expect(stage.textContent).toMatch('Pick one on your phone, laptop or tablet');
+    expect(stage.textContent).toMatch('Voting opens next');
     expect(stage.textContent).toMatch('Calm');
     expect(stage.textContent).toMatch('Playful');
-    expect(document.querySelector('.dock .status').textContent).toBe('Mockups ready \u00b7 the host opens voting');
+    expect(document.querySelector('.dock .status').textContent).toBe('Mockups ready');
     expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Open voting' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/005`));
@@ -1125,7 +1128,7 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     expect(rail.textContent).toMatch(/Choose/);
     expect(rail.textContent).toMatch(/Ask 3/);
     expect(rail.textContent).toMatch(new RegExp(`JOIN.*${window.location.host}/play.*${GAME}`));
-    expect(document.querySelector('.dock .status').textContent).toBe('3 of 4 have answered');
+    expect(document.querySelector('.dock .status').textContent).toBe('3 of 4 answered');
   });
 
   test('Space closes the ask from the dock', async () => {
@@ -1198,7 +1201,7 @@ describe('the ask as four steps, and Space on the Host screen (owner, 2026-10-07
     const box = screen.getByRole('textbox', { name: 'Direction for Claude' });
     expect(box.value).toBe('Which header should volunteers see first: Calm photo + calendar');
     expect(document.activeElement).toBe(box);
-    expect(screen.getByText("Going with B, the room's choice, 2 to 1")).toBeInTheDocument();
+    expect(screen.getByText("B \u00b7 the room's choice, 2 to 1")).toBeInTheDocument();
   });
 
   test('Space at Send does not send: only Ctrl or Cmd Enter in the direction does', async () => {
@@ -1218,7 +1221,7 @@ describe('the ask as four steps, and Space on the Host screen (owner, 2026-10-07
     // Claude's ask 005 opens and becomes current.
     current = hostState({ st: { CurrentAskId: '005' }, asks: [{ ...CHOICE, Status: 'results' }, { ...OTHER, Status: 'live' }], answers: CHOICE_ANSWERS });
     await act(async () => { webSocketClient.onMessage.mock.calls.find((c) => c[0] === 'buildChanged')[1](); });
-    await waitFor(() => expect(screen.getByText('You had an unsent direction for Ask 3. It is kept; reopen Ask 3 to send it.')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Ask 3 has an unsent direction. Reopen it to send.')).toBeInTheDocument());
     // Back to 003 at results, the same pick: the direction is what was typed.
     current = results();
     await act(async () => { webSocketClient.onMessage.mock.calls.find((c) => c[0] === 'buildChanged')[1](); });
@@ -1285,7 +1288,7 @@ describe('the review card leads with what the room would see (C2)', () => {
     expect(within(card).getByText('Calm photo + calendar', { selector: '.brm-reviewopt-t' })).toBeInTheDocument();
     const fold = card.querySelector('details.brm-editfold');
     expect(fold.open).toBe(false);
-    expect(within(fold).getByText('Edit the question and options')).toBeInTheDocument();
+    expect(within(fold).getByText('Edit question')).toBeInTheDocument();
     // An edit opens it and keeps it open.
     fireEvent.change(within(card).getByLabelText('Option B title'), { target: { value: 'Calm photo' } });
     expect(card.querySelector('details.brm-editfold').open).toBe(true);
@@ -1329,10 +1332,10 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
       const chip = screen.getByTestId('brm-agentchip');
       expect(chip.tagName).toBe('BUTTON');
       expect(chip.textContent).toMatch(/^Claude has paused · last seen /);
-      expect(chip.getAttribute('title')).toBe('Claude Code has stopped. Click to copy /engage:continue, then paste it into the Claude Code window and press Enter.');
+      expect(chip.getAttribute('title')).toBe('Copy, then paste into Claude Code.');
       fireEvent.click(chip);
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('/engage:continue'));
-      expect(await screen.findByText('Copied /engage:continue. Paste it into Claude Code.')).toBeInTheDocument();
+      expect(await screen.findByText('Copied. Paste into Claude Code.')).toBeInTheDocument();
     } finally {
       delete navigator.clipboard;
     }
@@ -1342,7 +1345,7 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
     await openRoom(hostState());
     const chip = screen.getByTestId('brm-agentchip');
     expect(chip.tagName).toBe('SPAN');
-    expect(chip.getAttribute('title')).toBe('Claude Code is connected and working.');
+    expect(chip.getAttribute('title')).toBe('Working.');
   });
 });
 
@@ -1356,7 +1359,7 @@ describe('a direction Claude has not heard while Claude Code has stopped (owner,
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     try {
       const notice = screen.getByTestId('brm-unheard');
-      expect(notice.textContent).toMatch(/Claude Code has stopped\. It has not heard your last direction yet\./);
+      expect(notice.textContent).toMatch(/Claude Code stopped before your last direction\./);
       fireEvent.click(within(notice).getByRole('button', { name: 'Copy /engage:continue' }));
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('/engage:continue'));
       openTimeline();
@@ -1476,7 +1479,7 @@ describe('acknowledge, and a comment on the wall (owner, 2026-10-05)', () => {
     await openRoom(hostState({ ideas: [{ PlayerName: 'Jordan', Text: 'I like the look of the new buttons' }] }));
     const inbox = screen.getByRole('region', { name: 'The queue' });
     const ack = within(inbox).getByRole('button', { name: 'Acknowledge' });
-    expect(ack.getAttribute('title')).toBe('Mark it as seen. Their phone says so; nothing goes to Claude.');
+    expect(ack.getAttribute('title')).toBe('Their screen says Seen.');
     fireEvent.click(ack);
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'acknowledge' }));
     // Show on the wall sits in the idea's Ask the room menu (step 4, C1).
@@ -1502,7 +1505,7 @@ describe('acknowledge, and a comment on the wall (owner, 2026-10-05)', () => {
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/ideas/wall/clear`));
     fireEvent.keyDown(window, { key: '2' });
     const banner = document.querySelector('.brm-wallcomment');
-    expect(banner.textContent).toBe('Someone in the room saidThe calendar reads really well');
+    expect(banner.textContent).toBe('From the roomThe calendar reads really well');
   });
 
   test('after its time is up it is gone from every screen', async () => {
@@ -1539,11 +1542,11 @@ describe('deciding: the winner by default, or choose another (owner, 2026-10-06)
     goWith();
     expect(box().value).toBe('Which header should volunteers see first: Calm photo + calendar');
     // Settle folds; opened again, every other option still offers itself.
-    openStep(/Going with B, the room's choice/);
+    openStep(/B \u00b7 the room's choice/);
     fireEvent.click(within(now()).getByRole('button', { name: 'Choose this instead' }));
     confirmPick();
     expect(box().value).toBe('Which header should volunteers see first: Bold banner');
-    expect(screen.getByTestId('brm-alternate').textContent).toMatch('You picked an alternate. The room preferred B · Calm photo + calendar.');
+    expect(screen.getByTestId('brm-alternate').textContent).toMatch('Your pick. The room preferred B · Calm photo + calendar.');
     // Changed their mind: the winner offers itself again.
     fireEvent.click(within(now()).getByRole('button', { name: 'Choose this instead' }));
     confirmPick();
@@ -1571,8 +1574,8 @@ describe('deciding: the winner by default, or choose another (owner, 2026-10-06)
     const box = () => screen.getByRole('textbox', { name: 'Direction for Claude' });
     goWith();
     expect(box().value).toBe('What would stop someone signing up: Not seeing open shifts');
-    expect(screen.getByText('Going with "Not seeing open shifts", the room\'s choice, 1 to 0')).toBeInTheDocument();
-    openStep(/Going with "Not seeing open shifts"/);
+    expect(screen.getByText('"Not seeing open shifts" \u00b7 the room\'s choice, 1 to 0')).toBeInTheDocument();
+    openStep(/"Not seeing open shifts"/);
     fireEvent.click(screen.getByRole('button', { name: 'Choose this idea instead' }));
     confirmPick();
     expect(box().value).toBe('What would stop someone signing up: Having to make an account');
@@ -1655,8 +1658,8 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     IDEAS.slice(0, 2).forEach((i) => fireEvent.click(within(q).getByRole('checkbox', { name: `Tick: ${i.Text}` })));
     fireEvent.click(within(q).getByRole('button', { name: 'Put 2 to a vote' }));
     const dialog = screen.getByRole('dialog', { name: 'Put 2 ideas to a vote' });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Ask Claude for a quick mockup of each first' }));
-    expect(dialog.textContent).toMatch('The vote waits in your queue, hidden from the room');
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Ask Claude for mockups first' }));
+    expect(dialog.textContent).toMatch('Hidden until the mockups are in');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ask Claude for 2 mockups' }));
     await waitFor(() => expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1'], prompt: 'Which should Claude build next?', maxPicks: 1, askForMockups: true }));
   });
@@ -1665,7 +1668,7 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
     const q = queue();
     fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
-    expect(within(q).getByRole('button', { name: 'Put to a vote (tick another idea first)' })).toBeDisabled();
+    expect(within(q).getByRole('button', { name: 'Put to a vote' })).toBeDisabled();
     fireEvent.click(within(q).getAllByRole('button', { name: 'Save for later' })[0]);
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'later' }));
   });
@@ -1687,7 +1690,7 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     const card = screen.getByRole('region', { name: 'Proposed ask 4' });
     expect(within(card).getByTestId('brm-mockups-wait').textContent).toBe('Claude is making mockups · 1 of 3');
     expect(card.textContent).toMatch('Your vote, from 3 ideas');
-    expect(card.textContent).toMatch('The room cannot see it yet. It is marked Ready when all 3 are in; you open it.');
+    expect(card.textContent).toMatch('Hidden until all 3 are in.');
     expect(within(card).getByRole('button', { name: 'Open now, without the rest' })).toBeInTheDocument();
     fireEvent.click(within(card).getByRole('button', { name: 'Cancel the vote' }));
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'discard' }));
@@ -1728,7 +1731,7 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
     const composer = screen.getByRole('region', { name: 'Add something' });
     fireEvent.click(within(composer).getByRole('button', { name: 'Send to Claude as' }));
     const menu = within(composer).getByRole('group', { name: 'Send to Claude as' });
-    expect(menu.textContent).toMatch('Goes on the brief; Claude does not stop.');
+    expect(menu.textContent).toMatch('A standing rule. Claude keeps going.');
     fireEvent.click(within(menu).getByRole('button', { name: /^Keep in mind/ }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
     expect(lastPost().body).toEqual({ text: 'Has to work on old phones', as: 'keep' });
@@ -1976,7 +1979,7 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /Who is this for, in one sentence\?/ }));
     expect(within(dialog).getByLabelText(/Question/)).toHaveValue('Who is this for, in one sentence?');
     expect(dialog.textContent).toMatch('from Build Room starters · Who it is for');
-    const kinds = within(dialog).getByRole('radiogroup', { name: 'When it is decided, Claude gets it as' });
+    const kinds = within(dialog).getByRole('radiogroup', { name: 'Claude gets it as' });
     expect(within(kinds).getByRole('radio', { name: 'Keep in mind' })).toHaveAttribute('aria-checked', 'true');
     // Later is not a kind (owner, 2026-10-08): three choices, Save for later is the way in.
     expect(within(kinds).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Do now', 'Keep in mind', 'Ask Claude']);
@@ -2006,7 +2009,7 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     expect(within(lib).getByRole('button', { name: /What should we cut\?/ }).textContent).toMatch('Asked · ask 5');
     expect(lib.textContent).toMatch('2 of 2 asked in this room');
     fireEvent.click(within(lib).getByRole('button', { name: /Who is this for, in one sentence\?/ }));
-    expect(dialog.textContent).toMatch('You asked this in ask 2. Ask again if the work has changed since.');
+    expect(dialog.textContent).toMatch('Asked in ask 2.');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ prompt: 'Who is this for, in one sentence?', fromQuestion: 'platform:br-starters:c001#001' }));
   });
@@ -2015,7 +2018,7 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     await openRoom(hostState());
     fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
     const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
-    expect(await within(dialog).findByText(/No ready questions yet/)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/No ready questions\./)).toBeInTheDocument();
   });
 });
 
@@ -2111,8 +2114,8 @@ describe('the host picks by clicking an option, and confirms (owner, 2026-10-06)
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Current ask' })).getByText('Bold banner'));
     const dialog = screen.getByRole('dialog', { name: 'Pick an alternate?' });
-    expect(within(dialog).getByTestId('brm-pick-body').textContent).toMatch(/The room preferred B · Calm photo \+ calendar \(the room's pick, \d+ of \d+\)\. You are picking A · Bold banner instead\. It is recorded as your pick, not the room's\./);
-    expect(within(dialog).getByRole('button', { name: 'Yes, pick A instead' })).toBeInTheDocument();
+    expect(within(dialog).getByTestId('brm-pick-body').textContent).toMatch(/The room preferred B · Calm photo \+ calendar \(the room's pick, \d+ of \d+\)\. A · Bold banner goes on record as your pick\./);
+    expect(within(dialog).getByRole('button', { name: 'Pick A' })).toBeInTheDocument();
   });
 
   test('while the room is still voting, picking closes the vote first', async () => {
@@ -2120,7 +2123,7 @@ describe('the host picks by clicking an option, and confirms (owner, 2026-10-06)
     fireEvent.click(within(screen.getByRole('region', { name: 'Current ask' })).getAllByRole('button', { name: 'Pick this' })[0]);
     const dialog = screen.getByRole('dialog', { name: 'Pick an alternate?' });
     expect(dialog.textContent).toMatch('This closes the vote.');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Yes, pick A instead' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pick A' }));
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'close' }));
   });
 
@@ -2131,7 +2134,7 @@ describe('the host picks by clicking an option, and confirms (owner, 2026-10-06)
     const picks = screen.getByRole('group', { name: 'Pick' });
     fireEvent.click(within(picks).getByRole('button', { name: 'B · Calm photo + calendar' }));
     const dialog = screen.getByRole('dialog', { name: 'Change before sending' });
-    expect(within(dialog).getByTestId('brm-alternate').textContent).toMatch('The room preferred A · Bold banner (where the wheel landed)');
+    expect(within(dialog).getByTestId('brm-alternate').textContent).toMatch('Your pick. The room preferred A · Bold banner.');
   });
 });
 
@@ -2206,7 +2209,7 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
   test('just after Start building, the Now card and More both offer Back to the opening', async () => {
     await openRoom(hostState({ st: { Phase: 'building', Brief: { forWhom: 'Two friends', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } } }));
     const back = screen.getByTestId('brm-backtoopening');
-    expect(back.textContent).toMatch('Pressed Start building too soon?');
+    expect(back.textContent).toMatch('Started building too soon?');
     fireEvent.click(within(back).getByRole('button', { name: 'Back to the opening' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/resume`));
     openMore();
@@ -2268,8 +2271,8 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     await openRoom(decidedRoom());
     const now = screen.getByRole('region', { name: 'Now' });
     expect(within(now).getByRole('list', { name: "What's next" })).toBeInTheDocument();
-    expect(within(now).getByRole('button', { name: 'Ask it' })).toHaveAttribute('data-next-primary');
-    await waitFor(() => expect(document.activeElement).toBe(within(now).getByRole('button', { name: 'Ask it' })));
+    expect(within(now).getByRole('button', { name: 'Ask' })).toHaveAttribute('data-next-primary');
+    await waitFor(() => expect(document.activeElement).toBe(within(now).getByRole('button', { name: 'Ask' })));
   });
 
   test('tick both in Decided, Add to the prompt, and the Composer holds the combined lines', async () => {
@@ -2331,11 +2334,11 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     expect(within(dialog).getByText('A share button')).toBeInTheDocument();
   });
 
-  test('New ask opens Ask the room; Write puts the cursor in the Composer', async () => {
+  test('Ask opens Ask the room; Write puts the cursor in the Composer', async () => {
     await openRoom(decidedRoom());
     fireEvent.click(screen.getByRole('button', { name: 'Write' }));
     expect(document.activeElement).toBe(composer());
-    fireEvent.click(screen.getByRole('button', { name: 'New ask' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     expect(screen.getByRole('dialog', { name: 'Ask the room' })).toBeInTheDocument();
   });
 
@@ -2352,7 +2355,7 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
       if (/question-sets\/br-starters\/questions/.test(url)) return res({ setId: 'br-starters', questions: [{ id: 'c001#001', Category: 'Who', title: 'Who is this for?' }] });
       return base(url, opts);
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Ask it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
     const prompt = within(dialog).getAllByRole('textbox')[0];
     prompt.focus();
@@ -2361,9 +2364,9 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     expect(document.activeElement).toBe(prompt);
   });
 
-  test('New ask: after the dialog creates the ask, the focus lands on Show results, not on New ask', async () => {
+  test('Ask: after the dialog creates the ask, the focus lands on Show results, not on Ask', async () => {
     await openRoom(decidedRoom());
-    const opener = screen.getByRole('button', { name: 'New ask' });
+    const opener = screen.getByRole('button', { name: 'Ask' });
     opener.focus();
     fireEvent.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
@@ -2375,11 +2378,13 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     await waitFor(() => expect(document.activeElement).toBe(close));
   });
 
-  test('Ask it opens Ask the room on its question library', async () => {
+  test('the one Ask move opens Ask the room: the cursor in the question field, the starter questions beside it', async () => {
     await openRoom(decidedRoom());
-    fireEvent.click(screen.getByRole('button', { name: 'Ask it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
     expect(within(dialog).getByRole('complementary', { name: 'Ready questions' })).toBeInTheDocument();
+    expect(document.activeElement).toBe(within(dialog).getByLabelText('Question'));
+    expect(document.activeElement.tagName).toBe('INPUT');
   });
 });
 
@@ -2663,7 +2668,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
     fireEvent.keyDown(window, { key: '2' });
     const stage = screen.getByRole('region', { name: 'Claude' });
     expect(within(stage).getByRole('heading', { name: 'Claude was scaffolding the site' })).toBeInTheDocument();
-    expect(within(stage).getByText('The host will pick it up again in a moment.')).toBeInTheDocument();
+    expect(within(stage).queryByText(/pick it up/)).toBeNull();
     expect(within(stage).queryByText(/^for \d/)).toBeNull();
   });
 

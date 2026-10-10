@@ -82,7 +82,7 @@ test('Settle on a rating: Send 3.5 to Claude; Change before sending carries the 
 
 test('Change before sending: Settle folds to what was chosen; the cursor is in the direction; Send is the primary', () => {
   mount({ ...base, status: 'results', results: won }, { pickId: 'B' });
-  expect(screen.getByText("Going with B, the room's choice, 7 to 4")).toBeInTheDocument();
+  expect(screen.getByText("B \u00b7 the room's choice, 7 to 4")).toBeInTheDocument();
   expect(document.activeElement.tagName).toBe('TEXTAREA');
   expect(screen.getByRole('button', { name: 'Send B to Claude' })).toHaveAttribute('data-next-primary');
 });
@@ -117,7 +117,7 @@ test('Change before sending: Space is never bound to Send; only Ctrl or Cmd Ente
 
 test('a pick on a tie: the folded Settle still offers Spin the wheel and Vote again', () => {
   mount({ ...base, status: 'results', results: { total: 8, tied: ['A', 'B'], options: [{ label: 'A', count: 4 }, { label: 'B', count: 4 }] } }, { pickId: 'A' });
-  fireEvent.click(screen.getByRole('button', { name: /Going with A, your pick/ }));
+  fireEvent.click(screen.getByRole('button', { name: /A \u00b7 your pick/ }));
   expect(screen.getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Vote again' })).toBeInTheDocument();
 });
@@ -264,14 +264,14 @@ describe('settleSummary: an Ideas ask is worded by what the idea says, never its
   const ideas = { askId: '7', kind: 'suggest', status: 'results', prompt: 'What stops a sign-up?',
     results: { total: 3, ranked: [{ respId: 'r2', text: 'Not seeing open shifts', votes: 2 }, { respId: 'r1', text: 'Having to make an account', votes: 1 }] } };
   test.each([
-    [{}, 'r2', 'Going with "Not seeing open shifts", the room\'s choice, 2 to 1'],
-    [{}, 'r1', 'Going with "Having to make an account", your pick instead of "Not seeing open shifts"'],
+    [{}, 'r2', '"Not seeing open shifts" \u00b7 the room\'s choice, 2 to 1'],
+    [{}, 'r1', '"Having to make an account" \u00b7 your pick, not "Not seeing open shifts"'],
     [{ wheel: { landed: 'r1' } }, null, 'The wheel picked "Having to make an account"'],
-    [{ wheel: { landed: 'r1' } }, 'r2', 'Going with "Not seeing open shifts", your pick instead of the wheel\'s "Having to make an account"'],
+    [{ wheel: { landed: 'r1' } }, 'r2', '"Not seeing open shifts" \u00b7 your pick, not the wheel\'s "Having to make an account"'],
   ])('%j, pick %s', (over, pick, out) => {
     expect(settleSummary({ ...ideas, ...over }, pick, { settle: 'unused' })).toBe(out);
   });
   test('a Choose ask keeps the letters from askPathSummaries', () => {
-    expect(settleSummary({ kind: 'choice' }, 'B', { settle: 'Going with B, your pick' })).toBe('Going with B, your pick');
+    expect(settleSummary({ kind: 'choice' }, 'B', { settle: 'B \u00b7 your pick' })).toBe('B \u00b7 your pick');
   });
 });
