@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
@@ -1042,7 +1043,13 @@ export default function BuildPlayer({
       centre={centre}
     >
       <div className="bpl">{body}</div>
-      {shown && <div className="bpl"><PictureView image={shown} onClose={() => setShown(null)} /></div>}
+      {/* On document.body, never inside the shell: iOS Safari keeps a fixed box
+         inside the stage's touch scroller, which put Back under the header
+         (owner's iPhone, 2026-10-10). The wrapper only carries the scopes. */}
+      {shown && createPortal(
+        <div className="plr plr-portal" data-theme="dark"><div className="bpl"><PictureView image={shown} onClose={() => setShown(null)} /></div></div>,
+        document.body,
+      )}
     </PlayerShell>
     </ImageViewer.Provider>
     </ImageLoader.Provider>

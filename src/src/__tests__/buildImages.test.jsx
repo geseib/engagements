@@ -90,6 +90,24 @@ describe('a picture on the phone opens in the app', () => {
     fireEvent.click(within(viewer).getByRole('button', { name: /Back/ }));
     expect(screen.queryByRole('dialog', { name: 'Picture' })).toBeNull();
   });
+
+  // Owner, 2026-10-10 (iPhone, test): the picture opened under the header with
+  // Back and the close button cut off. iOS Safari keeps a position:fixed box
+  // inside a touch-scrolling ancestor, so the viewer must not live inside the
+  // shell's scrolling stage (or the shell at all); it keeps its style scopes.
+  test('the viewer sits outside the scrolling stage, so Back is never under the header', async () => {
+    const view = S.publicView({ gameId: GAME, meta: { Title: 'Sign-up', Details: 'Goal' }, sessionState: 'STARTED', room: room(), players: ['Priya'], me: { playerName: 'Priya' }, now: NOW });
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => view }));
+    render(<BuildPlayer gameId={GAME} playerName="Priya" clientId="cid-1" apiBase={API} rev={0} />);
+    const pic = await screen.findByRole('img', { name: 'Choice A: Bold banner' });
+    fireEvent.click(pic.closest('button'));
+    const viewer = screen.getByRole('dialog', { name: 'Picture' });
+    expect(viewer.closest('.plr-stage')).toBeNull();
+    expect(viewer.closest('.plr-bar, main, header')).toBeNull();
+    expect(viewer.closest('.bpl')).not.toBeNull();
+    expect(viewer.closest('.plr')).not.toBeNull();
+    expect(viewer.closest('[data-theme="dark"]')).not.toBeNull();
+  });
 });
 
 describe('in the report', () => {
