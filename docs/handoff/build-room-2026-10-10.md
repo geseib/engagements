@@ -2,24 +2,32 @@
 
 Read this first in a new session. Worktree: `.claude/worktrees/affectionate-bouman-48e07a`, branch `working/build-room-host-redesign` (a push of it to `dev` deploys dev).
 
-## Where each tier is
+## Where each tier is (end of 2026-10-10)
 
 | Tier | Commit | What it carries |
 |---|---|---|
-| **prod** | `324fd05d` **waiting at ApprovalForProd** (owner) | Everything below through the doing line. Prod itself is still on the late-September release: the earlier run `a011c0fc` was approved but failed `npm test` on the expiring Events fixture (fixed since). |
-| **test** | `9e2f35ed` (merge of dev `12bb9a0d`, deployed 2026-10-10) | Everything on dev below. Not yet walked on test. |
-| **dev** | `12bb9a0d` | `324fd05d` + copy pass (Orwell) + plugin update notice (1.15.0) + Host · N alert and "The room chose: …" + phone picture viewer portalled out of the shell (iOS put Back/close under the header). |
-| **branch head** | = dev | Nothing unpushed. |
+| **prod** | `324fd05d` **waiting at ApprovalForProd** (owner) | Prod itself still runs the late-September release. **Its Cognito web client has no WriteAttributes** (verified live): a signed-in user can rewrite their own `custom:status` / `custom:role`. Fixed on dev and test (`7b2543ee`); prod needs a run. |
+| **test** | `f59cbeb5` (= dev `173ffc34`) | Everything below. Pool client WriteAttributes `email, name` verified live. |
+| **dev** | `173ffc34` | `324fd05d` + copy pass, plugin update notice, Host · N alert, phone viewer portal, popovers follow their anchor, dates to 2099, **one plugin per tier (1.16.0)**, Revy review fixes (counts, status, report, wrap-up, one pick), Before you start, README/help without emoji, invite notice (pending accounts, verified email), Cognito WriteAttributes, **Share demo**. |
+| **branch head** | = dev | Nothing unpushed except this note. |
 
-Promotion rules: test is MERGED into (never fast-forward); prod is a fast-forward of test (`git push origin origin/test:refs/heads/prod`) and halts at the owner's gate. Watch pipelines with `AWS_PROFILE=adminaccess` (the owner must `aws sso login --profile adminaccess` when it expires — the CLI then returns nothing/errors).
+Promotion rules: test is MERGED into (never fast-forward); prod is a fast-forward of test (`git push origin origin/test:refs/heads/prod`) and halts at the owner's gate. Watch pipelines with `AWS_PROFILE=adminaccess`. Promote from a scratch `git worktree add <tmp> origin/test` so the working branch is never disturbed.
 
 ## Next, in order
 
-1. **Walk on test** (`9e2f35ed`; was: push to dev, done). On a phone: tap a mockup, Back and close must sit at the top. Walk the Host · N alert on room 4443: amber when a question or ready mockups wait, grey otherwise; the list folds by kind and each line jumps (ideas → Waiting for you on Room; asks → that card); Mark all seen; seen shared across devices; nothing named on Stage/Build; **measure the list at ~660 and 375 px**; check "The room chose: …" on the Stage after a vote from Points.
-2. **Prod**: fast-forward to test's head (`git push origin origin/test:refs/heads/prod`) once the owner has looked at test; halts at the owner's gate.
-3. **Plugin per tier** — proposed, **awaiting the owner's yes**: prod stays `engage`; dev serves `engage-dev`, test `engage-test` (same file, name from the tier); the installer installs the tier it was run from beside prod; `/engage-<tier>:connect` writes `enabledPlugins` in the project's `.claude/settings.local.json` (own tier on, others off); each plugin's hooks/tools act only for a project connected to its own tier; the Connect window shows the tier's own commands. Claude Code docs (plugins/install, plugins/loading): one plugin id can't hold two versions; scopes control enablement only; differently named plugins coexist. Verify by test: both plugins' hooks fire; per-folder enable takes effect without restart.
-4. **Reviewer feedback** (owner mentioned, not yet pasted): a persistent notice for a pending team invite (so it isn't lost while someone creates their first Build Room), and clear setup/requirements for Claude Code before starting (Claude Code, Node 18+, the plugin, where to run the command). Ask the owner to paste it, then mockups → plan.
-5. **Expiring test dates** — a separate session (task_8e0ea9d6, started by the owner) is fixing nine test files with hard-coded 2026 dates; check its result before the next promotion.
+1. **Prod** — recommend soon (the WriteAttributes hole). Owner said "prod will wait"; ask, then fast-forward test → prod; it halts at the gate.
+2. **Owner calls on Share demo**: (a) should the Host-screen nudge take the one orange from What's next (built: plain)? (b) the header chip now opens its own popover (reverses 2026-10-09 "controls only in Settings") — OK? (c) screenshots-only rooms can share with no address (Claude is never asked for its local link) — leave or prompt Claude?
+3. **Invite**: accounts in NO group (App.jsx "Access Pending") still cannot see invites — owner ruling needed to open the routes to them.
+4. **Not yet seen in a browser**: the Connect window's plugin-version line (owner not signed in on dev in the pane), the Share demo Stage frame and the phones' shared state (need a live plugin LAN share). Walked on test room 5815: the Host nudge (12–647 at 659), the chip popover (16–436 at 659), the Build screen's "Only this laptop can open it.", narrow (≤480) moves the tools into Session.
+5. **Flaky**: tests/engagement-session-list.js once 8 vs 9 (task chip task_525c10e7); hostRemotePreview once under load.
+
+## Owner rulings 2026-10-10 (late)
+
+- Plugin per tier approved and shipped. Install command only when signed in (Connect window), never on the public page.
+- Share demo: nudge in both places (Host Now column AND the header chip on Build/History; a grey line in the Stage HOST list); "demo" when shared, "build" for the laptop link; no participant "Ask to try it"; no plugin change for it.
+- Points vote opens on one pick.
+- Invite: option A bar (Host screen only), Accept only, pending accounts may see/accept, accepting never approves hosting.
+- README/help: no emoji in the UI; Icon where it carries meaning.
 
 ## What was built this stretch (all on dev or later)
 
