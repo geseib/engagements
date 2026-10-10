@@ -412,7 +412,8 @@ export default function BuildReport({ state, onBack }) {
         </section>
 
         <section aria-labelledby="brr-ideas">
-          <h2 id="brr-ideas">Ideas from the room</h2>
+          {/* Ideas sent any time; answers to an Ideas ask are under Decisions (Revy review, 2026-10-10). */}
+          <h2 id="brr-ideas">Unprompted ideas</h2>
           {ideas.length ? (
             <table className="brr-tbl">
               <thead><tr><th className="brr-col-t">Time</th><th className="brr-col-who">Status</th><th>Idea</th></tr></thead>
@@ -426,7 +427,7 @@ export default function BuildReport({ state, onBack }) {
                 ))}
               </tbody>
             </table>
-          ) : <p className="brr-dim">No ideas were sent.</p>}
+          ) : <p className="brr-dim">No unprompted ideas were sent.</p>}
         </section>
 
         <section aria-labelledby="brr-people">
