@@ -35,3 +35,45 @@ describe('roomBelow: the height a popover may use before it would run off the bo
     expect(roomBelow(rect(0, 100, 880), 900)).toBe(160);
   });
 });
+
+/* Walked on test 2026-10-10 at 659px: the Stage dock's "Press Space" hint
+   comes and goes with the pointer, the HOST button moved 107px, and the open
+   Host alert list kept the slide it was given at opening — 91px off the right
+   edge. An open popover follows its anchor, not only a window resize. */
+describe('useKeepOnScreen follows a moving anchor', () => {
+  const React = require('react');
+  const { render, act } = require('@testing-library/react');
+  const { useKeepOnScreen } = require('../buildroom/keepOnScreen');
+
+  test('the anchor moves while open: the popover is placed again', () => {
+    jest.useFakeTimers();
+    const realW = window.innerWidth;
+    window.innerWidth = 659;
+    let anchorLeft = 0; // where the button's wrap sits; the CSS hangs the panel from it
+    function Pop() {
+      const ref = React.useRef(null);
+      useKeepOnScreen(ref, true, 'k');
+      return <span className="wrap"><div className="pop" ref={ref} /></span>;
+    }
+    const { container } = render(<Pop />);
+    const wrap = container.querySelector('.wrap');
+    const pop = container.querySelector('.pop');
+    wrap.getBoundingClientRect = () => rect(anchorLeft, 90);
+    // The panel is 627px wide, right-aligned to the wrap's right edge, plus whatever slide it carries.
+    pop.getBoundingClientRect = () => {
+      const m = /translateX\((-?\d+)px\)/.exec(pop.style.transform || '');
+      const left = anchorLeft + 90 - 627 + (m ? Number(m[1]) : 0);
+      return rect(left, 627);
+    };
+    anchorLeft = 436; // hint showing: panel 6..633 at first, before any slide
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(pop.getBoundingClientRect().left).toBe(GUTTER);
+    anchorLeft = 329; // the hint went away: the button moved 107px left
+    act(() => { jest.advanceTimersByTime(100); });
+    const r = pop.getBoundingClientRect();
+    expect(r.left).toBeGreaterThanOrEqual(GUTTER);
+    expect(r.right).toBeLessThanOrEqual(659 - GUTTER);
+    window.innerWidth = realW;
+    jest.useRealTimers();
+  });
+});
