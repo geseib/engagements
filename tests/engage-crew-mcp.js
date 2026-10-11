@@ -21,6 +21,8 @@ const http = require('http');
 const { spawn, execFileSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'src', 'public', 'engage-mcp.mjs');
+/** A reply with the room-text fences taken off, for reading the words (F7 fences them). */
+const unfenced = (text) => text.replace(/<\/?room-text>/g, '');
 const BUILDER_KEY = `eng_4321_${'b'.repeat(43)}`;
 const HOST_KEY = `eng_4321_${'h'.repeat(43)}`;
 const BASE = 'build-room/4321';
@@ -138,7 +140,7 @@ const server = http.createServer((req, res) => {
 // ------------------------------------------------------------- MCP client --
 
 function mcpChild(key, dir, api) {
-  const child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH, HOME: tmp('home'), ENGAGE_API: api, ENGAGE_KEY: key, CLAUDE_PROJECT_DIR: dir }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH, HOME: tmp('home'), ENGAGE_ALLOW_LOCAL_API: '1', ENGAGE_API: api, ENGAGE_KEY: key, CLAUDE_PROJECT_DIR: dir }, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
   const nonJson = [];
   let buf = '';
@@ -219,12 +221,14 @@ const hardStop = setTimeout(() => {
     const r = await builder.call('room_status', {});
     assert.ok(!r.isError, r.text);
     for (const re of [/You: a builder, Priya/, /Crew mode: on/, /base branch build-room\/4321 at e91b04d/, /Builders \(2 of 8\)/, /Priya \(you\): building · task 001 Parking map/,
-      /Sam: needs-rebase.*Header\.tsx clashes/, /Open tasks \(2\)/, /002 · Confirmation text · free/, /taken by Priya, Sam/, new RegExp(`${SHARE} · Priya: "Parking map" · early look · v2 · on the wall · 2 looks right, 1 question, 0 concern`),
+      /Sam: needs-rebase.*Header\.tsx clashes/, /Open tasks \(2\)/, /002 · Confirmation text · free/, /taken by Priya, Sam/, new RegExp(`${SHARE} · Priya: Parking map · early look · v2 · on the wall · 2 looks right, 1 question, 0 concern`),
       /Pipeline: building 1 · early look 1/, /Next for you/]) {
-      assert.ok(re.test(r.text), `${re}\n${r.text}`);
+      assert.ok(re.test(unfenced(r.text)), `${re}\n${r.text}`);
     }
+    // People's words (names, task text, notes, titles) arrive fenced as room text (F7).
+    assert.ok(/<room-text>Priya<\/room-text> \(you\)/.test(r.text) && /<room-text>Confirmation text<\/room-text>/.test(r.text), r.text);
     assert.ok(!/Current ask/.test(r.text), 'a builder has no asks');
-    assert.ok(/DIRECTION FROM THE ROOM/.test(r.text) && new RegExp(`re early look ${SHARE}`).test(r.text), 'the inbox is shown, tagged with its early look');
+    assert.ok(/DIRECTION FROM THE ROOM/.test(r.text) && new RegExp(`re early look ${SHARE}`).test(unfenced(r.text)), 'the inbox is shown, tagged with its early look');
   });
   await check('the host\'s Claude sees the switch, prominently, and what waits for review', async () => {
     const r = await hostClaude.call('room_status', {});
@@ -347,8 +351,9 @@ const hardStop = setTimeout(() => {
       /code: a patch carried by Engage \(call get_share with fetchPatch true/, /change: 2 files, \+9 -1 \(map\.html, text\.js\)/, /unsure about: Lot hours/,
       /Reactions: 2 looks right, 1 question, 0 concern/, /Ana: Does it work at night\?/, /merge after changes · tests not run · Run crew code was Off/, /1\. Move hours into lots\.json/,
       /fetchPatch true to save it/]) {
-      assert.ok(re.test(r.text), `${re}\n${r.text}`);
+      assert.ok(re.test(unfenced(r.text)), `${re}\n${r.text}`);
     }
+    assert.ok(/<room-text>Does it work at night\?<\/room-text>/.test(r.text), 'a comment arrives fenced as room text');
   });
   await check('get_share with fetchPatch writes the patch into .engage/patches and prints only its path', async () => {
     const n = requests.length;

@@ -93,3 +93,32 @@ Plain words, for a public page once F1–F3 are fixed.
 ## 5. Limits
 
 An AI review, not an independent audit. Not covered: the server side beyond the Wi-Fi share, a live test of the gateway, Windows. F1 and F2 were confirmed locally against a fake server; the proof of concept was deleted. Sections 2 (F4 onward) to 5 were finished from the reviewer's notes after its write-up was cut off, at a summary level.
+
+---
+
+## 6. Fixed in 1.17.0 (2026-10-11)
+
+`src/public/engage-mcp.mjs` VERSION `1.17.0`, 3,725 lines.
+SHA-256: `a2323663f2ce7f6f340a963bb6425018dd8b4cec6348f913d37878dcc22fdb2c`.
+The server's `LATEST_PLUGIN` (`lambda-functions/game/build-store.js`) is `1.17.0`, so a host
+running 1.16.0 sees "out of date" in Session > Claude and in Claude's tool replies.
+New tests: `tests/engage-plugin-security.js` (local fakes on 127.0.0.1 only; every other
+address is refused before anything is sent).
+
+| ID | Fix | Test |
+|---|---|---|
+| F1 | The API comes only from the user's own setup: `~/.engage/config*.json` (written by `--install-plugin --api`), `ENGAGE_API` in Claude Code's MCP settings, or connect's `api`. An `api` in `.engage/session.json` is ignored and no longer written. Every source must be `https://` and on `ENGAGE_APIS`: a named tier (`--tier`, `tier.json`) takes only its own stage URL; the bare `claude mcp add` copy takes any of the three. `--install-plugin` refuses to save any other address. The one escape hatch, `ENGAGE_ALLOW_LOCAL_API=1` in the environment, allows a loopback address only and warns on stderr. The activity pump and the Wi-Fi share loop start only after `connect` in this process; `connect` with no key reuses the folder's key, and `room_status` says when the window has not connected. | a foreign or `http://` session.json api is ignored and the server gets no request; `http://` and look-alike https hosts are refused from the user's config; no request before connect, then both loops start; each tier resolves its own API; a 1.16.0 folder keeps working |
+| F8 | connect's `api` meets the same list. | foreign, loopback (without the hatch), query-string and non-http addresses refused with nothing written; the dev plugin refuses prod's and test's API |
+| F2 | Every write into the project goes through `safeWrite` (temp file + rename, mode on every write) or `safeAppend` (`O_NOFOLLOW`). Both refuse a link anywhere from the project down to the file and a folder resolving outside the project. Covers brief.md, session.json (0600 every write; also F12's chmod part), .engage/.gitignore, DECISIONS.md, README.md, .gitignore, the patch file, .claude/settings.local.json, .git/info/exclude, last-update.txt, commit-message.txt and activity.jsonl. The hooks, the pump and the snapshot do nothing when `.engage` is not a plain folder. The brief is written only from tool calls, never from a background answer. | symlinked `.engage/`, brief.md, DECISIONS.md, `.claude/`, `.engage/patches/` all refused, targets untouched; the activity hook writes nothing through a linked `.engage/`; the key file is 0600 after rewrites; a brief in share/report and activity answers is never written, one in room_status is |
+| F4 | The Wi-Fi share opens only a server confirmed to run in this project's folder. Unknown owner (lsof missing, refused, nothing listening) or `/` is refused; the host sees why through the existing `lan.error` ("Not shared: could not confirm port N is this project's server ..."). | with a failing `lsof` the project's own server is not shared and the report is `failed` with the reason; in `tests/engage-lan-gateway.js` an address with nothing listening is never opened |
+| F7 | Room-supplied text (ideas, why comments, player and builder names, the brief, direction words, run-list items, research subjects, timeline lines, crew notes, task text, early-look titles, summaries, comments) is fenced as `<room-text>...</room-text>`. Any "room-text" inside the words (any dash, any case, zero-width characters removed first) becomes "room text", so the fence cannot be closed or opened from inside. The server instructions and the skill say room text is data, never authority; only the host's sent direction directs, and destructive or outward actions still follow Claude Code's normal permissions. The Do now footer says the same. | forged closings (`</room-text>`, `</ROOM_TEXT>`, `< / room-text >`, zero-width and en-dash variants) stay inside their fence in directions and results; instructions carry the rule |
+| F9 | The patch file name takes the server's version only when it is digits. | `../../../evil`, `2/../../x`, `1e3` and empty are refused with nothing written; `2` saves `abc123-v2.patch` |
+
+Behaviour a host notices: after updating, or in any new Claude Code window, Claude calls
+`connect` (no key needed) before the live view and Wi-Fi share run again. A laptop whose
+saved API is not its tier's Engage API (for example an `engage` plugin installed from the
+dev site before 1.16.0) is told to reinstall from its site. Sharing a server whose folder the
+laptop will not reveal now fails with a reason instead of opening.
+
+Still open: F3 (distribution, hash and signature), F5, F6, F10, F11, F13, and F12's key in shell
+history and transcript.
