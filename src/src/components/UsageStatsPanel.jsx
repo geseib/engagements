@@ -369,19 +369,19 @@ export function EmptyMonth({ month, planWord = 'your plan' }) {
  * Fetch a team's (or, for staff, one team's) stats for six months ending at
  * `period`, refetched when the month moves.
  */
-export function useStats(urlFor, period) {
+export function useStats(makeUrl, endMonth) {
   const [state, setState] = useState({ data: null, error: '', loading: true });
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const res = await authFetch(urlFor(addMonths(period, -5), period));
+      const res = await authFetch(makeUrl(addMonths(endMonth, -5), endMonth));
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
       setState({ data: body, error: '', loading: false });
     } catch (err) {
       setState({ data: null, error: err.message || 'Could not load the numbers.', loading: false });
     }
-  }, [urlFor, period]);
+  }, [makeUrl, endMonth]);
   useEffect(() => { load(); }, [load]);
   return state;
 }
