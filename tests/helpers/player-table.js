@@ -23,9 +23,14 @@
  *
  *   ConditionExpression   attribute_exists(A) · attribute_not_exists(A)
  *                         A = :v · A > :v · AND · OR · parentheses
+ *                         NOT <primary> · contains(A, :v) on a string set
+ *                         (the once-only ask and decision markers the usage
+ *                         stats keep — platform-metrics.js)
  *   UpdateExpression      SET a = :x, b = if_not_exists(b, :y)   REMOVE c, d
  *                         ADD n :one  (a number; the counters the platform
  *                         metrics keep — platform-metrics.js)
+ *                         ADD s :set  (a JS Set, as the DocumentClient sends a
+ *                         string set; merged, never duplicated)
  *                         (any clause may be absent; `#name` aliases work)
  *   ReturnValues          ALL_OLD on a Put, UPDATED_OLD on an Update — the two
  *                         a recorder reads to tell a NEW row from an overwrite.
@@ -120,7 +125,7 @@ function assertFits(item) {
  * inside the thing asserting it is prevented.
  */
 function evaluateCondition(expression, item, names = {}, values = {}) {
-  const tokens = String(expression).match(/attribute_not_exists|attribute_exists|[A-Za-z0-9_#:]+|\(|\)|>=|<=|<>|>|<|=/g) || [];
+  const tokens = String(expression).match(/attribute_not_exists|attribute_exists|[A-Za-z0-9_#:]+|\(|\)|,|>=|<=|<>|>|<|=/g) || [];
   let pos = 0;
 
   const peek = () => tokens[pos];
@@ -147,6 +152,19 @@ function evaluateCondition(expression, item, names = {}, values = {}) {
         && Object.prototype.hasOwnProperty.call(item, attribute)
         && item[attribute] !== undefined;
       return token === 'attribute_exists' ? present : !present;
+    }
+    if (token === 'NOT') return !parsePrimary();
+    if (token === 'contains') {
+      if (take() !== '(') throw new Error('fake: contains without (');
+      const attribute = resolveName(take());
+      if (take() !== ',') throw new Error('fake: contains needs two arguments');
+      const needle = resolveValue(take());
+      if (take() !== ')') throw new Error('fake: contains without )');
+      const hay = item ? item[attribute] : undefined;
+      if (hay instanceof Set) return hay.has(needle);
+      if (Array.isArray(hay)) return hay.includes(needle);
+      if (typeof hay === 'string') return hay.includes(String(needle));
+      return false;
     }
     // A comparison: NAME op :value
     const attribute = resolveName(token);
@@ -266,11 +284,19 @@ function applyUpdate(item, input) {
       } else if (kind === 'REMOVE') {
         delete next[nameOf(clause, names)];
       } else {
-        // ADD: numbers only. DynamoDB also adds to sets; nothing here does.
+        // ADD: a number to a number, or a Set (a string set) into a set.
         const m = /^([#\w]+)\s+(:\w+)$/.exec(clause);
         if (!m) throw new Error(`fake: unsupported ADD clause: ${clause}`);
         const attribute = nameOf(m[1], names);
         const delta = valueOf(m[2]);
+        if (delta instanceof Set) {
+          const current = next[attribute];
+          if (current !== undefined && !(current instanceof Set)) {
+            throw new Error(`fake: ADD of a set to non-set ${attribute}`);
+          }
+          next[attribute] = new Set([...(current || []), ...delta]);
+          continue;
+        }
         if (typeof delta !== 'number') throw new Error(`fake: ADD of a non-number to ${attribute}`);
         const current = next[attribute];
         if (current !== undefined && typeof current !== 'number') {
