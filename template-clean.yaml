@@ -1390,7 +1390,15 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # GET /me/attention counts accounts waiting in `pending` for staff
+          # (orgs/my-attention.js). Counts only; no attribute is returned.
+          USER_POOL_ID: !Ref UserPoolV2
       Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ cognito-idp:ListUsersInGroup ]
+              Resource: !GetAtt UserPoolV2.Arn
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -1407,6 +1415,16 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /orgs
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # How many things wait in each place the caller works: the console's
+        # scope tabs (docs/design/admin-landing). Counts only.
+        MyAttention:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /me/attention
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
@@ -7002,6 +7020,17 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/users/{username}/state
             Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # A team owner or admin approving hosting for somebody who joined
+        # through that team's invitation (orgs/approve-member.js). Routed in
+        # manage-users.js BEFORE the staff gate, with its own org check.
+        ApproveTeamMember:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/members/{sub}/approve
+            Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

@@ -34,6 +34,7 @@
 const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { ensurePersonalOrg } = require('./shared/personal-org');
+const { myAttention, isAttentionRoute } = require('./my-attention');
 
 /*
   WHICH SWITCHED FEATURES THIS TIER HAS ON (roadmap D6). The console reads it
@@ -71,7 +72,7 @@ async function listMyOrgs(event) {
     check-then-write), so calling it on every page load is safe and calling it
     from two tabs at once produces one organisation.
   */
-  await ensurePersonalOrg(event);
+  const home = await ensurePersonalOrg(event);
 
   // `tenant.orgPk('')` would throw on a blank id, so the prefix is the literal
   // 'ORG#' — the same string every reverse SK begins with. This is a PREFIX,
@@ -106,6 +107,10 @@ async function listMyOrgs(event) {
     // without guessing. Empty when they have none — the first-run state.
     activeOrgId: tenant.callerOrgId(event),
     features: { events: eventsEnabled() },
+    /* An account that joined through a team invitation has no personal space
+       until it asks for one (shared/personal-org.js). The console offers a
+       quiet "Make a personal space" only when this is true. */
+    canCreatePersonal: home.reason === 'invite-only',
   });
 }
 
@@ -115,6 +120,9 @@ exports.handler = async (event) => {
   // OPTIONS FIRST — a preflight carries no credentials and must not 403.
   if (method === 'OPTIONS') return G.handlePreflight();
 
+  // GET /me/attention shares this function (no new Lambda): counts per scope
+  // for the console's tabs. See my-attention.js.
+  if (method === 'GET' && isAttentionRoute(event)) return myAttention(event);
   if (method === 'GET') return listMyOrgs(event);
 
   return G.fail(404, 'Endpoint not found');

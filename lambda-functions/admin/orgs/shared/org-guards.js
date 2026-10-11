@@ -535,6 +535,13 @@ function publicMember(row) {
     displayName: row.displayName || '',
     role: clean(row.role).toLowerCase(),
     joinedAt: row.joinedAt || null,
+    /* Joined through this team's invitation before being approved to host
+       (accept-invite.js). While `awaitingHostApproval` is set the person
+       cannot host; a team owner or admin may approve them
+       (approve-member.js), and so may Engage. */
+    joinedByInvite: row.joinedByInvite === true,
+    awaitingHostApproval: row.awaitingHostApproval === true,
+    canHost: row.awaitingHostApproval !== true,
   };
 }
 

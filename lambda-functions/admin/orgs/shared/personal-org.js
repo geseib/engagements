@@ -183,7 +183,7 @@ async function readProfile(sub) {
  *          thread. IT NEVER THROWS: a failure to provision must not turn the
  *          switcher into a 500. The next page load tries again.
  */
-async function ensurePersonalOrg(event) {
+async function ensurePersonalOrg(event, { force = false } = {}) {
   const sub = G.callerSub(event);
   if (!sub) return { orgId: '', created: false, reason: 'anonymous' };
 
@@ -200,6 +200,33 @@ async function ensurePersonalOrg(event) {
   }
 
   const existing = G.clean(profile && profile.personalOrgId);
+
+  /*
+    AN ACCOUNT THAT ARRIVED THROUGH A TEAM INVITATION HAS NO PERSONAL SPACE
+    (owner, 2026-10-11: "it should be possible to create an account if invited
+    to a team but not have an individual account"). accept-invite.js stamps
+    PROFILE `joinedByInvite` when somebody not yet approved, with no space of
+    their own, accepts. The team is their home; the team pays.
+
+    ONLY WHILE THEY STILL BELONG SOMEWHERE. The invariant above still holds:
+    an approved account with no organisation at all gets a space, so somebody
+    removed from their only team lands in their own space, not a blank console.
+    An unreadable membership list provisions nothing (the next load retries)
+    rather than guessing in either direction.
+
+    `force` is the person asking for one ("Make a personal space", POST /orgs
+    with `personal: true`). Existing accounts carry no stamp and are unchanged.
+  */
+  if (!existing && !force && G.clean(profile && profile.joinedByInvite)) {
+    let memberships;
+    try {
+      memberships = await G.queryPartition(tenant.userPk(sub), 'ORG#');
+    } catch (error) {
+      console.warn('ensurePersonalOrg: could not read memberships:', error.message);
+      return { orgId: '', created: false, reason: 'error' };
+    }
+    if (memberships.length) return { orgId: '', created: false, reason: 'invite-only' };
+  }
 
   /*
     ── IS THAT HOME STILL THEIRS? ───────────────────────────────────────────
@@ -481,5 +508,5 @@ async function ensurePersonalOrg(event) {
 }
 
 module.exports = {
-  ensurePersonalOrg, personalOrgName, looksFederated, isApproved, APPROVED_GROUPS,
+  ensurePersonalOrg, personalOrgName, looksFederated, isApproved, APPROVED_GROUPS, readProfile,
 };
