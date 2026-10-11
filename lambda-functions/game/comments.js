@@ -185,6 +185,8 @@ const { isHidden, redactAnswers } = require('./anonymity');
 const { callerMayDriveSession } = require('./tenant');
 const { SURVEY_CLOSED } = require('./survey-names');
 const { describeSurveyQuestion } = require('./survey-digest');
+// Call & Answer follow-up asks share this function (followups.js header).
+const { handleFollowUps, isFollowUpRoute } = require('./followups');
 
 /**
  * A CLOSED SURVEY'S FEEDBACK ROUND (27 Sep 2026: the owner asked for "the
@@ -828,6 +830,11 @@ exports.handler = async (event) => {
   if (!gameId) return respond(400, { error: 'gameId is required' });
 
   try {
+    // The follow-up asks' two route families (followups.js), behind their own
+    // switch; the same table client and the same notify-then-refetch broadcast.
+    if (isFollowUpRoute(event.requestContext?.routeKey || event.routeKey)) {
+      return await handleFollowUps(event, { db, broadcast: broadcastToGame });
+    }
     if (method === 'GET') {
       const route = event.requestContext?.routeKey || event.routeKey || '';
       if (route.includes('/feedback-round')) {

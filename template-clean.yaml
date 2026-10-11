@@ -67,6 +67,18 @@ Parameters:
     Default: 'false'
     Description: Staff-only AI summary model picker (dev only)
 
+  # CALL & ANSWER FOLLOW-UP ASKS (docs/design/ca-followup-asks). Only
+  # buildspec-dev.yml passes 'on'; test and prod take this default, and with it
+  # no suggestion call is made, the follow-up routes answer 404 and
+  # next-question.js reads nothing extra. Read as FOLLOWUP_ASKS_ENABLED by the
+  # get-ai-summary, comments and next-question functions.
+  # tests/followup-switch.js holds that.
+  FollowUpAsks:
+    Type: String
+    AllowedValues: ['on', 'off']
+    Default: 'off'
+    Description: Call and Answer follow-up asks after the read (dev only)
+
   # The Anthropic API, through Workload Identity Federation: each model-calling
   # function's role signs in with an AWS STS web identity token, never a stored
   # key (anthropic-messages.js). Four ids from the owner's Claude Console
@@ -2852,7 +2864,20 @@ Resources:
       Handler: next-question.handler
       Runtime: nodejs22.x
       Timeout: 30
+      Environment:
+        Variables:
+          # 'on' on dev only (FollowUpAsks): advancing closes a live follow-up
+          # with its count first. Off, nothing extra is read.
+          FOLLOWUP_ASKS_ENABLED: !Ref FollowUpAsks
       Policies:
+        # Closing a live follow-up counts its answers and seals the count
+        # (ENCRYPTED_FIELDS.followup), so this function unwraps the session's
+        # org data key — ONLY with an orgId encryption context.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:
@@ -3449,6 +3474,9 @@ Resources:
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
           # 'true' on dev only (AiModelPicker); read by summary-models.js.
           AI_MODEL_PICKER: !Ref AiModelPicker
+          # 'on' on dev only (FollowUpAsks): the worker makes the follow-up
+          # suggestions after the read (followup-worker.js).
+          FOLLOWUP_ASKS_ENABLED: !Ref FollowUpAsks
           # Workload Identity Federation ids for the Anthropic API (not
           # secrets): the picker and the Claude models switch. Empty unless
           # the tier's buildspec passes all four.
@@ -4068,6 +4096,9 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
           WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+          # 'on' on dev only (FollowUpAsks): the follow-up routes below answer;
+          # off, every one of them is a 404 (followups.js).
+          FOLLOWUP_ASKS_ENABLED: !Ref FollowUpAsks
       Policies:
         # A comment is customer-authored prose about a named person's response —
         # Text, AnchorExcerpt and AnchorLabel are all ciphertext at rest
@@ -4124,6 +4155,42 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/feedback-round
             Method: GET
+        # CALL & ANSWER FOLLOW-UP ASKS (game/followups.js), on this function
+        # because they replace "Request feedback" with the comments kept
+        # inside, and because the stack is near its resource limit: four route
+        # events, no new function. The HOST's family carries Cognito, and
+        # followups.js asks callerMayDriveSession; authorizer.js names it for
+        # hosts|admins. The PHONES' family is public, as /comments is, and
+        # gated in the handler as writeComment is: the round on RESULTS, the
+        # ask live, a PLAYER# row and its ClientId.
+        FollowUpsHostGetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followups/{proxy+}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        FollowUpsHostPostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followups/{proxy+}
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        FollowUpsPlayGetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followup-play/{proxy+}
+            Method: GET
+        FollowUpsPlayPostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followup-play/{proxy+}
+            Method: POST
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName

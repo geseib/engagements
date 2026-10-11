@@ -272,6 +272,9 @@ const decode = (res) => JSON.parse(new TextDecoder().decode(res.body));
     'lambda-functions/game/get-ai-summary.js',
     'lambda-functions/game/get-results.js',
     'lambda-functions/game/draft-briefing.js',
+    // Call & Answer follow-up asks (docs/design/ca-followup-asks): Sonnet 4.6,
+    // switched to Sonnet 5.5; its request is pinned by tests/followup-asks-call.js.
+    'lambda-functions/game/followup-asks.js',
     'lambda-functions/admin/ai-generate-prompt.js',
     'lambda-functions/admin/ai-prompt-advisor.js',
     'lambda-functions/admin/shared/structured-generation.js',

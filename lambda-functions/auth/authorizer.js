@@ -673,6 +673,19 @@ function requiredGroupsForRoute(method, path) {
   if (path === 'games/{gameId}/build/{proxy+}') {
     return ['hosts', 'admins'];
   }
+  // ── CALL & ANSWER FOLLOW-UP ASKS, THE HOST'S FAMILY ──────────────────────
+  //
+  // `GET /games/{gameId}/followups/{proxy+}` returns the round's suggestions
+  // with the host-only `why` and every ask with its live count; the POSTs send,
+  // close and cancel. Named here for the reason the build routes are: the
+  // generic "GET + games is public" rule below would otherwise admit any pool
+  // account. The phones use the separate, unauthorized `/followup-play/`
+  // routes. game/followups.js additionally asks callerMayDriveSession.
+  // The template AND a concrete path, since the handler falls back to
+  // `rawPath` (a real id and a real proxy tail) when `routeKey` is absent.
+  if (path === 'games/{gameId}/followups/{proxy+}' || /^games\/[^/]+\/followups\/.+$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // ── A SURVEY'S HOST READS ────────────────────────────────────────────────
   //
   // `GET /games/{gameId}/survey/progress` and `/survey/people` say who has and

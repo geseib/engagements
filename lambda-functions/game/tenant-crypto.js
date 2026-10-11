@@ -545,6 +545,20 @@ const ENCRYPTED_FIELDS = Object.freeze({
   buildPoint: Object.freeze(['Text', 'Detail', 'Sources', 'About']),
   buildPointReq: Object.freeze(['Subject']),
   buildRun: Object.freeze(['Items']),
+
+  /** CALL & ANSWER FOLLOW-UP ASKS (docs/design/ca-followup-asks SPEC §5): one
+   *  question the host sends the room after a round's read. Three row kinds in
+   *  the session's own partition, all under this one entity:
+   *    FOLLOWUP#nnn#SUGGESTED            `Asks` — the checked suggestions,
+   *                                      words copied from the room's answers;
+   *    FOLLOWUP#nnn#ASK#<id>             `Statement`, `Question`, `Options`
+   *                                      and the frozen `Tally` (for a later
+   *                                      open ask, the room's own sentences);
+   *    FOLLOWUP#nnn#ASK#<id>#A#<name>    `Value` and `Text`, one person's answer.
+   *  `Kind`, `Status`, `Origin`, `FromAnswers`, the counts of drops and marks,
+   *  the times, `Model` and `PlayerName` (plaintext on every player row) are
+   *  structure and stay readable. */
+  followup: Object.freeze(['Asks', 'Statement', 'Question', 'Options', 'Tally', 'Value', 'Text']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────
