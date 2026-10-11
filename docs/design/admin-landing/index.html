@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Console overview · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* CONSOLE OVERVIEW (owner, 2026-10-11). Design only; nothing in src/.
+   The console shell is the shipped one (components/AdminShell.jsx/.css):
+   brand, topbar, left nav, work head, one scrolling work body. Two things are
+   new: the SCOPE ROW under the topbar (it replaces the OrgSwitcher chip) and
+   the OVERVIEW section (the landing page for each scope).
+   Laptop ladder only: 12 / 13 / 15 / 19 / 24 / 30, rows 36px.
+   One orange element per frame: the next thing to do. Every other accent is
+   blue (people waiting), red (something is stuck) or grey (for your info). */
+
+body.is-solo .frame-h,body.is-solo .sec,body.is-solo .qs,body.is-solo .tru{display:none !important}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:100ch}
+.frame-h p b{color:var(--text)}
+.frame-h .rec{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--m-success-text);border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green)}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:100ch}
+.sec p b{color:var(--text)}
+.lab{font:700 13px/1.3 var(--font-ui);color:var(--muted);margin:16px 0 8px}
+
+/* ---- the console frame (laptop, 1280 x 820, scaled by mock.js) ---------- */
+.con{position:relative;width:1280px;height:820px;display:grid;grid-template-columns:212px minmax(0,1fr);
+  grid-template-rows:48px 46px minmax(0,1fr);grid-template-areas:"brand top" "scope scope" "nav work";
+  background:var(--bg);border-radius:10px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.con--tall{height:980px}
+.c-brand{grid-area:brand;display:flex;align-items:center;gap:9px;padding:0 14px;background:var(--surface);border-right:1px solid var(--m-rule);border-bottom:1px solid var(--m-rule)}
+.c-brand .mk{width:22px;height:22px;border-radius:6px;background:linear-gradient(145deg,var(--primary),var(--primary-deep))}
+.c-brand .wd{font:800 13px/1 var(--font-display);letter-spacing:.1em;text-transform:uppercase}
+.c-top{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--m-rule);min-width:0}
+.c-top .sp{flex:1}
+.envchip{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid rgba(124,167,230,.5);color:var(--secondary)}
+.who{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);white-space:nowrap}
+.who .av{width:24px;height:24px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--text)}
+.who a{color:var(--secondary);text-decoration:none;font-weight:600}
+
+/* ---- THE SCOPE ROW: one switcher, tabs with counts --------------------- */
+.scopes{grid-area:scope;display:flex;align-items:stretch;gap:2px;padding:0 12px;background:#13203A;border-bottom:1px solid var(--m-rule);min-width:0;position:relative}
+.stab{display:flex;align-items:center;gap:8px;padding:0 12px;min-width:0;max-width:280px;color:var(--muted);
+  font:600 14px/1 var(--font-ui);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;cursor:pointer}
+.stab .nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.stab .ti{flex:none;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;background:var(--surface-2);color:var(--text);font:800 11px/1 var(--font-ui);letter-spacing:.02em}
+.stab .ti--me{border-radius:50%}
+.stab .ti--eng{background:rgba(124,167,230,.18);color:var(--secondary)}
+.stab .n{flex:none;display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--surface-2);color:var(--text);font:800 12px/1 var(--font-ui)}
+.stab .rl{flex:none;color:var(--muted);font-weight:500;font-size:12px}
+.stab.is-on{color:var(--text);border-bottom-color:var(--secondary);background:rgba(124,167,230,.07)}
+.stab:hover{color:var(--text)}
+.stab-sep{width:1px;margin:10px 6px;background:var(--m-rule)}
+.stab--more{color:var(--text)}
+.stab--add{color:var(--secondary);font-weight:600}
+.scopes .grow{flex:1}
+.smenu{position:absolute;top:44px;z-index:5;width:360px;background:var(--m-drawer);border:1px solid rgba(155,168,190,.45);border-radius:10px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.smenu .h{font:700 12px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:9px 10px 6px}
+.smenu .it{display:flex;align-items:center;gap:9px;min-height:36px;padding:0 10px;border-radius:6px;font-size:15px}
+.smenu .it:hover,.smenu .it.is-f{background:rgba(155,168,190,.08)}
+.smenu .it .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.smenu .it .rl{color:var(--muted);font-size:12px}
+.smenu .it .n{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--surface-2);font:800 12px/1 var(--font-ui)}
+.smenu .ti{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;background:var(--surface-2);font:800 11px/1 var(--font-ui)}
+.smenu .sep{height:1px;background:var(--m-rule);margin:5px 4px}
+.smenu .add{color:var(--secondary);font-weight:600}
+
+/* ---- nav (as shipped, trimmed from docs/design/observability) ---------- */
+.c-nav{grid-area:nav;background:var(--surface);border-right:1px solid var(--m-rule);padding:8px 8px;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.c-nav .sec-l{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);opacity:.8;padding:12px 8px 5px;font-weight:700}
+.c-nav .it{display:flex;align-items:center;gap:9px;padding:0 9px;height:32px;border-radius:6px;color:var(--muted);font-size:15px;border:1px solid transparent}
+.c-nav .it .l{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-nav .it .g{width:16px;height:16px;border-radius:4px;border:1.6px solid currentColor;opacity:.75;flex:none}
+.c-nav .it .ct{font-size:12px;color:var(--muted)}
+.c-nav .it .bd{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--secondary);color:var(--bg);font:800 12px/1 var(--font-ui)}
+.c-nav .it.is-on{background:rgba(246,169,76,.10);border-color:rgba(246,169,76,.34);color:var(--text);font-weight:600}
+.c-nav .foot{margin-top:auto;border-top:1px solid var(--m-rule);padding-top:8px}
+
+/* ---- work --------------------------------------------------------------- */
+.c-work{grid-area:work;min-width:0;min-height:0;display:flex;flex-direction:column}
+.c-head{flex:none;padding:14px 22px 11px;border-bottom:1px solid var(--m-rule)}
+.c-head h1{margin:0;font:800 24px/1.15 var(--font-display)}
+.c-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.c-body{flex:1;min-height:0;overflow:auto;padding:16px 22px 40px}
+
+/* =========================================================================
+   THE OVERVIEW PAGE — would ship as components/OverviewPanel.css, scope .ovw
+   ========================================================================= */
+.ovw{max-width:1000px;font-variant-numeric:tabular-nums}
+.ovw-h2{display:flex;align-items:baseline;gap:10px;margin:0 0 10px;font:700 19px/1.2 var(--font-display)}
+.ovw-h2 small{font:500 13px/1 var(--font-ui);color:var(--muted)}
+.ovw-h2 a{margin-left:auto;font:600 13px/1 var(--font-ui);color:var(--secondary);text-decoration:none}
+.ovw-alerts{display:flex;flex-direction:column;gap:10px;margin:0 0 26px}
+
+/* one alert: a box with a count and a plain title; the head is the toggle */
+.al{border:1px solid var(--m-rule);border-left:3px solid var(--muted);border-radius:10px;background:var(--surface);min-width:0}
+.al--people{border-left-color:var(--secondary)}
+.al--stuck{border-left-color:var(--danger)}
+.al--info{border-left-color:rgba(155,168,190,.45)}
+.al-head{display:flex;align-items:center;gap:14px;padding:10px 14px;min-height:60px;cursor:pointer;min-width:0}
+.al-n{flex:none;min-width:40px;text-align:center;font:800 30px/1 var(--font-display)}
+.al--info .al-n{color:var(--muted)}
+.al-t{flex:1;min-width:0}
+.al-t b{display:block;font:700 15px/1.3 var(--font-ui)}
+.al-t span{display:block;color:var(--muted);font-size:13px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-act{flex:none;display:flex;align-items:center;gap:8px}
+.al-car{flex:none;width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted);font-size:10px}
+.al.is-open .al-car{transform:rotate(180deg)}
+.al-body{border-top:1px solid var(--m-rule)}
+.al-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;padding:9px 14px;min-height:52px;border-bottom:1px solid var(--m-rule)}
+.al-row .who2{flex:1 1 240px;min-width:0}
+.al-row .who2 b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-row .who2 span{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-row .acts{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.al-row .acts .btn{min-height:32px;padding:5px 12px;font-size:13px}
+.al-row .note{flex-basis:100%;margin:0;padding:8px 10px;border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);line-height:1.45}
+.al-row .note i{color:var(--muted);font-style:normal}
+.al-foot{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:13px;color:var(--muted)}
+.al-foot a{margin-left:auto;color:var(--secondary);font-weight:600;text-decoration:none}
+.al-why{margin:0;padding:9px 14px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--m-rule);line-height:1.45}
+.al-why b{color:var(--text);font-weight:600}
+
+/* the empty state */
+.al-none{display:flex;align-items:center;gap:14px;padding:16px 16px;border:1px solid rgba(79,178,134,.45);border-radius:10px;background:linear-gradient(var(--m-tint-green),var(--m-tint-green)),var(--surface)}
+.al-none .ck{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:rgba(79,178,134,.2);color:var(--m-success-text);font:800 17px/1 var(--font-ui)}
+.al-none b{display:block;font:700 19px/1.25 var(--font-ui)}
+.al-none span{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+
+/* the stats strip — the Observability tile, as shipped (.pobs-tile) */
+.ovw-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ovw-tiles--5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.tile{min-width:0;padding:12px 14px 13px;border:1px solid var(--m-rule);border-radius:8px;background:var(--surface)}
+.tile .l{display:block;color:var(--muted);font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .v{display:block;margin:6px 0 4px;font:800 30px/1.15 var(--font-display);letter-spacing:-.01em}
+.tile .v small{font:600 15px/1 var(--font-ui);color:var(--muted);letter-spacing:0}
+.tile .s{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .meter{height:6px;border-radius:3px;background:var(--surface-2);margin:7px 0 2px;overflow:hidden}
+.tile .meter i{display:block;height:100%;background:var(--secondary);border-radius:3px}
+.ovw-note{margin:12px 0 0;font-size:13px;color:var(--muted)}
+
+/* ---- true-size frames: tablet 660 and phone 375 (NOT scaled) ----------- */
+.tru{display:flex;gap:30px;flex-wrap:wrap;padding:10px 20px;align-items:flex-start}
+.vp{border:1px dashed rgba(155,168,190,.45);border-radius:10px;background:var(--bg);position:relative;overflow:hidden}
+.vp .tag{position:absolute;bottom:8px;right:12px;font:700 12px/1 var(--font-ui);color:var(--muted);letter-spacing:.1em;text-transform:uppercase;z-index:2}
+.vp--660{width:660px}
+.vp--375{width:375px}
+.vp--1280{width:1280px}
+.ph-top{display:flex;align-items:center;gap:10px;height:48px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--m-rule)}
+.ph-top .mk{width:22px;height:22px;border-radius:6px;background:linear-gradient(145deg,var(--primary),var(--primary-deep));flex:none}
+.ph-top .sp{flex:1}
+.ph-top .mn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border:1px solid var(--m-rule);border-radius:8px;font:600 13px/1 var(--font-ui)}
+.ph-scope{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 16px;background:#13203A;border-bottom:1px solid var(--m-rule);min-width:0}
+.ph-scope .ti{flex:none;width:24px;height:24px;border-radius:6px;display:grid;place-items:center;background:var(--surface-2);font:800 11px/1 var(--font-ui)}
+.ph-scope .nm{flex:1;min-width:0;font:700 15px/1.2 var(--font-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-scope .nm small{display:block;font:500 12px/1.3 var(--font-ui);color:var(--muted)}
+.ph-scope .else{flex:none;font:600 12px/1 var(--font-ui);color:var(--secondary);border:1px solid rgba(124,167,230,.5);border-radius:999px;padding:5px 9px;background:var(--m-tint-blue)}
+.ph-scope .cv{flex:none;color:var(--muted)}
+.ph-body{padding:14px 16px 24px}
+.ph-body h1{margin:0 0 2px;font:800 24px/1.15 var(--font-display)}
+.ph-body .sub{margin:0 0 14px;color:var(--muted);font-size:13px}
+.vp--375 .ovw-tiles,.vp--375 .ovw-tiles--5{grid-template-columns:repeat(2,minmax(0,1fr))}
+.vp--375 .al-t span,.vp--375 .tile .s{white-space:normal}
+.vp--375 .al-head{flex-wrap:wrap;gap:8px 12px;padding:10px 12px}
+.vp--375 .al-t{flex-basis:calc(100% - 100px)}
+.vp--375 .al-act{margin-left:52px}
+.vp--375 .al-row{padding:10px 12px}
+.vp--375 .al-row .acts{margin-left:0;width:100%}
+.vp--375 .al-row .acts .btn{flex:1;justify-content:center;min-height:40px;font-size:15px}
+.vp--660 .ovw-tiles,.vp--660 .ovw-tiles--5{grid-template-columns:repeat(2,minmax(0,1fr))}
+.sheet2{background:var(--m-drawer);border-top:1px solid rgba(155,168,190,.45);border-radius:14px 14px 0 0;padding:8px 8px 16px;box-shadow:0 -12px 40px rgba(0,0,0,.5)}
+.sheet2 .grab{width:40px;height:4px;border-radius:2px;background:var(--surface-2);margin:2px auto 8px}
+.sheet2 .smenu{position:static;width:auto;border:0;box-shadow:none;background:transparent;padding:0}
+.sheet2 .smenu .it{min-height:48px}
+.dim{position:relative}
+.dim::after{content:"";position:absolute;inset:0;background:var(--m-scrim)}
+.measure{font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--m-success-text);margin:8px 0 0}
+
+/* ---- tables in the notes ------------------------------------------------ */
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45}
+.vt td:first-child{font-weight:700}
+.vt code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px;word-break:break-word}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:100ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+@media (max-width:700px){.vt{font-size:13px}.vt th,.vt td{padding:8px 6px}}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Console · Overview</b>
+<a href="#f1">F1 Personal</a><a href="#f2">F2 Team owner</a><a href="#f3">F3 Approvals open</a><a href="#f4">F4 Three teams</a><a href="#f5">F5 Engage staff</a><a href="#f6">F6 Nothing waiting</a><a href="#sw">Switcher: 1, 3, 8 teams</a><a href="#fit">660 and 375</a><a href="#why">Why tabs</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="SPEC.md">SPEC.md</a><a href="../observability/index.html">Observability</a><a href="../usage-stats/index.html">Activity</a></nav>
+<div class="pg-title"><h1>Console overview: what needs you, in each place you work</h1>
+<p>Owner, 2026-10-11. Every scope gets a first screen called <b style="color:var(--text)">Overview</b>: boxes for what is waiting on you, each with a count and a plain title, that open in place with the actions beside each row; then this month in numbers, in the Observability tiles. One row of tabs at the top names every place you work (Personal, each team, and Engage for staff), with how many things wait in each. It replaces the organisation chip; there is still one switcher.</p></div>
+
+<!-- ===================================================================== F1 -->
+<div class="frame-h" id="f1"><h2>F1 · Personal</h2><p>A host with a personal space and one team. The scope row shows both, and the team's tab says <b>2</b> things wait there, so nothing is hidden behind the tab you are not on. An invitation to a third team is the top box; Accept is the one orange button.</p></div>
+<div class="fit"><div class="fit-box"><div class="con">
+<div class="c-brand"><span class="mk"></span><span class="wd">Engage</span></div>
+<div class="c-top"><span class="sp"></span><span class="envchip">Dev</span><span class="who"><span class="av">MR</span>Maya Reyes<a>Host ↗</a><a>Sign out</a></span></div>
+<div class="scopes">
+<span class="stab is-on"><span class="ti ti--me">MR</span><span class="nm">Personal</span><span class="n">3</span></span>
+<span class="stab"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="n">2</span></span>
+<span class="grow"></span><span class="stab stab--add">+ New team</span>
+</div>
+<nav class="c-nav"><div class="sec-l">Your space</div>
+<span class="it is-on"><i class="g"></i><span class="l">Overview</span></span>
+<span class="it"><i class="g"></i><span class="l">Question sets</span><span class="bd">1</span></span>
+<span class="it"><i class="g"></i><span class="l">Sessions</span></span>
+<span class="it"><i class="g"></i><span class="l">Public library</span></span>
+<span class="it"><i class="g"></i><span class="l">Prompts</span></span>
+<div class="sec-l">Account</div>
+<span class="it"><i class="g"></i><span class="l">Plan &amp; usage</span></span>
+<span class="it"><i class="g"></i><span class="l">Data &amp; privacy</span></span>
+<div class="foot"><span class="it"><i class="g"></i><span class="l">Settings</span></span></div></nav>
+<main class="c-work"><div class="c-head"><h1>Overview</h1><p>Your own space. What is waiting on you, and this month in numbers.</p></div>
+<div class="c-body"><div class="ovw">
+<h2 class="ovw-h2">Needs you <small>3 things</small></h2>
+<div class="ovw-alerts">
+ <div class="al al--people is-open">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Team invitation</b><span>Riverside Church invited you as a member · 3 days left</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+  <div class="al-body">
+   <div class="al-row"><span class="who2"><b>Riverside Church</b><span>From Dan Okafor · member · 3 days left</span></span><span class="acts"><span class="btn btn--primary">Accept</span></span></div>
+   <div class="al-foot">There is no decline. An invitation you leave runs out on its own.</div>
+  </div>
+ </div>
+ <div class="al al--stuck">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Sent back by the check</b><span>“Lent study, week 3” was not published. Read the note.</span></span><span class="al-act"><span class="btn btn--sm">Open the set</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--info">
+  <div class="al-head"><span class="al-n">4</span><span class="al-t"><b>Free plan: 4 of 5 sessions used</b><span>The fifth is the last this month. It resets on 1 November.</span></span><span class="al-act"><span class="btn btn--sm btn--ghost">See plans</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+</div>
+<h2 class="ovw-h2">October so far <small>as of 11 Oct, 09:40</small><a>Plan &amp; usage ›</a></h2>
+<div class="ovw-tiles">
+ <div class="tile"><span class="l">Sessions counted</span><span class="v">4 <small>of 5</small></span><div class="meter"><i style="width:80%"></i></div><span class="s">Free plan · resets 1 Nov</span></div>
+ <div class="tile"><span class="l">Participants</span><span class="v">96</span><span class="s">one per person per session</span></div>
+ <div class="tile"><span class="l">Questions asked</span><span class="v">38</span><span class="s">put to the room</span></div>
+ <div class="tile"><span class="l">Question sets</span><span class="v">4 <small>of 5</small></span><span class="s">in your library</span></div>
+</div>
+</div></div></main>
+</div></div></div>
+
+<!-- ===================================================================== F2 -->
+<div class="frame-h" id="f2"><h2>F2 · Team, owner: three people waiting, collapsed</h2><p>The boxes are in urgency order: <b>people waiting on you</b> first, then <b>something stuck</b>, then <b>for your information</b>. Collapsed, the top box carries the screen's one orange button, <b>Review</b>, which opens it. "Awaiting approval" here is NEW: see SPEC §3, open question 1.</p></div>
+<div class="fit"><div class="fit-box"><div class="con">
+<div class="c-brand"><span class="mk"></span><span class="wd">Engage</span></div>
+<div class="c-top"><span class="sp"></span><span class="envchip">Dev</span><span class="who"><span class="av">MR</span>Maya Reyes<a>Host ↗</a><a>Sign out</a></span></div>
+<div class="scopes">
+<span class="stab"><span class="ti ti--me">MR</span><span class="nm">Personal</span><span class="n">3</span></span>
+<span class="stab is-on"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="rl">Owner</span><span class="n">6</span></span>
+<span class="grow"></span><span class="stab stab--add">+ New team</span>
+</div>
+<nav class="c-nav"><div class="sec-l">Northwind Learning</div>
+<span class="it is-on"><i class="g"></i><span class="l">Overview</span></span>
+<span class="it"><i class="g"></i><span class="l">Question sets</span><span class="ct">23</span></span>
+<span class="it"><i class="g"></i><span class="l">Sessions</span></span>
+<span class="it"><i class="g"></i><span class="l">Public library</span></span>
+<span class="it"><i class="g"></i><span class="l">Prompts</span></span>
+<div class="sec-l">Team</div>
+<span class="it"><i class="g"></i><span class="l">Members</span><span class="bd">3</span></span>
+<span class="it"><i class="g"></i><span class="l">Activity</span></span>
+<span class="it"><i class="g"></i><span class="l">Plan &amp; usage</span></span>
+<span class="it"><i class="g"></i><span class="l">Data &amp; privacy</span></span>
+<div class="foot"><span class="it"><i class="g"></i><span class="l">Settings</span></span></div></nav>
+<main class="c-work"><div class="c-head"><h1>Overview</h1><p>Northwind Learning. What is waiting on you, and this month in numbers.</p></div>
+<div class="c-body"><div class="ovw">
+<h2 class="ovw-h2">Needs you <small>6 things</small></h2>
+<div class="ovw-alerts">
+ <div class="al al--people">
+  <div class="al-head"><span class="al-n">3</span><span class="al-t"><b>Awaiting approval</b><span>Joined the team, cannot host yet · oldest 2 days</span></span><span class="al-act"><span class="btn btn--sm btn--primary">Review</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--people">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Invitation running out</b><span>lee.park@northwind.org has not accepted · 1 day left</span></span><span class="al-act"><span class="btn btn--sm">Copy link</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--stuck">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Sent back by the check</b><span>“Onboarding quiz v2” was not published</span></span><span class="al-act"><span class="btn btn--sm">Open the set</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--info">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Engage staff opened your content</b><span>Support, 9 Oct, with a written reason. It is in your log.</span></span><span class="al-act"><span class="btn btn--sm btn--ghost">Read the log</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+</div>
+<h2 class="ovw-h2">October so far <small>as of 11 Oct, 09:40</small><a>Activity ›</a></h2>
+<div class="ovw-tiles">
+ <div class="tile"><span class="l">Sessions counted</span><span class="v">31</span><span class="s">36 created · 33 started</span></div>
+ <div class="tile"><span class="l">Participants</span><span class="v">612</span><span class="s">one per person per session</span></div>
+ <div class="tile"><span class="l">Questions asked</span><span class="v">284</span><span class="s">put to the room</span></div>
+ <div class="tile"><span class="l">This month so far</span><span class="v">$7.75</span><span class="s">Organisation plan</span></div>
+</div>
+</div></div></main>
+</div></div></div>
+
+<!-- ===================================================================== F3 -->
+<div class="frame-h" id="f3"><h2>F3 · Team, owner: "Awaiting approval" open</h2><p>Opened in place; nothing moves to another screen. Each row says who, how they came in and how long they have waited, with the two actions beside it. The orange moves to the oldest row's <b>Approve</b>, the next thing to do. Not yet asks for a short reason in the row (the person reads it) and is never a delete. The foot links to the full list on Members.</p></div>
+<div class="fit"><div class="fit-box"><div class="con">
+<div class="c-brand"><span class="mk"></span><span class="wd">Engage</span></div>
+<div class="c-top"><span class="sp"></span><span class="envchip">Dev</span><span class="who"><span class="av">MR</span>Maya Reyes<a>Host ↗</a><a>Sign out</a></span></div>
+<div class="scopes">
+<span class="stab"><span class="ti ti--me">MR</span><span class="nm">Personal</span><span class="n">3</span></span>
+<span class="stab is-on"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="rl">Owner</span><span class="n">6</span></span>
+<span class="grow"></span><span class="stab stab--add">+ New team</span>
+</div>
+<nav class="c-nav"><div class="sec-l">Northwind Learning</div>
+<span class="it is-on"><i class="g"></i><span class="l">Overview</span></span>
+<span class="it"><i class="g"></i><span class="l">Question sets</span><span class="ct">23</span></span>
+<span class="it"><i class="g"></i><span class="l">Sessions</span></span>
+<span class="it"><i class="g"></i><span class="l">Public library</span></span>
+<span class="it"><i class="g"></i><span class="l">Prompts</span></span>
+<div class="sec-l">Team</div>
+<span class="it"><i class="g"></i><span class="l">Members</span><span class="bd">3</span></span>
+<span class="it"><i class="g"></i><span class="l">Activity</span></span>
+<span class="it"><i class="g"></i><span class="l">Plan &amp; usage</span></span>
+<span class="it"><i class="g"></i><span class="l">Data &amp; privacy</span></span>
+<div class="foot"><span class="it"><i class="g"></i><span class="l">Settings</span></span></div></nav>
+<main class="c-work"><div class="c-head"><h1>Overview</h1><p>Northwind Learning. What is waiting on you, and this month in numbers.</p></div>
+<div class="c-body"><div class="ovw">
+<h2 class="ovw-h2">Needs you <small>6 things</small></h2>
+<div class="ovw-alerts">
+ <div class="al al--people is-open">
+  <div class="al-head"><span class="al-n">3</span><span class="al-t"><b>Awaiting approval</b><span>Joined the team, cannot host yet · oldest 2 days</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+  <div class="al-body">
+   <p class="al-why">These people accepted your invitation. <b>Approve</b> lets them host sessions for Northwind Learning. Engage is told and can still refuse.</p>
+   <div class="al-row"><span class="who2"><b>Priya Shah</b><span>priya.shah@northwind.org · accepted 9 Oct · waiting 2 days</span></span><span class="acts"><span class="btn btn--ghost">Not yet</span><span class="btn btn--primary">Approve</span></span></div>
+   <div class="al-row"><span class="who2"><b>Tom Becker</b><span>tom.becker@northwind.org · accepted 10 Oct · waiting 1 day</span></span><span class="acts"><span class="btn btn--ghost">Not yet</span><span class="btn">Approve</span></span></div>
+   <div class="al-row"><span class="who2"><b>Ana Lima</b><span>ana@limafamily.net · accepted today</span></span><span class="acts"><span class="btn btn--ghost">Not yet</span><span class="btn">Approve</span></span>
+    <p class="note"><i>Not yet · they read this:</i> “Please use your Northwind address and I will approve it.” <span class="btn btn--sm btn--ghost" style="float:right">Send</span></p></div>
+   <div class="al-foot">Showing all 3<a>Members ›</a></div>
+  </div>
+ </div>
+ <div class="al al--people">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Invitation running out</b><span>lee.park@northwind.org has not accepted · 1 day left</span></span><span class="al-act"><span class="btn btn--sm">Copy link</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--stuck">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Sent back by the check</b><span>“Onboarding quiz v2” was not published</span></span><span class="al-act"><span class="btn btn--sm">Open the set</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--info">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Engage staff opened your content</b><span>Support, 9 Oct, with a written reason. It is in your log.</span></span><span class="al-act"><span class="btn btn--sm btn--ghost">Read the log</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+</div>
+</div></div></main>
+</div></div></div>
+
+<!-- ===================================================================== F4 -->
+<div class="frame-h" id="f4"><h2>F4 · A member of three teams, on one where they are a member</h2><p>Three teams fit as tabs at laptop width, each with its count. On a team where you are a <b>member</b>, the Overview shows only what is yours to act on, and two tiles the console already has (no Activity: that is owners and admins, by the owner's ruling of 2026-10-11). Riverside's tab has no number, so there is nothing to look at there.</p></div>
+<div class="fit"><div class="fit-box"><div class="con">
+<div class="c-brand"><span class="mk"></span><span class="wd">Engage</span></div>
+<div class="c-top"><span class="sp"></span><span class="envchip">Dev</span><span class="who"><span class="av">JA</span>Jo Adeyemi<a>Host ↗</a><a>Sign out</a></span></div>
+<div class="scopes">
+<span class="stab"><span class="ti ti--me">JA</span><span class="nm">Personal</span></span>
+<span class="stab"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="n">2</span></span>
+<span class="stab is-on"><span class="ti">HS</span><span class="nm">Harbour School</span><span class="rl">Member</span><span class="n">1</span></span>
+<span class="stab"><span class="ti">RC</span><span class="nm">Riverside Church</span></span>
+<span class="grow"></span><span class="stab stab--add">+ New team</span>
+</div>
+<nav class="c-nav"><div class="sec-l">Harbour School</div>
+<span class="it is-on"><i class="g"></i><span class="l">Overview</span></span>
+<span class="it"><i class="g"></i><span class="l">Question sets</span><span class="ct">41</span></span>
+<span class="it"><i class="g"></i><span class="l">Sessions</span></span>
+<span class="it"><i class="g"></i><span class="l">Public library</span></span>
+<div class="sec-l">Team</div>
+<span class="it"><i class="g"></i><span class="l">Members</span></span>
+<div class="foot"><span class="it"><i class="g"></i><span class="l">Settings</span></span></div></nav>
+<main class="c-work"><div class="c-head"><h1>Overview</h1><p>Harbour School. You are a member here.</p></div>
+<div class="c-body"><div class="ovw">
+<h2 class="ovw-h2">Needs you <small>1 thing</small></h2>
+<div class="ovw-alerts">
+ <div class="al al--info is-open">
+  <div class="al-head"><span class="al-n">2</span><span class="al-t"><b>Reports deleted soon</b><span>Two saved reports reach 90 days this week</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+  <div class="al-body">
+   <div class="al-row"><span class="who2"><b>Year 9 parents' evening</b><span>Saved 15 Jul · deleted 13 Oct</span></span><span class="acts"><span class="btn btn--primary">Download</span></span></div>
+   <div class="al-row"><span class="who2"><b>Staff INSET: feedback round</b><span>Saved 16 Jul · deleted 14 Oct</span></span><span class="acts"><span class="btn">Download</span></span></div>
+   <div class="al-foot">Only reports you saved are listed.<a>Sessions › Reports</a></div>
+  </div>
+ </div>
+</div>
+<h2 class="ovw-h2">Harbour School</h2>
+<div class="ovw-tiles" style="grid-template-columns:repeat(2,minmax(0,220px))">
+ <div class="tile"><span class="l">Question sets</span><span class="v">41</span><span class="s">in the team library</span></div>
+ <div class="tile"><span class="l">Sessions kept</span><span class="v">12</span><span class="s">kept 90 days from creation</span></div>
+</div>
+<p class="ovw-note">Monthly numbers are shown to the team's owners and admins.</p>
+</div></div></main>
+</div></div></div>
+
+<!-- ===================================================================== F5 -->
+<div class="frame-h" id="f5"><h2>F5 · Engage staff, on the Engage tab</h2><p>The Engage tab sits at the right end, after a rule, with a lock tile: it is a different hat, not a team. Its Overview gathers the queues that today are only visible after opening each section (the Plan requests badge is empty until that section has been opened once, <code>AdminPage.jsx:1552</code> with <code>PlanRequestsPanel.jsx</code> setting it). Accounts open; Approve as host is the orange.</p></div>
+<div class="fit"><div class="fit-box"><div class="con con--tall">
+<div class="c-brand"><span class="mk"></span><span class="wd">Engage</span></div>
+<div class="c-top"><span class="sp"></span><span class="envchip">Dev</span><span class="who"><span class="av">GS</span>George Seib<a>Host ↗</a><a>Sign out</a></span></div>
+<div class="scopes">
+<span class="stab"><span class="ti ti--me">GS</span><span class="nm">Personal</span></span>
+<span class="stab"><span class="ti">SE</span><span class="nm">Seib Tribe</span><span class="n">1</span></span>
+<span class="grow"></span><span class="stab stab--add">+ New team</span>
+<span class="stab-sep"></span>
+<span class="stab is-on"><span class="ti ti--eng">◆</span><span class="nm">Engage</span><span class="rl">Staff</span><span class="n">10</span></span>
+</div>
+<nav class="c-nav"><div class="sec-l">Engage</div>
+<span class="it is-on"><i class="g"></i><span class="l">Overview</span></span>
+<span class="it"><i class="g"></i><span class="l">Organisations</span></span>
+<span class="it"><i class="g"></i><span class="l">Observability</span></span>
+<span class="it"><i class="g"></i><span class="l">Plan requests</span><span class="bd">2</span></span>
+<span class="it"><i class="g"></i><span class="l">Discount codes</span></span>
+<span class="it"><i class="g"></i><span class="l">Shared library</span></span>
+<span class="it"><i class="g"></i><span class="l">Prompts</span></span>
+<span class="it"><i class="g"></i><span class="l">Public library</span></span>
+<span class="it"><i class="g"></i><span class="l">Moderation</span><span class="ct">3</span></span>
+<span class="it"><i class="g"></i><span class="l">Accounts</span><span class="bd">4</span></span>
+<span class="it"><i class="g"></i><span class="l">Archive</span></span>
+<span class="it"><i class="g"></i><span class="l">Engage settings</span></span>
+<div class="foot"><span class="it"><i class="g"></i><span class="l">Settings</span></span></div></nav>
+<main class="c-work"><div class="c-head"><h1>Overview</h1><p>Engage. Every queue that waits on staff, and the platform in numbers.</p></div>
+<div class="c-body"><div class="ovw">
+<h2 class="ovw-h2">Needs Engage <small>10 things</small></h2>
+<div class="ovw-alerts">
+ <div class="al al--people is-open">
+  <div class="al-head"><span class="al-n">4</span><span class="al-t"><b>Accounts awaiting approval</b><span>Registered, cannot host yet · oldest 3 days</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+  <div class="al-body">
+   <div class="al-row"><span class="who2"><b>sam.ito@gmail.com</b><span>Registered 8 Oct · email confirmed · no team</span></span><span class="acts"><span class="btn btn--danger">Reject</span><span class="btn btn--primary">Approve as host</span></span></div>
+   <div class="al-row"><span class="who2"><b>k.mensah@harbour.sch.uk</b><span>Registered 9 Oct · email confirmed · in Harbour School</span></span><span class="acts"><span class="btn btn--danger">Reject</span><span class="btn">Approve as host</span></span></div>
+   <div class="al-row"><span class="who2"><b>ola@limafamily.net</b><span>Registered 10 Oct · email not confirmed</span></span><span class="acts"><span class="btn btn--danger">Reject</span><span class="btn">Approve as host</span></span></div>
+   <div class="al-row"><span class="who2"><b>test+44@seibtribe.com</b><span>Registered today · email confirmed · no team</span></span><span class="acts"><span class="btn btn--danger">Reject</span><span class="btn">Approve as host</span></span></div>
+   <div class="al-foot">Reject asks first; the account is kept and can be restored.<a>Accounts ›</a></div>
+  </div>
+ </div>
+ <div class="al al--people">
+  <div class="al-head"><span class="al-n">2</span><span class="al-t"><b>Plan requests</b><span>Harbour School asks for the Organisation plan · Lena Ortiz asks for Standard</span></span><span class="al-act"><span class="btn btn--sm">Decide</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--people">
+  <div class="al-head"><span class="al-n">3</span><span class="al-t"><b>Sets waiting in Moderation</b><span>The check held them for a human · oldest 4 days</span></span><span class="al-act"><span class="btn btn--sm">Review</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+ <div class="al al--stuck">
+  <div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Claude 5.5 is chosen but not connected</b><span>Every call on this tier is answered by the Bedrock models</span></span><span class="al-act"><span class="btn btn--sm btn--ghost">Engage settings</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+ </div>
+</div>
+<h2 class="ovw-h2">Right now <small>as of 11 Oct, 09:40</small><a>Observability ›</a></h2>
+<div class="ovw-tiles">
+ <div class="tile"><span class="l">Accounts</span><span class="v">212</span><span class="s">any status · 4 pending</span></div>
+ <div class="tile"><span class="l">Organisations</span><span class="v">188</span><span class="s">17 teams · 171 personal</span></div>
+ <div class="tile"><span class="l">Sessions counted</span><span class="v">164</span><span class="s">this month, all teams</span></div>
+ <div class="tile"><span class="l">Question sets</span><span class="v">904</span><span class="s">61 Engage · 38 public</span></div>
+</div>
+</div></div></main>
+</div></div></div>
+
+<!-- ===================================================================== F6 -->
+<div class="frame-h" id="f6"><h2>F6 · Nothing waiting</h2><p>One green line says so, in plain words, and the stats rise to meet it. No orange on the screen at all: there is nothing to do next. The scope row carries no numbers either.</p></div>
+<div class="fit"><div class="fit-box"><div class="con" style="height:600px">
+<div class="c-brand"><span class="mk"></span><span class="wd">Engage</span></div>
+<div class="c-top"><span class="sp"></span><span class="envchip">Dev</span><span class="who"><span class="av">MR</span>Maya Reyes<a>Host ↗</a><a>Sign out</a></span></div>
+<div class="scopes">
+<span class="stab"><span class="ti ti--me">MR</span><span class="nm">Personal</span></span>
+<span class="stab is-on"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="rl">Owner</span></span>
+<span class="grow"></span><span class="stab stab--add">+ New team</span>
+</div>
+<nav class="c-nav"><div class="sec-l">Northwind Learning</div>
+<span class="it is-on"><i class="g"></i><span class="l">Overview</span></span>
+<span class="it"><i class="g"></i><span class="l">Question sets</span><span class="ct">23</span></span>
+<span class="it"><i class="g"></i><span class="l">Sessions</span></span>
+<span class="it"><i class="g"></i><span class="l">Public library</span></span>
+<div class="sec-l">Team</div>
+<span class="it"><i class="g"></i><span class="l">Members</span></span>
+<span class="it"><i class="g"></i><span class="l">Activity</span></span>
+<span class="it"><i class="g"></i><span class="l">Plan &amp; usage</span></span>
+<div class="foot"><span class="it"><i class="g"></i><span class="l">Settings</span></span></div></nav>
+<main class="c-work"><div class="c-head"><h1>Overview</h1><p>Northwind Learning. What is waiting on you, and this month in numbers.</p></div>
+<div class="c-body"><div class="ovw">
+<div class="ovw-alerts"><div class="al-none"><span class="ck">✓</span><div><b>Nothing needs you.</b><span>Approvals, invitations and sets sent back will show here when they arrive.</span></div></div></div>
+<h2 class="ovw-h2">October so far <small>as of 11 Oct, 09:40</small><a>Activity ›</a></h2>
+<div class="ovw-tiles">
+ <div class="tile"><span class="l">Sessions counted</span><span class="v">31</span><span class="s">36 created · 33 started</span></div>
+ <div class="tile"><span class="l">Participants</span><span class="v">612</span><span class="s">one per person per session</span></div>
+ <div class="tile"><span class="l">Questions asked</span><span class="v">284</span><span class="s">put to the room</span></div>
+ <div class="tile"><span class="l">This month so far</span><span class="v">$7.75</span><span class="s">Organisation plan</span></div>
+</div>
+</div></div></main>
+</div></div></div>
+
+<!-- ===================================================================== SWITCHER -->
+<section class="sec" id="sw"><h2>The switcher with 1, 3 and 8 teams</h2>
+<p>True size, 1280px wide. The row shows as many tabs as fit, in a fixed order (Personal, then teams A to Z, then Engage), so a team is always in the same place. When they do not fit, the last slot becomes <b>N more</b> with the sum of their counts; the team you are on is always one of the visible tabs. <b>+ New team</b> is where "Create an organisation" lives now (today it is the last item of the chip's menu, <code>OrgSwitcher.jsx:320-332</code>).</p></section>
+<div class="tru" style="overflow-x:auto"><div>
+<div class="lab">Personal only (no team yet). One tab still shows, because + New team is beside it: the row is not a control with one choice.</div>
+<div class="vp vp--1280"><div class="scopes" style="height:46px">
+<span class="stab is-on"><span class="ti ti--me">MR</span><span class="nm">Personal</span></span><span class="grow"></span><span class="stab stab--add">+ New team</span></div></div>
+<div class="lab">Personal and 1 team (most people)</div>
+<div class="vp vp--1280"><div class="scopes" style="height:46px">
+<span class="stab is-on"><span class="ti ti--me">MR</span><span class="nm">Personal</span><span class="n">3</span></span><span class="stab"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="n">2</span></span><span class="grow"></span><span class="stab stab--add">+ New team</span></div></div>
+<div class="lab">Personal and 3 teams</div>
+<div class="vp vp--1280"><div class="scopes" style="height:46px">
+<span class="stab"><span class="ti ti--me">JA</span><span class="nm">Personal</span></span><span class="stab"><span class="ti">HS</span><span class="nm">Harbour School</span><span class="n">1</span></span><span class="stab is-on"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="rl">Admin</span><span class="n">2</span></span><span class="stab"><span class="ti">RC</span><span class="nm">Riverside Church</span></span><span class="grow"></span><span class="stab stab--add">+ New team</span></div></div>
+<div class="lab">Staff with Personal and 8 teams, More open. Three teams fit beside Personal and Engage without cutting a name; the other four are in the menu, A to Z, with their counts. The More button adds them up.</div>
+<div class="vp vp--1280" style="height:380px"><div class="scopes" style="height:46px">
+<span class="stab"><span class="ti ti--me">GS</span><span class="nm">Personal</span></span><span class="stab"><span class="ti">AC</span><span class="nm">Acorn Choir</span></span><span class="stab"><span class="ti">BH</span><span class="nm">Bayview Hospital Training</span><span class="n">4</span></span><span class="stab is-on"><span class="ti">HS</span><span class="nm">Harbour School</span><span class="rl">Owner</span></span><span class="stab stab--more">4 more ▾ <span class="n">3</span></span><span class="grow"></span><span class="stab-sep"></span><span class="stab"><span class="ti ti--eng">◆</span><span class="nm">Engage</span><span class="n">10</span></span>
+<div class="smenu" style="left:640px"><div class="h">More teams</div>
+<div class="it"><span class="ti">LR</span><span class="nm">Lakeside Rotary</span><span class="rl">Member</span></div>
+<div class="it"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="rl">Admin</span><span class="n">2</span></div>
+<div class="it is-f"><span class="ti">RC</span><span class="nm">Riverside Church</span><span class="rl">Member</span></div>
+<div class="it"><span class="ti">SE</span><span class="nm">Seib Tribe</span><span class="rl">Owner</span><span class="n">1</span></div>
+<div class="it"><span class="ti">WC</span><span class="nm">Westfield College Debating Society</span><span class="rl">Admin</span></div>
+<div class="sep"></div><div class="it add">+ New team</div></div></div></div>
+</div></div>
+
+<!-- ===================================================================== FIT -->
+<section class="sec" id="fit"><h2>Tablet (660px) and phone (375px), at true size</h2>
+<p>Below 760px the scope row becomes one full-width button naming where you are, with a blue chip counting what waits <b>elsewhere</b>; tapping it opens a sheet listing every scope. The left nav is behind <b>Sections</b>. The alert rows stack their buttons full width at 40px. Today the console has no layout below 1180px (<code>AdminShell.css:101-103</code>: "Nothing here is designed for a phone"), so this is new work: open question 6. Each frame below prints its own <code>scrollWidth</code> against its width when the page loads.</p></section>
+<div class="tru">
+<div><div class="lab">660px · tablet portrait</div>
+<div class="vp vp--660" data-measure>
+<span class="tag">660</span>
+<div class="ph-top"><span class="mk"></span><b style="font:800 13px/1 var(--font-display);letter-spacing:.1em">ENGAGE</b><span class="sp"></span><span class="envchip">Dev</span><span class="mn">Sections ▾</span></div>
+<div class="scopes" style="height:46px;padding:0 8px">
+<span class="stab"><span class="ti ti--me">MR</span><span class="nm">Personal</span><span class="n">3</span></span><span class="stab is-on"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="n">6</span></span><span class="stab stab--more">1 more ▾</span></div>
+<div class="ph-body"><div class="ovw">
+<h1>Overview</h1><p class="sub">Northwind Learning. What is waiting on you.</p>
+<div class="ovw-alerts">
+ <div class="al al--people is-open">
+  <div class="al-head"><span class="al-n">3</span><span class="al-t"><b>Awaiting approval</b><span>Joined the team, cannot host yet · oldest 2 days</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+  <div class="al-body">
+   <div class="al-row"><span class="who2"><b>Priya Shah</b><span>accepted 9 Oct · waiting 2 days</span></span><span class="acts"><span class="btn btn--ghost">Not yet</span><span class="btn btn--primary">Approve</span></span></div>
+   <div class="al-row"><span class="who2"><b>Tom Becker</b><span>accepted 10 Oct · waiting 1 day</span></span><span class="acts"><span class="btn btn--ghost">Not yet</span><span class="btn">Approve</span></span></div>
+   <div class="al-foot">Showing 2 of 3<a>Members ›</a></div>
+  </div></div>
+ <div class="al al--stuck"><div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Sent back by the check</b><span>“Onboarding quiz v2” was not published</span></span><span class="al-car" aria-hidden="true">▼</span></div></div>
+</div>
+<div class="ovw-tiles">
+ <div class="tile"><span class="l">Sessions counted</span><span class="v">31</span><span class="s">36 created · 33 started</span></div>
+ <div class="tile"><span class="l">Participants</span><span class="v">612</span><span class="s">one per person per session</span></div>
+</div></div></div>
+<p class="measure" style="padding:0 16px 10px"></p>
+</div></div>
+
+<div><div class="lab">375px · phone, Overview with an alert open</div>
+<div class="vp vp--375" data-measure>
+<span class="tag">375</span>
+<div class="ph-top"><span class="mk"></span><span class="sp"></span><span class="mn">Sections ▾</span></div>
+<div class="ph-scope"><span class="ti">NL</span><span class="nm">Northwind Learning<small>Owner</small></span><span class="else">3 elsewhere</span><span class="cv">▾</span></div>
+<div class="ph-body"><div class="ovw">
+<h1>Overview</h1><p class="sub">What is waiting on you here.</p>
+<div class="ovw-alerts">
+ <div class="al al--people is-open">
+  <div class="al-head"><span class="al-n">3</span><span class="al-t"><b>Awaiting approval</b><span>Joined, cannot host yet · oldest 2 days</span></span><span class="al-car" aria-hidden="true">▼</span></div>
+  <div class="al-body">
+   <div class="al-row"><span class="who2"><b>Priya Shah</b><span>accepted 9 Oct · waiting 2 days</span></span><span class="acts"><span class="btn btn--ghost">Not yet</span><span class="btn btn--primary">Approve</span></span></div>
+   <div class="al-row"><span class="who2"><b>Tom Becker</b><span>accepted 10 Oct · waiting 1 day</span></span><span class="acts"><span class="btn btn--ghost">Not yet</span><span class="btn">Approve</span></span></div>
+   <div class="al-foot">Showing 2 of 3<a>Members ›</a></div>
+  </div></div>
+ <div class="al al--stuck"><div class="al-head"><span class="al-n">1</span><span class="al-t"><b>Sent back by the check</b><span>“Onboarding quiz v2”</span></span><span class="al-act"><span class="btn btn--sm">Open the set</span></span><span class="al-car" aria-hidden="true">▼</span></div></div>
+</div>
+<h2 class="ovw-h2">October so far</h2>
+<div class="ovw-tiles">
+ <div class="tile"><span class="l">Sessions counted</span><span class="v">31</span><span class="s">36 created · 33 started</span></div>
+ <div class="tile"><span class="l">Participants</span><span class="v">612</span><span class="s">one per person</span></div>
+ <div class="tile"><span class="l">Questions asked</span><span class="v">284</span><span class="s">put to the room</span></div>
+ <div class="tile"><span class="l">This month so far</span><span class="v">$7.75</span><span class="s">Organisation plan</span></div>
+</div></div></div>
+<p class="measure" style="padding:0 16px 10px"></p>
+</div></div>
+
+<div><div class="lab">375px · the scope sheet open (8 teams, staff)</div>
+<div class="vp vp--375" data-measure style="height:700px;display:flex;flex-direction:column">
+<span class="tag">375</span>
+<div class="dim" style="flex:1"><div class="ph-top"><span class="mk"></span><span class="sp"></span><span class="mn">Sections ▾</span></div>
+<div class="ph-scope"><span class="ti">HS</span><span class="nm">Harbour School<small>Owner</small></span><span class="else">18 elsewhere</span><span class="cv">▾</span></div></div>
+<div class="sheet2"><div class="grab"></div><div class="smenu">
+<div class="h">Where you work</div>
+<div class="it"><span class="ti" style="border-radius:50%">GS</span><span class="nm">Personal</span></div>
+<div class="it"><span class="ti">AC</span><span class="nm">Acorn Choir</span><span class="rl">Member</span></div>
+<div class="it"><span class="ti">BH</span><span class="nm">Bayview Hospital Training</span><span class="rl">Admin</span><span class="n">4</span></div>
+<div class="it is-f"><span class="ti">HS</span><span class="nm">Harbour School</span><span class="rl">Owner ✓</span></div>
+<div class="it"><span class="ti">LR</span><span class="nm">Lakeside Rotary</span><span class="rl">Member</span></div>
+<div class="it"><span class="ti">NL</span><span class="nm">Northwind Learning</span><span class="rl">Admin</span><span class="n">2</span></div>
+<div class="it"><span class="ti">RC</span><span class="nm">Riverside Church</span><span class="rl">Member</span></div>
+<div class="it"><span class="ti">SE</span><span class="nm">Seib Tribe</span><span class="rl">Owner</span><span class="n">1</span></div>
+<div class="it"><span class="ti">WC</span><span class="nm">Westfield College Debating Society</span><span class="rl">Admin</span></div>
+<div class="sep"></div>
+<div class="it"><span class="ti" style="background:rgba(124,167,230,.18);color:var(--secondary)">◆</span><span class="nm">Engage</span><span class="rl">Staff</span><span class="n">10</span></div>
+<div class="sep"></div><div class="it add">+ New team</div>
+</div></div>
+<p class="measure" style="padding:0 16px 10px;background:var(--m-drawer);margin:0"></p>
+</div></div>
+</div>
+
+<!-- ===================================================================== WHY -->
+<section class="sec" id="why"><h2>Why a row of tabs, and not a segmented control or a dropdown</h2>
+<table class="vt"><thead><tr><th style="width:18%">Option</th><th>For</th><th>Against</th><th style="width:14%">Verdict</th></tr></thead><tbody>
+<tr><td>Row of tabs, with counts <span class="chip chip--green">Recommended</span></td><td>Every place is named on screen, and the count on a tab you are not on tells you to look there: that is the owner's ask ("list at the top all of your teams"). One click, no menu. Works for the common case (Personal and one team) at a glance. Overflow folds into <b>N more</b>, which keeps order and counts.</td><td>Needs a 46px row. A ninth team lives in a menu. At phone width it has to become a button and a sheet.</td><td>Use it. It replaces the chip; still one switcher.</td></tr>
+<tr><td>Segmented control</td><td>Compact; reads as "one of these", which is right.</td><td>Breaks past three or four choices, and team names are long ("Bayview Hospital Training"). Segments of equal width either truncate every name or grow the row. Counts inside segments get cramped.</td><td>No.</td></tr>
+<tr><td>Dropdown (today's chip, <code>OrgSwitcher.jsx</code>)</td><td>Scales to any number. Already built and tested.</td><td>Hides the other places and anything waiting in them. A team owner with three people waiting in another team cannot see it without opening a menu they have no reason to open. Today's menu also carries Create and Act as Engage, so its job is already three jobs.</td><td>Keep only as the phone sheet and the More menu.</td></tr>
+<tr><td>Tabs AND the chip</td><td>No code removed.</td><td>Two controls saying "who am I right now". The tenancy work spent two rounds removing exactly this kind of doubling (<code>consoleSections.js:41-61</code>).</td><td>No.</td></tr>
+</tbody></table></section>
+
+<section class="qs" id="qs"><h2>Open questions (detail and recommendations in SPEC.md §9)</h2><ol>
+<li><b>May a team owner or admin approve hosting for people who accepted their invitation?</b> Today only Engage staff move an account from pending to hosts. Recommended: yes, for accounts that joined through that team's invitation; Engage is told and can still refuse.</li>
+<li><b>Counts on every tab need one new read.</b> Recommended: <code>GET /me/attention</code> returns a number per scope; the boxes on the open tab come from routes that already exist.</li>
+<li><b>Name the section "Overview".</b> Recommended, and make it the first item and the landing section in every scope (it moves Organisations to second for staff).</li>
+<li><b>Alerts above the numbers, or the numbers first?</b> Recommended: alerts first.</li>
+<li><b>Should a box ever be dismissed?</b> Recommended: no. A box goes when its cause goes. Information boxes (staff opened your content) clear when you open the log.</li>
+<li><b>The console on a phone.</b> Recommended: Overview and the scope sheet only at first; other sections say "Open on a laptop" below 760px.</li>
+<li><b>Plan requests: decide inline or in the dialog?</b> Recommended: Decide opens the existing dialog, which requires the note the customer reads.</li>
+<li><b>Moderation: approve from the Overview?</b> Recommended: no. Review opens the item; a set is judged on its findings.</li>
+</ol></section>
+
+<script>
+/* Measure every true-size frame: no horizontal scroll means scrollWidth equals clientWidth. */
+window.addEventListener('load', function () {
+  document.querySelectorAll('[data-measure]').forEach(function (vp) {
+    var out = vp.querySelector('.measure');
+    if (!out) return;
+    var ok = vp.scrollWidth <= vp.clientWidth;
+    out.textContent = 'measured: scrollWidth ' + vp.scrollWidth + ' / clientWidth ' + vp.clientWidth + (ok ? ' · no horizontal scroll' : ' · OVERFLOWS');
+    if (!ok) out.style.color = 'var(--danger-text)';
+  });
+});
+</script>
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>
