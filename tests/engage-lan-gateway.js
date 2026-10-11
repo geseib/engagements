@@ -236,10 +236,9 @@ function get(url, headers = {}) {
     targets = [appOrigin];
   });
   await check('an address whose server cannot be confirmed as this project\'s is never opened (security review F4)', async () => {
-    const dead = http.createServer();
-    await new Promise((r) => dead.listen(0, '127.0.0.1', r));
-    const deadOrigin = `http://localhost:${dead.address().port}`;
-    await new Promise((r) => dead.close(r));
+    // Port 1: nothing listens there, and no other suite running alongside can take it
+    // (a freed ephemeral port can be re-bound by a parallel test inside the 400ms below).
+    const deadOrigin = 'http://localhost:1';
     targets = [appOrigin, deadOrigin];
     await sleep(400);
     assert.deepStrictEqual(lastReport().map.map((m) => m.local), [appOrigin]);
