@@ -103,6 +103,19 @@ describe('the boxes', () => {
     expect(box.rows.map((r) => r.id)).toEqual(['a']);
     expect(box.link.section).toBe('members');
   });
+  // Owner, 2026-10-11: paid teams only. On a Free team the same people are
+  // information, waiting for Engage: no Approve, no orange, a link to the plan.
+  test('a Free team: Waiting for Engage, information only, no Approve', () => {
+    const box = approvalsBox([
+      { userId: 'a', email: 'a@x', joinedByInvite: true, awaitingHostApproval: true, joinedAt: day(-2) },
+    ], NOW, { canApprove: false });
+    expect(box.title).toBe('Waiting for Engage');
+    expect(box.cls).toBe('info');
+    expect(box.main).toBeUndefined();
+    expect(box.rows[0].actions).toEqual([]);
+    expect(box.why).toMatch(/paid plan/);
+    expect(box.link.section).toBe('billing');
+  });
   test('invitations running out: two days or fewer, and expired ones (Revoke only)', () => {
     const box = invitesRunningOutBox([
       { token: 'a', email: 'a@x', expiresAt: day(1), invitedAt: day(-13) },

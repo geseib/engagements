@@ -72,9 +72,12 @@ async function flaggedSets(orgId) {
   return rows.filter((r) => r && r.share && r.share.status === 'flagged').length;
 }
 
-async function teamPeople(orgId, nowMs) {
+async function teamPeople(orgId, nowMs, org) {
   const [members, invites] = await Promise.all([G.listMembers(orgId), G.listInvites(orgId)]);
-  const awaiting = members.filter((m) => m.awaitingHostApproval === true && m.joinedByInvite === true).length;
+  // A Free team cannot approve, so its waiting invitees are not its to act on.
+  const awaiting = G.canApproveHosting(org)
+    ? members.filter((m) => m.awaitingHostApproval === true && m.joinedByInvite === true).length
+    : 0;
   const runningOut = invites.map((row) => G.publicInvite(row, nowMs))
     .filter((i) => i.expired || (typeof i.daysUntilExpiry === 'number' && i.daysUntilExpiry <= RUNNING_OUT_DAYS))
     .length;
@@ -94,7 +97,7 @@ async function countOrg(orgId, role, now, unavailable) {
   const isAdmin = ADMIN_ROLES.includes(role);
   const parts = [flaggedSets(orgId).catch(() => { unavailable.push({ orgId, part: 'sets' }); return 0; })];
   if (isAdmin) {
-    parts.push(teamPeople(orgId, now.getTime()).catch(() => { unavailable.push({ orgId, part: 'members' }); return 0; }));
+    parts.push(teamPeople(orgId, now.getTime(), org).catch(() => { unavailable.push({ orgId, part: 'members' }); return 0; }));
     parts.push(capReached(orgId, org, now).catch(() => { unavailable.push({ orgId, part: 'usage' }); return 0; }));
   }
   const counts = await Promise.all(parts);

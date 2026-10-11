@@ -527,6 +527,21 @@ const priyaGroups = () => [...pool.get(`user-${PRIYA.sub}`).groups].sort();
     assert.deepStrictEqual([...pool.get(`user-${walkIn.sub}`).groups], ['pending']);
   });
 
+  await check('a Free team cannot approve: its invitees wait for Engage (owner, 2026-10-11: paid teams only)', async () => {
+    reset();
+    await priyaJoins();
+    const meta = store.get(key(`ORG#${TEAM}`, 'METADATA'));
+    store.set(key(`ORG#${TEAM}`, 'METADATA'), { ...meta, plan: 'free' });
+    order.length = 0;
+    const res = await approve(OWNER, 'owner');
+    // rejects: a host making a Free team and granting hosting to whoever they invite
+    assert.strictEqual(res.statusCode, 403, res.body);
+    assert.match(JSON.parse(res.body).error, /paid plan/);
+    assert.deepStrictEqual(priyaGroups(), ['pending']);
+    assert.strictEqual(memberOf(TEAM, PRIYA.sub).awaitingHostApproval, true, 'the person stays waiting, for Engage');
+    assert.ok(!order.includes('ddb:audit') && !order.some((o) => o.startsWith('cognito:Admin')), `touched: ${order.join(', ')}`);
+  });
+
   await check('a failed audit write refuses the approval and changes nothing', async () => {
     reset();
     await priyaJoins();

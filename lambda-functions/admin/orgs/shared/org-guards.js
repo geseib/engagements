@@ -615,6 +615,17 @@ function isPersonalOrg(org) {
 }
 
 /**
+ * May this team approve hosting for its own invitees? Only a team on a PAID plan
+ * (owner, 2026-10-11: "paid teams only"). Every team starts on Free and reaches a
+ * paid plan only through an approved plan request, so a host cannot make a Free
+ * team and use it to grant hosting to anyone they invite. Personal spaces never.
+ */
+function canApproveHosting(org) {
+  if (!org || isPersonalOrg(org)) return false;
+  return String(org.plan || 'free').toLowerCase() !== 'free';
+}
+
+/**
  * Refuse an operation that would take somebody's home away — or `null`.
  *
  * REFUSED IN THE HANDLER, NOT IN THE UI. `03-team.html` hides the Leave button
@@ -674,7 +685,7 @@ module.exports = {
   getOrgMetadata, getMembership, getInvite, listMembers, listInvites, ownersOf,
   authorizeOrg,
   publicMember, publicInvite, publicOrg,
-  PERSONAL, TEAM, ORG_TYPES, orgType, isPersonalOrg, personalOrgRefusal,
+  PERSONAL, TEAM, ORG_TYPES, orgType, isPersonalOrg, personalOrgRefusal, canApproveHosting,
   slugify, validateName, NAME_MAX, INVITABLE_ROLES,
   inviteePk, invitePointer, listInvitesFor, backfillInvitePointers,
 };

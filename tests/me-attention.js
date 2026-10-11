@@ -170,6 +170,13 @@ global.Date = class extends RealDate {
     assert.strictEqual(bodyOf(res).scopes[TEAM], 6);
   });
 
+  await check('a Free team: its waiting invitees are Engage\'s, so they are not counted (owner, 2026-10-11)', async () => {
+    seed();
+    table.put({ PK: tenant.orgPk(TEAM), SK: 'METADATA', orgId: TEAM, name: TEAM, plan: 'free', type: 'team' });
+    // soon, gone + f1, f2 — but not u_a, u_b
+    assert.strictEqual(bodyOf(await listMyOrgs.handler(evt())).scopes[TEAM], 4);
+  });
+
   await check('member of a team: only the sets the check sent back, never members or invitations', async () => {
     seed();
     assert.strictEqual(bodyOf(await listMyOrgs.handler(evt())).scopes[OTHER], 1);

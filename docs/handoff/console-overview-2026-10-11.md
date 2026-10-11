@@ -138,3 +138,8 @@ adminCopyRebind, adminOrgWiring, consolePersonas, AdminPage.
 3. The acting-as banner is kept and now covers the Overview (ruling 11, one release).
 4. Look at it on dev once deployed: the measurements above are from a harness with fixed
    data, not a signed-in console.
+
+## Owner rulings, 2026-10-11 (after the build)
+
+- **Paid teams only approve hosting.** `org-guards.canApproveHosting(org)`: a team (never a personal space) whose stored plan is not `free`. Every team starts Free and reaches a paid plan only through an approved plan request, so a host cannot make a Free team and grant hosting to whoever they invite. Enforced in `approve-member.js` (403, nothing written); `list-members.js` returns `canApproveHosting` so the Members button and the Overview follow it; `my-attention.js` does not count a Free team's waiting invitees. On a Free team the Overview shows the same people as information, "Waiting for Engage", linked to Plan & usage. Tests: `invite-only-accounts.js`, `me-attention.js`, `overviewAlerts.test.js`, `teamPanel.test.jsx`.
+- **Existing never-approved accounts become invite-only** when they accept an invitation (no personal space while they belong to a team), as built.

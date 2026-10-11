@@ -285,7 +285,7 @@ export default function OverviewPanel({
       if (d('invites')) list.push(invitationBox(d('invites').invites, nowMs));
       list.push(sentBackBox(sets));
       if (d('members') && isAdmin) {
-        list.push(approvalsBox(d('members').members, nowMs));
+        list.push(approvalsBox(d('members').members, nowMs, { canApprove: d('members').canApproveHosting !== false }));
         list.push(invitesRunningOutBox(d('members').invites, nowMs));
       }
       if (d('usage') && capped) list.push(usageBox(d('usage')));

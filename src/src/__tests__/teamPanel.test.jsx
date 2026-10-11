@@ -567,4 +567,12 @@ describe('approving hosting for somebody the team invited', () => {
     await screen.findByText('Priya Kaur');
     expect(screen.queryByRole('button', { name: 'Approve hosting' })).toBeNull();
   });
+  // Owner, 2026-10-11: paid teams only. The server says so; the screen follows.
+  test('a Free team is never offered it: the server says canApproveHosting false', async () => {
+    serve({ ...waiting(), canApproveHosting: false });
+    mount();
+    await screen.findByText('Priya Kaur');
+    expect(rowFor('Priya Kaur')).toHaveTextContent('cannot host yet');
+    expect(screen.queryByRole('button', { name: 'Approve hosting' })).toBeNull();
+  });
 });

@@ -17,7 +17,10 @@
  *   3. The account, read live from Cognito, is enabled and in `pending`. An
  *      account Engage has rejected is DISABLED, and a team must never undo
  *      that: refused, and the stale flag is cleared so the box goes.
- *   4. The audit entry is written FIRST, into the team's own log, and a
+ *   4. The team is on a PAID plan (G.canApproveHosting; owner, 2026-10-11).
+ *      A Free team's invitees wait for Engage, so a host cannot make a Free
+ *      team and grant hosting to whoever they invite.
+ *   5. The audit entry is written FIRST, into the team's own log, and a
  *      failure to write it refuses the change (owner, 2026-10-04: every staff
  *      and delete action is recorded before it happens; the same rule here).
  *
@@ -80,6 +83,11 @@ async function approveMember(event, { cognito, userPoolId }) {
 
   const auth = await G.authorizeOrg(event, orgId, 'admin');
   if (auth.denied) return auth.denied;
+  // Paid teams only (owner, 2026-10-11). A Free team's invitees wait for Engage.
+  const org = auth.org || await G.getOrgMetadata(orgId);
+  if (!G.canApproveHosting(org)) {
+    return G.fail(403, 'Only teams on a paid plan approve hosting. Engage approves people who join a Free team.');
+  }
 
   const member = await G.getMembership(orgId, sub);
   if (!member) return G.fail(404, 'That person is not a member of this team.');

@@ -959,7 +959,7 @@ export default function TeamPanel({
                                 gate a host saw "Make admin" on themselves — a
                                 button the server refuses, offering exactly the
                                 promotion they are not allowed to give. */}
-                            {canAdminister && !member.you && member.awaitingHostApproval && member.joinedByInvite && (
+                            {canAdminister && roster?.canApproveHosting !== false && !member.you && member.awaitingHostApproval && member.joinedByInvite && (
                               <button
                                 type="button"
                                 className="team-btn team-btn--sm"

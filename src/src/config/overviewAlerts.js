@@ -229,11 +229,35 @@ export function reportsBox(reports, now = Date.now()) {
   };
 }
 
-/** People who joined through THIS team's invitation and cannot host yet. */
-export function approvalsBox(members, now = Date.now()) {
+/**
+ * People who joined through THIS team's invitation and cannot host yet.
+ * `canApprove` is the server's word (paid plans only, owner 2026-10-11): on a
+ * Free team the same people show as information, waiting for Engage, with no
+ * Approve.
+ */
+export function approvalsBox(members, now = Date.now(), { canApprove = true } = {}) {
   const list = (members || []).filter((m) => m.awaitingHostApproval === true && m.joinedByInvite === true)
     .sort((a, b) => (ts(a.joinedAt) || 0) - (ts(b.joinedAt) || 0));
   if (!list.length) return null;
+  if (!canApprove) {
+    return {
+      id: 'approvals',
+      cls: 'info',
+      count: list.length,
+      title: 'Waiting for Engage',
+      summary: `Joined the team, cannot host yet · oldest ${waitedWords(list[0].joinedAt, now)}`,
+      since: list[0].joinedAt,
+      why: 'Only teams on a paid plan approve hosting. Engage approves people who join a Free team.',
+      rows: list.map((m) => ({
+        id: m.userId,
+        name: m.displayName || m.email,
+        detail: [m.displayName ? m.email : '', `accepted ${shortDate(m.joinedAt)}`, `waiting ${waitedWords(m.joinedAt, now)}`].filter(Boolean).join(' · '),
+        actions: [],
+        data: m,
+      })),
+      link: { label: 'Plan & usage', section: 'billing' },
+    };
+  }
   return {
     id: 'approvals',
     cls: 'people',
