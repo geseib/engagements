@@ -33,6 +33,10 @@ const {
   estimateCostUsd, variantSk, variantSkPrefix,
 } = require('./summary-models');
 const anthropicMessages = require('./anthropic-messages');
+// The Engage-wide switch (owner, 2026-10-11): the room's read goes to Haiku 5.5
+// on the Anthropic API where it is on, Bedrock Haiku 4.5 where it is off or
+// fails. A staff member's explicit pick in dev's picker is never switched.
+const claudeRoute = require('./claude-route');
 const { setMetadataKey } = require('./set-version');
 const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tenant-crypto');
 // Every log line below that is ABOUT the room's words — the answers, the
@@ -3518,6 +3522,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   const requestedModel = modelChoice || DEFAULT_MODEL;
   let activeModel = requestedModel;
   let modelFallbackReason = null;
+  // Only the default read goes through the switch; a model a staff member
+  // chose is a comparison and is asked for as chosen.
+  const routeDefault = !modelChoice;
+  // Who actually wrote the last reply used: set by askOnce. The switch may
+  // have sent the default read to Haiku 5.5 (claude-route.js).
+  let servedModelId = null;
+  let servedProvider = null;
   const tokens = { input: 0, output: 0, known: true };
   const countTokens = (inputTokens, outputTokens) => {
     if (Number.isFinite(inputTokens) && Number.isFinite(outputTokens)) {
@@ -3557,7 +3568,11 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   */
   const headingInstruction = '\n\nBegin your reply with this exact line, and write nothing before it:\n' + prefill;
 
-  const invokeBedrock = async (model, promptText) => bedrock.send(new InvokeModelCommand({
+  // The default read goes through the switch; a picked model goes as picked.
+  const sendModel = (model, cmd) => (routeDefault && model === DEFAULT_MODEL
+    ? claudeRoute.send(bedrock, cmd, { site: 'ai-summary', timeoutMs: anthropicMessages.TIMEOUT_MS })
+    : bedrock.send(cmd));
+  const invokeBedrock = async (model, promptText) => sendModel(model, new InvokeModelCommand({
     modelId: model === DEFAULT_MODEL ? haikuModelId : profileArn(model.modelId),
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
@@ -3586,6 +3601,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       const reply = await anthropicMessages.createMessage(model, promptText + headingInstruction);
       countTokens(reply.inputTokens, reply.outputTokens);
       const text = ensureLeadingHeading(reply.text, prefill);
+      servedModelId = model.modelId;
+      servedProvider = 'anthropic';
       console.log(`✅ CLAUDE SUCCESS: ${model.label} replied, ${text.length} chars, stop_reason ${reply.stopReason || 'not given'}`);
       if (reply.stopReason === 'max_tokens') {
         console.warn(`⚠️ ${model.label}: reply cut off at max_tokens after ${text.length} chars — the last section may be missing`);
@@ -3606,6 +3623,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     const usage = responseBody.usage || {};
     countTokens(usage.input_tokens, usage.output_tokens);
+    const switchedTo = claudeRoute.servedBy(response);
+    servedModelId = switchedTo || model.modelId;
+    servedProvider = switchedTo ? 'anthropic' : model.provider;
     // Prefill + completion IS the reply — the model wrote everything after the
     // heading, and everything downstream (the parser, the stored markdown, the
     // projector) must see the whole document, heading included.
@@ -3648,7 +3668,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   const startedAt = Date.now();
   const modelMeta = () => ({
     modelRequested: requestedModel.id,
-    provider: activeModel.provider,
+    provider: servedProvider || activeModel.provider,
     latencyMs: Date.now() - startedAt,
     inputTokens: tokens.known ? tokens.input : null,
     outputTokens: tokens.known ? tokens.output : null,
@@ -3718,8 +3738,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       // The model id, stored on the row as `Model` so a report can say which
       // model wrote each read (relay pilot review, 2026-10-11). The one that
       // actually answered: Haiku 4.5 unless dev's picker chose another and it
-      // did not fail.
-      model: activeModel.modelId,
+      // did not fail — or Haiku 5.5, where the Engage switch sent it there.
+      model: servedModelId || activeModel.modelId,
       // Dev's picker only: what was asked for, latency, tokens, fallback.
       ...(recordModel ? { modelMeta: modelMeta() } : {}),
       tallyCheck,

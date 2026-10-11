@@ -1,16 +1,23 @@
 /**
- * ONE CALL TO THE ANTHROPIC MESSAGES API, FOR DEV'S MODEL PICKER — signed in
- * with Workload Identity Federation, never a stored key.
+ * ONE CALL TO THE ANTHROPIC MESSAGES API — signed in with Workload Identity
+ * Federation, never a stored key.
  *
- * Only reached when the picker is on (AI_MODEL_PICKER, dev only) and a staff
- * member asked for an Anthropic API model (summary-models.js).
+ * Two callers:
+ *   - claude-route.js, the Engage-wide switch (owner, 2026-10-11) that sends
+ *     every Bedrock Haiku 4.5 / Sonnet 4.6 call to Haiku 5.5 / Sonnet 5.5 here
+ *     instead, through `postMessages`, falling back to Bedrock on any failure;
+ *   - dev's model picker (summary-models.js), through `createMessage`.
+ * Both are reached only where the four federation ids are configured for the
+ * tier (`anthropicConnected`); elsewhere every call stays on Bedrock.
  *
  * HOW IT SIGNS IN (platform.claude.com/docs/en/manage-claude/wif-providers/aws):
  *   1. AWS STS GetWebIdentityToken, signed with this function's own role
  *      credentials, returns an AWS-signed JWT for the audience
  *      https://api.anthropic.com. Its `sub` is the role's ARN, which the
- *      owner's federation rule in the Claude Console pins exactly — so
- *      replacing the GetAISummaryFunction role breaks the rule.
+ *      owner's federation rule in the Claude Console matches — on a per-tier
+ *      prefix (arn:aws:iam::<account>:role/engagedev-*), because every
+ *      model-calling function has its own role. The real gate is that only
+ *      those functions' roles are granted sts:GetWebIdentityToken.
  *   2. POST /v1/oauth/token exchanges that JWT, with the four ids from the
  *      template (ANTHROPIC_FEDERATION_RULE_ID, _ORGANIZATION_ID,
  *      _SERVICE_ACCOUNT_ID, _WORKSPACE_ID — none secret), for a short-lived
@@ -26,14 +33,18 @@
  * tests/ai-model-picker.js), from the credentials Lambda puts in the
  * environment. Everything goes over node:https.
  *
+ * DUPLICATED, BYTE FOR BYTE: lambda-functions/game/anthropic-messages.js and
+ * lambda-functions/admin/shared/anthropic-messages.js, because Lambda bundles
+ * are per-folder. tests/claude-55-switch.js fails the build if they drift.
+ *
  * SECRETS NEVER TRAVEL. The JWT, the access token and the role's credentials
  * are never logged, never returned and never part of an error: every failure
  * is a ModelCallError carrying a fixed reason word and, at most, an HTTP
  * status — never a response body.
  *
- * WHAT LEAVES AWS on this path: the prompt, which carries the round's answers
+ * WHAT LEAVES AWS on this path: the prompt — for a round's read, the answers
  * verbatim (and the names, unless the round is anonymous), the question and
- * the host's brief. That is why it is dev only and staff only.
+ * the host's brief. The owner chose this for every tier where the ids are set.
  */
 const https = require('https');
 const nodeCrypto = require('crypto');
@@ -60,6 +71,8 @@ const REASONS = Object.freeze({
   AUTH: 'auth',
   REFUSAL: 'refusal',
   EMPTY: 'empty-reply',
+  MAX_TOKENS: 'max-tokens',
+  INVALID: 'invalid-reply',
   API_ERROR: 'api-error',
   NETWORK: 'network',
 });
@@ -283,6 +296,40 @@ async function postMessages(token, body, timeoutMs) {
 }
 
 /**
+ * One Messages request with a body built by the caller, and its parsed answer.
+ * The whole attempt — a token mint included — is bounded by `timeoutMs`, so a
+ * slow sign-in cannot eat the time the Bedrock fallback needs. Throws a
+ * ModelCallError for anything but a 200 with a JSON body, and for a refusal.
+ */
+async function postMessagesRaw(requestBody, { timeoutMs = TIMEOUT_MS } = {}) {
+  const deadline = clock() + timeoutMs;
+  const left = () => Math.max(1, deadline - clock());
+  let timer;
+  const overall = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new ModelCallError(REASONS.TIMEOUT)), timeoutMs);
+  });
+  const attempt = (async () => {
+    const body = JSON.stringify(requestBody);
+    let res = await postMessages(await accessToken(), body, left());
+    if (res.status === 401) {
+      res = await postMessages(await accessToken({ fresh: true }), body, left());
+    }
+    let parsed = null;
+    try { parsed = JSON.parse(res.body); } catch { parsed = null; }
+    if (res.status !== 200) throw new ModelCallError(reasonFor(res.status, parsed), res.status);
+    if (!parsed) throw new ModelCallError(REASONS.API_ERROR, res.status);
+    if (parsed.stop_reason === 'refusal') throw new ModelCallError(REASONS.REFUSAL);
+    return parsed;
+  })();
+  try {
+    return await Promise.race([attempt, overall]);
+  } finally {
+    clearTimeout(timer);
+    attempt.catch(() => {}); // a late failure after the race is already reported
+  }
+}
+
+/**
  * One reply: { text, stopReason, inputTokens, outputTokens }.
  * Only the reply's text blocks are kept; a thinking block is never read.
  */
@@ -323,6 +370,7 @@ module.exports = {
   federationIds,
   buildRequest,
   createMessage,
+  postMessagesRaw,
   signSigV4,
   stsBody,
   webIdentityTokenFromXml,

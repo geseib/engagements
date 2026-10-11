@@ -25,6 +25,11 @@
  */
 
 const { retryWithBackoff } = require('./bedrock-utils');
+// Sonnet 4.6 / Haiku 4.5 on Bedrock, or Sonnet 5.5 / Haiku 5.5 on the
+// Anthropic API where the Engage switch is on (claude-route.js). The forced
+// tool_choice is translated there: `auto` plus a sentence naming the tool,
+// and a reply that did not call it falls back to the Bedrock model.
+const claudeRoute = require('./claude-route');
 const { MIN_SUGGESTED_TAGS, MAX_TAGS } = require('./tags');
 const { roundKindDetailCeiling } = require('./round-kinds');
 const { BACKGROUND_TRUTH_RULE } = require('./question-background');
@@ -333,18 +338,18 @@ async function invokeStructured(bedrockClient, InvokeModelCommand, { prompt, too
   const call = async () => {
     let responseBody;
     try {
-      const res = await bedrockClient.send(new InvokeModelCommand({
+      const res = await claudeRoute.send(bedrockClient, new InvokeModelCommand({
         modelId: SONNET(),
         body: JSON.stringify(payload),
-      }));
+      }), { site: 'structured-generation', timeoutMs: 240000 });
       responseBody = JSON.parse(new TextDecoder().decode(res.body));
     } catch (error) {
       console.error('🚨 BEDROCK Sonnet ERROR:', error.message);
       console.log('🔄 BEDROCK: trying Haiku 4.5 as fallback...');
-      const res = await bedrockClient.send(new InvokeModelCommand({
+      const res = await claudeRoute.send(bedrockClient, new InvokeModelCommand({
         modelId: HAIKU(),
         body: JSON.stringify(payload),
-      }));
+      }), { site: 'structured-generation', timeoutMs: 240000 });
       responseBody = JSON.parse(new TextDecoder().decode(res.body));
     }
 

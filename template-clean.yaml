@@ -67,35 +67,43 @@ Parameters:
     Default: 'false'
     Description: Staff-only AI summary model picker (dev only)
 
-  # The Anthropic API, for the picker, through Workload Identity Federation:
-  # the function's role signs in with an AWS STS web identity token, never a
-  # stored key (lambda-functions/game/anthropic-messages.js). Four ids from the
-  # owner's Claude Console federation rule; none is secret. Empty (the default,
-  # and test and prod) leaves the Anthropic models unavailable in the picker.
+  # The Anthropic API, through Workload Identity Federation: each model-calling
+  # function's role signs in with an AWS STS web identity token, never a stored
+  # key (anthropic-messages.js). Four ids from the owner's Claude Console
+  # federation rule for the tier; none is secret. All four set turns on the
+  # Claude models switch (claude-route.js: Haiku 4.5 -> Haiku 5.5, Sonnet 4.6 ->
+  # Sonnet 5.5, unless staff turn it off) and the picker's Anthropic models.
+  # Any empty (the default, and prod) leaves every call on Bedrock.
   AnthropicFederationRuleId:
     Type: String
     Default: ''
-    Description: Claude Console federation rule id (fdrl_...), dev's model picker
+    Description: Claude Console federation rule id (fdrl_...), Anthropic API (WIF)
   AnthropicOrganizationId:
     Type: String
     Default: ''
-    Description: Anthropic organization id (uuid), dev's model picker
+    Description: Anthropic organization id (uuid), Anthropic API (WIF)
   AnthropicServiceAccountId:
     Type: String
     Default: ''
-    Description: Anthropic service account id (svac_...), dev's model picker
+    Description: Anthropic service account id (svac_...), Anthropic API (WIF)
   AnthropicWorkspaceId:
     Type: String
     Default: ''
-    Description: Anthropic workspace id (wrkspc_...), dev's model picker
+    Description: Anthropic workspace id (wrkspc_...), Anthropic API (WIF)
 
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
-  # Dev's AI model picker (AiModelPicker above). Gates the one IAM grant that
-  # lets get-ai-summary mint a web identity token for the Anthropic API.
-  AiModelPickerOn: !Equals [!Ref AiModelPicker, 'true']
+  # All four Anthropic federation ids set: the Anthropic API is connected on
+  # this tier. Gates the sts:GetWebIdentityToken grant on every function that
+  # calls a model (claude-route.js, and dev's picker). Dev and test pass the
+  # ids; prod passes none, so prod stays on Bedrock.
+  AnthropicApiConfigured: !And
+    - !Not [!Equals [!Ref AnthropicFederationRuleId, '']]
+    - !Not [!Equals [!Ref AnthropicOrganizationId, '']]
+    - !Not [!Equals [!Ref AnthropicServiceAccountId, '']]
+    - !Not [!Equals [!Ref AnthropicWorkspaceId, '']]
   # True when the deploy passes Google credentials, fetched from
   # /<stack>/google/* SSM parameters by all three buildspecs.
   #
@@ -1649,6 +1657,13 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # Only so GET /platform/settings/claude-models can say whether the
+          # Anthropic API is connected on this tier. This function calls no
+          # model and holds no sts:GetWebIdentityToken.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
         # kms:Decrypt, since the AUDIT LOG (2026-10-04). It used to have none:
         # the ORGS index and MEMBER counts are plaintext by design. But a status
@@ -1703,6 +1718,26 @@ Resources:
             ApiId: !Ref RestApi
             Path: /platform/stats
             Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # The Engage-wide Claude models switch (orgs/platform-settings.js):
+        # Anthropic 5.5 (default) or Bedrock 4.x. Staff only — authorizer.js
+        # names it ['admins'], the handler re-asks isPlatformAdmin, and a
+        # change is written to the audit log first.
+        GetClaudeModelsSetting:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/settings/claude-models
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        SetClaudeModelsSetting:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/settings/claude-models
+            Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:
@@ -1817,11 +1852,29 @@ Resources:
       Handler: check-question-set.handler
       Environment:
         Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
           TABLE_NAME: !Ref GameTable
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
           ACCOUNT_ID: !Ref AWS::AccountId
           CHECK_DAILY_CAP: '20'
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Decrypt only: it reads the org's questions to judge them and writes
         # nothing into an org partition, so it never mints a key.
         - Version: '2012-10-17'
@@ -3115,7 +3168,27 @@ Resources:
       # The request half is unaffected: API Gateway still cuts a synchronous
       # caller off at its own 29s regardless of what is set here.
       Timeout: 300
+      Environment:
+        Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -3369,7 +3442,8 @@ Resources:
           # 'true' on dev only (AiModelPicker); read by summary-models.js.
           AI_MODEL_PICKER: !Ref AiModelPicker
           # Workload Identity Federation ids for the Anthropic API (not
-          # secrets). Empty unless buildspec-dev.yml passes them.
+          # secrets): the picker and the Claude models switch. Empty unless
+          # the tier's buildspec passes all four.
           ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
           ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
           ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
@@ -3387,14 +3461,15 @@ Resources:
             TableName: !Ref GameTable
         - S3ReadPolicy:
             BucketName: !Ref AIPromptsBucket
-        # DEV'S MODEL PICKER: a web identity token for the Anthropic API
-        # (Workload Identity Federation). Allow on dev, where AiModelPicker is
-        # 'true'; an explicit Deny everywhere else. The owner's federation rule
-        # pins THIS function's role ARN as the token's subject, so the role
-        # must never be renamed or replaced (a policy change does neither).
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
         - Version: '2012-10-17'
           Statement:
-            - Effect: !If [AiModelPickerOn, Allow, Deny]
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
               Action: sts:GetWebIdentityToken
               Resource: '*'
         - Version: '2012-10-17'
@@ -3471,7 +3546,37 @@ Resources:
       # the generation-job pattern (PLAN Phase 3).
       Timeout: 29
       MemorySize: 256
+      Environment:
+        Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
+        # The switch's one platform row, PLATFORM#SETTINGS / CLAUDE_MODELS, and
+        # nothing else in the table.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: !GetAtt GameTable.Arn
+              Condition:
+                ForAllValues:StringEquals:
+                  dynamodb:LeadingKeys: ['PLATFORM#SETTINGS']
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -4310,7 +4415,27 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
+      Environment:
+        Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -4389,7 +4514,27 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
+      Environment:
+        Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -4471,7 +4616,27 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 900
       MemorySize: 1024
+      Environment:
+        Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -4540,6 +4705,17 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -4577,6 +4753,13 @@ Resources:
               Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-scenarios'
       Environment:
         Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
           TABLE_NAME: !Ref GameTable
       Events:
         AdminAIGenerateScenariosEvent:
@@ -4611,6 +4794,17 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -4647,6 +4841,13 @@ Resources:
               Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-trivia'
       Environment:
         Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
           TABLE_NAME: !Ref GameTable
           REGION: !Ref AWS::Region
           ENVIRONMENT: !Ref Environment
@@ -4683,6 +4884,17 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -4719,6 +4931,13 @@ Resources:
               Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-polls'
       Environment:
         Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
           TABLE_NAME: !Ref GameTable
           REGION: !Ref AWS::Region
           ENVIRONMENT: !Ref Environment
@@ -4755,6 +4974,17 @@ Resources:
       Timeout: 900
       MemorySize: 1024
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -4791,6 +5021,13 @@ Resources:
               Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-admin-ai-generate-survey'
       Environment:
         Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
           TABLE_NAME: !Ref GameTable
           REGION: !Ref AWS::Region
           ENVIRONMENT: !Ref Environment
@@ -5582,8 +5819,26 @@ Resources:
       MemorySize: 512
       Environment:
         Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         # Tenant content is encrypted per organisation. This function opens an
         # org's own Workie to analyse it and seals the analysis on the job row,
         # so it needs to unwrap that org's data key — and ONLY with an orgId
@@ -5651,7 +5906,37 @@ Resources:
       Runtime: nodejs22.x
       Timeout: 60
       MemorySize: 512
+      Environment:
+        Variables:
+          # The Anthropic API's Workload Identity Federation ids (not secrets).
+          # All four set: claude-route.js may send this function's Haiku 4.5 /
+          # Sonnet 4.6 calls to Haiku 5.5 / Sonnet 5.5. Any empty: Bedrock.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
+        # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
+        # the Anthropic API, Workload Identity Federation. Allow only where the
+        # four federation ids are configured (AnthropicApiConfigured); an
+        # explicit Deny everywhere else. Only functions that call a model hold
+        # this — the owner's federation rule matches every role on the tier's
+        # prefix (role/<stack>-*), so this grant is the real gate.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AnthropicApiConfigured, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
+        # The switch's one platform row, PLATFORM#SETTINGS / CLAUDE_MODELS, and
+        # nothing else in the table.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: !GetAtt GameTable.Arn
+              Condition:
+                ForAllValues:StringEquals:
+                  dynamodb:LeadingKeys: ['PLATFORM#SETTINGS']
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow

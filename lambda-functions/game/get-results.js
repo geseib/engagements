@@ -2,6 +2,9 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+// Haiku 4.5 on Bedrock, or Haiku 5.5 on the Anthropic API where the Engage
+// switch is on (claude-route.js).
+const claudeRoute = require('./claude-route');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
 const { ORG, callerMayDriveSession } = require('./tenant');
@@ -1582,7 +1585,7 @@ const markWavelengthClustering = async (gameId, questionId, status) => {
  */
 const proposeWavelengthMerges = async (labels) => {
   const modelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
-  const response = await bedrock.send(new InvokeModelCommand({
+  const response = await claudeRoute.send(bedrock, new InvokeModelCommand({
     modelId,
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
@@ -1590,7 +1593,7 @@ const proposeWavelengthMerges = async (labels) => {
       temperature: 0,
       messages: [{ role: 'user', content: buildMergePrompt(labels) }]
     })
-  }));
+  }), { site: 'wavelength-merge', timeoutMs: 60000 });
   const responseBody = JSON.parse(new TextDecoder().decode(response.body));
   return parseMergeReply(responseBody.content?.[0]?.text);
 };

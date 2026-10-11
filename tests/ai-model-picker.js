@@ -3,10 +3,14 @@
  * with a different model and compare. docs/handoff/ai-model-picker-2026-10-11.md.
  *
  *   1. The switch: template parameter AiModelPicker defaults to 'false', only
- *      buildspec-dev.yml passes 'true', the function reads it as
- *      AI_MODEL_PICKER, its only new grant is sts:GetWebIdentityToken
- *      (Allow on dev, Deny elsewhere), the four federation ids are dev-only
- *      parameters, nothing reads SSM, and no resource is added.
+ *      buildspec-dev.yml and buildspec-test.yml pass 'true', the function
+ *      reads it as AI_MODEL_PICKER, its grant is sts:GetWebIdentityToken
+ *      (Allow where the four federation ids are set, Deny elsewhere), nothing
+ *      reads SSM, and no resource is added.
+ *
+ *   The Engage-wide Claude models switch (claude-route.js) is held OFF for
+ *   this whole file, so it tests the picker alone: with the switch on, the
+ *   default read goes to Haiku 5.5 — tests/claude-55-switch.js covers that.
  *   2. Switch off: the Bedrock request is byte-for-byte today's (Haiku 4.5,
  *      the heading prefilled, temperature 0.7, 2048), STS is never asked, the
  *      Anthropic API is never called, no variant row and no new attribute is
@@ -178,7 +182,10 @@ const { setMetadataKey, setPartition } = require(path.join(REPO, 'lambda-functio
 const summary = require(path.join(REPO, 'lambda-functions/game/get-ai-summary.js'));
 const models = require(path.join(REPO, 'lambda-functions/game/summary-models.js'));
 const anthropic = require(path.join(REPO, 'lambda-functions/game/anthropic-messages.js'));
+const claudeRoute = require(path.join(REPO, 'lambda-functions/game/claude-route.js'));
 const { handler } = summary;
+// The platform switch off: this file is about the picker (see the header).
+claudeRoute._setSettingReader(async () => ({ PK: 'PLATFORM#SETTINGS', SK: 'CLAUDE_MODELS', Anthropic55: false }));
 
 // ---- the fake transport: STS, the token exchange, Messages -------------------
 let apiCalls = [];     // Messages
@@ -380,24 +387,24 @@ const NEW_FIELDS = ['ModelRequested', 'Provider', 'LatencyMs', 'InputTokens', 'O
       const block = template.match(new RegExp(`\\n  ${param}:\\n((?: {4}.*\\n)+)`));
       assert.ok(block && /Default: ''/.test(block[1]), `${param} must default to empty`);
     }
-    // ...and nowhere else: no other function gets the switch.
+    // ...and no other function gets the picker. The federation ids go to every
+    // function that calls a model (tests/claude-55-switch.js pins which).
     assert.strictEqual(template.split('AI_MODEL_PICKER: !Ref AiModelPicker').length - 1, 1);
-    assert.strictEqual(template.split('ANTHROPIC_WORKSPACE_ID: !Ref').length - 1, 1);
   });
-  await check('its one new grant: sts:GetWebIdentityToken, Allow on the switch, Deny without it', () => {
+  await check('its grant: sts:GetWebIdentityToken, Allow where the ids are set, Deny without them', () => {
     const fn = template.slice(template.indexOf('  GetAISummaryFunction:'), template.indexOf('      Events:', template.indexOf('  GetAISummaryFunction:')));
-    assert.match(fn, /- Effect: !If \[AiModelPickerOn, Allow, Deny\]\n\s+Action: sts:GetWebIdentityToken\n\s+Resource: '\*'/);
-    assert.match(template, /AiModelPickerOn: !Equals \[!Ref AiModelPicker, 'true'\]/);
-    assert.strictEqual(template.split('sts:GetWebIdentityToken').length - 1, 1, 'granted to another function');
+    assert.match(fn, /- Effect: !If \[AnthropicApiConfigured, Allow, Deny\]\n\s+Action: sts:GetWebIdentityToken\n\s+Resource: '\*'/);
+    assert.match(template, /AnthropicApiConfigured: !And\n/);
     assert.ok(!/ssm:GetParameter|anthropic\/api-key|ANTHROPIC_KEY/.test(template), 'a stored-key path survives');
   });
-  await check('only buildspec-dev.yml passes AiModelPicker=true; test and prod never mention it', () => {
-    assert.match(spec('dev'), /PARAM_OVERRIDES="\$PARAM_OVERRIDES AiModelPicker=true"/);
-    assert.ok(!/AiModelPicker|Anthropic/.test(spec('test')), 'buildspec-test.yml sets the picker');
-    assert.ok(!/AiModelPicker|Anthropic/.test(spec('prod')), 'buildspec-prod.yml sets the picker');
-    for (const p of ['AnthropicFederationRuleId', 'AnthropicOrganizationId', 'AnthropicServiceAccountId', 'AnthropicWorkspaceId']) {
-      assert.match(spec('dev'), new RegExp(`\\[ -n "\\$[A-Z_]+" \\] && PARAM_OVERRIDES="\\$PARAM_OVERRIDES ${p}=`), p);
+  await check('dev and test pass AiModelPicker=true; prod never mentions it', () => {
+    for (const tier of ['dev', 'test']) {
+      assert.match(spec(tier), /PARAM_OVERRIDES="\$PARAM_OVERRIDES AiModelPicker=true"/, tier);
+      for (const p of ['AnthropicFederationRuleId', 'AnthropicOrganizationId', 'AnthropicServiceAccountId', 'AnthropicWorkspaceId']) {
+        assert.match(spec(tier), new RegExp(`\\[ -n "\\$[A-Z_]+" \\] && PARAM_OVERRIDES="\\$PARAM_OVERRIDES ${p}=`), `${tier} ${p}`);
+      }
     }
+    assert.ok(!/AiModelPicker|Anthropic/.test(spec('prod')), 'buildspec-prod.yml sets the picker');
   });
   await check('the override is appended before the sam deploy that uses it', () => {
     const s = spec('dev');
@@ -827,6 +834,52 @@ const NEW_FIELDS = ['ModelRequested', 'Provider', 'LatencyMs', 'InputTokens', 'O
     assert.ok(raw && typeof raw.MarkdownResponse === 'string');
     assert.strictEqual(apiCalls[0].body.model, 'claude-haiku-5-5');
   });
+
+  // ------------------------------------------------------------------------
+  say('\n7. the Engage-wide Claude models switch ON (claude-route.js): the room\'s read');
+  claudeRoute._setSettingReader(async () => null); // no row: the owner's default, on
+  reset();
+  await seedRound('8104', { orgId: ORG });
+  apiAnswer = apiOk(HEADING + BODY);
+  await runWorker('8104');
+  await check('the default read goes to Haiku 5.5: no prefill, no temperature, thinking off, effort low', () => {
+    assert.strictEqual(bedrockCalls.length, 0);
+    assert.strictEqual(apiCalls.length, 1);
+    const b = apiCalls[0].body;
+    assert.strictEqual(b.model, 'claude-haiku-5-5');
+    assert.ok(!('temperature' in b) && !('anthropic_version' in b));
+    assert.deepStrictEqual(b.messages.map((m) => m.role), ['user']);
+    assert.ok(b.messages[0].content.endsWith('Begin your reply with exactly this text, and write nothing before it:\n' + HEADING));
+    assert.deepStrictEqual(b.thinking, { type: 'disabled' });
+    assert.deepStrictEqual(b.output_config, { effort: 'low' });
+    assert.ok(!('tool_choice' in b));
+  });
+  await check('the row records the model that wrote it: claude-haiku-5-5, the heading intact', async () => {
+    const stored = await open(ORG, row('8104'));
+    assert.strictEqual(stored.Model, 'claude-haiku-5-5');
+    assert.ok(stored.MarkdownResponse.startsWith(HEADING + '\n'), stored.MarkdownResponse.slice(0, 80));
+  });
+  reset();
+  apiAnswer = apiStatus(500, 'api_error', 'x');
+  await runWorker('8104');
+  await check('the API fails: Bedrock Haiku 4.5 writes it, prefill and all, byte for byte as before', async () => {
+    assert.strictEqual(bedrockCalls.length, 1);
+    const c = bedrockCalls[0];
+    assert.strictEqual(c.raw, JSON.stringify({
+      anthropic_version: 'bedrock-2023-05-31', max_tokens: 2048, temperature: 0.7,
+      messages: [{ role: 'user', content: c.body.messages[0].content }, { role: 'assistant', content: HEADING }],
+    }));
+    const stored = await open(ORG, row('8104'));
+    assert.strictEqual(stored.Model, summary.SUMMARY_MODEL_ID);
+  });
+  reset();
+  await runWorker('8104', 'bedrock-haiku-4-5');
+  await check('a staff member\'s explicit pick (Bedrock Haiku 4.5) is not switched', () => {
+    assert.strictEqual(apiCalls.length, 0);
+    assert.strictEqual(bedrockCalls.length, 1);
+    assert.ok(bedrockCalls[0].modelId.endsWith('us.anthropic.claude-haiku-4-5-20251001-v1:0'));
+  });
+  claudeRoute._setSettingReader(async () => ({ Anthropic55: false }));
 
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();

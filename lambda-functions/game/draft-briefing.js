@@ -24,6 +24,10 @@ const {
   SOURCE_TEXT_CAP, SOURCE_TEXT_SLACK, buildDraftPrompt, parseDraftReply,
 } = require('./briefing');
 
+// Haiku 4.5 on Bedrock, or Haiku 5.5 on the Anthropic API where the Engage
+// switch is on (claude-route.js). The prefill below is translated there.
+const claudeRoute = require('./claude-route');
+
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
 const CORS = { 'Access-Control-Allow-Origin': '*' };
@@ -47,7 +51,9 @@ exports.handler = async (event) => {
 
   const prompt = buildDraftPrompt({ text, truncated: body.truncated === true });
   const modelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
-  const invoke = () => bedrock.send(new InvokeModelCommand({
+  // The function and its API Gateway route give up at 29s: twelve for the
+  // Anthropic API, the rest for the Bedrock fallback.
+  const invoke = () => claudeRoute.send(bedrock, new InvokeModelCommand({
     modelId,
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
@@ -61,7 +67,7 @@ exports.handler = async (event) => {
         { role: 'assistant', content: '{' },
       ],
     }),
-  }));
+  }), { site: 'draft-briefing', timeoutMs: 12000 });
 
   let completion;
   try {

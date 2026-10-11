@@ -21,6 +21,9 @@
  * fallback is the band sentence, so a Bedrock failure costs nothing but prose.
  */
 const { questionText } = require('./publishable');
+// Haiku 4.5 on Bedrock, or Haiku 5.5 on the Anthropic API where the Engage
+// switch is on (claude-route.js).
+const claudeRoute = require('./claude-route');
 
 const HAIKU = () => `arn:aws:bedrock:${process.env.AWS_REGION || 'us-east-1'}:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
 const SYSTEM_CATEGORIES = Object.freeze(['EMPTY', 'ERROR', 'UNCONFIGURED', 'TIMEOUT', 'SNAPSHOT']);
@@ -72,7 +75,7 @@ async function explainOne(bedrock, InvokeModelCommand, question, finding) {
     'QUESTION:',
     questionText(question),
   ].join('\n');
-  const res = await bedrock.send(new InvokeModelCommand({
+  const res = await claudeRoute.send(bedrock, new InvokeModelCommand({
     modelId: HAIKU(),
     contentType: 'application/json',
     accept: 'application/json',
@@ -82,7 +85,7 @@ async function explainOne(bedrock, InvokeModelCommand, question, finding) {
       temperature: 0.2,
       messages: [{ role: 'user', content: prompt }],
     }),
-  }));
+  }), { site: 'finding-explanation', timeoutMs: 20000 });
   const body = JSON.parse(new TextDecoder().decode(res.body));
   const text = (body.content || []).filter((c) => c.type === 'text').map((c) => c.text).join(' ');
   return plain(text);

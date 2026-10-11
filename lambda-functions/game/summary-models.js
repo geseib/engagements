@@ -7,11 +7,14 @@
  * picker, the generator and the cost line need about a model is here, so a
  * model is added or dropped in one place.
  *
- * THE PICKER IS DEV ONLY. template-clean.yaml passes `AiModelPicker` to the
- * get-ai-summary function as AI_MODEL_PICKER; only buildspec-dev.yml sets it to
- * 'true'. While it is off, nothing here is consulted except DEFAULT_MODEL, and
- * the read is written exactly as it was before the picker existed: Bedrock
- * Haiku 4.5, with its first heading prefilled.
+ * THE PICKER IS ON DEV AND TEST. template-clean.yaml passes `AiModelPicker` to
+ * the get-ai-summary function as AI_MODEL_PICKER; buildspec-dev.yml and
+ * buildspec-test.yml set it to 'true'. While it is off, nothing here is
+ * consulted except DEFAULT_MODEL, and the read is written as it was before the
+ * picker existed: Bedrock Haiku 4.5 with its first heading prefilled — or,
+ * where the Engage-wide Claude models switch is on and connected
+ * (claude-route.js), Haiku 5.5 on the Anthropic API, falling back to that.
+ * A model a staff member picks here is always asked for as picked.
  *
  * Fields:
  *   id         the catalogue id the host sends as `model`, and the suffix of a

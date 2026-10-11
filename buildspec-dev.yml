@@ -70,14 +70,16 @@ phases:
       - '[ -n "$GITHUB_REPO" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GitHubRepo=$GITHUB_REPO" || echo "skipping GitHubRepo (empty)"'
       - '[ -n "$GOOGLE_CLIENT_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientId=$GOOGLE_CLIENT_ID" || echo "skipping GoogleClientId (empty)"'
       - '[ -n "$GOOGLE_CLIENT_SECRET" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientSecret=$GOOGLE_CLIENT_SECRET" || echo "skipping GoogleClientSecret (empty)"'
-      # DEV ONLY: the staff AI model picker (template AiModelPicker). Test and
-      # prod never pass it and take the template's 'false'.
+      # The staff AI model picker (template AiModelPicker): dev and test.
+      # Prod never passes it and takes the template's 'false'.
       - PARAM_OVERRIDES="$PARAM_OVERRIDES AiModelPicker=true"
-      # Its Anthropic API sign-in (Workload Identity Federation): four ids from
-      # the owner's Claude Console federation rule, none secret. Fill them in
-      # here once the rule exists; while any is empty the picker shows the
-      # Anthropic models as "Anthropic API not connected". Appended only when
-      # set, because sam deploy rejects an empty override.
+      # The Anthropic API sign-in (Workload Identity Federation): four ids from
+      # the owner's Claude Console federation rule for dev (subject
+      # arn:aws:iam::239601476690:role/engagedev-*), none secret. All four set
+      # connects the Claude models switch (Haiku 5.5 / Sonnet 5.5 by default,
+      # docs/handoff/claude-55-switch-2026-10-11.md) and the picker's Anthropic
+      # models; any empty leaves every call on Bedrock. Appended only when set,
+      # because sam deploy rejects an empty override.
       - ANTHROPIC_FEDERATION_RULE_ID="fdrl_01Fgi2W7zco8f1k4HAPabtzn"
       - ANTHROPIC_ORGANIZATION_ID="19cbae90-fa39-4d34-bd38-e24396c41df4"
       - ANTHROPIC_SERVICE_ACCOUNT_ID="svac_012zQiYAvkDEUJBXDX7uA5TS"

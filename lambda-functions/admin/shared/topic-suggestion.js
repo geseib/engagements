@@ -53,6 +53,9 @@ const {
 } = require('./set-topics');
 const { MIN_SUGGESTED_TAGS, MAX_TAGS, normalizeTags } = require('./tags');
 const { questionText, setText } = require('./publishable');
+// Haiku 4.5 on Bedrock, or Haiku 5.5 on the Anthropic API where the Engage
+// switch is on (claude-route.js).
+const claudeRoute = require('./claude-route');
 
 // The same profile, and the same region-aware shape, as finding-explanations.js
 // — the check's other model call. Four copies of this ARN already exist in this
@@ -140,7 +143,7 @@ async function suggestSetTopic(bedrock, InvokeModelCommand, snapshot, { budget }
   if (typeof budget === 'function' && !budget()) return null;
   let parsed = null;
   try {
-    const res = await bedrock.send(new InvokeModelCommand({
+    const res = await claudeRoute.send(bedrock, new InvokeModelCommand({
       modelId: HAIKU(),
       contentType: 'application/json',
       accept: 'application/json',
@@ -150,7 +153,7 @@ async function suggestSetTopic(bedrock, InvokeModelCommand, snapshot, { budget }
         temperature: 0,
         messages: [{ role: 'user', content: promptFor(snapshot) }],
       }),
-    }));
+    }), { site: 'topic-suggestion', timeoutMs: 20000 });
     const body = JSON.parse(new TextDecoder().decode(res.body));
     parsed = parseReply((body.content || []).filter((c) => c.type === 'text').map((c) => c.text).join(' '));
   } catch (error) {
