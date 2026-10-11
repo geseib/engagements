@@ -86,8 +86,15 @@ function conditionFailed() {
   return e;
 }
 
-function conditionHolds(expr, item) {
+function conditionHolds(expr, item, names = {}) {
   const src = String(expr).trim();
+  // The usage stats' once-only markers (platform-metrics.js claimMarker):
+  // `attribute_exists(PK) AND attribute_not_exists(#m)`, both halves judged.
+  if (/\sAND\s/.test(src) && !/[()]\s*OR\s|\sOR\s/.test(src)) {
+    return src.split(/\s+AND\s+/).every((part) => conditionHolds(part, item, names));
+  }
+  const named = /^attribute_not_exists\((#\w+)\)$/.exec(src);
+  if (named && names[named[1]]) return !item || item[names[named[1]]] === undefined;
   if (src === 'attribute_not_exists(PK)' || src === 'attribute_not_exists(SK)') return !item;
   if (src === 'attribute_not_exists(ClientId)') return !item || item.ClientId === undefined;
   if (src === 'attribute_exists(RemovedAt)') return !!item && item.RemovedAt !== undefined;
@@ -103,15 +110,35 @@ function applyUpdate(item, inp) {
   const names = inp.ExpressionAttributeNames || {};
   const values = inp.ExpressionAttributeValues || {};
   const src = String(inp.UpdateExpression || '');
+  // Top-level commas only, so `if_not_exists(#a, :b)` stays one clause.
+  const splitTop = (body) => {
+    const out = []; let depth = 0; let cur = '';
+    for (const ch of body) {
+      if (ch === '(') depth += 1;
+      if (ch === ')') depth -= 1;
+      if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map((x) => x.trim()).filter(Boolean);
+  };
   const clause = (kw) => {
     const m = new RegExp(`(?:^|\\s)${kw}\\s+(.*?)(?=\\s+(?:SET|ADD|REMOVE)\\s+|$)`, 'is').exec(src);
-    return m ? m[1].split(',').map((s) => s.trim()).filter(Boolean) : [];
+    return m ? splitTop(m[1]) : [];
   };
   const attr = (n) => names[n] || n;
   const next = { ...item };
   for (const pair of clause('SET')) {
-    const [lhs, rhs] = pair.split('=').map((s) => s.trim());
-    next[attr(lhs)] = values[rhs];
+    const eq = pair.indexOf('=');
+    const lhs = pair.slice(0, eq).trim();
+    const rhs = pair.slice(eq + 1).trim();
+    const ifNot = /^if_not_exists\(\s*(#?\w+)\s*,\s*(:\w+)\s*\)$/.exec(rhs);
+    if (ifNot) {
+      const cur = next[attr(ifNot[1])];
+      next[attr(lhs)] = cur !== undefined ? cur : values[ifNot[2]];
+    } else {
+      next[attr(lhs)] = values[rhs];
+    }
   }
   for (const pair of clause('ADD')) {
     const [lhs, rhs] = pair.split(/\s+/);
@@ -150,7 +177,7 @@ const fakeDoc = {
         const k = key(inp.Key.PK, inp.Key.SK);
         if (failing(inp.Key.SK)) throw new Error(`injected write failure on ${k}`);
         const existing = store.get(k);
-        if (inp.ConditionExpression && !conditionHolds(inp.ConditionExpression, existing)) {
+        if (inp.ConditionExpression && !conditionHolds(inp.ConditionExpression, existing, inp.ExpressionAttributeNames)) {
           throw conditionFailed();
         }
         store.set(k, { ...applyUpdate(existing || { PK: inp.Key.PK, SK: inp.Key.SK }, inp), PK: inp.Key.PK, SK: inp.Key.SK });
@@ -656,7 +683,9 @@ const sessionsRun = (orgId) => [...store.values()]
         },
       };
       const out = await countAnsweredQuestion(racingDb, 'test-table', '5555', 'c001#002', { orgId: '' });
-      const reads = sentCommands.filter((c) => c.type === 'get');
+      // The re-read of the claim — not the usage stats' one projected read of
+      // the session's type and creator, which follows a count.
+      const reads = sentCommands.filter((c) => c.type === 'get' && /FirstAnsweredRound/.test(String(c.input.ProjectionExpression || '')));
       assert.strictEqual(reads.length, 1);
       assert.strictEqual(reads[0].input.ConsistentRead, true, 'the re-read is eventually consistent');
       assert.strictEqual(out.counted, true, `not counted: ${out.reason}`);
@@ -680,6 +709,44 @@ const sessionsRun = (orgId) => [...store.values()]
     // next-question — which would bill rehearsals the answer path forgives.
     assert.deepStrictEqual(callers.sort(), ['game/session-count.js', 'websocket/session-count.js']);
   });
+
+  say('\n7. the usage stats count the session once, at the same moment');
+  // rejects: recordSessionCounted called before the charge is decided, or
+  // without its marker — racing second answers would count twice.
+  await check('racing answers to the second question count the session once in the stats', async () => {
+    const TEAM = 'org_stats';
+    await seedOrg(TEAM, { type: 'team', plan: 'team' });
+    const gameId = await liveSession(TEAM);
+    await join(gameId, 'Ada');
+    await join(gameId, 'Bob');
+    await answeredRound(TEAM, gameId);
+    await serve(TEAM, gameId);
+    await Promise.all([answer(gameId, 'Ada'), answer(gameId, 'Bob')]);
+    const period = usage.periodOf(new Date());
+    const teamRow = () => store.get(key(`ORG#${TEAM}`, `STATS#${period}#TYPE#call-and-answer`)) || {};
+    assert.ok(metadataOf(gameId).StatsCountedAt, 'no StatsCountedAt marker');
+    assert.strictEqual(teamRow().counted, 1, `team row: ${JSON.stringify(teamRow())}`);
+    await answer(gameId, 'Ada', 'changed');
+    assert.strictEqual(teamRow().counted, 1);
+  });
+  // rejects: an event's item session left out of "counted" because its bill
+  // is the event's — the count and the bill are different questions.
+  for (const copy of ['game', 'websocket']) {
+    await check(`${copy}/session-count.js: an event's item session is counted, with no ledger row`, async () => {
+      const { countAnsweredQuestion } = require(path.join(REPO, 'lambda-functions', copy, 'session-count.js'));
+      const gameId = copy === 'game' ? '7101' : '7102';
+      store.set(key(`GAME#${gameId}`, 'METADATA'), {
+        PK: `GAME#${gameId}`, SK: 'METADATA', orgId: OTHER, GameType: 'poll', CreatedBy: 'u-host', EventRef: '4321', FirstAnsweredRound: '001',
+      });
+      const ledgerBefore = sessionRows(OTHER).length;
+      const out = await countAnsweredQuestion(fakeDoc, 'test-table', gameId, '002', { orgId: OTHER, EventRef: '4321', FirstAnsweredRound: '001' });
+      assert.strictEqual(out.reason, 'covered-by-event');
+      assert.strictEqual(sessionRows(OTHER).length, ledgerBefore, 'a ledger row was written');
+      const period = usage.periodOf(new Date());
+      const acct = store.get(key('USER#u-host', `STATS#${period}#TYPE#poll#ORG#${OTHER}`)) || {};
+      assert.strictEqual(acct.counted, copy === 'game' ? 1 : 2);
+    });
+  }
 
   say(`\n${pass} passed, ${fail} failed\n`);
   suiteFinished();

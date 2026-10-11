@@ -51,10 +51,12 @@
  *
  * tests/billable-session-wiring.js drives create, start, join, next-question
  * and real answers through message.js, holds the two copies identical, and
- * holds them the meter's only callers.
+ * holds them the meter's only callers. The same moment feeds the usage stats'
+ * "counted" (platform-metrics.js recordSessionCounted), once per session.
  */
 const { GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { recordBillableSession } = require('./usage');
+const { recordSessionCounted } = require('./platform-metrics');
 
 /** What countAnsweredQuestion needs from METADATA, for the caller's own read. */
 const COUNT_PROJECTION = 'orgId, FirstAnsweredRound, CountedAt, EventRef';
@@ -127,6 +129,10 @@ async function countAnsweredQuestion(db, tableName, gameId, round, meta = {}, op
       UpdateExpression: 'SET CountedAt = :at',
       ExpressionAttributeValues: { ':at': now.toISOString() },
     }));
+    // THE USAGE STATS' "counted" (usage-stats SPEC §5 E3): once per session
+    // by its own marker, an event's item included — the event's charge covers
+    // its bill, not its count. Never throws.
+    await recordSessionCounted({ gameId }, { db, tableName, now });
     return { counted: charge.reason !== 'covered-by-event', reason: charge.reason };
   } catch (error) {
     console.error(`⚠️ session-count: could not count ${gameId} at round ${round} — the next answer retries:`, error);

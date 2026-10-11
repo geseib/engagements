@@ -348,7 +348,11 @@ exports.handler = async (event) => {
   }
 
   console.log(`✅ Game ${gameId} created successfully`);
-  await recordSessionCreated({ gameId }); // platform-metrics.js: never throws
+  // platform-metrics.js: never throws. Once per session (StatsCreatedAt); the
+  // type, team and creator feed the usage stats (usage-stats SPEC §5 E1).
+  await recordSessionCreated({
+    gameId, gameType: gameType || 'call-and-answer', orgId: orgId || '', createdBy: callerUserId(event),
+  });
   return {
     statusCode: 201,
     body: JSON.stringify({

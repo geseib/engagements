@@ -168,7 +168,9 @@ async function prepare(db, tableName, { meta, code, row, itemId }) {
   if (stateOf(row) !== 'planned') return { refusal: raced() };
   const { item, refusal } = await playableItem(meta, row);
   if (refusal) return { refusal };
-  const gameId = await C.createChildSession(db, tableName, { item, orgId: meta.orgId, code, itemId, open: false });
+  const gameId = await C.createChildSession(db, tableName, {
+    item, orgId: meta.orgId, code, itemId, open: false, createdBy: meta.CreatedBy,
+  });
   try {
     await db.send(new UpdateCommand({
       TableName: tableName,
@@ -210,7 +212,9 @@ async function start(db, tableName, { meta, code, row, itemId }) {
     } else {
       const { item, refusal } = await playableItem(meta, row);
       if (refusal) return { refusal };
-      gameId = await C.createChildSession(db, tableName, { item, orgId: meta.orgId, code, itemId, now });
+      gameId = await C.createChildSession(db, tableName, {
+        item, orgId: meta.orgId, code, itemId, now, createdBy: meta.CreatedBy,
+      });
       created = true;
     }
   }
