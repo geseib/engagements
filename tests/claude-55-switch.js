@@ -688,15 +688,17 @@ const decode = (res) => JSON.parse(new TextDecoder().decode(res.body));
     assert.ok(!/Action: sts:/.test(b));
   });
   const spec = (tier) => fs.readFileSync(path.join(REPO, `buildspec-${tier}.yml`), 'utf8');
-  await check('buildspec-test.yml: the picker on, test\'s three ids, the rule id empty until the owner makes it', () => {
+  await check('buildspec-test.yml: the picker on, test\'s three ids, and its own federation rule', () => {
     const s = spec('test');
     assert.match(s, /PARAM_OVERRIDES="\$PARAM_OVERRIDES AiModelPicker=true"/);
-    assert.match(s, /# The federation rule id: set when the owner creates the test rule\.\n\s+- ANTHROPIC_FEDERATION_RULE_ID=""\n/);
+    // The owner created test's own rule (engagetest-*) on 2026-10-11.
+    assert.match(s, /- ANTHROPIC_FEDERATION_RULE_ID="fdrl_01SmE8ZCp94cd1kLFLwTgaRP"\n/);
     assert.match(s, /- ANTHROPIC_ORGANIZATION_ID="19cbae90-fa39-4d34-bd38-e24396c41df4"/);
     assert.match(s, /- ANTHROPIC_SERVICE_ACCOUNT_ID="svac_012zQiYAvkDEUJBXDX7uA5TS"/);
     assert.match(s, /- ANTHROPIC_WORKSPACE_ID="wrkspc_01Fxxn28qBVFs6uYyoccyngL"/);
     assert.ok(s.indexOf('AnthropicWorkspaceId=') < s.indexOf('Deploying to AWS...'), 'appended after the deploy');
-    assert.ok(!/fdrl_/.test(s), 'a federation rule id (dev\'s?) is on test');
+    // Dev's rule pins engagedev-* roles; on test it would refuse every exchange.
+    assert.ok(!/fdrl_01Fgi2W7zco8f1k4HAPabtzn/.test(s), 'dev\'s federation rule id is on test');
   });
   await check('buildspec-dev.yml keeps its four ids; buildspec-prod.yml is untouched by this work', () => {
     assert.match(spec('dev'), /- ANTHROPIC_FEDERATION_RULE_ID="fdrl_01Fgi2W7zco8f1k4HAPabtzn"/);
