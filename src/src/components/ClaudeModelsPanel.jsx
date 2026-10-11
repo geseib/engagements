@@ -24,6 +24,24 @@ import './ClaudeModelsPanel.css';
 const API = () => window.API_BASE || '';
 const URL_PATH = 'platform/settings/claude-models';
 
+const MODEL_ROWS = [
+  { bedrock: 'Claude Haiku 4.5', api: 'Claude Haiku 5.5' },
+  { bedrock: 'Claude Sonnet 4.6', api: 'Claude Sonnet 5.5' },
+];
+
+/** One model in a row: muted unless it is the one answering, which says In use. */
+function Model({ name, where, short, active }) {
+  return (
+    <span className={`cms-model${active ? ' is-active' : ''}`} data-active={active || undefined}>
+      <span className="cms-model-name">{name}</span>
+      {/* Narrow screens hide the column headings, so each model says where it runs. */}
+      <span className="cms-where" aria-hidden="true">{short}</span>
+      <span className="cms-sr">{` on ${where}${active ? ', in use' : ', not in use'}`}</span>
+      {active && <span className="cms-inuse" aria-hidden="true">In use</span>}
+    </span>
+  );
+}
+
 export const NOT_CONNECTED = 'Anthropic API not connected on this tier. Every call stays on Bedrock until its federation ids are set.';
 
 export default function ClaudeModelsPanel() {
@@ -111,32 +129,32 @@ export default function ClaudeModelsPanel() {
             </button>
           </div>
 
-          {connected ? (
-            <>
-              <ul className="cms-map">
-                <li>
-                  <span className="cms-from">Claude Haiku 4.5 on Bedrock</span>
-                  <span className="cms-arrow">{on ? 'to' : 'stays'}</span>
-                  <span className={on ? 'cms-to' : 'cms-to cms-to--off'}>{on ? 'Claude Haiku 5.5' : 'Claude Haiku 4.5'}</span>
+          {/* Both models on each row; the one actually answering is marked In use
+              (owner, 2026-10-11). It follows what is in effect, so a tier with no
+              Anthropic connection marks Bedrock whatever the setting says. */}
+          <div className="cms-map">
+            <div className="cms-maphead" aria-hidden="true">
+              <span>Bedrock 4.x</span>
+              <span>Anthropic API 5.5</span>
+            </div>
+            <ul aria-label="Which model answers">
+              {MODEL_ROWS.map((row) => (
+                <li key={row.api}>
+                  <Model name={row.bedrock} where="Bedrock" short="Bedrock" active={!effective55} />
+                  <Model name={row.api} where="the Anthropic API" short="Anthropic API" active={effective55} />
                 </li>
-                <li>
-                  <span className="cms-from">Claude Sonnet 4.6 on Bedrock</span>
-                  <span className="cms-arrow">{on ? 'to' : 'stays'}</span>
-                  <span className={on ? 'cms-to' : 'cms-to cms-to--off'}>{on ? 'Claude Sonnet 5.5' : 'Claude Sonnet 4.6'}</span>
-                </li>
-              </ul>
-              {saved
-                ? <p className="cms-note cms-note--saved" role="status">{saved}</p>
-                : (
-                  <p className="cms-foot">
-                    {on ? 'Turn it off to keep every call on Bedrock 4.x. ' : 'Turn it on to send these calls to the Anthropic API. '}
-                    A change reaches every function within a minute. A call that fails on the Anthropic API is answered by the Bedrock model. Other models, such as the staff picker&apos;s Opus, are not affected.
-                  </p>
-                )}
-            </>
-          ) : (
-            <p className="cms-note" role="status">{NOT_CONNECTED}</p>
-          )}
+              ))}
+            </ul>
+          </div>
+          {!connected && <p className="cms-note" role="status">{NOT_CONNECTED}</p>}
+          {connected && (saved
+            ? <p className="cms-note cms-note--saved" role="status">{saved}</p>
+            : (
+              <p className="cms-foot">
+                {on ? 'Turn it off to keep every call on Bedrock 4.x. ' : 'Turn it on to send these calls to the Anthropic API. '}
+                A change reaches every function within a minute. A call that fails on the Anthropic API is answered by the Bedrock model. Other models, such as the staff picker&apos;s Opus, are not affected.
+              </p>
+            ))}
         </section>
       )}
     </div>

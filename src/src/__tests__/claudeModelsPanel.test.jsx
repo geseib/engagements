@@ -35,6 +35,9 @@ function serve(...answers) {
 
 beforeEach(() => { window.API_BASE = 'https://api.test/'; });
 
+/** The model names marked In use, in row order. */
+const inUse = () => [...document.querySelectorAll('.cms-model.is-active .cms-model-name')].map((n) => n.textContent);
+
 it('reads the staff route once, through authFetch', async () => {
   serve(view());
   render(<ClaudeModelsPanel />);
@@ -51,8 +54,10 @@ it('on by default: says so, and maps Haiku 4.5 to 5.5 and Sonnet 4.6 to 5.5', as
   expect(sw).not.toBeDisabled();
   expect(screen.getByText('Anthropic API, 5.5 models')).toBeInTheDocument();
   expect(screen.getByText(/the default/)).toBeInTheDocument();
-  expect(screen.getByText('Claude Haiku 5.5')).toBeInTheDocument();
-  expect(screen.getByText('Claude Sonnet 5.5')).toBeInTheDocument();
+  // Both models show; the 5.5 ones are marked In use, the 4.x ones are not (owner, 2026-10-11).
+  expect(inUse()).toEqual(['Claude Haiku 5.5', 'Claude Sonnet 5.5']);
+  expect(screen.getByText('Claude Haiku 4.5')).toBeInTheDocument();
+  expect(screen.getAllByText('In use')).toHaveLength(2);
 });
 
 it('a click posts the opposite value and shows the saved state', async () => {
@@ -66,7 +71,8 @@ it('a click posts the opposite value and shows the saved state', async () => {
   expect(JSON.parse(init.body)).toEqual({ anthropic55: false });
   expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
   expect(screen.getByText('Bedrock, 4.x models')).toBeInTheDocument();
-  expect(screen.getByText('Claude Haiku 4.5')).toBeInTheDocument();
+  // The mark moves to the Bedrock models.
+  expect(inUse()).toEqual(['Claude Haiku 4.5', 'Claude Sonnet 4.6']);
 });
 
 it('a refused change keeps the old state and says nothing was changed', async () => {
@@ -85,6 +91,8 @@ it('not connected: the switch is disabled, the reason is in words, and nothing i
   expect(sw).toHaveAttribute('aria-checked', 'false');
   expect(screen.getByText(NOT_CONNECTED)).toBeInTheDocument();
   expect(screen.getByText('Bedrock, 4.x models')).toBeInTheDocument();
+  // Not connected: Bedrock answers, so Bedrock is marked In use whatever the setting says.
+  expect(inUse()).toEqual(['Claude Haiku 4.5', 'Claude Sonnet 4.6']);
   fireEvent.click(sw);
   await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
 });

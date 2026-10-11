@@ -112,18 +112,55 @@
 .cms .cms-switch.is-on .cms-track { background: var(--primary); border-color: var(--primary); }
 .cms .cms-switch.is-on .cms-track::after { left: 23px; background: var(--bg); }
 
-.cms .cms-map { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--cms-rule); }
+.cms .cms-map { border-top: 1px solid var(--cms-rule); }
+.cms .cms-maphead,
 .cms .cms-map li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
-  min-height: var(--cms-row-h);
-  padding: 4px 0;
-  border-bottom: 1px solid var(--cms-rule);
 }
-.cms .cms-arrow { color: var(--muted); font-size: var(--cms-t-label); text-align: center; }
-.cms .cms-to--off { color: var(--muted); }
+.cms .cms-maphead {
+  padding: 8px 0 4px;
+  color: var(--muted);
+  font: 700 var(--cms-t-floor)/1.2 var(--font-ui);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.cms .cms-map ul { margin: 0; padding: 0; list-style: none; }
+.cms .cms-map li { padding: 6px 0; border-bottom: 1px solid var(--cms-rule); }
+
+/* The model answering: green, never orange (the switch holds the one orange). */
+.cms .cms-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--cms-row-h);
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+}
+.cms .cms-model.is-active {
+  border-color: rgba(79, 178, 134, .5);
+  background: var(--cms-tint-green);
+  color: var(--text);
+  font-weight: 600;
+}
+.cms .cms-inuse {
+  margin-left: auto;
+  color: var(--cms-success);
+  font: 700 var(--cms-t-floor)/1 var(--font-ui);
+  white-space: nowrap;
+}
+.cms .cms-where { display: none; color: var(--muted); font: 500 var(--cms-t-floor)/1 var(--font-ui); }
+.cms .cms-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 .cms .cms-foot { margin: 0; color: var(--muted); font-size: var(--cms-t-label); line-height: 1.5; }
 
@@ -144,6 +181,7 @@
 
 @media (max-width: 520px) {
   .cms .cms-set { padding: 14px 16px; }
-  .cms .cms-map li { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 6px 0; }
-  .cms .cms-arrow { text-align: left; }
+  .cms .cms-maphead { display: none; }
+  .cms .cms-where { display: inline; }
+  .cms .cms-map li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
