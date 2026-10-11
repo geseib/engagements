@@ -78,10 +78,10 @@ phases:
       # arn:aws:iam::239601476690:role/engagetest-*), none secret. All four set
       # connects the Claude models switch (Haiku 5.5 / Sonnet 5.5 by default,
       # docs/handoff/claude-55-switch-2026-10-11.md) and the picker's Anthropic
-      # models; any empty leaves every call on Bedrock — which is test today.
+      # models; any empty leaves every call on Bedrock.
       # Appended only when set, because sam deploy rejects an empty override.
-      # The federation rule id: set when the owner creates the test rule.
-      - ANTHROPIC_FEDERATION_RULE_ID=""
+      # The federation rule id: test's own rule (engagetest-*), created by the owner 2026-10-11.
+      - ANTHROPIC_FEDERATION_RULE_ID="fdrl_01SmE8ZCp94cd1kLFLwTgaRP"
       - ANTHROPIC_ORGANIZATION_ID="19cbae90-fa39-4d34-bd38-e24396c41df4"
       - ANTHROPIC_SERVICE_ACCOUNT_ID="svac_012zQiYAvkDEUJBXDX7uA5TS"
       - ANTHROPIC_WORKSPACE_ID="wrkspc_01Fxxn28qBVFs6uYyoccyngL"
