@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
-import { monthLabel, dateLabel, countLabel } from './ObservabilityPanel';
+import { monthLabel, dateLabel, countLabel } from '../utils/statsFormat';
 import './UsageStatsPanel.css';
 
 /**
@@ -127,7 +127,7 @@ function saveFile(name, text) {
   return true;
 }
 
-function Tile({ label, value, sub }) {
+export function Tile({ label, value, sub }) {
   return (
     <div className="ust-tile">
       <span className="ust-tile-l">{label}</span>

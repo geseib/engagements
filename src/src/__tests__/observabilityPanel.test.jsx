@@ -273,3 +273,30 @@ describe('the formatters', () => {
     expect(libraryLabel('anything else')).toBe('Teams');
   });
 });
+
+describe('the usage stats block (docs/design/usage-stats B1)', () => {
+  const c = (o) => ({ created: 0, started: 0, counted: 0, questions: 0, participants: 0, decisions: 0, tasks: 0, ...o });
+  const WITH_STATS = {
+    ...FULL,
+    stats: {
+      month: new Date().toISOString().slice(0, 7), recorded: true,
+      byType: { poll: c({ created: 3, counted: 2, questions: 9 }) }, totals: c({ created: 3, counted: 2, questions: 9 }),
+      events: c({}), gauge: null, teams: [], noTeam: c({}),
+    },
+  };
+  // rejects: the month stepper changing the label and not the numbers.
+  it('moving to the previous month asks for that month', async () => {
+    serve(WITH_STATS);
+    render(<ObservabilityPanel />);
+    await screen.findByRole('region', { name: 'Platform by type' });
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    expect(global.fetch.mock.calls[1][0]).toMatch(/platform\/observability\?month=\d{4}-\d{2}$/);
+  });
+  it('a response without stats leaves the page as it was', async () => {
+    serve(FULL);
+    render(<ObservabilityPanel />);
+    await loaded();
+    expect(screen.queryByRole('region', { name: 'Platform by type' })).toBeNull();
+  });
+});
