@@ -440,6 +440,41 @@ function seedRef({ scope, orgId, sourceQuestionId }) {
     assert.strictEqual(answers[0].answer, ANSWER, `answer was ${JSON.stringify(answers[0].answer)}`);
   });
 
+  // The two HOST doors that answer with the ballot. Each built its rows from
+  // the raw Query, so on an org session the host's VOTE stage drew every card
+  // as “[object Object]” until a later get-answers refetch replaced it (owner,
+  // 2026-10-11). rejects: start-vote or reveal-authors returning envelopes.
+  put({
+    PK: `GAME#${GAME_ID}`, SK: 'STATE', State: 'ASK#001',
+    LessonNumber: 1, CurrentQuestionId: 'QUESTION#c001#001',
+  });
+  const voted = await W('start-vote.js')({
+    ...HOST,
+    pathParameters: { gameId: GAME_ID },
+    body: JSON.stringify({ questionNumber: 1 }),
+  });
+  await check('start-vote returns 200 to the session host', () =>
+    assert.strictEqual(voted.statusCode, 200, voted.body));
+  await check('…and its ballot carries the sentence, not the envelope', () => {
+    const answers = parse(voted).answers || [];
+    assert.strictEqual(answers.length, 1, `got ${answers.length} answers`);
+    assert.strictEqual(answers[0].answer, ANSWER, `answer was ${JSON.stringify(answers[0].answer)}`);
+    assert.ok(!/"iv":/.test(voted.body), 'an envelope reached the host');
+  });
+  const revealed = await G('reveal-authors.js')({
+    ...HOST,
+    pathParameters: { gameId: GAME_ID },
+    body: JSON.stringify({ questionNumber: 1 }),
+  });
+  await check('reveal-authors returns 200 to the session host', () =>
+    assert.strictEqual(revealed.statusCode, 200, revealed.body));
+  await check('…and its rows carry the sentence, not the envelope', () => {
+    const answers = parse(revealed).answers || [];
+    assert.strictEqual(answers.length, 1, `got ${answers.length} answers`);
+    assert.strictEqual(answers[0].answer, ANSWER, `answer was ${JSON.stringify(answers[0].answer)}`);
+    assert.ok(!/"iv":/.test(revealed.body), 'an envelope reached the host');
+  });
+
   // ── 4. PLATFORM content is NOT encrypted, and must not be ─────────────────
   //
   // rejects: encrypting platform (or public) content. There is no organisation

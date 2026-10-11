@@ -51,3 +51,40 @@ export function askFetchStillCurrent(gameStateNow, round) {
   const key = stageAnswersKey(`ASK#${round}`);
   return key !== null && stageAnswersKey(gameStateNow) === key;
 }
+
+/**
+ * WHAT THE VOTE AND RESULTS STAGES ARE DOING about their responses:
+ * `'ready'` (draw them — or the none line, if there are none), `'gathering'`
+ * (this round-phase's rows have not landed yet) or `'failed'` (the load for
+ * THIS round-phase was refused or threw, so the stage stops saying it is
+ * gathering). The owner, 2026-10-11: the wait should read "Gathering
+ * responses…" — work in progress, never an error, never blank.
+ *
+ * @param failedFor the round-phase key whose load last failed, or null
+ */
+export function stageAnswersStatus(gameState, answersFor, failedFor) {
+  if (stageAnswersReady(gameState, answersFor)) return 'ready';
+  const key = stageAnswersKey(gameState);
+  return key && failedFor === key ? 'failed' : 'gathering';
+}
+
+/** The noun the gathering line uses on each phase: "Gathering responses…". */
+export function stageGatheringNoun(gameState) {
+  return String(gameState || '').startsWith('RESULTS#') ? 'results' : 'responses';
+}
+
+/**
+ * THE TEXT OF ONE RESPONSE, AS A CARD MAY PRINT IT. A string is itself, a
+ * number (a trivia slot, a rating) is its digits, and ANYTHING ELSE IS EMPTY.
+ *
+ * Why not just `${answer.answer}`: on an org session the stored `Answer` is an
+ * encryption envelope, and start-vote / reveal-authors once handed it to the
+ * host unopened — so the VOTE stage printed “[object Object]” beside
+ * "Response 1" until a decrypted refetch replaced it (owner, 2026-10-11). The
+ * server is fixed; this is the page refusing to print an object as prose again.
+ */
+export function answerText(value) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '';
+}

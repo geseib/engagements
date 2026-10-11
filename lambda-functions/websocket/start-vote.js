@@ -4,6 +4,7 @@ const { broadcastToGame } = require('./schema-compliant-manager');
 const { isHidden, redactAnswers } = require('./anonymity');
 const { inDisplayOrder } = require('./answer-order');
 const { callerMayDriveSession } = require('./tenant');
+const { decryptItems } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -125,7 +126,15 @@ exports.handler = async (event) => {
 
     // The room's order (answer-order.js), as get-answers.js serves it: the
     // stage draws this list, and the phones number theirs the same way.
-    const ballot = inDisplayOrder(answers, gameId, paddedQuestionNumber).map(answer => ({
+    //
+    // PLAINTEXT FIRST. On an org session `Answer` is an envelope at rest
+    // (tenant-crypto), and this ballot is what the host's VOTE stage draws the
+    // moment it lands: built from the raw Query, every card read
+    // "[object Object]" until a later get-answers refetch replaced it (owner,
+    // 2026-10-11). get-answers.js decrypts before it builds; so does this.
+    const orgId = metaRes.Item && typeof metaRes.Item.orgId === 'string' ? metaRes.Item.orgId.trim() : '';
+    const opened = orgId ? await decryptItems(orgId, 'answer', answers) : answers;
+    const ballot = inDisplayOrder(opened, gameId, paddedQuestionNumber).map(answer => ({
       playerId: answer.PlayerName,
       playerName: answer.PlayerName,
       name: answer.PlayerName, // Add name field for frontend compatibility

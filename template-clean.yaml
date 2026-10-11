@@ -808,6 +808,14 @@ Resources:
             Auth:
               Authorizer: CognitoAuthorizer
       Policies:
+        # It answers with every response's text, which is encrypted per
+        # organisation at rest, so it unwraps that org's data key — only with
+        # an orgId encryption context, which the key policy makes mandatory.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:

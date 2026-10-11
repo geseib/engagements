@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon from './Icon';
 import { sameFocus } from '../config/stageFocus';
+import { answerText } from '../config/stageAnswers';
 
 /**
  * MAKE THAT BIGGER — the phone's control over what the ROOM is looking at.
@@ -99,7 +100,7 @@ export default function RemoteFocusPanel({
                   clamp is CSS, so the full string is still in the DOM for a
                   screen reader and for the copy the host might want.
                 */}
-                <span className="hr-focus__text">{answer.answer || answer.text || ''}</span>
+                <span className="hr-focus__text">{answerText(answer.answer) || answerText(answer.text)}</span>
                 <button
                   className={`hr-btn hr-btn--small ${showing ? 'hr-btn--primary' : 'hr-btn--ghost'}`}
                   type="button"
