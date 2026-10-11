@@ -724,6 +724,36 @@ async function makeEvent() {
     }
   });
 
+  console.log('\n9. the usage stats: an attendee in three items');
+  // rejects: an event attendee counted once per item on the event row, or
+  // an item's seat not counted as a participant of its session (usage-stats
+  // SPEC §5 E9, E14): three item seats, one registration.
+  await check('one attendee in three items: three item participants, one event attendee', async () => {
+    table.clear();
+    seedOrg(table, NW);
+    seedSets();
+    const day = await makeEvent();
+    const lee = bodyOf(await join(day.code, 'Lee Chen'));
+    for (const key of ['trivia', 'friction', 'pulse']) {
+      const started = await run(day.code, { action: 'start', itemId: day.ids[key] });
+      assert.strictEqual(started.statusCode, 200, `${key}: ${started.body}`);
+      const gameId = itemRow(day.code, day.ids[key]).GameId;
+      const seat = await playerJoin(gameId, { attendeeToken: lee.token, clientId: 'cl_lee' });
+      assert.strictEqual(seat.statusCode, 200, `${key}: ${seat.body}`);
+      // Coming back to the same item is the same seat, not a second participant.
+      await playerJoin(gameId, { attendeeToken: lee.token, clientId: 'cl_lee' });
+    }
+    const p = new Date().toISOString().slice(0, 7);
+    const team = (type) => table.get(`ORG#${NW}`, `STATS#${p}#TYPE#${type}`) || {};
+    assert.strictEqual(team('trivia').participants, 1);
+    assert.strictEqual(team('call-and-answer').participants, 1);
+    assert.strictEqual(team('survey').participants, 1);
+    assert.strictEqual(team('event').participants, 1);
+    // The event's creator, carried onto its items' sessions.
+    const acct = table.get('USER#u_host', `STATS#${p}#TYPE#trivia#ORG#${NW}`) || {};
+    assert.strictEqual(acct.participants, 1);
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

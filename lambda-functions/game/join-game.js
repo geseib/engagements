@@ -5,6 +5,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { openSessionOr } = require('./session-gate');
 const { nowSeconds, handoverOpenFor } = require('./handover');
 const { attendeeForToken, seatName, MAX_SEATS } = require('./event-attendee');
+const { recordParticipant } = require('./platform-metrics');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -210,6 +211,8 @@ async function joinAsAttendee(gameId, token, clientId) {
         if (error && error.name === 'ConditionalCheckFailedException') continue;
         throw error;
       }
+      // A NEW seat: one participant (usage stats, SPEC §5 E9). Never throws.
+      await recordParticipant({ gameId, metadata: meta }, { db });
       await db.send(new PutCommand({
         TableName: TABLE,
         Item: {
@@ -483,6 +486,10 @@ exports.handler = async (event) => {
       }
       throw error;
     }
+
+    // A NEW seat, written once: one participant (usage stats, SPEC §5 E9). A
+    // reconnect, a refresh or a handover reuses the seat and never gets here.
+    await recordParticipant({ gameId, metadata: gate.metadata }, { db });
 
     // Create initial consolidated score record using playerName (new players start with afterRound: "000")
     await db.send(new PutCommand({

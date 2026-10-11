@@ -96,7 +96,15 @@ async function makeEvent(body = {}) {
     }
   });
   await check('it wrote exactly the attendee row, one on the count and its list mirror — no session, no code, no usage', () => {
-    const writes = writesSince(logFrom);
+    // The usage stats' three counter rows (platform, team, the event's
+    // creator: usage-stats SPEC §5 E14) are numbers under STATS#/MONTH# keys;
+    // everything else is the join's own writes.
+    const isStats = (w) => w.input.Key && /^(STATS|MONTH)#/.test(String(w.input.Key.SK));
+    const all = writesSince(logFrom);
+    const stats = all.filter(isStats);
+    assert.strictEqual(stats.length, 3, `stats writes: ${stats.length}`);
+    assert.ok(stats.every((w) => /#TYPE#event(#|$)/.test(w.input.Key.SK)), 'an attendee counts on the event row only');
+    const writes = all.filter((w) => !isStats(w));
     assert.deepStrictEqual(writes.map((w) => w.type), ['put', 'update', 'update']);
     assert.match(writes[0].input.Item.SK, /^ATTENDEE#at_[0-9a-f]{16}$/);
     assert.deepStrictEqual(writes[1].input.Key, { PK: `EVENT#${code}`, SK: 'METADATA' });

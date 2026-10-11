@@ -35,6 +35,7 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const { eventPk, eventsIndexPk } = require('../tenant');
 const { encryptItem, decryptItem } = require('../tenant-crypto');
+const { recordEventAttendee } = require('../platform-metrics');
 const {
   attendeeSk, indexSk, META_SK, ATTENDEE_PREFIX, queryAll,
 } = require('./event-store');
@@ -139,6 +140,8 @@ async function putAttendee(db, tableName, { code, meta, name, now = new Date() }
         Item: item,
         ConditionExpression: 'attribute_not_exists(SK)',
       })));
+      // One registration for the event's numbers (usage stats, SPEC §5 E14).
+      await recordEventAttendee({ orgId: meta.orgId, createdBy: meta.CreatedBy }, { db, tableName, now });
       return { attendeeId, token, row };
     } catch (error) {
       if (error && error.name === 'ConditionalCheckFailedException' && attempt < MINT_TRIES) continue;
