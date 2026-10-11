@@ -293,6 +293,16 @@ const TEMPLATE_VARIABLES = [
     example: 'Working with Ambiguity, Leadership Challenge',
   },
   {
+    // task-instruction.js: the question's CustomInstructions, else the set's
+    // customInstruction, else the artwork line, else the game type's default.
+    // Every type resolves one, the same way the phone does.
+    name: 'task',
+    description: 'What the room was told to do: the task line on the answer screen',
+    category: 'Question Info',
+    gameTypes: ALL_TYPES,
+    example: 'What change does our team need to introduce, and what would stop it?',
+  },
+  {
     name: 'questionDetail',
     description: 'Additional context and details about the question',
     category: 'Question Info',
@@ -580,6 +590,16 @@ const TEMPLATE_VARIABLES = [
     category: 'Vote Tally',
     gameTypes: RANKED_TYPES,
     example: '1. Ship it Friday (13 vote points), 2. Wait for the audit (8 vote points)',
+  },
+  {
+    // author-tally.js. Built only where a ballot was cast (the vote loop's
+    // types); trivia, wavelength and an unvoted round read "No votes
+    // recorded", and an anonymous round names nobody.
+    name: 'voteTallyByAuthor',
+    description: 'One line per author: name and the vote points their answer earned',
+    category: 'Vote Tally',
+    gameTypes: VOTED_TYPES,
+    example: '- Theo Brooks: 7 vote points (1 first, 2 second, 0 third)',
   },
   {
     /*

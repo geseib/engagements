@@ -740,7 +740,7 @@ function outputSectionDefects(raw) {
 export const SECTION_SYNONYMS = {
   summary: /^(summary|results?|overview|insights?|analysis|key\s*lessons?|key\s*takeaways?|takeaways?|themes?|common\s*themes?|dive\s*deep|game\s*status|challenge)\b/i,
   discussion: /^(discussion\s*(questions?|topics?|prompts?)|questions?\s*(to\s*discuss)?|talking\s*points?|prompts?)\b/i,
-  nextSteps: /^(next\s*steps?|actions?|action\s*items?|recommendations?|strategic\s*recommendations?|implementation(\s*priority)?)\b/i,
+  nextSteps: /^((suggested\s*)?next\s*steps?|actions?|action\s*items?|recommendations?|strategic\s*recommendations?|implementation(\s*priority)?)\b/i,
 };
 
 /* --------------------------------------------------------- word budget -- */

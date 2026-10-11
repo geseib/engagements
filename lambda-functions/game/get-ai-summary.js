@@ -35,6 +35,8 @@ const { shapeForLog } = require('./log-shape');
 const { pollQuestionOf } = require('./poll-question');
 const { pollTally, describePollTally } = require('./poll-round');
 const { describeSurveyResults } = require('./survey-digest');
+const { resolveTask, authoredTaskOf } = require('./task-instruction');
+const { authorTallyLines, findTallyMismatches, tallyRows } = require('./author-tally');
 
 /**
  * A SURVEY'S ONE SUMMARY lives at this pseudo-round. A survey has no rounds
@@ -59,6 +61,12 @@ const personaAttribution = (persona) => ({
 });
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+/**
+ * The model every Workie read is written by. Its id is stored on each summary
+ * row (`Model`), so the constant and the call cannot disagree.
+ */
+const SUMMARY_MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+exports.SUMMARY_MODEL_ID = SUMMARY_MODEL_ID;
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
 
@@ -258,7 +266,7 @@ const extractListItems = (text, limit) => {
 const SECTION_SYNONYMS = {
   summary: /^(summary|results?|overview|insights?|analysis|key\s*lessons?|key\s*takeaways?|takeaways?|themes?|common\s*themes?|dive\s*deep|game\s*status|challenge)\b/i,
   discussion: /^(discussion\s*(questions?|topics?|prompts?)|questions?\s*(to\s*discuss)?|talking\s*points?|prompts?)\b/i,
-  nextSteps: /^(next\s*steps?|actions?|action\s*items?|recommendations?|strategic\s*recommendations?|implementation(\s*priority)?)\b/i,
+  nextSteps: /^((suggested\s*)?next\s*steps?|actions?|action\s*items?|recommendations?|strategic\s*recommendations?|implementation(\s*priority)?)\b/i,
 };
 
 // Parse Claude's response into { summaryText, discussionQuestions, nextSteps }.
@@ -945,6 +953,8 @@ exports.handler = async (event) => {
           markdownResponse: existingSummary.Item.MarkdownResponse || null,
           personaName: existingSummary.Item.PersonaName || null,
           personaSource: existingSummary.Item.PersonaSource || null,
+          // null for a row written before Model existed, or by the fallback.
+          model: existingSummary.Item.Model || null,
           // null for a row written before ContextUsed existed, or by the fallback.
           contextUsed: existingSummary.Item.ContextUsed || null,
           // A row written by the template says so (buildFallback). A row
@@ -1702,6 +1712,10 @@ exports.handler = async (event) => {
       PersonaName: summaryData.personaName || null,
       PersonaId: summaryData.personaId || null,
       PersonaSource: summaryData.personaSource || null,
+      // Which model wrote this read: the Bedrock id, plaintext like
+      // PersonaSource (configuration, not content). Absent on the template
+      // fallback, which no model wrote.
+      ...(summaryData.model ? { Model: summaryData.model } : {}),
       // Written with the briefing? Only the model path can say yes; the
       // data-driven fallback never read it.
       ...(summaryData.briefingUsed ? { BriefingUsed: true } : {}),
@@ -1758,6 +1772,7 @@ exports.handler = async (event) => {
       markdownResponse: summaryData.markdownResponse,
       personaName: summaryData.personaName || null,
       personaSource: summaryData.personaSource || null,
+      model: summaryData.model || null,
       contextUsed: summaryData.contextUsed || null,
       fallback: summaryData.fallback === true,
       fallbackReason: summaryData.fallback ? (summaryData.fallbackReason || null) : null,
@@ -2573,6 +2588,21 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Scoring system explanation
   const scoringSystem = `1st place: ${scoringConfig.firstPlacePoints} pts, 2nd place: ${scoringConfig.secondPlacePoints} pts, 3rd place: ${scoringConfig.thirdPlacePoints} pt`;
   
+  // THE TASK (task-instruction.js). Both sources were decrypted where they
+  // were read: the question with its set's org, the set's instruction with
+  // the session set's.
+  const canonicalGameType = normalizeGameType(gameType) || gameType;
+  const task = resolveTask(question, customInstruction, canonicalGameType);
+  const authoredTask = authoredTaskOf(question, customInstruction);
+
+  // WHO EARNED WHAT (author-tally.js). Skipped where no ballot was cast: on
+  // trivia the points are not votes, and wavelength has no points at all.
+  const tallyApplies = !survey && votes && votes.length > 0
+    && gameType !== 'trivia' && gameType !== 'wavelength';
+  const voteTallyByAuthor = tallyApplies
+    ? authorTallyLines(voteTallies, { hidden })
+    : 'No votes recorded';
+
   // Voting breakdown
   const votingBreakdown = sortedAnswers.slice(0, 3).map(([idx, data]) => 
     `${data.answerText}: ${data.firstPlace} first-place, ${data.secondPlace} second-place, ${data.thirdPlace} third-place votes`
@@ -2889,7 +2919,17 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       (question.questionDetail || question.detail)
         ? `Detail: ${question.questionDetail || question.detail}`
         : null,
+      // Only a task someone WROTE: a game type's stock line ("Select the best
+      // answer:") says nothing about this round that the prompt does not.
+      authoredTask ? `Task the room was set: ${authoredTask}` : null,
     ].filter(Boolean).join('\n'),
+    /*
+      THE TASK THE ROOM ANSWERED — the words on the phone's answer screen
+      (task-instruction.js, mirroring the phone's resolveInstruction). Until
+      2026-10-11 nothing read the question's CustomInstructions, so the model
+      was told the room had answered the story's title.
+    */
+    task: task,
     triviaChoices: triviaChoices || (() => {
       // Fallback if trivia processing didn't run
       if (question && gameType === 'trivia') {
@@ -2975,6 +3015,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     
     // VOTE TALLY / RESULTS
     voteTally: resultsString,
+    // One line per author, name and points (author-tally.js). The reply's
+    // name-and-points claims are checked against the same rows after it lands.
+    voteTallyByAuthor: voteTallyByAuthor,
     topVotedAnswers: topAnswers_formatted,
     votingBreakdown: votingBreakdown,
     consensusLevel: consensusLevel,
@@ -3265,7 +3308,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Haiku 4.5 is the single fast model in the hot path. It finishes in ~3–8s,
   // makes a throttle retry cheap, and keeps us well under any latency budget.
   // No second slow model is chained — failures go straight to the static fallback.
-  const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
+  const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/${SUMMARY_MODEL_ID}`;
   console.log('🤖 BEDROCK: Calling Claude Haiku 4.5 (primary)…', haikuModelId);
   console.log('🤖 BEDROCK: Prompt length:', prompt.length);
 
@@ -3283,7 +3326,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   const firstHeading = resolveOutputSections(promptData)[0].heading;
   const prefill = `## ${firstHeading}`;
 
-  const invokeHaiku = async () => bedrock.send(new InvokeModelCommand({
+  const invokeHaiku = async (promptText = prompt) => bedrock.send(new InvokeModelCommand({
     modelId: haikuModelId,
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
@@ -3298,37 +3341,87 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       // "real, vivid, natural" quality the owner asked this pass to restore.
       temperature: 0.7,
       messages: [
-        { role: 'user', content: prompt },
+        { role: 'user', content: promptText },
         { role: 'assistant', content: prefill }
       ]
     })
   }));
 
-  try {
+  /** One reply: the call, its single throttle retry, and prefill + completion. */
+  const askModel = async (promptText) => {
     let response;
     try {
-      response = await invokeHaiku();
+      response = await invokeHaiku(promptText);
     } catch (e) {
       if (e.name === 'ThrottlingException') {
         console.log('⏳ BEDROCK: throttled — retrying Haiku 4.5 once');
-        response = await invokeHaiku(); // one retry, SAME fast model
+        response = await invokeHaiku(promptText); // one retry, SAME fast model
       } else {
         throw e;
       }
     }
-
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     // Prefill + completion IS the reply — the model wrote everything after the
     // heading, and everything downstream (the parser, the stored markdown, the
     // projector) must see the whole document, heading included.
-    const aiResponse = (prefill + responseBody.content[0].text).trim();
-
+    const text = (prefill + responseBody.content[0].text).trim();
     // Its size and how it ended, never a preview: the reply is written from the
     // answers and stored sealed (ENCRYPTED_FIELDS.aiSummary). A stop_reason of
     // max_tokens is the one thing here worth an alert.
-    console.log(`✅ CLAUDE SUCCESS: AI response received, ${aiResponse.length} chars, stop_reason ${responseBody.stop_reason || 'not given'}`);
+    console.log(`✅ CLAUDE SUCCESS: AI response received, ${text.length} chars, stop_reason ${responseBody.stop_reason || 'not given'}`);
     if (responseBody.stop_reason === 'max_tokens') {
-      console.warn(`⚠️ BEDROCK: reply cut off at max_tokens after ${aiResponse.length} chars — the last section may be missing`);
+      console.warn(`⚠️ BEDROCK: reply cut off at max_tokens after ${text.length} chars — the last section may be missing`);
+    }
+    return text;
+  };
+
+  /*
+    THE SCORES ARE CHECKED, NOT TRUSTED (author-tally.js). Relay pilot game
+    6497: the prompt listed Lena 6 and Omar 6, and the reply said Theo and
+    Omar both earned 6. A reply whose name-and-points claims disagree with the
+    tally is written again ONCE, told the right figures; if the second still
+    disagrees it is kept — a summary with a slip beats no summary — and a
+    structured warning is logged. Never on an anonymous round: there are no
+    names to check, and none may be printed here.
+  */
+  const checkRows = tallyApplies && !hidden
+    ? tallyRows(voteTallies).map((r) => ({ name: r.name, points: r.points }))
+    : [];
+  const mismatchesIn = (text) => (checkRows.length ? findTallyMismatches(text, checkRows) : []);
+  // Shapes, never names: a player's name next to a score is attribution.
+  const shapeMismatches = (list) => list.map((m) => ({ claimed: m.claimed, actual: m.actual }));
+
+  try {
+    let aiResponse = await askModel(prompt);
+    let tallyCheck = { attempts: 1, mismatches: mismatchesIn(aiResponse).length };
+
+    if (tallyCheck.mismatches) {
+      console.log(`🔁 TALLY CHECK: ${tallyCheck.mismatches} name-and-points claim(s) disagree with the tally — writing the reply once more`);
+      const correction = '\n\nCORRECTION. An earlier draft of this reply gave an author the wrong vote points. '
+        + 'These are the only correct figures; copy them exactly:\n'
+        + authorTallyLines(voteTallies);
+      try {
+        const second = await askModel(prompt + correction);
+        const left = mismatchesIn(second);
+        aiResponse = second;
+        tallyCheck = { attempts: 2, mismatches: left.length };
+        if (left.length) {
+          console.warn(JSON.stringify({
+            event: 'ai-summary-tally-mismatch',
+            gameId, round: paddedQuestionNumber, attempts: 2,
+            mismatches: shapeMismatches(left),
+            kept: 'second reply',
+          }));
+        }
+      } catch (e) {
+        // The first reply is a real read with one slip; keep it.
+        console.warn(JSON.stringify({
+          event: 'ai-summary-tally-mismatch',
+          gameId, round: paddedQuestionNumber, attempts: 1,
+          mismatches: shapeMismatches(mismatchesIn(aiResponse)),
+          kept: 'first reply', regenerateError: e.name || 'Error',
+        }));
+      }
     }
 
     // Parse the structured response
@@ -3342,7 +3435,10 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       nextSteps: parsed.nextSteps,
       fullResponse: aiResponse,
       markdownResponse: parsed.markdownResponse,   // present on every success path
-      model: 'claude-haiku-4-5',                    // correct label (was mislabeled 'claude-3.5-*')
+      // The Bedrock model id, stored on the row as `Model` so a report can say
+      // which model wrote each read (relay pilot review, 2026-10-11).
+      model: SUMMARY_MODEL_ID,
+      tallyCheck,
       // Whose voice this section is in. Persisted onto the AISummary item so a
       // report generated weeks later can attribute it — by then the game's
       // PersonaId may have been switched again, or the persona edited.
