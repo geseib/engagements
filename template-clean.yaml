@@ -57,10 +57,45 @@ Parameters:
     Description: Google OAuth Client Secret (empty disables Google sign-in resources)
     Default: ""
 
+  # DEV'S AI MODEL PICKER (docs/handoff/ai-model-picker-2026-10-11.md). Only
+  # buildspec-dev.yml passes 'true'; test and prod take this default, and with
+  # it get-ai-summary.js writes every read exactly as before (Bedrock Haiku 4.5,
+  # no SSM read, no picker). tests/ai-model-picker.js holds that.
+  AiModelPicker:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: Staff-only AI summary model picker (dev only)
+
+  # The Anthropic API, for the picker, through Workload Identity Federation:
+  # the function's role signs in with an AWS STS web identity token, never a
+  # stored key (lambda-functions/game/anthropic-messages.js). Four ids from the
+  # owner's Claude Console federation rule; none is secret. Empty (the default,
+  # and test and prod) leaves the Anthropic models unavailable in the picker.
+  AnthropicFederationRuleId:
+    Type: String
+    Default: ''
+    Description: Claude Console federation rule id (fdrl_...), dev's model picker
+  AnthropicOrganizationId:
+    Type: String
+    Default: ''
+    Description: Anthropic organization id (uuid), dev's model picker
+  AnthropicServiceAccountId:
+    Type: String
+    Default: ''
+    Description: Anthropic service account id (svac_...), dev's model picker
+  AnthropicWorkspaceId:
+    Type: String
+    Default: ''
+    Description: Anthropic workspace id (wrkspc_...), dev's model picker
+
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasSecondaryDomain: !Not [!Equals [!Ref SecondaryDomainName, ""]]
   IsProd: !Equals [!Ref Environment, "prod"]
+  # Dev's AI model picker (AiModelPicker above). Gates the one IAM grant that
+  # lets get-ai-summary mint a web identity token for the Anthropic API.
+  AiModelPickerOn: !Equals [!Ref AiModelPicker, 'true']
   # True when the deploy passes Google credentials, fetched from
   # /<stack>/google/* SSM parameters by all three buildspecs.
   #
@@ -3331,6 +3366,14 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
+          # 'true' on dev only (AiModelPicker); read by summary-models.js.
+          AI_MODEL_PICKER: !Ref AiModelPicker
+          # Workload Identity Federation ids for the Anthropic API (not
+          # secrets). Empty unless buildspec-dev.yml passes them.
+          ANTHROPIC_FEDERATION_RULE_ID: !Ref AnthropicFederationRuleId
+          ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
+          ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
+          ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
       Policies:
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
@@ -3344,6 +3387,16 @@ Resources:
             TableName: !Ref GameTable
         - S3ReadPolicy:
             BucketName: !Ref AIPromptsBucket
+        # DEV'S MODEL PICKER: a web identity token for the Anthropic API
+        # (Workload Identity Federation). Allow on dev, where AiModelPicker is
+        # 'true'; an explicit Deny everywhere else. The owner's federation rule
+        # pins THIS function's role ARN as the token's subject, so the role
+        # must never be renamed or replaced (a policy change does neither).
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: !If [AiModelPickerOn, Allow, Deny]
+              Action: sts:GetWebIdentityToken
+              Resource: '*'
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -3353,6 +3406,11 @@ Resources:
               Resource:
                 - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-6'
                 - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0'
+                # Opus 4.6, for dev's model picker (summary-models.js).
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-opus-4-6-v1'
+                - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-4-6-v1'
+                - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-opus-4-6-v1'
+                - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-opus-4-6-v1'
                 - 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6'
                 - 'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6'
                 - 'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6'

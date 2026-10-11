@@ -25,7 +25,14 @@ const { consensusLabel } = require('./consensus');
 // or the preflight reads the sliced text's interpolations as unknown
 // brace-tokens and goes red.
 const { analyzeWavelength, buildWavelengthProse } = require('./wavelength');
-const { ORG, promptsMetadataPk, callerMayDriveSession } = require('./tenant');
+const { ORG, promptsMetadataPk, callerMayDriveSession, isPlatformAdmin } = require('./tenant');
+// Dev's model picker (AI_MODEL_PICKER): the catalogue, and the one call to the
+// Anthropic Messages API. Off on test and prod, where neither is consulted.
+const {
+  DEFAULT_MODEL, findModel, modelByProviderId, modelPickerOn, pickerCatalogue,
+  estimateCostUsd, variantSk, variantSkPrefix,
+} = require('./summary-models');
+const anthropicMessages = require('./anthropic-messages');
 const { setMetadataKey } = require('./set-version');
 const { decryptItem, decryptItems, decryptValue, encryptItem } = require('./tenant-crypto');
 // Every log line below that is ABOUT the room's words — the answers, the
@@ -201,6 +208,77 @@ async function refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug
     headers: { 'Access-Control-Allow-Origin': '*' }
   };
 }
+
+/**
+ * DEV'S MODEL PICKER: WHO MAY USE IT, AND WHAT IT RETURNS.
+ *
+ * Only on the host route, only while AI_MODEL_PICKER is 'true' (dev, from the
+ * template's AiModelPicker parameter), and only for Engage staff (the Cognito
+ * `admins` group). Anybody else's `model` and `variants` are ignored, so with
+ * the switch off this handler behaves exactly as it did before the picker.
+ */
+function staffPickerFor(event) {
+  const rc = event.requestContext || {};
+  const route = rc.routeKey || event.routeKey || event.rawPath || '';
+  return HOST_ROUTE.test(route) && modelPickerOn() && isPlatformAdmin(event);
+}
+
+/** What the staff UI is told about the picker: on, the menu, the default. */
+const modelPickerInfo = () => ({
+  enabled: true,
+  defaultModel: DEFAULT_MODEL.id,
+  models: pickerCatalogue(),
+});
+
+/**
+ * The model attributes of a summary row, for a host response. Plaintext on
+ * the row (configuration, never content), like PersonaSource. `modelLabel`
+ * and `costUsd` are worked out here from the catalogue, never stored.
+ */
+function modelFieldsOf(item) {
+  const actual = modelByProviderId(item.Model);
+  const requested = findModel(item.ModelRequested);
+  const priced = actual || requested;
+  return {
+    model: item.Model || null,
+    modelLabel: actual ? actual.label : (item.Model || null),
+    modelRequested: item.ModelRequested || null,
+    modelRequestedLabel: requested ? requested.label : (item.ModelRequested || null),
+    provider: item.Provider || null,
+    latencyMs: Number.isFinite(item.LatencyMs) ? item.LatencyMs : null,
+    inputTokens: Number.isFinite(item.InputTokens) ? item.InputTokens : null,
+    outputTokens: Number.isFinite(item.OutputTokens) ? item.OutputTokens : null,
+    costUsd: estimateCostUsd(priced, item.InputTokens, item.OutputTokens),
+    modelFallbackReason: item.ModelFallbackReason || null,
+  };
+}
+
+/** One model's latest read of a round, as the Compare view draws it. */
+function variantResponse(item) {
+  return {
+    ...modelFieldsOf(item),
+    summary: item.Summary || item.SummaryText || null,
+    markdownResponse: item.MarkdownResponse || null,
+    discussionQuestions: item.DiscussionQuestions || [],
+    nextSteps: item.NextSteps || [],
+    fallback: item.Fallback === true,
+    fallbackReason: item.Fallback === true ? (item.FallbackReason || null) : null,
+    generatedAt: item.GeneratedAt || null,
+  };
+}
+
+/** The row attributes that say which model wrote a read and what it cost. */
+function modelRowAttributes(meta) {
+  if (!meta) return {};
+  const out = { ModelRequested: meta.modelRequested };
+  if (meta.provider) out.Provider = meta.provider;
+  if (Number.isFinite(meta.latencyMs)) out.LatencyMs = meta.latencyMs;
+  if (Number.isFinite(meta.inputTokens)) out.InputTokens = meta.inputTokens;
+  if (Number.isFinite(meta.outputTokens)) out.OutputTokens = meta.outputTokens;
+  if (meta.modelFallbackReason) out.ModelFallbackReason = meta.modelFallbackReason;
+  return out;
+}
+
 const s3 = new S3Client({ region: 'us-east-1' });
 const lambda = new LambdaClient({});
 const apigateway = new ApiGatewayManagementApiClient({ endpoint: process.env.WEBSOCKET_API_ENDPOINT });
@@ -841,7 +919,7 @@ exports.handler = async (event) => {
   // persist, and broadcast the result over WebSocket.
   const workerMode = event.__workerMode === true;
   try {
-    let gameId, questionId, generateNew, debug, promptDebug;
+    let gameId, questionId, generateNew, debug, promptDebug, model, variants;
     if (workerMode) {
       ({ gameId, questionId, debug, promptDebug } = event); // questionId === targetQuestionId
       generateNew = 'true';
@@ -849,7 +927,7 @@ exports.handler = async (event) => {
     } else {
       ({ gameId } = event.pathParameters || {});
       const queryParams = event.queryStringParameters || {};
-      ({ questionId, generateNew, debug, promptDebug } = queryParams);
+      ({ questionId, generateNew, debug, promptDebug, model, variants } = queryParams);
     }
 
     if (!gameId) {
@@ -866,6 +944,24 @@ exports.handler = async (event) => {
       const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug });
       if (refusal) return refusal;
     }
+
+    // DEV'S MODEL PICKER (summary-models.js). `staffPicker` is false off the
+    // host route, off dev and for anybody outside `admins`; then `model` and
+    // `variants` are ignored and nothing below differs from before the picker.
+    const staffPicker = !workerMode && staffPickerFor(event);
+    let requestedModel = null;
+    if (staffPicker && model) {
+      requestedModel = findModel(model);
+      if (!requestedModel) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'Unknown model', models: pickerCatalogue().map((m) => m.id) }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+    }
+    // The worker re-reads the switch: a variant is written only while it is on.
+    const workerModel = workerMode && modelPickerOn() ? findModel(event.model) : null;
 
     console.log(`🤖 Getting AI summary for game ${gameId}, questionId: ${questionId || 'current'}`);
 
@@ -919,6 +1015,28 @@ exports.handler = async (event) => {
     }
     
     console.log(`🔍 Using question number ${paddedQuestionNumber} for lookups`);
+
+    // STAFF COMPARE: every model's latest read of this round, newest model
+    // first in catalogue order. The room's own read is not among them unless
+    // the picker was on when it was written (then it has a copy here too).
+    if (staffPicker && variants === 'true') {
+      const variantOrgId = await sessionOrgId(gameId);
+      const res = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': 'GAME#' + gameId, ':sk': variantSkPrefix(paddedQuestionNumber) }
+      }));
+      const rows = (res && res.Items) || [];
+      const opened = variantOrgId ? await decryptItems(variantOrgId, 'aiSummary', rows) : rows;
+      const order = pickerCatalogue().map((m) => m.id);
+      const list = opened.map(variantResponse)
+        .sort((a, b) => order.indexOf(a.modelRequested) - order.indexOf(b.modelRequested));
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ gameId, questionId: targetQuestionId, modelPicker: modelPickerInfo(), variants: list }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
     
     // Check if AI summary already exists (unless generateNew is true)
     if (!generateNew) {
@@ -966,6 +1084,10 @@ exports.handler = async (event) => {
           generatedAt: existingSummary.Item.GeneratedAt,
           fromCache: true
         };
+        // Staff on dev also get the picker and the row's model attributes.
+        if (staffPicker) {
+          Object.assign(responseData, modelFieldsOf(existingSummary.Item), { modelPicker: modelPickerInfo() });
+        }
         
         // Add debug information if debug mode is enabled
         if (debug === 'true' && existingSummary.Item.DebugInfo) {
@@ -1020,12 +1142,18 @@ exports.handler = async (event) => {
           questionId: targetQuestionId,
           paddedQuestionNumber,
           debug,
-          promptDebug
+          promptDebug,
+          // Only a staff request on dev carries a model; the worker then writes
+          // that model's variant and leaves the room's read alone.
+          ...(requestedModel ? { model: requestedModel.id } : {})
         }))
       }));
       return {
         statusCode: 202,
-        body: JSON.stringify({ status: 'generating', gameId, questionId: targetQuestionId }),
+        body: JSON.stringify({
+          status: 'generating', gameId, questionId: targetQuestionId,
+          ...(requestedModel ? { model: requestedModel.id } : {})
+        }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
     }
@@ -1682,7 +1810,12 @@ exports.handler = async (event) => {
       // A closed survey's frozen results in words (survey-digest.js), or null
       // for every round. It becomes {surveyResults}, and its respondent count
       // is what the data-driven fallback states.
-      survey: surveyDigest
+      survey: surveyDigest,
+      // Dev's model picker: the model a staff member asked for (null: the
+      // default), and whether to record which model wrote the read and what
+      // it cost. Both null/false while AI_MODEL_PICKER is off.
+      modelChoice: workerModel,
+      recordModel: modelPickerOn()
     };
 
     // Generate AI summary
@@ -1702,6 +1835,7 @@ exports.handler = async (event) => {
 
     // Store the enhanced AI summary in DynamoDB (keeping same storage key)
     const now = new Date().toISOString();
+    const pickerOn = modelPickerOn();
     const dbItem = {
       PK: `GAME#${gameId}`,
       SK: `QUESTION#${paddedQuestionNumber}#AISummary`,
@@ -1736,9 +1870,41 @@ exports.handler = async (event) => {
       // The template, not Workie's read (buildFallback). Plaintext flags like
       // Angle: a boolean and a word from FALLBACK_REASONS, never content.
       ...(summaryData.fallback ? { Fallback: true, FallbackReason: summaryData.fallbackReason || null } : {}),
+      // Dev's model picker only: which model was asked for, which provider
+      // answered, how long it took, the tokens, and why it fell back to
+      // Haiku 4.5 if it did. Never written while the picker is off.
+      ...(pickerOn ? modelRowAttributes(summaryData.modelMeta || { modelRequested: (workerModel || DEFAULT_MODEL).id }) : {}),
       GeneratedAt: now,
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     };
+
+    /*
+      ONE MODEL'S VARIANT OF THIS ROUND (dev's picker). Same attributes as the
+      room's read, sealed the same way, kept for 30 days like it, under
+      QUESTION#<nnn>#AIVARIANT#<model> (summary-models.js variantSk), and
+      without DebugInfo: the prompt stays with the room's read only. A staff
+      request for a model writes ONLY this row, so regenerating with another
+      model never overwrites what the room reads; a normal generation while the
+      picker is on also files a copy under the default model, so Compare has
+      the baseline beside the others.
+    */
+    if (pickerOn) {
+      const variantItem = {
+        ...dbItem,
+        SK: variantSk(paddedQuestionNumber, (workerModel || DEFAULT_MODEL).id),
+      };
+      await db.send(new PutCommand({
+        TableName: process.env.TABLE_NAME,
+        Item: summaryOrgId ? await encryptItem(summaryOrgId, 'aiSummary', variantItem) : variantItem
+      }));
+      if (workerModel) {
+        console.log(`✅ AI summary variant stored for ${gameId}: ${targetQuestionId}, model ${workerModel.id}`);
+        // Its own message type: the room's clients refetch on aiSummaryReady,
+        // and there is nothing new for them to read.
+        await broadcastToGame(gameId, { type: 'aiSummaryVariantReady', gameId, questionId: targetQuestionId, model: workerModel.id });
+        return { ok: true, gameId, questionId: targetQuestionId, model: workerModel.id };
+      }
+    }
     
     // Store debug information if available
     if (summaryData.debugInfo) {
@@ -1817,7 +1983,8 @@ exports.handler = async (event) => {
     if (workerMode) {
       const failedQuestionId = event.questionId;
       await broadcastToGame(event.gameId, {
-        type: 'aiSummaryError',
+        // A staff variant that failed is not the room's read failing.
+        type: event.model ? 'aiSummaryVariantError' : 'aiSummaryError',
         gameId: event.gameId,
         questionId: failedQuestionId,
         message: error.message
@@ -2044,7 +2211,34 @@ exports.pollOptionsLine = pollOptionsLine;
 // so the direct call is now a convenience rather than a workaround.
 exports.generateAISummary = generateAISummary;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '', survey = null }) {
+/**
+ * THE REPLY STARTS AT ITS FIRST HEADING, for a model that cannot be prefilled.
+ * Anything written before the heading (a preamble, an invented title) is
+ * dropped; a reply without the heading gets it put back in front. The heading
+ * is the parser's anchor (parseAIResponse), as the prefill made it for Haiku.
+ */
+function ensureLeadingHeading(text, headingLine) {
+  const t = String(text || '').trim();
+  if (t.startsWith(headingLine)) return t;
+  const at = t.indexOf(headingLine);
+  if (at > 0) return t.slice(at).trim();
+  return (headingLine + '\n\n' + t).trim();
+}
+exports.ensureLeadingHeading = ensureLeadingHeading;
+
+/** Why a chosen model failed, as a word for the row (never the error's text). */
+function modelFailureReason(e) {
+  if (e && e.reason) return e.reason; // anthropic-messages.js REASONS
+  const name = (e && e.name) || '';
+  if (name === 'AccessDeniedException') return 'access-denied';
+  if (name === 'ThrottlingException') return 'rate-limit';
+  if (name === 'ValidationException') return 'bedrock-validation';
+  if (name === 'ModelTimeoutException' || name === 'TimeoutError') return 'timeout';
+  return 'model-error';
+}
+exports.modelFailureReason = modelFailureReason;
+
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '', survey = null, modelChoice = null, recordModel = false }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -3316,8 +3510,28 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // Haiku 4.5 is the single fast model in the hot path. It finishes in ~3–8s,
   // makes a throttle retry cheap, and keeps us well under any latency budget.
   // No second slow model is chained — failures go straight to the static fallback.
-  const haikuModelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/${SUMMARY_MODEL_ID}`;
-  console.log('🤖 BEDROCK: Calling Claude Haiku 4.5 (primary)…', haikuModelId);
+  const profileArn = (modelId) => `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/${modelId}`;
+  const haikuModelId = profileArn(SUMMARY_MODEL_ID);
+  // Dev's model picker: the model asked for (the default unless a staff member
+  // chose another on dev), and the one actually answering — the default once
+  // the chosen one has failed.
+  const requestedModel = modelChoice || DEFAULT_MODEL;
+  let activeModel = requestedModel;
+  let modelFallbackReason = null;
+  const tokens = { input: 0, output: 0, known: true };
+  const countTokens = (inputTokens, outputTokens) => {
+    if (Number.isFinite(inputTokens) && Number.isFinite(outputTokens)) {
+      tokens.input += inputTokens;
+      tokens.output += outputTokens;
+    } else {
+      tokens.known = false;
+    }
+  };
+  if (requestedModel === DEFAULT_MODEL) {
+    console.log('🤖 BEDROCK: Calling Claude Haiku 4.5 (primary)…', haikuModelId);
+  } else {
+    console.log(`🤖 MODEL PICKER: calling ${requestedModel.label} (${requestedModel.provider})`);
+  }
   console.log('🤖 BEDROCK: Prompt length:', prompt.length);
 
   /*
@@ -3334,8 +3548,17 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   const firstHeading = resolveOutputSections(promptData)[0].heading;
   const prefill = `## ${firstHeading}`;
 
-  const invokeHaiku = async (promptText = prompt) => bedrock.send(new InvokeModelCommand({
-    modelId: haikuModelId,
+  /*
+    A MODEL THAT REFUSES A PREFILL (Sonnet 4.6, Opus 4.6, every Anthropic API
+    model in summary-models.js) is asked for the same heading in words,
+    appended after the prompt, and the reply is checked after:
+    ensureLeadingHeading drops any preamble before it, or puts it back when the
+    model left it out. The prompt is otherwise the same for every model.
+  */
+  const headingInstruction = '\n\nBegin your reply with this exact line, and write nothing before it:\n' + prefill;
+
+  const invokeBedrock = async (model, promptText) => bedrock.send(new InvokeModelCommand({
+    modelId: model === DEFAULT_MODEL ? haikuModelId : profileArn(model.modelId),
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
       // 2048, up from 1024: a Workie may declare its own sections, and dev's
@@ -3348,31 +3571,47 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       // variety, not hallucination risk — and 0.5 flattened exactly the
       // "real, vivid, natural" quality the owner asked this pass to restore.
       temperature: 0.7,
-      messages: [
-        { role: 'user', content: promptText },
-        { role: 'assistant', content: prefill }
-      ]
+      messages: model.prefill
+        ? [
+          { role: 'user', content: promptText },
+          { role: 'assistant', content: prefill }
+        ]
+        : [{ role: 'user', content: promptText + headingInstruction }]
     })
   }));
 
-  /** One reply: the call, its single throttle retry, and prefill + completion. */
-  const askModel = async (promptText) => {
+  /** One reply from one model: the call, its single throttle retry, and the heading. */
+  const askOnce = async (model, promptText) => {
+    if (model.provider === 'anthropic') {
+      const reply = await anthropicMessages.createMessage(model, promptText + headingInstruction);
+      countTokens(reply.inputTokens, reply.outputTokens);
+      const text = ensureLeadingHeading(reply.text, prefill);
+      console.log(`✅ CLAUDE SUCCESS: ${model.label} replied, ${text.length} chars, stop_reason ${reply.stopReason || 'not given'}`);
+      if (reply.stopReason === 'max_tokens') {
+        console.warn(`⚠️ ${model.label}: reply cut off at max_tokens after ${text.length} chars — the last section may be missing`);
+      }
+      return text;
+    }
     let response;
     try {
-      response = await invokeHaiku(promptText);
+      response = await invokeBedrock(model, promptText);
     } catch (e) {
       if (e.name === 'ThrottlingException') {
-        console.log('⏳ BEDROCK: throttled — retrying Haiku 4.5 once');
-        response = await invokeHaiku(promptText); // one retry, SAME fast model
+        console.log(`⏳ BEDROCK: throttled — retrying ${model.label} once`);
+        response = await invokeBedrock(model, promptText); // one retry, SAME model
       } else {
         throw e;
       }
     }
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    const usage = responseBody.usage || {};
+    countTokens(usage.input_tokens, usage.output_tokens);
     // Prefill + completion IS the reply — the model wrote everything after the
     // heading, and everything downstream (the parser, the stored markdown, the
     // projector) must see the whole document, heading included.
-    const text = (prefill + responseBody.content[0].text).trim();
+    const text = model.prefill
+      ? (prefill + responseBody.content[0].text).trim()
+      : ensureLeadingHeading(responseBody.content[0].text, prefill);
     // Its size and how it ended, never a preview: the reply is written from the
     // answers and stored sealed (ENCRYPTED_FIELDS.aiSummary). A stop_reason of
     // max_tokens is the one thing here worth an alert.
@@ -3382,6 +3621,39 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     }
     return text;
   };
+
+  /*
+    One reply, falling back to Haiku 4.5. A chosen model that fails — not connected,
+    out of credit, rate-limited, timed out, refused, or Bedrock access denied —
+    is dropped for the rest of this read and the reason kept as a word; the
+    read is then written by the default exactly as it always was. Only a
+    failure of the default itself reaches the template fallback below.
+  */
+  const askModel = async (promptText) => {
+    if (activeModel !== DEFAULT_MODEL) {
+      try {
+        return await askOnce(activeModel, promptText);
+      } catch (e) {
+        modelFallbackReason = modelFailureReason(e);
+        // The reason word and the model, never the error's own text.
+        console.warn(JSON.stringify({
+          event: 'ai-summary-model-fallback', requested: requestedModel.id,
+          reason: modelFallbackReason, status: e.status || null,
+        }));
+        activeModel = DEFAULT_MODEL;
+      }
+    }
+    return askOnce(DEFAULT_MODEL, promptText);
+  };
+  const startedAt = Date.now();
+  const modelMeta = () => ({
+    modelRequested: requestedModel.id,
+    provider: activeModel.provider,
+    latencyMs: Date.now() - startedAt,
+    inputTokens: tokens.known ? tokens.input : null,
+    outputTokens: tokens.known ? tokens.output : null,
+    modelFallbackReason,
+  });
 
   /*
     THE SCORES ARE CHECKED, NOT TRUSTED (author-tally.js). Relay pilot game
@@ -3443,9 +3715,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       nextSteps: parsed.nextSteps,
       fullResponse: aiResponse,
       markdownResponse: parsed.markdownResponse,   // present on every success path
-      // The Bedrock model id, stored on the row as `Model` so a report can say
-      // which model wrote each read (relay pilot review, 2026-10-11).
-      model: SUMMARY_MODEL_ID,
+      // The model id, stored on the row as `Model` so a report can say which
+      // model wrote each read (relay pilot review, 2026-10-11). The one that
+      // actually answered: Haiku 4.5 unless dev's picker chose another and it
+      // did not fail.
+      model: activeModel.modelId,
+      // Dev's picker only: what was asked for, latency, tokens, fallback.
+      ...(recordModel ? { modelMeta: modelMeta() } : {}),
       tallyCheck,
       // Whose voice this section is in. Persisted onto the AISummary item so a
       // report generated weeks later can attribute it — by then the game's
@@ -3475,6 +3751,7 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     // Data-driven fallback — never chain a second slow model, never return blank.
     console.log(`🚨 BEDROCK FINAL FALLBACK: data-driven summary for ${totalParticipants} participants`);
     const fallbackResult = { ...buildFallback(FALLBACK_REASONS.MODEL_ERROR), ...personaAttribution(persona) };
+    if (recordModel) fallbackResult.modelMeta = { ...modelMeta(), provider: null };
     if (debugMode) fallbackResult.debugInfo = debugInfo;
     return fallbackResult;
   }

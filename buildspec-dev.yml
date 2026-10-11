@@ -70,6 +70,22 @@ phases:
       - '[ -n "$GITHUB_REPO" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GitHubRepo=$GITHUB_REPO" || echo "skipping GitHubRepo (empty)"'
       - '[ -n "$GOOGLE_CLIENT_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientId=$GOOGLE_CLIENT_ID" || echo "skipping GoogleClientId (empty)"'
       - '[ -n "$GOOGLE_CLIENT_SECRET" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES GoogleClientSecret=$GOOGLE_CLIENT_SECRET" || echo "skipping GoogleClientSecret (empty)"'
+      # DEV ONLY: the staff AI model picker (template AiModelPicker). Test and
+      # prod never pass it and take the template's 'false'.
+      - PARAM_OVERRIDES="$PARAM_OVERRIDES AiModelPicker=true"
+      # Its Anthropic API sign-in (Workload Identity Federation): four ids from
+      # the owner's Claude Console federation rule, none secret. Fill them in
+      # here once the rule exists; while any is empty the picker shows the
+      # Anthropic models as "Anthropic API not connected". Appended only when
+      # set, because sam deploy rejects an empty override.
+      - ANTHROPIC_FEDERATION_RULE_ID=""
+      - ANTHROPIC_ORGANIZATION_ID=""
+      - ANTHROPIC_SERVICE_ACCOUNT_ID=""
+      - ANTHROPIC_WORKSPACE_ID=""
+      - '[ -n "$ANTHROPIC_FEDERATION_RULE_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES AnthropicFederationRuleId=$ANTHROPIC_FEDERATION_RULE_ID" || echo "skipping AnthropicFederationRuleId (empty)"'
+      - '[ -n "$ANTHROPIC_ORGANIZATION_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES AnthropicOrganizationId=$ANTHROPIC_ORGANIZATION_ID" || echo "skipping AnthropicOrganizationId (empty)"'
+      - '[ -n "$ANTHROPIC_SERVICE_ACCOUNT_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES AnthropicServiceAccountId=$ANTHROPIC_SERVICE_ACCOUNT_ID" || echo "skipping AnthropicServiceAccountId (empty)"'
+      - '[ -n "$ANTHROPIC_WORKSPACE_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES AnthropicWorkspaceId=$ANTHROPIC_WORKSPACE_ID" || echo "skipping AnthropicWorkspaceId (empty)"'
       - echo "Parameter overrides:" $(echo "$PARAM_OVERRIDES" | sed -E 's/(GitHubToken|GoogleClientSecret)=[^ ]*/\1=***/g')
       # ── THE BACKEND GATE ─────────────────────────────────────────────
       # `sam deploy` spent ~18 of a ~27-minute deploy zipping the same four
