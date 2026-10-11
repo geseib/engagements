@@ -22,6 +22,8 @@ const ACTIONS = {
   'user.disable': 'Turned the account off',
   'user.enable': 'Turned the account back on',
   'user.delete': 'Deleted the account',
+  // A team letting somebody it invited host (orgs/approve-member.js)
+  'member.approve-hosting': 'Approved them to host for this team',
   // Organisations (platform-orgs.js)
   'org.approve': 'Approved the organisation',
   'org.suspend': 'Suspended the organisation',

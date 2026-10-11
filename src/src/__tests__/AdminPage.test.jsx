@@ -117,7 +117,9 @@ describe('the admin console', () => {
   test('an unreachable API does not blank it', async () => {
     global.fetch.mockRejectedValue(new Error('network down'));
     render(<AdminPage />);
-    expect((await screen.findAllByText(/Question sets/i)).length).toBeGreaterThan(0);
+    // The landing section is the Overview since 2026-10-11 (it was Question
+    // sets); what matters is that the console draws a screen at all.
+    expect((await screen.findByRole('heading', { level: 1 })).textContent).toMatch(/\S/);
   });
 
   // rejects: a non-2xx being parsed as data and crashing the render.
@@ -129,7 +131,9 @@ describe('the admin console', () => {
       text: async () => 'Internal Server Error',
     });
     render(<AdminPage />);
-    expect((await screen.findAllByText(/Question sets/i)).length).toBeGreaterThan(0);
+    // The landing section is the Overview since 2026-10-11 (it was Question
+    // sets); what matters is that the console draws a screen at all.
+    expect((await screen.findByRole('heading', { level: 1 })).textContent).toMatch(/\S/);
   });
 });
 

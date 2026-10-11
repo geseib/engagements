@@ -94,7 +94,9 @@ beforeEach(() => {
   localStorage.clear();
   mockActiveOrg = '';
   mockGroups = ['admins', 'hosts'];
-  window.history.pushState({}, '', '/admin');
+  // The set list is asked for by name: a bare /admin lands on the Overview
+  // since 2026-10-11 (docs/design/admin-landing).
+  window.history.pushState({}, '', '/admin?section=questionsets');
 });
 
 test('an org console shows who can see each set, badges the flagged count, and Share opens the dialog', async () => {
@@ -116,6 +118,8 @@ test('an org console shows who can see each set, badges the flagged count, and S
 
 test('the platform console has neither the column nor Share', async () => {
   mockActiveOrg = '~platform'; mockGroups = ['admins', 'hosts'];
+  // Organisations, the platform landing section before the Overview (2026-10-11).
+  window.history.pushState({}, '', '/admin?section=orgs');
   serve();
   render(<AdminPage />);
   await screen.findByRole('table');
@@ -332,6 +336,8 @@ test('Share a set in the Public library opens the same share dialog the list row
 */
 test('and the staff console has no way in there either, because Engage publishes nothing', async () => {
   mockActiveOrg = '~platform'; mockGroups = ['admins', 'hosts'];
+  // Organisations, the platform landing section before the Overview (2026-10-11).
+  window.history.pushState({}, '', '/admin?section=orgs');
   serve(SETS_WITH_PUBLIC);
   render(<AdminPage />);
   await screen.findByRole('table');

@@ -78,7 +78,9 @@ const PLATFORM_MODE = '~platform';
   `activeTab` happens to initialise to", which is the behaviour these
   expectations were updated to.
 */
-const LANDING = 'Organisations';
+/* Overview is the landing section in every scope since 2026-10-11 (owner;
+   docs/design/admin-landing). Organisations is second in platform mode. */
+const LANDING = 'Overview';
 let mockActiveOrg = PLATFORM_MODE;
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
@@ -218,11 +220,11 @@ describe('moving between sections writes the URL', () => {
     render(<AdminPage />);
     await waitFor(() => expect(openSection()).toBe('Accounts'));
 
-    /* Organisations, not Question sets: in platform mode the landing section is
-       the first item of the platform group, and this suite runs in that mode
-       because Accounts only exists there. */
+    /* Overview: the landing section is the first item of the platform
+       group, and this suite runs in that mode because Accounts only exists
+       there. */
     await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: /^organisations$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^overview$/i }));
     });
 
     expect(lastUrl(pushState)).toBe('/admin');
@@ -274,7 +276,7 @@ describe('Back returns to the previous section', () => {
     await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /^accounts$/i })); });
     await act(async () => { window.history.back(); });
 
-    await waitFor(() => expect(openSection()).toBe('Organisations'));
+    await waitFor(() => expect(openSection()).toBe(LANDING));
     expect(window.location.search).toBe('');
   });
 
@@ -310,12 +312,12 @@ describe('Back returns to the previous section', () => {
 describe('the landing URL is canonicalised on arrival', () => {
   // rejects: leaving '?section=questionsets' in the bar. Bookmark that and Back
   //          needs two presses to leave a screen that never visibly changed.
-  /* `?section=orgs`, because the landing section is per-person and this suite
-     runs as Engage staff. `?section=questionsets` is no longer the landing here
+  /* `?section=overview`, the landing section in every scope. (It was
+     `?section=orgs` while staff landed on Organisations.) `?section=questionsets` is no longer the landing here
      — it is the Shared library, a real destination — so canonicalising it away
      would be deleting a URL somebody meant. */
   test('an explicit landing section is replaced with the bare path', async () => {
-    arriveAt('/admin?section=orgs');
+    arriveAt('/admin?section=overview');
     render(<AdminPage />);
     await waitFor(() => expect(replaceState).toHaveBeenCalled());
     expect(lastUrl(replaceState)).toBe('/admin');

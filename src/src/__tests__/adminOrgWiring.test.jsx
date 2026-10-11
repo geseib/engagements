@@ -68,7 +68,7 @@ beforeEach(() => {
   window.history.pushState({}, '', '/admin');
 });
 
-describe('the organisation switcher', () => {
+describe('the scope row (it replaced the organisation switcher)', () => {
   /*
     A HOST, NOT STAFF — and that is what makes this bite.
 
@@ -86,16 +86,22 @@ describe('the organisation switcher', () => {
     mockActiveOrg = 'org_nw';
     serve([PERSONAL, TEAM]);
     render(<AdminPage />);
-    expect(await screen.findByTestId('orgsw-chip')).toHaveTextContent('Northwind');
+    // The scope row replaced the chip (docs/design/admin-landing, 2026-10-11).
+    const row = await screen.findByRole('navigation', { name: 'Where you work' });
+    expect(row).toHaveTextContent('Northwind');
+    expect(row).toHaveTextContent('Personal');
   });
 
   // rejects: passing the orgs under a name the component ignores, which shows
-  // up as a chip naming the wrong org — or, as shipped, no chip at all.
+  // up as a tab naming the wrong org — or, as shipped once, no switcher at all.
   it('names the active organisation', async () => {
     mockActiveOrg = 'org_nw';
     serve([PERSONAL, TEAM]);
     render(<AdminPage />);
-    expect(await screen.findByTestId('orgsw-chip')).toHaveTextContent('Northwind');
+    const row = await screen.findByRole('navigation', { name: 'Where you work' });
+    const current = row.querySelector('[aria-current="page"]');
+    expect(current).not.toBeNull();
+    expect(current).toHaveTextContent('Northwind');
   });
 });
 

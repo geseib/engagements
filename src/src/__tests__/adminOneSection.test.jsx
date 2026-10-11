@@ -94,6 +94,8 @@ const HOME = {
  * mounted.
  */
 const MARKERS = {
+  /* The landing section in every scope since 2026-10-11. */
+  Overview: '.ovw',
   'Question sets': '.qsets',
   Organisations: '.porgs',
   Observability: '.pobs',
@@ -164,11 +166,11 @@ describe('platform mode', () => {
     serve();
     render(<AdminPage />);
     await settle();
-    await waitFor(() => expect(mounted()).toEqual(['Organisations']));
-    expect(document.querySelector('h1')).toHaveTextContent('Organisations');
+    await waitFor(() => expect(mounted()).toEqual(['Overview']));
+    expect(document.querySelector('h1')).toHaveTextContent('Overview');
     // rejects: the fallback chain's subtitle. Organisations, Plan requests and
     // Discount codes were all headed with Question sets' sentence on test.
-    expect(document.querySelector('.adm-sub')).toHaveTextContent(/Every organisation on this tier/);
+    expect(document.querySelector('.adm-sub')).toHaveTextContent(/Every queue that waits on staff/);
     expect(document.querySelector('.adm-sub')).not.toHaveTextContent(/every session is built from/);
   });
 
@@ -217,7 +219,7 @@ describe('platform mode', () => {
     serve();
     render(<AdminPage />);
     await settle();
-    await waitFor(() => expect(mounted()).toEqual(['Question sets']));
+    await waitFor(() => expect(mounted()).toEqual(['Overview']));
   });
 
   // rejects: the Public library section being unreachable, or mounting
@@ -244,8 +246,8 @@ describe('platform mode', () => {
     serve();
     render(<AdminPage />);
     await settle();
-    await waitFor(() => expect(mounted()).toEqual(['Organisations']));
-    expect(document.querySelector('h1')).toHaveTextContent('Organisations');
+    await waitFor(() => expect(mounted()).toEqual(['Overview']));
+    expect(document.querySelector('h1')).toHaveTextContent('Overview');
   });
 
   // rejects: the plan-request effect firing off `activeTab` (a fetch guard,
@@ -262,9 +264,14 @@ describe('platform mode', () => {
     serve();
     render(<AdminPage />);
     await settle();
-    await waitFor(() => expect(mounted()).toEqual(['Organisations']));
+    await waitFor(() => expect(mounted()).toEqual(['Overview']));
     const urls = global.fetch.mock.calls.map(([url]) => String(url));
-    expect(urls.some((u) => u.includes('/plan-requests'))).toBe(false);
+    // No org-scoped read for the literal ~platform id…
+    expect(urls.some((u) => /orgs\/[^/]*\/plan-requests/.test(u))).toBe(false);
+    expect(urls.some((u) => u.includes('~platform'))).toBe(false);
+    // …while Engage's own queue IS read on entering the mode, so the Plan
+    // requests badge is right before that section is opened (2026-10-11).
+    expect(urls.some((u) => u.includes('platform/plan-requests?status=requested'))).toBe(true);
   });
 
   // rejects: the heading and the body describing different screens — the state
@@ -296,8 +303,8 @@ describe('inside an organisation', () => {
     serve();
     render(<AdminPage />);
     await settle();
-    await waitFor(() => expect(mounted()).toEqual(['Question sets']));
-    expect(document.querySelector('h1')).toHaveTextContent('Question sets');
+    await waitFor(() => expect(mounted()).toEqual(['Overview']));
+    expect(document.querySelector('h1')).toHaveTextContent('Overview');
   });
 
   // rejects: a section rendering for an account that cannot address it, which
@@ -309,7 +316,7 @@ describe('inside an organisation', () => {
     serve();
     render(<AdminPage />);
     await settle();
-    await waitFor(() => expect(mounted()).toEqual(['Question sets']));
+    await waitFor(() => expect(mounted()).toEqual(['Overview']));
   });
 });
 
@@ -345,7 +352,7 @@ describe('Events (roadmap M1), behind the switch', () => {
     serve([TEAM]);
     render(<AdminPage />);
     await settle();
-    await waitFor(() => expect(mounted()).toEqual(['Question sets']));
+    await waitFor(() => expect(mounted()).toEqual(['Overview']));
     expect(screen.queryByRole('button', { name: /^events$/i })).toBeNull();
   });
 
@@ -446,7 +453,7 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
     await openEventsSection(); // pushes '/admin?section=events' onto beforeEach's '/admin'
     await openRow('Event A');
     await act(async () => { window.history.back(); });
-    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Question sets'));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Overview'));
     fireEvent.click(sectionsNav().getByRole('button', { name: /^events$/i }));
     await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));
     expect(screen.getAllByTestId('event-row')).toHaveLength(1);
@@ -459,7 +466,7 @@ describe('Events: opening one, as a place (roadmap M1, Fix round 1)', () => {
     fireEvent.click(within(document.querySelector('.adm-head-actions')).getByRole('button', { name: /new event/i }));
     expect(await screen.findByRole('heading', { name: 'New event', level: 2 })).toBeInTheDocument();
     await act(async () => { window.history.back(); });
-    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Question sets'));
+    await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Overview'));
     expect(screen.queryByRole('heading', { name: 'New event', level: 2 })).toBeNull();
     await act(async () => { window.history.forward(); });
     await waitFor(() => expect(document.querySelector('h1')).toHaveTextContent('Events'));

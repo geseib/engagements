@@ -45,7 +45,7 @@ describe('platform staff (mockups 10 and 11)', () => {
     // 'prompts' joined 2026-09-24: Engage's prompt library is Engage's own content, like the
     // Shared library, and Engage mode is now the ONE place prompts are authored (the owner:
     // "the workie advisor and ai prompts should be only in the engage mode for now").
-    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings']);
+    expect(ids(PLATFORM)).toEqual(['overview', 'orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings']);
     expect(ids(PLATFORM)).not.toContain('games');
     expect(ids(PLATFORM)).not.toContain('library');
   });
@@ -133,7 +133,7 @@ describe('a personal space (mockup 12)', () => {
   // section from the person most likely to be editing prompts.
   test('is Your space then Account, exactly as drawn', () => {
     expect(labels(PERSONAL)).toEqual(['Your space', 'Account']);
-    expect(ids(PERSONAL)).toEqual(['questionsets', 'games', 'library', 'prompts', 'billing', 'privacy']);
+    expect(ids(PERSONAL)).toEqual(['overview', 'questionsets', 'games', 'library', 'prompts', 'billing', 'privacy']);
   });
 
   // rejects: heading the personal group with the person's own name
@@ -153,12 +153,12 @@ describe('a team', () => {
   // rejects: a member getting Prompts — the owner, 2026-09-24: "team admins could view
   // them". Owners and admins read the library (read-only); members do not get the section.
   test('a member sees Members and neither Plan & usage nor Data & privacy, nor Prompts', () => {
-    expect(ids(TEAM_MEMBER)).toEqual(['questionsets', 'games', 'library', 'members']);
+    expect(ids(TEAM_MEMBER)).toEqual(['overview', 'questionsets', 'games', 'library', 'members']);
   });
 
   // rejects: an owner losing billing because only 'admin' was checked
   test('owner and admin both get the full Team group', () => {
-    const full = ['questionsets', 'games', 'library', 'prompts', 'members', 'activity', 'billing', 'privacy'];
+    const full = ['overview', 'questionsets', 'games', 'library', 'prompts', 'members', 'activity', 'billing', 'privacy'];
     expect(ids(TEAM_ADMIN)).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'owner' })).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'OWNER' })).toEqual(full);
@@ -224,8 +224,11 @@ describe('the ids the rest of the console has to agree with', () => {
 
   // rejects: landing a personal account on a section that is not its first place
   test('the default section is the first place in the first group', () => {
-    expect(defaultSectionIdFor(TEAM_ADMIN)).toBe('questionsets');
-    expect(defaultSectionIdFor(PLATFORM)).toBe('orgs');
+    // Overview is first and the landing section in every scope (owner, 2026-10-11).
+    expect(defaultSectionIdFor(TEAM_ADMIN)).toBe('overview');
+    expect(defaultSectionIdFor(PLATFORM)).toBe('overview');
+    expect(defaultSectionIdFor(PERSONAL)).toBe('overview');
+    expect(ids(PLATFORM)[1]).toBe('orgs');
   });
 
   // rejects: Settings quietly disappearing from the foot for one of the four states

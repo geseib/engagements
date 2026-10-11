@@ -1,0 +1,293 @@
+/* ============================================================================
+   THE CONSOLE OVERVIEW — components/OverviewPanel.jsx, scope .ovw
+
+   Derived from docs/design/admin-landing/index.html (the `.ovw` / `.al` /
+   `.tile` rules there, renamed under this scope) and SPEC.md §6. The tile is
+   the Observability tile as shipped (ObservabilityPanel.css .pobs-tile).
+
+   Laptop ladder 12 / 13 / 15 / 19 / 24 / 30; alert rows 52px (two lines),
+   buttons 32px, 40px on a phone. Dusk: the root declares data-theme="dark".
+
+   ONE ORANGE PER SCREEN. .ovw-btn--primary is the only --primary fill here and
+   the component draws it on exactly one button (config/overviewAlerts.js
+   orangeTarget). The left edge carries the urgency class: --secondary (people),
+   --danger as a BORDER only (stuck; never text), a grey rule (info).
+
+   MEASURED CONTRAST (sRGB; __tests__/overviewPalette.test.js composites them):
+     --text      #F4EDE4 on --surface #1B2942            12.53:1
+     --muted     #9BA8BE on --surface #1B2942             6.06:1
+     --muted     #9BA8BE on --bg      #0F1A2E             7.24:1
+     --bg        #0F1A2E on --primary #F6A94C (button)    8.86:1
+     --secondary #7CA7E6 on --surface #1B2942             5.91:1   (links)
+     --danger-text #EF8C86 on --surface #1B2942           5.84:1   (Reject)
+     --ovw-success-text #6FD0A4 on the green-tinted card  8.6:1
+   ========================================================================== */
+
+.ovw {
+  --ovw-t-floor: 12px;
+  --ovw-t-label: 13px;
+  --ovw-t-body: 15px;
+  --ovw-t-head: 19px;
+  --ovw-t-numeral: 30px;
+  --ovw-rule: rgba(155, 168, 190, .20);
+  --ovw-info-edge: rgba(155, 168, 190, .45);
+  --ovw-tint-green: rgba(79, 178, 134, .10);
+  --ovw-success-text: #6FD0A4;
+
+  max-width: 1000px;
+  color: var(--text);
+  font: 400 var(--ovw-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.ovw *, .ovw *::before, .ovw *::after { box-sizing: border-box; }
+
+.ovw .ovw-h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 10px;
+  font: 700 var(--ovw-t-head)/1.2 var(--font-display);
+  color: var(--text);
+}
+.ovw .ovw-h2 small { font: 500 var(--ovw-t-label)/1 var(--font-ui); color: var(--muted); }
+.ovw .ovw-h2-link { margin-left: auto; }
+
+.ovw .ovw-alerts { display: flex; flex-direction: column; gap: 10px; margin: 0 0 26px; }
+
+/* ── one alert box ───────────────────────────────────────────────────────── */
+.ovw .ovw-al {
+  min-width: 0;
+  border: 1px solid var(--ovw-rule);
+  border-left: 3px solid var(--ovw-info-edge);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.ovw .ovw-al--people { border-left-color: var(--secondary); }
+.ovw .ovw-al--stuck { border-left-color: var(--danger); }
+.ovw .ovw-al--info { border-left-color: var(--ovw-info-edge); }
+
+.ovw .ovw-al-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 14px 8px 0;
+  min-width: 0;
+}
+.ovw .ovw-al-toggle {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 2px 0 2px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ovw .ovw-al-n {
+  flex: none;
+  min-width: 40px;
+  text-align: center;
+  font: 800 var(--ovw-t-numeral)/1 var(--font-display);
+  color: var(--text);
+}
+.ovw .ovw-al--info .ovw-al-n { color: var(--muted); }
+.ovw .ovw-al-t { flex: 1 1 auto; min-width: 0; }
+.ovw .ovw-al-t b { display: block; font: 700 var(--ovw-t-body)/1.3 var(--font-ui); color: var(--text); }
+.ovw .ovw-al-t span {
+  display: block;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--ovw-t-label);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ovw .ovw-al-act { flex: none; display: flex; align-items: center; gap: 8px; }
+.ovw .ovw-al-car {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ovw-rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ovw .ovw-al-car svg { transition: transform .15s ease; }
+.ovw .ovw-al.is-open .ovw-al-car svg { transform: rotate(180deg); }
+.ovw .ovw-al-car:hover, .ovw .ovw-al-toggle:hover .ovw-al-t b { color: var(--text); }
+
+.ovw .ovw-al-body { border-top: 1px solid var(--ovw-rule); }
+.ovw .ovw-al-why {
+  margin: 0;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--ovw-rule);
+  color: var(--muted);
+  font-size: var(--ovw-t-label);
+  line-height: 1.45;
+}
+/* A row: name and how long it waited, then the actions. The action group is
+   pushed right by margin-left:auto and WRAPS under the name when narrow —
+   never justify-content:flex-end (engage-design rule 9). */
+.ovw .ovw-al-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-height: 52px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--ovw-rule);
+}
+.ovw .ovw-who { flex: 1 1 240px; min-width: 0; }
+.ovw .ovw-who b,
+.ovw .ovw-who span {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ovw .ovw-who b { font-weight: 600; color: var(--text); }
+.ovw .ovw-who span { color: var(--muted); font-size: var(--ovw-t-label); }
+.ovw .ovw-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.ovw .ovw-note {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--ovw-t-label);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.ovw .ovw-note--bad { color: var(--danger-text); }
+.ovw .ovw-al-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 9px 14px;
+  color: var(--muted);
+  font-size: var(--ovw-t-label);
+}
+.ovw .ovw-al-foot > span { flex: 1 1 200px; min-width: 0; }
+
+/* ── buttons, namespaced: styles.css owns the bare .btn ─────────────────── */
+.ovw .ovw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--ovw-rule);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 var(--ovw-t-label)/1.2 var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ovw .ovw-btn:hover { border-color: var(--muted); }
+.ovw .ovw-btn:disabled { opacity: .6; cursor: progress; }
+.ovw .ovw-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--bg); }
+.ovw .ovw-btn--ghost { background: transparent; }
+.ovw .ovw-btn--danger { background: transparent; border-color: rgba(229, 100, 94, .6); color: var(--danger-text); }
+.ovw .ovw-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--secondary);
+  font: 600 var(--ovw-t-label)/1.3 var(--font-ui);
+  text-decoration: none;
+  cursor: pointer;
+}
+.ovw .ovw-link:hover { text-decoration: underline; }
+.ovw :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+
+/* ── nothing waiting ──────────────────────────────────────────────────── */
+.ovw .ovw-none {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(79, 178, 134, .45);
+  border-radius: 10px;
+  background: linear-gradient(var(--ovw-tint-green), var(--ovw-tint-green)), var(--surface);
+}
+.ovw .ovw-none-ck {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(79, 178, 134, .2);
+  color: var(--ovw-success-text);
+}
+.ovw .ovw-none b { display: block; font: 700 var(--ovw-t-head)/1.25 var(--font-ui); color: var(--text); }
+.ovw .ovw-none span { display: block; margin-top: 2px; color: var(--muted); font-size: var(--ovw-t-label); }
+.ovw .ovw-loading,
+.ovw .ovw-partial,
+.ovw .ovw-note-line { margin: 0 0 14px; color: var(--muted); font-size: var(--ovw-t-label); }
+.ovw .ovw-note-line { margin: 12px 0 0; }
+
+/* ── the numbers: the Observability tile ──────────────────────────────── */
+.ovw .ovw-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ovw .ovw-tiles--two { grid-template-columns: repeat(2, minmax(0, 220px)); }
+.ovw .ovw-tile {
+  min-width: 0;
+  padding: 12px 14px 13px;
+  border: 1px solid var(--ovw-rule);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.ovw .ovw-tile-l,
+.ovw .ovw-tile-s {
+  display: block;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--ovw-t-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ovw .ovw-tile-l { font-weight: 600; }
+.ovw .ovw-tile-v {
+  display: block;
+  margin: 6px 0 4px;
+  font: 800 var(--ovw-t-numeral)/1.15 var(--font-display);
+  letter-spacing: -.01em;
+  color: var(--text);
+}
+.ovw .ovw-tile-v small { font: 600 var(--ovw-t-body)/1 var(--font-ui); color: var(--muted); letter-spacing: 0; }
+.ovw .ovw-meter { display: block; height: 6px; margin: 7px 0 4px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.ovw .ovw-meter i { display: block; height: 100%; border-radius: 3px; background: var(--secondary); }
+
+/* Two across where the work area narrows, as Observability does. */
+@media (max-width: 1180px) {
+  .ovw .ovw-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A phone: the head wraps, rows stack their buttons full width at 40px. */
+@media (max-width: 480px) {
+  .ovw .ovw-tiles--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ovw .ovw-al-head { flex-wrap: wrap; gap: 8px 10px; padding-right: 12px; }
+  .ovw .ovw-al-toggle { flex-basis: calc(100% - 48px); padding-left: 12px; }
+  .ovw .ovw-al-act { margin-left: 66px; }
+  .ovw .ovw-al-t span, .ovw .ovw-tile-s { white-space: normal; }
+  .ovw .ovw-al-row { padding: 10px 12px; }
+  .ovw .ovw-acts { margin-left: 0; width: 100%; }
+  .ovw .ovw-acts .ovw-btn { flex: 1 1 0; min-height: 40px; font-size: var(--ovw-t-body); }
+}

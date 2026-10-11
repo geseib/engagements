@@ -65,7 +65,7 @@ function serve() {
   });
 }
 
-beforeEach(() => { localStorage.clear(); mockActiveOrg = HOME.orgId; mockGroups = ['hosts']; window.history.pushState({}, '', '/admin'); });
+beforeEach(() => { localStorage.clear(); mockActiveOrg = HOME.orgId; mockGroups = ['hosts']; window.history.pushState({}, '', '/admin?section=questionsets'); }); // the landing section is the Overview since 2026-10-11
 
 test('after Save-as-copy the editor is on my copy, clean, with Close as the way out', async () => {
   serve();

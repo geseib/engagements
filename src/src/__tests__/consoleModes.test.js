@@ -103,7 +103,7 @@ describe('the platform mode', () => {
   // is why it was bolted on additively in the first place.
   it('is reachable by an explicit choice, not by having no organisation', () => {
     expect(ids(sectionsFor(staffOnPlatform)))
-      .toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings']);
+      .toEqual(['overview', 'orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings']);
   });
 
   /*
@@ -145,8 +145,9 @@ describe('the platform mode', () => {
 
   // rejects: landing a platform operator on Settings because the default
   // section was computed from a nav this mode does not have.
-  it('lands on Organisations', () => {
-    expect(defaultSectionIdFor(staffOnPlatform)).toBe('orgs');
+  it('lands on the Overview, with Organisations second', () => {
+    // Overview is the landing section in every scope (owner, 2026-10-11).
+    expect(defaultSectionIdFor(staffOnPlatform)).toBe('overview');
   });
 });
 
