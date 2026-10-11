@@ -27,6 +27,7 @@ import GameReport from './components/GameReport';
 import SurveyResultsPanel from './components/SurveyResultsPanel';
 import SurveyWalkthrough from './components/stage/SurveyWalkthrough';
 import AISummaryStatus from './components/AISummaryStatus';
+import useModelPicker from './components/stage/useModelPicker';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
@@ -897,6 +898,23 @@ function GameHostPage() {
    * so the next round's results open on the tally.
    */
   const [resultsBeat, setResultsBeat] = useState('results');
+  /*
+    DEV'S AI MODEL PICKER, STAFF ONLY (components/stage/useModelPicker.js).
+    The round whose read is on screen, and only on What We Heard. Whether the
+    picker exists at all is the server's answer (dev's AiModelPicker and the
+    `admins` group), never the hostname; `staff` only saves a request.
+  */
+  const pickerRound = gameState !== 'ENDED'
+    && hostPhaseForBeat(phaseOfGameState(gameState), resultsBeat) === 'FIELD_NOTES'
+    ? (resultsRoundOf(gameState) || (String(gameState).match(/#(\d+)/) || [])[1] || null)
+    : null;
+  const modelPicker = useModelPicker({
+    gameId,
+    round: pickerRound,
+    staff: Boolean(currentUser?.groups?.includes('admins')),
+    fetchFn: authFetch,
+    apiBase: API_BASE,
+  });
   /*
     WHAT THE ROOM HAS SAID ABOUT THIS ROUND'S REPORT.
 
@@ -7889,6 +7907,7 @@ Focus on actionable business strategy insights.`;
             briefed: sessionBriefed,
             onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
             redoBusy: loadingAIInsights,
+            modelPicker: hostPhase === 'FIELD_NOTES' ? modelPicker : null,
           }}
         />
       )}
