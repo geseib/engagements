@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { broadcastToGame } = require('./schema-compliant-manager');
 const { isHidden, redactAnswers } = require('./anonymity');
+const { inDisplayOrder } = require('./answer-order');
 const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
@@ -122,7 +123,9 @@ exports.handler = async (event) => {
     ]);
     const hidden = isHidden(metaRes.Item, roundRes.Item);
 
-    const ballot = answers.map(answer => ({
+    // The room's order (answer-order.js), as get-answers.js serves it: the
+    // stage draws this list, and the phones number theirs the same way.
+    const ballot = inDisplayOrder(answers, gameId, paddedQuestionNumber).map(answer => ({
       playerId: answer.PlayerName,
       playerName: answer.PlayerName,
       name: answer.PlayerName, // Add name field for frontend compatibility

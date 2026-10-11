@@ -34,6 +34,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { inDisplayOrder } = require('./answer-order');
 
 const { callerMayDriveSession } = require('./tenant');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
@@ -141,8 +142,8 @@ exports.handler = async (event) => {
       }
     }));
 
-    // Same order as the ballot — this is the query the ballot was built from.
-    const answers = (answersRes.Items || []).map(a => ({
+    // The room's order (answer-order.js) — the order the ballot was drawn in.
+    const answers = inDisplayOrder(answersRes.Items || [], gameId, padded).map(a => ({
       playerId: a.PlayerName,
       playerName: a.PlayerName,
       name: a.PlayerName,

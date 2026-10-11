@@ -255,8 +255,10 @@ console.log('\n4. GET /answers with anonymity turned off');
 
 seedAnonymousRound('3003', { anonymous: false });
 const plain = JSON.parse((await askAnswers('3003', 'host')).body);
+// The answers come in the room's shuffled order (answer-order.js), so find
+// Ada's by its text rather than by position.
 await check('opting out carries playerName from the start', () =>
-  assert.strictEqual(plain.answers[0].playerName, 'Ada'));
+  assert.strictEqual(plain.answers.find(a => a.answer === "Ada's answer").playerName, 'Ada'));
 
 console.log('\n5. a game with no HostPreferences at all');
 
@@ -286,9 +288,15 @@ await check('no playerId — the label that named the answer', () =>
     `leaked: ${JSON.stringify(votePayload.answers[0])}`));
 await check('no playerName and no name', () =>
   assert.ok(votePayload.answers.every(a => !('playerName' in a) && !('name' in a))));
-await check('answer order is untouched — the ballot runs on it', () =>
+// The phone's ballot is keyed by this order, so redaction must not move a
+// row: the list is exactly the room's order (answer-order.js), names or not.
+await check('answer order is untouched by redaction — the ballot runs on it', () => {
+  const { inDisplayOrder } = require(path.join(__dirname, '..', 'lambda-functions/game/answer-order.js'));
+  const roomOrder = inDisplayOrder(
+    ['Ada', 'Grace'].map(n => ({ SK: `QUESTION#001#ANSWER#${n}`, PlayerName: n })), '3005', '001');
   assert.deepStrictEqual(votePayload.answers.map(a => a.answer),
-    ["Ada's answer", "Grace's answer"]));
+    roomOrder.map(a => `${a.PlayerName}'s answer`));
+});
 
 // Regression guard for the fix in d9e58aae — this must not be lost.
 await check('votingStarted still carries newState', () =>
@@ -793,7 +801,7 @@ await check('the round is no longer hidden once results are in', () =>
 // for — the endpoint carries names again with no POST /reveal-authors call.
 const afterVoteClose = JSON.parse((await askAnswers('3011', 'host')).body);
 await check('GET /answers carries attribution once voting has closed', () =>
-  assert.strictEqual(afterVoteClose.answers[0].playerName, 'Ada'));
+  assert.strictEqual(afterVoteClose.answers.find(a => a.answer === "Ada's answer").playerName, 'Ada'));
 
 console.log('\n15. the round record is written even on the exits that used to skip it');
 

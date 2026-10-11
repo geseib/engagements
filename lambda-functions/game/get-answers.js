@@ -4,6 +4,7 @@ const { isHidden, redactAnswers } = require('./anonymity');
 const { decryptItem, decryptItems } = require('./tenant-crypto');
 const { readPollQuestion, pollTally } = require('./poll-round');
 const { callerMayDriveSession } = require('./tenant');
+const { inDisplayOrder } = require('./answer-order');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -204,16 +205,23 @@ exports.handler = async (event) => {
     // envelopes would leave the ciphertext in place and hand the voting screen
     // `{v:1,iv:…}` to vote on, so the unwrap has to come first.
     //
-    // `decryptItems` preserves order, and order is load-bearing here: the
-    // ballot is POSITIONAL and get-results tallies vote index against
-    // answers[index].
+    // `decryptItems` preserves order; the display order is applied below, from
+    // the sort keys, so it does not depend on this.
     const answerOrgId = orgOf(metaRes.Item);
     const decryptedAnswers = answerOrgId
       ? await decryptItems(answerOrgId, 'answer', answers)
       : answers;
 
+    // THE ROOM'S ORDER, NOT THE TABLE'S (answer-order.js). The Query returns
+    // the rows alphabetical by author; every screen numbers what this returns,
+    // so it goes out shuffled by game and round — the same order for the
+    // stage, each phone and every reload. A phone's ballot is keyed by these
+    // positions and submit-vote.js maps it back to the Query order before it
+    // is stored, so every tally still reads `answers[index]` in SK order.
+    const shownAnswers = inDisplayOrder(decryptedAnswers, gameId, targetQuestionId);
+
     // Base answer information
-    const fullAnswers = decryptedAnswers.map(answer => ({
+    const fullAnswers = shownAnswers.map(answer => ({
       playerName: answer.PlayerName,
       name: answer.PlayerName, // Add name field for frontend compatibility
       answer: answer.Answer,
@@ -221,8 +229,8 @@ exports.handler = async (event) => {
       submittedAt: answer.SubmittedAt
     }));
 
-    // Order is preserved by redactAnswers and must stay that way: the ballot is
-    // positional and get-results tallies vote index against answers[index].
+    // Order is preserved by redactAnswers and must stay that way: the phone's
+    // ballot is positional against THIS order (submit-vote.js translates it).
     const baseAnswers = hidden ? redactAnswers(fullAnswers) : fullAnswers;
 
     // Which payload: the ROUTE decides, never `role`.

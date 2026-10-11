@@ -10,6 +10,7 @@ const { shapeForLog } = require('./log-shape');
 const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { readPollQuestion, pollTally } = require('./poll-round');
+const { displayOrder } = require('./answer-order');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -722,11 +723,23 @@ exports.handler = async (event) => {
       });
     });
 
+    /*
+      THE ROOM'S ORDER ON THE WAY OUT (answer-order.js). The ballots were
+      tallied against the answers in SK order above, as they are stored. What
+      leaves this handler is keyed by DISPLAY position instead — the numbers
+      the stage and the phones voted under — so a tie on the results screen
+      falls in the room's order rather than alphabetically by author. Nothing
+      maps these keys back to a ballot; every reader takes Object.values.
+    */
+    const shownOrder = displayOrder(answers, gameId, paddedQuestionId);
+    const shownTallies = Object.fromEntries(
+      shownOrder.map((canonical, pos) => [String(pos), voteTallies[canonical]]));
+
     // Find winners (highest score)
     const maxScore = Math.max(...Object.values(answerScores));
     const winners = [];
     
-    Object.entries(answerScores).forEach(([index, score]) => {
+    shownOrder.map((canonical) => [canonical, answerScores[canonical]]).forEach(([index, score]) => {
       if (score === maxScore && voteTallies[index]) {
         winners.push({
           playerName: voteTallies[index].playerName,
@@ -816,7 +829,7 @@ exports.handler = async (event) => {
     const result = {
       gameId: gameId,
       questionId: paddedQuestionId,
-      voteTallies: voteTallies,
+      voteTallies: shownTallies,
       winners: winners,
       totalVotes: votes.length,
       maxScore: maxScore,
@@ -837,7 +850,7 @@ exports.handler = async (event) => {
         GameId: gameId,
         QuestionId: paddedQuestionId,
         Winners: winners.map(w => w.playerName),
-        VoteTallies: voteTallies,
+        VoteTallies: shownTallies,
         MaxVotes: maxScore,
         TotalVotes: votes.length,
         CompletedAt: new Date().toISOString(),

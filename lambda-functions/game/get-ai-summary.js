@@ -36,6 +36,7 @@ const { pollQuestionOf } = require('./poll-question');
 const { pollTally, describePollTally } = require('./poll-round');
 const { describeSurveyResults } = require('./survey-digest');
 const { resolveTask, authoredTaskOf } = require('./task-instruction');
+const { displayOrder } = require('./answer-order');
 const { authorTallyLines, findTallyMismatches, tallyRows } = require('./author-tally');
 
 /**
@@ -1436,6 +1437,8 @@ exports.handler = async (event) => {
       }
     });
 
+    const shownOrder = displayOrder(answers, gameId, paddedQuestionNumber);
+
     const results = {
       voteTallies: voteTallies,
       winners: winners,
@@ -1640,12 +1643,17 @@ exports.handler = async (event) => {
       debugMode: debug === 'true',
       questionId: targetQuestionId,
       question: question, // Pass the normalized question object with all fields
-      answers: answers.map(answer => ({
+      // IN THE ROOM'S ORDER (answer-order.js), answers and tallies together so
+      // `voteTallies[i]` still describes `answers[i]`: the ballots were tallied
+      // in SK order above, and from here a tie reads in the order the room
+      // voted on, never alphabetically by author.
+      answers: shownOrder.map((canonical) => answers[canonical]).map(answer => ({
         playerName: answer.PlayerName,
         answer: answer.Answer
       })),
       results: {
-        voteTallies: results.voteTallies,
+        voteTallies: Object.fromEntries(
+          shownOrder.map((canonical, pos) => [String(pos), results.voteTallies[canonical]])),
         winners: results.winners,
         totalVotes: results.totalVotes,
         // maxScore is NOT optional. This literal is the only thing

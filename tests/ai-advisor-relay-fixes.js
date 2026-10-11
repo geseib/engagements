@@ -445,6 +445,16 @@ const decryptRow = async (orgId, row) => (orgId ? crypto.decryptItem(orgId, 'aiS
     assert.ok(lines.indexOf('Lena Ortiz') < lines.indexOf('Maya Chen'));
   });
 
+  await check('a tie reads in the room\'s answer order, in the tally line and the ranked list', () => {
+    const { inDisplayOrder } = require(path.join(REPO, 'lambda-functions/game/answer-order.js'));
+    const shown = inDisplayOrder(PEOPLE.map((n) => ({ SK: `QUESTION#001#ANSWER#${n}` })), '7101', '001')
+      .map((a) => a.SK.split('#ANSWER#')[1]).filter((n) => n === 'Theo Brooks' || n === 'Omar Patel');
+    const lines = org.prompt.split('Vote points by author: ')[1].split('\n- Every answer')[0];
+    assert.ok(lines.indexOf(shown[0]) < lines.indexOf(shown[1]), lines);
+    const ranked = org.prompt.split('Every answer, ranked, with the vote points it earned: ')[1];
+    assert.ok(ranked.indexOf(shown[0]) < ranked.indexOf(shown[1]), ranked.slice(0, 400));
+  });
+
   say('\n5. the tally check');
   await check('a reply that matches the tally is written once', () => {
     assert.strictEqual(org.calls, 1);
