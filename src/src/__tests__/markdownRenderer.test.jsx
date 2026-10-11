@@ -302,6 +302,18 @@ describe('MarkdownRenderer — lists and the Lead idiom', () => {
     expect(c.querySelector('.md-rest').textContent).toBe('nobody had a majority.');
   });
 
+  // Relay pilot round 6: the model wrote `**Lena Ortiz:** …`, the colon inside
+  // the bold, and the CSS added its own — "Lena Ortiz::" on the projector and
+  // in the PDF. Rejects: keeping a colon the CSS is about to add again.
+  test('a colon inside the bold is dropped, so only the CSS colon shows', () => {
+    const c = draw('1. **Lena Ortiz:** draft the one-page plan.\n\n- **No split :** every answer names a pilot.');
+    const leads = [...c.querySelectorAll('.md-lead')].map((n) => n.textContent);
+    expect(leads).toEqual(['Lena Ortiz', 'No split']);
+    expect(c.querySelector('.md-rest').textContent).toBe('draft the one-page plan.');
+    const css = fs.readFileSync(src('styles.css'), 'utf8');
+    expect(css).toMatch(/\.md-point > \.md-lead::after \{\s*content: ': ';/);
+  });
+
   // Rejects: making the split unconditional, which would leave an empty
   // caption under every fully-bold bullet.
   test('a bullet that is all lead and no detail is not split', () => {
