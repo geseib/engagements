@@ -533,6 +533,13 @@ function requiredGroupsForRoute(method, path) {
   if (path === 'platform/audit') {
     return ['admins'];
   }
+  // Usage stats for one team, account or set (usage-stats SPEC §9). Engage's;
+  // orgs/platform-stats.js re-asks isPlatformAdmin and logs every team or
+  // account it opens. A team's own owners and admins read theirs at
+  // `orgs/{orgId}/stats`, which ORG_ROUTE above admits and the handler narrows.
+  if (path === 'platform/stats') {
+    return ['admins'];
+  }
 
   // ── COPYING A SHARED SET INTO YOUR OWN ORGANISATION ──────────────────────
   //

@@ -1658,6 +1658,18 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
+        # Usage stats for ONE team, account or set (docs/design/usage-stats).
+        # Staff only — authorizer.js names it ['admins'] and the handler
+        # re-asks isPlatformAdmin; opening a team or an account is written to
+        # the audit log first, and refused if it cannot be.
+        PlatformStats:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /platform/stats
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -2314,6 +2326,16 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /orgs/{orgId}/invoices/{period}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # The team's Activity page (usage stats): owners and admins only, by
+        # the MEMBER row (org-guards authorizeOrg). Read-only, like the rest.
+        OrgStats:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/stats
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer

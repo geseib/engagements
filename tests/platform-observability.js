@@ -249,12 +249,18 @@ const tenantReads = () => table.log.filter((e) => e.type === 'query' && /^ORG#/.
   });
   // rejects: querying ORG#<id> without a prefix, which returns members,
   // invites and ledger rows along with the counters.
-  await check('an organisation’s own partition is read only for its USAGE# counters', () => {
+  // The usage stats (2026-10-11) add ONE more prefix: the month's own
+  // `STATS#<yyyy-mm>#` counter rows, numbers only (platform-metrics.js).
+  await check('an organisation’s own partition is read only for its USAGE# and STATS#<month># counters', () => {
     const own = tenantReads().filter((e) => /^ORG#[^#]+$/.test(e.input.ExpressionAttributeValues[':pk']));
     assert.ok(own.length >= 2);
     for (const e of own) {
-      assert.strictEqual(e.input.ExpressionAttributeValues[':sk'], 'USAGE#');
-      assert.ok(e.input.ProjectionExpression, 'the counter read carries no projection');
+      const sk = e.input.ExpressionAttributeValues[':sk'];
+      if (sk === 'USAGE#') {
+        assert.ok(e.input.ProjectionExpression, 'the counter read carries no projection');
+      } else {
+        assert.ok(/^STATS#\d{4}-\d{2}#$/.test(sk), `ORG# read under ${sk}`);
+      }
     }
   });
   // rejects: reaching into a session or a set's content.

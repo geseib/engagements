@@ -52,6 +52,9 @@ const ROUTES = [
   ['GET', 'orgs/{orgId}'],
   ['GET', 'orgs/{orgId}/members'],
   ['GET', 'orgs/{orgId}/usage'],
+  // The Activity page (usage stats): hosts may knock, the handler admits an
+  // owner or admin only (tests/usage-stats-routes.js).
+  ['GET', 'orgs/{orgId}/stats'],
   ['POST', 'orgs/{orgId}/invites'],
   ['DELETE', 'orgs/{orgId}/invites/{token}'],
   ['PUT', 'orgs/{orgId}/members/{sub}/role'],
