@@ -116,8 +116,11 @@ exports.handler = async (event) => {
       await recordSurveyOpened({
         gameId,
         questions: surveyRows.length,
-        set: { scope: surveySet.scope, pk: surveySet.pk },
-        questionId: surveyRows[0].SK
+        // The whole pinned set — scope, org, id, version — so the usage stats
+        // count it on the version the survey serves (usage-stats SPEC §5 E5).
+        set: surveySet,
+        questionId: surveyRows[0].SK,
+        metadata: meta
       }, { db });
       // A phone that loaded the survey before it opened was told "not open
       // yet"; `gameStateChanged` is what both pages already re-fetch on

@@ -17,6 +17,10 @@
  *   §4  a recorder cannot throw, whatever the table does
  *   §5  the rows carry numbers only and no ttl
  *   §6  reading it back: the average divides what it says it divides
+ *   §7  the usage stats ride the same guards: a retried start, a racing
+ *       round and a double Open add nothing to the type or set rows; the
+ *       first served round adds one session to the set at the version served;
+ *       an unversioned set lands on V#0
  *
  * Every check carries a `// rejects:` line naming the change it catches.
  */
@@ -486,6 +490,63 @@ const brokenDb = (mode) => ({
   await check('months are cut in UTC', () => {
     assert.strictEqual(M.periodOf(new Date('2026-09-30T23:59:59Z')), '2026-09');
     assert.strictEqual(M.periodOf(new Date('2026-10-01T00:00:00Z')), '2026-10');
+  });
+
+  /* ----------------------------------------------------------------------- */
+  say('\n§7 the usage stats ride the same guards');
+  reset();
+  const statsTeam = (type, period = '2026-09') => row(`ORG#${ORG}`, `STATS#${period}#TYPE#${type}`) || {};
+  const statsPlatform = (type, period = '2026-09') => row(M.METRICS_PK, `MONTH#${period}#TYPE#${type}`) || {};
+  const statsSet = (pk, sk) => row(pk, sk) || {};
+  session('7001', { GameType: 'trivia', CreatedBy: 'u-ana' });
+  // rejects: the stats bumped before the started marker is claimed — a
+  // retried Start would count twice in the type rows.
+  await check('a retried start adds one started, not two', async () => {
+    await M.recordSessionStarted({ gameId: '7001' }, opts());
+    await M.recordSessionStarted({ gameId: '7001' }, opts());
+    assert.strictEqual(statsTeam('trivia').started, 1);
+    assert.strictEqual(statsPlatform('trivia').started, 1);
+    assert.strictEqual(row('USER#u-ana', `STATS#2026-09#TYPE#trivia#ORG#${ORG}`).started, 1);
+  });
+  const VERSIONED = { scope: 'platform', setId: 'shared', version: 1, pk: 'SET#shared#v1' };
+  // rejects: counting a racing press of the same round as a second question.
+  await check('two racing presses of round 1 add one question and one set session', async () => {
+    const meta = metadataOf('7001');
+    await Promise.all([
+      M.recordRoundServed({ gameId: '7001', round: 1, set: VERSIONED, questionId: 'QUESTION#c001#001', metadata: meta }, opts()),
+      M.recordRoundServed({ gameId: '7001', round: 1, set: VERSIONED, questionId: 'QUESTION#c001#001', metadata: meta }, opts()),
+    ]);
+    assert.strictEqual(statsTeam('trivia').questions, 1);
+    const set = statsSet('SETSTATS', 'SET#shared#V#1');
+    assert.strictEqual(set.questions, 1);
+    assert.strictEqual(set.sessions, 1);
+  });
+  // rejects: counting a set session per round rather than per session.
+  await check('round 2 of the same session is a question, not another set session', async () => {
+    await M.recordRoundServed({ gameId: '7001', round: 2, set: VERSIONED, questionId: 'QUESTION#c001#001' }, opts());
+    const set = statsSet('SETSTATS', 'SET#shared#V#1');
+    assert.strictEqual(set.questions, 2);
+    assert.strictEqual(set.sessions, 1);
+    assert.strictEqual(statsTeam('trivia').questions, 2);
+  });
+  // rejects: an unversioned (legacy) set dropped, or given an invented version.
+  await check('an unversioned set lands on V#0', async () => {
+    session('7002', { GameType: 'poll' });
+    await M.recordRoundServed({ gameId: '7002', round: 1, set: { scope: 'platform', setId: 'legacy', version: null, pk: 'SET#legacy' }, questionId: 'QUESTION#c002#004' }, opts());
+    const set = statsSet('SETSTATS', 'SET#legacy#V#0');
+    assert.strictEqual(set.sessions, 1);
+    assert.strictEqual(set.version, 0);
+  });
+  // rejects: a double-pressed Open counting a survey's questions twice.
+  await check('a double Open of a survey adds its questions once', async () => {
+    session('7003', { GameType: 'survey' });
+    const survey = { scope: 'org', orgId: ORG, setId: 'ours', version: 1, pk: `ORG#${ORG}#SET#ours#v1` };
+    await M.recordSurveyOpened({ gameId: '7003', questions: 6, set: survey, questionId: 'QUESTION#c001#001' }, opts());
+    await M.recordSurveyOpened({ gameId: '7003', questions: 6, set: survey, questionId: 'QUESTION#c001#001' }, opts());
+    assert.strictEqual(statsTeam('survey').questions, 6);
+    const set = statsSet(`ORG#${ORG}#SETSTATS`, 'SET#ours#V#1');
+    assert.strictEqual(set.questions, 6);
+    assert.strictEqual(set.sessions, 1);
   });
 
   say(`\n${pass} passed, ${fail} failed\n`);

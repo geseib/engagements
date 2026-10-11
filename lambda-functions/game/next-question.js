@@ -1224,7 +1224,11 @@ exports.handler = async (event) => {
     }));
 
     // Served: one question put to the room, counted once per round (platform-metrics.js; never throws).
-    await recordRoundServed({ gameId, round: newLessonNumber, set: resolvedSet, questionId: nextQuestion.questionId }, { db });
+    // The usage stats ride the same guard: by type for the platform, the team and
+    // the creator, and on the set's own row at the version served (usage-stats SPEC §5 E4).
+    await recordRoundServed({
+      gameId, round: newLessonNumber, set: resolvedSet, questionId: nextQuestion.questionId, metadata: gameMetadata.Item,
+    }, { db });
 
     /*
       THE CURSOR AND THE EXHAUSTION FLAG BELONG TO THE AUTOMATIC PATH ONLY.

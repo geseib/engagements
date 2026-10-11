@@ -220,6 +220,28 @@ const answer = (gameId, playerName, text, q = '001') => wsMessage({
     }
   });
 
+  say('\n6b. the usage stats, by type, for the team, the creator and the set');
+  const statsRow = (pk, sk) => store.get(table.keyOf(pk, sk)) || {};
+  // rejects: a hook that stopped passing what the stats need — the team and
+  // account rows would stay empty while the platform month still counts.
+  await check('the team row counts both sessions: created, started, questions', () => {
+    const team = statsRow(`ORG#${ACME}`, `STATS#${period}#TYPE#call-and-answer`);
+    assert.strictEqual(team.created, 2);
+    assert.strictEqual(team.started, 2);
+    assert.strictEqual(team.questions, 4);
+  });
+  await check('the creator’s account row counts the same, filed under the team', () => {
+    const acct = statsRow(`USER#user-${ACME}`, `STATS#${period}#TYPE#call-and-answer#ORG#${ACME}`);
+    assert.strictEqual(acct.created, 2);
+    assert.strictEqual(acct.questions, 4);
+  });
+  // rejects: next-question passing the set without its id or version.
+  await check('the legacy set counts two sessions and four questions on V#0', () => {
+    const set = statsRow('SETSTATS', `SET#${SET}#V#0`);
+    assert.strictEqual(set.sessions, 2);
+    assert.strictEqual(set.questions, 4);
+  });
+
   say('\n7. one call per event site');
   // rejects: a second call slipped in beside the first (a double count), or
   // the call moved out of the module into hand-rolled writes.
