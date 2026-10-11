@@ -1,0 +1,387 @@
+{
+ "note": "Prototype runs for docs/design/ca-followup-asks (2026-10-11). Bedrock converse, read-only. Synthetic round material in prototype/rounds.json. A = asks as a fifth section of the read (prompt-draft-v1 rules); B = a separate call with the v2 rules and the suggest_follow_up_asks tool, toolChoice auto.",
+ "runs": [
+  {
+   "run": "A_haiku_r3",
+   "shape": "in-band (fifth section)",
+   "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+   "round": "r3",
+   "latencySeconds": 12.8,
+   "stopReason": "end_turn",
+   "usage": {
+    "inputTokens": 5006,
+    "outputTokens": 954,
+    "totalTokens": 5960
+   },
+   "asksParsed": true,
+   "asks": [
+    {
+     "type": "agree",
+     "prompt": "If the tests would still pass with the function body deleted, the code goes back.",
+     "source": "I stop reading the implementation body. I read the interface diff, the test assertions and the rollback plan. If the tests would still pass with the function body deleted, it goes back.",
+     "why": "Tests whether the room trusts the agent's test suite to fail when the code is wrong."
+    },
+    {
+     "type": "choice",
+     "prompt": "When do you catch the problem: before the code ships, or after it runs in production?",
+     "options": [
+      "Blast radius first: what else imports this, who gets paged if wrong.",
+      "Ship it to one percent and review the dashboards instead."
+     ],
+     "source": "Blast radius first: what else imports this, and who gets paged if it is wrong. I would skip anything under 50 lines that only touches one module. / Stop reviewing diffs at all for anything behind a flag. Ship it to one percent and review the dashboards instead; production behaviour is the only review the agent cannot fake.",
+     "why": "Settles whether human review stops the change before deployment or trusts production signals to catch it."
+    }
+   ],
+   "read": "*I stop reading the implementation body. I read the interface diff, the test assertions and the rollout plan.*\n\nMarcus Hale put the sharpest edge on this: stop pretending the second agent's work is invisible, and hand the human reviewer something the agent cannot do alone.\n\n## What the room said\n\n**The answers split into three strategies.** One group says *read the interface diff, the test assertions and the rollback plan*, and *if the tests would still pass with the function body deleted, it goes back*. A second says *security-sensitive files only: auth, IAM, payments, anything touching personal data. Everything else goes through on the second agent's approval plus green CI*. A third says *review the tests as if they were the spec and skip the code*.\n\n**Not settled**: One answer argues for *blast radius first: what else imports this, and who gets paged if it is wrong*. Another says *ship it to one percent and review the dashboards instead; production behaviour is the only review the agent cannot fake*. The choice is whether you stop the change before it ships or trust the production signal to catch it.\n\n## What the room voted\n\n**Marcus Hale's answer collected 14 vote points** — three first-place, two second-place, one third. Aisha Rahman's security-gated approach earned 11 points. Ben Okafor's test-as-spec answer earned 9.\n\n**The vote held tight to the writing.** The top answer in the room matched the top vote.\n\n**Worth keeping**: *Migrations and data scripts. Code can be rolled back; a bad backfill cannot.* Ignoring this would let the one answer that names irreversible damage stay at 5 points while the room settles on a general rule that assumes rollback is always possible.\n\n## Discussion topics\n\n1. Marcus Hale's answer assumes the test suite is written to fail if the code is wrong. Does that hold for the agent's output, or do you find yourself re-reading the tests because the agent wrote both?\n\n2. Aisha Rahman draws the line at security-sensitive code. Where would you draw it, and what else besides auth and payments belongs on the human-review side?\n\n3. Priya Nair says production behaviour is the only review the agent cannot fake. Would shipping behind a flag and reading dashboards catch the IAM policy widening Tom Becker named?\n\n## Suggested next steps\n\n1. **Whoever runs code review**: draft the three-part checklist — interface diff, test assertions, rollback plan — from Marcus Hale's answer and run it on the next five agent PRs to see whether tests written by the agent catch what they should.\n\n2. **Whoever owns the security policy**: list the file paths and patterns that trigger mandatory human review under Aisha Rahman's rule, and add them to the CI gate this week."
+  },
+  {
+   "run": "A_haiku_r2",
+   "shape": "in-band (fifth section)",
+   "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+   "round": "r2",
+   "latencySeconds": 12.2,
+   "stopReason": "end_turn",
+   "usage": {
+    "inputTokens": 4637,
+    "outputTokens": 906,
+    "totalTokens": 5543
+   },
+   "asksParsed": true,
+   "asks": [
+    {
+     "type": "agree",
+     "prompt": "Senior engineers writing tickets and juniors reviewing agent output is healthy for the juniors.",
+     "source": "More rigorous, and it has shifted who writes them: senior engineers write the tickets now and juniors review the agent's output.",
+     "why": "Tests whether the room stands behind the new distribution of writing work or sees it as a problem."
+    },
+    {
+     "type": "choice",
+     "prompt": "When specs get heavier, who should write the what-if cases?",
+     "options": [
+      "Engineers, before anything runs",
+      "Product, as part of the what",
+      "The agent, from the ticket"
+     ],
+     "source": "Product writes the what, and engineers now write the what-if cases before anything runs.",
+     "why": "Settles who owns the new layer of specification the room is already writing."
+    }
+   ],
+   "read": "*The agent made the cost of ambiguity visible.*\n\nThat phrase sits at the heart of what the room is seeing happen. Seven people answered. Seven voted. The picture is split, but not evenly, and the split is not about direction—it is about what the direction means for who does the work.\n\n## What the room said\n\n**Two answers tied for the most support both describe heavier specs, but they diagnose different problems.** One says *the agent made the cost of ambiguity visible*, so product writes the what and engineers now write the what-if cases before anything runs. The other says *senior engineers write the tickets now and juniors review the agent's output*, and the writer is unsure that shift is healthy for the juniors. A third answer adds that *the agent takes vague tickets literally*, so acceptance criteria are now written as examples—good, but slower.\n\n**No split**: all three top answers agree the team is drifting toward heavier specs. The disagreement is not about direction; it is about whether the new burden has landed on the right people and whether that is sustainable.\n\n## What the room voted\n\n**Two answers earned 9 vote points each.** One describes heavier specs justified by visibility of ambiguity's cost, with product and engineers now writing different parts of the ticket. The other describes the same shift but flags that senior engineers now write tickets and juniors review agent output, and names uncertainty about whether that is healthy for the juniors.\n\nThe vote matched the writing: the room's concern is not whether specs should get heavier, but who carries that weight and whether the distribution makes sense.\n\n**Worth keeping**: *Disposable. We stopped arguing in refinement; someone asks the agent for two versions and we pick one in the demo. Nobody reads the ticket after that.* Ignoring this answer would mean missing that one part of the codebase is already moving in the opposite direction—specs are disposable when the cost of iteration is low enough that arguing about intent stops mattering.\n\n## Discussion topics\n\n1. One answer says *senior engineers write the tickets now and juniors review the agent's output*. Does the room want to test whether that distribution is working, or is it already clear it is not?\n\n2. One answer describes acceptance criteria written as examples because *the agent takes vague tickets literally*. Is that a permanent shift, or a temporary tax while the team learns to write for agents?\n\n3. One answer reports that specs are *heavier for anything touching billing, and disposable for UI*. Should the team codify which kinds of work get which level of specification, or leave it case-by-case?\n\n## Suggested next steps\n\n1. **Whoever runs code review or pair programming**: measure how much time juniors spend reviewing agent output versus writing code in the next two weeks, and report whether the balance feels right.\n\n2. **Whoever writes most of the billing tickets**: draft a one-page template for the what-if cases engineers now write before anything runs, using the examples from the third answer, and try it on the next ticket."
+  },
+  {
+   "run": "A_sonnet_r3",
+   "shape": "in-band (fifth section)",
+   "model": "us.anthropic.claude-sonnet-4-6",
+   "round": "r3",
+   "latencySeconds": 14.9,
+   "stopReason": "end_turn",
+   "usage": {
+    "inputTokens": 5006,
+    "outputTokens": 1090,
+    "totalTokens": 6096
+   },
+   "asksParsed": true,
+   "asks": [
+    {
+     "type": "agree",
+     "prompt": "Do you agree: if the tests would still pass with the function body deleted, the PR goes back?",
+     "statement": "If the tests would still pass with the function body deleted, it goes back.",
+     "source": "If the tests would still pass with the function body deleted, it goes back.",
+     "why": "Tests whether the room will commit to a falsifiability rule as a hard gate, or treat it as one signal among many."
+    },
+    {
+     "type": "choice",
+     "prompt": "When an agent PR touches IAM, what should trigger human review?",
+     "options": [
+      "Security-sensitive files: auth, IAM, payments, personal data",
+      "Blast radius first: what else imports this",
+      "Migrations and data scripts — code can be rolled back"
+     ],
+     "source": "Security-sensitive files only: auth, IAM, payments, anything touching personal data.",
+     "why": "Settles whether the room wants a file-type rule, a dependency rule, or a reversibility rule as the primary gate for high-risk changes."
+    },
+    {
+     "type": "open",
+     "prompt": "What is one thing a human reviewer can catch in an agent PR that a second agent cannot?",
+     "source": "production behaviour is the only review the agent cannot fake.",
+     "why": "Finds the concrete residual value of human review that the room named but did not define, which is the premise every answer rests on."
+    }
+   ],
+   "read": "*If the tests would still pass with the function body deleted, it goes back.* That is a falsifiability test for the whole review, and it is the sharpest thing in this room.\n\n## What the room said\n\n- **What to stop reading**: seven of the nine answers name something specific to skip — the implementation body, style and lint, formatting, code behind a flag — and several name a domain to keep: interfaces, blast radius, migrations, security-sensitive files.\n- **Tests as the real spec**: three answers converge on the tests being the thing worth reading, because *if the agent wrote both the code and the tests*, the tests are the only place the human can check whether the right problem was solved.\n- **No split**: every answer accepts that some human attention stays, and every answer draws the line somewhere; the disagreement is only about where, not whether.\n\n## What the room voted\n\n- **Marcus Hale's answer took first place with 14 vote points**: *I stop reading the implementation body. I read the interface diff, the test assertions and the rollback plan.*\n- **The vote matched the writing**: the answers that named a specific, falsifiable stopping rule collected the most points; the answers that kept the scope broad or deferred to production collected the fewest.\n- **Worth keeping**: *Stop reviewing diffs at all for anything behind a flag. Ship it to one percent and review the dashboards instead; production behaviour is the only review the agent cannot fake.* Ignoring this means the room never decides whether the diff is even the right unit of review anymore.\n\n## Discussion topics\n\n1. Marcus Hale's answer requires a rollback plan to exist before review. Who currently owns the rollback plan on a standard agent-generated PR, and is one actually written?\n2. Aisha Rahman's answer draws the line at *auth, IAM, payments, anything touching personal data* — Tom Becker's answer describes an agent that *quietly widened an IAM policy* and a reviewer agent that approved it. Does the security-file boundary hold when the agent is the one deciding which files touch IAM?\n3. Kenji Mori's answer singles out *migrations and data scripts* because *code can be rolled back; a bad backfill cannot* — does this category sit inside or outside the security-sensitive boundary Aisha Rahman drew, and does it need its own rule?\n\n## Suggested next steps\n\n1. Marcus Hale: draft a one-paragraph PR template that requires an explicit rollback plan field before the diff reaches a human reviewer, and test it on the next agent-generated PR this week.\n2. Whoever owns the security review checklist: take Aisha Rahman's list — *auth, IAM, payments, anything touching personal data* — and confirm in writing whether it currently covers data scripts of the kind Kenji Mori described; circulate the answer before the next sprint.\n3. Whoever triages the flag-gated releases: run a count of how many agent PRs in the last two weeks were behind a flag and ask whether any of them received a diff review at all — that number would tell the room whether Priya Nair's proposal is already happening by default."
+  },
+  {
+   "run": "A_sonnet_r2",
+   "shape": "in-band (fifth section)",
+   "model": "us.anthropic.claude-sonnet-4-6",
+   "round": "r2",
+   "latencySeconds": 14.2,
+   "stopReason": "end_turn",
+   "usage": {
+    "inputTokens": 4637,
+    "outputTokens": 1062,
+    "totalTokens": 5699
+   },
+   "asksParsed": true,
+   "asks": [
+    {
+     "type": "agree",
+     "prompt": "Do you agree: specs are heavier because the agent made ambiguity costly, not because the team chose rigour?",
+     "statement": "heavier specs, but only because the agent made the cost of ambiguity visible",
+     "source": "heavier specs, but only because the agent made the cost of ambiguity visible",
+     "why": "Tests whether the room sees heavier specs as a deliberate choice or a reaction forced on them — settles whether this drift is owned or just happening."
+    },
+    {
+     "type": "choice",
+     "prompt": "Where does your team sit right now on ticket weight?",
+     "options": [
+      "acceptance criteria written as examples",
+      "senior engineers write the tickets",
+      "the branch is the proposal now",
+      "two drifts at once, depends on the domain"
+     ],
+     "source": "Specs are getting more rigorous for anything touching billing, and disposable for UI. Two drifts at once.",
+     "why": "Finds whether the room is one team with one drift or several teams with different ones — shapes whether a single policy can be written."
+    },
+    {
+     "type": "open",
+     "prompt": "What is one thing a junior engineer no longer decides because a senior writes the ticket first?",
+     "source": "senior engineers write the tickets now and juniors review the agent's output. I am not sure that is healthy for the juniors.",
+     "why": "Produces a concrete example the room can act on — the answer flagged a concern but named no specific loss."
+    }
+   ],
+   "read": "*The agent takes vague tickets literally.* That line is doing a lot of work. It explains why six of the seven answers land in the same place.\n\n## What the room said\n\n- **All seven answers point the same direction**: every answer says specs are getting heavier, more formal, or more structured — not lighter, not gone.\n- **The split is in who pays the cost**: two answers describe a product-and-engineer split, with *product writes the what, and engineers now write the what-if cases*; another says *senior engineers write the tickets now and juniors review the agent's output*, which is a different division with different consequences.\n- **No split**: the answers share one thing — ambiguity that used to surface as a question in standup now surfaces as wrong running code, and the room has responded by writing more, not less.\n\n## What the room voted\n\n- **Two answers tied at nine points each**: *heavier specs, but only because the agent made the cost of ambiguity visible* and *more rigorous, and it has shifted who writes them: senior engineers write the tickets now and juniors review the agent's output.*\n- **The vote matched the writing**: the room wrote heavier specs and voted heavier specs; no gap between instinct and choice.\n- **Worth keeping**: the answer with one point says *the branch is the proposal now — half our tickets are one line and a link to a preview build.* Ignoring it means the room has no account of what happens when the drift toward heavier specs reverses, or where it already has.\n\n## Discussion topics\n\n1. The answer about senior engineers writing tickets says *I am not sure that is healthy for the juniors* — what specifically does a junior lose when reviewing output is their primary contact with a ticket?\n2. The answer about billing versus UI says *two drifts at once* — does the room treat those as one problem to solve or two separate policies to set?\n3. The answer about the branch-as-proposal describes a team where *half our tickets are one line and a link to a preview build* — is that a different team, a different domain, or a direction this room is also moving in parts of the codebase?\n\n## Suggested next steps\n\n1. Whoever owns the junior engineer's development path: by end of week, list the three ticket-writing decisions a junior used to make before the agent existed and check whether any of those decisions still happen anywhere in the current workflow — this comes directly from the answer that flags the health concern.\n2. Whoever runs sprint refinement: draft a one-paragraph policy distinguishing which ticket types get full acceptance-criteria examples and which stay lightweight, using the billing-versus-UI answer as the test case, and bring it to the next refinement session.\n3. Whoever manages the team that described one-line tickets linked to preview builds: ask that team to walk through one recent example in a shared channel this week, so the room can see whether that workflow is an exception or a leading indicator."
+  },
+  {
+   "run": "B_haiku_r3",
+   "shape": "separate call (tool)",
+   "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+   "round": "r3",
+   "latencySeconds": 5.6,
+   "stopReason": "tool_use",
+   "usage": {
+    "inputTokens": 2791,
+    "outputTokens": 355,
+    "totalTokens": 3146
+   },
+   "toolCalled": true,
+   "strayText": "",
+   "asks": [
+    {
+     "type": "agree",
+     "statement": "Code can be rolled back; a bad backfill cannot.",
+     "answers": [
+      6
+     ],
+     "why": "Tests whether the room's consensus on general review strategy holds for migrations and irreversible changes, or if this answer should move higher."
+    },
+    {
+     "type": "choice",
+     "question": "When should a risky change go live: before human review or after production monitoring?",
+     "options": [
+      {
+       "text": "Stop the change before it ships",
+       "answer": 4
+      },
+      {
+       "text": "Ship it to one percent and review dashboards",
+       "answer": 7
+      }
+     ],
+     "answers": [
+      4,
+      7
+     ],
+     "why": "Settles the unsettled tension between pre-deployment gates and production-signal review that the read named."
+    },
+    {
+     "type": "open",
+     "question": "What else besides auth, IAM, and payments would you always require human review?",
+     "answers": [
+      2
+     ],
+     "why": "Tests whether Aisha Rahman's security-sensitive list is complete or if the room would add categories like data retention or compliance changes."
+    }
+   ]
+  },
+  {
+   "run": "B_haiku_r2",
+   "shape": "separate call (tool)",
+   "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+   "round": "r2",
+   "latencySeconds": 5.3,
+   "stopReason": "tool_use",
+   "usage": {
+    "inputTokens": 2729,
+    "outputTokens": 379,
+    "totalTokens": 3108
+   },
+   "toolCalled": true,
+   "strayText": "",
+   "asks": [
+    {
+     "type": "choice",
+     "question": "When specs are heavier now, who has taken on the extra work?",
+     "options": [
+      {
+       "text": "Product and engineers writing what-if cases",
+       "answer": 1
+      },
+      {
+       "text": "Senior engineers writing tickets, juniors reviewing output",
+       "answer": 2
+      },
+      {
+       "text": "Engineers writing acceptance criteria as examples",
+       "answer": 3
+      }
+     ],
+     "answers": [
+      1,
+      2,
+      3
+     ],
+     "why": "Settles whether the team sees the extra work as shared fairly, or perceives it as shifted onto seniors or juniors."
+    },
+    {
+     "type": "agree",
+     "statement": "Senior engineers write the tickets now and juniors review the agent's output.",
+     "answers": [
+      2
+     ],
+     "why": "Tests whether the room accepts this new work distribution as the intended state, or views it as a problem to fix."
+    },
+    {
+     "type": "open",
+     "question": "What is one area of the codebase where specs should stay disposable?",
+     "answers": [
+      6,
+      7
+     ],
+     "why": "Finds whether the room has clear boundaries for when iteration speed matters more than upfront specification."
+    }
+   ]
+  },
+  {
+   "run": "B_sonnet_r3",
+   "shape": "separate call (tool)",
+   "model": "us.anthropic.claude-sonnet-4-6",
+   "round": "r3",
+   "latencySeconds": 6.5,
+   "stopReason": "tool_use",
+   "usage": {
+    "inputTokens": 2859,
+    "outputTokens": 432,
+    "totalTokens": 3291
+   },
+   "toolCalled": true,
+   "strayText": "",
+   "asks": [
+    {
+     "type": "agree",
+     "statement": "if the agent wrote both the code and the tests, the tests are the only place the human can check whether the right problem was solved.",
+     "answers": [
+      3
+     ],
+     "why": "Tests whether the room broadly accepts tests-as-spec as the review target, or whether it was just a minority view that happened to be well-worded."
+    },
+    {
+     "type": "choice",
+     "question": "Which should determine how deeply you review an agent PR?",
+     "options": [
+      {
+       "text": "interface diff, test assertions and the rollback plan",
+       "answer": 1
+      },
+      {
+       "text": "security-sensitive files: auth, IAM, payments, personal data",
+       "answer": 2
+      },
+      {
+       "text": "blast radius: what else imports this, and who gets paged",
+       "answer": 4
+      }
+     ],
+     "answers": [
+      1,
+      2,
+      4
+     ],
+     "why": "Settles whether the room's primary review trigger is structural, security-domain-based, or impact-based — three competing frames from the top-voted answers."
+    },
+    {
+     "type": "open",
+     "question": "What is one type of agent PR where you would not trust any of the stopping rules from this session?",
+     "answers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "why": "Finds the edges or exceptions the room did not name, which the session's consensus-leaning read may have obscured."
+    }
+   ]
+  },
+  {
+   "run": "B_sonnet_r2",
+   "shape": "separate call (tool)",
+   "model": "us.anthropic.claude-sonnet-4-6",
+   "round": "r2",
+   "latencySeconds": 6.1,
+   "stopReason": "tool_use",
+   "usage": {
+    "inputTokens": 2722,
+    "outputTokens": 358,
+    "totalTokens": 3080
+   },
+   "toolCalled": true,
+   "strayText": "",
+   "asks": [
+    {
+     "type": "agree",
+     "statement": "senior engineers write the tickets now and juniors review the agent's output",
+     "answers": [
+      2
+     ],
+     "why": "Settles whether the room broadly sees this role shift as a real pattern or as one team's edge case."
+    },
+    {
+     "type": "choice",
+     "question": "When the agent builds from a vague ticket, what does your team do next?",
+     "options": [
+      {
+       "text": "engineers now write the what-if cases before anything runs",
+       "answer": 1
+      },
+      {
+       "text": "acceptance criteria written as examples",
+       "answer": 3
+      },
+      {
+       "text": "two versions and we pick one in the demo",
+       "answer": 6
+      }
+     ],
+     "answers": [
+      1,
+      3,
+      6
+     ],
+     "why": "Finds which response pattern is most common across teams in the room."
+    },
+    {
+     "type": "open",
+     "question": "What is one ticket-writing decision a junior engineer used to make that has now moved to someone or something else?",
+     "answers": [
+      2
+     ],
+     "why": "Finds concrete examples of what juniors lose, which the round flagged as a concern but did not detail."
+    }
+   ]
+  }
+ ]
+}
