@@ -240,8 +240,14 @@ function get(url, headers = {}) {
     // (a freed ephemeral port can be re-bound by a parallel test inside the 400ms below).
     const deadOrigin = 'http://localhost:1';
     targets = [appOrigin, deadOrigin];
-    await sleep(400);
-    assert.deepStrictEqual(lastReport().map.map((m) => m.local), [appOrigin]);
+    // Wait for a report that reflects these targets (under load the last one can
+    // still carry the previous step's stopped app), then one more sync after it:
+    // the unconfirmed address must be absent from both.
+    const locals = () => (lastReport().map || []).map((m) => m.local);
+    await until(() => JSON.stringify(locals()) === JSON.stringify([appOrigin]));
+    const seen = reports.length;
+    await until(() => reports.length > seen);
+    assert.deepStrictEqual(locals(), [appOrigin]);
     targets = [deadOrigin];
     await until(() => lastReport().status === 'failed');
     assert.match(lastReport().error, /could not confirm port \d+ is this project's server/);
