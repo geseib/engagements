@@ -63,6 +63,7 @@ const { GetCommand, TransactWriteCommand, UpdateCommand } = require('@aws-sdk/li
 const tenant = require('../tenant');
 const { endSession } = require('../session-end');
 const { recordBillableEvent } = require('../usage');
+const { recordEventRun } = require('../platform-metrics');
 const rules = require('./agenda-rules');
 const { json, readBody } = require('./event-http');
 const S = require('./event-store');
@@ -270,6 +271,9 @@ async function start(db, tableName, { meta, code, row, itemId }) {
     // preview (Open) never gets here, so an agenda drafted and never run costs
     // nothing. It never throws: a meter must not stop a room.
     await recordBillableEvent(meta.orgId, code, { db, tableName });
+    // Run, for the usage stats: once per event by StatsRunAt on its METADATA
+    // (SPEC §5 E13), however often it pauses and resumes. Never throws.
+    await recordEventRun({ code, orgId: meta.orgId, createdBy: meta.CreatedBy }, { db, tableName });
   }
 
   // The rows are written; now the rooms. The item that was live is ended —

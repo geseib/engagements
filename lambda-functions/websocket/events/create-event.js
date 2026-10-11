@@ -35,6 +35,7 @@ const { reserveCode, releaseCode, CodeSpaceExhausted } = require('../code-reserv
 const { readAllowance } = require('../usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('../pricing');
 const { planLimitResolve } = require('../plan-limit');
+const { recordEventCreated } = require('../platform-metrics');
 const rules = require('./agenda-rules');
 const { json, readBody, trace, callerSub, eventsEnabled } = require('./event-http');
 const { META_SK, indexSk, projectEvent } = require('./event-store');
@@ -129,6 +130,8 @@ exports.handler = async (request) => {
       return json(500, { error: 'Could not create the event. Nothing was kept; try again.' });
     }
 
+    // The event's own row in the usage stats (SPEC §5 E12); never throws.
+    await recordEventCreated({ orgId, createdBy: metaRow.CreatedBy }, { db });
     return json(201, { event: projectEvent(metaRow) });
   } catch (error) {
     console.error('❌ create-event failed:', error && error.message);
