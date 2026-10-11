@@ -33,6 +33,11 @@ const S = require('./build-store');
 const C = require('./build-crew');
 const LAN = require('./build-lan');
 const { closeSeat } = require('./build-seat');
+// The usage stats (docs/design/usage-stats/SPEC.md §4, §5 E2/E6–E8): asks put
+// to the room, decisions, crew tasks and the kickoff. Counts only; never throws.
+const {
+  recordBuildAsk, recordBuildDecision, recordBuildTask, recordSessionStarted,
+} = require('./platform-metrics');
 
 // S3 is loaded lazily: most calls never touch an image, and tests stub it.
 let s3client = null;
@@ -332,6 +337,8 @@ async function makeCurrent(ctx, room, askId, role) {
     by: 'system',
     askId,
   });
+  // One question for the stats, once per ask: a reopened ask bounces.
+  await recordBuildAsk({ gameId: ctx.gameId, askId, metadata: ctx.meta }, { db });
 }
 
 /**
@@ -406,6 +413,9 @@ async function reaskAction(ctx, room, ask, b) {
   if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, fromPoints, now);
   await touchState(ctx, { set: { CurrentAskId: newId } });
   await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
+  // A re-ask is a new ask put to the room (it writes its own live ask, not
+  // through makeCurrent), so it is a second question for the stats.
+  await recordBuildAsk({ gameId: ctx.gameId, askId: newId, metadata: ctx.meta }, { db });
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -498,6 +508,7 @@ async function askAction(ctx, role, askId, body) {
         await saveBrief(ctx, brief);
       }
       await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '', noBrief: Boolean(ask.OpeningStep) });
+      await recordBuildDecision({ gameId: ctx.gameId, askId, metadata: ctx.meta }, { db });
     }
     await put(ctx, next);
     if (action === 'open' || action === 'reopen') await makeCurrent(ctx, room, askId, role);
@@ -1237,6 +1248,9 @@ async function markKickedOff(ctx) {
   const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: 'KickedOffAt' }));
   if (res && res.Item && res.Item.KickedOffAt) return;
   const st = await touchState(ctx, { set: { KickedOffAt: new Date().toISOString() } });
+  // A Build Room is STARTED when Claude kicks it off — once, on the same
+  // MetricsStartedAt marker every other session type uses (usage stats E2).
+  await recordSessionStarted({ gameId: ctx.gameId, metadata: ctx.meta }, { db });
   await announce(ctx, st.Rev);
 }
 
@@ -1458,6 +1472,7 @@ async function crewTaskCreate(ctx, role, body) {
   const now = new Date().toISOString();
   await put(ctx, { SK: C.SK.task(taskId), TaskId: taskId, Text: norm.value.text, Detail: norm.value.detail, Source: role === 'agent' ? 'agent' : 'host', ClaimedBy: [], State: 'open', CreatedAt: now });
   await logEntry(ctx, { kind: 'crew', text: `New task: ${norm.value.text}`, by: role === 'agent' ? 'agent' : 'host' });
+  await recordBuildTask({ gameId: ctx.gameId, metadata: ctx.meta }, { db });
   return done(ctx, 201, { task: { taskId, ...norm.value, claimedBy: [], state: 'open' } });
 }
 
@@ -2341,6 +2356,7 @@ async function forwardAction(ctx, room, ask, b) {
       Decision: { direction, chosen: labels, note: '', sendToAgent: false, method: 'vote', as: 'do-now' },
     });
     await logEntry(ctx, { kind: 'decision', text: direction, by: 'host', askId, forAgent: false, spoken: false, as: 'do-now', claudeNote: '', noBrief: false });
+    await recordBuildDecision({ gameId: ctx.gameId, askId, metadata: ctx.meta }, { db });
     await openNextIfQueued(ctx, askId);
   };
   let result;

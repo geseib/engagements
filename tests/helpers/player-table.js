@@ -33,7 +33,8 @@
  *                         string set; merged, never duplicated)
  *                         (any clause may be absent; `#name` aliases work)
  *   ReturnValues          ALL_OLD on a Put, UPDATED_OLD on an Update — the two
- *                         a recorder reads to tell a NEW row from an overwrite.
+ *                         a recorder reads to tell a NEW row from an overwrite —
+ *                         and ALL_NEW on an Update, the row as it now is.
  *                         Any other value answers `{}` exactly as before.
  *   TransactWrite         ConditionCheck · Put · Update · Delete, ALL-OR-NOTHING:
  *                         every condition is evaluated against the table as it
@@ -540,6 +541,9 @@ function createTable() {
             store.set(k, updated);
             // UPDATED_OLD: the prior values of the attributes this update
             // named, and only those that existed — DynamoDB's own shape.
+            // ALL_NEW: the row as it now is — how a counter learns its new
+            // value (build-room.js touchState reads AskSeq back this way).
+            if (input.ReturnValues === 'ALL_NEW') return { Attributes: { ...updated } };
             if (input.ReturnValues === 'UPDATED_OLD') {
               const old = {};
               for (const name of updatedAttributes(input)) {
