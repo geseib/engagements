@@ -235,21 +235,31 @@ const SEED_PERSONAS = [
     // argument in it, so neither can use this.
     personaId: 'session-advisor',
     name: 'The Session Advisor',
-    tagline: 'Names the disagreement, then names an owner',
+    tagline: 'Names any real disagreement, then names an owner',
     // Must be an export of components/Icon.jsx — an unknown name silently
     // renders a generic circle (ICONS[name] ?? Circle).
     icon: 'ListChecks',
     sortOrder: 100,
     gameTypes: ['call-and-answer', 'poll'],
-    requiredAddition: 'the disagreement named in both sides\' own words, and one recommendation with a named owner',
+    requiredAddition: 'one recommendation with a named owner',
+    // CONDITIONAL, never demanded (owner, 2026-10-11, after the relay pilot
+    // review docs/reviews/relay-pilot-ai-advisor-2026-10-11.md). This used to
+    // sit in requiredAddition as "the disagreement named in both sides' own
+    // words", under buildVoiceDirective's "a reply without it is malformed".
+    // When the answers agreed, Haiku, Sonnet and Opus all invented a split to
+    // satisfy it (rounds 2 and 3 of test game 6497).
+    conditionalAddition: 'When two answers genuinely conflict (doing one rules out the other), name that '
+      + 'disagreement in both sides\' own words and leave it open. When they do not, say so plainly in one '
+      + 'line ("No split: …") and never invent one.',
     voice:
       'You are the advisor a working team keeps around because you tell them the truth about ' +
       'their own meeting. Direct, plain, unhurried, and specific.\n\n' +
       'You have two jobs that pull against each other, and you do both.\n' +
-      'FIRST, report the disagreement. Never smooth a split into agreement — a room told it ' +
-      'agreed when it did not will make the same decision again in six weeks, worse. Name both ' +
-      'positions in the room\'s own words, name the choice between them, and hand it back ' +
-      'unresolved. You are not the tie-breaker.\n' +
+      'FIRST, report any real disagreement. Never smooth a split into agreement — a room told it ' +
+      'agreed when it did not will make the same decision again in six weeks, worse. When two ' +
+      'answers truly conflict, name both positions in the room\'s own words, name the choice ' +
+      'between them, and hand it back unresolved. You are not the tie-breaker. When the answers ' +
+      'agree, say so plainly; an invented split is as false as a smoothed one.\n' +
       'SECOND, leave the room with work. Prefer one recommendation somebody can start on Monday ' +
       'over three that sound strategic. An action with no owner is an opinion.\n\n' +
       'Give the idea almost nobody backed its fair hearing. The tally already says what won; your ' +
@@ -583,10 +593,22 @@ const buildVoiceDirective = (persona) => {
   const addition = String((persona && persona.requiredAddition) || '').trim();
   if (!addition) return '';
   const name = persona.name || persona.personaId || 'the chosen voice';
+  /*
+    A CONDITIONAL ADDITION is stated apart from the required one, and the
+    "malformed" self-check below never covers it: a split is reported when the
+    answers hold one and never manufactured to satisfy a format rule. It also
+    outranks the voice's own wording, because the voice lives on a DynamoDB
+    row that may still carry an older, unconditional demand.
+  */
+  const conditional = String((persona && persona.conditionalAddition) || '').trim();
   return (
     "THE VOICE'S REQUIRED ADDITION — a requirement of the FORMAT block above, identical in force to the headings. " +
     `This room's voice is ${name}, and the reply must include ${addition}. ` +
     'Put it inside whichever section it sharpens most; do not add a heading for it.\n' +
+    (conditional
+      ? `ONLY WHEN THE ANSWERS CALL FOR IT, NEVER DEMANDED: ${conditional} ` +
+        'This overrides any line in the voice above that asks for a disagreement in every round.\n'
+      : '') +
     'The rules above that limit you to "the material listed at the end", and to numbers "you can copy from that ' +
     'material", govern what you say about THIS ROOM: what people wrote, how they voted, the counts, and this ' +
     'organisation. They do not forbid general knowledge of the world. When you use it, state only what you are ' +
@@ -756,9 +778,11 @@ const resolvePersona = async ({
     // takes the seed's. A row that carries its own wins.
     const seeded = SEED_PERSONAS.find((p) => p.personaId === personaId);
     const requiredAddition = record.requiredAddition || (seeded && seeded.requiredAddition) || '';
+    const conditionalAddition = record.conditionalAddition || (seeded && seeded.conditionalAddition) || '';
     return {
       source, personaId, name: record.name || id, voice: record.voice, inferred: false,
       ...(requiredAddition ? { requiredAddition } : {}),
+      ...(conditionalAddition ? { conditionalAddition } : {}),
     };
   };
 
