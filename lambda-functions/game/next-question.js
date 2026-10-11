@@ -8,6 +8,8 @@ const { startSession } = require('./session-start');
 const { endSession } = require('./session-end');
 const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
 const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
+// Call & Answer follow-up asks (docs/design/ca-followup-asks SPEC §4.3 step 6).
+const { followUpsEnabled, readLivePointer, finishAsk } = require('./followup-store');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -855,6 +857,31 @@ exports.handler = async (event) => {
         }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
+    }
+
+    /*
+      NEXT ROUND WITH A FOLLOW-UP STILL LIVE CLOSES IT FIRST, with its count,
+      so no answer is lost (followup-store.js finishAsk freezes the tally after
+      the status flips, and no answer is accepted once it has). Only while the
+      feature is on; best effort — a failure here never stops the room, and
+      the follow-up routes close a stale live ask themselves on their next read.
+    */
+    if (followUpsEnabled()) {
+      try {
+        const live = await readLivePointer(db, { gameId });
+        if (live) {
+          const owner = ownerRead.Item || {};
+          await finishAsk(db, {
+            gameId, round: live.Round, askId: live.AskId, status: 'closed',
+            orgId: typeof owner.orgId === 'string' ? owner.orgId.trim() : '',
+          });
+          await broadcastToGame(gameId, {
+            type: 'followUpChanged', gameId, questionNumber: live.Round, askId: live.AskId, status: 'closed',
+          });
+        }
+      } catch (e) {
+        console.warn(JSON.stringify({ event: 'followup-close-failed', gameId, error: (e && e.name) || 'Error' }));
+      }
     }
 
     // Get game metadata for question set ID

@@ -73,6 +73,9 @@ phases:
       # The staff AI model picker (template AiModelPicker): dev and test.
       # Prod never passes it and takes the template's 'false'.
       - PARAM_OVERRIDES="$PARAM_OVERRIDES AiModelPicker=true"
+      # Call & Answer follow-up asks (template FollowUpAsks): dev only until the
+      # owner has measured it. Test and prod never pass it and take 'off'.
+      - PARAM_OVERRIDES="$PARAM_OVERRIDES FollowUpAsks=on"
       # The Anthropic API sign-in (Workload Identity Federation): four ids from
       # the owner's Claude Console federation rule for dev (subject
       # arn:aws:iam::239601476690:role/engagedev-*), none secret. All four set
