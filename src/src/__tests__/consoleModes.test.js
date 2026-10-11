@@ -103,7 +103,7 @@ describe('the platform mode', () => {
   // is why it was bolted on additively in the first place.
   it('is reachable by an explicit choice, not by having no organisation', () => {
     expect(ids(sectionsFor(staffOnPlatform)))
-      .toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive']);
+      .toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings']);
   });
 
   /*

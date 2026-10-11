@@ -160,6 +160,20 @@ const SECTION = {
     subtitle: 'Who can build and run sessions here.',
     contentTheme: 'dark',
   },
+  /*
+    ACTIVITY — what the team ran, month by month (docs/design/usage-stats,
+    UsageStatsPanel.jsx). Owners and admins only (owner, 2026-10-11, SPEC
+    §13 Q10): GET /orgs/{orgId}/stats checks the role on the MEMBER row; a
+    member never gets the entry.
+  */
+  activity: {
+    id: 'activity',
+    label: 'Activity',
+    icon: 'ChartLineUp',
+    title: 'Activity',
+    subtitle: 'What this team ran, by month. Counts only.',
+    contentTheme: 'dark',
+  },
   billing: {
     id: 'billing',
     label: 'Plan & usage',
@@ -289,6 +303,20 @@ const SECTION = {
     // same commit, or the dusk table renders on AdminShell's paper patch.
     contentTheme: 'dark',
   },
+  /*
+    ENGAGE SETTINGS — the platform-wide switches (owner, 2026-10-11), today one:
+    which Claude models Engage calls (ClaudeModelsPanel.jsx,
+    docs/design/claude-55-switch). Not the foot's Settings, which is three
+    browser-local switches; this changes Engage for everyone and is audited.
+  */
+  engagesettings: {
+    id: 'engagesettings',
+    label: 'Engage settings',
+    icon: 'Brain',
+    title: 'Engage settings',
+    subtitle: 'Settings for all of Engage. Every change is written to the audit log.',
+    contentTheme: 'dark',
+  },
   settings: {
     id: 'settings',
     label: 'Settings',
@@ -361,6 +389,7 @@ export function sectionsFor({
       SECTION.moderation,
       SECTION.accounts,
       SECTION.archive,
+      SECTION.engagesettings,
     ])];
   }
 
@@ -417,7 +446,7 @@ export function sectionsFor({
 
   return [
     content,
-    group('team', 'Team', [SECTION.members, SECTION.billing, SECTION.privacy]),
+    group('team', 'Team', [SECTION.members, SECTION.activity, SECTION.billing, SECTION.privacy]),
   ];
 }
 

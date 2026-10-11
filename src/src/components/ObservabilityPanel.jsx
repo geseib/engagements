@@ -2,6 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import './ObservabilityPanel.css';
+import {
+  monthLabel, dateLabel, asOfLabel, countLabel,
+} from '../utils/statsFormat';
+import { PlatformStatsBlock, StaffStatsDrill } from './StaffStatsDrill';
+
+export { monthLabel, dateLabel, countLabel };
 
 /**
  * HOW ENGAGE IS USED, IN NUMBERS — the platform console's Observability page.
@@ -37,38 +43,7 @@ import './ObservabilityPanel.css';
  */
 const API = () => window.API_BASE || '';
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-
 const NONE = '—';
-
-/** `2026-09` -> `September 2026`. Parsed, never handed to Date: no zone can move it. */
-export function monthLabel(period) {
-  const m = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
-  if (!m) return String(period || '');
-  return `${MONTHS[Number(m[2]) - 1] || m[2]} ${m[1]}`;
-}
-
-/** An ISO instant -> `23 September 2026`, in UTC, for the reason sinceLabel gives. */
-export function dateLabel(iso) {
-  const d = new Date(iso);
-  if (!iso || Number.isNaN(d.getTime())) return '';
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
-
-/** An ISO instant -> `14 Nov 2026, 10:42 UTC`. */
-function asOfLabel(iso) {
-  const d = new Date(iso);
-  if (!iso || Number.isNaN(d.getTime())) return '';
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}, ${hh}:${mm} UTC`;
-}
-
-/** 4076 -> `4,076`; anything that is not a number is a dash, never a 0. */
-export function countLabel(n) {
-  return Number.isFinite(n) ? n.toLocaleString('en-GB') : NONE;
-}
 
 /** 6 -> `6.0`. null (no session served anything) -> a dash. */
 export function averageLabel(n) {
@@ -90,6 +65,7 @@ const PART_LABEL = {
   accounts: 'Accounts could not be counted',
   organisations: 'The organisation index could not be read, so organisations, question sets, stored reports and the plan meter are missing',
   recorded: 'The recorded counters could not be read',
+  stats: 'The usage stats by type could not be read',
 };
 
 const plural = (n, one, many) => `${countLabel(n)} ${n === 1 ? one : many}`;
@@ -243,16 +219,26 @@ const DEFINITIONS = [
   ['Answers', 'One per person per question, counted when the host moves on from it. Changing an answer does not count again.'],
 ];
 
+const thisMonth = () => new Date().toISOString().slice(0, 7);
+
 export default function ObservabilityPanel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  /* THE USAGE STATS (docs/design/usage-stats, B1–B4): the month the by-type
+     block shows, the drill trail (a team, an account, a set — each a place
+     of its own), and the teams' names from GET /platform/orgs, joined by id
+     because GET /platform/observability names nobody. */
+  const [month, setMonth] = useState(thisMonth);
+  const [trail, setTrail] = useState([]);
+  const [orgNames, setOrgNames] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await authFetch(`${API()}platform/observability`);
+      const current = month === thisMonth();
+      const res = await authFetch(`${API()}platform/observability${current ? '' : `?month=${month}`}`);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
       setData(body);
@@ -262,9 +248,36 @@ export default function ObservabilityPanel() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [month]);
 
   useEffect(() => { load(); }, [load]);
+
+  const teamCount = data && data.stats && Array.isArray(data.stats.teams) ? data.stats.teams.length : 0;
+  useEffect(() => {
+    if (!teamCount || Object.keys(orgNames).length) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(`${API()}platform/orgs`);
+        const body = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        setOrgNames(Object.fromEntries((body.orgs || []).map((o) => [o.orgId, o.name || o.orgId])));
+      } catch (err) {
+        /* Names are a courtesy: the teams still list, by id. */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [teamCount, orgNames]);
+
+  if (trail.length) {
+    return (
+      <StaffStatsDrill
+        trail={trail}
+        onTrail={(i) => setTrail((t) => (i < 0 ? [] : t.slice(0, i + 1)))}
+        onOpen={(step) => setTrail((t) => [...t, step])}
+      />
+    );
+  }
 
   const unavailable = (data && Array.isArray(data.unavailable)) ? data.unavailable : [];
   const months = (data && Array.isArray(data.months)) ? data.months : [];
@@ -303,6 +316,18 @@ export default function ObservabilityPanel() {
       {data && (
         <>
           <Tiles now={data.now} />
+          {data.stats && (
+            <section className="pobs-section" aria-label="Usage by type">
+              <PlatformStatsBlock
+                stats={data.stats}
+                month={month}
+                onMonth={setMonth}
+                latest={thisMonth()}
+                names={orgNames}
+                onOpen={(step) => setTrail([step])}
+              />
+            </section>
+          )}
           <MonthTable months={months} countingSince={data.countingSince} />
           <CategoryTable categories={categories} countingSince={data.countingSince} />
           <section className="pobs-note" aria-labelledby="pobs-defs">

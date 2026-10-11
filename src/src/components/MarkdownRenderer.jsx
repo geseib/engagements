@@ -212,9 +212,13 @@ function MarkdownRenderer({ content, className = '' }) {
   const formatListItem = (text) => {
     const m = text && text.match(/^\*\*(.+?)\*\*\s*[:—–-]?\s*([\s\S]*)$/);
     if (m && m[2].trim()) {
+      // The colon belongs to the CSS (styles.css `.md-point > .md-lead::after`),
+      // so one the model put INSIDE the bold — `**Lena Ortiz:** draft it` — is
+      // dropped here, or the projector and the PDF read "Lena Ortiz::".
+      const lead = m[1].replace(/\s*[:：]\s*$/, '');
       return (
         <span className="md-point">
-          <strong className="md-lead">{m[1]}</strong>
+          <strong className="md-lead">{lead}</strong>
           <span className="md-rest">{formatInlineText(m[2])}</span>
         </span>
       );

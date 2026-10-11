@@ -49,7 +49,10 @@ const CREW_ON = {
   enabled: true, repoUrl: 'https://github.com/george/foodbank', baseBranch: 'build-room/4821', baseCommit: 'e91b04d', modes: ['fork'], runCrewCode: false,
 };
 
-function hostState({ crew = null, st = {}, ideas = [], ended = false } = {}) {
+/** Claude has shown an app running on the laptop: Share demo appears (owner, 2026-10-11). */
+const SHOWN = [{ Kind: 'showing', Text: 'Header is live', By: 'agent', Link: 'http://localhost:5173/' }];
+
+function hostState({ crew = null, st = {}, ideas = [], logs = [], ended = false } = {}) {
   const rows = [
     { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...(crew ? { Crew: crew } : {}), ...st },
     ...(crew ? [
@@ -57,6 +60,7 @@ function hostState({ crew = null, st = {}, ideas = [], ended = false } = {}) {
       { SK: 'BUILD#TASK#001', TaskId: '001', Text: 'Parking map', Detail: '', ClaimedBy: ['Sam'], State: 'open' },
     ] : []),
     ...ideas.map((d, i) => ({ SK: `BUILD#IDEA#${String(i).padStart(13, '0')}#i${i}`, IdeaId: `${i}-i${i}`, Status: 'new', CreatedAt: ago(120), ...d })),
+    ...logs.map((l, i) => ({ SK: `BUILD#LOG#${String(i).padStart(13, '0')}#x${i}`, LogId: `${i}-x${i}`, CreatedAt: ago(300), ...l })),
   ];
   const room = S.roomFromRows(rows);
   const view = S.hostView({
@@ -385,7 +389,7 @@ describe('the panel\'s controls', () => {
   });
 
   test('on the Stage the top line carries the Wi-Fi and connection chips, which the Stage has no header for', async () => {
-    await openRoom(hostState());
+    await openRoom(hostState({ logs: SHOWN }));
     fireEvent.keyDown(window, { key: '2' });
     fireEvent.click(within(document.querySelector('.dock')).getByRole('button', { name: /SESSION/ }));
     const top = within(panel()).getByTestId('brm-sp-top');
@@ -502,20 +506,92 @@ describe('Settings, in four groups', () => {
     expect(end.closest('.brm-sp-end').querySelectorAll('button')).toHaveLength(1);
   });
 
-  test('The room: join code and link, the QR, Share demo, and names on the room meter', async () => {
-    await openRoom(hostState());
+  test('The room: two codes, Join and Demo, the Stage button, and names on the room meter', async () => {
+    await openRoom(hostState({ logs: SHOWN }));
     openSettings();
     const p = panel();
-    expect(within(p).getByText(GAME)).toBeInTheDocument();
-    expect(within(p).getByRole('button', { name: 'Copy join link' })).toBeInTheDocument();
-    expect(within(p).getByRole('button', { name: 'Show the QR on the wall' })).toBeInTheDocument();
-    // Share demo stays reachable here after Not now (D3).
-    expect(within(p).getByLabelText('Share demo')).toBeInTheDocument();
+    const join = within(p).getByTestId('brm-join-tile');
+    expect(within(join).getByRole('img', { name: `QR code to join at ${window.location.origin}/play?gameId=${GAME}` })).toBeInTheDocument();
+    expect(within(join).getByText(GAME)).toBeInTheDocument();
+    expect(within(join).getByText('any network')).toBeInTheDocument();
+    expect(within(join).getByRole('button', { name: 'Copy join link' })).toBeInTheDocument();
+    expect(within(p).queryByRole('button', { name: 'Show the QR on the wall' })).toBeNull();
+    // Share demo stays reachable here after Not now (D3): the Demo tile carries it.
+    const demo = within(p).getByTestId('brm-demo-tile');
+    expect(within(demo).getByRole('button', { name: 'Share demo' })).toBeInTheDocument();
     expect(within(p).getByRole('switch', { name: 'List names on the room meter' })).toHaveAttribute('aria-checked', 'false');
   });
 
-  test('the Share demo chip opens its own panel, hanging from the chip (D2, 2026-10-10), not the Session panel', async () => {
+  test('nothing running on the laptop yet: no Share demo in Settings or the header, and the No demo yet placeholder (owner, 2026-10-11)', async () => {
     await openRoom(hostState());
+    expect(screen.queryByTestId('brm-wifi')).toBeNull();
+    openSettings();
+    expect(within(panel()).queryByRole('button', { name: 'Share demo' })).toBeNull();
+    const demo = within(panel()).getByTestId('brm-demo-tile');
+    expect(demo).toHaveAttribute('data-state', 'none');
+    expect(within(demo).getByText('No demo yet')).toBeInTheDocument();
+  });
+
+  describe('the room group\'s one orange, per demo state (two codes, NOTES table)', () => {
+    const LINK = 'http://192.168.1.20:4900/?k=KEY';
+    const lanOf = (status, over = {}) => ({
+      wanted: status !== 'off', status, open: 2, liveSince: ago(30), wantedAt: ago(5), offerDismissed: true,
+      map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900', link: LINK }],
+      ...over,
+    });
+    const group = () => panel().querySelector('[data-group="room"]');
+    const oranges = () => [...group().querySelectorAll('.brm-btn--primary')].map((b) => b.textContent);
+    test.each([
+      ['no demo yet', null, false, 'Show on the Stage'],
+      ['not shared', lanOf('off'), true, 'Share demo'],
+      ['starting', lanOf('starting', { liveSince: null }), true, 'Show on the Stage'],
+      ['live', lanOf('live'), true, 'Show both on the Stage'],
+      ['quiet', lanOf('live', { open: 0, liveSince: ago(600) }), true, 'Stop sharing'],
+      ['failed', lanOf('failed', { error: 'No Wi-Fi address.' }), true, 'Try again'],
+    ])('%s: exactly one orange, %s', async (_name, lan, shown, orange) => {
+      const st = hostState(shown ? { logs: SHOWN } : {});
+      await openRoom(lan ? { ...st, lan } : st);
+      openSettings();
+      expect(oranges()).toEqual([orange]);
+    });
+
+    test('live: the Stage button reads Show both on the Stage and opens the two-code card, putting the panel away', async () => {
+      await openRoom({ ...hostState({ logs: SHOWN }), lan: lanOf('live') });
+      openSettings();
+      expect(within(group()).getByText(/^2 of \d+ opened it$/)).toBeInTheDocument();
+      fireEvent.click(within(group()).getByRole('button', { name: 'Show both on the Stage' }));
+      expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+      const card = screen.getByTestId('brm-wallcodes');
+      expect(card.querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+    });
+
+    test('no demo: Show on the Stage opens the card with Join alone', async () => {
+      await openRoom(hostState());
+      openSettings();
+      fireEvent.click(within(group()).getByRole('button', { name: 'Show on the Stage' }));
+      expect(screen.getByTestId('brm-wallcodes')).toHaveClass('is-one');
+    });
+
+    test('quiet: the warning under the codes, and Stop sharing stops it', async () => {
+      await openRoom({ ...hostState({ logs: SHOWN }), lan: lanOf('live', { open: 0, liveSince: ago(600) }) });
+      openSettings();
+      expect(within(group()).getByText('Nobody has opened it in 2 minutes.')).toBeInTheDocument();
+      fireEvent.click(within(group()).getByRole('button', { name: 'Stop sharing' }));
+      await waitFor(() => expect(calls.find((c) => c.url.endsWith('/build/share') && c.method === 'POST')).toBeTruthy());
+      expect(calls.find((c) => c.url.endsWith('/build/share')).body).toEqual({ on: false });
+    });
+
+    test('ended: the Join code only, nothing to press', async () => {
+      await openRoom({ ...hostState({ logs: SHOWN, ended: true }), lan: lanOf('live') });
+      openSettings();
+      expect(within(group()).getByTestId('brm-join-tile')).toBeInTheDocument();
+      expect(within(group()).queryByTestId('brm-demo-tile')).toBeNull();
+      expect(within(group()).queryByRole('button', { name: /Stage|Copy join link/ })).toBeNull();
+    });
+  });
+
+  test('the Share demo chip opens its own panel, hanging from the chip (D2, 2026-10-10), not the Session panel', async () => {
+    await openRoom(hostState({ logs: SHOWN }));
     fireEvent.click(screen.getByTestId('brm-wifi'));
     const d = screen.getByRole('dialog', { name: 'Share demo' });
     expect(d.closest('.brm-wifiwrap')).not.toBeNull();

@@ -6,6 +6,7 @@ const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
+const { displayOrder } = require('./answer-order');
 const { shapeForLog } = require('./log-shape');
 const { reconcileReport } = require('./report-merge');
 const { surveyResultsPayload } = require('./survey-host');
@@ -581,6 +582,9 @@ exports.handler = async (event) => {
         });
       });
 
+      const shownPlace = new Map(displayOrder(questionAnswers, gameId, questionNumber)
+        .map((canonical, pos) => [canonical, pos]));
+
       // Create ranked answers list with proper tie handling
       const rankedAnswers = Object.entries(voteTallies)
         .map(([index, voteData]) => ({
@@ -599,7 +603,10 @@ exports.handler = async (event) => {
           if (b.totalScore !== a.totalScore) {
             return b.totalScore - a.totalScore;
           }
-          return b.firstPlace - a.firstPlace;
+          if (b.firstPlace !== a.firstPlace) return b.firstPlace - a.firstPlace;
+          // Then the order the room voted in (answer-order.js), never the
+          // alphabetical order the rows are stored in.
+          return shownPlace.get(a.answerIndex) - shownPlace.get(b.answerIndex);
         });
 
       // Add ranking positions

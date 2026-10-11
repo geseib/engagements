@@ -27,6 +27,7 @@ import GameReport from './components/GameReport';
 import SurveyResultsPanel from './components/SurveyResultsPanel';
 import SurveyWalkthrough from './components/stage/SurveyWalkthrough';
 import AISummaryStatus from './components/AISummaryStatus';
+import useModelPicker from './components/stage/useModelPicker';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import RoomMeter from './components/stage/RoomMeter';
@@ -35,6 +36,7 @@ import Podium from './components/stage/Podium';
 import WavelengthSessionVocabulary from './components/stage/WavelengthSessionVocabulary';
 import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
+import StageGathering from './components/stage/StageGathering';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
@@ -76,7 +78,10 @@ import {
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
   resultsRoundOf, SURVEY_ROUND,
 } from './config/hostControls';
-import { stageAnswersKey, stageAnswersReady, askFetchStillCurrent } from './config/stageAnswers';
+import {
+  stageAnswersKey, stageAnswersReady, askFetchStillCurrent,
+  stageAnswersStatus, stageGatheringNoun, answerText,
+} from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
 import useSurveyProgress, {
   surveyRoomCounts, surveyMeterRows, surveyWaiting, stillGoingNames,
@@ -212,12 +217,19 @@ function GameHostPage() {
     order, which is how the list could briefly hold one row.
   */
   const [answersFor, setAnswersFor] = useState(null);
+  /* WHICH ROUND-PHASE'S LOAD FAILED, if one did. Without it a refused or
+     thrown VOTE/RESULTS load left the stage on "Gathering responses…" for
+     good; with it the stage says the load failed and offers a retry. Cleared
+     by any rows landing. */
+  const [answersFailedFor, setAnswersFailedFor] = useState(null);
   const answersFetchSeqRef = useRef(0);
   const showAnswersFor = (rows, forState) => {
     answersFetchSeqRef.current += 1;       // any ASK refetch still in flight is now stale
     setAnswers(rows);
     setAnswersFor(stageAnswersKey(forState));
+    setAnswersFailedFor(null);
   };
+  const markAnswersFailed = (forState) => setAnswersFailedFor(stageAnswersKey(forState));
   /* Wavelength RESULTS payload (wordAnalysis): landed words, near-miss tier,
      denominator, matching mode. Set from the close-round/get-results response,
      upgraded in place by the `wavelengthAnalysisReady` frame when the
@@ -897,6 +909,23 @@ function GameHostPage() {
    * so the next round's results open on the tally.
    */
   const [resultsBeat, setResultsBeat] = useState('results');
+  /*
+    DEV'S AI MODEL PICKER, STAFF ONLY (components/stage/useModelPicker.js).
+    The round whose read is on screen, and only on What We Heard. Whether the
+    picker exists at all is the server's answer (dev's AiModelPicker and the
+    `admins` group), never the hostname; `staff` only saves a request.
+  */
+  const pickerRound = gameState !== 'ENDED'
+    && hostPhaseForBeat(phaseOfGameState(gameState), resultsBeat) === 'FIELD_NOTES'
+    ? (resultsRoundOf(gameState) || (String(gameState).match(/#(\d+)/) || [])[1] || null)
+    : null;
+  const modelPicker = useModelPicker({
+    gameId,
+    round: pickerRound,
+    staff: Boolean(currentUser?.groups?.includes('admins')),
+    fetchFn: authFetch,
+    apiBase: API_BASE,
+  });
   /*
     WHAT THE ROOM HAS SAID ABOUT THIS ROUND'S REPORT.
 
@@ -2879,10 +2908,13 @@ Focus on actionable business strategy insights.`;
                 if (stageAnswersKey(gameStateRef.current) === stageAnswersKey(currentState)) {
                   showAnswersFor(answersData.answers || [], currentState);
                 }
-                console.log(`🗳️ HOST: Loaded ${answersData.answers.length} answers for voting`);
+                console.log(`🗳️ HOST: Loaded ${(answersData.answers || []).length} answers for voting`);
+              } else {
+                markAnswersFailed(currentState);
               }
             } catch (error) {
               console.error(`❌ Failed to load answers for question ${questionNumber}:`, error);
+              markAnswersFailed(currentState);
             }
             
             // Set voting progress
@@ -2987,9 +3019,12 @@ Focus on actionable business strategy insights.`;
                   showAnswersFor(formattedAnswers, currentState);
                 }
                 console.log(`🏆 HOST: Loaded ${formattedAnswers.length} formatted results for question ${questionNumber}`);
+              } else {
+                markAnswersFailed(currentState);
               }
             } catch (error) {
               console.error(`❌ Failed to load results for question ${questionNumber}:`, error);
+              markAnswersFailed(currentState);
             }
           }
         } else {
@@ -6081,6 +6116,9 @@ Focus on actionable business strategy insights.`;
   // space blank until they are (config/stageAnswers.js) — the owner: "it
   // would be better to leave that space blank until the data has loaded."
   const stageResponsesReady = stageAnswersReady(gameState, answersFor);
+  // …and while they are not: gathering, or failed (config/stageAnswers.js).
+  // The owner, 2026-10-11: the wait says "Gathering responses…", never blank.
+  const stageResponsesStatus = stageAnswersStatus(gameState, answersFor, answersFailedFor);
 
   /*
     WHERE THE READ-BACK IS, for the dock. On FIELD_NOTES the primary is a page
@@ -7248,13 +7286,21 @@ Focus on actionable business strategy insights.`;
                     A page is the middle: as many as the profile can hold, a
                     printed position, and two keys the room can read off the
                     line itself. */}
+                <StageGathering
+                  status={stageResponsesStatus}
+                  noun={stageGatheringNoun(gameState)}
+                  onRetry={() => restoreGameState()}
+                />
+                {stageResponsesReady && answers.length === 0 && (
+                  <p className="qdetail">No responses yet.</p>
+                )}
                 <div className="cards">
                   {stageResponsesReady && answerPage.items.map((answer, i) => {
                     const idx = answerPage.offset + i;
                     return (
                       <div key={idx} className="card">
                         <div className="body">
-                          <div className="ans">{`“${answer.answer}”`}</div>
+                          <div className="ans">{`“${answerText(answer.answer)}”`}</div>
                           <span className={`who ${authorsRevealed ? 'revealed' : 'anon'}`}>
                             {displayLabelFor(answer, idx)}
                           </span>
@@ -7344,15 +7390,22 @@ Focus on actionable business strategy insights.`;
                     running totals live on the board.
                     The old empty-state is not restored either: it printed
                     JSON.stringify(answers) at a room. */}
-                {/* Blank until this round's results are the ones in hand, so
-                    "No responses came in" is never said while they load. */}
+                {/* "Gathering results…" until this round's results are the ones
+                    in hand, so "No responses came in" is never said while they
+                    load — and never blank (owner, 2026-10-11). */}
                 {currentGameType === 'poll' ? (
                   /* A typed poll: the same board as ASK, no longer moving. */
                   <>
                     {currentQuestion?.title && <p className="recap">{currentQuestion.title}</p>}
                     {currentQuestion?.poll && <PollBoard question={currentQuestion.poll} tally={pollTallyNow} />}
                   </>
-                ) : !stageResponsesReady ? null : currentGameType !== 'trivia' && answers.length === 0 ? (
+                ) : !stageResponsesReady ? (
+                  <StageGathering
+                    status={stageResponsesStatus}
+                    noun={stageGatheringNoun(gameState)}
+                    onRetry={() => restoreGameState()}
+                  />
+                ) : currentGameType !== 'trivia' && answers.length === 0 ? (
                   <p className="qdetail">No responses came in for this one.</p>
                 ) : currentGameType === 'trivia' ? (
                   /* The same card as ASK, in its RESULTS treatment: the correct
@@ -7448,7 +7501,7 @@ Focus on actionable business strategy insights.`;
                           {/* "1st", not "1" — the owner's word for it. */}
                           <span className="rank">{placeLabel(answer.placement)}</span>
                           <div className="body">
-                            <div className="ans">{`“${answer.answer}”`}</div>
+                            <div className="ans">{`“${answerText(answer.answer)}”`}</div>
                             <span className="who revealed">{displayName}</span>
                           </div>
                           {showPoints && (
@@ -7889,6 +7942,7 @@ Focus on actionable business strategy insights.`;
             briefed: sessionBriefed,
             onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
             redoBusy: loadingAIInsights,
+            modelPicker: hostPhase === 'FIELD_NOTES' ? modelPicker : null,
           }}
         />
       )}

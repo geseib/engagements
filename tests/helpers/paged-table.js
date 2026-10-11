@@ -19,6 +19,13 @@
  *   Filter     `a = :v` clauses joined by AND, `#name` aliases allowed.
  *   Put        stores the item; `attribute_not_exists(PK|SK)` is the one condition.
  *   Update     `SET a = :v, #b = :w` and `REMOVE c` on an existing item.
+ *              COUNTERS (usage stats): `ADD n :one` (a number, or a JS Set
+ *              as the DocumentClient sends a string set), `if_not_exists(a,
+ *              :v)` on a SET, and the conditions `attribute_not_exists(x)`,
+ *              `attribute_exists(PK)`, `x < :n` and `NOT contains(x, :v)`,
+ *              joined by AND / OR. An ADD upserts a missing row, as DynamoDB
+ *              does; `ReturnValues: 'UPDATED_OLD'` answers as DynamoDB does.
+ *              The grammar is player-table.js's, so the two fakes agree.
  *   Anything else THROWS — an ignored clause is a passing test for a filter
  *   that does nothing.
  *
@@ -49,8 +56,57 @@ function parseKeyCondition(expression, values = {}) {
   return (item) => item.PK === pk && String(item.SK).startsWith(prefix);
 }
 
+const CONDITION_FORMS = [
+  /attribute_not_exists\(\s*#?\w+\s*\)/g,
+  /attribute_exists\(\s*PK\s*\)/g,
+  /NOT\s+contains\(\s*#?\w+\s*,\s*:\w+\s*\)/g,
+  /#?\w+\s*<\s*:\w+/g,
+];
+
+/**
+ * Every clause of a condition must be one of the forms above, joined by AND /
+ * OR and grouped by parentheses — or it throws. Each known form is cut out;
+ * anything left over that is not a connective is an unmodelled clause.
+ */
+function assertConditionModelled(expression) {
+  let rest = String(expression);
+  for (const re of CONDITION_FORMS) rest = rest.replace(re, ' ');
+  rest = rest.replace(/\b(?:AND|OR)\b|[()]/g, ' ').trim();
+  if (rest) throw new Error(`paged-table: unsupported Update condition "${expression}" (left: "${rest}")`);
+}
+
+/** The counter grammar: ADD, if_not_exists and the forms above (player-table.js). */
+function applyCounterUpdate(store, input) {
+  const pt = require('./player-table');
+  const k = keyOf(input.Key);
+  const current = store.get(k);
+  if (input.ConditionExpression) {
+    assertConditionModelled(input.ConditionExpression);
+    if (!pt.evaluateCondition(input.ConditionExpression, current, input.ExpressionAttributeNames, input.ExpressionAttributeValues)) {
+      throw pt.conditionalFailure();
+    }
+  }
+  if (!current && !/\bADD\b/.test(input.UpdateExpression || '') && !input.ConditionExpression) {
+    throw new Error(`paged-table: Update of a missing row ${JSON.stringify(input.Key)} is not modelled`);
+  }
+  const updated = pt.applyUpdate(current || { ...input.Key }, input);
+  store.set(k, updated);
+  if (input.ReturnValues === 'UPDATED_OLD') {
+    const old = {};
+    for (const name of pt.updatedAttributes(input)) {
+      if (current && current[name] !== undefined) old[name] = current[name];
+    }
+    return Object.keys(old).length ? { Attributes: old } : {};
+  }
+  return {};
+}
+
+const isCounterUpdate = (input) => Boolean(input.ConditionExpression)
+  || /\bADD\b|if_not_exists/.test(input.UpdateExpression || '')
+  || input.ReturnValues === 'UPDATED_OLD';
+
 function applyUpdate(store, input) {
-  if (input.ConditionExpression) throw new Error('paged-table: Update conditions are not modelled');
+  if (isCounterUpdate(input)) return applyCounterUpdate(store, input);
   const item = store.get(keyOf(input.Key));
   if (!item) throw new Error(`paged-table: Update of a missing row ${JSON.stringify(input.Key)} is not modelled`);
   const names = input.ExpressionAttributeNames || {};
@@ -64,6 +120,7 @@ function applyUpdate(store, input) {
     item[attr(a[1])] = values[a[2]];
   }
   for (const token of (m[2] ? m[2].split(',') : [])) delete item[attr(token.trim())];
+  return {};
 }
 
 function createPagedTable({ pageSize = 3 } = {}) {
@@ -128,10 +185,11 @@ function createPagedTable({ pageSize = 3 } = {}) {
           store.set(keyOf(input.Item), { ...input.Item });
           log.push({ kind: 'put', input });
           return {};
-        case 'update':
-          applyUpdate(store, input);
+        case 'update': {
+          const out = applyUpdate(store, input);
           log.push({ kind: 'update', input });
-          return {};
+          return out;
+        }
         case 'scan':
           return page([...store.values()], input, 'scan');
         case 'query': {

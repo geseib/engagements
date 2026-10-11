@@ -28,7 +28,7 @@ import Icon from '../components/Icon';
 import PlayersList from '../components/stage/PlayersList';
 import { copyText } from '../utils/copyText';
 import { RunCrewCodeSwitch } from './BuildCrew';
-import { SharePanel } from './BuildWifiShare';
+import { CodeBox, DemoTile, AppList, QuietWarning, demoSlotOf, demoOnStage } from './BuildWifiShare';
 import { askingOf } from './useBuildPlayers';
 import { W } from './words';
 
@@ -161,6 +161,74 @@ function Switch({ label, checked, onChange, disabled = false, note = '', tag = '
   );
 }
 
+/* ------------------------------------------------------------- the codes -- */
+
+/**
+ * WHICH ORANGE (two codes, owner 2026-10-11): the room group has one, the move
+ * that matters most in the Demo tile's state. Share demo and Try again are
+ * inside the tile; Stop sharing leads when nobody can reach it; otherwise the
+ * Stage button does.
+ */
+const STAGE_LEADS = new Set(['none', 'starting', 'waiting', 'on']);
+
+/**
+ * THE ROOM'S TWO CODES (docs/design/build-room-two-qr, C): Join always, the
+ * demo beside it, then the one button that puts them on the Stage. Two tiles
+ * side by side at laptop width (232px codes), frameless under 420px of panel,
+ * stacked under 330px, so no code is ever under 160px (BuildRoom.css). Ended:
+ * Join only, nothing to press.
+ */
+export function RoomCodes({ room, now, ended, busy, run, api, wifiLink = '', onShowCodes }) {
+  const [copied, setCopied] = useState('');
+  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
+  const here = room.playerCount || 0;
+  const st = ended ? 'ended' : demoSlotOf(room, now);
+  const both = !ended && demoOnStage(room, now, wifiLink);
+  const lan = room.lan || {};
+  const open = Number(lan.open) || 0;
+  const copyLink = async () => {
+    const ok = await copyText(playUrl);
+    setCopied(ok ? 'Copied' : 'Press and hold to copy');
+    setTimeout(() => setCopied(''), 2500);
+  };
+  const stageLeads = STAGE_LEADS.has(st);
+  return (
+    <>
+      <div className="brm-codes">
+        <div className="brm-codes-tile" data-testid="brm-join-tile">
+          <CodeBox value={playUrl} label={`QR code to join at ${playUrl}`} />
+          <h4 className="brm-codes-h">{W.codesJoin}<span>{W.codesAnyNetwork}</span></h4>
+          <span className="brm-codes-u">{`${window.location.host}/play`}</span>
+          <p className="brm-codes-m">
+            Code <b className="brm-codes-code" aria-label={`Join code ${room.gameId}`}>{room.gameId}</b>{` \u00b7 ${here} joined`}
+          </p>
+          {!ended && (
+            <div className="brm-codes-acts">
+              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={copyLink}>Copy join link</button>
+              {copied && <span className="brm-hint" role="status">{copied}</span>}
+            </div>
+          )}
+        </div>
+        {!ended && <DemoTile room={room} now={now} link={wifiLink} here={here} busy={busy} run={run} api={api} />}
+      </div>
+      {st === 'on' && both && open < here && <p className="brm-hint brm-sp-note">{W.shareNotAll(open, here)}</p>}
+      {st === 'quiet' && <QuietWarning />}
+      {(st === 'on' || st === 'quiet') && <AppList map={lan.map || []} />}
+      {!ended && (
+        <div className="brm-sp-row">
+          <button type="button" className={`brm-btn${stageLeads ? ' brm-btn--primary' : ''}`} onClick={onShowCodes}>
+            {both ? W.showBothOnStage : W.shareShowOnStage}
+          </button>
+          {(st === 'starting' || st === 'waiting') && <span className="brm-hint">{W.demoJoinsWhenLive}</span>}
+          {st === 'quiet' && (
+            <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={() => run(() => api.share({ on: false }))}>{W.stopSharing}</button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ------------------------------------------------------------------ panel -- */
 
 export default function BuildSessionPanel({
@@ -169,7 +237,7 @@ export default function BuildSessionPanel({
   tab, onTab, focusGroup = '', onClose,
   topLine = null, slots = {},
   listNames, onListNames,
-  onConnect, onUpdatePlugin, onCrew, onWrap, onReport, onEnd, onShowQr, onWifiWall, wifiLink = '',
+  onConnect, onUpdatePlugin, onCrew, onWrap, onReport, onEnd, onShowCodes, wifiLink = '',
 }) {
   const panelRef = useRef(null);
   const rootRef = useRef(null);
@@ -177,7 +245,6 @@ export default function BuildSessionPanel({
   const crew = room.crew && room.crew.enabled ? room.crew : null;
   const { rows, departed, summary } = useMemo(() => rosterOf(room, roster), [room, roster]);
   const asking = askingOf(roster.players);
-  const [copied, setCopied] = useState('');
 
   // Where focus came from, so it can go back (a keyboard host who opens this
   // and closes it must not be dropped at the top of the page).
@@ -264,12 +331,6 @@ export default function BuildSessionPanel({
   };
 
   const pick = (fn) => () => { onClose(); fn(); };
-  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
-  const copyLink = async () => {
-    const ok = await copyText(playUrl);
-    setCopied(ok ? 'Copied' : 'Press and hold to copy');
-    setTimeout(() => setCopied(''), 2500);
-  };
   const opening = room.opening && room.opening.phase === 'building';
 
   // Arrow keys, Home and End move between the tabs (the tabs pattern); the selected one is the tab stop.
@@ -356,30 +417,8 @@ export default function BuildSessionPanel({
           {tab === 'settings' && (
             <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
               <div className="brm-sp-grp" data-group="room">
-                <div className="brm-sp-gh"><h3>The room</h3></div>
-                <div className="brm-sp-row">
-                  <span className="brm-code" aria-label={`Join code ${room.gameId}`}>{room.gameId}</span>
-                  <span className="brm-hint">{`${window.location.host}/play · ${room.playerCount || 0} joined`}</span>
-                </div>
-                <div className="brm-sp-row">
-                  <button type="button" className="brm-btn brm-btn--sm" onClick={copyLink}>Copy join link</button>
-                  <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onShowQr)}>Show the QR on the wall</button>
-                  {copied && <span className="brm-hint" role="status">{copied}</span>}
-                </div>
-                {!ended && (
-                  <SharePanel
-                    inline
-                    lan={room.lan}
-                    link={wifiLink}
-                    here={room.playerCount || 0}
-                    now={now}
-                    busy={busy}
-                    run={run}
-                    api={api}
-                    onClose={onClose}
-                    onShowWall={pick(onWifiWall)}
-                  />
-                )}
+                <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they can open</span></div>
+                <RoomCodes room={room} now={now} ended={ended} busy={busy} run={run} api={api} wifiLink={wifiLink} onShowCodes={pick(onShowCodes)} />
                 <Switch
                   label="List names on the room meter"
                   tag="new"

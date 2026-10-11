@@ -12,6 +12,8 @@ import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import ObservabilityPanel from './components/ObservabilityPanel';
+import ClaudeModelsPanel from './components/ClaudeModelsPanel';
+import UsageStatsPanel from './components/UsageStatsPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
 import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
@@ -181,7 +183,7 @@ function urlNamesKnownSection() {
    a banner to the shape of the nav. Deliberately not counted in this sentence:
    it said "the four" while the array held five, which is the reliable fate of
    a number written beside a list that grows. */
-const PLATFORM_SECTION_IDS = ['orgs', 'observability', 'publiclibrary', 'moderation', 'users', 'archive'];
+const PLATFORM_SECTION_IDS = ['orgs', 'observability', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings'];
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -1962,6 +1964,15 @@ function AdminPage() {
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
           {resolvedTab === 'observability' && onPlatform && <ObservabilityPanel />}
+          {resolvedTab === 'engagesettings' && onPlatform && <ClaudeModelsPanel />}
+          {resolvedTab === 'activity' && activeOrg && !onPlatform && (
+            <UsageStatsPanel
+              key={activeOrgId}
+              orgId={activeOrgId}
+              orgName={activeOrg.name || ''}
+              sets={questionSets}
+            />
+          )}
           {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
           {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
 

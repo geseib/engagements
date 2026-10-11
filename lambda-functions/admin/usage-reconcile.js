@@ -38,6 +38,17 @@
  * that window hours wide; `rate(1 hour)` would make it minutes. The cost of the
  * job is one query per org, so raising the frequency is cheap if it ever
  * matters.
+ *
+ * ── THE USAGE STATS' TWO LEVELS (usage-stats SPEC §6.2) ────────────────────
+ *
+ * Sessions still kept and sets held are LEVELS, not events, so counters
+ * cannot keep them. This run writes them as absolute snapshots for each org —
+ * the team row and one per account — then the platform's sum, last. One paged
+ * Query of the org's session index and one of its set index, both plaintext
+ * attributes only; `SET`, never `ADD`, so a rerun changes nothing. On the 1st
+ * the same snapshot also closes the month just ended (its month-end figure).
+ * A failure here is logged and costs that org's gauges only: the meter and
+ * the invoice above it are not held up by a dashboard.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
@@ -46,6 +57,7 @@ const { closeInvoice } = require('./shared/invoices');
 const {
   countSets, countBilledSessions, recordSetCount, setSessionsRun, readUsage, periodOf,
 } = require('./shared/usage');
+const { snapshotOrgGauges, writePlatformGauge } = require('./shared/platform-metrics');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -101,6 +113,9 @@ exports.handler = async (event = {}) => {
   if (!orgIds.length) console.warn('⚠️ usage-reconcile: the ORGS index returned nothing');
 
   const repaired = [];
+  // The gauges: this month's, and on the 1st the closing figure of the last.
+  const gaugePeriods = now.getUTCDate() === 1 ? [previous, period] : [period];
+  const platform = { existing: {}, setsHeld: 0, teams: 0 };
   for (const orgId of orgIds) {
     try {
       // Sets: current period only. See the header.
@@ -139,6 +154,24 @@ exports.handler = async (event = {}) => {
       // One org's failure must not stop the rest; the next run tries again.
       console.error(`⚠️ usage-reconcile: ${orgId} failed:`, error);
     }
+    try {
+      const levels = await snapshotOrgGauges(orgId, { periods: gaugePeriods }, { db, now });
+      let kept = 0;
+      for (const [type, n] of Object.entries(levels.existing)) {
+        platform.existing[type] = (platform.existing[type] || 0) + n;
+        kept += n;
+      }
+      platform.setsHeld += levels.setsHeld;
+      if (kept > 0) platform.teams += 1;
+    } catch (error) {
+      console.error(`⚠️ usage-reconcile: ${orgId} usage-stats gauges not written:`, error);
+    }
+  }
+
+  try {
+    await writePlatformGauge({ periods: gaugePeriods, ...platform }, { db, now });
+  } catch (error) {
+    console.error('⚠️ usage-reconcile: the platform usage-stats gauge was not written:', error);
   }
 
   console.log(`✅ usage-reconcile: ${orgIds.length} orgs, ${repaired.length} counters repaired`);

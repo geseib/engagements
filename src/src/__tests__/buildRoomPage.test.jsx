@@ -170,27 +170,102 @@ describe('loading and live updates', () => {
   });
 });
 
-describe('the demo\'s code on the Stage', () => {
-  const lan = (status) => ({
+/**
+ * TWO CODES ON THE STAGE (docs/design/build-room-two-qr, option C; owner
+ * 2026-10-11). One card for codes: the chip's Show on the Stage, Settings'
+ * Stage button and (while the demo is live) the header's join button all open
+ * it. It stays up while nobody has opened the demo; stop or fail takes the demo
+ * half away and Join stays. The meter steps aside while it shows.
+ */
+describe('the codes on the Stage', () => {
+  const lan = (status, over = {}) => ({
     wanted: status !== 'off', status, open: 2, liveSince: ago(30), offerDismissed: true,
     map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900', link: 'http://192.168.1.20:4900/?k=KEY' }],
+    ...over,
   });
-  const push = async (status) => {
+  const push = async (l) => {
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
-    current = { ...hostState(), lan: lan(status) };
+    current = { ...hostState(), lan: l };
     await act(async () => { handler({ gameId: GAME, rev: 9 }); });
   };
+  const card = () => screen.queryByTestId('brm-wallcodes');
+  const dock = () => document.querySelector('footer.dock');
 
-  test('a QR left up does not come back when sharing is switched off and on again', async () => {
+  test('the chip\'s Show on the Stage opens the two-code card; the meter steps aside; Hide the codes is the dock\'s one move', async () => {
     await openRoom({ ...hostState(), lan: lan('live') });
-    // Share demo (2026-10-10, D2): the chip's own panel puts the code on the Stage.
     fireEvent.click(screen.getByTestId('brm-wifi'));
     fireEvent.click(screen.getByRole('button', { name: 'Show on the Stage' }));
-    expect(screen.getByRole('dialog', { name: 'Try the demo yourself' })).toBeInTheDocument();
-    await push('off');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Try the demo yourself' })).toBeNull());
-    await push('live');
+    expect(card()).not.toBeNull();
+    expect(card().querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+    expect(screen.getByText('Try the demo yourself')).toBeInTheDocument();
+    // No demo-only dialog any more: one card for codes.
     expect(screen.queryByRole('dialog', { name: 'Try the demo yourself' })).toBeNull();
+    expect(document.querySelector('.main.solo')).not.toBeNull();
+    expect(document.querySelector('aside.meter')).toBeNull();
+    const hide = within(dock()).getByRole('button', { name: 'Hide the codes' });
+    expect(hide).toHaveClass('btn');
+    fireEvent.click(hide);
+    expect(card()).toBeNull();
+    expect(document.querySelector('aside.meter')).not.toBeNull();
+  });
+
+  test('stopping or failing takes the demo half away and keeps Join up; sharing again brings the demo back to the card', async () => {
+    await openRoom({ ...hostState(), lan: lan('live') });
+    fireEvent.click(screen.getByTestId('brm-wifi'));
+    fireEvent.click(screen.getByRole('button', { name: 'Show on the Stage' }));
+    await push(lan('off'));
+    await waitFor(() => expect(card()).toHaveClass('is-one'));
+    expect(screen.getByText('Scan to join')).toBeInTheDocument();
+    expect(screen.queryByText('Try the demo yourself')).toBeNull();
+    expect(within(dock()).getByRole('button', { name: 'Hide the code' })).toBeInTheDocument();
+    await push(lan('failed', { error: 'No Wi-Fi address.' }));
+    expect(card()).toHaveClass('is-one');
+    await push(lan('live'));
+    await waitFor(() => expect(card()).not.toHaveClass('is-one'));
+  });
+
+  test('no auto-hide: the demo stays on the card while nobody has opened it', async () => {
+    await openRoom({ ...hostState(), lan: lan('live') });
+    fireEvent.click(screen.getByTestId('brm-wifi'));
+    fireEvent.click(screen.getByRole('button', { name: 'Show on the Stage' }));
+    await push(lan('live', { open: 0, liveSince: ago(600) }));
+    // The count goes (nobody has opened it), and the demo stays.
+    await waitFor(() => expect(card().querySelector('.brm-wallcodes-n')).toBeNull());
+    expect(card()).not.toHaveClass('is-one');
+    expect(card().querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+  });
+
+  test('the header\'s join button opens both codes while the demo is live', async () => {
+    await openRoom({ ...hostState(), lan: lan('live') });
+    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show both codes on the Stage` }));
+    expect(card()).not.toBeNull();
+    expect(card().querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+    expect(screen.queryByRole('dialog', { name: 'Join QR code' })).toBeNull();
+  });
+
+  test('the header\'s join button opens Join alone when there is no live demo', async () => {
+    await openRoom({ ...hostState(), lan: lan('starting') });
+    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
+    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+    expect(card()).toBeNull();
+  });
+
+  test('a click on a code enlarges it alone; Escape takes the card down', async () => {
+    await openRoom({ ...hostState(), lan: lan('live') });
+    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show both codes on the Stage` }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge the demo code' }));
+    const big = screen.getByRole('dialog', { name: 'Demo QR code' });
+    expect(within(big).getByText('192.168.1.20:4900')).toBeInTheDocument();
+    expect(big.querySelector('.brm-qrzoom-url').textContent).not.toMatch(/k=/);
+    // Escape closes the enlarged code first, and leaves the card.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Demo QR code' })).toBeNull());
+    expect(card()).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge the join code' }));
+    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Join QR code' })).getByRole('img'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(card()).toBeNull();
   });
 });
 
@@ -1873,7 +1948,9 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
   });
 
   test('tick 2 to 6 in Later: Put to a vote, and What\'s next leads with it; ideas and directions both become options', async () => {
-    await openRoom(hostState({ asks: [DONE], answers: CHOICE_ANSWERS, st: { Brief: BRIEF_AT }, ideas: LATER_IDEAS }));
+    const view = hostState({ asks: [DONE], answers: CHOICE_ANSWERS, st: { Brief: BRIEF_AT }, ideas: LATER_IDEAS });
+    // Option A runs on the laptop: the Share demo nudge is answered, so What's next holds the orange.
+    await openRoom({ ...view, lan: { ...view.lan, offerDismissed: true } });
     const later = () => laterRegion();
     fireEvent.click(within(later()).getByRole('checkbox', { name: 'Tick: Sign up as a pair' }));
     expect(within(later()).getByRole('button', { name: 'Put 1 to a vote' })).toBeDisabled();
@@ -2110,7 +2187,7 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
 
   test('375px: Main menu stays; the join code, live build, Wi-Fi and Claude status move to the panel\'s top line', async () => {
     asNarrow(true);
-    await openRoom(hostState());
+    await openRoom(hostState({ logs: [{ Kind: 'showing', Text: 'Header is live', By: 'agent', Link: 'http://localhost:5173/' }] }));
     const h = header();
     expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
     expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
@@ -2289,9 +2366,23 @@ describe('Claude drafts the brief; the host edits it and uses it (owner, 2026-10
 describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stage P1, P2)", () => {
   const BUILT = { ...CHOICE, AskId: '001', Prompt: 'What are we building?', Status: 'decided', DecidedAt: ago(600), Decision: { direction: 'An app', method: 'vote' } };
   const WHO = { ...CHOICE, AskId: '002', Prompt: 'Who is it for?', Status: 'decided', DecidedAt: ago(300), Decision: { direction: 'Who is it for: Everyone', method: 'host' } };
-  const decidedRoom = () => hostState({ asks: [WHO, BUILT] });
+  // Option A runs on the laptop, so the Share demo nudge would take the orange: answered here.
+  const answered = (view) => ({ ...view, lan: { ...view.lan, offerDismissed: true } });
+  const decidedRoom = () => answered(hostState({ asks: [WHO, BUILT] }));
   const decidedSection = () => screen.getByRole('button', { name: /^Decided/ }).closest('.brm-stackitem');
   const composer = () => screen.getByLabelText('Tell Claude, or log what the room said');
+
+  test('the Share demo nudge takes the one orange from What\'s next while it shows (owner, 2026-10-11)', async () => {
+    await openRoom(hostState({ asks: [WHO, BUILT] }));
+    const col = screen.getByRole('main', { name: 'Now' });
+    const nudge = within(col).getByRole('region', { name: 'Share demo' });
+    expect(within(nudge).getByRole('button', { name: 'Share demo' })).toHaveClass('brm-btn--primary');
+    // What's next stays, as outline, and Space no longer presses it: sharing the laptop is a click.
+    const card = screen.getByRole('region', { name: 'Now' });
+    expect(within(card).getByRole('list', { name: "What's next" })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Ask' })).not.toHaveAttribute('data-next-primary');
+    expect(col.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+  });
 
   test('between asks the Now column says what Claude is doing and leads What\'s next, focused', async () => {
     await openRoom(decidedRoom());

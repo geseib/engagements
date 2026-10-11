@@ -156,8 +156,17 @@ describe('Share demo', () => {
     expect(screen.getByTestId('brm-wifi')).toHaveTextContent('Shared · 3 opened');
   });
 
-  test('the first screenshot alone brings the nudge: on Build and History it hangs from the chip (D1 B)', async () => {
+  test('a screenshot alone is a picture: no nudge, no chip, no Share demo on Build (owner, 2026-10-11)', async () => {
     await open([base, SHOT], '3');
+    expect(screen.queryByRole('dialog', { name: 'Share demo' })).toBeNull();
+    expect(screen.queryByTestId('brm-wifi')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Share demo' })).toBeNull();
+    fireEvent.keyDown(window, { key: '1' });
+    expect(screen.queryByRole('region', { name: 'Share demo' })).toBeNull();
+  });
+
+  test('the first local link brings the nudge: on Build and History it hangs from the chip (D1 B)', async () => {
+    await open([base, SHOWING, SHOT], '3');
     let d = screen.getByRole('dialog', { name: 'Share demo' });
     expect(within(d).getByText('Let everyone try it.')).toBeInTheDocument();
     expect(d.closest('.brm-wifiwrap')).not.toBeNull();

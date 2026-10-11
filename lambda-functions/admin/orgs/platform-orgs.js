@@ -36,6 +36,8 @@ const { readUsage } = require('../shared/usage');
 const {
   recordAudit, markAuditOutcome, actorFromEvent, readAudit, readPlatformAudit,
 } = require('../shared/audit-log');
+const { platformStats } = require('./platform-stats');
+const { platformSettings } = require('./platform-settings');
 
 /** The statuses an organisation can be in, and who may move it between them. */
 const STATUSES = ['pending', 'active', 'suspended'];
@@ -265,6 +267,14 @@ exports.handler = async (event) => {
   if (method === 'OPTIONS') return G.handlePreflight();
   if (method === 'GET' && /\/platform\/audit$/.test(String(event?.rawPath || event?.routeKey || ''))) {
     return readAuditLog(event);
+  }
+  // One team, account or set's usage numbers, logged (orgs/platform-stats.js).
+  if (method === 'GET' && /\/platform\/stats$/.test(String(event?.rawPath || event?.routeKey || ''))) {
+    return platformStats(event);
+  }
+  // The Engage-wide Claude models switch (orgs/platform-settings.js).
+  if (/\/platform\/settings\/claude-models$/.test(String(event?.rawPath || event?.routeKey || ''))) {
+    return platformSettings(event);
   }
   if (method === 'GET') return listOrgs(event);
   if (method === 'POST') return setStatus(event);

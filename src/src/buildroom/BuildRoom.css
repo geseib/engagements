@@ -45,6 +45,13 @@
   --brm-alert-amber: #FFD27A;
   --brm-line-blue: rgba(124, 167, 230, 0.55);
   --brm-line-red: rgba(229, 100, 94, 0.45);
+  --brm-line-green: rgba(79, 178, 134, 0.5);
+  /* The demo slot before there is a demo (two codes, "QR code TBD"): a QR's
+     corner marks and a dot field, faint, behind a solid label. Decoration
+     only; no text is ever drawn on them (__tests__/buildRoomCodesPalette). */
+  --brm-tbd-ink: rgba(155, 168, 190, 0.30);
+  --brm-tbd-dot: rgba(155, 168, 190, 0.16);
+  --brm-tbd-line: rgba(155, 168, 190, 0.40);
 
   --brm-t-floor: 12px;
   --brm-t-label: 13px;
@@ -1011,30 +1018,28 @@
 .brm .brm-wifioffer-pic img, .brm .brm-wifioffer-pic .brm-shot { display: block; max-width: 100%; max-height: 180px; border-radius: 8px; }
 .brm .brm-wifioffer-who { margin: 0; font-size: var(--brm-t-label); color: var(--muted); line-height: 1.45; }
 
-/* The QR on the wall: the join QR's dusk scrim, a card beside the words. */
-.brm .brm-wallqr {
-  position: fixed; inset: 0; z-index: 1000; background: var(--brm-qr-scrim);
-  display: flex; align-items: flex-start; overflow-y: auto; padding: 24px;
-}
-.brm .brm-wallqr-card { position: relative; margin: auto; background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 22px; padding: 40px 48px; max-width: 1150px; outline: none; }
-.brm .brm-wallqr-body { display: grid; grid-template-columns: auto 1fr; gap: 44px; align-items: center; }
-.brm .brm-wallqr-qr { width: min(60vh, 40vw); height: min(60vh, 40vw); }
-.brm .brm-wallqr-x {
-  position: absolute; top: 18px; right: 18px; width: 44px; height: 44px; display: grid; place-items: center;
-  border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--surface); color: var(--muted); font-weight: 800; cursor: pointer;
-}
-.brm .brm-wallqr-x:hover, .brm .brm-wallqr-x:focus-visible { border-color: var(--primary); color: var(--text); }
-/* Share demo D4: the one amber on the wall is Hide the code, so the eyebrow is the success green. */
-.brm .brm-wallqr-eb { display: block; margin-bottom: 16px; font: 800 var(--brm-st-meta)/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--brm-success-text); }
-.brm .brm-wallqr-h { margin: 0 0 14px; font: 800 54px/1.05 var(--font-display); }
-.brm .brm-wallqr-l { margin: 0 0 12px; font-size: 28px; line-height: 1.3; color: var(--text); }
-.brm .brm-wallqr-m { margin: 0 0 12px; font-size: 22px; color: var(--muted); }
-.brm .brm-wallqr-n { margin: 0 0 20px; font: 700 24px/1.2 var(--font-ui); color: var(--brm-success-text); }
-@media (max-width: 760px) {
-  .brm .brm-wallqr-body { grid-template-columns: 1fr; gap: 20px; }
-  .brm .brm-wallqr-qr { width: min(60vw, 60vh); height: min(60vw, 60vh); }
-  .brm .brm-wallqr-card { padding: 56px 20px 24px; }
-  .brm .brm-wallqr-h { font-size: 34px; }
+/* TWO CODES ON THE STAGE (docs/design/build-room-two-qr, ST1/ST2): Join
+   left, the demo right, on the stage's own ladder (--t-*, styles/stage.css).
+   Each code up to 430px (about 58 cm on a 90-inch image, 6 m), never under
+   160px. Without the demo the card is Join alone, centred. */
+.brm .brm-wallcodes { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 32px 96px; padding: 8px 0; }
+.brm .brm-wallcodes-c { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; min-width: 0; }
+.brm .brm-wallcodes-qr { display: block; padding: 0; border: 0; background: none; border-radius: 16px; cursor: zoom-in; }
+.brm .brm-wallcodes-qr:focus-visible { outline: 3px solid var(--secondary); outline-offset: 4px; }
+.brm .brm-wallcodes .brm-codes-qr { width: clamp(160px, min(36vw, 52vh), 430px); min-width: 160px; border-radius: 16px; margin-bottom: 6px; }
+.brm .brm-wallcodes.is-one .brm-codes-qr { width: clamp(160px, min(70vw, 52vh), 430px); }
+.brm .brm-wallcodes-eb { font: 800 var(--t-meta)/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.brm .brm-wallcodes-eb.is-live { color: var(--brm-success-text); }
+.brm .brm-wallcodes-h { margin: 0; font: 800 var(--t-secondary)/1.1 var(--font-display); color: var(--text); }
+.brm .brm-wallcodes-l { margin: 0; font-size: var(--t-meta); color: var(--muted); overflow-wrap: anywhere; }
+.brm .brm-wallcodes-l b { color: var(--text); }
+.brm .brm-wallcodes-n { margin: 0; font: 700 var(--t-meta)/1.2 var(--font-ui); color: var(--brm-success-text); }
+@media (max-width: 900px) { .brm .brm-wallcodes { gap: 24px 48px; } }
+/* A phone (stage-locked, no scroll): the two stay side by side at the 160px
+   floor and their words wrap under each code, so neither half is cut off. */
+@media (max-width: 560px) {
+  .brm .brm-wallcodes { flex-wrap: nowrap; gap: 16px; }
+  .brm .brm-wallcodes-c { width: min-content; gap: 8px; }
 }
 
 /* The QR on the Build screen: open it on your own device. */
@@ -1461,7 +1466,7 @@
 .brm .brm-sp-tab.is-on { color: var(--text); border-bottom-color: var(--primary); }
 .brm .brm-sp-c { letter-spacing: 0; color: var(--muted); font-weight: 700; }
 .brm .brm-sp-flag { letter-spacing: 0; text-transform: none; font-weight: 700; color: var(--primary); }
-.brm .brm-sp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px 16px; }
+.brm .brm-sp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px 16px; container-type: inline-size; }
 .brm .brm-sp-pane { display: flex; flex-direction: column; gap: 12px; }
 .brm .brm-sp-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-top: 1px solid var(--brm-rule); }
 .brm .brm-sp-grp { display: flex; flex-direction: column; gap: 9px; padding: 12px 0 14px; border-top: 1px solid var(--brm-rule); }
@@ -1480,9 +1485,60 @@
 .brm .brm-sp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--success); display: block; }
 .brm .brm-sp-dot.is-away { background: transparent; border: 2px solid var(--muted); }
 .brm .brm-sp-tag { height: 20px; font-size: var(--brm-t-floor); padding: 0 7px; }
-.brm .brm-sp .brm-wifipanel--inline { position: static; width: auto; max-width: none; padding: 0; border: 0; box-shadow: none; background: transparent; display: grid; gap: 8px; }
-.brm .brm-sp .brm-wifipanel--inline h4 { margin: 0; font: 600 var(--brm-t-body)/1.3 var(--font-ui); }
-.brm .brm-sp .brm-wifipanel--inline .brm-wifipanel-foot { border-top: 0; padding-top: 0; }
+/* TWO CODES IN SETTINGS (docs/design/build-room-two-qr, C; owner 2026-10-11).
+   Join and Demo side by side: 232px codes in the 560px panel. The body is
+   the container: under 420px of it the tiles drop their frame so each code
+   keeps its width (168px on a 375px phone); under 330px (2 x 160 + gap) the
+   two stack, each capped at 260px. CODE FLOOR 160px: 160 / 41 modules is
+   3.9 CSS px a module, crisp on a 2x laptop and a 3x phone. */
+.brm .brm-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.brm .brm-codes-tile { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--brm-rule); border-radius: 12px; background: var(--surface); }
+.brm .brm-codes-tile.is-live { border-color: var(--brm-line-green); }
+.brm .brm-codes-tile.is-warn { border-color: var(--brm-line-red); }
+.brm .brm-codes-qr { display: block; width: 100%; min-width: 160px; aspect-ratio: 1; border-radius: 8px; background: var(--brm-qr-bg); overflow: hidden; }
+.brm .brm-codes-qr svg { display: block; width: 100%; height: 100%; }
+.brm .brm-codes-tile.is-quiet .brm-codes-qr { opacity: .55; }
+.brm .brm-codes-slot {
+  position: relative; width: 100%; min-width: 160px; aspect-ratio: 1; border: 2px dashed var(--brm-tbd-line); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; padding: 14px; text-align: center;
+}
+.brm .brm-codes-slot-t { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.brm .brm-codes-slot b { font: 700 var(--brm-t-body)/1.3 var(--font-ui); color: var(--text); }
+.brm .brm-codes-slot span { font-size: var(--brm-t-label); color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
+.brm .brm-codes-slot.is-bad b { color: var(--danger-text); }
+/* No demo yet: a code-shaped placeholder, so the layout does not jump when the code arrives. */
+.brm .brm-codes-slot--tbd {
+  border: 1px solid var(--brm-rule); background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--brm-tbd-dot) 1.6px, transparent 1.9px); background-size: 14px 14px; background-position: center;
+}
+.brm .brm-codes-fp { position: absolute; width: 20%; aspect-ratio: 1; border: 3px solid var(--brm-tbd-ink); border-radius: 6px; }
+.brm .brm-codes-fp::after { content: ""; position: absolute; inset: 24%; border-radius: 3px; background: var(--brm-tbd-ink); }
+.brm .brm-codes-fp--tl { top: 6%; left: 6%; }
+.brm .brm-codes-fp--tr { top: 6%; right: 6%; }
+.brm .brm-codes-fp--bl { bottom: 6%; left: 6%; }
+.brm .brm-codes-slot--tbd .brm-codes-slot-t { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 10px; padding: 10px 12px; max-width: 76%; }
+.brm .brm-codes-h { margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font: 700 var(--brm-t-body)/1.2 var(--font-ui); }
+.brm .brm-codes-h span { font: 500 var(--brm-t-label)/1.2 var(--font-ui); color: var(--muted); }
+.brm .brm-codes-u { font: 600 var(--brm-t-label)/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.brm .brm-codes-m { margin: 0; font-size: var(--brm-t-label); color: var(--muted); line-height: 1.4; }
+.brm .brm-codes-m b { color: var(--text); }
+.brm .brm-codes-st { margin: 0; font: 700 var(--brm-t-body)/1.3 var(--font-ui); color: var(--brm-success-text); }
+.brm .brm-codes-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: auto; }
+@container (max-width: 420px) {
+  .brm .brm-codes { gap: 10px; }
+  .brm .brm-codes-tile { padding: 0; border: 0; background: none; }
+  .brm .brm-codes-slot { padding: 8px; }
+  .brm .brm-codes-fp { width: 16%; }
+  .brm .brm-codes-fp--tl, .brm .brm-codes-fp--tr { top: 5%; }
+  .brm .brm-codes-fp--tl, .brm .brm-codes-fp--bl { left: 5%; }
+  .brm .brm-codes-fp--tr { right: 5%; }
+  .brm .brm-codes-fp--bl { bottom: 5%; }
+  .brm .brm-codes-slot--tbd .brm-codes-slot-t { max-width: 100%; padding: 8px; }
+}
+@container (max-width: 329px) {
+  .brm .brm-codes { grid-template-columns: minmax(0, 1fr); }
+  .brm .brm-codes-qr, .brm .brm-codes-slot { max-width: 260px; }
+}
 /* PlayersList's rows (styles.css), placed for this panel: a dot, the name, the side cluster; the actions on their own line. */
 .brm .brm-sp .setup-roster__row { grid-template-columns: 14px minmax(0, 1fr) auto; }
 .brm .brm-sp .setup-roster__row--norank { grid-template-columns: minmax(0, 1fr) auto; }

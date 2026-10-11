@@ -20,6 +20,17 @@
  * meet, how much they store. Reading it is reading them. There is no
  * `?orgId=anything` route in here for support to use; that access is the
  * written-reason, four-hour, logged request drawn on 10-platform-orgs.html.
+ *
+ * ── AND GET /orgs/{orgId}/stats (usage stats, 2026-10-11) ──────────────────
+ *
+ * The team's Activity page: months by session type, kept sessions, each
+ * member's numbers for this team, and the team's own sets — counts and ids
+ * only (shared/usage-stats-view.js). A team OWNER or ADMIN only:
+ * `authorizeOrg(event, orgId, 'admin')` checks the acting context AND the
+ * MEMBER row, so a member, a stale token or another org's id is refused.
+ * Engage staff read the same numbers at GET /platform/stats, logged — the
+ * owner's request ("staff see each user, each team") overrides the line above
+ * for COUNTS, never for content (docs/design/usage-stats/SPEC.md §9).
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
@@ -28,6 +39,9 @@ const { readUsage, periodOf, periodBounds, usageSk } = require('./shared/usage')
 const { projectInvoice, planFor } = require('./shared/pricing');
 const { applyAdjustments, simulationSentence } = require('./shared/pricing-adjust');
 const { listInvoices, getInvoice } = require('./shared/invoices');
+const { readSetStats } = require('./shared/platform-metrics');
+const V = require('./shared/usage-stats-view');
+const { authorizeOrg, listMembers, publicMember } = require('./orgs/shared/org-guards');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -100,6 +114,32 @@ async function recentPeriods(orgId, currentPeriod, plan, limit = 12) {
   }));
 }
 
+/**
+ * GET /orgs/{orgId}/stats — the team's own numbers, for its owners and admins.
+ * `?from=yyyy-mm&to=yyyy-mm` (≤ 24 months; default the last six).
+ */
+async function teamStats(event, orgId) {
+  const auth = await authorizeOrg(event, orgId, 'admin');
+  if (auth.denied) return auth.denied;
+  const range = V.parseRange(event?.queryStringParameters, new Date());
+  if (range.error) return respond(400, { error: range.error });
+  const opts = { db, tableName: process.env.TABLE_NAME };
+  const [team, members, setRows] = await Promise.all([
+    V.teamMonths(orgId, range, opts),
+    listMembers(orgId).then((rows) => V.memberRows(orgId, rows.map(publicMember), range, opts)),
+    readSetStats({ scope: 'org', orgId }, opts),
+  ]);
+  return respond(200, {
+    orgId,
+    from: range.from,
+    to: range.to,
+    countingSince: team.countingSince,
+    months: team.months,
+    members,
+    sets: V.groupSets(setRows),
+  });
+}
+
 exports.handler = async (event) => {
   try {
     if (event?.requestContext?.http?.method === 'OPTIONS') {
@@ -113,6 +153,8 @@ exports.handler = async (event) => {
     const wanted = String(event?.pathParameters?.orgId || '').trim();
     const acting = callerOrgId(event);
     if (!wanted) return respond(400, { error: 'Which organisation?' });
+    // The Activity page: owners and admins, by the MEMBER row (see the header).
+    if (/\/stats$/.test(String(event?.rawPath || event?.routeKey || ''))) return await teamStats(event, wanted);
     // Same shape as tenant.js's guards: a caller acting for another org, or for
     // none, is refused identically. No membership-vs-existence distinction is
     // leaked — "not yours" and "not there" answer the same.

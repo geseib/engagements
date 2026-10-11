@@ -91,6 +91,9 @@
  *              no model call, no prompt text.
  */
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+// Sonnet 4.6 / Haiku 4.5 on Bedrock, or Sonnet 5.5 / Haiku 5.5 on the
+// Anthropic API where the Engage switch is on (shared/claude-route.js).
+const claudeRoute = require('./shared/claude-route');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
@@ -241,13 +244,18 @@ async function invokeClaude(prompt, { temperature = ANALYSIS_TEMPERATURE } = {})
   for (const model of MODELS) {
     const startedAt = Date.now();
     let responseBody;
+    let servedBy = null;
     try {
-      const response = await bedrockClient.send(new InvokeModelCommand({
+      // Medium effort on the API path: this screen exists for the quality of
+      // its analysis. Five minutes, inside the function's 900s with room for
+      // the Bedrock fallback.
+      const response = await claudeRoute.send(bedrockClient, new InvokeModelCommand({
         contentType: 'application/json',
         body,
         modelId: model.arn(),
-      }));
+      }), { site: 'prompt-advisor', timeoutMs: 300000, effort: 'medium' });
       responseBody = JSON.parse(new TextDecoder().decode(response.body));
+      servedBy = claudeRoute.servedBy(response);
     } catch (error) {
       console.error(`❌ BEDROCK: ${model.label} failed after ${Date.now() - startedAt}ms — ${error.name}: ${error.message}`);
       failures.push(`${model.label}: ${error.message}`);
@@ -262,7 +270,7 @@ async function invokeClaude(prompt, { temperature = ANALYSIS_TEMPERATURE } = {})
     const outputTokens = responseBody.usage?.output_tokens ?? 'unknown';
     console.log(`🤖 BEDROCK: ${model.label} answered in ${Date.now() - startedAt}ms — ${text.length} chars, `
       + `output_tokens ${outputTokens}, stop_reason ${stopReason}`);
-    return { text, stopReason, model: model.label };
+    return { text, stopReason, model: servedBy || model.label };
   }
 
   throw new AdvisorFailure(`The AI service did not answer, so no analysis was made (${failures.join('; ')}). `

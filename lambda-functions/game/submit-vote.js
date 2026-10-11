@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { encryptItem } = require('./tenant-crypto');
+const { displayToCanonical } = require('./answer-order');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -65,13 +66,43 @@ exports.handler = async (event) => {
       };
     }
 
+    /*
+      THE PHONE VOTED ON WHAT IT SAW. get-answers.js serves a round's answers
+      in the room's shuffled order (answer-order.js), and a ballot is keyed by
+      position in that list. Every tally reads ballots against the answers in
+      Query (SK) order, so the positions are mapped to that order here, once,
+      before the ballot is stored — the same Query the tallies make. A ballot
+      stored before the shuffle was already in SK order and means what it
+      meant. A position that names no answer is dropped, not guessed at.
+    */
+    const answersQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': `QUESTION#${paddedQuestionNumber}#ANSWER#`
+      },
+      ProjectionExpression: 'SK'
+    }));
+    const mapped = displayToCanonical(votes, answersQuery.Items || [], gameId, paddedQuestionNumber);
+    if (mapped.dropped) {
+      console.warn(`⚠️ Vote from ${playerName} on ${paddedQuestionNumber}: ${mapped.dropped} position(s) named no answer and were dropped`);
+    }
+    if (Object.keys(mapped.votes).length === 0) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Those answers are no longer in this round. Reload and vote again.' }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
     // Store vote in database following design doc schema
     const voteRecord = {
       PK: `GAME#${gameId}`,
       SK: `QUESTION#${paddedQuestionNumber}#VOTE#${playerName}`,
       VoterName: playerName,
       QuestionNumber: paddedQuestionNumber,
-      Votes: votes, // e.g., {"0": 1, "1": 2, "2": 3}
+      Votes: mapped.votes, // canonical (SK-order) positions, e.g. {"0": 1, "1": 2, "2": 3}
       SubmittedAt: new Date().toISOString(),
       ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days TTL
     };
@@ -102,7 +133,7 @@ exports.handler = async (event) => {
     console.log(`✅ Vote stored successfully for ${playerName} on question ${questionNumber}`);
 
     // After successful storage, notify host via WebSocket
-    await notifyHostOfVote(gameId, playerName, questionNumber, votes);
+    await notifyHostOfVote(gameId, playerName, questionNumber, mapped.votes);
 
     return {
       statusCode: 200,

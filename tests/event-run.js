@@ -724,6 +724,58 @@ async function makeEvent() {
     }
   });
 
+  console.log('\n9. the usage stats: an attendee in three items');
+  // rejects: an event attendee counted once per item on the event row, or
+  // an item's seat not counted as a participant of its session (usage-stats
+  // SPEC §5 E9, E14): three item seats, one registration.
+  await check('one attendee in three items: three item participants, one event attendee', async () => {
+    table.clear();
+    seedOrg(table, NW);
+    seedSets();
+    const day = await makeEvent();
+    const lee = bodyOf(await join(day.code, 'Lee Chen'));
+    for (const key of ['trivia', 'friction', 'pulse']) {
+      const started = await run(day.code, { action: 'start', itemId: day.ids[key] });
+      assert.strictEqual(started.statusCode, 200, `${key}: ${started.body}`);
+      const gameId = itemRow(day.code, day.ids[key]).GameId;
+      const seat = await playerJoin(gameId, { attendeeToken: lee.token, clientId: 'cl_lee' });
+      assert.strictEqual(seat.statusCode, 200, `${key}: ${seat.body}`);
+      // Coming back to the same item is the same seat, not a second participant.
+      await playerJoin(gameId, { attendeeToken: lee.token, clientId: 'cl_lee' });
+    }
+    const p = new Date().toISOString().slice(0, 7);
+    const team = (type) => table.get(`ORG#${NW}`, `STATS#${p}#TYPE#${type}`) || {};
+    assert.strictEqual(team('trivia').participants, 1);
+    assert.strictEqual(team('call-and-answer').participants, 1);
+    assert.strictEqual(team('survey').participants, 1);
+    assert.strictEqual(team('event').participants, 1);
+    // The event's creator, carried onto its items' sessions.
+    const acct = table.get('USER#u_host', `STATS#${p}#TYPE#trivia#ORG#${NW}`) || {};
+    assert.strictEqual(acct.participants, 1);
+  });
+
+  console.log('\n10. the usage stats: an event created once and run once');
+  // rejects: run counted on every item that goes live, or on a resume; or an
+  // event created and not counted (usage-stats SPEC §5 E12, E13).
+  await check('created 1; going live on two items one after the other: run 1', async () => {
+    table.clear();
+    seedOrg(table, NW);
+    seedSets();
+    const day = await makeEvent();
+    const p = new Date().toISOString().slice(0, 7);
+    const eventRow = () => table.get(`ORG#${NW}`, `STATS#${p}#TYPE#event`) || {};
+    assert.strictEqual(eventRow().created, 1);
+    assert.strictEqual(eventRow().started, undefined, 'an event planned is not run');
+    for (const key of ['trivia', 'friction']) {
+      const res = await run(day.code, { action: 'start', itemId: day.ids[key] });
+      assert.strictEqual(res.statusCode, 200, `${key}: ${res.body}`);
+    }
+    assert.ok(meta(day.code).StatsRunAt, 'no StatsRunAt marker');
+    assert.strictEqual(eventRow().started, 1);
+    assert.strictEqual(table.get('USER#u_host', `STATS#${p}#TYPE#event#ORG#${NW}`).started, 1);
+    assert.strictEqual(table.get('PLATFORM#METRICS', `MONTH#${p}#TYPE#event`).created, 1);
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

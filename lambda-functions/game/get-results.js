@@ -2,6 +2,9 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+// Haiku 4.5 on Bedrock, or Haiku 5.5 on the Anthropic API where the Engage
+// switch is on (claude-route.js).
+const claudeRoute = require('./claude-route');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
 const { ORG, callerMayDriveSession } = require('./tenant');
@@ -10,6 +13,7 @@ const { shapeForLog } = require('./log-shape');
 const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { readPollQuestion, pollTally } = require('./poll-round');
+const { displayOrder } = require('./answer-order');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -722,11 +726,23 @@ exports.handler = async (event) => {
       });
     });
 
+    /*
+      THE ROOM'S ORDER ON THE WAY OUT (answer-order.js). The ballots were
+      tallied against the answers in SK order above, as they are stored. What
+      leaves this handler is keyed by DISPLAY position instead — the numbers
+      the stage and the phones voted under — so a tie on the results screen
+      falls in the room's order rather than alphabetically by author. Nothing
+      maps these keys back to a ballot; every reader takes Object.values.
+    */
+    const shownOrder = displayOrder(answers, gameId, paddedQuestionId);
+    const shownTallies = Object.fromEntries(
+      shownOrder.map((canonical, pos) => [String(pos), voteTallies[canonical]]));
+
     // Find winners (highest score)
     const maxScore = Math.max(...Object.values(answerScores));
     const winners = [];
     
-    Object.entries(answerScores).forEach(([index, score]) => {
+    shownOrder.map((canonical) => [canonical, answerScores[canonical]]).forEach(([index, score]) => {
       if (score === maxScore && voteTallies[index]) {
         winners.push({
           playerName: voteTallies[index].playerName,
@@ -816,7 +832,7 @@ exports.handler = async (event) => {
     const result = {
       gameId: gameId,
       questionId: paddedQuestionId,
-      voteTallies: voteTallies,
+      voteTallies: shownTallies,
       winners: winners,
       totalVotes: votes.length,
       maxScore: maxScore,
@@ -837,7 +853,7 @@ exports.handler = async (event) => {
         GameId: gameId,
         QuestionId: paddedQuestionId,
         Winners: winners.map(w => w.playerName),
-        VoteTallies: voteTallies,
+        VoteTallies: shownTallies,
         MaxVotes: maxScore,
         TotalVotes: votes.length,
         CompletedAt: new Date().toISOString(),
@@ -1569,7 +1585,7 @@ const markWavelengthClustering = async (gameId, questionId, status) => {
  */
 const proposeWavelengthMerges = async (labels) => {
   const modelId = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
-  const response = await bedrock.send(new InvokeModelCommand({
+  const response = await claudeRoute.send(bedrock, new InvokeModelCommand({
     modelId,
     body: JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
@@ -1577,7 +1593,7 @@ const proposeWavelengthMerges = async (labels) => {
       temperature: 0,
       messages: [{ role: 'user', content: buildMergePrompt(labels) }]
     })
-  }));
+  }), { site: 'wavelength-merge', timeoutMs: 60000 });
   const responseBody = JSON.parse(new TextDecoder().decode(response.body));
   return parseMergeReply(responseBody.content?.[0]?.text);
 };

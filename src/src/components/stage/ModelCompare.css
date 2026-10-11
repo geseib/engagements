@@ -1,0 +1,171 @@
+/* ============================================================================
+   DEV'S AI MODEL PICKER — "Redo with…", its menu, and the Compare dialog
+   (components/stage/ModelCompare.jsx). Staff only, dev only.
+
+   Two places, two scopes:
+     .mcmp-controls / .mcmp-menu  inside the Session panel (`.setup-panel`),
+                                  whose own button rule paints the buttons; this
+                                  sheet only lays them out.
+     .mcmp-scrim / .mcmp          the Compare dialog, mounted through <Modal
+                                  theme="dark"> so it resolves dusk tokens
+                                  under <html data-theme="light">.
+
+   No orange: the Session panel already spends its one. Tokens only; the local
+   ladder is the laptop one (12 / 13 / 15 / 19). MEASURED, unlifted:
+     --text  #F4EDE4 on --surface #1B2942   12.53:1  reads, headings
+     --muted #9BA8BE on --surface            6.06:1  footers, notes
+     --text  #F4EDE4 on --surface-2 #25375A 10.20:1  menu items, model reads
+     --muted #9BA8BE on --surface-2          4.93:1  menu meta, read footers
+
+   THE SCRIM SCROLLS AND DOES NOT CENTRE (skill hard rule 10): flex-start plus
+   overflow-y on the scrim, margin:auto on the card. The grid stacks to one
+   column under ~640px, so 375px needs no horizontal scroll.
+   ========================================================================== */
+
+.mcmp-controls { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.mcmp-anchor { position: relative; }
+
+.mcmp-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: min(300px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.mcmp-menu .mcmp-menu__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+}
+.mcmp-menu__label { font-size: 15px; color: var(--text); }
+.mcmp-menu__meta { font-size: 12px; font-weight: 400; color: var(--muted); }
+
+.mcmp-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10002;
+  display: flex;
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: 24px 16px;
+  background: rgba(6, 11, 22, 0.72);
+}
+.mcmp {
+  --mcmp-t-floor: 12px;
+  --mcmp-t-label: 13px;
+  --mcmp-t-body: 15px;
+  --mcmp-t-head: 19px;
+  --mcmp-rule: rgba(155, 168, 190, 0.20);
+
+  margin: auto;
+  width: min(1200px, 100%);
+  min-width: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid rgba(155, 168, 190, 0.34);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  font: 400 var(--mcmp-t-body)/1.45 var(--font-ui);
+  overflow-wrap: anywhere;
+}
+.mcmp *, .mcmp *::before, .mcmp *::after { box-sizing: border-box; }
+
+.mcmp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--mcmp-rule);
+}
+.mcmp-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 800 var(--mcmp-t-head)/1.2 var(--font-display);
+}
+.mcmp-x {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--mcmp-rule);
+  background: transparent;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mcmp-empty { margin: 0; padding: 18px 16px; color: var(--muted); }
+
+.mcmp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+}
+.mcmp-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--mcmp-rule);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.mcmp-col__head {
+  margin: 0;
+  padding: 10px 12px 6px;
+  font: 700 var(--mcmp-t-body)/1.3 var(--font-ui);
+}
+.mcmp-col__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 12px 10px;
+  font-size: var(--mcmp-t-body);
+}
+.mcmp-col__body h1, .mcmp-col__body h2, .mcmp-col__body h3 {
+  font-size: var(--mcmp-t-body);
+  margin: 12px 0 4px;
+}
+.mcmp-col__body ul, .mcmp-col__body ol { padding-left: 20px; margin: 4px 0; }
+/* MarkdownRenderer paints its headings and items in paper greys (#34495E,
+   #2C3E50: about 1.6:1 here). In this dusk dialog every part of a read is
+   --text; scoped deeper than the renderer's single-class rules. */
+.mcmp .mcmp-col__body .mcmp-md,
+.mcmp .mcmp-col__body .mcmp-md * { color: var(--text); background: transparent; }
+.mcmp-writing { margin: 0 12px 8px; color: var(--muted); font-size: var(--mcmp-t-label); }
+.mcmp-foot {
+  margin: 0;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--mcmp-rule);
+  color: var(--muted);
+  font-size: var(--mcmp-t-floor);
+  line-height: 1.5;
+}
+
+.mcmp-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--mcmp-rule);
+}
+.mcmp-btn {
+  font: 600 var(--mcmp-t-body)/1 var(--font-ui);
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(155, 168, 190, 0.22);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}

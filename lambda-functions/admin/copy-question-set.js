@@ -67,6 +67,7 @@ const { LIFECYCLE_SKS } = require('./shared/archive-snapshot');
 const { readAllowance } = require('./shared/usage');
 const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('./shared/pricing');
 const { planLimitResolve } = require('./shared/plan-limit');
+const { recordSetCopied } = require('./shared/platform-metrics');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -271,6 +272,9 @@ exports.handler = async (event) => {
       Quickstart: false,
     });
     await db.send(new PutCommand({ TableName: TABLE(), Item: metadata }));
+    // Counted on the SOURCE set at the version copied, never on the copy
+    // (usage-stats SPEC §5 E10). Never throws.
+    await recordSetCopied({ set: resolved }, { db });
 
     console.log(`copied ${scope}:${setId} -> ${orgId}:${newSetId} (${copies.length} rows)`);
     return json(201, {

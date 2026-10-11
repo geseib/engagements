@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Share Demo Click-through</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* SHARE DEMO, CLICK-THROUGH. As built on dev e0ed29e5 (2026-10-11), with the
+   owner's rulings of 2026-10-10 and 2026-10-11. Words are W.* from
+   src/src/buildroom/words.js. Three devices move together: the host's laptop,
+   the Stage on the projector, and one participant's phone. Click the ringed
+   control, or use the step list and the arrow keys. Tokens: Warm Summit dusk. */
+:root{
+  --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A; --page:#0A1222; --chrome:#0C1628; --drawer:#111D33;
+  --text:#F4EDE4; --muted:#9BA8BE; --primary:#F6A94C; --secondary:#7CA7E6;
+  --success:#4FB286; --success-text:#6FD0A4; --danger:#E5645E; --danger-text:#EF8C86;
+  --rule:rgba(155,168,190,.22); --t-blue:rgba(124,167,230,.14); --t-green:rgba(79,178,134,.14); --t-red:rgba(229,100,94,.12);
+  --font-display:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--text);font:400 15px/1.5 var(--font-ui);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+
+/* ---- page shell ---------------------------------------------------------- */
+.top{max-width:1480px;margin:0 auto;padding:18px 20px 6px}
+.top h1{margin:0;font:800 24px/1.2 var(--font-display)}
+.top p{margin:4px 0 0;color:var(--muted);max-width:110ch}
+.steps{display:flex;flex-wrap:wrap;gap:6px;max-width:1480px;margin:0 auto;padding:12px 20px 0}
+.steps button{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;border:1px solid var(--rule);background:var(--surface);font:600 13px/1 var(--font-ui);color:var(--muted);cursor:pointer}
+.steps button b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--surface-2);color:var(--text);font-size:12px}
+.steps button.is-on{color:var(--text);border-color:var(--secondary);background:var(--t-blue)}
+.steps button.is-on b{background:var(--secondary);color:var(--bg)}
+.steps .branch{color:var(--muted);font-style:italic}
+.cap{max-width:1480px;margin:12px auto 0;padding:0 20px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start}
+.cap-box{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:12px 16px}
+.cap-box h2{margin:0;font:800 19px/1.25 var(--font-ui)}
+.cap-box p{margin:4px 0 0;color:var(--muted)}
+.cap-box p b{color:var(--text)}
+.cap-box .rule{margin-top:8px;padding-top:8px;border-top:1px solid var(--rule);font-size:13px}
+.nav{display:flex;gap:8px}
+.nav button{min-height:36px;padding:8px 14px;border-radius:8px;border:1px solid var(--rule);background:var(--surface);font-weight:600;cursor:pointer}
+.nav button:disabled{opacity:.4;cursor:default}
+
+.stagearea{max-width:1480px;margin:0 auto;padding:16px 20px 60px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
+.left{display:flex;flex-direction:column;gap:22px;min-width:0}
+.dev-lab{font:700 12px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px 2px}
+
+/* ---- the ring on the control to press ------------------------------------- */
+.hot{position:relative;cursor:pointer}
+.hot::after{content:"";position:absolute;inset:-5px;border-radius:12px;border:2px solid var(--secondary);animation:ring 1.6s ease-out infinite;pointer-events:none}
+@keyframes ring{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.12)}}
+@media (prefers-reduced-motion:reduce){.hot::after{animation:none}}
+[data-go]{cursor:pointer}
+
+/* ---- shared controls -------------------------------------------------------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:7px 13px;border-radius:8px;border:1px solid var(--rule);background:var(--surface);color:var(--text);font:600 14px/1.2 var(--font-ui);white-space:nowrap}
+.btn--sm{min-height:28px;padding:4px 10px;font-size:13px}
+.btn--primary{background:var(--primary);border-color:var(--primary);color:var(--bg)}
+.btn--ghost{background:transparent}
+.qr{display:inline-block;flex:none;width:72px;height:72px;border-radius:6px;background:#fff;
+  background-image:linear-gradient(45deg,#0F1A2E 25%,transparent 25%,transparent 75%,#0F1A2E 75%),linear-gradient(45deg,#0F1A2E 25%,transparent 25%,transparent 75%,#0F1A2E 75%);
+  background-size:12px 12px;background-position:0 0,6px 6px;box-shadow:inset 0 0 0 6px #fff}
+.shot{display:block;width:100%;border-radius:8px;border:1px solid var(--rule)}
+
+/* ---- the host's laptop -------------------------------------------------------- */
+.lap{border:10px solid #050A14;border-bottom-width:22px;border-radius:14px;background:var(--bg);overflow:visible;box-shadow:0 18px 50px rgba(0,0,0,.45);position:relative}
+.hdr{display:flex;align-items:center;gap:10px;padding:0 12px;height:48px;border-bottom:1px solid var(--rule);background:var(--chrome);border-radius:4px 4px 0 0;flex-wrap:nowrap;min-width:0}
+.hdr .ttl{font:800 14px/1 var(--font-display);white-space:nowrap}
+.views{display:flex;gap:2px;margin-left:6px}
+.views span{padding:6px 9px;font:700 12px/1 var(--font-ui);color:var(--muted);border-radius:6px}
+.views span.is-on{color:var(--text);box-shadow:inset 0 -2px 0 var(--secondary)}
+.hdr .sp{flex:1}
+.lb{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--rule);background:var(--surface-2);font:600 12px/1 var(--font-ui);white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--rule);font:600 12px/1 var(--font-ui);white-space:nowrap;background:var(--surface)}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.7}
+.chip--starting{color:var(--secondary);border-color:rgba(124,167,230,.55);background:var(--t-blue)}
+.chip--starting::before{background:var(--secondary);opacity:1}
+.chip--on{color:var(--success-text);border-color:rgba(79,178,134,.5);background:var(--t-green)}
+.chip--on::before{background:var(--success);opacity:1}
+.chip--quiet{color:var(--danger-text);border-color:rgba(229,100,94,.45);background:var(--t-red)}
+.chip--quiet::before{background:var(--danger);opacity:1}
+.chip.is-open{box-shadow:0 0 0 2px var(--secondary)}
+.join{font:600 12px/1 var(--font-ui);color:var(--muted);white-space:nowrap}
+.join b{color:var(--text)}
+.n-joined{font:600 12px/1 var(--font-ui);padding:6px 8px;border-radius:999px;border:1px solid var(--rule);white-space:nowrap}
+.cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;padding:14px;min-height:380px}
+.colh{margin:0 0 10px;font:800 13px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:12px 14px}
+.nowline{margin:0 0 10px;font:700 16px/1.35 var(--font-ui)}
+.wn{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.wn li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:1px solid var(--rule);background:var(--bg)}
+.wn li .t{font-weight:600;font-size:14px}
+.wn li .h{display:block;font-size:12px;color:var(--muted);font-weight:400}
+.wn li .btn{margin-left:auto}
+.wn li.is-lead{border-color:rgba(246,169,76,.45)}
+.spacehint{font-size:12px;color:var(--muted);margin:8px 0 0}
+.spacehint kbd{font:600 11px/1 var(--font-ui);padding:2px 5px;border:1px solid var(--rule);border-radius:4px}
+.nudge{display:flex;flex-direction:column;gap:8px;border:1px solid rgba(124,167,230,.55);background:linear-gradient(var(--t-blue),var(--t-blue)),var(--surface);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.nudge .t{margin:0;font:800 17px/1.25 var(--font-ui)}
+.nudge .s{margin:0;font-size:14px}
+.nudge .who{margin:0;font-size:12px;color:var(--muted)}
+.nudge img{max-height:120px;object-fit:cover;object-position:top}
+.acts{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.q-item{padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--surface);margin-bottom:8px;font-size:14px}
+.q-item small{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}
+.shotcard img{margin-top:8px}
+
+/* the chip's popover */
+.pop{position:absolute;z-index:5;top:52px;right:150px;width:min(400px,calc(100% - 24px));background:var(--drawer);border:1px solid rgba(155,168,190,.45);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+.pop h3{margin:0;font:800 17px/1.2 var(--font-ui)}
+.pop .tp{display:flex;align-items:center;gap:10px}
+.pop .x{margin-left:auto;width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--rule);border-radius:8px;color:var(--muted);font-weight:800;font-size:13px}
+.pop .say{margin:0;font-size:13px;color:var(--muted)}
+.pop .lede{margin:0;font-size:14px}
+.pop .stat{margin:0;font-size:14px}
+.pop .stat b{font:800 26px/1 var(--font-display);color:var(--success-text);margin-right:6px}
+.pop .addr{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:8px;border:1px solid var(--rule);border-radius:10px;background:var(--bg)}
+.pop .addr .u{font:600 14px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace}
+.pop .addr .u small{display:block;font:500 12px/1.4 var(--font-ui);color:var(--muted);margin-top:2px}
+.pop .warn{border:1px solid rgba(229,100,94,.45);background:var(--t-red);border-radius:10px;padding:8px 12px;font-size:13px}
+.pop .warn b{color:var(--danger-text)}
+.pop .warn ul{margin:4px 0 0;padding-left:18px}
+.pop .foot{display:flex;gap:8px;align-items:center;justify-content:flex-end;border-top:1px solid var(--rule);padding-top:10px}
+.pop .foot .left{margin-right:auto}
+
+/* ---- the Stage --------------------------------------------------------------- */
+.proj{border:10px solid #050A14;border-radius:10px;background:var(--bg);aspect-ratio:16/9;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45);position:relative;container-type:inline-size}
+.rail{display:flex;align-items:center;gap:2.2cqi;padding:1.6cqi 2.4cqi;border-bottom:1px solid var(--rule)}
+.phase{font:800 1.4cqi/1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.rail .tt{font:800 2cqi/1.1 var(--font-display)}
+.rail .jn{margin-left:auto;font:700 1.6cqi/1 var(--font-ui);color:var(--muted)}
+.rail .jn b{color:var(--text);font-size:2.4cqi;margin-left:.6cqi}
+.stage-main{display:flex;align-items:center;gap:4cqi;padding:2.4cqi 4cqi;min-height:0}
+.building{display:flex;align-items:center;gap:2cqi}
+.building .pulse{width:2cqi;height:2cqi;border-radius:50%;background:var(--secondary);box-shadow:0 0 0 1cqi var(--t-blue)}
+.building h2{margin:0;font:800 4.4cqi/1.1 var(--font-display)}
+.stage-main .qr{width:24cqi;height:24cqi;background-size:2cqi 2cqi;background-position:0 0,1cqi 1cqi;box-shadow:inset 0 0 0 1.4cqi #fff;border-radius:1cqi}
+.stage-main .eb{font:800 1.5cqi/1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--success-text)}
+.stage-main h2.big{margin:1.4cqi 0 1.6cqi;font:800 5.4cqi/1.02 var(--font-display)}
+.stage-main .l{margin:0 0 1cqi;font-size:2.4cqi;line-height:1.25}
+.stage-main .m{margin:0;font-size:1.9cqi;color:var(--muted)}
+.stage-main .cnt{margin:2cqi 0 0;font-size:1.6cqi;color:var(--success-text);font-weight:700}
+.dock{display:flex;align-items:center;gap:1.4cqi;padding:1.4cqi 2.4cqi;border-top:1px solid var(--rule);background:var(--chrome)}
+.dock .st{color:var(--muted);font-size:1.6cqi;margin-right:auto}
+.dbtn{display:inline-flex;align-items:center;min-height:4.4cqi;padding:0 2cqi;border-radius:1cqi;border:1px solid var(--rule);font:700 1.5cqi/1 var(--font-ui)}
+.dbtn--primary{background:var(--primary);border-color:var(--primary);color:var(--bg)}
+.hostlist{position:absolute;right:16cqi;bottom:9cqi;width:46cqi;background:var(--drawer);border:1px solid rgba(155,168,190,.45);border-radius:1.2cqi;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.hostlist div{display:flex;align-items:center;padding:1.6cqi 2cqi;font-size:1.8cqi}
+.hostlist div span:last-child{margin-left:auto;color:var(--secondary);font-weight:700}
+
+/* ---- the participant's phone --------------------------------------------------- */
+.phone{width:320px;height:660px;background:var(--bg);border:10px solid #050A14;border-radius:36px;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.ph-top{padding:14px 16px 10px;border-bottom:1px solid var(--rule)}
+.ph-top b{font-size:15px}
+.ph-top .hint{font-size:12px;color:var(--muted);margin-top:4px}
+.ph-body{padding:12px 16px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.ph-tabs{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--rule);background:var(--chrome)}
+.ph-tabs span{text-align:center;padding:11px 0 14px;font:700 13px/1 var(--font-ui);color:var(--muted)}
+.ph-tabs span.is-on{color:var(--text);box-shadow:inset 0 2px 0 var(--secondary)}
+.po{display:flex;flex-direction:column;gap:6px;border:1px solid var(--rule);background:var(--surface);border-radius:12px;padding:12px}
+.po p{margin:0;font-size:13px;line-height:1.45}
+.po .m{color:var(--muted);font-size:12px;text-align:center}
+.po .btn{min-height:46px;font-size:16px}
+.po--on{border-color:rgba(79,178,134,.5);background:linear-gradient(var(--t-green),var(--t-green)),var(--surface)}
+.po--warn{border-color:rgba(229,100,94,.45)}
+.po h4{margin:0;font:800 15px/1.3 var(--font-ui)}
+.eb2{font:800 11px/1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ph-q{margin:0;font:700 18px/1.25 var(--font-ui)}
+.ph-fb{display:flex;gap:8px}
+.ph-fb .btn{flex:1}
+.browser{display:grid;grid-template-rows:auto 1fr;height:100%;background:#F4F7FB}
+.browser .bar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--chrome);font:500 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.browser .bar span.back{font:700 13px/1 var(--font-ui);color:var(--secondary)}
+.browser img{width:100%;display:block}
+.mode{display:flex;gap:6px;margin:10px 0 0;flex-wrap:wrap}
+.mode button{padding:5px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--surface);font:600 12px/1 var(--font-ui);color:var(--muted);cursor:pointer}
+.mode button.is-on{color:var(--text);border-color:var(--secondary);background:var(--t-blue)}
+
+@media (max-width:1100px){.stagearea{grid-template-columns:1fr}.phone{margin:0 auto}.cap{grid-template-columns:1fr}}
+@media (max-width:760px){.cols{grid-template-columns:1fr}.views,.lb,.join{display:none}.pop{right:12px}}
+</style>
+</head>
+<body>
+<header class="top">
+<h1>Share demo, clicked through</h1>
+<p>As built on dev (<code>e0ed29e5</code>, 2026-10-11). The host's laptop, the Stage on the projector and one participant's phone move together. Press the ringed control, use the steps, or ← →.</p>
+</header>
+<nav class="steps" id="steps" aria-label="Steps"></nav>
+<div class="cap"><div class="cap-box" id="cap" aria-live="polite"></div>
+<div class="nav"><button type="button" id="prev">← Back</button><button type="button" id="next">Next →</button></div></div>
+
+<main class="stagearea">
+<div class="left">
+<section aria-label="The host's laptop"><p class="dev-lab">Host · laptop</p><div class="lap" id="host"></div></section>
+<section aria-label="The Stage"><p class="dev-lab">Stage · projector</p><div class="proj" id="stage"></div></section>
+</div>
+<section aria-label="A participant's phone"><p class="dev-lab">Participant · phone</p><div class="phone" id="phone"></div>
+<div class="mode" id="mode" role="group" aria-label="This phone is on"></div></section>
+</main>
+
+<script>
+(function () {
+  var IMG = '../build-room-lan-share/img/board.svg';
+  var ADDR = '192.168.1.20:4900';
+  var HERE = 18;
+
+  // Each step is the room's state; the three devices are drawn from it.
+  var STEPS = [
+    { id: 'shots', name: 'Screenshots only',
+      title: 'Claude posts a screenshot, nothing running yet',
+      say: 'The room sees the picture. <b>No Share demo anywhere:</b> no nudge, no chip, nothing in Settings, and phones say nothing about sharing.',
+      rule: 'A screenshot is a picture, not a demo (owner, 2026-10-11). What’s next keeps the one orange.',
+      share: 'none', next: 'ready', hot: 'next' },
+    { id: 'ready', name: 'Claude shows a running app',
+      title: 'Claude shows the app running on the laptop',
+      say: 'The nudge leads the Now column and <b>Share demo takes the orange</b>; What’s next turns outline. The header gains the Share demo chip. On the Stage, HOST counts one grey line.',
+      rule: 'Space never presses Share demo: sharing the laptop is a click. Press <b>Share demo</b>, or <b>Not now</b>.',
+      share: 'off', nudge: true, next: 'starting', hot: 'nudge-share' },
+    { id: 'notnow', name: 'Not now', branch: true,
+      title: 'Not now: the nudge goes, the chip stays',
+      say: 'The room is never asked again. What’s next gets the orange back. Share demo is one click away on the chip, the Build screen and Settings.',
+      rule: 'Press the <b>Share demo</b> chip.',
+      share: 'off', next: 'notnow-open', hot: 'chip' },
+    { id: 'notnow-open', name: 'The chip’s panel', branch: true,
+      title: 'The chip opens its own panel',
+      say: 'Same words as the nudge. Share demo is the panel’s main move.',
+      rule: 'The chip’s popover stays (owner, 2026-10-11).',
+      share: 'off', pop: true, next: 'starting', hot: 'pop-share' },
+    { id: 'starting', name: 'Starting',
+      title: 'Claude Code opens the gateway',
+      say: 'The chip reads <b>Starting…</b> while the plugin starts the Wi-Fi gateway. Phones still see the screenshot.',
+      rule: 'If the plugin never answers, after 25 s the chip says <b>Waiting for Claude Code</b>.',
+      share: 'starting', next: 'live', hot: 'next', auto: 1600 },
+    { id: 'live', name: 'Shared',
+      title: 'The demo is shared on this Wi-Fi',
+      say: 'The chip turns green and counts who opened it. Every phone gets <b>Open the demo</b>. Nobody has opened it yet.',
+      rule: 'Press the chip to see the address and put the code on the Stage.',
+      share: 'on', open: 0, next: 'live-open', hot: 'chip' },
+    { id: 'live-open', name: 'The address',
+      title: 'Who has opened it, the address, Show on the Stage',
+      say: 'The panel shows the count against the room, the address and its QR. <b>Show on the Stage</b> is the orange; Stop sharing sits left.',
+      rule: 'The key in the link is copied, never shown.',
+      share: 'on', open: 0, pop: true, next: 'wall', hot: 'pop-stage' },
+    { id: 'wall', name: 'On the Stage',
+      title: 'The room is shown how to open it',
+      say: 'The Stage shows the code, three short lines and the count, a number and never a name.',
+      rule: 'On the phone, press <b>Open the demo</b>.',
+      share: 'on', open: 0, wall: true, next: 'opened', hot: 'phone-open' },
+    { id: 'opened', name: 'Phones open it',
+      title: 'The demo opens on the phone',
+      say: 'The phone opens the laptop’s app through the gateway. The count climbs on the chip and the Stage as the room joins in.',
+      rule: 'Try the phone on mobile data (below the phone) to see what someone off the Wi-Fi gets.',
+      share: 'on', open: 11, wall: true, phoneIn: true, next: 'quiet', hot: 'next' },
+    { id: 'quiet', name: 'Nobody can reach it', branch: true,
+      title: 'Another room: shared two minutes, opened by none',
+      say: 'Guest Wi-Fi often keeps devices apart. The chip turns red and the panel says what to try. <b>Stop sharing becomes the orange</b>: sharing that reaches nobody only exposes the laptop.',
+      rule: 'Press <b>Stop sharing</b>.',
+      share: 'quiet', open: 0, pop: true, next: 'stopped', hot: 'pop-stop' },
+    { id: 'stopped', name: 'Stopped',
+      title: 'Sharing stops',
+      say: 'The chip is back to Share demo, the Stage card is gone, and phones say the demo runs on the host’s laptop, with the screenshot below.',
+      rule: 'Nothing shares again until the host presses Share demo.',
+      share: 'off', next: null }
+  ];
+  var MAIN = ['shots', 'ready', 'starting', 'live', 'live-open', 'wall', 'opened', 'stopped'];
+  var at = 0;
+  var phoneMode = 'wifi';
+  var timer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var hot = function (s, key) { return s.hot === key ? ' hot' : ''; };
+  var go = function (key, s) { return s.hot === key ? ' data-go="' + key + '"' : ''; };
+
+  function chip(s) {
+    if (s.share === 'none') return '';
+    var cls = 'chip', label = 'Share demo';
+    if (s.share === 'starting') { cls += ' chip--starting'; label = 'Starting…'; }
+    if (s.share === 'on') { cls += ' chip--on'; label = 'Shared · ' + s.open + ' opened'; }
+    if (s.share === 'quiet') { cls += ' chip--quiet'; label = 'Shared · none opened yet'; }
+    if (s.pop) cls += ' is-open';
+    return '<span class="' + cls + hot(s, 'chip') + '"' + go('chip', s) + '>' + label + '</span>';
+  }
+
+  function popover(s) {
+    if (!s.pop) return '';
+    var x = '<span class="x" aria-hidden="true">✕</span>';
+    if (s.share === 'off') {
+      return '<div class="pop" role="dialog" aria-label="Share demo"><div class="tp"><h3>Let everyone try it.</h3>' + x + '</div>'
+        + '<p class="lede">Share this demo with people on your Wi-Fi.</p>'
+        + '<p class="say">People on this Wi-Fi can open this laptop’s app. No one else can.</p>'
+        + '<div class="foot"><span class="btn btn--ghost">Not now</span><span class="btn btn--primary' + hot(s, 'pop-share') + '"' + go('pop-share', s) + '>Share demo</span></div></div>';
+    }
+    if (s.share === 'quiet') {
+      return '<div class="pop" role="dialog" aria-label="Share demo"><div class="tp"><h3>Demo shared on this Wi-Fi</h3>' + x + '</div>'
+        + '<div class="warn"><b>Nobody has opened it in 2 minutes.</b> Guest Wi-Fi often blocks this.<ul><li>Test it: scan the QR from another device.</li><li>Same Wi-Fi; no mobile data, no VPN.</li></ul></div>'
+        + '<div class="addr"><span class="qr"></span><div class="u">' + ADDR + '<small>If it fails for you, it fails for the room. Use screenshots.</small></div><span></span></div>'
+        + '<div class="foot"><span class="btn btn--ghost left">Keep sharing</span><span class="btn btn--primary' + hot(s, 'pop-stop') + '"' + go('pop-stop', s) + '>Stop sharing</span></div></div>';
+    }
+    return '<div class="pop" role="dialog" aria-label="Share demo"><div class="tp"><h3>Demo shared on this Wi-Fi</h3>' + x + '</div>'
+      + '<p class="stat"><b>' + s.open + '</b>opened it · ' + HERE + ' here</p>'
+      + '<div class="addr"><span class="qr"></span><div class="u">' + ADDR + '<small>People on this Wi-Fi can open it. No one else can.</small></div><span class="btn btn--sm btn--ghost">Copy</span></div>'
+      + (s.open < HERE ? '<p class="say">Not ' + s.open + ' of ' + HERE + '? Some people may be on mobile data or a VPN. They still see screenshots.</p>' : '')
+      + '<div class="foot"><span class="btn btn--ghost left">Stop sharing</span><span class="btn btn--primary' + hot(s, 'pop-stage') + '"' + go('pop-stage', s) + '>Show on the Stage</span></div></div>';
+  }
+
+  function whatsNext(lead) {
+    var p = lead ? ' btn--primary' : '';
+    return '<p class="colh" style="margin-top:4px">What’s next</p><ul class="wn" aria-label="What’s next">'
+      + '<li class="' + (lead ? 'is-lead' : '') + '"><span class="t">Ask the room<span class="h">A choice, ideas or a rating</span></span><span class="btn btn--sm' + p + '">Ask</span></li>'
+      + '<li><span class="t">Tell Claude<span class="h">Do now, keep in mind, or ask Claude</span></span><span class="btn btn--sm">Write</span></li></ul>'
+      + (lead ? '<p class="spacehint"><kbd>Space</kbd> does the first</p>' : '');
+  }
+
+  function drawHost(s) {
+    var live = s.share === 'on' || s.share === 'quiet';
+    var claude = s.id === 'shots' ? 'Claude posted a screenshot' : (s.id === 'ready' || s.id === 'notnow' || s.id === 'notnow-open' ? 'Claude showed the first board' : 'Claude is building the counters');
+    var nudge = s.nudge
+      ? '<section class="nudge" aria-label="Share demo"><p class="t">Let everyone try it.</p><p class="s">Share this demo with people on your Wi-Fi.</p>'
+        + '<img class="shot" src="' + IMG + '" alt="The first board, as Claude showed it">'
+        + '<p class="who">People on this Wi-Fi can open this laptop’s app. No one else can.</p>'
+        + '<div class="acts"><span class="btn btn--ghost" data-go="notnow">Not now</span><span class="btn btn--primary' + hot(s, 'nudge-share') + '"' + go('nudge-share', s) + '>Share demo</span></div></section>'
+      : '';
+    var waiting = s.id === 'shots' || s.share === 'none'
+      ? '<div class="q-item shotcard"><small>Claude · screenshot</small>The first board<img class="shot" src="' + IMG + '" alt="Screenshot of the first board"></div>'
+      : '<div class="q-item"><small>From the room · 1 min</small>Can the winning row flash?</div><div class="q-item"><small>From the room · 2 min</small>Bigger counters for the projector</div>';
+    $('host').innerHTML =
+      '<header class="hdr"><span class="ttl">Monday build</span><div class="views"><span class="is-on">Host</span><span>Stage</span><span>Build</span><span>History</span></div><span class="sp"></span>'
+      + (s.share === 'none' ? '' : '<span class="lb">' + (live ? 'Open the build ↗' : 'Open the build ↗') + '</span>')
+      + chip(s)
+      + '<span class="join">Join <b>6717</b></span><span class="n-joined">' + HERE + ' joined</span></header>'
+      + '<div class="cols"><div>' + nudge
+      + '<div class="card"><p class="colh">Now</p><p class="nowline">' + claude + '</p>' + whatsNext(!s.nudge) + '</div></div>'
+      + '<div><p class="colh">Waiting for you · ' + (s.share === 'none' ? 1 : 2) + '</p>' + waiting + '</div></div>'
+      + popover(s);
+  }
+
+  function drawStage(s) {
+    var main;
+    if (s.wall) {
+      main = '<span class="qr"></span><div><span class="eb">The demo is live</span><h2 class="big">Try the demo yourself</h2>'
+        + '<p class="l">Scan the code, or press Open the demo.</p><p class="m">Same Wi-Fi as this laptop.</p>'
+        + '<p class="cnt">' + (s.open === 1 ? '1 has opened it' : s.open + ' have opened it') + '</p></div>';
+    } else {
+      main = '<div class="building"><span class="pulse"></span><h2>' + (s.id === 'shots' || s.id === 'ready' || s.id === 'notnow' || s.id === 'notnow-open' ? 'Claude showed the first board' : 'Claude is building the counters') + '</h2></div>';
+    }
+    var hostCount = s.nudge ? 'HOST · 1' : 'HOST';
+    var list = s.nudge ? '<div class="hostlist" role="list"><div role="listitem"><span>The demo is ready to share</span><span>Share →</span></div></div>' : '';
+    $('stage').innerHTML =
+      '<div class="rail"><span class="phase">Building</span><span class="tt">Monday build</span><span class="jn">JOIN<b>6717</b></span></div>'
+      + '<div class="stage-main">' + main + '</div>'
+      + '<footer class="dock"><span class="st">' + HERE + ' here</span>'
+      + (s.wall ? '<span class="dbtn dbtn--primary">Hide the code</span>' : '<span class="dbtn">Ask the room</span>')
+      + '<span class="dbtn">' + hostCount + '</span><span class="dbtn">SESSION</span></footer>' + list;
+  }
+
+  function drawPhone(s) {
+    var live = s.share === 'on';
+    var offWifi = phoneMode === 'mobile';
+    if (s.phoneIn && !offWifi) {
+      $('phone').innerHTML = '<div class="browser" style="grid-row:1/4"><div class="bar"><span class="back">← Engage</span>' + ADDR + '</div>'
+        + '<img src="' + IMG + '" alt="The demo, running on the host’s laptop, opened on this phone"></div>';
+      return;
+    }
+    var box = '';
+    if (s.phoneIn && offWifi) {
+      box = '<div class="po po--warn"><h4>Didn’t open?</h4><p>You may be on mobile data or another Wi-Fi.</p><p class="m">Same Wi-Fi; no mobile data, no VPN.</p><span class="btn">Try again ↗</span></div>';
+    } else if (live) {
+      box = '<div class="po po--on"><span class="btn btn--primary' + hot(s, 'phone-open') + '"' + go('phone-open', s) + '>Open the demo ↗</span><p class="m">Same Wi-Fi only.</p></div>';
+    } else if (s.share !== 'none') {
+      box = '<div class="po"><p>The demo runs on the host’s laptop. Screenshots are below.</p></div>';
+    }
+    $('phone').innerHTML = '<div class="ph-top"><b>Monday build</b><div class="hint">Claude is building</div></div>'
+      + '<div class="ph-body">' + box
+      + '<span class="eb2">Claude is showing · 10:42</span><p class="ph-q">The first board</p>'
+      + '<img class="shot" src="' + IMG + '" alt="Screenshot of the first board">'
+      + '<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div></div>'
+      + '<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div>';
+  }
+
+  function drawMode(s) {
+    var show = s.id === 'opened';
+    $('mode').innerHTML = show
+      ? '<button type="button" data-mode="wifi" class="' + (phoneMode === 'wifi' ? 'is-on' : '') + '" aria-pressed="' + (phoneMode === 'wifi') + '">On the Wi-Fi</button>'
+        + '<button type="button" data-mode="mobile" class="' + (phoneMode === 'mobile' ? 'is-on' : '') + '" aria-pressed="' + (phoneMode === 'mobile') + '">On mobile data</button>'
+      : '';
+  }
+
+  function drawSteps() {
+    $('steps').innerHTML = STEPS.map(function (s, i) {
+      return '<button type="button" data-step="' + i + '" class="' + (i === at ? 'is-on' : '') + (s.branch ? ' branch' : '') + '"' + (i === at ? ' aria-current="step"' : '') + '><b>' + (i + 1) + '</b>' + s.name + '</button>';
+    }).join('');
+  }
+
+  function draw() {
+    var s = STEPS[at];
+    clearTimeout(timer);
+    $('cap').innerHTML = '<h2>' + (at + 1) + '. ' + s.title + '</h2><p>' + s.say + '</p><p class="rule">' + s.rule + '</p>';
+    drawSteps(); drawHost(s); drawStage(s); drawPhone(s); drawMode(s);
+    $('prev').disabled = at === 0;
+    $('next').disabled = !s.next;
+    if (s.auto) timer = setTimeout(function () { show(s.next); }, s.auto);
+  }
+
+  function show(id) {
+    var i = STEPS.findIndex(function (x) { return x.id === id; });
+    if (i < 0) return;
+    if (id !== 'opened') phoneMode = 'wifi';
+    at = i; draw();
+  }
+  function next() { var s = STEPS[at]; if (s.next) show(s.next); }
+  function prev() {
+    // Back walks the main path; a branch steps back to where it left it.
+    var s = STEPS[at];
+    if (s.id === 'notnow') return show('ready');
+    if (s.id === 'notnow-open') return show('notnow');
+    if (s.id === 'quiet') return show('opened');
+    var k = MAIN.indexOf(s.id);
+    if (k > 0) show(MAIN[k - 1]); else if (at > 0) { at -= 1; draw(); }
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-step],[data-go],[data-mode]');
+    if (!t) return;
+    if (t.dataset.step) { at = Number(t.dataset.step); phoneMode = 'wifi'; draw(); return; }
+    if (t.dataset.mode) { phoneMode = t.dataset.mode; draw(); return; }
+    if (t.dataset.go === 'notnow') return show('notnow');
+    next();
+  });
+  $('next').addEventListener('click', next);
+  $('prev').addEventListener('click', prev);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev();
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

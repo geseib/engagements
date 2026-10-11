@@ -144,6 +144,16 @@ function personasPk() {
   return 'AIPROMPTS';
 }
 
+/**
+ * The partition holding a scope's USAGE STATS for its sets — one row per set
+ * and version, all time (docs/design/usage-stats/SPEC.md §6.3; SK =
+ * `SET#<id>#V#<n>`). `SETSTATS` for Engage's library, `ORG#<org>#SETSTATS`,
+ * `PUBLIC#SETSTATS`. Numbers and ids only; it never holds a title.
+ */
+function setStatsPk(scope, orgId) {
+  return `${scopePrefix(scope, orgId)}SETSTATS`;
+}
+
 /** The partition holding a scope's set CONTENT (categories and questions). */
 function setContentPk(scope, orgId, setId, version) {
   const id = clean(setId);
@@ -583,7 +593,7 @@ function tenantStamp(event) {
 module.exports = {
   PLATFORM, ORG, PUBLIC, SCOPES, ORG_ROLES,
   GAMES_RESERVATION_PK, ORGS_INDEX_PK, REPORTS_PLATFORM_PK, reportsIndexPk,
-  scopePrefix, setsMetadataPk, setContentPk, promptsMetadataPk, personasPk, gamesIndexPk, orgPk, userPk,
+  scopePrefix, setsMetadataPk, setStatsPk, setContentPk, promptsMetadataPk, personasPk, gamesIndexPk, orgPk, userPk,
   eventsIndexPk, eventPk,
   callerOrgId, callerOrgRole, callerOrgIds, callerGroups, isPlatformAdmin,
   roleAtLeast, readableScopes, canManageScope,

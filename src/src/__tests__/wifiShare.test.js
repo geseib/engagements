@@ -1,4 +1,4 @@
-import { wifiState, shouldOfferDemo } from '../buildroom/wifiShare';
+import { wifiState, shouldOfferDemo, demoRunnable } from '../buildroom/wifiShare';
 
 const NOW = '2026-10-07T12:00:00.000Z';
 const ago = (ms) => new Date(Date.parse(NOW) - ms).toISOString();
@@ -33,7 +33,7 @@ describe('wifiState: the chip says what is happening, in words', () => {
   });
 });
 
-describe('shouldOfferDemo: once, when Claude first shows something running on this laptop, or a screenshot of it', () => {
+describe('shouldOfferDemo: once, when Claude first shows something running on this laptop', () => {
   const lan = { wanted: false, status: 'off', offerDismissed: false };
   test('a showing entry by Claude with a local link', () => {
     expect(shouldOfferDemo({ lan, log: [{ by: 'agent', kind: 'showing', link: 'http://localhost:5173/' }], asks: [] })).toBe(true);
@@ -41,9 +41,11 @@ describe('shouldOfferDemo: once, when Claude first shows something running on th
   test('a choice option with a local url', () => {
     expect(shouldOfferDemo({ lan, log: [], asks: [{ options: [{ url: 'http://127.0.0.1:5174/a' }] }] })).toBe(true);
   });
-  test('the first screenshot Claude posts, even with no link (the reviewer\'s session, 2026-10-10)', () => {
-    expect(shouldOfferDemo({ lan, log: [], asks: [], images: [{ imageId: 'p1', kind: 'progress', by: 'agent' }] })).toBe(true);
-    // A mockup is an option's picture, not the running app.
+  test('the wrap-up\'s local link', () => {
+    expect(shouldOfferDemo({ lan, log: [], asks: [], outcome: { links: [{ url: 'http://localhost:3000/' }] } })).toBe(true);
+  });
+  test('never for screenshots or mockups alone: nothing to open (owner, 2026-10-11)', () => {
+    expect(shouldOfferDemo({ lan, log: [], asks: [], images: [{ imageId: 'p1', kind: 'progress', by: 'agent' }] })).toBe(false);
     expect(shouldOfferDemo({ lan, log: [], asks: [], images: [{ imageId: 'm1', kind: 'mockup', by: 'agent' }] })).toBe(false);
     expect(shouldOfferDemo({ lan, log: [], asks: [], images: [] })).toBe(false);
   });
@@ -51,5 +53,18 @@ describe('shouldOfferDemo: once, when Claude first shows something running on th
     expect(shouldOfferDemo({ lan, log: [{ by: 'agent', kind: 'showing', link: 'https://example.com/' }], asks: [] })).toBe(false);
     expect(shouldOfferDemo({ lan: { ...lan, offerDismissed: true }, log: [{ by: 'agent', kind: 'showing', link: 'http://localhost:5173/' }], asks: [] })).toBe(false);
     expect(shouldOfferDemo({ lan: { ...lan, wanted: true }, log: [{ by: 'agent', kind: 'showing', link: 'http://localhost:5173/' }], asks: [] })).toBe(false);
+  });
+});
+
+describe('demoRunnable: Share demo appears only with an app to share', () => {
+  test('a local app shown, or sharing already on', () => {
+    expect(demoRunnable({ log: [{ by: 'agent', link: 'http://localhost:5173/' }] })).toBe(true);
+    expect(demoRunnable({ lan: { wanted: true }, log: [] })).toBe(true);
+  });
+  test('not for screenshots, public links or a room member\'s link', () => {
+    expect(demoRunnable({ log: [], images: [{ imageId: 'p1', kind: 'progress', by: 'agent' }] })).toBe(false);
+    expect(demoRunnable({ log: [{ by: 'agent', link: 'https://example.com/' }] })).toBe(false);
+    expect(demoRunnable({ log: [{ by: 'host', link: 'http://localhost:5173/' }] })).toBe(false);
+    expect(demoRunnable(null)).toBe(false);
   });
 });

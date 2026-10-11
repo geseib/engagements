@@ -1,4 +1,5 @@
 import React from 'react';
+import { ModelPickerControls } from './ModelCompare';
 
 /**
  * WORKIE'S HOST OPTIONS, IN THE SESSION PANEL — not on the stage.
@@ -23,6 +24,10 @@ import React from 'react';
  *
  * REDO ONLY WHERE THERE IS A READ ON SCREEN. `onRedo` is null except on the
  * What We Heard beat; a Redo that rewrites nothing is a dead control.
+ *
+ * `modelPicker` (useModelPicker) adds "Redo with…" and Compare beside Redo —
+ * only when the server said dev's staff picker is on, so for everyone else,
+ * and everywhere but dev, this section is exactly what it was.
  */
 export default function WorkieSettings({
   roundNoun = 'question',
@@ -38,6 +43,7 @@ export default function WorkieSettings({
   briefed = false,
   onRedo = null,
   redoBusy = false,
+  modelPicker = null,
 }) {
   const noun = String(roundNoun || 'question').toLowerCase();
   const hasAnything = showNextRound || briefed || typeof onRedo === 'function';
@@ -61,6 +67,7 @@ export default function WorkieSettings({
             </button>
           </div>
           <p className="setup-note">Rewrites What We Heard now, in the voice and approach set below.</p>
+          {modelPicker && modelPicker.info && <ModelPickerControls picker={modelPicker} />}
         </>
       )}
 

@@ -45,7 +45,7 @@ describe('platform staff (mockups 10 and 11)', () => {
     // 'prompts' joined 2026-09-24: Engage's prompt library is Engage's own content, like the
     // Shared library, and Engage mode is now the ONE place prompts are authored (the owner:
     // "the workie advisor and ai prompts should be only in the engage mode for now").
-    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive']);
+    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings']);
     expect(ids(PLATFORM)).not.toContain('games');
     expect(ids(PLATFORM)).not.toContain('library');
   });
@@ -158,10 +158,26 @@ describe('a team', () => {
 
   // rejects: an owner losing billing because only 'admin' was checked
   test('owner and admin both get the full Team group', () => {
-    const full = ['questionsets', 'games', 'library', 'prompts', 'members', 'billing', 'privacy'];
+    const full = ['questionsets', 'games', 'library', 'prompts', 'members', 'activity', 'billing', 'privacy'];
     expect(ids(TEAM_ADMIN)).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'owner' })).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'OWNER' })).toEqual(full);
+  });
+});
+
+describe('Activity (usage stats, owner 2026-10-11)', () => {
+  // rejects: a member, a personal space or the platform console offered a
+  // page whose route refuses them (GET /orgs/{orgId}/stats is owner/admin).
+  test('owners and admins of a team have it; nobody else does', () => {
+    expect(ids(TEAM_ADMIN)).toContain('activity');
+    expect(ids({ ...TEAM_ADMIN, orgRole: 'owner' })).toContain('activity');
+    expect(ids({ ...TEAM_ADMIN, orgRole: 'member' })).not.toContain('activity');
+    expect(ids(PLATFORM)).not.toContain('activity');
+  });
+  test('it sits after Members and before Plan & usage', () => {
+    const team = ids(TEAM_ADMIN);
+    expect(team.indexOf('activity')).toBe(team.indexOf('members') + 1);
+    expect(team.indexOf('billing')).toBe(team.indexOf('activity') + 1);
   });
 });
 

@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Call &amp; Answer: follow-up asks · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* CALL & ANSWER FOLLOW-UP ASKS (owner, 2026-10-11). Design only.
+   Stage frames use the Room ladder from mock.css; host chrome (the drawer,
+   the remote) uses the laptop ladder. One orange element per frame: every
+   other amber that mock.css paints (join code, phase bar, eyebrow, drawer
+   edge, letter tiles, meter bar) goes neutral or blue here. The content in
+   every frame is the measured prototype output (PROTOTYPE.md), lightly
+   trimmed where a frame says so. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .sec,body.is-solo .qs,body.is-solo .row-wrap,body.is-solo .fitrow{display:none !important}
+html,body{overflow-x:hidden}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.frame-h p b{color:var(--text)}
+.frame-h .rec{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--m-success-text);border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green)}
+.frame-h .later{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--secondary);border:1px solid rgba(124,167,230,.55);background:var(--m-tint-blue)}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec p b{color:var(--text)}
+code{word-break:break-word}
+
+/* ---- no stray orange ---------------------------------------------------- */
+.scr .join .code,.joinbox b{color:var(--text)}
+.scr .bar{background:var(--success)}
+.scr .eyebrow{color:var(--muted)}
+.meter .bar2 span{background:var(--secondary)}
+.drawer{border-left-color:var(--secondary)}
+.dr-head h2{color:var(--text)}
+.L{background:var(--surface-2);color:var(--text)}
+
+/* ---- the read on the Stage (What We Heard, last page) ------------------- */
+.read{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:26px;max-width:30em}
+.read li{display:flex;gap:18px}
+.read li .n{flex:none;font:800 var(--L-secondary)/1.1 var(--font-display);color:var(--muted);width:1.2em}
+.read .lead{display:block;font:800 var(--L-secondary)/1.15 var(--font-ui)}
+.read .rest{display:block;margin-top:6px;font-size:var(--L-body);line-height:1.3;color:var(--text)}
+.read i{color:var(--text)}
+.pips{display:flex;gap:10px;margin-top:auto}
+.pips span{width:12px;height:12px;border-radius:50%;background:var(--surface-2)}
+.pips span.on{background:var(--text)}
+
+/* ---- the drawer: suggestions ------------------------------------------ */
+.dr-body{overflow:auto;gap:7px}
+.sug{background:var(--surface);border:1px solid var(--m-rule);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.sug.is-on{border-color:var(--secondary);box-shadow:inset 3px 0 0 var(--secondary)}
+.sug .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sug .kind{font:700 var(--t-label)/1 var(--font-ui);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.sug .say{margin:0;font:600 var(--t-body)/1.4 var(--font-ui)}
+.sug .say i{font-style:italic;font-weight:500}
+.sug ol{margin:0;padding-left:22px;font-size:var(--t-body);line-height:1.45}
+.sug .why{margin:0;font-size:var(--t-label);color:var(--muted);line-height:1.45}
+.sug .why b{color:var(--text);font-weight:600}
+.sug .from{font-size:var(--t-floor);color:var(--muted)}
+.sug .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.flag{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;font:600 var(--t-floor)/1 var(--font-ui);color:var(--secondary);border:1px solid rgba(124,167,230,.55);background:var(--m-tint-blue)}
+.dr-sub{margin:4px 0 0;font:700 var(--t-label)/1.2 var(--font-ui);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.other{display:flex;align-items:center;gap:10px;min-height:var(--row-h);padding:6px 12px;border:1px solid var(--m-rule);border-radius:10px;font-size:var(--t-body)}
+.other small{display:block;color:var(--muted);font-size:var(--t-label)}
+.other .go{margin-left:auto;color:var(--secondary);font-weight:600;font-size:var(--t-label);white-space:nowrap}
+
+/* the editor */
+.seg{display:flex;border:1px solid var(--m-rule);border-radius:8px;overflow:hidden}
+.seg span{flex:1;text-align:center;padding:8px 6px;font:600 var(--t-label)/1.1 var(--font-ui);color:var(--muted)}
+.seg span.on{background:var(--m-tint-blue);color:var(--text);box-shadow:inset 0 -2px 0 var(--secondary)}
+.seg span.off{opacity:.55}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld .in,.fld .ta{font-size:var(--t-body)}
+.optrow{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+.optrow .from{font-size:var(--t-floor);color:var(--muted);white-space:nowrap}
+.optrow b{font:800 var(--t-label)/1 var(--font-ui);color:var(--muted);width:16px}
+.mini{border:1px solid var(--m-rule);border-radius:10px;background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:8px}
+.mini .k{font:700 var(--t-floor)/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.mini .st{margin:0;font:600 var(--t-body)/1.35 var(--font-ui)}
+.mini .opts{display:flex;gap:6px;flex-wrap:wrap}
+.mini .opts span{padding:6px 10px;border:1px solid var(--m-rule);border-radius:8px;font-size:var(--t-label)}
+.note-line{margin:0;font-size:var(--t-label);color:var(--muted);line-height:1.45}
+
+/* ---- the Stage while the ask is live, and its results ------------------ */
+.askq{margin:0;font:800 var(--L-primary)/1.1 var(--font-display);max-width:22ch}
+.askq i{font-style:italic}
+.askq--st::before{content:"\201C"}
+.askq--st::after{content:"\201D"}
+.agree3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:10px}
+.agree3 div{border:2px solid var(--m-rule);border-radius:16px;padding:22px 24px;font:800 var(--L-secondary)/1 var(--font-ui);text-align:center;background:var(--surface)}
+.res{display:flex;flex-direction:column;gap:22px;margin-top:6px;max-width:980px}
+.res .r{display:grid;grid-template-columns:minmax(220px,360px) 1fr 70px;gap:20px;align-items:center;font-size:var(--L-body)}
+.res .r .t{line-height:1.2}
+.res .r .track{height:30px;border-radius:8px;background:var(--surface-2);overflow:hidden}
+.res .r .track span{display:block;height:100%;background:var(--secondary)}
+.res .r b{font:800 var(--L-secondary)/1 var(--font-display);text-align:right}
+.res .r--mid .track span{background:var(--muted)}
+.res .r--dis .track span{background:rgba(124,167,230,.45)}
+.res-note{font-size:var(--L-meta);color:var(--muted);margin:0}
+
+/* ---- phones, laptop ---------------------------------------------------- */
+.row-wrap{display:flex;gap:30px;justify-content:center;flex-wrap:wrap;padding:10px 20px 6px}
+.ph{width:395px;height:812px;background:var(--bg);border:10px solid #050A14;border-radius:40px;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.ph-cap{max-width:395px;text-align:center;font-size:13px;color:var(--muted);margin:12px auto 0}
+.ph-cap b{color:var(--text)}
+.ph .eb{font:800 13px/1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ph .pq{margin:0;font:700 21px/1.3 var(--font-ui)}
+.ph .pq i{font-style:italic;font-weight:600}
+.ph .pm{margin:0;font-size:14px;color:var(--muted);line-height:1.45}
+.yn{display:flex;flex-direction:column;gap:10px}
+.yn span{display:flex;align-items:center;justify-content:center;min-height:56px;border:1px solid var(--m-rule);border-radius:12px;font:700 18px/1 var(--font-ui);background:var(--surface)}
+.yn span.on{border-color:var(--secondary);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface)}
+.yn--row{flex-direction:row}
+.yn--row span{flex:1}
+.ph .send{display:flex;justify-content:center;min-height:52px;align-items:center;border-radius:12px;font:700 17px/1 var(--font-ui);background:var(--primary);color:var(--bg)}
+.ph .send--off{background:var(--surface-2);color:var(--muted)}
+.ph .done{border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green);border-radius:12px;padding:12px 14px;font-size:15px;line-height:1.45}
+.ph .ta{min-height:110px;font-size:16px}
+.ph .cnt{align-self:flex-end;font-size:12px;color:var(--muted)}
+.ph .mini-res{display:flex;flex-direction:column;gap:8px}
+.ph .mini-res div{display:grid;grid-template-columns:90px 1fr 26px;gap:8px;align-items:center;font-size:14px}
+.ph .mini-res i{display:block;height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.ph .mini-res i span{display:block;height:100%;background:var(--secondary)}
+.ph .mini-res b{text-align:right}
+.lap{width:1100px;margin:0 auto;border:12px solid #050A14;border-bottom-width:28px;border-radius:16px;background:var(--bg);box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}
+.lap-bar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#0A1222;border-bottom:1px solid var(--m-rule)}
+.lap-bar i{width:10px;height:10px;border-radius:50%;background:var(--surface-2)}
+.lap-bar .ad{flex:1;margin-left:8px;padding:6px 12px;border-radius:8px;background:var(--surface);font:500 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.lap-top{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--m-rule)}
+.lap-top b{font-size:17px}
+.lap-body{display:grid;grid-template-columns:1fr 360px;gap:30px;padding:26px 30px 34px}
+.lap-body .pq{margin:0;font:700 24px/1.3 var(--font-ui)}
+.lap-body .ph-opt{font-size:17px}
+
+/* ---- the report (paper) ------------------------------------------------- */
+.paper{width:900px;margin:0 auto;background:#FBF7F1;color:#1B2942;border-radius:6px;padding:40px 48px;box-shadow:0 18px 50px rgba(0,0,0,.45);font:400 15px/1.55 var(--font-ui)}
+.paper h3{margin:0 0 4px;font:800 22px/1.2 var(--font-display)}
+.paper h4{margin:26px 0 8px;font:800 13px/1 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:#5E6167}
+.paper .muted{color:#5E6167}
+.paper .fu{border-top:1px solid #E2DBCF;padding:14px 0}
+.paper .fu .q{font-weight:700;margin:0 0 6px}
+.paper .fu .q i{font-weight:600}
+.paper .fu .meta{font-size:13px;color:#5E6167;margin:0 0 8px}
+.paper table{border-collapse:collapse;width:100%;max-width:520px;table-layout:fixed;font-size:14px}
+.paper td{padding:5px 8px;border-bottom:1px solid #EFE9DE}
+.paper td.num{text-align:right;width:60px;font-variant-numeric:tabular-nums;font-weight:700}
+.paper ul{margin:6px 0 0;padding-left:20px}
+
+/* ---- the fit check ------------------------------------------------------ */
+.fitrow{display:flex;gap:30px;flex-wrap:wrap;padding:10px 20px;justify-content:center;align-items:flex-start}
+.vp{border:1px dashed rgba(155,168,190,.45);border-radius:10px;background:#0C1628;position:relative;padding:44px 16px 16px;overflow:hidden;max-width:100%}
+.vp .tag{position:absolute;top:14px;left:16px;font:700 12px/1 var(--font-ui);color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.vp--660{width:660px}
+.vp--375{width:375px}
+.vp .panel{width:min(560px,100%);margin-left:auto;background:var(--m-drawer);border:1px solid var(--m-rule);border-left:2px solid var(--secondary);border-radius:12px;display:flex;flex-direction:column}
+.vp .panel .dr-body{padding:12px 14px}
+.vp .panel .dr-head{padding:14px 14px 6px}
+.vp .panel .dr-foot{padding:10px 14px;flex-wrap:wrap;justify-content:flex-end}
+
+/* ---- tables ------------------------------------------------------------- */
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45;overflow-wrap:anywhere}
+.vt td:first-child{font-weight:700}
+.vt code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+
+/* Narrow windows: the phone frames become the phone, the wide pieces scale. */
+@media (max-width:700px){
+  .vt{font-size:13px}.vt th,.vt td{padding:8px 6px}
+  .row-wrap{padding:10px 0 6px}
+}
+@media (max-width:440px){
+  .ph{width:100%;height:auto;min-height:720px;border-width:6px;border-radius:28px}
+  .ph-cap{max-width:100%;padding:0 6px}
+  .vp--375{width:100%}
+}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Call &amp; Answer · Follow-up asks</b>
+<a href="#f1">F1 After the read</a><a href="#f2">F2 Suggested asks</a><a href="#f3">F3 Edit and send</a><a href="#f4">F4 Stage, live</a><a href="#f5">F5 Stage, results</a><a href="#f6">F6 Phones</a><a href="#f7">F7 Laptop</a><a href="#f8">F8 Report</a><a href="#fit">Fit at 660 / 375</a><a href="#data">States and data</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="SPEC.md">SPEC</a><a href="PROTOTYPE.md">Prototype runs</a><a href="PLAN.md">Plan</a></nav>
+<div class="pg-title"><h1>After the read, one more question for the room</h1>
+<p>Owner, 2026-10-11. When Workie has read the round back, it also suggests up to three short questions the host can send to everyone's phone, laptop or tablet: agree or disagree with a line the room wrote, pick one of the room's own options, or answer one open question. The host picks one, edits it if they like, and sends it. Results come back to the Stage and go into the report. The wording in these frames is what the prototype actually returned (PROTOTYPE.md), from round 3 of the agentic SDLC set.</p></div>
+
+<!-- ===================================================================== F1 -->
+<div class="frame-h" id="f1"><h2>F1 · The last page of What We Heard: "Ask the room…" replaces "Request feedback"</h2><p>Nothing new appears while the read is being read. On its last page, where the dock today offers <b>Request feedback</b>, it offers <b>Ask the room…</b> instead, with a count when suggestions are ready. The feedback round is not lost: it is one of the choices inside (F2). Next round stays the one amber button. The Host Remote gets the same list in the second build.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--results">Results</span><div class="rail-title"><b>Platform engineering offsite</b><span>Question 3 of 6</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4182</span></div></div>
+<div class="bar"></div>
+<div class="main"><div class="content">
+<span class="eyebrow">What we heard <span>· Suggested next steps</span></span>
+<ol class="read">
+<li><span class="n">1</span><div><span class="lead">Whoever runs code review</span><span class="rest">Draft the three-part checklist from the top answer (interface diff, test assertions, rollback plan) and try it on the next five agent changes.</span></div></li>
+<li><span class="n">2</span><div><span class="lead">Whoever owns the security policy</span><span class="rest">List the file paths that must have a human reviewer, and add them to the CI gate this week.</span></div></li>
+</ol>
+<div class="pips"><span></span><span></span><span class="on"></span></div>
+</div>
+<aside class="meter"><span class="lbl">Answered</span><span class="big">9<small> / 18</small></span><div class="joinbox"><span class="qr"></span><p>Join<b>4182</b></p></div></aside></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">Page 3 of 3<small>→ starts the next round · ← back</small></div><span class="dbtn dbtn--ghost">Ask the room… <span class="chip chip--blue" style="font-size:14px;height:26px">3 ready</span></span><span class="dbtn dbtn--primary">Next round</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== F2 -->
+<div class="frame-h" id="f2"><h2>F2 · Ask the room: Workie's suggestions, the host's own question, or comments <span class="rec">Recommended</span></h2><p>The drawer is host chrome on the laptop ladder; the read stays under it. Each suggestion shows what the room would see, a line for the host only on what the answer would settle, and which answers it comes from (numbers, never names). A statement or option whose words were not found in its answer is marked <b>Reworded</b>, so the host knows it is not the room's own words. The three suggestions are the prototype's (Haiku's agree, Sonnet's pick-one and open), unedited. One suggestion is selected; <b>Edit and send</b> is the one amber button.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--results">Results</span><div class="rail-title"><b>Platform engineering offsite</b><span>Question 3 of 6</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4182</span></div></div>
+<div class="bar"></div>
+<div class="main"><div class="content">
+<span class="eyebrow">What we heard <span>· Suggested next steps</span></span>
+<ol class="read">
+<li><span class="n">1</span><div><span class="lead">Whoever runs code review</span><span class="rest">Draft the three-part checklist from the top answer…</span></div></li>
+</ol>
+</div><aside class="meter"></aside></div>
+<div class="drawer" role="dialog" aria-label="Ask the room">
+<div class="dr-head"><h2>Ask the room</h2><span class="x" style="margin-left:auto">✕</span></div>
+<div class="dr-body">
+<div class="dr-sub">Suggested by Workie · from this round's answers</div>
+<div class="sug is-on">
+<div class="top"><span class="kind">Agree or disagree</span><span class="from" style="margin-left:auto">From answer 6</span></div>
+<p class="say"><i>"Code can be rolled back; a bad backfill cannot."</i></p>
+<p class="why"><b>For you:</b> tests whether the rule the room voted for still holds for migrations, which only one answer named.</p>
+<div class="acts"><span class="btn btn--sm btn--ghost">Send as it is</span><span class="btn btn--sm btn--primary">Edit and send</span></div>
+</div>
+<div class="sug">
+<div class="top"><span class="kind">Pick one</span><span class="flag">Reworded</span><span class="from" style="margin-left:auto">From answers 1, 2 and 4</span></div>
+<p class="say">Which should determine how deeply you review an agent PR?</p>
+<ol type="A"><li>interface diff, test assertions and the rollback plan</li><li>security-sensitive files: auth, IAM, payments, personal data</li><li>blast radius: what else imports this, and who gets paged</li></ol>
+<p class="why"><b>For you:</b> settles whether the room's main trigger is structural, about security, or about impact.</p>
+</div>
+<div class="sug">
+<div class="top"><span class="kind">Open question</span><span class="from" style="margin-left:auto">From answer 7</span></div>
+<p class="say">What is one thing a human reviewer can catch in an agent PR that a second agent cannot?</p>
+<p class="why"><b>For you:</b> finds what human review is still for, which every answer assumed and none said.</p>
+</div>
+<div class="dr-sub" style="margin-top:6px">Or</div>
+<div class="other"><div>Write your own<small>Agree or disagree, or pick one</small></div><span class="go">Write →</span></div>
+<div class="other"><div>Comments on the read<small>Today's feedback round: everyone comments on a section</small></div><span class="go">Open →</span></div>
+</div>
+<div class="dr-foot"><span class="hint">Answers are never shown with names.</span><span class="btn btn--ghost push">Close</span></div>
+</div>
+<footer class="dock"><div class="status" style="color:var(--muted)">Choosing a question</div><span class="dbtn dbtn--ghost">Ask the room…</span><span class="dbtn dbtn--ghost">Next round</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== F3 -->
+<div class="frame-h" id="f3"><h2>F3 · Edit and send: the same drawer, one question, and what the room will see</h2><p>Here the host opened the pick-one suggestion and cut its options to the room's words. Words can change; the type can change while nothing is sent. The editor marks a statement or option that no longer matches an answer (<b>Your words</b>), so an edited line is never presented as the room's. The preview is the phone card. <b>Send to the room</b> is the one amber button; Back and the X leave without sending, through one close that asks first when something was edited.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--results">Results</span><div class="rail-title"><b>Platform engineering offsite</b><span>Question 3 of 6</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4182</span></div></div>
+<div class="bar"></div>
+<div class="main"><div class="content"><span class="eyebrow">What we heard</span></div><aside class="meter"></aside></div>
+<div class="drawer" role="dialog" aria-label="Ask the room: edit">
+<div class="dr-head"><span class="btn btn--sm btn--ghost">← Back</span><h2 style="margin-left:6px">Edit the question</h2><span class="x" style="margin-left:auto">✕</span></div>
+<div class="dr-body">
+<div class="seg" role="tablist"><span>Agree or disagree</span><span class="on">Pick one</span><span class="off" title="Second build">Open</span></div>
+<div class="fld"><label class="lbl">The question</label><input class="in" value="Which should decide how closely a human reviews an agent's change?"><span class="hint" style="align-self:flex-end">66 / 110</span></div>
+<div class="fld"><label class="lbl">Options, in the room's words</label>
+<div class="optrow"><b>A</b><input class="in" value="The interface diff and the test assertions"><span class="from">Your words</span></div>
+<div class="optrow"><b>B</b><input class="in" value="Security-sensitive files only"><span class="from">Answer 2</span></div>
+<div class="optrow"><b>C</b><input class="in" value="Blast radius first"><span class="from">Answer 4</span></div>
+<span class="btn btn--sm btn--link" style="align-self:flex-start">+ Add an option (up to 4)</span>
+</div>
+<div class="mini"><span class="k">What phones, laptops and tablets show</span><p class="st">Which should decide how closely a human reviews an agent's change?</p><div class="opts"><span>A · The interface diff and the test assertions</span><span>B · Security-sensitive files only</span><span>C · Blast radius first</span></div></div>
+<p class="note-line">One pick each. Answers are counted, never shown with names. Results go on the Stage when you press Show results, and into this round's report.</p>
+</div>
+<div class="dr-foot"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Send to the room</span></div>
+</div>
+<footer class="dock"><div class="status" style="color:var(--muted)">Choosing a question</div><span class="dbtn dbtn--ghost">Ask the room…</span><span class="dbtn dbtn--ghost">Next round</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== F4 -->
+<div class="frame-h" id="f4"><h2>F4 · The Stage while the ask is live</h2><p>A new beat, after What We Heard: the question in Room type, the three answers as the phones show them, and the count. Nothing else moves. <b>Show results</b> is the one amber button (Space). The dock's second slot is <b>Cancel the question</b>, which closes it with no results shown.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--vote">One more question</span><div class="rail-title"><b>Platform engineering offsite</b><span>Question 3 of 6</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4182</span></div></div>
+<div class="bar" style="background:var(--secondary)"></div>
+<div class="main"><div class="content">
+<span class="eyebrow">Do you agree? <span>· from one of this round's answers</span></span>
+<p class="askq askq--st"><i>Code can be rolled back; a bad backfill cannot.</i></p>
+<div class="agree3"><div>Agree</div><div>Not sure</div><div>Disagree</div></div>
+<p class="res-note">Answer on your phone, laptop or tablet.</p>
+</div>
+<aside class="meter"><span class="lbl">Answered</span><span class="big">12<small> / 18</small></span><div class="bar2"><span style="width:66%"></span></div><span class="says">Names are never shown</span><div class="joinbox"><span class="qr"></span><p>Join<b>4182</b></p></div></aside></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">12 of 18 have answered<small>Press Space to show results</small></div><span class="dbtn dbtn--ghost">Cancel the question</span><span class="dbtn dbtn--primary">Show results</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== F5 -->
+<div class="frame-h" id="f5"><h2>F5 · The Stage with results: agree or disagree, and pick one</h2><p>Counts, not percentages, as the reads already rule. Bars are blue; nothing on the wall competes with the next move. The dock: <b>Next round</b> (amber) and <b>Ask another…</b>, which reopens F2 with the used suggestion ticked. The second frame is the same beat for a pick-one question.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr">
+<div class="rail"><span class="phase phase--results">Results</span><div class="rail-title"><b>Platform engineering offsite</b><span>Question 3 of 6</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4182</span></div></div>
+<div class="bar"></div>
+<div class="main"><div class="content">
+<span class="eyebrow">Do you agree? <span>· 16 answered</span></span>
+<p class="askq askq--st" style="font-size:var(--L-secondary)"><i>Code can be rolled back; a bad backfill cannot.</i></p>
+<div class="res">
+<div class="r"><span class="t">Agree</span><span class="track"><span style="width:69%"></span></span><b>11</b></div>
+<div class="r r--mid"><span class="t">Not sure</span><span class="track"><span style="width:19%"></span></span><b>3</b></div>
+<div class="r r--dis"><span class="t">Disagree</span><span class="track"><span style="width:12%"></span></span><b>2</b></div>
+</div>
+</div>
+<aside class="meter"><span class="lbl">Answered</span><span class="big">16<small> / 18</small></span><div class="joinbox"><span class="qr"></span><p>Join<b>4182</b></p></div></aside></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">Results are up</div><span class="dbtn dbtn--ghost">Ask another…</span><span class="dbtn dbtn--primary">Next round</span></footer>
+</div></div></div>
+<div class="fit"><div class="fit-box"><div class="scr" style="height:620px">
+<div class="rail"><span class="phase phase--results">Results</span><div class="rail-title"><b>Platform engineering offsite</b><span>Question 3 of 6</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4182</span></div></div>
+<div class="bar"></div>
+<div class="main main--solo"><div class="content">
+<span class="eyebrow">Pick one <span>· 15 answered</span></span>
+<p class="askq" style="font-size:var(--L-secondary);max-width:none">Which should decide how closely a human reviews an agent's change?</p>
+<div class="res">
+<div class="r"><span class="t">A · The interface diff and the test assertions</span><span class="track"><span style="width:40%"></span></span><b>6</b></div>
+<div class="r"><span class="t">B · Security-sensitive files only</span><span class="track"><span style="width:27%"></span></span><b>4</b></div>
+<div class="r"><span class="t">C · Blast radius first</span><span class="track"><span style="width:33%"></span></span><b>5</b></div>
+</div>
+</div></div>
+</div></div></div>
+
+<!-- ===================================================================== F6 -->
+<div class="frame-h" id="f6"><h2>F6 · On a phone (375): each type, and after sending</h2><p>The answer controls are the ones a typed poll already uses on phones (<code>components/survey/YesNoInput</code>, <code>ChoiceInput</code>, <code>TextInput</code>), so nothing new is drawn. A tablet is the same page, wider. <b>Send</b> is the one amber element on each screen; an answer can be changed until the host shows results.</p></div>
+<div class="row-wrap">
+<div><div class="ph"><div class="ph-top"><b>Platform engineering offsite</b><div class="hint" style="margin-top:6px">Question 3 · one more question</div></div>
+<div class="ph-body">
+<span class="eb">Do you agree?</span>
+<p class="pq"><i>"Code can be rolled back; a bad backfill cannot."</i></p>
+<p class="pm">From one of this round's answers.</p>
+<div class="yn"><span>Agree</span><span class="on">Disagree</span><span>Not sure</span></div>
+<span class="send" style="margin-top:auto">Send</span>
+<p class="pm" style="text-align:center">Your answer is counted, never shown with your name.</p>
+</div>
+<div></div></div>
+<p class="ph-cap"><b>(a) Agree or disagree.</b> YesNoInput with the labels Agree and Disagree and "Not sure" on. Nothing is preselected.</p></div>
+
+<div><div class="ph"><div class="ph-top"><b>Platform engineering offsite</b><div class="hint" style="margin-top:6px">Question 3 · one more question</div></div>
+<div class="ph-body">
+<span class="eb">Pick one</span>
+<p class="pq">Which should decide how closely a human reviews an agent's change?</p>
+<div class="ph-opt">A · The interface diff and the test assertions</div>
+<div class="ph-opt on">B · Security-sensitive files only</div>
+<div class="ph-opt">C · Blast radius first</div>
+<span class="send" style="margin-top:auto">Send</span>
+</div>
+<div></div></div>
+<p class="ph-cap"><b>(b) Pick one.</b> ChoiceInput, one pick, no write-in.</p></div>
+
+<div><div class="ph"><div class="ph-top"><b>Platform engineering offsite</b><div class="hint" style="margin-top:6px">Question 3 · one more question</div></div>
+<div class="ph-body">
+<span class="eb">One more question</span>
+<p class="pq">What is one thing a human reviewer can catch in an agent's change that a second agent cannot?</p>
+<textarea class="ta" placeholder="A sentence or two"></textarea><span class="cnt">0 / 280</span>
+<span class="send send--off" style="margin-top:auto">Send</span>
+</div>
+<div></div></div>
+<p class="ph-cap"><b>(c) Open question</b>, second build. TextInput, short (280). Send stays grey until something is written, so this screen has no amber yet.</p></div>
+
+<div><div class="ph"><div class="ph-top"><b>Platform engineering offsite</b><div class="hint" style="margin-top:6px">Question 3 · one more question</div></div>
+<div class="ph-body">
+<div class="done">Sent: <b>Disagree</b>. You can change it until the results go up.</div>
+<span class="btn" style="justify-content:center">Change my answer</span>
+<span class="eb" style="margin-top:14px">When the results are up</span>
+<div class="mini-res"><div><span>Agree</span><i><span style="width:69%"></span></i><b>11</b></div><div><span>Not sure</span><i><span style="width:19%"></span></i><b>3</b></div><div><span>Disagree</span><i><span style="width:12%"></span></i><b>2</b></div></div>
+<p class="pm">The same counts as the Stage. Yours is one of the 2.</p>
+</div>
+<div></div></div>
+<p class="ph-cap"><b>(d) After sending</b>, then after Show results (no amber). Counts only.</p></div>
+</div>
+
+<!-- ===================================================================== F7 -->
+<div class="frame-h" id="f7"><h2>F7 · A participant on a laptop: the same card, laid out wide</h2><p>The question on the left, the answers on the right. Same controls, same words.</p></div>
+<div class="fit"><div class="fit-box">
+<div class="lap"><div class="lap-bar"><i></i><i></i><i></i><span class="ad">engage.seibtribe.us/play/4182</span></div>
+<div class="lap-top"><b>Platform engineering offsite</b><span class="hint">Question 3 · one more question</span></div>
+<div class="lap-body">
+<div style="display:flex;flex-direction:column;gap:12px"><span class="eb" style="font:800 13px/1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Pick one</span><p class="pq">Which should decide how closely a human reviews an agent's change?</p><p class="hint" style="font-size:14px">Your answer is counted, never shown with your name.</p></div>
+<div style="display:flex;flex-direction:column;gap:10px"><div class="ph-opt">A · The interface diff and the test assertions</div><div class="ph-opt on">B · Security-sensitive files only</div><div class="ph-opt">C · Blast radius first</div><span class="btn btn--primary" style="justify-content:center;min-height:46px;font-size:16px">Send</span></div>
+</div></div>
+</div></div>
+
+<!-- ===================================================================== F8 -->
+<div class="frame-h" id="f8"><h2>F8 · The report: a Follow-up section under the round's read</h2><p>Paper theme, as the report already is. Each ask the room answered: what was asked, its type, where it came from (Workie's suggestion, edited or not, or the host's own), the counts. A cancelled ask is listed as cancelled with no counts. No names anywhere in the section. Open answers (second build) are listed in full, nameless, in a fixed order that is not arrival order.</p></div>
+<div class="fit"><div class="fit-box">
+<div class="paper" data-theme="light">
+<h3>Question 3 · The machine wrote it and the machine reviewed it. What are you reviewing?</h3>
+<p class="muted" style="margin:0">9 answered · 9 voted</p>
+<h4>What we heard</h4>
+<p class="muted" style="margin:0">… the round's read, as today …</p>
+<h4>Follow-up questions</h4>
+<div class="fu"><p class="q">Do you agree? <i>"Code can be rolled back; a bad backfill cannot."</i></p>
+<p class="meta">Agree or disagree · suggested by Workie from answer 6, sent as written · 16 answered</p>
+<table><tbody><tr><td>Agree</td><td class="num">11</td></tr><tr><td>Not sure</td><td class="num">3</td></tr><tr><td>Disagree</td><td class="num">2</td></tr></tbody></table></div>
+<div class="fu"><p class="q">Which should decide how closely a human reviews an agent's change?</p>
+<p class="meta">Pick one · suggested by Workie from answers 1, 2 and 4, edited by the host · 15 answered</p>
+<table><tbody><tr><td>The interface diff and the test assertions</td><td class="num">6</td></tr><tr><td>Security-sensitive files only</td><td class="num">4</td></tr><tr><td>Blast radius first</td><td class="num">5</td></tr></tbody></table></div>
+</div>
+</div></div>
+
+<!-- ===================================================================== fit -->
+<div class="frame-h" id="fit"><h2>Fit: the Ask the room panel at 660px and 375px</h2><p>The drawer is <code>width: min(560px, 100vw - 32px)</code>. At 375 it is the Host Remote's sheet: the same list, the same <b>Edit and send</b>, buttons wrapping right-aligned with the primary last. Measure in the build, rect against <code>innerWidth</code>, at both widths.</p></div>
+<div class="fitrow">
+<div class="vp vp--660"><span class="tag">660px</span>
+<div class="panel" role="dialog" aria-label="Ask the room"><div class="dr-head"><h2>Ask the room</h2><span class="x" style="margin-left:auto">✕</span></div>
+<div class="dr-body">
+<div class="sug is-on"><div class="top"><span class="kind">Agree or disagree</span><span class="from" style="margin-left:auto">From answer 6</span></div><p class="say"><i>"Code can be rolled back; a bad backfill cannot."</i></p><p class="why"><b>For you:</b> tests whether the rule the room voted for still holds for migrations.</p><div class="acts"><span class="btn btn--sm btn--ghost">Send as it is</span><span class="btn btn--sm btn--primary">Edit and send</span></div></div>
+<div class="sug"><div class="top"><span class="kind">Pick one</span><span class="from" style="margin-left:auto">From answers 1, 2 and 4</span></div><p class="say">Which should decide how closely a human reviews an agent's change?</p></div>
+</div>
+<div class="dr-foot"><span class="btn btn--ghost">Close</span></div></div></div>
+<div class="vp vp--375"><span class="tag">375px · Host Remote</span>
+<div class="panel" role="dialog" aria-label="Ask the room"><div class="dr-head"><h2>Ask the room</h2><span class="x" style="margin-left:auto">✕</span></div>
+<div class="dr-body">
+<div class="sug is-on"><div class="top"><span class="kind">Agree or disagree</span><span class="from" style="margin-left:auto">From answer 6</span></div><p class="say"><i>"Code can be rolled back; a bad backfill cannot."</i></p><p class="why"><b>For you:</b> tests whether the rule the room voted for still holds for migrations.</p><div class="acts"><span class="btn btn--sm btn--ghost">Send as it is</span><span class="btn btn--sm btn--primary">Edit and send</span></div></div>
+<div class="sug"><div class="top"><span class="kind">Pick one</span><span class="from" style="margin-left:auto">From answers 1, 2 and 4</span></div><p class="say">Which should decide how closely a human reviews an agent's change?</p></div>
+</div>
+<div class="dr-foot"><span class="btn btn--ghost">Close</span></div></div></div>
+</div>
+
+<!-- ===================================================================== data -->
+<div class="sec" id="data"><h2>States and what they read</h2>
+<table class="vt">
+<thead><tr><th style="width:22%">State</th><th style="width:36%">Reads</th><th>Shows</th></tr></thead>
+<tbody>
+<tr><td>Read on screen, suggestions not ready</td><td>beat <code>field-notes</code>; no <code>FOLLOWUP#nnn#SUGGESTED</code> row for this read</td><td>F1 without the count. "Ask the room…" still opens: Write your own and Comments work; the list says "Workie is still thinking of questions".</td></tr>
+<tr><td>Suggestions ready</td><td><code>FOLLOWUP#nnn#SUGGESTED</code> whose <code>ForSummaryAt</code> matches the read's <code>GeneratedAt</code></td><td>F1 count, F2 list. A Redo of the read makes them stale; they are fetched again.</td></tr>
+<tr><td>No suggestions</td><td>the call failed, the read was the fallback template, or every suggestion failed the check</td><td>F2 says "No suggestions this round." Write your own and Comments remain.</td></tr>
+<tr><td>Live</td><td>beat <code>ask</code>; <code>FOLLOWUP#nnn#ASK#id</code> with <code>Status = live</code>; STATE still <code>RESULTS#nnn</code></td><td>F4 on the Stage; F6 on phones; the Host Remote mirrors.</td></tr>
+<tr><td>Results</td><td>beat <code>ask</code>; the ask's <code>Status = closed</code> and its frozen <code>Tally</code></td><td>F5; F6 (d).</td></tr>
+<tr><td>Cancelled</td><td><code>Status = cancelled</code></td><td>The Stage returns to What We Heard; the report lists it as cancelled.</td></tr>
+<tr><td>Next round</td><td>STATE moves to <code>ASK#nnn+1</code></td><td>Any live ask is closed first, with its tally, so no answer is thrown away.</td></tr>
+</tbody></table>
+</div>
+
+<div class="qs" id="qs"><h2>Open questions (full list, with recommendations, in SPEC.md)</h2>
+<ol>
+<li><b>The projector sees the drawer.</b> The host's laptop is usually the Stage, so the suggestions are visible while the host chooses. They come from words the room has already seen. Recommended: accept it, and offer the same list on the Host Remote for a host who wants to choose in private.</li>
+<li><b>"Ask the room…" in place of "Request feedback".</b> Recommended: yes, with Comments on the read inside it, so the dock keeps two buttons.</li>
+<li><b>Agree scale.</b> Recommended: three answers (Agree, Not sure, Disagree), not a five-point scale.</li>
+<li><b>Open questions in the first build?</b> Recommended: second build. They scored well, but they put free text on the wall.</li>
+<li><b>Reworded suggestions.</b> Recommended: drop an agree statement that is not the room's words; show a reworded option or question marked Reworded.</li>
+</ol></div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

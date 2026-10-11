@@ -68,6 +68,7 @@ const api = http.createServer((req, res) => {
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     res.setHeader('Content-Type', 'application/json');
+    if (req.url.endsWith('/build/state')) return res.end(JSON.stringify({ gameId: '4821', title: 'Four in a row', inbox: [] }));
     if (req.url.endsWith('/build/share/report')) {
       if (apiDown) { res.statusCode = 500; return res.end('{"error":"down"}'); }
       reports.push(JSON.parse(body));
@@ -91,7 +92,8 @@ function get(url, headers = {}) {
   await new Promise((r) => api.listen(0, '127.0.0.1', r));
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lan-')));
   fs.mkdirSync(path.join(dir, '.engage'));
-  fs.writeFileSync(path.join(dir, '.engage', 'session.json'), JSON.stringify({ key: KEY, api: `http://127.0.0.1:${api.address().port}/` }));
+  // The key in the folder; the API from the user's own setup (here ENGAGE_API), never the folder (F1).
+  fs.writeFileSync(path.join(dir, '.engage', 'session.json'), JSON.stringify({ key: KEY, tier: 'prod' }));
   fs.writeFileSync(path.join(dir, 'app.js'), APP_SOURCE);
 
   const procs = [];
@@ -119,13 +121,22 @@ function get(url, headers = {}) {
 
   const base = 47000 + Math.floor(Math.random() * 1000);
   const env = { ...process.env, CLAUDE_PROJECT_DIR: dir, ENGAGE_LAN_ADDRESS: '127.0.0.1', ENGAGE_LAN_PORT: String(base), ENGAGE_LAN_FAST_MS: '100', ENGAGE_LAN_IDLE_MS: '100', ENGAGE_LAN_LOST_MS: '600', ENGAGE_ACTIVITY_MS: '60000' };
-  delete env.ENGAGE_KEY; delete env.ENGAGE_API;
+  delete env.ENGAGE_KEY;
+  env.ENGAGE_API = `http://127.0.0.1:${api.address().port}/`;
+  env.ENGAGE_ALLOW_LOCAL_API = '1';
   const child = spawn(process.execPath, [SCRIPT], { cwd: dir, env, stdio: ['pipe', 'pipe', 'pipe'] });
   let childOut = '';
   child.stdout.on('data', (d) => { childOut += d.toString(); });
   const gw = `http://127.0.0.1:${base}`;
 
   console.log('\nThe Wi-Fi gateway');
+  await check('before connect in this process, the share loop never reports (security review F1)', async () => {
+    await sleep(600); // six idle rounds' worth
+    assert.strictEqual(reports.length, 0);
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'connect', arguments: {} } }) + '\n');
+    await until(() => childOut.includes('"id":1'));
+    assert.ok(!/"isError":true/.test(childOut), childOut);
+  });
   await check('off: the plugin reports off, and nothing listens', async () => {
     await until(() => reports.length >= 2);
     assert.strictEqual(lastReport().status, 'off');
@@ -210,17 +221,41 @@ function get(url, headers = {}) {
     await until(() => lastReport().open >= 1);
   });
   await check('an app that has stopped answers with a plain 502, it does not hang', async () => {
-    const dead = http.createServer();
-    await new Promise((r) => dead.listen(0, '127.0.0.1', r));
-    const deadOrigin = `http://localhost:${dead.address().port}`;
-    await new Promise((r) => dead.close(r));
-    targets = [appOrigin, deadOrigin];
+    // Shared while it ran in this project (its owner was confirmed), then stopped.
+    const second = startApp('127.0.0.1');
+    await until(() => second.port);
+    const secondOrigin = `http://localhost:${second.port}`;
+    targets = [appOrigin, secondOrigin];
     await until(() => lastReport().map.length === 2);
-    const second = lastReport().map.find((m) => m.local === deadOrigin).lan;
-    const r = await get(`${second}/`, { Cookie: cookie });
+    const lanSecond = lastReport().map.find((m) => m.local === secondOrigin).lan;
+    procs[procs.length - 1].kill();
+    await sleep(200);
+    const r = await get(`${lanSecond}/`, { Cookie: cookie });
     assert.strictEqual(r.status, 502);
     assert.match(r.body, /not answering/);
     targets = [appOrigin];
+  });
+  await check('an address whose server cannot be confirmed as this project\'s is never opened (security review F4)', async () => {
+    // Port 1: nothing listens there, and no other suite running alongside can take it
+    // (a freed ephemeral port can be re-bound by a parallel test inside the 400ms below).
+    const deadOrigin = 'http://localhost:1';
+    targets = [appOrigin, deadOrigin];
+    // Wait for a report that reflects these targets (under load the last one can
+    // still carry the previous step's stopped app), then one more sync after it:
+    // the unconfirmed address must be absent from both.
+    const locals = () => (lastReport().map || []).map((m) => m.local);
+    await until(() => JSON.stringify(locals()) === JSON.stringify([appOrigin]));
+    const seen = reports.length;
+    await until(() => reports.length > seen);
+    assert.deepStrictEqual(locals(), [appOrigin]);
+    targets = [deadOrigin];
+    await until(() => lastReport().status === 'failed');
+    assert.match(lastReport().error, /could not confirm port \d+ is this project's server/);
+    targets = [appOrigin];
+    await until(() => lastReport().status === 'live');
+    // Closing everything minted a new key: carry on with it.
+    key = lastReport().key;
+    cookie = (await get(`${gw}/?k=${key}`)).headers['set-cookie'][0].split(';')[0];
   });
   await check('turned off: the port closes, an open hot-reload socket is cut, and the report says off', async () => {
     const sock = net.connect(base, '127.0.0.1');
@@ -277,8 +312,10 @@ function get(url, headers = {}) {
     assert.match(r.body, /Four in a row/);
     targets = [appOrigin];
   });
-  await check('the plugin wrote nothing to stdout (that is the MCP stream)', async () => {
-    assert.strictEqual(childOut, '');
+  await check('the plugin wrote nothing to stdout but its one JSON-RPC reply (that is the MCP stream)', async () => {
+    const lines = childOut.split('\n').filter(Boolean);
+    assert.strictEqual(lines.length, 1, childOut);
+    assert.strictEqual(JSON.parse(lines[0]).id, 1);
   });
 
   await check('lost contact with Engage: the door closes by itself, it does not stay open', async () => {

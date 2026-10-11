@@ -96,9 +96,28 @@ function applyUpdate(item, input) {
   const re = /\b(SET|ADD|REMOVE)\b/g;
   const parts = expr.split(re).map((s) => s.trim()).filter(Boolean);
   for (let i = 0; i < parts.length; i += 2) sections[parts[i]] = parts[i + 1] || '';
-  for (const assignment of (sections.SET || '').split(/,\s*/).filter(Boolean)) {
-    const [lhs, rhs] = assignment.split(/\s*=\s*/);
-    item[resolveName(lhs, names)] = resolveValue(rhs, values);
+  // Top-level commas only, so `if_not_exists(#a, :b)` stays one assignment
+  // (the usage stats' counters stamp `firstRecordedAt` that way).
+  const assignments = [];
+  let depth = 0; let cur = '';
+  for (const ch of (sections.SET || '')) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) { assignments.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  assignments.push(cur);
+  for (const assignment of assignments.map((a) => a.trim()).filter(Boolean)) {
+    const eq = assignment.indexOf('=');
+    const lhs = assignment.slice(0, eq).trim();
+    const rhs = assignment.slice(eq + 1).trim();
+    const ifNot = /^if_not_exists\(\s*(\S+?)\s*,\s*(\S+?)\s*\)$/.exec(rhs);
+    if (ifNot) {
+      const have = item[resolveName(ifNot[1], names)];
+      item[resolveName(lhs, names)] = have !== undefined ? have : resolveValue(ifNot[2], values);
+    } else {
+      item[resolveName(lhs, names)] = resolveValue(rhs, values);
+    }
   }
   for (const add of (sections.ADD || '').split(/,\s*/).filter(Boolean)) {
     const [lhs, rhs] = add.trim().split(/\s+/);

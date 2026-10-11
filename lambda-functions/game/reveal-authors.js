@@ -34,8 +34,10 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
+const { inDisplayOrder } = require('./answer-order');
 
 const { callerMayDriveSession } = require('./tenant');
+const { decryptItems } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 
 const client = new DynamoDBClient({});
@@ -141,8 +143,17 @@ exports.handler = async (event) => {
       }
     }));
 
-    // Same order as the ballot — this is the query the ballot was built from.
-    const answers = (answersRes.Items || []).map(a => ({
+    // PLAINTEXT FIRST, as get-answers.js does: on an org session `Answer` is
+    // an envelope at rest, and the host draws these rows straight onto the
+    // stage — undecrypted, each one read "[object Object]" (owner, 2026-10-11).
+    // `ownerRead` projected orgId above, so this costs no extra read.
+    const orgId = ownerRead.Item && typeof ownerRead.Item.orgId === 'string' ? ownerRead.Item.orgId.trim() : '';
+    const opened = orgId
+      ? await decryptItems(orgId, 'answer', answersRes.Items || [])
+      : (answersRes.Items || []);
+
+    // The room's order (answer-order.js) — the order the ballot was drawn in.
+    const answers = inDisplayOrder(opened, gameId, padded).map(a => ({
       playerId: a.PlayerName,
       playerName: a.PlayerName,
       name: a.PlayerName,

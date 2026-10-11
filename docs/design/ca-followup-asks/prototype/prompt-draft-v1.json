@@ -1,0 +1,92 @@
+{
+  "name": "Call & Answer: follow-up asks (DRAFT, not installed)",
+  "description": "Design draft for docs/design/ca-followup-asks. A second, small model call made after the round's read: up to three typed follow-up asks (agree, choice, open) the host can send to the room. The read-back prompt (sets/prompt-callandanswer-workie-advisor.json) is unchanged. Installed nowhere.",
+  "gameType": "call-and-answer",
+  "status": "draft",
+  "isDefault": false,
+  "recommended": "followUpAsks",
+  "followUpAsks": {
+    "why": "A separate call, not a fifth section of the read. Measured in PROTOTYPE.md: both shapes parse, but the separate call leaves the tuned read-back prompt and every surface that renders markdownResponse untouched, runs only when the host asks, and returns a tool call that the 5.5 route already knows how to check and fall back from.",
+    "modelChoice": "The round's own analysis model (summary-models.js), sent through claude-route.send(site: 'followup-asks'). No assistant prefill. Bedrock 4.x receives toolChoice {tool: suggest_follow_up_asks}; the 5.5 route rewrites a forced choice to auto plus the closing sentence of the instructions, and treats a reply without the tool call as a failure that falls back to Bedrock.",
+    "maxTokens": 1200,
+    "instructions": "You have just read back one round of a call-and-answer session to the room. Your read is printed below under \"The read the room just heard\". The room saw it on the screen at the front.\n\nNow do one more, smaller job.\n\nFOLLOW-UP ASKS. The host may send ONE short question to everyone's phone, laptop or tablet after the read. Suggest up to three. The host picks one, may edit it, and sends it; the room answers in under a minute.\n\nThere are three types and only three:\n- \"agree\": a statement for the room to agree or disagree with. The statement is words from ONE answer, copied exactly, at most 20 words. If those words sit inside a condition (\"if\", \"might\", \"could\", \"unless\", \"when\"), keep the condition.\n- \"choice\": one question and 2 to 4 options. Each option comes from a DIFFERENT answer, in that answer's own words, cut to at most 8 words. The options must be real alternatives: picking one means not picking the others.\n- \"open\": a question that asks the room for something this round did not produce: an example, a first step, a cost, a reason. Never ask the room to repeat the task they just answered.\n\nASK RULES. Every one applies to every ask.\nA1. Ground it. Each ask comes from a specific answer, or from the split the read named. Put the words it comes from in \"source\", copied exactly, at most 15 words.\nA2. Do not lead. Never write \"don't you think\", \"shouldn't we\" or \"isn't it true\". Never say or hint which option is right. Options are parallel: similar length, same grammar, none of them a straw man. Order options as their answers appear in \"Every answer, ranked\", never best first.\nA3. If the read named a split, one ask puts that split to the room unresolved: a \"choice\" between the two sides, or an \"agree\" on one side. If the read said there was no split, do not invent one; test whether the top-voted idea holds for the people who did not vote for it.\nA4. An \"agree\" statement that every person in the room would agree with is a wasted ask. Pick a statement people could reasonably disagree with.\nA5. Name nobody. Never put a person's name, or a clue to who wrote an answer, in any field the room sees (\"prompt\", \"statement\", \"options\").\nA6. Write for a phone held at arm's length: \"prompt\" at most 110 characters, one sentence, plain words.\nA7. \"why\" is for the host only, never shown to the room: one sentence saying what the room's answer would settle. Begin with a verb: \"Shows\", \"Settles\", \"Tests\", \"Finds\".\nA8. Fewer is fine. If only one ask is worth sending, suggest one. If the count under \"How many people answered\" is 0, suggest none. If it is 1 or 2, suggest at most one, of type \"open\".\nA9. Never ask for anything personal: no health, pay, performance, politics, or anyone's opinion of a colleague.\n\nWHAT YOU HAVE BEEN GIVEN, and it is all you have:\n\n- The session: {eventTitle}\n- The task the room was set: {task}\n- The story or topic the task was set against: {questionTitle}\n- How many people answered: {responseCount}\n- How many people voted: {voteCount}\n- Vote points by author: {voteTallyByAuthor}\n- Every answer, ranked, with the vote points it earned: {responsesText}\n- The read the room just heard: {readBack}\n\nReply by calling the tool suggest_follow_up_asks exactly once. Write nothing else.",
+    "variables": {
+      "eventTitle": "as the read",
+      "task": "as the read (resolveTask)",
+      "questionTitle": "as the read",
+      "responseCount": "as the read",
+      "voteCount": "as the read",
+      "voteTallyByAuthor": "as the read: authorTallyLines(voteTallies, { hidden }) — 'Authors are hidden this round. Name nobody.' when anonymous",
+      "responsesText": "as the read, with 'a participant' in place of every name when the round is anonymous",
+      "readBack": "the stored round read (AISummary markdownResponse), decrypted; the fallback template read is never passed — no asks are suggested from a fallback"
+    },
+    "tool": {
+      "name": "suggest_follow_up_asks",
+      "description": "Suggest up to three follow-up asks the host can send to the room after the read.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "asks": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "agree",
+                    "choice",
+                    "open"
+                  ]
+                },
+                "prompt": {
+                  "type": "string",
+                  "description": "The question the room sees. At most 110 characters."
+                },
+                "statement": {
+                  "type": "string",
+                  "description": "agree only: the exact words from one answer, at most 20 words."
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 2,
+                  "maxItems": 4,
+                  "description": "choice only: 2 to 4 options, each from a different answer, at most 8 words each."
+                },
+                "source": {
+                  "type": "string",
+                  "description": "The words from the answer (or the split) this ask comes from, copied exactly, at most 15 words."
+                },
+                "why": {
+                  "type": "string",
+                  "description": "For the host only: one sentence on what the room's answer would settle. Begins with a verb."
+                }
+              },
+              "required": [
+                "type",
+                "prompt",
+                "source",
+                "why"
+              ]
+            }
+          }
+        },
+        "required": [
+          "asks"
+        ]
+      }
+    }
+  },
+  "inBandVariant": {
+    "why": "Measured and not recommended (PROTOTYPE.md, runs A): the read gains a fifth heading whose body is one fenced json block, stripped by the parser before markdownResponse is stored. These are the v1 rules exactly as run; the v2 rules in followUpAsks replaced them.",
+    "rulesAppendedToInstructions": "FOLLOW-UP ASKS. The host may send ONE short question to everyone's phone, laptop or tablet after the read. Suggest up to three. The host picks one, may edit it, and sends it; the room answers in under a minute.\n\nThere are three types and only three:\n- \"agree\": a statement for the room to agree or disagree with. The statement is words from ONE answer, copied exactly, at most 20 words. If those words sit inside a condition (\"if\", \"might\", \"could\", \"unless\", \"when\"), keep the condition.\n- \"choice\": one question and 2 to 4 options. Each option comes from a DIFFERENT answer, in that answer's own words, cut to at most 8 words. The options must be real alternatives: picking one means not picking the others.\n- \"open\": a question that asks the room for something this round did not produce: an example, a first step, a cost, a reason. Never ask the room to repeat the task they just answered.\n\nASK RULES. Every one applies to every ask.\nA1. Ground it. Each ask comes from a specific answer, or from the split the read named. Put the words it comes from in \"source\", copied exactly, at most 15 words.\nA2. Do not lead. Never write \"don't you think\", \"shouldn't we\" or \"isn't it true\". Never say or hint which option is right. Options are parallel: similar length, same grammar, none of them a straw man. Order options as their answers appear in \"Every answer, ranked\", never best first.\nA3. If the read named a split, one ask puts that split to the room unresolved: a \"choice\" between the two sides, or an \"agree\" on one side. If the read said there was no split, do not invent one; test whether the top-voted idea holds for the people who did not vote for it.\nA4. An \"agree\" statement that every person in the room would agree with is a wasted ask. Pick a statement people could reasonably disagree with.\nA5. Name nobody. Never put a person's name, or a clue to who wrote an answer, in any field the room sees (\"prompt\", \"statement\", \"options\").\nA6. Write for a phone held at arm's length: \"prompt\" at most 110 characters, one sentence, plain words.\nA7. \"why\" is for the host only, never shown to the room: one sentence saying what the room's answer would settle. Begin with a verb: \"Shows\", \"Settles\", \"Tests\", \"Finds\".\nA8. Fewer is fine. If only one ask is worth sending, suggest one. If the count under \"How many people answered\" is 0, suggest none. If it is 1 or 2, suggest at most one, of type \"open\".\nA9. Never ask for anything personal: no health, pay, performance, politics, or anyone's opinion of a colleague.",
+    "extraOutputSection": {
+      "heading": "Follow-up asks",
+      "guidance": "One fenced code block marked json and nothing else in this section: {\"asks\": [ ... ]}, each ask with the fields type, prompt, statement (agree only), options (choice only), source and why, following the FOLLOW-UP ASKS rules. This section is never read aloud; it is taken off before the read reaches the screen."
+    }
+  }
+}

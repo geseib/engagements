@@ -2,6 +2,7 @@ import React, { useCallback, useEffect } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
 import { step, canStep, positionLabel } from '../utils/answerSpotlight';
+import { answerText } from '../config/stageAnswers';
 
 /**
  * ONE ANSWER, BIG ENOUGH TO READ, WITH THE REST STILL REACHABLE.
@@ -229,7 +230,7 @@ export default function AnswerSpotlight({
         </button>
       </div>
 
-      <div className="answer-spotlight__text">{answer.answer}</div>
+      <div className="answer-spotlight__text">{answerText(answer.answer)}</div>
 
       <div className="answer-spotlight__meta">
         <span className="answer-spotlight__who">{labelFor(answer, index)}</span>

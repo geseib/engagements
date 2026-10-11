@@ -1,4 +1,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+// Haiku 4.5 / Sonnet 4.6 on Bedrock, or Haiku 5.5 / Sonnet 5.5 on the
+// Anthropic API where the Engage switch is on (shared/claude-route.js).
+const claudeRoute = require('./shared/claude-route');
 const { normalizeGameType, isKnownGameType, GAME_TYPE_IDS } = require('./shared/game-types');
 const { canAuthorPrompts, promptRefusalMessage } = require('./shared/prompt-access');
 const { callerUserId } = require('./shared/question-set-access');
@@ -36,7 +39,8 @@ const CATEGORY_CONTEXTS = {
 async function askModel(promptText) {
   console.log('🤖 BEDROCK: Calling Claude Haiku 4.5 via inference profile...');
   const invoke = async (modelId) => {
-    const response = await bedrockClient.send(new InvokeModelCommand({
+    // The function gives up at 60s and may ask twice (the bracket gate).
+    const response = await claudeRoute.send(bedrockClient, new InvokeModelCommand({
       modelId,
       body: JSON.stringify({
         anthropic_version: 'bedrock-2023-05-31',
@@ -44,7 +48,7 @@ async function askModel(promptText) {
         temperature: 0.7,
         messages: [{ role: 'user', content: promptText }]
       })
-    }));
+    }), { site: 'generate-prompt', timeoutMs: 15000 });
     return JSON.parse(new TextDecoder().decode(response.body));
   };
 

@@ -42,6 +42,14 @@
  * backfill: sessions created / started, questions served, sessions that
  * served one, answers, and the per-category counts.
  *
+ * THE USAGE STATS (2026-10-11, docs/design/usage-stats): `stats` is one month
+ * (`?month=yyyy-mm`, default this one) by session type, the daily gauge, and
+ * every team's totals — one small Query of each team's own `STATS#<month>#`
+ * rows in the same per-org pass. Teams are listed by id: the name the ORGS
+ * index carries is still never copied into this response, and the console
+ * joins names from GET /platform/orgs, which staff already read. "No team" is
+ * the platform's numbers less the teams' — sessions made outside any team.
+ *
  * ── ONE UNREADABLE SOURCE COSTS ONE TILE ───────────────────────────────────
  *
  * Every source is read independently and a failure nulls only what depends on
@@ -62,7 +70,8 @@ const { QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { CognitoIdentityProviderClient, ListUsersCommand } = require('@aws-sdk/client-cognito-identity-provider');
 const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
-const { readRecordedMetrics } = require('../shared/platform-metrics');
+const { readRecordedMetrics, readScopeStats, sumCounters } = require('../shared/platform-metrics');
+const V = require('../shared/usage-stats-view');
 
 /** Months listed, newest first. A year is what a staff screen can read. */
 const MONTHS_SHOWN = 12;
@@ -158,8 +167,15 @@ async function meterFor(orgId) {
   return byPeriod;
 }
 
+/** One team's usage-stats month: totals over its types, kept today, sets held. */
+async function teamMonth(orgId, month) {
+  const { rows } = await readScopeStats('team', orgId, { from: month, to: month }, { db: G.db, tableName: G.tableName() });
+  const m = V.monthOf(rows, month);
+  return { totals: m.totals, kept: m.gauge ? m.gauge.kept : null, setsHeld: m.gauge ? m.gauge.setsHeld : null, recorded: m.recorded };
+}
+
 /** Everything that hangs off the ORGS index, counted across the estate. */
-async function readEstate() {
+async function readEstate(month) {
   const orgs = await listOrganisations();
   const [platformSets, publicSets, orglessReports] = await Promise.all([
     countRows(tenant.setsMetadataPk(tenant.PLATFORM), 'SET#'),
@@ -167,12 +183,13 @@ async function readEstate() {
     countRows(tenant.reportsIndexPk(''), 'REPORT#'),
   ]);
   const perOrg = await mapLimit(orgs, CONCURRENCY, async ({ orgId }) => {
-    const [sets, reports, meter] = await Promise.all([
+    const [sets, reports, meter, stats] = await Promise.all([
       countRows(tenant.setsMetadataPk(tenant.ORG, orgId), 'SET#'),
       countRows(tenant.reportsIndexPk(orgId), 'REPORT#'),
       meterFor(orgId),
+      teamMonth(orgId, month),
     ]);
-    return { sets, reports, meter };
+    return { sets, reports, meter, stats };
   });
 
   const orgSets = perOrg.reduce((n, o) => n + o.sets, 0);
@@ -190,6 +207,39 @@ async function readEstate() {
     },
     storedReports: orglessReports + perOrg.reduce((n, o) => n + o.reports, 0),
     counted,
+    // The usage stats' teams this month, by id (names are joined in the console).
+    teams: orgs.map((o, i) => ({
+      orgId: o.orgId, type: o.type, sets: perOrg[i].sets, ...perOrg[i].stats,
+    })),
+  };
+}
+
+/**
+ * The platform's usage-stats month, and every team's beside it. A team with
+ * nothing recorded and nothing kept is left out of the list.
+ */
+async function readStatsMonth(month, estate) {
+  const { rows } = await readScopeStats('platform', null, { from: month, to: month }, { db: G.db, tableName: G.tableName() });
+  const m = V.monthOf(rows, month);
+  const teams = estate ? estate.teams.filter((t) => t.recorded || t.kept) : [];
+  teams.sort((a, b) => (b.totals.counted - a.totals.counted) || (b.totals.questions - a.totals.questions) || a.orgId.localeCompare(b.orgId));
+  let noTeam = null;
+  if (estate) {
+    const summed = sumCounters(teams.map((t) => ({ kind: 'type', type: 'all', counters: t.totals })));
+    noTeam = {};
+    for (const [k, v] of Object.entries(m.totals)) noTeam[k] = Math.max(0, v - (summed[k] || 0));
+  }
+  return {
+    month,
+    recorded: m.recorded,
+    byType: m.byType,
+    totals: m.totals,
+    events: m.events,
+    gauge: m.gauge,
+    teams: teams.map(({ orgId, type, totals, kept, setsHeld, sets }) => ({
+      orgId, type, totals, kept, setsHeld, sets,
+    })),
+    noTeam,
   };
 }
 
@@ -220,8 +270,10 @@ async function observe(event) {
   const refusal = requirePlatformAdmin(event);
   if (refusal) return refusal;
 
+  const q = event?.queryStringParameters || {};
+  const month = /^\d{4}-\d{2}$/.test(String(q.month || '')) ? String(q.month) : V.addMonths(new Date().toISOString().slice(0, 7), 0);
   const [estate, accounts, recorded] = await Promise.allSettled([
-    readEstate(),
+    readEstate(month),
     countAccounts(),
     readRecordedMetrics({ db: G.db, tableName: G.tableName() }),
   ]);
@@ -265,8 +317,17 @@ async function observe(event) {
     };
   });
 
+  let stats = null;
+  try {
+    stats = await readStatsMonth(month, e);
+  } catch (error) {
+    console.error('observability: the usage stats could not be read:', error);
+    unavailable.push(unavailableBecause('stats', error));
+  }
+
   return G.json(200, {
     generatedAt: new Date().toISOString(),
+    stats,
     now: {
       accounts: accounts.status === 'fulfilled' ? accounts.value : null,
       organisations: e ? e.organisations : null,

@@ -17,6 +17,9 @@ const CASES = [
   ['POST', 'admin/moderation/decide', ['admin/moderation/decide']],
   ['GET', 'admin/public-library/{publicSetId}', ['admin/public-library/orgx-callandanswer', 'admin/public-library/orgx-votes']],
   ['DELETE', 'admin/public-library/{publicSetId}', ['admin/public-library/orgx-partygames']],
+  // Usage stats for one team, account or set (2026-10-11); the query string
+  // never reaches the route, so the template and the path are the same.
+  ['GET', 'platform/stats', ['platform/stats']],
 ];
 for (const [method, template, concretes] of CASES) {
   check(`${method} ${template} is staff-only by template`, () => assert.deepStrictEqual(requiredGroupsForRoute(method, template), ['admins']));

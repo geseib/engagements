@@ -7,6 +7,7 @@ import WorkieContextHint from './WorkieContextHint';
 import { remotePanelTabs, rosterListing } from '../config/hostRemote';
 import { roundsFrom, roundSubtitle, hasSummary } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
+import { answerText } from '../config/stageAnswers';
 import { normaliseQueue } from '../config/questionQueue';
 import { questionKey } from '../config/setupPanel';
 import { fetchUpNext } from '../utils/questionQueueClient';
@@ -324,7 +325,7 @@ export default function RemoteSessionPanel({
                                     from the session settings is how the two
                                     answers drift apart. */}
                                 <b>{displayLabelFor(answer, i)}</b>
-                                <span>{answer.answer}</span>
+                                <span>{answerText(answer.answer)}</span>
                               </li>
                             ))}
                           </ol>

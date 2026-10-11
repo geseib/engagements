@@ -5,6 +5,7 @@ const { findSetForCaller, requestedScope } = require('./shared/question-set-acce
 const { ORG } = require('./shared/tenant');
 const { decryptItem, decryptItems } = require('./shared/tenant-crypto');
 const { SURVEY_CSV_COLUMNS, surveyCsvCells, pollFieldsOf } = require('./shared/survey-kinds');
+const { recordSetDownloaded } = require('./shared/platform-metrics');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -86,6 +87,10 @@ exports.handler = async (event) => {
     const questions = cryptoOrgId
       ? await decryptItems(cryptoOrgId, 'question', questionsRes.Items || [])
       : (questionsRes.Items || []);
+
+    // One download of the version read (usage-stats SPEC §5 E11). An empty
+    // set downloads nothing worth counting. Ids and a number; never throws.
+    if (questions.length) await recordSetDownloaded({ set: resolved }, { db });
 
     // Determine output format based on engagement type and user preference.
     //

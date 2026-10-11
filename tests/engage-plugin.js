@@ -68,7 +68,7 @@ const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `engage-${name}-`));
 const gitIn = (dir, ...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
 
 function mcpChild(env, script = SCRIPT) {
-  const child = spawn(process.execPath, [script], { env: { PATH: process.env.PATH, HOME: env.HOME || process.env.HOME, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [script], { env: { PATH: process.env.PATH, HOME: env.HOME || process.env.HOME, ENGAGE_ALLOW_LOCAL_API: '1', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
   let buf = '';
   let id = 0;
@@ -117,7 +117,8 @@ async function check(name, fn) {
     assert.ok(gitIn(project, 'ls-files').split('\n').includes('index.html'));
     assert.ok(/engage:build-room skill/.test(r.text), r.text);
     const saved = JSON.parse(fs.readFileSync(path.join(project, '.engage', 'session.json'), 'utf8'));
-    assert.deepStrictEqual([saved.key, saved.api], [KEY, API]);
+    assert.strictEqual(saved.key, KEY);
+    assert.ok(!('api' in saved), 'the project file never carries the API (security review F1)');
     assert.strictEqual(fs.readFileSync(path.join(project, '.engage', '.gitignore'), 'utf8'), '*\n');
     assert.strictEqual(fs.statSync(path.join(project, '.engage', 'session.json')).mode & 0o077, 0, 'the key file is private to its owner');
   });
@@ -216,7 +217,7 @@ async function check(name, fn) {
   });
   await check('a decided ask tells Claude the question and the answer, and nothing about how (owner, 2026-10-06)', async () => {
     const r = await mcp.call('get_results', { askId: '008' });
-    assert.ok(/THE ROOM DECIDED \(final — build this\):\n  Which header: Calm/.test(r.text), r.text);
+    assert.ok(/THE ROOM DECIDED \(final — build this\):\n  <room-text>Which header: Calm<\/room-text>/.test(r.text), r.text);
     assert.ok(!/out loud|Chosen:|wheel|vote/i.test(r.text.split('THE ROOM DECIDED')[1]), r.text);
     assert.ok(!/0 \(0%\)/.test(r.text), `the tally was printed:\n${r.text}`);
   });
@@ -264,9 +265,18 @@ async function check(name, fn) {
     activityHook(other, { tool_name: 'Edit', tool_input: { file_path: 'a.js' } });
     assert.ok(!fs.existsSync(path.join(other, '.engage')), 'never writes outside a Build Room project');
   });
+  // The pump starts only after connect in its own process (security review F1):
+  // a new window reconnects with no key, reusing the folder's.
+  const armedPump = async () => {
+    const pump = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: project, ENGAGE_ACTIVITY_MS: '200', ENGAGE_API: API });
+    await pump.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+    const r = await pump.call('connect', {});
+    assert.ok(!r.isError, r.text);
+    return pump;
+  };
   await check('the server sends the lines to the room in a batch and empties the file', async () => {
     const before = requests.filter((q) => q.url.endsWith('/build/activity')).length;
-    const pump = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: project, ENGAGE_ACTIVITY_MS: '200' });
+    const pump = await armedPump();
     try {
       const deadline = Date.now() + 5000;
       while (requests.filter((q) => q.url.endsWith('/build/activity')).length === before && Date.now() < deadline) {
@@ -419,7 +429,7 @@ async function check(name, fn) {
     hookEvent('PreToolUse', { tool_name: 'Agent', tool_input: { description: 'Researching contrast rules' } });
     hookEvent('SubagentStop', { agent_id: 'a1', agent_type: 'Explore' });
     const before = requests.filter((q) => q.url.endsWith('/build/activity')).length;
-    const pump = mcpChild({ HOME: home, CLAUDE_PROJECT_DIR: project, ENGAGE_ACTIVITY_MS: '200' });
+    const pump = await armedPump();
     try {
       const deadline = Date.now() + 5000;
       while (requests.filter((q) => q.url.endsWith('/build/activity')).length === before && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
@@ -493,7 +503,7 @@ async function check(name, fn) {
 
   console.log('\ninstalling the plugin');
   await check('writes a local marketplace with the plugin, its commands and its hook', async () => {
-    const r = spawnSync(process.execPath, [SCRIPT, '--install-plugin', '--api', API], { env: { PATH: '/nonexistent', HOME: home }, encoding: 'utf8', timeout: 20000 });
+    const r = spawnSync(process.execPath, [SCRIPT, '--install-plugin', '--api', API], { env: { PATH: '/nonexistent', HOME: home, ENGAGE_ALLOW_LOCAL_API: '1' }, encoding: 'utf8', timeout: 20000 });
     assert.strictEqual(r.status, 0, r.stderr);
     const root = path.join(home, '.engage', 'claude-plugin');
     const market = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'marketplace.json'), 'utf8'));
@@ -556,7 +566,7 @@ async function check(name, fn) {
     fs.writeFileSync(claudeState, JSON.stringify(state));
     fs.writeFileSync(claudeLog, '');
     const r = spawnSync(process.execPath, [SCRIPT, '--install-plugin', '--api', api],
-      { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home }, encoding: 'utf8', timeout: 20000 });
+      { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home, ENGAGE_ALLOW_LOCAL_API: '1' }, encoding: 'utf8', timeout: 20000 });
     assert.strictEqual(r.status, 0, r.stderr);
     const calls = fs.readFileSync(claudeLog, 'utf8').trim().split('\n').filter(Boolean);
     return { out: r.stdout, calls, changing: calls.filter((c) => !/^(--version|plugin list --json)$/.test(c)) };
@@ -588,12 +598,12 @@ async function check(name, fn) {
     assert.ok(!r.calls.some((c) => /plugin (install|update)/.test(c)), r.calls.join(' | '));
     assert.ok(/turned off\. It is on again/.test(r.out), r.out);
   });
-  await check('moving to another Engage site: the API follows, even when the plugin is current', async () => {
-    const other = 'https://other.example/dev/';
-    const r = installWith(entry(VERSION), other);
-    assert.ok(r.out.includes(`It now talks to ${other}`), r.out);
-    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.engage', 'config.json'), 'utf8')), { api: other });
-    installWith(entry(VERSION)); // back to the test API for the checks below
+  await check('a site that is not Engage is never saved as the API (security review F1)', async () => {
+    for (const other of ['https://other.example/dev/', 'http://other.example/dev/', 'https://ouv6fztlig.execute-api.us-east-1.amazonaws.com/dev/']) {
+      const r = installWith(entry(VERSION), other);
+      assert.ok(r.out.includes(`Not saving ${other} as the Engage API`), r.out);
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.engage', 'config.json'), 'utf8')), { api: API }, 'the last good API stays');
+    }
   });
   await check('after install, connect needs only the key', async () => {
     const fresh = tmp('fresh');
@@ -627,7 +637,7 @@ async function check(name, fn) {
     fs.writeFileSync(claudeState, JSON.stringify(entry(VERSION))); // prod's engage is installed and current
     fs.writeFileSync(claudeLog, '');
     const r = spawnSync(process.execPath, [SCRIPT, '--install-plugin', '--api', API, '--tier', 'dev'],
-      { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home }, encoding: 'utf8', timeout: 20000 });
+      { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home, ENGAGE_ALLOW_LOCAL_API: '1' }, encoding: 'utf8', timeout: 20000 });
     assert.strictEqual(r.status, 0, r.stderr);
     const calls = fs.readFileSync(claudeLog, 'utf8').trim().split('\n');
     assert.ok(calls.includes(`plugin marketplace add ${devRoot}`), calls.join(' | '));
@@ -659,7 +669,7 @@ async function check(name, fn) {
     assert.ok(!r.isError, r.text);
     const session = JSON.parse(fs.readFileSync(path.join(devFolder, '.engage', 'session.json'), 'utf8'));
     assert.strictEqual(session.tier, 'dev');
-    assert.strictEqual(session.api, API);
+    assert.strictEqual(session.api, undefined, 'the API is never kept in the project');
     const settings = JSON.parse(fs.readFileSync(path.join(devFolder, '.claude', 'settings.local.json'), 'utf8'));
     assert.deepStrictEqual(settings.enabledPlugins, { 'engage@engage-local': false, 'engage-dev@engage-dev-local': true, 'engage-test@engage-test-local': false });
     assert.deepStrictEqual(settings.permissions, { allow: ['Bash(ls)'] }, 'what was there stays');

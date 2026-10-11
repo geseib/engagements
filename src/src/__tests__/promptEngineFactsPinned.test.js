@@ -65,7 +65,7 @@ describe('SECTION_SYNONYMS', () => {
 
 describe('the model a Workie is read by', () => {
   test('the model, its max_tokens and its temperature are the engine\'s', () => {
-    const call = /const invokeHaiku[\s\S]*?max_tokens:\s*(\d+)[\s\S]*?temperature:\s*([\d.]+)/.exec(ENGINE);
+    const call = /const invokeBedrock[\s\S]*?max_tokens:\s*(\d+)[\s\S]*?temperature:\s*([\d.]+)/.exec(ENGINE);
     expect(call).toBeTruthy();
     expect(SUMMARY_MODEL.maxTokens).toBe(Number(call[1]));
     expect(SUMMARY_MODEL.temperature).toBe(Number(call[2]));

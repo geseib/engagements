@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: Two codes · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* TWO CODES (owner, 2026-10-11): "the settings for build room should have two
+   QR codes, large enough for the room to see: the Join QR and the Demo QR link."
+   Extends v2.css, the Session panel mockups (../build-room-sidebar) and Share
+   demo (../build-room-share-demo). One orange button per frame. The QR images
+   in img/ are real codes made by the app's own qrcode.react, level M:
+   join 44 chars and demo 60 chars are both version 4, 41 modules with the
+   quiet zone; a remote link of 81 chars is version 5, 45 modules. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .sec,body.is-solo .qs,body.is-solo .real,body.is-solo .fitrow,body.is-solo #pagecheck{display:none !important}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.frame-h p b{color:var(--text)}
+.rec{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--m-success-text);border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green);vertical-align:middle}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec p b{color:var(--text)}
+code{font-size:13px;background:var(--surface);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.pg-title p{overflow-wrap:anywhere}
+
+/* No stray orange: the join code, the phase dot, the on-view underline go neutral */
+.scr .phase--build::before{background:var(--muted)}
+.scr .join .code,.hjoin b{color:var(--text)}
+.view.is-on{box-shadow:inset 0 -2px 0 var(--secondary)}
+
+/* ---- option cards ------------------------------------------------------- */
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:16px}
+.opt{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:14px 16px;min-width:0}
+.opt.is-rec{border-color:rgba(79,178,134,.55)}
+.opt h3{margin:0 0 6px;font:800 17px/1.25 var(--font-ui)}
+.opt p{margin:6px 0 0;color:var(--muted);font-size:14px;line-height:1.5}
+.opt p b{color:var(--text)}
+
+/* ---- the Session panel (from ../build-room-sidebar, shipped geometry) --- */
+.hostb{display:grid;grid-template-columns:430px 1fr 330px;gap:16px;padding:16px;min-height:0}
+.scrim2{position:absolute;inset:60px 0 0 0;background:rgba(6,11,21,.74);z-index:30}
+.sess{display:inline-flex;align-items:center;gap:9px;height:34px;padding:0 10px 0 12px;border-radius:8px;border:1px solid var(--m-rule);color:var(--text);font:800 13px/1 var(--font-ui);letter-spacing:.12em;white-space:nowrap;flex:none}
+.sess kbd{font:700 12px/1 var(--font-ui);letter-spacing:0;color:var(--muted);border:1px solid var(--m-rule);border-radius:4px;padding:2px 5px}
+.sess.is-on{border-color:var(--secondary);background:var(--surface-2)}
+.wifi{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:999px;border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green);color:var(--m-success-text);font:600 13px/1 var(--font-ui);white-space:nowrap}
+.sbar{position:absolute;top:60px;right:0;bottom:0;width:560px;z-index:40;background:#111D33;border-left:2px solid var(--primary);display:flex;flex-direction:column;color:var(--text)}
+.sbar--real{position:relative;top:auto;right:auto;bottom:auto;width:min(560px,100%);border-radius:0 12px 12px 0;border:1px solid var(--m-rule);border-left:2px solid var(--primary)}
+.sbh{flex:none;display:flex;align-items:center;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--m-rule)}
+.sbh h2{margin:0;font:800 19px/1 var(--font-display);letter-spacing:.09em;text-transform:uppercase;color:var(--primary)}
+.sbh .ws{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--m-success-text);white-space:nowrap}
+.sbh .ws::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.icb{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--surface-2);border:1px solid var(--m-rule);font:700 15px/1 var(--font-ui);color:var(--text)}
+.sbt{flex:none;display:flex;gap:4px;padding:0 14px;border-bottom:1px solid var(--m-rule)}
+.sbt span{display:inline-flex;align-items:center;gap:8px;padding:13px 10px 12px;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent}
+.sbt span.on{color:var(--text);border-bottom-color:var(--primary)}
+.sbt .c{letter-spacing:0;color:var(--muted);font-weight:700}
+.sbb{flex:1;min-height:0;overflow:hidden;padding:14px 20px 16px;display:flex;flex-direction:column;gap:12px;container-type:inline-size}
+.grp{display:flex;flex-direction:column;gap:10px;padding:12px 0 14px;border-top:1px solid var(--m-rule)}
+.grp:first-of-type{border-top:0;padding-top:4px}
+.grp .gh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.grp h3{margin:0;font:800 13px/1 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--text)}
+.grp .gq{font-size:13px;color:var(--muted)}
+.grp--next{opacity:.55}
+.srow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:36px}
+.srow .lab{font:600 15px/1.3 var(--font-ui)}
+.srow .val{font-size:13px;color:var(--muted)}
+.srow .push{margin-left:auto}
+.bsm{min-height:30px;padding:5px 10px;font-size:13px}
+.sw{flex:none;width:38px;height:22px;border-radius:11px;background:var(--surface-2);border:1px solid var(--m-rule);position:relative}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted)}
+.sw.on{background:var(--success);border-color:var(--success)}
+.sw.on::after{left:18px;background:var(--bg)}
+.notes2{font-size:13px;color:var(--muted);margin:0;line-height:1.45}
+.code{font:800 26px/1 var(--font-display);color:var(--text);letter-spacing:.05em}
+
+/* ---- the two codes (new) ------------------------------------------------ */
+.codes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.qt{display:flex;flex-direction:column;gap:8px;min-width:0;padding:10px;border:1px solid var(--m-rule);border-radius:12px;background:var(--surface)}
+.qt--live{border-color:rgba(79,178,134,.5)}
+.qt--warn{border-color:rgba(229,100,94,.45)}
+.qi{display:block;width:100%;aspect-ratio:1;border-radius:8px;background:#fff;overflow:hidden}
+.qi img{display:block;width:100%;height:100%}
+.qt--quiet .qi{opacity:.55}
+.qslot{width:100%;aspect-ratio:1;border:2px dashed rgba(155,168,190,.4);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px;text-align:center}
+.qslot b{font:700 15px/1.3 var(--font-ui)}
+.qslot span{font-size:13px;color:var(--muted);line-height:1.4}
+.qslot--bad b{color:var(--danger-text)}
+.qt h4{margin:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font:700 15px/1.2 var(--font-ui)}
+.qt h4 span{font:500 13px/1.2 var(--font-ui);color:var(--muted)}
+.qt .u{font:600 13px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.qt .m{margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.qt .st{margin:0;font:700 15px/1.3 var(--font-ui);color:var(--m-success-text)}
+.qt .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+.warn2{border:1px solid rgba(229,100,94,.45);background:var(--m-tint-red);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5}
+.warn2 b{color:var(--danger-text)}
+.warn2 ul{margin:6px 0 0;padding-left:18px}
+/* Narrow panel (a phone at 375): the tile drops its frame so the code keeps its width;
+   below 330px of panel the two stack, so neither code is ever under 160px. */
+@container (max-width:420px){.qt{padding:0;border:0;background:none}.codes{gap:10px}}
+@container (max-width:329px){.codes{grid-template-columns:1fr}.qi,.qslot{max-width:260px}}
+
+/* ---- the Stage card (option B, Room ladder) ----------------------------- */
+.two{display:grid;grid-template-columns:repeat(2,auto);justify-content:center;gap:0 96px;align-items:start}
+.two--one{grid-template-columns:auto}
+.two .c2{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px}
+.two .big{width:430px;height:430px;border-radius:16px;background:#fff;overflow:hidden;margin-bottom:6px}
+.two .big img{display:block;width:100%;height:100%}
+.two .eb{font:800 var(--L-meta)/1 var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.two .eb--live{color:var(--m-success-text)}
+.two h2{margin:0;font:800 var(--L-secondary)/1.1 var(--font-display)}
+.two .l{margin:0;font-size:var(--L-meta);color:var(--muted)}
+.two .l b{color:var(--text)}
+.two .n{margin:0;font:700 var(--L-meta)/1.2 var(--font-ui);color:var(--m-success-text)}
+
+/* ---- real-size panes, the fit check ------------------------------------ */
+.real{display:flex;flex-wrap:wrap;gap:26px;justify-content:center;padding:10px 20px}
+.realcol{display:flex;flex-direction:column;gap:8px;min-width:0;width:min(560px,100%)}
+.realcol--660{width:min(660px,100%)}
+.realcol--375{width:min(375px,100%)}
+.cap{font:700 13px/1.3 var(--font-ui);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.cap b{color:var(--text);text-transform:none;letter-spacing:0}
+.measure{font:600 13px/1.5 var(--font-ui);color:var(--muted);margin:2px 0 0;max-width:560px}
+.measure b{color:var(--text)}
+.vp{border:1px dashed rgba(155,168,190,.45);border-radius:10px;background:#0A1222;position:relative;padding:34px 0 0;overflow:hidden;max-width:100%}
+.vp .tag{position:absolute;top:10px;left:14px;font:700 12px/1 var(--font-ui);color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.vp--660{width:660px}
+.vp--660 .sbar--real{margin-left:auto;border-radius:0}
+.vp--375{width:375px}
+/* the panel at 375 is full width, with the shipped 480px padding */
+.vp--375 .sbar--real{width:100%;border-left:1px solid var(--m-rule);border-top:2px solid var(--primary);border-radius:0}
+.vp--375 .sbh{padding:12px 14px 10px}
+.vp--375 .sbb{padding-left:14px;padding-right:14px}
+.vp--375 .sbt{padding:0 6px}
+
+/* ---- tables and questions ----------------------------------------------- */
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45;overflow-wrap:anywhere}
+.vt td:first-child{font-weight:700}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+#pagecheck{max-width:1440px;margin:18px auto 0;padding:0 20px}
+@media (max-width:700px){.vt{font-size:13px}.vt th,.vt td{padding:8px 6px}.pg-title h1{font-size:20px}}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · Two codes</b>
+<a href="#opts">Options</a><a href="#p0">C on the projector</a><a href="#states">Settings, every state</a><a href="#b">B alone</a><a href="#stage">Stage card</a><a href="#stage2">Stage, demo gone</a><a href="#remote">Remote link later</a><a href="#fit">Fit at 660 / 375</a><a href="#sizes">Sizes</a><a href="#data">States and data</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="../build-room-share-demo/index.html">Share demo</a><a href="../build-room-sidebar/index.html">Session panel</a></nav>
+<div class="pg-title"><h1>Two codes the room can scan: Join, and the demo</h1>
+<p>Owner, 2026-10-11: "the settings for build room should have two QR codes, large enough for the room to see: the Join QR and the Demo QR link." Today Settings shows the join code as a number and a button that opens the Join QR on the wall; the demo's QR is 72px inside the inline Share demo panel. The host's laptop is often on the projector, so a code in the panel is also a code on the wall.</p></div>
+
+<!-- ===================================================================== options -->
+<div class="sec" id="opts"><h2>Three options</h2>
+<div class="opts">
+<div class="opt"><h3>A · Both codes in Settings</h3><p>The room group leads with two codes side by side: Join always, the demo when it is shared. When it is not, the demo's slot says what to do: <b>Share demo</b> if Claude has shown a running app, <b>No demo yet</b> if there are only screenshots. Each code carries its short address and one line.</p><p>Big enough for the host to test with a phone and for the front rows on the projector (about 3 m). Not for the back of a room: the panel is 560px wide.</p></div>
+<div class="opt"><h3>B · One move: both codes on the Stage</h3><p>Settings keeps today's rows and gains <b>Show both on the Stage</b>. The Stage shows a two-code card, Join left, demo right, on the Room ladder. With no demo shared it is today's Join QR alone.</p><p>Readable across the room (about 6 m). But Settings itself still has no code to scan, which is what the owner asked for.</p></div>
+<div class="opt is-rec"><h3>C · Both <span class="rec">Recommended</span></h3><p>A's two codes in Settings, and its one orange button puts them on the Stage as B's card. The panel is where the host checks the codes work; the Stage is where the room reads them. One element per job.</p><p>Also retires the 72px demo code and the inline Share demo panel: the demo tile does that panel's job in every state.</p></div>
+</div></div>
+
+<!-- ===================================================================== P0 -->
+<div class="frame-h" id="p0"><h2>C · Settings on the projector: demo shared, 11 of 18 opened it</h2><p>The Session panel over the Host screen at 1440. The two codes lead the room group, each 232px: on a 90-inch projected image that is about 31 cm, enough from about 3 m. <b>Show both on the Stage</b> is the one orange button; it puts the same two codes on the Stage at 430px for the rest of the room.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" data-frame="P0">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="wifi">Shared · 11 opened</span><span class="hjoin">Join <b>4443</b></span><span class="sess is-on">SESSION <kbd>\</kbd></span></header>
+<div class="hostb">
+<section class="col"><div class="colh"><h2>Now</h2></div><div class="now"><p class="nq">Claude is building the counters</p><p class="hint">for 2 min</p></div></section>
+<section class="col"><div class="colh"><h2>Waiting for you · 1</h2></div><div class="now"><p class="hint">Can the winning row flash?</p></div></section>
+<section class="col"></section>
+</div>
+<div class="scrim2"></div>
+<aside class="sbar">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">?</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb">
+<div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt qt--live"><span class="qi"><img src="img/demo.svg" alt="QR code to open the demo"></span><h4>Demo <span>same Wi-Fi only</span></h4><span class="u">192.168.1.20:4900</span><p class="st">11 of 18 opened it</p><div class="acts"><span class="btn bsm btn--ghost">Copy</span><span class="btn bsm btn--ghost">Stop sharing</span></div></div>
+</div>
+<div class="srow"><span class="btn btn--primary">Show both on the Stage</span></div>
+<div class="srow"><span class="sw on"></span><span class="lab">List names on the room meter</span></div>
+</div>
+<div class="grp grp--next"><div class="gh"><h3>Claude</h3><span class="gq">How Claude works with the room</span></div></div>
+</div>
+</aside>
+</div></div></div>
+
+<!-- ===================================================================== states -->
+<div class="frame-h" id="states"><h2>C · The room group in every state, at real size (560px)</h2><p>The Join code never changes. The demo tile follows <code>demoRunnable(room)</code> and <code>wifiState(lan, now)</code>, the same rules the Share demo chip uses, so the two can never disagree. One orange button per panel: the move that matters most in that state.</p></div>
+<div class="real">
+
+<div class="realcol"><span class="cap">1 · <b>No demo yet</b>: Claude has shown screenshots only</span>
+<aside class="sbar sbar--real" data-frame="S1" id="p-s1">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt"><div class="qslot"><b>No demo yet</b><span>When Claude runs the app, you can share it here.</span></div><h4>Demo</h4><p class="m">The room sees Claude's screenshots.</p></div>
+</div>
+<div class="srow"><span class="btn btn--primary">Show on the Stage</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-s1">Measuring…</p></div>
+
+<div class="realcol"><span class="cap">2 · <b>Runnable, not shared</b></span>
+<aside class="sbar sbar--real" data-frame="S2" id="p-s2">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt"><div class="qslot"><b>Not shared</b><span>Only this laptop can open it.</span><span class="btn btn--primary">Share demo</span></div><h4>Demo</h4><p class="m">People on this Wi-Fi can open this laptop's app. No one else can.</p></div>
+</div>
+<div class="srow"><span class="btn">Show on the Stage</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-s2">Measuring…</p></div>
+
+<div class="realcol"><span class="cap">3 · <b>Starting</b> (up to 15 s), or waiting for Claude Code</span>
+<aside class="sbar sbar--real" data-frame="S3" id="p-s3">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt"><div class="qslot" role="status"><b>Starting…</b><span>The code appears here when the laptop is reachable.</span></div><h4>Demo</h4><div class="acts"><span class="btn bsm btn--ghost">Stop sharing</span></div></div>
+</div>
+<div class="srow"><span class="btn btn--primary">Show on the Stage</span><span class="val">The demo joins the Stage card when it is live.</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-s3">Measuring…</p></div>
+
+<div class="realcol"><span class="cap">4 · <b>Shared and live</b>, with the open count</span>
+<aside class="sbar sbar--real" data-frame="S4" id="p-s4">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt qt--live"><span class="qi"><img src="img/demo.svg" alt="QR code to open the demo"></span><h4>Demo <span>same Wi-Fi only</span></h4><span class="u">192.168.1.20:4900</span><p class="st">11 of 18 opened it</p><div class="acts"><span class="btn bsm btn--ghost">Copy</span><span class="btn bsm btn--ghost">Stop sharing</span></div></div>
+</div>
+<p class="notes2">Not 11 of 18? Some people may be on mobile data or a VPN. They still see screenshots.</p>
+<div class="srow"><span class="btn btn--primary">Show both on the Stage</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-s4">Measuring…</p></div>
+
+<div class="realcol"><span class="cap">5 · <b>Quiet</b>: live 2 min, nobody opened it</span>
+<aside class="sbar sbar--real" data-frame="S5" id="p-s5">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt qt--warn"><span class="qi"><img src="img/demo.svg" alt="QR code to open the demo"></span><h4>Demo <span>same Wi-Fi only</span></h4><span class="u">192.168.1.20:4900</span><p class="m">None opened yet</p><div class="acts"><span class="btn bsm btn--ghost">Keep sharing</span></div></div>
+</div>
+<div class="warn2"><b>Nobody has opened it in 2 minutes.</b> Guest Wi-Fi often blocks this.<ul><li>Test it: scan the QR from another device.</li><li>If it fails for you, it fails for the room. Use screenshots.</li></ul></div>
+<div class="srow"><span class="btn">Show both on the Stage</span><span class="btn btn--primary push">Stop sharing</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-s5">Measuring…</p></div>
+
+<div class="realcol"><span class="cap">6 · <b>Failed</b>: sharing did not start</span>
+<aside class="sbar sbar--real" data-frame="S6" id="p-s6">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt qt--warn"><div class="qslot qslot--bad"><b>It didn't start.</b><span><code>lan.error</code>, as the plugin reported it.</span><span class="btn btn--primary">Try again</span></div><h4>Demo</h4><div class="acts"><span class="btn bsm btn--ghost">Stop sharing</span></div></div>
+</div>
+<div class="srow"><span class="btn">Show on the Stage</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-s6">Measuring…</p></div>
+</div>
+
+<!-- ===================================================================== B alone -->
+<div class="frame-h" id="b"><h2>B alone · Settings keeps today's rows and gains one move</h2><p>For comparison. The join code stays a number, the demo stays inside the inline Share demo panel with its 72px code, and the panel gains <b>Show both on the Stage</b> while the demo is live. Nothing in Settings is big enough to scan from a seat, so the owner's "in settings" is not met.</p></div>
+<div class="real">
+<div class="realcol"><span class="cap">B · <b>Shared and live</b></span>
+<aside class="sbar sbar--real" data-frame="B" id="p-b">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they see</span></div>
+<div class="srow"><span class="code">4443</span><span class="val">engage.seibtribe.us/play · 18 joined</span></div>
+<div class="srow"><span class="btn bsm">Copy join link</span><span class="btn bsm">Show the QR on the wall</span></div>
+<div class="srow"><span class="lab">Demo shared on this Wi-Fi</span><span class="val">11 opened it · 18 here</span></div>
+<div class="srow"><span class="qi" style="width:72px;flex:none"><img src="img/demo.svg" alt="QR code to open the demo, 72px"></span><span class="val" style="font-family:ui-monospace,Menlo,monospace">192.168.1.20:4900</span><span class="btn bsm btn--ghost">Copy</span></div>
+<div class="srow"><span class="btn bsm btn--ghost">Stop sharing</span><span class="btn btn--primary push">Show both on the Stage</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-b">Measuring…</p></div>
+</div>
+
+<!-- ===================================================================== Stage -->
+<div class="frame-h" id="stage"><h2>B and C · The Stage card: Join left, demo right</h2><p>Room ladder. Each code is 430px, about 58 cm on a 90-inch projected image: scannable from about 6 m. The meter column steps aside while the card shows, so the join code is not on screen three times; the rail keeps its one-line JOIN. Each line is 12 words or fewer. Clicking either code enlarges it alone (today's <code>QrZoom</code>, 630px) for a long room. <b>Hide the codes</b> is the one orange.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr" data-frame="ST1">
+<div class="rail"><span class="phase phase--build">Building</span><div class="rail-title"><b>Monday build session</b><span>Built with the room</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4443</span></div></div>
+<div class="bar bar--build"></div>
+<div class="main main--solo"><div class="content">
+<div class="two">
+<div class="c2"><span class="big"><img src="img/join.svg" alt="QR code to join the session"></span><span class="eb">Join the room</span><h2>Scan to join</h2><p class="l">engage.seibtribe.us/play · code <b>4443</b></p></div>
+<div class="c2"><span class="big"><img src="img/demo.svg" alt="QR code to open the demo"></span><span class="eb eb--live">The demo is live</span><h2>Try the demo yourself</h2><p class="l">Same Wi-Fi as this laptop.</p><p class="n">11 have opened it</p></div>
+</div>
+</div></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">Claude is building the counters</div><span class="dbtn dbtn--primary">Hide the codes</span><span class="dbtn dbtn--ghost">HOST</span><span class="dbtn dbtn--ghost">SESSION</span></footer>
+</div></div></div>
+
+<div class="frame-h" id="stage2"><h2>The Stage when the demo goes: the card keeps Join alone</h2><p>Stop sharing, a failed share or no demo yet: the demo half leaves the wall rather than becoming an empty slot the room cannot use. The quiet state does <b>not</b> change the Stage: the host may be testing it right then, and the warning is the host's, not the room's. The count only shows once someone has opened it.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr" data-frame="ST2">
+<div class="rail"><span class="phase phase--build">Building</span><div class="rail-title"><b>Monday build session</b><span>Built with the room</span></div><div class="join"><span class="k">JOIN</span><span class="u">engage.seibtribe.us</span><span class="code">4443</span></div></div>
+<div class="bar bar--build"></div>
+<div class="main main--solo"><div class="content">
+<div class="two two--one">
+<div class="c2"><span class="big"><img src="img/join.svg" alt="QR code to join the session"></span><span class="eb">Join the room</span><h2>Scan to join</h2><p class="l">engage.seibtribe.us/play · code <b>4443</b></p></div>
+</div>
+</div></div>
+<footer class="dock"><div class="status" style="color:var(--muted)">Claude is building the counters</div><span class="dbtn dbtn--primary">Hide the code</span><span class="dbtn dbtn--ghost">HOST</span><span class="dbtn dbtn--ghost">SESSION</span></footer>
+</div></div></div>
+
+<!-- ===================================================================== remote -->
+<div class="frame-h" id="remote"><h2>Later · the same tile with a remote link</h2><p>The demo tile takes a link and a reach line, nothing Wi-Fi-specific. When the planned remote link (<code>../build-room-lan-share/LATER.md</code>) exists, the tile shows it with "anyone with the link" and the room off the Wi-Fi can open it too. A remote link is longer (81 characters here): version 5, 45 modules, still above the size floor at 232px and at 168px. Not built; drawn so the tile is not designed into a corner.</p></div>
+<div class="real">
+<div class="realcol"><span class="cap">Later · <b>remote link</b></span>
+<aside class="sbar sbar--real" data-frame="R" id="p-r">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt qt--live"><span class="qi"><img src="img/demo-remote.svg" alt="QR code to open the demo from anywhere"></span><h4>Demo <span>anyone with the link</span></h4><span class="u">quiet-river-4443…</span><p class="st">16 of 18 opened it</p><div class="acts"><span class="btn bsm btn--ghost">Copy</span><span class="btn bsm btn--ghost">Stop sharing</span></div></div>
+</div>
+<div class="srow"><span class="btn btn--primary">Show both on the Stage</span></div>
+</div></div></aside>
+<p class="measure" data-measure="p-r">Measuring…</p></div>
+</div>
+
+<!-- ===================================================================== fit -->
+<div class="frame-h" id="fit"><h2>Fit · the panel in a 660px window and on a 375px phone</h2><p>At 660 the panel is its full 560px (<code>min(560px, 100vw)</code>), so nothing changes. At 375 it is full width with the shipped 14px padding: the tiles drop their frame so each code keeps its width, <b>168px</b>, above the 160px floor. Below 330px of panel the two codes stack. Live measurements under each.</p></div>
+<div class="real">
+<div class="realcol realcol--660"><div class="vp vp--660" id="w660"><span class="tag">660px window</span>
+<aside class="sbar sbar--real" data-frame="F660">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt qt--live"><span class="qi"><img src="img/demo.svg" alt="QR code to open the demo"></span><h4>Demo <span>same Wi-Fi only</span></h4><span class="u">192.168.1.20:4900</span><p class="st">11 of 18 opened it</p><div class="acts"><span class="btn bsm btn--ghost">Copy</span><span class="btn bsm btn--ghost">Stop sharing</span></div></div>
+</div>
+<div class="srow"><span class="btn btn--primary">Show both on the Stage</span></div>
+</div></div></aside></div>
+<p class="measure" data-measure="w660">Measuring…</p></div>
+
+<div class="realcol realcol--375"><div class="vp vp--375" id="w375"><span class="tag">375px phone</span>
+<aside class="sbar sbar--real" data-frame="F375">
+<div class="sbh"><h2>Session</h2><span class="ws">Connected</span><span class="icb">✕</span></div>
+<div class="sbt"><span>Players <b class="c">18</b></span><span class="on">Settings</span></div>
+<div class="sbb"><div class="grp"><div class="gh"><h3>The room</h3><span class="gq">Who can get in, and what they can open</span></div>
+<div class="codes">
+<div class="qt"><span class="qi"><img src="img/join.svg" alt="QR code to join the session"></span><h4>Join <span>any network</span></h4><span class="u">engage.seibtribe.us/play</span><p class="m">Code <b style="color:var(--text)">4443</b> · 18 joined</p><div class="acts"><span class="btn bsm btn--ghost">Copy join link</span></div></div>
+<div class="qt qt--live"><span class="qi"><img src="img/demo.svg" alt="QR code to open the demo"></span><h4>Demo <span>same Wi-Fi only</span></h4><span class="u">192.168.1.20:4900</span><p class="st">11 of 18 opened it</p><div class="acts"><span class="btn bsm btn--ghost">Copy</span><span class="btn bsm btn--ghost">Stop sharing</span></div></div>
+</div>
+<div class="srow"><span class="btn btn--primary">Show both on the Stage</span></div>
+</div></div></aside></div>
+<p class="measure" data-measure="w375">Measuring…</p></div>
+</div>
+<p class="measure" id="pagecheck">Measuring the page…</p>
+
+<!-- ===================================================================== sizes -->
+<div class="sec" id="sizes"><h2>Sizes, and why</h2>
+<p>Both links are QR version 4 at level M (the app's setting): 33 modules, 41 with the quiet zone. Projected sizes assume a 90-inch 16:10 image showing a 1440px-wide screen, so 1 CSS px is about 1.35 mm. Scan range uses the usual rule of thumb: a phone reads a code from about ten times its width.</p>
+<table class="vt">
+<thead><tr><th style="width:24%">Where</th><th style="width:16%">Code</th><th style="width:24%">Projected</th><th>Who can scan it</th></tr></thead>
+<tbody>
+<tr><td>Settings at laptop width (C, A)</td><td>232px</td><td>about 31 cm</td><td>Front rows, about 3 m; the host testing it with a phone</td></tr>
+<tr><td>Stage card, two codes (C, B)</td><td>430px</td><td>about 58 cm</td><td>Most of a meeting room, about 6 m</td></tr>
+<tr><td>One code enlarged (today's QrZoom)</td><td>min(70vh, 80vw), 630px at 900 tall</td><td>about 85 cm</td><td>The back of a long room, about 8 m</td></tr>
+<tr><td>Settings on a 375px phone</td><td>168px</td><td>not projected</td><td>Another phone held 15 to 30 cm away</td></tr>
+<tr><td><b>Floor</b>, any width</td><td><b>160px</b></td><td></td><td>160 / 41 modules = 3.9 CSS px a module, at least 7.8 device pixels on a 2x screen and 11.7 on a 3x phone: every module stays crisp. A remote link (45 modules) is still 3.6. Below 160 the panel stacks the codes instead of shrinking them.</td></tr>
+<tr><td>Today, for comparison</td><td>72px (demo in Settings), 96px (Build card)</td><td>about 10 and 13 cm</td><td>Not from a seat</td></tr>
+</tbody></table></div>
+
+<!-- ===================================================================== data -->
+<div class="sec" id="data"><h2>States and what they read</h2>
+<table class="vt">
+<thead><tr><th style="width:20%">Demo tile</th><th style="width:34%">Reads</th><th>Shows · the orange</th></tr></thead>
+<tbody>
+<tr><td>No demo yet</td><td><code>!demoRunnable(room)</code></td><td>Dashed slot, "No demo yet". No Share demo (owner, 2026-10-11, rule 3). · Show on the Stage</td></tr>
+<tr><td>Not shared</td><td><code>demoRunnable</code>, <code>wifiState</code> = off</td><td>Dashed slot, Share demo, who can reach it. · Share demo</td></tr>
+<tr><td>Starting / waiting</td><td><code>wifiState</code> = starting or waiting</td><td>Starting… or "Update the plugin, then restart it." (<code>W.wifiWaiting</code>), Stop sharing. · Show on the Stage</td></tr>
+<tr><td>Live</td><td>state on, <code>lan.open</code>, <code>room.playerCount</code>, <code>wifiLink(room)</code></td><td>The code, address, "11 of 18 opened it", Copy, Stop sharing. · Show both on the Stage</td></tr>
+<tr><td>Quiet</td><td>state quiet</td><td>Code dimmed but scannable, the warning. Stage unchanged. · Stop sharing</td></tr>
+<tr><td>Failed</td><td>state failed, <code>lan.error</code></td><td>"It didn't start." and the error. Stage card loses the demo. · Try again</td></tr>
+<tr><td>More than one app</td><td><code>lan.map.length &gt; 1</code></td><td>The code is the newest app (<code>wifiLink</code>); the other apps list under the tiles with Copy, as the Share demo panel does today.</td></tr>
+<tr><td>Ended</td><td><code>ended</code></td><td>Join tile only, no actions; no demo tile (sharing stops at session end).</td></tr>
+</tbody></table></div>
+
+<div class="qs" id="qs"><h2>Open questions</h2>
+<ol>
+<li><b>Show "No demo yet" at all?</b> The slot teaches where the demo will appear, but it is a second thing on screen before there is anything to share. The alternative is the Join code alone, wider, until <code>demoRunnable</code>.</li>
+<li><b>One orange in Settings.</b> The shipped inline Share demo panel has no orange on purpose, and the Session panel mockup kept Players free of it. These frames give the room group one. Agreed?</li>
+<li><b>One Stage card for codes.</b> Should the Share demo chip's "Show on the Stage" also open the two-code card, retiring the demo-only card (<code>WallBuildQr</code>)? These frames assume yes, so the Stage has one place for codes.</li>
+<li><b>The header join button</b> keeps opening the single big Join QR. Or should it open the two-code card while the demo is live?</li>
+<li><b>Quiet on the Stage.</b> These frames keep the demo code up while nobody has opened it. Take it down after 2 minutes instead?</li>
+<li><b>Remote link, later.</b> When there is both a Wi-Fi link and a remote one, show the remote one (it reaches everyone) and list the Wi-Fi one under it?</li>
+</ol></div>
+
+<script>
+(function () {
+  function measureOne(el, out) {
+    var b = el.getBoundingClientRect(), worst = 0, small = 999, qmin = 9999;
+    el.querySelectorAll('*').forEach(function (k) {
+      var r = k.getBoundingClientRect();
+      if (!r.width) return;
+      worst = Math.max(worst, r.right - b.right, b.left - r.left);
+      if ([].some.call(k.childNodes, function (n) { return n.nodeType === 3 && n.textContent.trim(); })) {
+        small = Math.min(small, parseFloat(getComputedStyle(k).fontSize));
+      }
+    });
+    el.querySelectorAll('.codes .qi').forEach(function (q) { qmin = Math.min(qmin, q.getBoundingClientRect().width); });
+    out.innerHTML = 'Measured live: <b>' + Math.round(b.width) + 'px</b> wide; widest overflow <b>' + Math.max(0, Math.round(worst)) + 'px</b>; ' +
+      'smallest code <b>' + (qmin === 9999 ? 'none' : Math.round(qmin) + 'px') + '</b>; smallest text <b>' + small + 'px</b>.';
+  }
+  function run() {
+    document.querySelectorAll('[data-measure]').forEach(function (out) {
+      var el = document.getElementById(out.getAttribute('data-measure'));
+      if (el) measureOne(el, out);
+    });
+    var frames = document.querySelectorAll('[data-frame]'), bad = [];
+    frames.forEach(function (f) {
+      var n = f.querySelectorAll('.btn--primary, .dbtn--primary').length;
+      if (n !== 1) bad.push(f.getAttribute('data-frame') + ' (' + n + ')');
+    });
+    var sw = document.documentElement.scrollWidth, iw = window.innerWidth;
+    document.getElementById('pagecheck').innerHTML = 'Page at <b>' + iw + 'px</b>: sideways scroll <b>' + (sw > iw ? 'yes, ' + (sw - iw) + 'px' : 'none') + '</b>. ' +
+      'Orange buttons: <b>' + frames.length + '</b> frames checked; ' + (bad.length ? 'not exactly one in <b>' + bad.join(', ') + '</b>.' : 'each has exactly one.');
+  }
+  window.addEventListener('load', function () { setTimeout(run, 50); });
+  window.addEventListener('resize', function () { setTimeout(run, 50); });
+})();
+</script>
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>

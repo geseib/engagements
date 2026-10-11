@@ -53,7 +53,9 @@ const gamePk = (gameId) => `GAME#${gameId}`;
  * of the create dialog's payload, applied to the item's own form
  * (agenda-rules.sessionFormOf). Null for an item that cannot be played.
  */
-function childGameData(item, { orgId, code, itemId }) {
+function childGameData(item, {
+  orgId, code, itemId, createdBy,
+}) {
   const form = rules.sessionFormOf(item);
   if (!form || !rules.isEngagement(form.gameType)) return null;
   const isSurvey = form.gameType === 'survey';
@@ -79,6 +81,10 @@ function childGameData(item, { orgId, code, itemId }) {
     accessCode: null,
     eventRef: code,
     eventItem: itemId,
+    // THE EVENT'S CREATOR, carried onto each item's session (usage stats,
+    // 2026-10-11): the account an item's numbers are filed under, as a
+    // session's own creator is. Absent when the event row names nobody.
+    ...(createdBy ? { createdBy } : {}),
   };
   if (isSurvey) data.names = form.names;
   if (form.gameType === 'call-and-answer' && form.briefing) data.briefing = form.briefing;
@@ -95,9 +101,11 @@ const openingState = (type) => (type === 'survey' ? SURVEY_OPEN : 'STARTED');
  * removes what was made, so nothing is left holding a code.
  */
 async function createChildSession(db, tableName, {
-  item, orgId, code, itemId, now = new Date().toISOString(), open = true,
+  item, orgId, code, itemId, now = new Date().toISOString(), open = true, createdBy = '',
 }) {
-  const data = childGameData(item, { orgId, code, itemId });
+  const data = childGameData(item, {
+    orgId, code, itemId, createdBy,
+  });
   if (!data) throw new Error(`child-session: item ${itemId} of EVENT#${code} is not a playable engagement`);
   const gameId = await reserveCode(db, {
     kind: 'session', orgId, tableName, claim: (candidate) => createGame(candidate, data),
@@ -114,7 +122,10 @@ async function createChildSession(db, tableName, {
       throw error;
     }
   }
-  await recordSessionCreated({ gameId }); // platform metrics; never throws
+  // Platform metrics and usage stats; once per session, never throws.
+  await recordSessionCreated({
+    gameId, gameType: data.engagementType, orgId, createdBy: data.createdBy || '',
+  });
   return gameId;
 }
 

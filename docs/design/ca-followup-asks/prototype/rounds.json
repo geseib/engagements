@@ -1,0 +1,135 @@
+{
+  "eventTitle": "Platform engineering offsite: the agentic SDLC",
+  "rounds": {
+    "r3": {
+      "currentRound": "Question 3",
+      "hidden": false,
+      "questionTitle": "The machine wrote it and the machine reviewed it. What are you reviewing?",
+      "questionDetail": "A second agent will find the null dereference, the missing await, the off-by-one, and it will find them faster and more consistently than you will at 4pm on a Thursday. That leaves the human reviewer holding something else, and it is not obvious what. Candidates: the interface and who else now depends on it; the blast radius if this is wrong; whether the tests would fail if the code were wrong; whether this change should exist at all. Or the opposite answer, that human review of the diff stops entirely and moves to production behaviour. Say what you would actually spend your review attention on now, and what you would consciously let through unread.",
+      "task": "Say what you would stop reading. An answer that keeps reviewing everything is not an answer.",
+      "answers": [
+        {
+          "name": "Marcus Hale",
+          "text": "I stop reading the implementation body. I read the interface diff, the test assertions and the rollback plan. If the tests would still pass with the function body deleted, it goes back.",
+          "first": 3,
+          "second": 2,
+          "third": 1
+        },
+        {
+          "name": "Aisha Rahman",
+          "text": "Security-sensitive files only: auth, IAM, payments, anything touching personal data. Everything else goes through on the second agent's approval plus green CI.",
+          "first": 2,
+          "second": 2,
+          "third": 1
+        },
+        {
+          "name": "Ben Okafor",
+          "text": "The tests. If the agent wrote both the code and the tests, I review the tests as if they were the spec and skip the code.",
+          "first": 1,
+          "second": 2,
+          "third": 2
+        },
+        {
+          "name": "Wei Zhang",
+          "text": "Blast radius first: what else imports this, and who gets paged if it is wrong. I would skip anything under 50 lines that only touches one module.",
+          "first": 1,
+          "second": 1,
+          "third": 2
+        },
+        {
+          "name": "Dana Kowalski",
+          "text": "I would still read every test line by line, because the agent writes tests that describe the code. Style, naming and the obvious null checks I would let through unread.",
+          "first": 1,
+          "second": 1,
+          "third": 1
+        },
+        {
+          "name": "Kenji Mori",
+          "text": "Migrations and data scripts. Code can be rolled back; a bad backfill cannot.",
+          "first": 1,
+          "second": 1,
+          "third": 0
+        },
+        {
+          "name": "Priya Nair",
+          "text": "Stop reviewing diffs at all for anything behind a flag. Ship it to one percent and review the dashboards instead; production behaviour is the only review the agent cannot fake.",
+          "first": 0,
+          "second": 0,
+          "third": 2
+        },
+        {
+          "name": "Sofia Reyes",
+          "text": "Whether the change should exist at all. Half the agent pull requests I see solve a problem nobody asked for. I would stop reading formatting and lint-level comments completely.",
+          "first": 0,
+          "second": 0,
+          "third": 0
+        },
+        {
+          "name": "Tom Becker",
+          "text": "Honestly I would keep reading all of it for now. Last month an agent quietly widened an IAM policy and the reviewer agent approved it.",
+          "first": 0,
+          "second": 0,
+          "third": 0
+        }
+      ]
+    },
+    "r2": {
+      "currentRound": "Question 2",
+      "hidden": true,
+      "questionTitle": "If an agent can build it from the ticket, who writes the ticket?",
+      "questionDetail": "When the distance from a written intent to a running branch collapses to minutes, the written intent becomes the expensive part. Three positions are all defensible. One: specs get more rigorous than they have ever been, because ambiguity now produces confident wrong code instead of a question in standup. Two: specs get cheaper and more disposable, because when three implementations cost an afternoon you stop arguing and go look. Three: the ticket stops existing and the branch becomes the proposal. Pick the one your team is actually drifting toward and say whether that drift is a good thing.",
+      "task": "Two or three sentences. Say which way your team is drifting, not which way it should drift.",
+      "answers": [
+        {
+          "name": "p1",
+          "text": "Heavier specs, but only because the agent made the cost of ambiguity visible. Product writes the what, and engineers now write the what-if cases before anything runs.",
+          "first": 2,
+          "second": 1,
+          "third": 1
+        },
+        {
+          "name": "p2",
+          "text": "More rigorous, and it has shifted who writes them: senior engineers write the tickets now and juniors review the agent's output. I am not sure that is healthy for the juniors.",
+          "first": 2,
+          "second": 1,
+          "third": 1
+        },
+        {
+          "name": "p3",
+          "text": "We are drifting toward heavier specs. Our tickets now have acceptance criteria written as examples, because the agent takes vague tickets literally. Good, but slower.",
+          "first": 1,
+          "second": 2,
+          "third": 1
+        },
+        {
+          "name": "p4",
+          "text": "Heavier. We added a non-goals section after the agent built three features nobody asked for.",
+          "first": 1,
+          "second": 1,
+          "third": 1
+        },
+        {
+          "name": "p5",
+          "text": "Specs are getting more rigorous for anything touching billing, and disposable for UI. Two drifts at once.",
+          "first": 1,
+          "second": 1,
+          "third": 1
+        },
+        {
+          "name": "p6",
+          "text": "Disposable. We stopped arguing in refinement; someone asks the agent for two versions and we pick one in the demo. Nobody reads the ticket after that.",
+          "first": 0,
+          "second": 1,
+          "third": 1
+        },
+        {
+          "name": "p7",
+          "text": "Honestly the branch is the proposal now. Half our tickets are one line and a link to a preview build.",
+          "first": 0,
+          "second": 0,
+          "third": 1
+        }
+      ]
+    }
+  }
+}
