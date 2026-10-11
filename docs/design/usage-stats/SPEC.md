@@ -1,6 +1,7 @@
 # Monthly usage stats — spec
 
-Status: PROPOSED, 2026-10-11. Nothing built. Mockups: `index.html`. Build order: `PLAN.md`.
+Status: APPROVED, 2026-10-11. The owner accepted every recommendation in §13 as written
+("go with all the recommendations, build it"). Mockups: `index.html`. Build order: `PLAN.md`.
 
 The owner asked for monthly numbers for each account and each team, broken down by
 session type, plus usage numbers for each question set and each of its versions. Team
