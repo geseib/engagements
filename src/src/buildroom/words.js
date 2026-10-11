@@ -398,11 +398,28 @@ export const W = Object.freeze({
   alertShare: 'Share \u2192',
   stageDemoLive: 'The demo is live',
   stageDemoHead: 'Try the demo yourself',
-  stageDemoScan: 'Scan the code, or press Open the demo.',
   stageSameWifi: 'Same Wi-Fi as this laptop.',
   stageOpened: (n) => (n === 1 ? '1 has opened it' : `${n} have opened it`),
   buildCardSub: (n) => `Same Wi-Fi only \u00b7 ${n === 1 ? '1 has' : `${n} have`} opened it`,
   hideCode: 'Hide the code',
+  // TWO CODES (docs/design/build-room-two-qr, owner 2026-10-11, option C): the
+  // Join and Demo codes in Settings, and both on the Stage in one card.
+  codesJoin: 'Join',
+  codesAnyNetwork: 'any network',
+  codesDemo: 'Demo',
+  codesSameWifi: 'same Wi-Fi only',
+  noDemoYet: 'No demo yet',
+  noDemoBody: 'When Claude runs the app, you can share it here.',
+  noDemoRoom: "The room sees Claude's screenshots.",
+  notShared: 'Not shared',
+  demoSlotStarting: 'The code appears here when the laptop is reachable.',
+  demoJoinsWhenLive: 'The demo joins the Stage card when it is live.',
+  openedOfHere: (n, here) => `${n} of ${here} opened it`,
+  noneOpened: 'None opened yet',
+  showBothOnStage: 'Show both on the Stage',
+  hideCodes: 'Hide the codes',
+  stageJoinEyebrow: 'Join the room',
+  stageJoinHead: 'Scan to join',
   openDemo: 'Open the demo',
   /** A participant, sharing off (D5 b). No button: the owner ruled out "Ask to try it". */
   demoNotShared: "The demo runs on the host's laptop. Screenshots are below.",
@@ -507,4 +524,7 @@ export const RETIRED = Object.freeze([
   { word: 'Let the room open it themselves?', enforced: true, task: 'share-demo' },
   { word: 'Open the build yourself', enforced: true, task: 'share-demo' },
   { word: 'Wi-Fi ·', prefix: true, enforced: true, task: 'share-demo' },
+  // Two codes (2026-10-11): Settings shows the codes; the Stage card has one place for them.
+  { word: 'Show the QR on the wall', enforced: true, task: 'two-codes' },
+  { word: 'Scan the code, or press Open the demo.', enforced: true, task: 'two-codes' },
 ]);

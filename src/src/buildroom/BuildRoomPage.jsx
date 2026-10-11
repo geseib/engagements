@@ -55,7 +55,7 @@ import { isTypingTarget, dialogOpen } from './useNextFocus';
 import BuildStageDecide from './BuildStageDecide';
 import { useRosterMode, rosterRevealFor } from '../hooks/useRosterReveal';
 import { joinedRoster } from '../config/anonymity';
-import { ShareDemo, DemoNudge, WallBuildQr, BuildScreenQr, wifiLink } from './BuildWifiShare';
+import { ShareDemo, DemoNudge, WallCodes, BuildScreenQr, wifiLink, demoOnStage, shownAddress } from './BuildWifiShare';
 import { shouldOfferDemo, demoRunnable, wifiState } from './wifiShare';
 import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
 import PendingInvites from '../components/PendingInvites';
@@ -472,13 +472,15 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // Crew mode: which stage shows (the room's asks, or the crew board), and the early look open.
   const [stage, setStage] = useState('room');
   const [openShareId, setOpenShareId] = useState(null);
-  const [wallQr, setWallQr] = useState(false);
+  // THE CODES ON THE STAGE (two codes, owner 2026-10-11): one card, Join and
+  // the demo. It stays up while nobody has opened the demo (no auto-hide);
+  // when sharing stops or fails the demo half leaves and Join stays. Only the
+  // host, or the session ending, takes it down.
+  const [codesUp, setCodesUp] = useState(false);
+  const hideCodes = useCallback(() => setCodesUp(false), []);
   const now = useNow(5000);
-  // The wall QR is put away the moment sharing stops or the session ends, so
-  // it cannot come back on the projector when sharing next turns on.
-  const sharingNow = Boolean(room) && ['on', 'quiet'].includes(wifiState(room.lan, now).state);
   const endedNow = Boolean(room) && room.state === 'ENDED';
-  useEffect(() => { if (!sharingNow || endedNow) setWallQr(false); }, [sharingNow, endedNow]);
+  useEffect(() => { if (endedNow) setCodesUp(false); }, [endedNow]);
 
   // ── THE SESSION PANEL (owner, 2026-10-09) ───────────────────────────────
   // The roster is read here, not in the panel, because the count on SESSION
@@ -491,7 +493,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [panel, setPanel] = useState(null); // {tab: 'players'|'settings', group}
   const openPanel = useCallback((tab = 'players', group = '') => setPanel({ tab, group }), []);
   const closePanel = useCallback(() => setPanel(null), []);
-  const [qrOpen, setQrOpen] = useState(false);
+  // The header's join button with no demo to show: the one big Join QR (QrZoom).
+  const [joinZoom, setJoinZoom] = useState(false);
   const narrow = useNarrowHeader();
   const playerCount = room ? room.playerCount : undefined;
   useEffect(() => { loadPlayers(); }, [loadPlayers, playerCount]);
@@ -831,15 +834,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
   // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
   const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
-  const showWall = () => { setScreen('stage'); setWallQr(true); };
-  const share = { busy, run, api, onShowWall: showWall };
+  const showCodes = () => { setScreen('stage'); setCodesUp(true); };
+  // The chip's Show on the Stage opens the same card (ruling 3).
+  const share = { busy, run, api, onShowWall: showCodes };
+  // The header's join button: both codes while the demo is live, Join alone otherwise (ruling 4).
+  const demoLive = demoOnStage(room, now, wifiLink(room));
+  const onJoinCode = demoLive ? showCodes : () => setJoinZoom(true);
   const headerTools = {
     room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: setScreen, share,
-    onQr: () => setQrOpen(true),
+    onQr: onJoinCode, bothCodes: demoLive,
     onPlayers: () => openPanel('players'),
   };
-  // The Wi-Fi QR on the wall sits on the Stage, which has no header of its own.
-  const wallQrLink = wallQr && sharingNow ? wifiLink(room) : '';
   const asks = room.asks || [];
   const proposed = asks.filter((a) => a.status === 'proposed');
   const current = asks.find((a) => a.askId === room.currentAskId && ['live', 'voting', 'results'].includes(a.status)) || null;
@@ -1004,6 +1009,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           run={run}
           api={api}
           now={now}
+          codesUp={codesUp && !ended}
+          onHideCodes={hideCodes}
           draft={current ? drafts[current.askId] || null : null}
           onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
           onHost={() => setScreen('host')}
@@ -1040,7 +1047,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
         pluginOutdated={Boolean(room.plugin && room.plugin.outdated) && !ended}
         onPlayers={() => openPanel('players')}
-        onQr={() => setQrOpen(true)}
+        onQr={onJoinCode}
+        bothCodes={demoLive}
         share={{ ...share, nudge: demoOffered && !narrow && (screen === 'build' || screen === 'history') }}
       />
       {/* A TEAM INVITATION (owner, 2026-10-10, option A): a slim bar on the Host
@@ -1239,7 +1247,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       </>
       )}
 
-      {qrOpen && <QrZoom playUrl={`${window.location.origin}/play?gameId=${room.gameId}`} gameId={room.gameId} onClose={() => setQrOpen(false)} />}
+      {joinZoom && <QrZoom playUrl={`${window.location.origin}/play?gameId=${room.gameId}`} gameId={room.gameId} onClose={() => setJoinZoom(false)} />}
       {panel && (
         <BuildSessionPanel
           room={room} now={now} ended={ended} busy={busy} run={run} api={api} connected={connection === 'live'}
@@ -1257,8 +1265,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onWrap={() => dialogFromPanel('wrap')}
           onReport={() => goView('report')}
           onEnd={() => dialogFromPanel('end')}
-          onShowQr={() => setQrOpen(true)}
-          onWifiWall={showWall}
+          onShowCodes={showCodes}
           wifiLink={wifiLink(room)}
         />
       )}
@@ -1343,7 +1350,6 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onDone={() => { setVoteIdeas(null); setVotePicks(1); setLaterTicked([]); }}
         />
       )}
-      {wallQrLink && <WallBuildQr link={wallQrLink} open={room.lan && room.lan.open} onClose={() => setWallQr(false)} />}
       {detailAskId && askById(room, detailAskId) && (
         <AskDetail ask={askById(room, detailAskId)} entry={toldEntry(room, detailAskId)} held={((room.brief && room.brief.later) || []).some((i) => i.askId === detailAskId)} onClose={() => setDetailAskId(null)} onViewMockup={(label) => openViewer(detailAskId, label, 'history')} />
       )}
@@ -1688,7 +1694,7 @@ function useNarrowHeader() {
  * The chip is on every screen with a header (Share demo D1 B, D3): it carries
  * the nudge on Build and History, and Share demo after Not now.
  */
-function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, withPill = true }) {
+function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes = false, withPill = true }) {
   // Share demo appears once there is a running app to share (owner, 2026-10-11).
   const showWifi = !ended && Boolean(share) && demoRunnable(room);
   return (
@@ -1707,7 +1713,13 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
       )}
       <span className="brm-agentwrap"><AgentChip room={room} now={now} /></span>
       {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
-      <button type="button" className="brm-codewrap brm-codebtn" title="Show the QR code" aria-label={`Join code ${room.gameId}. Show the QR code`} onClick={onQr}>
+      <button
+        type="button"
+        className="brm-codewrap brm-codebtn"
+        title={bothCodes ? 'Show both codes on the Stage' : 'Show the QR code'}
+        aria-label={bothCodes ? `Join code ${room.gameId}. Show both codes on the Stage` : `Join code ${room.gameId}. Show the QR code`}
+        onClick={onQr}
+      >
         <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
       </button>
       <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers}>{room.playerCount || 0} joined</button>
@@ -1717,12 +1729,12 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
 
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
-  onSession, panelOpen, askingCount, onPlayers, onQr, pluginOutdated = false,
+  onSession, panelOpen, askingCount, onPlayers, onQr, bothCodes = false, pluginOutdated = false,
   alert, onAlertGo, onAlertAll, share,
 }) {
   const pill = askPill(room);
   const tucked = narrow;
-  const tools = { room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share };
+  const tools = { room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes };
   return (
     <header className="brm-hbar">
       {/* MAIN MENU (B5, 2026-10-08): always the first control, on every host
@@ -1882,6 +1894,7 @@ function hintVerb(move) {
   if (move.action === 'open' || move.action === 'vote') return 'open voting';
   if (move.action === 'edit') return 'change before sending';
   if (move.action === 'reopen') return 'reopen it';
+  if (move.action === 'hide-codes') return move.label === W.hideCodes ? 'hide the codes' : 'hide the code';
   return 'go';
 }
 
@@ -1897,9 +1910,11 @@ function hintVerb(move) {
  * window (StageDecide), and a click on an option or a wheel slice opens that
  * window with the pick made (owner, 2026-10-08).
  */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, onHost, alert, onAlertGo, onAlertAll, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
+function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, codesUp = false, onHideCodes = () => {}, onHost, alert, onAlertGo, onAlertAll, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
-  const [qr, setQr] = useState(false);
+  // One code enlarged alone: the rail's join code, or either code on the codes card.
+  const [zoom, setZoom] = useState(null); // 'join' | 'demo'
+  const demoLink = wifiLink(room);
   // "Press Space to ..." is for the host at the dock: it shows only while the pointer is on the dock (copy pass 2026-10-10).
   const [overDock, setOverDock] = useState(false);
   // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
@@ -1923,11 +1938,15 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
     if (editable) { setEditPick(id); setEditing(true); return; }
     onPick(id);
   };
-  const move = !ended && m.primary ? m.primary : null;
+  // THE CODES CARD: its one move is to take it down, so the dock's button and Space do that.
+  const both = codesUp && demoOnStage(room, now, demoLink);
+  const hideMove = useMemo(() => ({ action: 'hide-codes', label: both ? W.hideCodes : W.hideCode }), [both]);
+  const move = codesUp ? hideMove : (!ended && m.primary ? m.primary : null);
   const doMove = useCallback((m) => {
     if (!m || busy) return;
     // The turning wheel offers nothing: a pick waits for it to stop, as the Host's button does.
     if (m.action === 'noop' || m.disabled || (m.action === 'to-claude' && wheelTurning)) return;
+    if (m.action === 'hide-codes') { onHideCodes(); return; }
     // A pick waits for the wheel to stop, as the Host's button does.
     if (m.action === 'noop' || m.disabled || (m.action === 'to-claude' && wheelTurning)) return;
     // EDIT opens the send window here; TO CLAUDE sends the room's choice with
@@ -1956,8 +1975,18 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       return;
     }
     run(() => api.askAction(m.askId || current.askId, { action: m.action }));
-  }, [busy, run, api, current, editable, wheelTurning, room, onTakeDown, onPointLater, onPointsMove, onRunNext, onRunSkip, onRunStop]);
+  }, [busy, run, api, current, editable, wheelTurning, room, onTakeDown, onPointLater, onPointsMove, onRunNext, onRunSkip, onRunStop, onHideCodes]);
   const act = useCallback(() => doMove(move), [doMove, move]);
+  // Escape takes the codes down too, as the card it replaced did; never while a dialog is up.
+  useEffect(() => {
+    if (!codesUp) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || dialogOpen()) return;
+      onHideCodes();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [codesUp, onHideCodes]);
   // Space fires the dock's move: never while typing, and never when a focused
   // control would take the Space itself.
   useEffect(() => {
@@ -1989,7 +2018,9 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
   const body = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   let content;
-  if (crewOn) {
+  if (codesUp) {
+    content = <WallCodes room={room} now={now} link={demoLink} onZoom={setZoom} />;
+  } else if (crewOn) {
     content = (
       <>
         {onWall && <EarlyLook key={onWall.shareId} share={onWall} crew={crew} host={false} stage />}
@@ -2032,7 +2063,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       <Stage
         profile={profile}
         phase={m.phase || ''}
-        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}` : 'idle', crewOn ? 'crew' : ''].join('|')}
+        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : ''].join('|')}
         rail={(
           <Rail
             phase={m.phase}
@@ -2040,10 +2071,10 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             context={m.context}
             join={ended
               ? { code: room.gameId, closed: true }
-              : { url: `${window.location.host}/play`, code: room.gameId, onPreview: () => undefined, onPreviewEnd: () => undefined, onPin: () => setQr(true) }}
+              : { url: `${window.location.host}/play`, code: room.gameId, onPreview: () => undefined, onPreviewEnd: () => undefined, onPin: () => setZoom('join') }}
           />
         )}
-        meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} waiting={joinedWaiting} />}
+        meter={codesUp ? null : <RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} waiting={joinedWaiting} />}
         dock={(
           <Dock
             onMouseEnter={() => setOverDock(true)}
@@ -2058,8 +2089,8 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             </>
           ) : m.status}
           >
-            {!ended && (m.extras || []).map((x) => <button key={x.action} type="button" className="btn ghost" disabled={busy || x.disabled} onClick={() => doMove(x)}>{x.label}</button>)}
-            {!ended && m.secondary && <button type="button" className="btn ghost" disabled={busy || m.secondary.disabled} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
+            {!ended && !codesUp && (m.extras || []).map((x) => <button key={x.action} type="button" className="btn ghost" disabled={busy || x.disabled} onClick={() => doMove(x)}>{x.label}</button>)}
+            {!ended && !codesUp && m.secondary && <button type="button" className="btn ghost" disabled={busy || m.secondary.disabled} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
             {move && <button type="button" className="btn" disabled={busy || move.disabled || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
             {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
             {overDock && move && !move.disabled && !(move.action === 'run-next' && !move.claudeDone) && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
@@ -2080,7 +2111,8 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
       {editing && editable && (
         <BuildStageDecide key={`${current.askId}:${editPick || ''}`} initialPick={editPick} draft={draft} onSent={onSent} ask={current} busy={busy} run={run} api={api} onClose={() => { setEditing(false); setEditPick(null); }} />
       )}
-      {qr && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setQr(false)} />}
+      {zoom === 'join' && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setZoom(null)} />}
+      {zoom === 'demo' && demoLink && <QrZoom demoLink={demoLink} onClose={() => setZoom(null)} />}
     </>
   );
 }
@@ -2311,7 +2343,22 @@ function CopyLinkButton({ url, className, children }) {
  * The QR, big enough to scan from the back of the room (owner, 2026-10-04).
  * A click anywhere puts it away; the link under it copies instead.
  */
-export function QrZoom({ playUrl, gameId, onClose }) {
+export function QrZoom({ playUrl, gameId, onClose, demoLink = '' }) {
+  if (demoLink) {
+    // The demo's code alone, for a long room (two codes, 2026-10-11). Its key
+    // is in the code, never in the words: the address shows host and port only.
+    return (
+      <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Demo QR code">
+        <div className="brm-qrzoom-body" onClick={onClose}>
+          <div className="brm-qrzoom-qr" role="img" aria-label="QR code to open the demo">
+            <QRCodeSVG value={demoLink} size={512} level="M" includeMargin={false} />
+          </div>
+          <div className="brm-qrzoom-url">{shownAddress(demoLink)}</div>
+          <div className="brm-qrzoom-code">{W.stageSameWifi}</div>
+        </div>
+      </Modal>
+    );
+  }
   return (
     <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Join QR code">
       <div className="brm-qrzoom-body" onClick={onClose}>

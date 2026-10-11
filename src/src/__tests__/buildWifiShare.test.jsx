@@ -6,7 +6,9 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { WifiChip, SharePanel, ShareDemo, DemoNudge, WallBuildQr, BuildScreenQr, wifiLink } from '../buildroom/BuildWifiShare';
+import {
+  WifiChip, SharePanel, ShareDemo, DemoNudge, DemoTile, WallCodes, BuildScreenQr, wifiLink, demoSlotOf,
+} from '../buildroom/BuildWifiShare';
 
 const NOW = '2026-10-07T12:00:00.000Z';
 const LINK = 'http://192.168.1.20:4900/?k=KEY';
@@ -124,16 +126,6 @@ describe('the panel (D1 B, D2, D2 quiet)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
-
-  test('inline (Session, Settings): no X, Share demo starts it, nothing is asked again', () => {
-    const api = { share: jest.fn().mockResolvedValue({}) };
-    panel({ lan: { ...OFF, offerDismissed: true }, link: '', api, inline: true });
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Share demo' }));
-    expect(api.share).toHaveBeenCalledWith({ on: true });
-  });
 });
 
 describe('the chip and its popover', () => {
@@ -173,27 +165,160 @@ test('the nudge on the Host screen (D1 A): the words, the picture, Not now, Shar
   expect(api.share).toHaveBeenCalledWith({ dismissOffer: true });
 });
 
-describe('the Stage while shared (D4)', () => {
-  test('the QR, three short lines and the count; no device and no name; Hide the code', () => {
-    const onClose = jest.fn();
-    render(<WallBuildQr link={LINK} open={11} onClose={onClose} />);
-    const d = screen.getByRole('dialog', { name: 'Try the demo yourself' });
-    expect(within(d).getByText('The demo is live')).toBeInTheDocument();
-    expect(within(d).getByText('Scan the code, or press Open the demo.')).toBeInTheDocument();
-    expect(within(d).getByText('Same Wi-Fi as this laptop.')).toBeInTheDocument();
-    expect(within(d).getByText('11 have opened it')).toBeInTheDocument();
-    expect(within(d).queryByText(/phone|tablet/i)).toBeNull();
-    // Every line the room reads is 12 words or fewer.
-    [...d.querySelectorAll('h2, p, span')].forEach((el) => expect(el.textContent.trim().split(/\s+/).length).toBeLessThanOrEqual(12));
-    const hide = within(d).getByRole('button', { name: 'Hide the code' });
-    expect(hide).toHaveClass('brm-btn--primary');
-    fireEvent.click(hide);
-    fireEvent.click(within(d).getByRole('button', { name: 'Close the QR' }));
-    expect(onClose).toHaveBeenCalledTimes(2);
+/**
+ * TWO CODES (docs/design/build-room-two-qr, option C; owner 2026-10-11). The
+ * Demo tile in Settings in each state, and the Stage card. Wi-Fi only.
+ */
+const SHOWN = [{ by: 'agent', link: 'http://localhost:5173/' }];
+const roomWith = (lan, extra = {}) => ({ gameId: '4443', playerCount: 18, log: SHOWN, lan, ...extra });
+const tile = (room, props = {}) => render(
+  <DemoTile room={room} now={NOW} link={LINK} here={18} busy={false} run={runNow} api={{ share: jest.fn().mockResolvedValue({}) }} {...props} />,
+);
+const tileEl = () => screen.getByTestId('brm-demo-tile');
+
+describe('the Demo tile (two codes, Settings)', () => {
+  test('screenshots alone: the No demo yet placeholder, code-shaped, with no Share demo and no orange', () => {
+    tile({ gameId: '4443', log: [], lan: OFF });
+    const t = tileEl();
+    expect(t).toHaveAttribute('data-state', 'none');
+    const slot = t.querySelector('.brm-codes-slot--tbd');
+    expect(slot).not.toBeNull();
+    // The three corner marks of a QR, so it reads as "a code goes here".
+    expect(slot.querySelectorAll('.brm-codes-fp')).toHaveLength(3);
+    expect(within(slot).getByText('No demo yet')).toBeInTheDocument();
+    expect(within(slot).getByText('When Claude runs the app, you can share it here.')).toBeInTheDocument();
+    expect(within(t).getByText("The room sees Claude's screenshots.")).toBeInTheDocument();
+    expect(within(t).queryByRole('button')).toBeNull();
+    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+  });
+
+  test('runnable, not shared: Not shared, who can reach it, Share demo is the orange and starts it', () => {
+    const api = { share: jest.fn().mockResolvedValue({}) };
+    tile(roomWith(OFF), { api, link: '' });
+    const t = tileEl();
+    expect(t).toHaveAttribute('data-state', 'off');
+    expect(within(t).getByText('Not shared')).toBeInTheDocument();
+    expect(within(t).getByText('Only this laptop can open it.')).toBeInTheDocument();
+    expect(within(t).getByText("People on this Wi-Fi can open this laptop's app. No one else can.")).toBeInTheDocument();
+    const go = within(t).getByRole('button', { name: 'Share demo' });
+    expect(go).toHaveClass('brm-btn--primary');
+    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    fireEvent.click(go);
+    expect(api.share).toHaveBeenCalledWith({ on: true });
+  });
+
+  test('starting: a status, where the code will appear, Stop sharing; no orange', () => {
+    tile(roomWith({ wanted: true, status: 'starting', wantedAt: '2026-10-07T11:59:50.000Z', map: [] }), { link: '' });
+    const t = tileEl();
+    expect(within(t).getByRole('status')).toHaveTextContent('Starting…');
+    expect(within(t).getByText('The code appears here when the laptop is reachable.')).toBeInTheDocument();
+    expect(within(t).getByRole('button', { name: 'Stop sharing' })).not.toHaveClass('brm-btn--primary');
+    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+  });
+
+  test('waiting: Claude Code has not answered, and what to do', () => {
+    tile(roomWith({ wanted: true, status: 'starting', wantedAt: '2026-10-07T11:59:00.000Z', reportedAt: null, map: [] }), { link: '' });
+    expect(tileEl()).toHaveAttribute('data-state', 'waiting');
+    expect(within(tileEl()).getByRole('status')).toHaveTextContent('Claude Code has not answered.Update the plugin, then restart it.');
+  });
+
+  test('live: the code, same Wi-Fi only, the address without its key, "11 of 18 opened it", Copy and Stop sharing; no orange', () => {
+    const api = { share: jest.fn().mockResolvedValue({}) };
+    tile(roomWith(LIVE), { api });
+    const t = tileEl();
+    expect(t).toHaveAttribute('data-state', 'on');
+    expect(within(t).getByRole('img', { name: 'QR code to open the demo' })).toBeInTheDocument();
+    expect(within(t).getByText('same Wi-Fi only')).toBeInTheDocument();
+    expect(t.querySelector('.brm-codes-u').textContent).toBe('192.168.1.20:4900');
+    // The key is only in the code and what Copy copies, never in the words.
+    expect([...t.querySelectorAll('h4, p, .brm-codes-u')].map((e) => e.textContent).join(' ')).not.toMatch(/k=/);
+    expect(within(t).getByText('11 of 18 opened it')).toBeInTheDocument();
+    expect(within(t).getAllByRole('button').map((b) => b.textContent)).toEqual(['Copy', 'Stop sharing']);
+    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+    fireEvent.click(within(t).getByRole('button', { name: 'Stop sharing' }));
+    expect(api.share).toHaveBeenCalledWith({ on: false });
+  });
+
+  test('quiet: the code stays, dimmed, None opened yet; Stop sharing is the group\'s orange, not the tile\'s', () => {
+    tile(roomWith(QUIET));
+    const t = tileEl();
+    expect(t).toHaveClass('is-quiet');
+    expect(within(t).getByRole('img', { name: 'QR code to open the demo' })).toBeInTheDocument();
+    expect(within(t).getByText('None opened yet')).toBeInTheDocument();
+    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+  });
+
+  test("failed: It didn't start, the reason, Try again the orange, Stop sharing beside", () => {
+    const api = { share: jest.fn().mockResolvedValue({}) };
+    tile(roomWith({ wanted: true, status: 'failed', error: 'No Wi-Fi address on this laptop.', map: [] }), { api, link: '' });
+    const t = tileEl();
+    expect(within(t).getByText("It didn't start.")).toBeInTheDocument();
+    expect(within(t).getByText('No Wi-Fi address on this laptop.')).toBeInTheDocument();
+    const again = within(t).getByRole('button', { name: 'Try again' });
+    expect(again).toHaveClass('brm-btn--primary');
+    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    fireEvent.click(again);
+    expect(api.share).toHaveBeenCalledWith({ on: true });
+    fireEvent.click(within(t).getByRole('button', { name: 'Stop sharing' }));
+    expect(api.share).toHaveBeenCalledWith({ on: false });
+  });
+
+  test('the tile and the chip read the same state', () => {
+    expect(demoSlotOf(roomWith(LIVE), NOW)).toBe('on');
+    expect(demoSlotOf(roomWith(QUIET), NOW)).toBe('quiet');
+    expect(demoSlotOf({ log: [], lan: OFF }, NOW)).toBe('none');
+    // Sharing already on counts as runnable, screenshots or not.
+    expect(demoSlotOf({ log: [], lan: LIVE }, NOW)).toBe('on');
+  });
+});
+
+describe('the codes on the Stage (two codes, ST1/ST2)', () => {
+  const lines = (el) => [...el.querySelectorAll('h2, p, span')].filter((x) => !x.closest('button'));
+
+  test('live: Join left, the demo right, short lines, the count; a click on a code enlarges that code alone', () => {
+    const onZoom = jest.fn();
+    render(<WallCodes room={roomWith(LIVE)} now={NOW} link={LINK} onZoom={onZoom} />);
+    const card = screen.getByTestId('brm-wallcodes');
+    const cols = [...card.querySelectorAll('.brm-wallcodes-c')];
+    expect(cols).toHaveLength(2);
+    expect(within(cols[0]).getByText('Join the room')).toBeInTheDocument();
+    expect(within(cols[0]).getByRole('heading', { name: 'Scan to join' })).toBeInTheDocument();
+    expect(cols[0].querySelector('.brm-wallcodes-l').textContent).toBe(`${window.location.host}/play · code 4443`);
+    expect(within(cols[1]).getByText('The demo is live')).toBeInTheDocument();
+    expect(within(cols[1]).getByRole('heading', { name: 'Try the demo yourself' })).toBeInTheDocument();
+    expect(within(cols[1]).getByText('Same Wi-Fi as this laptop.')).toBeInTheDocument();
+    expect(within(cols[1]).getByText('11 have opened it')).toBeInTheDocument();
+    // The room reads it: no device named, no person named, every line 12 words or fewer.
+    expect(card.textContent).not.toMatch(/phone|tablet/i);
+    lines(card).forEach((el) => expect(el.textContent.trim().split(/\s+/).length).toBeLessThanOrEqual(12));
+    fireEvent.click(within(card).getByRole('button', { name: 'Enlarge the demo code' }));
+    expect(onZoom).toHaveBeenLastCalledWith('demo');
+    fireEvent.click(within(card).getByRole('button', { name: 'Enlarge the join code' }));
+    expect(onZoom).toHaveBeenLastCalledWith('join');
+  });
+
+  test('quiet (nobody opened it): the demo stays up, and no count is shown', () => {
+    render(<WallCodes room={roomWith(QUIET)} now={NOW} link={LINK} onZoom={() => {}} />);
+    const card = screen.getByTestId('brm-wallcodes');
+    expect(card.querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+    expect(card.querySelector('.brm-wallcodes-n')).toBeNull();
+  });
+
+  test.each([
+    ['stopped', OFF],
+    ['failed', { wanted: true, status: 'failed', error: 'x', map: [] }],
+    ['starting', { wanted: true, status: 'starting', map: [] }],
+  ])('%s: the card is Join alone, never an empty slot', (_n, lan) => {
+    render(<WallCodes room={roomWith(lan)} now={NOW} link={LINK} onZoom={() => {}} />);
+    const card = screen.getByTestId('brm-wallcodes');
+    expect(card).toHaveClass('is-one');
+    expect(card.querySelectorAll('.brm-wallcodes-c')).toHaveLength(1);
+    expect(screen.queryByText('Try the demo yourself')).toBeNull();
+    expect(screen.getByText('Scan to join')).toBeInTheDocument();
   });
 
   test('one person: "1 has opened it"', () => {
-    render(<WallBuildQr link={LINK} open={1} onClose={() => {}} />);
+    render(<WallCodes room={roomWith({ ...LIVE, open: 1 })} now={NOW} link={LINK} onZoom={() => {}} />);
     expect(screen.getByText('1 has opened it')).toBeInTheDocument();
   });
 });

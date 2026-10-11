@@ -52,10 +52,27 @@ describe('words.js', () => {
     expect(W.anyoneOnWifi).toBe('Anyone on this Wi-Fi');
     expect(W.demoReadyLine).toBe('The demo is ready to share');
     expect(W.stageDemoHead).toBe('Try the demo yourself');
-    expect(W.stageDemoScan).toBe('Scan the code, or press Open the demo.');
+    expect(W.stageDemoScan).toBeUndefined();
     expect(W.stageSameWifi).toBe('Same Wi-Fi as this laptop.');
     expect(W.stageOpened(11)).toBe('11 have opened it');
     expect(W.hideCode).toBe('Hide the code');
+    // Two codes (owner, 2026-10-11): Join and Demo in Settings, both on the Stage.
+    expect(W.codesJoin).toBe('Join');
+    expect(W.codesAnyNetwork).toBe('any network');
+    expect(W.codesDemo).toBe('Demo');
+    expect(W.codesSameWifi).toBe('same Wi-Fi only');
+    expect(W.noDemoYet).toBe('No demo yet');
+    expect(W.noDemoBody).toBe('When Claude runs the app, you can share it here.');
+    expect(W.noDemoRoom).toBe("The room sees Claude's screenshots.");
+    expect(W.notShared).toBe('Not shared');
+    expect(W.demoSlotStarting).toBe('The code appears here when the laptop is reachable.');
+    expect(W.demoJoinsWhenLive).toBe('The demo joins the Stage card when it is live.');
+    expect(W.openedOfHere(11, 18)).toBe('11 of 18 opened it');
+    expect(W.noneOpened).toBe('None opened yet');
+    expect(W.showBothOnStage).toBe('Show both on the Stage');
+    expect(W.hideCodes).toBe('Hide the codes');
+    expect(W.stageJoinEyebrow).toBe('Join the room');
+    expect(W.stageJoinHead).toBe('Scan to join');
     expect(W.openDemo).toBe('Open the demo');
     expect(W.demoNotShared).toBe("The demo runs on the host's laptop. Screenshots are below.");
     expect(W.demoDidntOpen).toBe("Didn't open?");

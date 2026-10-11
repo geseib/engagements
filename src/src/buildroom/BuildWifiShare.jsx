@@ -12,9 +12,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../components/Icon';
-import Modal from '../components/Modal';
 import { copyText } from '../utils/copyText';
-import { wifiState } from './wifiShare';
+import { wifiState, demoRunnable } from './wifiShare';
 import { useKeepOnScreen } from './keepOnScreen';
 import { W } from './words';
 
@@ -47,7 +46,7 @@ export function WifiChip({ lan, now, onOpen, open }) {
 const APP_NAMES = ['Latest build', 'Second app', 'Third app', 'Fourth app'];
 
 /** What a person reads of a Wi-Fi link: its host and port. The key is never shown, only copied. */
-const shownAddress = (link) => { try { return new URL(String(link)).host; } catch (e) { return ''; } };
+export const shownAddress = (link) => { try { return new URL(String(link)).host; } catch (e) { return ''; } };
 
 function CopyLink({ link }) {
   const [said, setSaid] = useState('');
@@ -76,39 +75,36 @@ function Address({ link, note, copy = true }) {
 }
 
 /**
- * THE PANEL (D1 B, D2, D2 quiet), one element in every state. As a popover it
- * hangs from the chip with an X and a bottom exit; `inline` is the Session
- * panel's Settings (D3: Share demo stays reachable there), with no X and no
- * Not now. `offer` is the nudge: its Not now also tells the room not to ask
- * again. `here` is who is in the room.
+ * THE PANEL (D1 B, D2, D2 quiet), one element in every state. It hangs from
+ * the chip with an X and a bottom exit. `offer` is the nudge: its Not now also
+ * tells the room not to ask again. `here` is who is in the room. Settings
+ * carries the same states in its Demo tile (DemoTile, below).
  */
-export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, onShowWall, offer = false, inline = false }) {
+export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, onShowWall, offer = false }) {
   const s = wifiState(lan, now);
   const map = (lan && lan.map) || [];
   const panelRef = useRef(null);
-  useKeepOnScreen(panelRef, !inline, s.state);
+  useKeepOnScreen(panelRef, true, s.state);
   const share = (on) => run(() => api.share({ on }));
   const notNow = () => {
     if (offer) run(() => api.share({ dismissOffer: true }));
     onClose();
   };
-  const primary = inline ? '' : ' brm-btn--primary';
   const live = s.state === 'on' || s.state === 'quiet';
-  const Head = inline ? 'h4' : 'h3';
-  const head = live ? W.shareLiveHead : s.state === 'off' ? (inline ? W.shareDemo : W.shareNudgeHead) : W.shareDemo;
+  const head = live ? W.shareLiveHead : s.state === 'off' ? W.shareNudgeHead : W.shareDemo;
   let body;
   let foot;
   if (s.state === 'off') {
     body = (
       <>
-        {!inline && <p className="brm-wifipanel-lede">{W.shareNudgeBody}</p>}
+        <p className="brm-wifipanel-lede">{W.shareNudgeBody}</p>
         <p className="brm-wifipanel-say">{W.shareWho}</p>
       </>
     );
     foot = (
       <>
-        {!inline && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={notNow}>{W.notNow}</button>}
-        <button type="button" className={`brm-btn brm-btn--sm${primary}${inline ? '' : ' brm-push'}`} disabled={busy} onClick={() => share(true)}>{W.shareDemo}</button>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={notNow}>{W.notNow}</button>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy} onClick={() => share(true)}>{W.shareDemo}</button>
       </>
     );
   } else if (s.state === 'failed') {
@@ -116,7 +112,7 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
     foot = (
       <>
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
-        <button type="button" className={`brm-btn brm-btn--sm${primary} brm-push`} disabled={busy} onClick={() => share(true)}>{W.tryAgain}</button>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy} onClick={() => share(true)}>{W.tryAgain}</button>
       </>
     );
   } else if (s.state === 'starting' || s.state === 'waiting') {
@@ -127,21 +123,15 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
   } else if (s.state === 'quiet') {
     body = (
       <>
-        <div className="brm-wifipanel-warn">
-          <b>{W.wifiQuietHead}</b> {W.wifiQuietBody}
-          <ul>
-            <li>{W.wifiTest}</li>
-            <li>{W.wifiSameAdvice}</li>
-          </ul>
-        </div>
+        <QuietWarning />
         <Address link={link} note={W.wifiFailsForRoom} copy={false} />
       </>
     );
     foot = (
       <>
-        {!inline && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onClose}>{W.keepSharing}</button>}
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onClose}>{W.keepSharing}</button>
         {/* Sharing that reaches nobody only exposes the laptop: Stop is the move (D2 quiet). */}
-        <button type="button" className={`brm-btn brm-btn--sm${primary}${inline ? '' : ' brm-push'}`} disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
       </>
     );
   } else {
@@ -155,34 +145,49 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
     foot = (
       <>
         <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
-        <button type="button" className={`brm-btn brm-btn--sm${primary} brm-push`} disabled={!link} onClick={onShowWall}>{W.shareShowOnStage}</button>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={!link} onClick={onShowWall}>{W.shareShowOnStage}</button>
       </>
     );
   }
   return (
-    <div
-      className={`brm-wifipanel${inline ? ' brm-wifipanel--inline' : ''}`}
-      {...(inline ? { 'aria-label': W.shareDemo } : { role: 'dialog', 'aria-label': W.shareDemo })}
-      ref={panelRef}
-    >
+    <div className="brm-wifipanel" role="dialog" aria-label={W.shareDemo} ref={panelRef}>
       <div className="brm-wifipanel-top">
-        <Head>{head}</Head>
-        {!inline && <button type="button" className="brm-wifipanel-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>}
+        <h3>{head}</h3>
+        <button type="button" className="brm-wifipanel-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
       </div>
       {body}
-      {live && map.length > 1 && (
-        <ul className="brm-wifipanel-apps">
-          {map.map((m, i) => (
-            <li key={m.lan}>
-              <span className="brm-wifipanel-k">{APP_NAMES[i] || `App ${i + 1}`}</span>
-              <span className="brm-wifipanel-u" title={m.local}>{shownAddress(m.lan)}</span>
-              {m.link && <CopyLink link={m.link} />}
-            </li>
-          ))}
-        </ul>
-      )}
+      {live && <AppList map={map} />}
       <div className="brm-wifipanel-foot">{foot}</div>
     </div>
+  );
+}
+
+/** Nobody has opened it in 2 minutes: what to try (D2 quiet). The host's, never the room's. */
+export function QuietWarning() {
+  return (
+    <div className="brm-wifipanel-warn">
+      <b>{W.wifiQuietHead}</b> {W.wifiQuietBody}
+      <ul>
+        <li>{W.wifiTest}</li>
+        <li>{W.wifiSameAdvice}</li>
+      </ul>
+    </div>
+  );
+}
+
+/** More than one app shared: each, by name, with Copy. The QR is the newest (wifiLink). */
+export function AppList({ map }) {
+  if (!map || map.length < 2) return null;
+  return (
+    <ul className="brm-wifipanel-apps">
+      {map.map((m, i) => (
+        <li key={m.lan}>
+          <span className="brm-wifipanel-k">{APP_NAMES[i] || `App ${i + 1}`}</span>
+          <span className="brm-wifipanel-u" title={m.local}>{shownAddress(m.lan)}</span>
+          {m.link && <CopyLink link={m.link} />}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -241,29 +246,157 @@ export function DemoNudge({ busy, run, api, picture = null, lead = true }) {
   );
 }
 
+/* ------------------------------------------------------------- two codes -- */
+
 /**
- * THE STAGE WHILE SHARED (D4): the code, three short lines and how many
- * opened it, a number and never a name. Modal gives Escape; the X and Hide the
- * code close it.
+ * A code on its white quiet zone, sized by its box (BuildRoom.css). Level M
+ * and a four-module margin: the join and demo links are both version 4, 41
+ * modules with the margin (docs/design/build-room-two-qr, Sizes).
  */
-export function WallBuildQr({ link, open = 0, onClose }) {
+export function CodeBox({ value, label, className = '' }) {
   return (
-    <Modal overlayClassName="brm-wallqr" contentClassName="brm-wallqr-card" onClose={onClose} label={W.stageDemoHead}>
-      <button type="button" className="brm-wallqr-x" aria-label="Close the QR" onClick={onClose}><Icon name="X" size={16} /></button>
-      <div className="brm-wallqr-body">
-        <div className="brm-qrzoom-qr brm-wallqr-qr" role="img" aria-label="QR code to open the demo">
-          <QRCodeSVG value={link} size={512} level="M" includeMargin={false} />
-        </div>
-        <div>
-          <span className="brm-wallqr-eb">{W.stageDemoLive}</span>
-          <h2 className="brm-wallqr-h">{W.stageDemoHead}</h2>
-          <p className="brm-wallqr-l">{W.stageDemoScan}</p>
-          <p className="brm-wallqr-m">{W.stageSameWifi}</p>
-          <p className="brm-wallqr-n">{W.stageOpened(Number(open) || 0)}</p>
-          <button type="button" className="brm-btn brm-btn--primary" onClick={onClose}>{W.hideCode}</button>
-        </div>
+    <span className={`brm-codes-qr${className ? ` ${className}` : ''}`} role="img" aria-label={label}>
+      <QRCodeSVG value={value} size={256} level="M" marginSize={4} />
+    </span>
+  );
+}
+
+/**
+ * Which Demo tile to draw: 'none' (nothing runnable: screenshots alone), or
+ * the chip's own state (wifiState), so the tile and the chip never disagree.
+ */
+export function demoSlotOf(room, now) {
+  if (!demoRunnable(room)) return 'none';
+  return wifiState(room && room.lan, now).state;
+}
+
+/** The demo is on the Stage card only while it can be opened: live or quiet (no auto-hide, owner 2026-10-11). */
+export function demoOnStage(room, now, link) {
+  const st = wifiState(room && room.lan, now).state;
+  return Boolean(link) && (st === 'on' || st === 'quiet');
+}
+
+/** The QR-shaped frame a code will fill: the three corner marks over a soft dot field. */
+function DemoSlot({ tbd = false, bad = false, status = false, children }) {
+  return (
+    <div className={`brm-codes-slot${tbd ? ' brm-codes-slot--tbd' : ''}${bad ? ' is-bad' : ''}`} {...(status ? { role: 'status' } : {})}>
+      {tbd && (
+        <>
+          <span className="brm-codes-fp brm-codes-fp--tl" aria-hidden="true" />
+          <span className="brm-codes-fp brm-codes-fp--tr" aria-hidden="true" />
+          <span className="brm-codes-fp brm-codes-fp--bl" aria-hidden="true" />
+        </>
+      )}
+      <div className="brm-codes-slot-t">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * THE DEMO TILE (two codes, C; owner 2026-10-11). The Session panel's demo,
+ * every state the inline Share demo panel had: No demo yet (the placeholder),
+ * Not shared (Share demo), Starting or waiting, live with the count, quiet,
+ * failed (Try again). Wi-Fi only: a remote link goes to browsers, never here.
+ * The orange inside it is the room group's one orange in the states where it
+ * leads (Share demo, Try again); RoomCodes keeps the rest plain.
+ */
+export function DemoTile({ room, now, link, here = 0, busy, run, api }) {
+  const st = demoSlotOf(room, now);
+  const lan = (room && room.lan) || {};
+  const share = (on) => run(() => api.share({ on }));
+  const stop = <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>;
+  const open = Number(lan.open) || 0;
+  let visual;
+  let sub = '';
+  let line = null;
+  let acts = null;
+  let mod = '';
+  const live = (st === 'on' || st === 'quiet') && link;
+  if (st === 'none') {
+    visual = <DemoSlot tbd><b>{W.noDemoYet}</b><span>{W.noDemoBody}</span></DemoSlot>;
+    line = <p className="brm-codes-m">{W.noDemoRoom}</p>;
+  } else if (st === 'off') {
+    visual = (
+      <DemoSlot>
+        <b>{W.notShared}</b>
+        <span>{W.onlyThisLaptop}</span>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => share(true)}>{W.shareDemo}</button>
+      </DemoSlot>
+    );
+    line = <p className="brm-codes-m">{W.shareWho}</p>;
+  } else if (st === 'failed') {
+    mod = ' is-warn';
+    visual = (
+      <DemoSlot bad>
+        <b>It didn&apos;t start.</b>
+        {lan.error && <span>{lan.error}</span>}
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => share(true)}>{W.tryAgain}</button>
+      </DemoSlot>
+    );
+    acts = stop;
+  } else if (live) {
+    mod = st === 'quiet' ? ' is-warn is-quiet' : ' is-live';
+    sub = W.codesSameWifi;
+    visual = <CodeBox value={link} label="QR code to open the demo" />;
+    line = st === 'quiet'
+      ? <p className="brm-codes-m">{W.noneOpened}</p>
+      : <p className="brm-codes-st">{W.openedOfHere(open, here)}</p>;
+    acts = (
+      <>
+        <CopyLink link={link} />
+        {st === 'on' && stop}
+      </>
+    );
+  } else {
+    // Starting, waiting for Claude Code, or live before the link is known.
+    visual = st === 'waiting'
+      ? <DemoSlot status><b>Claude Code has not answered.</b><span>{W.wifiWaiting}</span></DemoSlot>
+      : <DemoSlot status><b>{W.shareStarting}</b><span>{W.demoSlotStarting}</span></DemoSlot>;
+    acts = stop;
+  }
+  return (
+    <div className={`brm-codes-tile${mod}`} data-testid="brm-demo-tile" data-state={st}>
+      {visual}
+      <h4 className="brm-codes-h">{W.codesDemo}{sub && <span>{sub}</span>}</h4>
+      {live && <span className="brm-codes-u">{shownAddress(link)}</span>}
+      {line}
+      {acts && <div className="brm-codes-acts">{acts}</div>}
+    </div>
+  );
+}
+
+/**
+ * THE STAGE CARD (two codes, B and C): Join left, the demo right while it can
+ * be opened; when the demo stops or fails its half leaves and the card is Join
+ * alone, never an empty slot. Room ladder; every line 12 words or fewer, and
+ * a count only once someone has opened it. A click on a code enlarges it alone.
+ */
+export function WallCodes({ room, now, link, onZoom }) {
+  const demo = demoOnStage(room, now, link);
+  const open = Number(room && room.lan && room.lan.open) || 0;
+  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
+  return (
+    <section className={`brm-wallcodes${demo ? '' : ' is-one'}`} aria-label={demo ? 'The join and demo codes' : 'The join code'} data-testid="brm-wallcodes">
+      <div className="brm-wallcodes-c">
+        <button type="button" className="brm-wallcodes-qr" aria-label="Enlarge the join code" onClick={() => onZoom('join')}>
+          <CodeBox value={playUrl} label={`QR code to join at ${playUrl}`} />
+        </button>
+        <span className="brm-wallcodes-eb">{W.stageJoinEyebrow}</span>
+        <h2 className="brm-wallcodes-h">{W.stageJoinHead}</h2>
+        <p className="brm-wallcodes-l">{`${window.location.host}/play \u00b7 code `}<b>{room.gameId}</b></p>
       </div>
-    </Modal>
+      {demo && (
+        <div className="brm-wallcodes-c">
+          <button type="button" className="brm-wallcodes-qr" aria-label="Enlarge the demo code" onClick={() => onZoom('demo')}>
+            <CodeBox value={link} label="QR code to open the demo" />
+          </button>
+          <span className="brm-wallcodes-eb is-live">{W.stageDemoLive}</span>
+          <h2 className="brm-wallcodes-h">{W.stageDemoHead}</h2>
+          <p className="brm-wallcodes-l">{W.stageSameWifi}</p>
+          {open > 0 && <p className="brm-wallcodes-n">{W.stageOpened(open)}</p>}
+        </div>
+      )}
+    </section>
   );
 }
 
