@@ -102,12 +102,40 @@
  * and there are no layers. game/ starts sessions and serves and closes
  * rounds, websocket/ creates sessions, admin/ reads it all back for the
  * platform console. tests/platform-metrics.js fails the build if the copies drift.
+ *
+ * ── USAGE STATS: BY TYPE, BY TEAM, BY ACCOUNT, BY SET (2026-10-11) ─────────
+ *
+ * docs/design/usage-stats/SPEC.md. The same moments, counted once more into
+ * small rows per month, per session type, for three scopes at once:
+ *
+ *   PK: PLATFORM#METRICS  SK: MONTH#<yyyy-mm>#TYPE#<type>
+ *   PK: ORG#<org>         SK: STATS#<yyyy-mm>#TYPE#<type>
+ *   PK: USER#<sub>        SK: STATS#<yyyy-mm>#TYPE#<type>#ORG#<org|->
+ *       created, started, counted, questions, participants
+ *       (Build Room adds decisions, tasks)
+ *
+ * and one row per set and version, all time, in the set's own scope:
+ *
+ *   PK: <scope>SETSTATS   SK: SET#<setId>#V#<n>      (n = 0: unversioned)
+ *       sessions, questions, copies, downloads
+ *
+ * The daily job (admin/usage-reconcile.js) writes the two LEVELS — sessions
+ * still kept, sets held — as absolute snapshots under `…#GAUGE`.
+ *
+ * Every counter rides behind a once-only guard on the session's METADATA (or
+ * the event's): `StatsCreatedAt`, `MetricsStartedAt`, `StatsCountedAt`, the
+ * `MetricsRoundsServed` ratchet, the string sets `StatsAsks`/`StatsDecided`,
+ * and `StatsRunAt` on an event. Numbers and ids only — never a title, never a
+ * question, and nothing here can decrypt. No ttl.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand,
 } = require('@aws-sdk/lib-dynamodb');
-const { setContentPk, PLATFORM, PUBLIC } = require('./tenant');
+const {
+  setContentPk, setStatsPk, orgPk, userPk, gamesIndexPk, setsMetadataPk, eventPk,
+  PLATFORM, PUBLIC, ORG,
+} = require('./tenant');
 
 const client = new DynamoDBClient({});
 const defaultDb = DynamoDBDocumentClient.from(client, {
@@ -234,13 +262,224 @@ function swallow(what, error) {
   return { counted: false, reason: 'error' };
 }
 
+// ── Usage stats: the rows (SPEC §6) ────────────────────────────────────────
+
+/** The session types counted. `event` is the agenda's own row, never a session type. */
+const STATS_TYPES = Object.freeze(['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey', 'build']);
+const EVENT_TYPE = 'event';
+const OTHER_TYPE = 'other';
+/**
+ * Legacy spellings → canonical type. game-types.js's ALIASES, copied because
+ * websocket/ carries no game-types.js; tests/usage-stats.js holds the two
+ * equal, so they cannot drift.
+ */
+const TYPE_ALIASES = Object.freeze({
+  callandanswer: 'call-and-answer',
+  call_and_answer: 'call-and-answer',
+  calland: 'call-and-answer',
+  quiz: 'trivia',
+  polls: 'poll',
+});
+/** The counters a type row may hold. Build Room adds the last two. */
+const STATS_COUNTERS = Object.freeze(['created', 'started', 'counted', 'questions', 'participants', 'decisions', 'tasks']);
+/** The counters a set row may hold. */
+const SET_COUNTERS = Object.freeze(['sessions', 'questions', 'copies', 'downloads']);
+
+/** The markers this module keeps for the stats (SPEC §6.4). */
+const CREATED_MARKER = 'StatsCreatedAt';
+const COUNTED_MARKER = 'StatsCountedAt';
+const ASKS_MARKER = 'StatsAsks';
+const DECIDED_MARKER = 'StatsDecided';
+const RUN_MARKER = 'StatsRunAt';
+
+/**
+ * A stored GameType as the stats count it. `build` passes through; a known
+ * spelling lands on its canonical key; an absent type is the create default
+ * (call-and-answer); anything else is `other`.
+ */
+function statsType(gameType) {
+  if (gameType === undefined || gameType === null || gameType === '') return 'call-and-answer';
+  const key = String(gameType).trim().toLowerCase();
+  if (!key) return 'call-and-answer';
+  if (STATS_TYPES.includes(key)) return key;
+  if (TYPE_ALIASES[key]) return TYPE_ALIASES[key];
+  return OTHER_TYPE;
+}
+
+const NO_ORG = '-';
+const statsTypeSk = (period, type) => `STATS#${period}#TYPE#${type}`;
+const accountTypeSk = (period, type, orgId) => `STATS#${period}#TYPE#${type}#ORG#${clean(orgId) || NO_ORG}`;
+const platformTypeSk = (period, type) => `MONTH#${period}#TYPE#${type}`;
+const statsGaugeSk = (period) => `STATS#${period}#GAUGE`;
+const accountGaugeSk = (period, orgId) => `STATS#${period}#GAUGE#ORG#${clean(orgId) || NO_ORG}`;
+const platformGaugeSk = (period) => `MONTH#${period}#GAUGE`;
+const setVersionOf = (version) => {
+  const n = Math.trunc(Number(version));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+const setStatsSk = (setId, version) => `SET#${clean(setId)}#V#${setVersionOf(version)}`;
+
+const sessionKey = (gameId) => ({ PK: `GAME#${gameId}`, SK: 'METADATA' });
+
+/**
+ * Claim a once-only marker on an existing row. true when this call wrote it;
+ * false when it was already there (or the row is gone). Throws on anything
+ * else, for the recorder's own catch.
+ */
+async function claimMarker(c, Key, marker) {
+  try {
+    await c.db.send(new UpdateCommand({
+      TableName: c.tableName,
+      Key,
+      UpdateExpression: 'SET #m = :t',
+      ConditionExpression: 'attribute_exists(PK) AND attribute_not_exists(#m)',
+      ExpressionAttributeNames: { '#m': marker },
+      ExpressionAttributeValues: { ':t': c.now.toISOString() },
+    }));
+    return true;
+  } catch (error) {
+    if (isConditionFailure(error)) return false;
+    throw error;
+  }
+}
+
+/** Add `id` to the string set `marker` on METADATA, once. true when it was new. */
+async function claimInSet(c, Key, marker, id) {
+  try {
+    await c.db.send(new UpdateCommand({
+      TableName: c.tableName,
+      Key,
+      UpdateExpression: 'ADD #s :set',
+      ConditionExpression: 'attribute_exists(PK) AND NOT contains(#s, :id)',
+      ExpressionAttributeNames: { '#s': marker },
+      ExpressionAttributeValues: { ':set': new Set([id]), ':id': id },
+    }));
+    return true;
+  } catch (error) {
+    if (isConditionFailure(error)) return false;
+    throw error;
+  }
+}
+
+/**
+ * Who and what a session is, for the stats: its type, its team, its creator.
+ * From the METADATA item the caller already holds, else one projected read
+ * of three plaintext attributes. Never a title.
+ */
+async function sessionFacts(c, gameId, metadata) {
+  let meta = metadata && typeof metadata === 'object' ? metadata : null;
+  if (!meta) {
+    const res = await c.db.send(new GetCommand({
+      TableName: c.tableName,
+      Key: sessionKey(gameId),
+      ProjectionExpression: '#t, #o, #c',
+      ExpressionAttributeNames: { '#t': 'GameType', '#o': 'orgId', '#c': 'CreatedBy' },
+    }));
+    meta = (res && res.Item) || {};
+  }
+  return {
+    type: statsType(meta.GameType),
+    orgId: clean(meta.orgId || meta.OrgId),
+    userId: clean(meta.CreatedBy),
+  };
+}
+
+/** ADD each positive counter on one stats row, and stamp what it is. */
+async function bumpStatsRow(c, Key, counters, fields) {
+  const entries = Object.entries(counters).filter(([, n]) => n > 0);
+  if (!entries.length) return;
+  const names = { '#u': 'updatedAt', '#first': 'firstRecordedAt' };
+  const values = { ':now': c.now.toISOString() };
+  const adds = entries.map(([attr, n], i) => {
+    names[`#c${i}`] = attr;
+    values[`:n${i}`] = n;
+    return `#c${i} :n${i}`;
+  });
+  const sets = ['#u = :now', '#first = if_not_exists(#first, :now)'];
+  Object.entries(fields).forEach(([attr, value], i) => {
+    names[`#f${i}`] = attr;
+    values[`:f${i}`] = value;
+    sets.push(`#f${i} = :f${i}`);
+  });
+  await c.db.send(new UpdateCommand({
+    TableName: c.tableName,
+    Key,
+    UpdateExpression: `ADD ${adds.join(', ')} SET ${sets.join(', ')}`,
+    ExpressionAttributeNames: names,
+    ExpressionAttributeValues: values,
+  }));
+}
+
+/**
+ * The three scope rows for one event (SPEC §6.1): platform, the team (when
+ * the session has one), the account (when it names its creator). Together,
+ * each caught and logged on its own — one failed row costs that row only.
+ */
+async function fanOut(c, { type, orgId, userId } = {}, counters = {}) {
+  const t = type || OTHER_TYPE;
+  const period = periodOf(c.now);
+  const base = { period, type: t };
+  const writes = [
+    ['platform', { PK: METRICS_PK, SK: platformTypeSk(period, t) }, base],
+  ];
+  if (clean(orgId)) writes.push(['team', { PK: orgPk(orgId), SK: statsTypeSk(period, t) }, base]);
+  if (clean(userId)) {
+    writes.push(['account', { PK: userPk(userId), SK: accountTypeSk(period, t, orgId) }, { ...base, orgId: clean(orgId) || NO_ORG }]);
+  }
+  await Promise.all(writes.map(([scope, Key, fields]) => bumpStatsRow(c, Key, counters, fields)
+    .catch((error) => { swallow(`${scope} stats`, error); })));
+}
+
+/**
+ * A set's all-time row for the version used (SPEC §6.3). `set` is a resolved
+ * set reference: { scope, orgId, setId, version }. Nothing for a set this
+ * cannot place. Caught and logged here, like fanOut.
+ */
+async function bumpSet(c, set, counters = {}) {
+  try {
+    const ref = set && typeof set === 'object' ? set : {};
+    const setId = clean(ref.setId);
+    const scope = clean(ref.scope) || PLATFORM;
+    if (!setId || ![PLATFORM, ORG, PUBLIC].includes(scope)) return;
+    const orgId = scope === ORG ? clean(ref.orgId) : '';
+    if (scope === ORG && !orgId) return;
+    const version = setVersionOf(ref.version);
+    const used = (counters.questions || 0) > 0 || (counters.sessions || 0) > 0;
+    await bumpStatsRow(c, { PK: setStatsPk(scope, orgId), SK: setStatsSk(setId, version) }, counters, {
+      setId, version, scope, ...(orgId ? { orgId } : {}), ...(used ? { lastAt: c.now.toISOString() } : {}),
+    });
+  } catch (error) {
+    swallow('set stats', error);
+  }
+}
+
 // ── The recorders ─────────────────────────────────────────────────────
 
-/** A host created a session. Call once, after the create succeeded. */
-async function recordSessionCreated(_args = {}, opts = {}) {
+/**
+ * A host created a session. Call once, after the create succeeded.
+ *
+ * With a `gameId`, once per session: `StatsCreatedAt` on METADATA, written
+ * only if absent. The type, team and creator come from the arguments, else
+ * from one projected read of METADATA.
+ */
+async function recordSessionCreated({
+  gameId, gameType, orgId, createdBy, metadata,
+} = {}, opts = {}) {
   try {
     const c = ctx(opts);
-    await bumpMonth(c, { sessionsCreated: 1 });
+    const id = clean(String(gameId || ''));
+    if (!id) {
+      await bumpMonth(c, { sessionsCreated: 1 });
+      return { counted: true };
+    }
+    if (!await claimMarker(c, sessionKey(id), CREATED_MARKER)) return { counted: false, reason: 'already' };
+    const given = gameType !== undefined || orgId !== undefined || createdBy !== undefined
+      ? { GameType: gameType, orgId, CreatedBy: createdBy } : metadata;
+    const facts = await sessionFacts(c, id, given);
+    await Promise.all([
+      bumpMonth(c, { sessionsCreated: 1 }),
+      fanOut(c, facts, { created: 1 }),
+    ]);
     return { counted: true };
   } catch (error) {
     return swallow('session created', error);
@@ -248,7 +487,7 @@ async function recordSessionCreated(_args = {}, opts = {}) {
 }
 
 /** A session left the lobby. Once per session, however many doors raced. */
-async function recordSessionStarted({ gameId } = {}, opts = {}) {
+async function recordSessionStarted({ gameId, metadata } = {}, opts = {}) {
   try {
     const c = ctx(opts);
     const id = clean(String(gameId || ''));
@@ -268,7 +507,11 @@ async function recordSessionStarted({ gameId } = {}, opts = {}) {
       if (isConditionFailure(error)) return { counted: false, reason: 'already' };
       throw error;
     }
-    await bumpMonth(c, { sessionsStarted: 1 });
+    const facts = await sessionFacts(c, id, metadata);
+    await Promise.all([
+      bumpMonth(c, { sessionsStarted: 1 }),
+      fanOut(c, facts, { started: 1 }),
+    ]);
     return { counted: true };
   } catch (error) {
     return swallow('session started', error);
@@ -283,8 +526,12 @@ async function recordSessionStarted({ gameId } = {}, opts = {}) {
  * @param {number} args.round       the round number just served (LessonNumber)
  * @param {object} args.set         next-question's resolvedSet: { scope, pk }
  * @param {string} args.questionId  the served question's SK in that partition
+ * @param {object} [args.metadata]  the METADATA item the caller already read
+ *                                  (type, team, creator for the usage stats)
  */
-async function recordRoundServed({ gameId, round, set, questionId } = {}, opts = {}) {
+async function recordRoundServed({
+  gameId, round, set, questionId, metadata,
+} = {}, opts = {}) {
   try {
     const c = ctx(opts);
     const id = clean(String(gameId || ''));
@@ -318,9 +565,12 @@ async function recordRoundServed({ gameId, round, set, questionId } = {}, opts =
       throw error;
     }
 
+    const facts = await sessionFacts(c, id, metadata);
     await Promise.all([
       bumpMonth(c, { roundsServed: 1, sessionsServed: firstForSession ? 1 : 0 }),
       bumpCategory(c, bucket, 'rounds'),
+      fanOut(c, facts, { questions: 1 }),
+      bumpSet(c, set, { questions: 1, sessions: firstForSession ? 1 : 0 }),
     ]);
     return { counted: true, firstForSession, library: bucket.library };
   } catch (error) {
@@ -459,8 +709,11 @@ async function recordRoundClosed({ gameId, round, metadata } = {}, opts = {}) {
  * @param {object} args.set         the pinned set: { scope, pk }
  * @param {string} args.questionId  one question's SK in that partition — the
  *                                  category it names is the survey's bucket
+ * @param {object} [args.metadata]  the METADATA item the caller already read
  */
-async function recordSurveyOpened({ gameId, questions, set, questionId } = {}, opts = {}) {
+async function recordSurveyOpened({
+  gameId, questions, set, questionId, metadata,
+} = {}, opts = {}) {
   try {
     const c = ctx(opts);
     const id = clean(String(gameId || ''));
@@ -491,9 +744,12 @@ async function recordSurveyOpened({ gameId, questions, set, questionId } = {}, o
       throw error;
     }
 
+    const facts = await sessionFacts(c, id, metadata);
     await Promise.all([
       bumpMonth(c, { roundsServed: n, sessionsServed: firstForSession ? 1 : 0 }),
       bumpCategory(c, bucket, 'rounds', n),
+      fanOut(c, facts, { questions: n }),
+      bumpSet(c, set, { questions: n, sessions: firstForSession ? 1 : 0 }),
     ]);
     return { counted: true, firstForSession, library: bucket.library };
   } catch (error) {
@@ -551,6 +807,367 @@ async function recordSurveyClosed({ gameId, answers, metadata } = {}, opts = {})
   } catch (error) {
     return swallow('survey closed', error);
   }
+}
+
+// ── Usage stats: the moments with no older counter (SPEC §5) ──────────────
+
+/**
+ * The session COUNTED — session-count.js, once the charge is decided (and for
+ * an event's item, when the event's charge covers it). Once, by
+ * `StatsCountedAt`.
+ */
+async function recordSessionCounted({ gameId, metadata } = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    const id = clean(String(gameId || ''));
+    if (!id) return { counted: false, reason: 'no-session' };
+    if (!await claimMarker(c, sessionKey(id), COUNTED_MARKER)) return { counted: false, reason: 'already' };
+    await fanOut(c, await sessionFacts(c, id, metadata), { counted: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('session counted', error);
+  }
+}
+
+/**
+ * A new player seat in a session — join-game.js, only after its conditional
+ * put of the seat succeeded. A reconnect, a refresh or a handover reuses the
+ * seat and never reaches here.
+ */
+async function recordParticipant({ gameId, metadata } = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    const id = clean(String(gameId || ''));
+    if (!id) return { counted: false, reason: 'no-session' };
+    await fanOut(c, await sessionFacts(c, id, metadata), { participants: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('participant', error);
+  }
+}
+
+/** Build Room: an ask put to the room. Once per ask id (`StatsAsks`). */
+async function recordBuildAsk({ gameId, askId, metadata } = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    const id = clean(String(gameId || ''));
+    const ask = clean(String(askId || ''));
+    if (!id || !ask) return { counted: false, reason: 'no-ask' };
+    if (!await claimInSet(c, sessionKey(id), ASKS_MARKER, ask)) return { counted: false, reason: 'already' };
+    await fanOut(c, await sessionFacts(c, id, metadata), { questions: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('build ask', error);
+  }
+}
+
+/** Build Room: the host decided an ask. Once per ask id (`StatsDecided`). */
+async function recordBuildDecision({ gameId, askId, metadata } = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    const id = clean(String(gameId || ''));
+    const ask = clean(String(askId || ''));
+    if (!id || !ask) return { counted: false, reason: 'no-ask' };
+    if (!await claimInSet(c, sessionKey(id), DECIDED_MARKER, ask)) return { counted: false, reason: 'already' };
+    await fanOut(c, await sessionFacts(c, id, metadata), { decisions: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('build decision', error);
+  }
+}
+
+/** Build Room: a crew task was created. Each create is a new task id. */
+async function recordBuildTask({ gameId, metadata } = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    const id = clean(String(gameId || ''));
+    if (!id) return { counted: false, reason: 'no-session' };
+    await fanOut(c, await sessionFacts(c, id, metadata), { tasks: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('build task', error);
+  }
+}
+
+/**
+ * A set was copied into a team's library (copy-question-set.js), counted on
+ * the SOURCE set at the version copied — never on the copy.
+ */
+async function recordSetCopied({ set } = {}, opts = {}) {
+  try {
+    await bumpSet(ctx(opts), set, { copies: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('set copied', error);
+  }
+}
+
+/** A set was downloaded (download-question-set.js), at the version downloaded. */
+async function recordSetDownloaded({ set } = {}, opts = {}) {
+  try {
+    await bumpSet(ctx(opts), set, { downloads: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('set downloaded', error);
+  }
+}
+
+/** An event was created (create-event.js, after its conditional put). */
+async function recordEventCreated({ orgId, createdBy } = {}, opts = {}) {
+  try {
+    await fanOut(ctx(opts), { type: EVENT_TYPE, orgId, userId: createdBy }, { created: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('event created', error);
+  }
+}
+
+/** An event first went live (run.js). Once, by `StatsRunAt` on its METADATA. */
+async function recordEventRun({
+  code, orgId, createdBy,
+} = {}, opts = {}) {
+  try {
+    const c = ctx(opts);
+    let pk;
+    try { pk = eventPk(code); } catch { return { counted: false, reason: 'no-event' }; }
+    if (!await claimMarker(c, { PK: pk, SK: 'METADATA' }, RUN_MARKER)) return { counted: false, reason: 'already' };
+    await fanOut(c, { type: EVENT_TYPE, orgId, userId: createdBy }, { started: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('event run', error);
+  }
+}
+
+/** A person registered for an event (attendee-store.js, after its conditional put). */
+async function recordEventAttendee({ orgId, createdBy } = {}, opts = {}) {
+  try {
+    await fanOut(ctx(opts), { type: EVENT_TYPE, orgId, userId: createdBy }, { participants: 1 });
+    return { counted: true };
+  } catch (error) {
+    return swallow('event attendee', error);
+  }
+}
+
+// ── Usage stats: the daily snapshot (SPEC §6.2; admin/usage-reconcile.js) ──
+
+/** Every page of a Query; the rows. */
+async function queryEvery(c, input) {
+  const items = [];
+  let ExclusiveStartKey;
+  do {
+    const page = await c.db.send(new QueryCommand({ TableName: c.tableName, ...input, ExclusiveStartKey }));
+    items.push(...((page && page.Items) || []));
+    ExclusiveStartKey = page && page.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return items;
+}
+
+const emptyTypeMap = () => ({});
+const addTo = (map, key, n = 1) => { map[key] = (map[key] || 0) + n; };
+
+/**
+ * One team's levels today: sessions not yet expired, by type and by creator,
+ * and sets held, in total and by creator. Reads the team's session index and
+ * set index — every attribute read is plaintext — and filters `ttl` in code,
+ * because DynamoDB deletes up to ~48 h late and a row past its ttl is gone.
+ */
+async function readOrgLevels(c, orgId) {
+  const nowSeconds = Math.floor(c.now.getTime() / 1000);
+  const sessions = await queryEvery(c, {
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': gamesIndexPk(orgId), ':sk': 'GAME#' },
+    ProjectionExpression: '#t, #c, #ttl',
+    ExpressionAttributeNames: { '#t': 'GameType', '#c': 'CreatedBy', '#ttl': 'ttl' },
+  });
+  const sets = await queryEvery(c, {
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': setsMetadataPk(ORG, orgId), ':sk': 'SET#' },
+    ProjectionExpression: '#c, #hold',
+    ExpressionAttributeNames: { '#c': 'createdBy', '#hold': 'publicHold' },
+  });
+  const existing = emptyTypeMap();
+  const byUser = new Map();
+  const userOf = (sub) => {
+    if (!byUser.has(sub)) byUser.set(sub, { existing: emptyTypeMap(), setsHeld: 0 });
+    return byUser.get(sub);
+  };
+  for (const row of sessions) {
+    // No ttl, or one already past: not kept (session-ttl.js gives every
+    // session row one; a row without is pre-ttl and expires with nothing).
+    if (!(Number(row.ttl) > nowSeconds)) continue;
+    const type = statsType(row.GameType);
+    addTo(existing, type);
+    const sub = clean(row.CreatedBy);
+    if (sub) addTo(userOf(sub).existing, type);
+  }
+  let setsHeld = 0;
+  for (const row of sets) {
+    if (row.publicHold !== undefined) continue; // usage.js countSets: a held public copy is not stored
+    setsHeld += 1;
+    const sub = clean(row.createdBy);
+    if (sub) userOf(sub).setsHeld += 1;
+  }
+  return { existing, setsHeld, byUser };
+}
+
+/** SET one gauge row absolutely: a rerun writes the same thing. */
+async function writeGauge(c, Key, { existing, setsHeld, period, extra = {} }) {
+  const names = {
+    '#e': 'existing', '#s': 'setsHeld', '#at': 'snapshotAt', '#p': 'period',
+  };
+  const values = {
+    ':e': existing, ':s': setsHeld, ':at': c.now.toISOString(), ':p': period,
+  };
+  const sets = ['#e = :e', '#s = :s', '#at = :at', '#p = :p'];
+  Object.entries(extra).forEach(([attr, value], i) => {
+    names[`#x${i}`] = attr;
+    values[`:x${i}`] = value;
+    sets.push(`#x${i} = :x${i}`);
+  });
+  await c.db.send(new UpdateCommand({
+    TableName: c.tableName,
+    Key,
+    UpdateExpression: `SET ${sets.join(', ')}`,
+    ExpressionAttributeNames: names,
+    ExpressionAttributeValues: values,
+  }));
+}
+
+/**
+ * Write one team's gauges for `periods` (this month, and on the 1st the month
+ * just ended): the team row and one row per account. Returns the levels so
+ * the caller can sum the platform row. THROWS — the daily job catches per org.
+ */
+async function snapshotOrgGauges(orgId, { periods } = {}, opts = {}) {
+  const c = ctx(opts);
+  const org = clean(orgId);
+  if (!org) throw new Error('usage stats: a gauge needs an orgId');
+  const levels = await readOrgLevels(c, org);
+  const list = (periods && periods.length ? periods : [periodOf(c.now)]);
+  for (const period of list) {
+    await writeGauge(c, { PK: orgPk(org), SK: statsGaugeSk(period) }, { existing: levels.existing, setsHeld: levels.setsHeld, period });
+    for (const [sub, mine] of levels.byUser) {
+      await writeGauge(c, { PK: userPk(sub), SK: accountGaugeSk(period, org) }, {
+        existing: mine.existing, setsHeld: mine.setsHeld, period, extra: { orgId: org },
+      });
+    }
+  }
+  return levels;
+}
+
+/** The platform's gauge: the sum of every team's, written last. */
+async function writePlatformGauge({ periods, existing, setsHeld, teams } = {}, opts = {}) {
+  const c = ctx(opts);
+  const list = (periods && periods.length ? periods : [periodOf(c.now)]);
+  for (const period of list) {
+    await writeGauge(c, { PK: METRICS_PK, SK: platformGaugeSk(period) }, {
+      existing: existing || {}, setsHeld: int(setsHeld), period, extra: { teams: int(teams) },
+    });
+  }
+}
+
+// ── Usage stats: reading it back (admin/ only) ────────────────────────────
+
+const PERIOD_RE = /^\d{4}-\d{2}$/;
+
+/** The counters a stats row holds, as integers, every key present. */
+function countersOf(item) {
+  const out = {};
+  for (const k of STATS_COUNTERS) out[k] = int(item && item[k]);
+  return out;
+}
+
+/**
+ * Parse one stats SK, from any of the three scopes:
+ *   { period, kind: 'type'|'gauge', type?, orgId? } or null.
+ */
+function parseStatsSk(sk) {
+  const s = String(sk || '');
+  let m = /^(?:STATS|MONTH)#(\d{4}-\d{2})#TYPE#([^#]+)(?:#ORG#(.+))?$/.exec(s);
+  if (m) return { period: m[1], kind: 'type', type: m[2], ...(m[3] ? { orgId: m[3] === NO_ORG ? '' : m[3] } : {}) };
+  m = /^(?:STATS|MONTH)#(\d{4}-\d{2})#GAUGE(?:#ORG#(.+))?$/.exec(s);
+  if (m) return { period: m[1], kind: 'gauge', ...(m[2] ? { orgId: m[2] === NO_ORG ? '' : m[2] } : {}) };
+  return null;
+}
+
+/**
+ * Every stats row of one scope between two months (inclusive), paged.
+ *
+ * @param {'platform'|'team'|'account'} scope
+ * @param {string} id   the orgId (team) or sub (account); ignored for platform
+ * @returns {Promise<{ rows: object[], firstRecordedAt: string|null }>}
+ *   rows: { period, kind, type?, orgId?, counters?, existing?, setsHeld?, snapshotAt? }
+ */
+async function readScopeStats(scope, id, { from, to } = {}, opts = {}) {
+  const c = ctx(opts);
+  let pk;
+  let base;
+  if (scope === 'platform') { pk = METRICS_PK; base = 'MONTH#'; }
+  else if (scope === 'team') { pk = orgPk(id); base = 'STATS#'; }
+  else if (scope === 'account') { pk = userPk(id); base = 'STATS#'; }
+  else throw new Error(`usage stats: unknown scope ${JSON.stringify(scope)}`);
+  if (scope !== 'platform' && !clean(id)) throw new Error('usage stats: which team or account?');
+  const lo = PERIOD_RE.test(from || '') ? from : '0000-00';
+  const hi = PERIOD_RE.test(to || '') ? to : '9999-99';
+  // One month: its own prefix. A range: the scope's stats, filtered here.
+  const prefix = lo === hi ? `${base}${lo}#` : base;
+  const items = await queryEvery(c, {
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': pk, ':sk': prefix },
+  });
+  const rows = [];
+  let firstRecordedAt = null;
+  for (const item of items) {
+    const parsed = parseStatsSk(item.SK);
+    if (!parsed || parsed.period < lo || parsed.period > hi) continue;
+    if (parsed.kind === 'type') {
+      rows.push({ ...parsed, counters: countersOf(item) });
+      const first = clean(item.firstRecordedAt);
+      if (first && (!firstRecordedAt || first < firstRecordedAt)) firstRecordedAt = first;
+    } else {
+      const existing = {};
+      for (const [k, v] of Object.entries(item.existing || {})) existing[k] = int(v);
+      rows.push({ ...parsed, existing, setsHeld: int(item.setsHeld), snapshotAt: clean(item.snapshotAt) || null, ...(item.teams !== undefined ? { teams: int(item.teams) } : {}) });
+    }
+  }
+  return { rows, firstRecordedAt };
+}
+
+/**
+ * Sum the counters of type rows — "all types" is a sum on read, never a row
+ * (SPEC §6.1). The `event` row is left out: its sessions already count under
+ * their own types, and adding it would count them twice (SPEC §5).
+ */
+function sumCounters(rows) {
+  const out = countersOf({});
+  for (const row of rows || []) {
+    if (!row || row.kind !== 'type' || row.type === EVENT_TYPE) continue;
+    for (const k of STATS_COUNTERS) out[k] += int(row.counters && row.counters[k]);
+  }
+  return out;
+}
+
+/**
+ * A library's set rows, or one set's (every version), paged. Ids and counts
+ * only — never a title.
+ */
+async function readSetStats({ scope, orgId, setId } = {}, opts = {}) {
+  const c = ctx(opts);
+  const pk = setStatsPk(scope, scope === ORG ? orgId : '');
+  const id = clean(setId);
+  const items = await queryEvery(c, {
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': pk, ':sk': id ? `SET#${id}#V#` : 'SET#' },
+  });
+  return items.map((item) => {
+    const m = /^SET#(.+)#V#(\d+)$/.exec(String(item.SK || ''));
+    if (!m) return null;
+    const out = { setId: m[1], version: Number(m[2]) };
+    for (const k of SET_COUNTERS) out[k] = int(item[k]);
+    out.firstAt = clean(item.firstRecordedAt) || null;
+    out.lastAt = clean(item.lastAt) || null;
+    return out;
+  }).filter(Boolean);
 }
 
 // ── Reading it back (admin/ only calls this) ───────────────────────────────
@@ -636,6 +1253,45 @@ async function readRecordedMetrics(opts = {}) {
 }
 
 module.exports = {
+  recordSessionCounted,
+  recordParticipant,
+  recordBuildAsk,
+  recordBuildDecision,
+  recordBuildTask,
+  recordSetCopied,
+  recordSetDownloaded,
+  recordEventCreated,
+  recordEventRun,
+  recordEventAttendee,
+  snapshotOrgGauges,
+  writePlatformGauge,
+  readScopeStats,
+  readSetStats,
+  parseStatsSk,
+  sumCounters,
+  countersOf,
+  statsType,
+  fanOut,
+  bumpSet,
+  STATS_TYPES,
+  TYPE_ALIASES,
+  STATS_COUNTERS,
+  SET_COUNTERS,
+  EVENT_TYPE,
+  OTHER_TYPE,
+  NO_ORG,
+  statsTypeSk,
+  accountTypeSk,
+  platformTypeSk,
+  statsGaugeSk,
+  accountGaugeSk,
+  platformGaugeSk,
+  setStatsSk,
+  CREATED_MARKER,
+  COUNTED_MARKER,
+  ASKS_MARKER,
+  DECIDED_MARKER,
+  RUN_MARKER,
   recordSessionCreated,
   recordSessionStarted,
   recordRoundServed,
