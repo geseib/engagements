@@ -303,6 +303,20 @@ const SECTION = {
     // same commit, or the dusk table renders on AdminShell's paper patch.
     contentTheme: 'dark',
   },
+  /*
+    ENGAGE SETTINGS — the platform-wide switches (owner, 2026-10-11), today one:
+    which Claude models Engage calls (ClaudeModelsPanel.jsx,
+    docs/design/claude-55-switch). Not the foot's Settings, which is three
+    browser-local switches; this changes Engage for everyone and is audited.
+  */
+  engagesettings: {
+    id: 'engagesettings',
+    label: 'Engage settings',
+    icon: 'Brain',
+    title: 'Engage settings',
+    subtitle: 'Settings for all of Engage. Every change is written to the audit log.',
+    contentTheme: 'dark',
+  },
   settings: {
     id: 'settings',
     label: 'Settings',
@@ -375,6 +389,7 @@ export function sectionsFor({
       SECTION.moderation,
       SECTION.accounts,
       SECTION.archive,
+      SECTION.engagesettings,
     ])];
   }
 

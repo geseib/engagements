@@ -45,7 +45,7 @@ describe('platform staff (mockups 10 and 11)', () => {
     // 'prompts' joined 2026-09-24: Engage's prompt library is Engage's own content, like the
     // Shared library, and Engage mode is now the ONE place prompts are authored (the owner:
     // "the workie advisor and ai prompts should be only in the engage mode for now").
-    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive']);
+    expect(ids(PLATFORM)).toEqual(['orgs', 'observability', 'planrequests', 'discountcodes', 'questionsets', 'prompts', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings']);
     expect(ids(PLATFORM)).not.toContain('games');
     expect(ids(PLATFORM)).not.toContain('library');
   });

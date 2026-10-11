@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude models switch · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<style>
+/* CLAUDE MODELS SWITCH (owner, 2026-10-11): "I want 5.5 to be the default API
+   call in the session. I want the option to set these in the admin pages. A
+   direct switch: if Sonnet 4.6 go to Sonnet 5.5, if Haiku 4.5 go to Haiku 5.5.
+   For now set this at the Engage level for everyone."
+
+   Where: the platform console (Engage mode), a new last item in the Engage
+   group, "Engage settings". There was no platform-wide settings place; the
+   foot "Settings" is three browser-local switches and must stay that.
+
+   One orange per screen: the switch's track when it is on. Everything else is
+   neutral or blue. Laptop ladder 12/13/15/19/24, nothing under 12px. */
+body{margin:0;background:#0b1424;color:var(--text);font:400 15px/1.45 var(--font-ui)}
+.pg-title{max-width:1180px;margin:28px auto 0;padding:0 16px}
+.pg-title h1{margin:0;font:800 24px/1.2 var(--font-display)}
+.pg-title p{margin:6px 0 0;color:var(--muted);max-width:90ch}
+.frame-h{max-width:1180px;margin:34px auto 10px;padding:0 16px}
+.frame-h h2{margin:0;font:800 19px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:90ch}
+.row-wrap{display:flex;gap:24px;flex-wrap:wrap;max-width:1180px;margin:0 auto;padding:0 16px;align-items:flex-start}
+
+/* the console, drawn small: nav + work area */
+.con{display:grid;grid-template-columns:220px 1fr;width:min(1180px,100%);min-height:420px;background:var(--bg);border:1px solid var(--m-rule);border-radius:12px;overflow:hidden}
+.nav{background:#111D33;border-right:1px solid var(--m-rule);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+.nav .grp{font:700 12px/1 var(--font-ui);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:4px 8px 8px}
+.nav a{display:block;padding:7px 10px;border-radius:7px;color:var(--muted);font-size:13px;text-decoration:none}
+.nav a.on{background:var(--surface-2);color:var(--text);box-shadow:inset 2px 0 0 var(--secondary)}
+.work{padding:22px 26px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.work h3{margin:0;font:800 24px/1.2 var(--font-display)}
+.work .sub{margin:-10px 0 0;color:var(--muted);font-size:13px}
+
+/* the one setting */
+.set{max-width:720px;border:1px solid var(--m-rule);border-radius:12px;background:var(--surface);padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.set .top{display:flex;gap:16px;align-items:flex-start}
+.set .top .words{flex:1 1 auto;min-width:0}
+.set h4{margin:0;font:700 19px/1.25 var(--font-ui)}
+.set .now{margin:4px 0 0;font-size:15px}
+.set .now b{font-weight:700}
+.sw{flex:none;display:inline-flex;align-items:center;gap:10px;font:600 13px/1 var(--font-ui);color:var(--text);background:none;border:0;padding:4px;cursor:pointer}
+.sw .tr{width:46px;height:26px;border-radius:13px;background:var(--surface-2);border:1px solid rgba(155,168,190,.45);position:relative}
+.sw .tr::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--muted)}
+.sw.on .tr{background:var(--primary);border-color:var(--primary)}
+.sw.on .tr::after{left:23px;background:#0F1A2E}
+.sw[disabled]{cursor:not-allowed;opacity:.55}
+.map{margin:0;padding:0;list-style:none;border-top:1px solid var(--m-rule)}
+.map li{display:grid;grid-template-columns:1fr 24px 1fr;gap:8px;align-items:center;min-height:36px;border-bottom:1px solid var(--m-rule);font-size:15px}
+.map li .arrow{color:var(--muted);text-align:center}
+.map li .off{color:var(--muted)}
+.foot{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+.note{margin:0;padding:9px 12px;border:1px solid rgba(124,167,230,.55);background:var(--m-tint-blue);border-radius:8px;font-size:13px}
+.note--saved{border-color:rgba(79,178,134,.5);background:var(--m-tint-green);color:var(--m-success-text)}
+.lab{font:700 13px/1 var(--font-ui);color:var(--muted);margin:0 0 6px 2px}
+
+/* phone */
+.phone{width:375px;max-width:100%;background:var(--bg);border:1px solid var(--m-rule);border-radius:22px;overflow:hidden}
+.phone .bar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--m-rule);font:700 15px/1 var(--font-ui)}
+.phone .bar span{color:var(--muted);font-weight:500;font-size:13px}
+.phone .work{padding:16px}
+.phone .set{padding:14px 16px}
+.phone .set .top{flex-direction:column;gap:10px}
+@media (max-width:760px){.con{grid-template-columns:1fr}.nav{display:none}}
+</style>
+</head>
+<body>
+<div class="pg-title">
+  <h1>Claude models switch</h1>
+  <p>One Engage-wide setting, for every team and for Engage's own calls. On (the default): Claude calls go to the Anthropic API's 5.5 models. Off: they stay on Bedrock's 4.x models, exactly as before. Any call that fails on the Anthropic API is answered by the Bedrock model instead.</p>
+</div>
+
+<div class="frame-h"><h2>1 · Laptop: on, the default</h2>
+  <p>Engage mode, Engage settings. The switch's track is the one orange on the screen. The two rows say exactly which model replaces which; nothing else changes.</p></div>
+<div class="row-wrap">
+  <div class="con">
+    <nav class="nav" aria-label="Engage">
+      <div class="grp">Engage</div>
+      <a>Organisations</a><a>Observability</a><a>Plan requests</a><a>Discount codes</a><a>Shared library</a><a>Prompts</a><a>Public library</a><a>Moderation</a><a>Accounts</a><a>Archive</a>
+      <a class="on">Engage settings</a>
+    </nav>
+    <main class="work">
+      <h3>Engage settings</h3>
+      <p class="sub">Settings for all of Engage. Every change is written to the audit log.</p>
+      <section class="set" aria-labelledby="s1">
+        <div class="top">
+          <div class="words">
+            <h4 id="s1">Claude models</h4>
+            <p class="now">Now: <b>Anthropic API, 5.5 models</b> (the default)</p>
+          </div>
+          <button class="sw on" role="switch" aria-checked="true"><span class="tr"></span>Anthropic 5.5</button>
+        </div>
+        <ul class="map">
+          <li><span>Claude Haiku 4.5 on Bedrock</span><span class="arrow">to</span><span>Claude Haiku 5.5</span></li>
+          <li><span>Claude Sonnet 4.6 on Bedrock</span><span class="arrow">to</span><span>Claude Sonnet 5.5</span></li>
+        </ul>
+        <p class="foot">Turn it off to keep every call on Bedrock 4.x. A change reaches every function within a minute. Other models, such as the staff picker's Opus, are not affected.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="frame-h"><h2>2 · Laptop: just turned off</h2>
+  <p>No confirm dialog: the change is reversible with the same click. The line under the switch says it was saved and when it takes effect.</p></div>
+<div class="row-wrap">
+  <div class="con">
+    <nav class="nav" aria-label="Engage"><div class="grp">Engage</div><a>Organisations</a><a>Observability</a><a>Archive</a><a class="on">Engage settings</a></nav>
+    <main class="work">
+      <h3>Engage settings</h3>
+      <p class="sub">Settings for all of Engage. Every change is written to the audit log.</p>
+      <section class="set" aria-labelledby="s2">
+        <div class="top">
+          <div class="words">
+            <h4 id="s2">Claude models</h4>
+            <p class="now">Now: <b>Bedrock, 4.x models</b></p>
+          </div>
+          <button class="sw" role="switch" aria-checked="false"><span class="tr"></span>Anthropic 5.5</button>
+        </div>
+        <ul class="map">
+          <li><span>Claude Haiku 4.5 on Bedrock</span><span class="arrow">stays</span><span class="off">Claude Haiku 4.5</span></li>
+          <li><span>Claude Sonnet 4.6 on Bedrock</span><span class="arrow">stays</span><span class="off">Claude Sonnet 4.6</span></li>
+        </ul>
+        <p class="note note--saved" role="status">Saved. Every call is on Bedrock within a minute.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="frame-h"><h2>3 · A tier with no Anthropic connection (prod, for now)</h2>
+  <p>The switch is shown, disabled, and the reason is said in words. Calls stay on Bedrock whatever the stored setting is.</p></div>
+<div class="row-wrap">
+  <div class="con">
+    <nav class="nav" aria-label="Engage"><div class="grp">Engage</div><a>Organisations</a><a>Archive</a><a class="on">Engage settings</a></nav>
+    <main class="work">
+      <h3>Engage settings</h3>
+      <p class="sub">Settings for all of Engage. Every change is written to the audit log.</p>
+      <section class="set" aria-labelledby="s3">
+        <div class="top">
+          <div class="words">
+            <h4 id="s3">Claude models</h4>
+            <p class="now">Now: <b>Bedrock, 4.x models</b></p>
+          </div>
+          <button class="sw" role="switch" aria-checked="false" disabled><span class="tr"></span>Anthropic 5.5</button>
+        </div>
+        <p class="note">Anthropic API not connected on this tier. Every call stays on Bedrock until its federation ids are set.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="frame-h"><h2>4 · Phone, 375px</h2>
+  <p>The same panel, the switch below the words. Nothing scrolls sideways.</p></div>
+<div class="row-wrap">
+  <div class="phone">
+    <div class="bar">Engage settings <span>Engage</span></div>
+    <main class="work">
+      <section class="set" aria-labelledby="s4">
+        <div class="top">
+          <div class="words">
+            <h4 id="s4">Claude models</h4>
+            <p class="now">Now: <b>Anthropic API, 5.5 models</b> (the default)</p>
+          </div>
+          <button class="sw on" role="switch" aria-checked="true"><span class="tr"></span>Anthropic 5.5</button>
+        </div>
+        <ul class="map">
+          <li><span>Haiku 4.5</span><span class="arrow">to</span><span>Haiku 5.5</span></li>
+          <li><span>Sonnet 4.6</span><span class="arrow">to</span><span>Sonnet 5.5</span></li>
+        </ul>
+        <p class="foot">A change reaches every function within a minute.</p>
+      </section>
+    </main>
+  </div>
+</div>
+<div style="height:48px"></div>
+</body>
+</html>

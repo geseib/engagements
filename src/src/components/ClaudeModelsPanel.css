@@ -1,0 +1,149 @@
+/* ============================================================================
+   ENGAGE SETTINGS: THE CLAUDE MODELS SWITCH — components/ClaudeModelsPanel.jsx
+
+   Derived from docs/design/claude-55-switch/index.html. Scoped under `.cms`
+   for the reason `.pobs`, `.qsets` and `.um` are: styles.css owns the bare
+   `.btn`, `.chip` and `.panel`, and a component sheet declaring a global class
+   hands it to every screen that imports after it.
+
+   ONE PANEL, ONE SWITCH. The switch's track, when on, is the one orange on the
+   screen; everything else is neutral, blue (a note) or green (saved). Laptop
+   ladder 12/13/15/19, rows 36px, nothing under 12px. Mounted with
+   contentTheme="dark"; the root declares data-theme itself.
+
+   MEASURED (composited on the real stack: --bg under --surface under a tint):
+     --text        #F4EDE4 on --surface #1B2942      12.53:1  heading, values, label
+     --muted       #9BA8BE on --surface               6.06:1  "to", the foot line
+     --muted       #9BA8BE on --bg #0F1A2E            7.24:1  the loading line
+     --cms-success #6FD0A4 on green tint/--surface    6.18:1  "Saved."
+     --text        on blue tint/--surface             9.70:1  not-connected note
+     --danger-text #EF8C86 on red tint/--bg           6.33:1  a refused change
+   `--danger` is never text. Asserted in __tests__/claudeModelsPalette.test.js.
+   ========================================================================== */
+
+.cms {
+  --cms-t-floor: 12px;
+  --cms-t-label: 13px;
+  --cms-t-body: 15px;
+  --cms-t-head: 19px;
+  --cms-row-h: 36px;
+
+  --cms-rule: rgba(155, 168, 190, .22);
+  --cms-rule-strong: rgba(155, 168, 190, .45);
+  --cms-success: #6FD0A4;
+  --cms-tint-green: rgba(79, 178, 134, .14);
+  --cms-tint-blue: rgba(124, 167, 230, .14);
+  --cms-tint-red: rgba(229, 100, 94, .12);
+
+  max-width: 720px;
+  color: var(--text);
+  font: 400 var(--cms-t-body)/1.45 var(--font-ui);
+}
+
+.cms *,
+.cms *::before,
+.cms *::after { box-sizing: border-box; }
+
+.cms :focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 6px; }
+
+.cms .cms-muted { margin: 0; color: var(--muted); }
+
+.cms .cms-alert {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border: 1px solid rgba(229, 100, 94, .5);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--cms-tint-red);
+  color: var(--danger-text);
+  font-size: var(--cms-t-label);
+}
+
+.cms .cms-set {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--cms-rule);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.cms .cms-top { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.cms .cms-words { flex: 1 1 260px; min-width: 0; }
+.cms .cms-h { margin: 0; font: 700 var(--cms-t-head)/1.25 var(--font-ui); color: var(--text); }
+.cms .cms-now { margin: 4px 0 0; }
+.cms .cms-now b { font-weight: 700; }
+
+.cms .cms-switch {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--cms-row-h);
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: 600 var(--cms-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.cms .cms-switch:disabled { cursor: not-allowed; opacity: .55; }
+.cms .cms-track {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border: 1px solid var(--cms-rule-strong);
+  border-radius: 13px;
+  background: var(--surface-2);
+}
+.cms .cms-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: left .15s ease;
+}
+.cms .cms-switch.is-on .cms-track { background: var(--primary); border-color: var(--primary); }
+.cms .cms-switch.is-on .cms-track::after { left: 23px; background: var(--bg); }
+
+.cms .cms-map { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--cms-rule); }
+.cms .cms-map li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: var(--cms-row-h);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--cms-rule);
+}
+.cms .cms-arrow { color: var(--muted); font-size: var(--cms-t-label); text-align: center; }
+.cms .cms-to--off { color: var(--muted); }
+
+.cms .cms-foot { margin: 0; color: var(--muted); font-size: var(--cms-t-label); line-height: 1.5; }
+
+.cms .cms-note {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(124, 167, 230, .55);
+  border-radius: 8px;
+  background: var(--cms-tint-blue);
+  color: var(--text);
+  font-size: var(--cms-t-label);
+}
+.cms .cms-note--saved {
+  border-color: rgba(79, 178, 134, .5);
+  background: var(--cms-tint-green);
+  color: var(--cms-success);
+}
+
+@media (max-width: 520px) {
+  .cms .cms-set { padding: 14px 16px; }
+  .cms .cms-map li { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 6px 0; }
+  .cms .cms-arrow { text-align: left; }
+}
