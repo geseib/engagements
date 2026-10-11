@@ -12,6 +12,7 @@ import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import ObservabilityPanel from './components/ObservabilityPanel';
+import UsageStatsPanel from './components/UsageStatsPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
 import { BillingHistory, Invoice, periodLabel } from './components/InvoicePanel';
@@ -1962,6 +1963,14 @@ function AdminPage() {
 
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
           {resolvedTab === 'observability' && onPlatform && <ObservabilityPanel />}
+          {resolvedTab === 'activity' && activeOrg && !onPlatform && (
+            <UsageStatsPanel
+              key={activeOrgId}
+              orgId={activeOrgId}
+              orgName={activeOrg.name || ''}
+              sets={questionSets}
+            />
+          )}
           {resolvedTab === 'planrequests' && onPlatform && <PlanRequestsPanel onCountChange={setPlanRequestCount} />}
           {resolvedTab === 'discountcodes' && onPlatform && <DiscountCodesPanel />}
 

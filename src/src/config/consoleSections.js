@@ -160,6 +160,20 @@ const SECTION = {
     subtitle: 'Who can build and run sessions here.',
     contentTheme: 'dark',
   },
+  /*
+    ACTIVITY — what the team ran, month by month (docs/design/usage-stats,
+    UsageStatsPanel.jsx). Owners and admins only (owner, 2026-10-11, SPEC
+    §13 Q10): GET /orgs/{orgId}/stats checks the role on the MEMBER row; a
+    member never gets the entry.
+  */
+  activity: {
+    id: 'activity',
+    label: 'Activity',
+    icon: 'ChartLineUp',
+    title: 'Activity',
+    subtitle: 'What this team ran, by month. Counts only.',
+    contentTheme: 'dark',
+  },
   billing: {
     id: 'billing',
     label: 'Plan & usage',
@@ -417,7 +431,7 @@ export function sectionsFor({
 
   return [
     content,
-    group('team', 'Team', [SECTION.members, SECTION.billing, SECTION.privacy]),
+    group('team', 'Team', [SECTION.members, SECTION.activity, SECTION.billing, SECTION.privacy]),
   ];
 }
 

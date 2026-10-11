@@ -158,10 +158,26 @@ describe('a team', () => {
 
   // rejects: an owner losing billing because only 'admin' was checked
   test('owner and admin both get the full Team group', () => {
-    const full = ['questionsets', 'games', 'library', 'prompts', 'members', 'billing', 'privacy'];
+    const full = ['questionsets', 'games', 'library', 'prompts', 'members', 'activity', 'billing', 'privacy'];
     expect(ids(TEAM_ADMIN)).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'owner' })).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'OWNER' })).toEqual(full);
+  });
+});
+
+describe('Activity (usage stats, owner 2026-10-11)', () => {
+  // rejects: a member, a personal space or the platform console offered a
+  // page whose route refuses them (GET /orgs/{orgId}/stats is owner/admin).
+  test('owners and admins of a team have it; nobody else does', () => {
+    expect(ids(TEAM_ADMIN)).toContain('activity');
+    expect(ids({ ...TEAM_ADMIN, orgRole: 'owner' })).toContain('activity');
+    expect(ids({ ...TEAM_ADMIN, orgRole: 'member' })).not.toContain('activity');
+    expect(ids(PLATFORM)).not.toContain('activity');
+  });
+  test('it sits after Members and before Plan & usage', () => {
+    const team = ids(TEAM_ADMIN);
+    expect(team.indexOf('activity')).toBe(team.indexOf('members') + 1);
+    expect(team.indexOf('billing')).toBe(team.indexOf('activity') + 1);
   });
 });
 
