@@ -78,10 +78,10 @@ phases:
       # here once the rule exists; while any is empty the picker shows the
       # Anthropic models as "Anthropic API not connected". Appended only when
       # set, because sam deploy rejects an empty override.
-      - ANTHROPIC_FEDERATION_RULE_ID=""
-      - ANTHROPIC_ORGANIZATION_ID=""
-      - ANTHROPIC_SERVICE_ACCOUNT_ID=""
-      - ANTHROPIC_WORKSPACE_ID=""
+      - ANTHROPIC_FEDERATION_RULE_ID="fdrl_01Fgi2W7zco8f1k4HAPabtzn"
+      - ANTHROPIC_ORGANIZATION_ID="19cbae90-fa39-4d34-bd38-e24396c41df4"
+      - ANTHROPIC_SERVICE_ACCOUNT_ID="svac_012zQiYAvkDEUJBXDX7uA5TS"
+      - ANTHROPIC_WORKSPACE_ID="wrkspc_01Fxxn28qBVFs6uYyoccyngL"
       - '[ -n "$ANTHROPIC_FEDERATION_RULE_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES AnthropicFederationRuleId=$ANTHROPIC_FEDERATION_RULE_ID" || echo "skipping AnthropicFederationRuleId (empty)"'
       - '[ -n "$ANTHROPIC_ORGANIZATION_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES AnthropicOrganizationId=$ANTHROPIC_ORGANIZATION_ID" || echo "skipping AnthropicOrganizationId (empty)"'
       - '[ -n "$ANTHROPIC_SERVICE_ACCOUNT_ID" ] && PARAM_OVERRIDES="$PARAM_OVERRIDES AnthropicServiceAccountId=$ANTHROPIC_SERVICE_ACCOUNT_ID" || echo "skipping AnthropicServiceAccountId (empty)"'
