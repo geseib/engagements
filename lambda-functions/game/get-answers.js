@@ -56,6 +56,14 @@ exports.handler = async (event) => {
     // (see the top of this file). `question` is an accepted spelling of
     // `questionId` because that is what the player client has always sent.
     const { role, questionId, question, player, clientId } = queryParams;
+    /*
+      THE ROOM VIEW (two-surface PLAN 1.12, D3): the Presentation's read. On
+      the PUBLIC door only, and it always strips authorship and the submission
+      time, in every phase and whatever the round's names setting — the
+      owner's ruling: while the room votes, names are always hidden. It never
+      becomes one player's own-answer lookup.
+    */
+    const roomView = queryParams.view === 'room';
 
     if (!gameId) {
       return {
@@ -153,7 +161,7 @@ exports.handler = async (event) => {
     // Server-side is the only place this can be fixed durably: client-side
     // state preservation cannot survive a page reload, and this can.
     // The phone's path only: the host's door reads the whole round.
-    if (player && !onHostDoor) {
+    if (player && !onHostDoor && !roomView) {
       return await getOwnAnswer(gameId, targetQuestionId, player, clientId);
     }
 
@@ -232,6 +240,11 @@ exports.handler = async (event) => {
     // Order is preserved by redactAnswers and must stay that way: the phone's
     // ballot is positional against THIS order (submit-vote.js translates it).
     const baseAnswers = hidden ? redactAnswers(fullAnswers) : fullAnswers;
+    const roomAnswers = redactAnswers(fullAnswers).map((row) => {
+      const out = { ...row };
+      delete out.submittedAt;
+      return out;
+    });
 
     // Which payload: the ROUTE decides, never `role`.
     if (onHostDoor) {
@@ -273,7 +286,7 @@ exports.handler = async (event) => {
         const result = {
           gameId: gameId,
           questionId: targetQuestionId,
-          answers: baseAnswers,
+          answers: roomView && !onHostDoor ? roomAnswers : baseAnswers,
           answerCount: answers.length,
           timestamp: new Date().toISOString()
         };

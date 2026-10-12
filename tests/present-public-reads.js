@@ -158,6 +158,47 @@ const HOST_ONLY = ['questionQueue', 'categoryCounts', 'categoryState', 'answerPr
     assert.ok('stageProfile' in plain.body);
   });
 
+  say('\n§3. /answers?view=room: during VOTE the answers, never their authors');
+  seed('7201', { state: 'VOTE#001', anonymous: false });
+  const named = await answersRead('7201');
+  const namedRoom = await answersRead('7201', { view: 'room' });
+  await check('without the parameter a named round still names its authors (unchanged)', () => {
+    assert.strictEqual(named.status, 200, named.raw);
+    assert.ok(named.body.answers.some((a) => a.playerName), 'the plain read lost its names');
+  });
+  await check('with view=room the same answers, in the same voting order', () =>
+    assert.deepStrictEqual(namedRoom.body.answers.map((a) => a.answer), named.body.answers.map((a) => a.answer)));
+  await check('with view=room no playerName, no name, no submittedAt — on a NAMED round', () => {
+    for (const a of namedRoom.body.answers) {
+      for (const k of ['playerName', 'name', 'submittedAt', 'PlayerName']) assert.ok(!(k in a), `an answer carries ${k}`);
+    }
+    for (const name of NAMES) assert.ok(!namedRoom.raw.includes(name), `the body names ${name}`);
+  });
+  seed('7202', { state: 'VOTE#001', anonymous: true });
+  const anonRoom = await answersRead('7202', { view: 'room' });
+  await check('an anonymous round in the room view: no authors either', () => {
+    for (const name of NAMES) assert.ok(!anonRoom.raw.includes(name), `the body names ${name}`);
+    assert.ok(anonRoom.body.answers.every((a) => !('submittedAt' in a)));
+  });
+  seed('7203', { state: 'ASK#001', anonymous: false });
+  const asking = await answersRead('7203', { view: 'room' });
+  await check('while the room answers, the room view is a count, as the public read always was', () => {
+    assert.strictEqual(asking.body.answers, undefined);
+    assert.strictEqual(asking.body.answerCount, 3);
+  });
+  seed('7204', { state: 'RESULTS#001', anonymous: false, revealed: true });
+  const results = await answersRead('7204', { view: 'room' });
+  await check('at RESULTS the room view is a count too: the tally is get-results\' to give', () => {
+    assert.strictEqual(results.body.answers, undefined);
+    for (const name of NAMES) assert.ok(!results.raw.includes(name));
+  });
+  seed('7205', { state: 'VOTE#001', anonymous: false });
+  const asPlayer = await answersRead('7205', { view: 'room', player: NAMES[0] });
+  await check('the room view never turns into one player\'s own-answer lookup', () => {
+    assert.ok(Array.isArray(asPlayer.body.answers), asPlayer.raw);
+    assert.ok(!asPlayer.raw.includes(NAMES[0]));
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);
