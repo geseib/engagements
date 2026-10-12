@@ -550,6 +550,42 @@
   color: var(--primary);
 }
 
+/* WHERE THE ROOM IS IN THE READ: "Page 2 of 3", a dot per page, and the way
+   back. The current dot is the text colour, never amber (R3: the one amber
+   thing on this screen is the primary). */
+.hr-notes-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+}
+
+.hr-notes-pos {
+  margin: 0;
+  font-size: .875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hr-notes-dots {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.hr-notes-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: .45;
+}
+
+.hr-notes-dot.is-current {
+  background: var(--text);
+  opacity: 1;
+}
+
 /* The one secondary (R3), directly above the primary: a ghost button, never
    amber. Its armed state reuses the ghost look; the warning line says why. */
 .hr-sec {

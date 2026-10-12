@@ -828,6 +828,9 @@ function HostRemote() {
     goalLine: goal.reached ? goal.line : '',
   }), [snapshot, rosterCount, onResults, focusAnswers.length, notes.ready, setId, goal.reached, goal.line]);
   const action = step.primary;
+  /* Workie's page, as the server holds it (get-game-state `stageNotes`). */
+  const notesPages = Number.isInteger(snapshot?.stageNotes?.pages) ? snapshot.stageNotes.pages : 1;
+  const notesPage = Math.min(Math.max(0, Number(snapshot?.stageNotes?.page) || 0), notesPages - 1);
   const secondary = step.secondary;
   const confirmNeeded = needsConfirmation(action);
   const primaryArmed = armedAction === 'primary';
@@ -1432,6 +1435,35 @@ function HostRemote() {
             {onFieldNotes && (
               <section className="hr-notes" aria-label={RW.whatWeHeard}>
                 <p className="hr-notes-kicker">{RW.whatWeHeard}</p>
+                {/* WHERE THE ROOM IS IN THE READ (two-surface PLAN 1.15): the
+                    page is a server fact, so this phone and the wall say the
+                    same thing. Next page is the dock's primary (roundStep);
+                    the way back is here, in the body, not beside it. */}
+                {notesPages > 1 && (
+                  <div className="hr-notes-pager">
+                    <p className="hr-notes-pos">{RW.pageOf(notesPage + 1, notesPages)}</p>
+                    <span className="hr-notes-dots" data-testid="notes-dots" aria-hidden="true">
+                      {Array.from({ length: notesPages }, (_, i) => (
+                        <span
+                          key={i}
+                          className={`hr-notes-dot ${i === notesPage ? 'is-current' : ''}`}
+                          aria-current={i === notesPage ? 'true' : undefined}
+                        />
+                      ))}
+                    </span>
+                    {notesPage > 0 && (
+                      <button
+                        className="hr-btn hr-btn--ghost hr-btn--small"
+                        type="button"
+                        disabled={blocked}
+                        onClick={() => fire('notes-back')}
+                      >
+                        <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" />
+                        {RW.backPage}
+                      </button>
+                    )}
+                  </div>
+                )}
                 {!notes.ready ? (
                   <p className="hr-notes-waiting">Workie is reading the responses…</p>
                 ) : (
