@@ -63,14 +63,42 @@ export function roundOfState(state) {
  * NO_FOCUS CLOSES what is open, so answering a stale frame with it would have a
  * late arrival from round 3 shut the spotlight the host just opened on round 4.
  */
-export function focusFromFrame(frame, currentState) {
+export function focusFromFrame(frame, currentState, lastRev = null) {
   if (!frame || typeof frame !== 'object') return null;
 
   const here = roundOfState(currentState);
   if (here === null) return null;
   if (roundKey(frame.questionNumber) !== here) return null;
 
+  // A FRAME OLDER THAN WHAT IS UP is dropped (two-surface PLAN 1.13): two
+  // surfaces focusing at once, or a slow socket, must not put back a response
+  // the host has already moved on from. A frame with no rev (an older
+  // deploy) is applied as before.
+  if (Number.isInteger(frame.rev) && Number.isInteger(lastRev) && frame.rev <= lastRev) return null;
+
   return normaliseFocus(frame);
+}
+
+/**
+ * The extras a focus may carry (two-surface PLAN 1.10/1.13), each only when
+ * sound: the part of a long response (answer only, 0 <= part < parts <= 9),
+ * the phase the server stamped (FOCUS_PHASES) and the rev. Anything else is
+ * dropped rather than passed on.
+ */
+function extrasOf(value, kind) {
+  const out = {};
+  if (kind === 'answer') {
+    const { part, parts } = value;
+    const partsOk = Number.isInteger(parts) && parts >= 1 && parts <= 9;
+    const partOk = Number.isInteger(part) && part >= 0 && part < (partsOk ? parts : 9);
+    // A part that does not fit its count makes the pair untrustworthy: both go.
+    const pairBroken = part !== undefined && part !== null && !partOk;
+    if (partsOk && !pairBroken) out.parts = parts;
+    if (partOk) out.part = part;
+    if (FOCUS_PHASES.includes(value.phase)) out.phase = value.phase;
+  }
+  if (Number.isInteger(value.rev) && value.rev >= 0) out.rev = value.rev;
+  return out;
 }
 
 /**
@@ -83,7 +111,7 @@ export function focusFromFrame(frame, currentState) {
 export function normaliseFocus(value) {
   const kind = value && value.focus;
 
-  if (kind === 'question') return { focus: 'question', index: null };
+  if (kind === 'question') return { focus: 'question', index: null, ...extrasOf(value, 'question') };
 
   if (kind === 'answer') {
     /*
@@ -104,10 +132,11 @@ export function normaliseFocus(value) {
     if (value.index === null || value.index === undefined || value.index === '') return NO_FOCUS;
     const index = Number(value.index);
     if (!Number.isInteger(index) || index < 0) return NO_FOCUS;
-    return { focus: 'answer', index };
+    return { focus: 'answer', index, ...extrasOf(value, 'answer') };
   }
 
-  return NO_FOCUS;
+  const rest = value && typeof value === 'object' ? extrasOf(value, 'none') : {};
+  return Object.keys(rest).length ? { ...NO_FOCUS, ...rest } : NO_FOCUS;
 }
 
 /**
@@ -143,11 +172,11 @@ export function focusToStage(focus, { answerCount = 0 } = {}) {
  * and the stage post to the same endpoint, and this is the file that knows
  * `questionNumber` is required and that only an answer carries an index.
  */
-export function focusRequest({ focus, index, state } = {}) {
+export function focusRequest({ focus, index, part, parts, state } = {}) {
   const round = roundOfState(state);
   if (round === null) return null;
 
-  const normalised = normaliseFocus({ focus, index });
+  const normalised = normaliseFocus({ focus, index, part, parts });
 
   // 'none' is sendable — closing is a thing the host DID and it has to travel.
   if (!FOCUS_KINDS.includes(normalised.focus)) return null;
@@ -155,6 +184,9 @@ export function focusRequest({ focus, index, state } = {}) {
   return {
     focus: normalised.focus,
     index: normalised.focus === 'answer' ? normalised.index : null,
+    // The part of a long response, only when a surface measured one.
+    ...(normalised.focus === 'answer' && normalised.part !== undefined ? { part: normalised.part } : {}),
+    ...(normalised.focus === 'answer' && normalised.parts !== undefined ? { parts: normalised.parts } : {}),
     questionNumber: Number(round),
   };
 }
@@ -170,5 +202,5 @@ export function focusRequest({ focus, index, state } = {}) {
 export function sameFocus(a, b) {
   const x = normaliseFocus(a);
   const y = normaliseFocus(b);
-  return x.focus === y.focus && x.index === y.index;
+  return x.focus === y.focus && x.index === y.index && (x.part || 0) === (y.part || 0);
 }

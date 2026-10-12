@@ -16,6 +16,7 @@
  *             voting order, through config/podium.js's assignPlacements.
  */
 import { assignPlacements } from './podium';
+import { stageLabelFor } from './anonymity';
 
 const NAME_FIELDS = ['playerName', 'name', 'PlayerName', 'player', 'author', 'submittedAt'];
 
@@ -67,4 +68,15 @@ export function tallyOrder(voteTallies, answers = []) {
 export function responseAt(order, index) {
   if (!Array.isArray(order) || !Number.isInteger(index) || index < 0) return null;
   return order[index] || null;
+}
+
+/**
+ * The label a response wears on the wall and on the host's own spotlight.
+ * During VOTE it is never a name, whatever the round's names setting (the
+ * owner's ruling, 2026-10-12); otherwise the stage's own rule
+ * (config/anonymity.js stageLabelFor).
+ */
+export function navigatorLabel(answer, index, { phase, authorsHidden } = {}) {
+  if (phase === 'VOTE') return `Response ${index + 1}`;
+  return stageLabelFor(answer, index, { authorsHidden });
 }

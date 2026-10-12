@@ -251,7 +251,9 @@ describe('the stage follows and announces', () => {
   test('a frame it should ignore is ignored, and ignoring is not closing', () => {
     // rejects: applying `focusFromFrame`'s null as a close, which would let a
     // late frame from a previous round shut the spotlight the host just opened.
-    expect(host).toMatch(/const focus = focusFromFrame\(data, gameStateRef\.current\);\s*if \(!focus\) return;/);
+    // Since two-surface Phase 1 the last applied rev rides along, so a late
+    // frame is dropped too.
+    expect(host).toMatch(/const focus = focusFromFrame\(data, gameStateRef\.current, focusRevRef\.current\);\s*if \(!focus\) return;/);
   });
 
   test('the clamp reads a ref, not the state', () => {
@@ -332,5 +334,38 @@ describe('the stylesheet contract', () => {
     // half the width — not enough to tell two answers apart, which is the
     // entire job of this list.
     expect(block('.hr-focus__row')).toMatch(/flex-direction:\s*column/);
+  });
+});
+
+/*
+  ONE ORDER FOR "RESPONSE N" (two-surface D5, PLAN 1.13). The host page's
+  spotlight indexes its TALLY rows at RESULTS (assignPlacements); this list
+  used to be /answers/host's display order, so "Show the room" on row 2 could
+  put a different response on the wall. Both now read config/navigatorOrder.js.
+*/
+describe('the list is in the same order as the wall', () => {
+  // Display (voting) order is Ada, Grace, Alan; the tally puts Alan first.
+  const voteTallies = {
+    0: { playerName: 'Ada', answerText: answers[0].answer, totalScore: 2, firstPlace: 0, secondPlace: 1, thirdPlace: 0 },
+    1: { playerName: 'Grace', answerText: answers[1].answer, totalScore: 5, firstPlace: 1, secondPlace: 1, thirdPlace: 0 },
+    2: { playerName: 'Alan', answerText: answers[2].answer, totalScore: 9, firstPlace: 3, secondPlace: 0, thirdPlace: 0 },
+  };
+
+  test('at RESULTS the rows are in tally order, and row 1 sends tally index 0', () => {
+    const { onFocus } = renderPanel({ phase: 'RESULTS', voteTallies });
+    const rows = screen.getAllByTestId('focus-row');
+    expect(rows.map((r) => within(r).getByText(/^Because/).textContent)).toEqual([
+      answers[2].answer, answers[1].answer, answers[0].answer,
+    ]);
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Show the room' }));
+    expect(onFocus).toHaveBeenCalledWith({ focus: 'answer', index: 0 });
+  });
+
+  test('during VOTE the rows are the voting order, numbered, and never named', () => {
+    renderPanel({ phase: 'VOTE' });
+    const rows = screen.getAllByTestId('focus-row');
+    expect(rows.map((r) => within(r).getByText(/^Because/).textContent)).toEqual(answers.map((a) => a.answer));
+    for (const name of ['Ada', 'Grace', 'Alan']) expect(screen.queryByText(name)).not.toBeInTheDocument();
+    expect(within(rows[1]).getByText('Response 2')).toBeInTheDocument();
   });
 });

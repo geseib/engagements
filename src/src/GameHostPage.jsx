@@ -49,7 +49,8 @@ import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfi
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
-import { assignPlacements, placeLabel } from './config/podium';
+import { placeLabel } from './config/podium';
+import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
 import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import ConfirmDialog from './components/ConfirmDialog';
@@ -286,6 +287,9 @@ function GameHostPage() {
     on a later round.
   */
   const pendingFocusRef = useRef(null);
+  // The rev of the last focus this page applied (two-surface PLAN 1.13), so a
+  // late frame cannot put back a response the host has moved on from.
+  const focusRevRef = useRef(null);
   useEffect(() => {
     answersRef.current = answers;
 
@@ -2365,8 +2369,10 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('stageFocusChanged', (data) => {
       console.log('🔌 Stage focus notification:', data);
-      const focus = focusFromFrame(data, gameStateRef.current);
+      // A frame no newer than the last applied is dropped (its `rev`).
+      const focus = focusFromFrame(data, gameStateRef.current, focusRevRef.current);
       if (!focus) return;
+      if (Number.isInteger(focus.rev)) focusRevRef.current = focus.rev;
 
       const next = focusToStage(focus, { answerCount: answersRef.current.length });
       setLessonExpanded(next.lessonExpanded);
@@ -2732,6 +2738,7 @@ Focus on actionable business strategy insights.`;
           this once the rows are in and the count is real.
         */
         pendingFocusRef.current = gameStateData.stageFocus || null;
+        focusRevRef.current = Number.isInteger(gameStateData.stageFocus?.rev) ? gameStateData.stageFocus.rev : null;
 
         // THE SCOREBOARD, as the room last saw it: a reload over an open board
         // comes back up on it rather than dropping the room to the stage.
@@ -3041,17 +3048,12 @@ Focus on actionable business strategy insights.`;
                   // PLACE in the round by total points, ties shared. The old
                   // inline derivation was "best rank any voter gave it", which
                   // badged every answer with one first-choice vote as 1.
+                  //
+                  // TALLY ORDER IS config/navigatorOrder.js's (two-surface D5):
+                  // the spotlight's index is read by the Remote against the
+                  // same order, so "response 2" is one response everywhere.
                   formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-                    ? assignPlacements(Object.values(resultsData.voteTallies).map((tally, index) => {
-                        console.log(`📊 HOST: Formatting tally ${index}:`, tally);
-                        return {
-                          player: tally.playerName,
-                          playerName: tally.playerName, // for displayLabelFor
-                          answer: tally.answerText,
-                          points: tally.totalScore,
-                          votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-                        };
-                      }))
+                    ? tallyOrder(resultsData.voteTallies).map((row) => ({ ...row, player: row.playerName }))
                     : [];
                 }
                 
@@ -4593,14 +4595,10 @@ Focus on actionable business strategy insights.`;
         // Same placement rule as the restore path above — one definition, in
         // config/podium.js, so the two sites cannot disagree about what a
         // place is.
+        // Tally order through config/navigatorOrder.js (two-surface D5), the
+        // order the Remote's list and the wall read the focus index against.
         formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-          ? assignPlacements(Object.values(resultsData.voteTallies).map(tally => ({
-              player: tally.playerName,
-              playerName: tally.playerName, // for displayLabelFor
-              answer: tally.answerText,
-              points: tally.totalScore,
-              votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-            })))
+          ? tallyOrder(resultsData.voteTallies).map((row) => ({ ...row, player: row.playerName }))
           : []; // Empty array if no votes
       }
       
@@ -7708,10 +7706,13 @@ Focus on actionable business strategy insights.`;
                   index={spotlightIndex}
                   onIndex={openSpotlight}
                   onClose={closeSpotlight}
-                  showPoints={standingsVisible({
+                  /* DURING VOTE: no name, no points, whatever the round's
+                     names setting (the owner's ruling, two-surface D5). */
+                  showPoints={phaseOfGameState(gameState) !== 'VOTE' && standingsVisible({
                     gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                   })}
-                  labelFor={(answer, idx) => stageLabelFor(answer, idx, {
+                  labelFor={(answer, idx) => navigatorLabel(answer, idx, {
+                    phase: phaseOfGameState(gameState),
                     authorsHidden: authorsHiddenNow({
                       gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                     }),

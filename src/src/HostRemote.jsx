@@ -182,6 +182,12 @@ function HostRemote() {
     nothing.
   */
   const [focusAnswers, setFocusAnswers] = useState([]);
+  /*
+    THE ROUND'S TALLY, at RESULTS: get-results' `voteTallies`, so the focus
+    list runs in tally order — the order the host page's spotlight and the
+    wall read the index against (config/navigatorOrder.js, two-surface D5).
+  */
+  const [voteTallies, setVoteTallies] = useState(null);
   const [focusOpen, setFocusOpen] = useState(false);
   const [focusBusy, setFocusBusy] = useState(false);
   const [scoreboardBusy, setScoreboardBusy] = useState(false);
@@ -605,7 +611,33 @@ function HostRemote() {
   // stops round 4's phone offering round 3's answers to put on the wall — and
   // the index it would send addresses round 4, so the room would get a
   // different response from the one the host tapped.
-  useEffect(() => { setFocusAnswers([]); }, [gameId, round]);
+  useEffect(() => { setFocusAnswers([]); setVoteTallies(null); }, [gameId, round]);
+
+  /*
+    The tally, once per round at RESULTS. POST /games/get-results is the PUBLIC
+    read route (players read a resolved round with it); on a RESULTS# round it
+    transitions nothing. The tallies are final once the round has closed, so
+    one read is enough.
+  */
+  useEffect(() => {
+    if (!gameId || !round || !onResults || voteTallies) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase()}games/get-results`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId, questionNumber: round }),
+        });
+        if (cancelled || !res.ok || activeGameRef.current !== gameId) return;
+        const payload = await res.json();
+        if (payload && payload.voteTallies && typeof payload.voteTallies === 'object') setVoteTallies(payload.voteTallies);
+      } catch {
+        /* the list keeps its own order until the tally arrives */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [gameId, round, onResults, voteTallies]);
 
   /*
     Only while the panel is open, and only once there is a round to have
@@ -1526,6 +1558,8 @@ function HostRemote() {
                       || snapshot?.currentQuestionData?.question || ''}
                     busy={focusBusy}
                     onFocus={setStageFocus}
+                    phase={summary.phase}
+                    voteTallies={voteTallies}
                     /*
                       THE ROOM CAN SEE THIS PHONE'S DECISION, so the phone must
                       not name someone the stage is deliberately not naming.

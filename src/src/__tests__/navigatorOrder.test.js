@@ -76,3 +76,17 @@ describe('responseAt', () => {
     expect(responseAt(null, 0)).toBeNull();
   });
 });
+
+describe('navigatorLabel: during VOTE a response is never named', () => {
+  const { navigatorLabel } = require('../config/navigatorOrder');
+  const named = { playerName: 'Ada', answer: 'x' };
+
+  test('VOTE: "Response N" on a named round too (the owner\'s ruling)', () => {
+    expect(navigatorLabel(named, 2, { phase: 'VOTE', authorsHidden: false })).toBe('Response 3');
+  });
+
+  test('RESULTS: the name as the round allows', () => {
+    expect(navigatorLabel(named, 0, { phase: 'RESULTS', authorsHidden: false })).toBe('Ada');
+    expect(navigatorLabel(named, 0, { phase: 'RESULTS', authorsHidden: true })).toBe('Response 1');
+  });
+});
