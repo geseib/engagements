@@ -635,7 +635,10 @@ exports.handler = async (event) => {
         response.votingProgress = {
           votesReceived: votesResult.Items?.length || 0,
           totalPlayers: uniquePlayers.length,
-          votersIds: (votesResult.Items || []).map(vote => vote.PlayerName)
+          // `VoterName` is the field submit-vote.js writes; `PlayerName` is
+          // never on a real ballot, so this list was all `undefined` — the
+          // same mistake get-players.js made (tests/roster-readiness.js §5).
+          votersIds: (votesResult.Items || []).map(vote => vote.VoterName || vote.PlayerName)
         };
       }
 

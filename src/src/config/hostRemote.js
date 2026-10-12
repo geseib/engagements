@@ -607,7 +607,11 @@ export function needsConfirmation(action, progress) {
  *          `hasVoted: false` for the whole room, which would otherwise render
  *          as "the entire room is holding us up" on the results screen.
  */
-export function waitingOn(rosterResponse, state) {
+export function waitingOn(rosterResponse, stateOrSnapshot) {
+  // A bare state string is the old call shape and still accepted; the remote
+  // now passes the whole `/host-state` snapshot.
+  const snapshot = stateOrSnapshot && typeof stateOrSnapshot === 'object' ? stateOrSnapshot : null;
+  const state = snapshot ? snapshot.state : stateOrSnapshot;
   const { phase } = parseGamePhase(state);
 
   const field = phase === 'ASK' ? 'hasAnswered' : phase === 'VOTE' ? 'hasVoted' : null;
@@ -615,15 +619,35 @@ export function waitingOn(rosterResponse, state) {
     return { applicable: false, heading: '', verb: '', names: [] };
   }
 
+  /*
+    WHO HAS ACTED COMES FROM THE SAME RESPONSE AS THE COUNT ABOVE IT.
+
+    Owner, 2026-10-12: *"the users left to answer or vote does not update when
+    the box above shows there has been progress"*. The count (`roundProgress`)
+    reads `/host-state`, polled every two seconds; this list read each
+    roster row's `readiness` from `/players`, polled every six — so the list
+    trailed every answer, and through a vote it never moved at all, because
+    get-players read the voter off a field no ballot carries (fixed in
+    get-players.js; tests/roster-readiness.js §5). `/host-state` carries the
+    names it counted (`answererIds` / `votersIds`), so those decide who has
+    acted and the roster only says who is in the room. The roster's own
+    readiness is the fallback for a snapshot without the list.
+  */
+  const progress = snapshot && (phase === 'ASK' ? snapshot.answerProgress : snapshot.votingProgress);
+  const actedIds = progress && (phase === 'ASK' ? progress.answererIds : progress.votersIds);
+  const acted = Array.isArray(actedIds) ? new Set(actedIds.filter(Boolean)) : null;
+
   const payload = rosterResponse && typeof rosterResponse === 'object' ? rosterResponse : {};
   const players = Array.isArray(payload.players) ? payload.players : [];
 
   const names = players
+    .filter((player) => player && typeof player === 'object')
+    .map((player) => ({ player, name: player.playerName || player.PlayerName || '' }))
     // A row with no readiness block has not been seen to act, so it stays in
     // the list. Dropping it would quietly under-report who the room is waiting
     // for, which is the one thing this list must not do.
-    .filter((player) => player && typeof player === 'object' && !player.readiness?.[field])
-    .map((player) => player.playerName || player.PlayerName || '')
+    .filter(({ player, name }) => (acted ? !acted.has(name) : !player.readiness?.[field]))
+    .map(({ name }) => name)
     // A row with no name cannot be called out, so it is not a chip.
     .filter(Boolean);
 

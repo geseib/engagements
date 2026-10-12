@@ -511,7 +511,9 @@ function HostRemote() {
     ? (roster.stats?.totalPlayers ?? roster.players?.length ?? null)
     : null;
 
-  const waiting = useMemo(() => waitingOn(roster, snapshot?.state), [roster, snapshot]);
+  // The snapshot, not just its state: who has acted comes from the same
+  // `/host-state` response as the count above the list (config/hostRemote.js).
+  const waiting = useMemo(() => waitingOn(roster, snapshot), [roster, snapshot]);
   const notes = useMemo(() => fieldNotesFrom(aiSummary), [aiSummary]);
 
   /** Is the room reading the AI's read-back right now? */
