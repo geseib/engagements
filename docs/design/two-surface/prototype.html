@@ -1,0 +1,745 @@
+<title>Two-Surface Host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: the room's 16:9 screen, the host's dashboard and the phone remote side by side,
+   all reading one shared state. Warm Summit dusk tokens (styles.css:9-55); single dark look. */
+:root{
+  --bg:#0F1A2E; --canvas:#0A1324; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#9BA8BE; --primary:#F6A94C; --primary-deep:#C77B4A;
+  --secondary:#7CA7E6; --success:#4FB286; --danger-text:#EF8C86;
+  --line:rgba(155,168,190,.22); --line-strong:rgba(155,168,190,.4);
+  --on-primary:#0F1A2E; --sec-tint:rgba(124,167,230,.16);
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+html,body{background:var(--canvas);color:var(--text)}
+body{font-family:var(--f-ui);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:0 40px}
+*{box-sizing:border-box}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--secondary);outline-offset:2px}
+
+/* ---------- prototype toolbar (not part of the design) ---------- */
+.tb{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;padding-block:16px 10px;border-bottom:1px solid var(--line)}
+.tb h1{font-family:var(--f-display);font-size:19px;font-weight:700;margin:0;letter-spacing:.01em}
+.tb h1 small{display:block;font-family:var(--f-ui);font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+.tb .grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tb label,.tb .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:6px 10px;font-size:13px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line-strong)}
+.seg button[aria-pressed="true"]{background:var(--sec-tint);color:var(--text);box-shadow:inset 0 -2px 0 var(--secondary)}
+.tb select{background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:5px 8px;font-size:13px}
+.fitstat{font-size:12px;font-variant-numeric:tabular-nums;padding:4px 8px;border-radius:6px;border:1px solid var(--line)}
+.fitstat.ok{color:var(--success);border-color:rgba(79,178,134,.45)}
+.fitstat.bad{color:var(--danger-text);border-color:rgba(239,140,134,.5)}
+.ghost-sm{background:transparent;border:1px solid var(--line-strong);border-radius:8px;padding:5px 10px;font-size:13px}
+.jump{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-block:10px;font-size:12px;color:var(--muted)}
+.jump button{background:transparent;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.jump button[aria-current="step"]{border-color:var(--secondary);color:var(--text);background:var(--sec-tint)}
+.keys{font-size:12px;color:var(--muted);margin-left:auto}
+kbd{font-family:var(--f-ui);font-size:11px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--text)}
+
+/* ---------- surfaces grid ---------- */
+.surf{display:grid;gap:20px;align-items:start;padding-top:8px}
+.surf.setup-a{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-areas:"dash pres"}
+.surf.setup-b{grid-template-columns:minmax(0,1fr) 390px;grid-template-areas:"pres rem"}
+.surf.setup-all{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-areas:"dash pres" "dash rem"}
+.surf.setup-a .s-rem,.surf.setup-b .s-dash{display:none}
+.s-pres{grid-area:pres;min-width:0}.s-dash{grid-area:dash;min-width:0}.s-rem{grid-area:rem;min-width:0}
+.surf.setup-all .s-rem{justify-self:center;width:100%;max-width:390px}
+.cap{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.cap b{color:var(--text);font-weight:600}
+.cap-note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+@media (max-width:1000px){
+  .surf.setup-a,.surf.setup-b,.surf.setup-all{grid-template-columns:minmax(0,1fr);grid-template-areas:"pres" "dash" "rem"}
+  .surf .s-rem{justify-self:center;width:100%;max-width:390px}
+  .keys{margin-left:0}
+}
+
+/* ---------- the 16:9 presentation frame ----------
+   A virtual 1920x1080 canvas, scaled to its box. overflow:hidden everywhere: it never scrolls. */
+.fw{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;overflow:hidden;border-radius:6px;background:var(--bg);box-shadow:0 0 0 1px var(--line)}
+.fw .pf{position:absolute;left:0;top:0;transform-origin:0 0}
+.pf{width:1920px;height:1080px;overflow:hidden;display:flex;flex-direction:column;padding:64px 96px 56px;
+  background:radial-gradient(120% 90% at 85% 0%,#1E3050 0%,var(--bg) 55%),var(--bg);color:var(--text);font-family:var(--f-ui);line-height:1.3}
+/* the four ladders, as px at 1080 tall (styles/stage.css:43-86, clamp() resolved at 1080) */
+.p-room,.p-call{--L-hero:91px;--L-primary:60px;--L-secondary:40px;--L-body:30px;--L-meta:21px;--fit-min:.55;--hair:1px}
+.p-call{--hair:2px}
+.p-tv{--L-hero:119px;--L-primary:80px;--L-secondary:52px;--L-body:38px;--L-meta:26px;--fit-min:.78;--hair:1px}
+.p-table{--L-hero:64px;--L-primary:43px;--L-secondary:28px;--L-body:22px;--L-meta:16px;--fit-min:.55;--hair:1px}
+.pf{--fit:1}
+.pt{display:flex;justify-content:space-between;align-items:baseline;font-size:var(--L-meta);color:var(--muted);font-weight:500;padding-bottom:20px;border-bottom:var(--hair) solid var(--line);flex:none}
+.pt b{color:var(--text);font-weight:600}
+.pm{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:center;padding-block:28px}
+.pfoot{flex:none;display:flex;align-items:center;justify-content:center;gap:28px;font-size:var(--L-meta);color:var(--muted);padding-top:18px;border-top:var(--hair) solid var(--line);min-height:calc(var(--L-meta)*2.6)}
+.pfoot b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.ey{font-size:calc(var(--L-meta)*var(--fit));text-transform:uppercase;letter-spacing:.12em;color:var(--secondary);font-weight:600;margin:0 0 .6em}
+.hero{font-family:var(--f-display);font-weight:800;font-size:calc(var(--L-hero)*var(--fit));line-height:1.04;margin:0 0 .35em;text-wrap:balance;letter-spacing:-.01em}
+.h2{font-family:var(--f-display);font-weight:700;font-size:calc(var(--L-primary)*var(--fit));line-height:1.1;margin:0 0 .4em;text-wrap:balance}
+.lead{font-size:calc(var(--L-secondary)*var(--fit));line-height:1.3;margin:0 0 .6em;max-width:34ch}
+.bodyt{font-size:calc(var(--L-body)*var(--fit));color:var(--muted);line-height:1.4;margin:0 0 .8em;max-width:52ch}
+.meter{display:flex;gap:8px}
+.meter i{display:block;width:44px;height:12px;border-radius:6px;background:var(--surface-2)}
+.meter i.on{background:var(--secondary)}
+.meter i.all{background:var(--success)}
+
+/* lobby */
+.lob{display:grid;grid-template-columns:1fr auto;gap:96px;align-items:center}
+.code{font-family:var(--f-display);font-weight:800;font-size:calc(var(--L-hero)*2*var(--fit));letter-spacing:.08em;line-height:1;margin:.1em 0 .25em;color:var(--text)}
+.qr{width:calc(380px*var(--fit));aspect-ratio:1;display:grid;grid-template-columns:repeat(21,1fr);background:#F4EDE4;padding:18px;border-radius:12px}
+.qr span{background:transparent}.qr span.k{background:#0F1A2E}
+
+/* tally (results) */
+.tal{display:flex;flex-direction:column;gap:calc(22px*var(--fit))}
+.trow{display:grid;grid-template-columns:calc(var(--L-secondary)*1.4*var(--fit)) minmax(0,1fr) auto;gap:24px;align-items:center}
+.trow .rk{font-family:var(--f-display);font-weight:700;font-size:calc(var(--L-secondary)*var(--fit));color:var(--muted);text-align:right}
+.trow .nm{font-size:calc(var(--L-secondary)*var(--fit));font-weight:600;line-height:1.15}
+.trow .nm small{display:block;font-size:calc(var(--L-meta)*var(--fit));font-weight:400;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.2em}
+.trow .bar{height:calc(14px*var(--fit));border-radius:7px;background:var(--secondary);margin-top:.5em}
+.trow .pts{font-size:calc(var(--L-secondary)*var(--fit));font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.trow .pts small{font-size:.55em;color:var(--muted);font-weight:500;margin-left:.3em}
+.tmore{font-size:calc(var(--L-body)*var(--fit));color:var(--muted);padding-left:calc(var(--L-secondary)*1.4*var(--fit) + 24px)}
+
+/* response navigator */
+.nav{display:grid;grid-template-columns:300px minmax(0,1fr) 300px;gap:40px;height:100%;min-height:0;align-items:stretch}
+.fl{display:flex;flex-direction:column;justify-content:center;gap:18px;min-width:0}
+.mini{border:var(--hair) solid var(--line-strong);border-radius:16px;padding:16px 20px;background:rgba(27,41,66,.6);min-width:0}
+.mini .n{font-family:var(--f-display);font-weight:700;font-size:var(--L-secondary);line-height:1;color:var(--muted)}
+.mini .w{font-size:var(--L-meta);color:var(--muted);line-height:1.3;margin-top:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rng{border:var(--hair) dashed var(--line-strong);border-radius:16px;padding:16px 20px;text-align:center}
+.rng .n{font-family:var(--f-display);font-weight:700;font-size:var(--L-secondary);line-height:1.1;color:var(--muted);font-variant-numeric:tabular-nums}
+.rng .w{font-size:var(--L-meta);color:var(--muted)}
+.card{background:var(--surface);border:3px solid var(--secondary);border-radius:28px;padding:44px 56px 40px;display:flex;flex-direction:column;min-height:0;min-width:0}
+.ch{display:flex;align-items:center;gap:22px;flex:none;margin-bottom:24px}
+.badge{flex:none;min-width:calc(var(--L-secondary)*1.7);height:calc(var(--L-secondary)*1.7);padding:0 .3em;border-radius:999px;background:var(--secondary);color:var(--bg);font-family:var(--f-display);font-weight:800;font-size:var(--L-secondary);display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.ch .who{font-size:var(--L-secondary);font-weight:700;line-height:1.1;min-width:0}
+.ch .who small{display:block;font-size:var(--L-meta);color:var(--muted);font-weight:500;margin-top:4px}
+.ch .sample{margin-left:auto;font-size:var(--L-meta);border:var(--hair) solid var(--line-strong);border-radius:999px;padding:4px 14px;color:var(--muted);flex:none}
+.fit-text{flex:1;min-height:0;overflow:hidden;font-size:var(--L-primary);line-height:1.28;font-weight:500;margin:0}
+.part{flex:none;font-size:var(--L-meta);color:var(--secondary);font-weight:600;margin-top:16px}
+.trk{display:flex;gap:6px;align-items:center}
+.trk i{display:block;width:30px;height:10px;border-radius:5px;background:var(--surface-2)}
+.trk i.on{background:var(--secondary);width:56px}
+.trk.long{position:relative;width:640px;height:10px;border-radius:5px;background:var(--surface-2)}
+.trk.long em{position:absolute;top:-5px;height:20px;width:12px;border-radius:6px;background:var(--secondary)}
+
+/* Workie's read */
+.rd-h{font-family:var(--f-display);font-weight:700;font-size:calc(var(--L-primary)*var(--fit));margin:0 0 .5em;line-height:1.1}
+.rd-h small{font-family:var(--f-ui);font-weight:500;font-size:.45em;color:var(--muted);margin-left:.6em;letter-spacing:.02em}
+.rd ul,.rd ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:.75em}
+.rd li,.rd p{font-size:calc(var(--L-body)*1.22*var(--fit));line-height:1.36;max-width:62ch;margin:0}
+.rd ul li{padding-left:1.1em;position:relative}
+.rd ul li::before{content:"";position:absolute;left:0;top:.55em;width:.42em;height:.42em;border-radius:50%;background:var(--secondary)}
+.rd ol{counter-reset:t}
+.rd ol li{counter-increment:t;padding-left:1.8em;position:relative}
+.rd ol li::before{content:counter(t);position:absolute;left:0;top:-.05em;font-family:var(--f-display);font-weight:800;color:var(--primary-deep);font-size:1.15em}
+.rd.topics li{font-size:calc(var(--L-secondary)*var(--fit));line-height:1.3}
+.rd strong{font-weight:700;color:var(--text)}
+.rd em{font-style:normal;color:#D9E5F7}
+.pg{display:flex;gap:10px}
+.pg i{display:block;width:48px;height:10px;border-radius:5px;background:var(--surface-2)}
+.pg i.seen{background:rgba(124,167,230,.45)}
+.pg i.on{background:var(--secondary)}
+
+/* asks */
+.opts{display:grid;gap:calc(18px*var(--fit));margin-top:.4em}
+.opt{display:grid;grid-template-columns:calc(var(--L-secondary)*1.3*var(--fit)) minmax(0,1fr) auto;gap:20px;align-items:center;font-size:calc(var(--L-secondary)*var(--fit))}
+.opt .k{font-family:var(--f-display);font-weight:800;color:var(--muted)}
+.opt .c{font-weight:700;font-variant-numeric:tabular-nums}
+.opt .b{grid-column:2/4;height:calc(16px*var(--fit));border-radius:8px;background:var(--secondary)}
+.opt .b.z{background:var(--surface-2)}
+.agree3{display:flex;gap:24px;margin-top:.6em}
+.agree3 span{font-size:calc(var(--L-body)*var(--fit));border:var(--hair) solid var(--line-strong);border-radius:999px;padding:.35em 1em;color:var(--muted)}
+.stmt{font-family:var(--f-display);font-weight:700;font-size:calc(var(--L-primary)*var(--fit));line-height:1.12;margin:0 0 .3em;max-width:24ch;text-wrap:balance}
+
+/* off / not presenting */
+.off{flex:1;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:var(--L-secondary)}
+
+/* one-screen strip (setup b, the no-phone fallback) */
+.strip{position:absolute;left:50%;bottom:3%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:rgba(15,26,46,.92);border:1px solid var(--line-strong);border-radius:12px;padding:6px 8px 6px 14px;font-size:12px;color:var(--muted);opacity:0;pointer-events:none;transition:opacity .2s;max-width:94%;white-space:nowrap}
+.fw.stripon:hover .strip,.fw.stripon:focus-within .strip{opacity:1;pointer-events:auto}
+.strip .st{overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+/* ---------- shared control pieces ---------- */
+.btn{border-radius:10px;border:1px solid var(--line-strong);background:var(--surface-2);padding:9px 14px;font-weight:600;font-size:14px;line-height:1.2}
+.btn-p{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.btn-p.armed{box-shadow:0 0 0 3px rgba(246,169,76,.35)}
+.btn-p.ready{box-shadow:0 0 0 3px var(--success)}
+.btn-g{background:transparent}
+.btn-s{padding:5px 10px;font-size:13px;border-radius:8px}
+.btn[aria-pressed="true"]{background:var(--sec-tint);border-color:var(--secondary);color:var(--text)}
+.btn:disabled{opacity:.45;cursor:default}
+
+/* ---------- dashboard (laptop) ---------- */
+.db{background:var(--bg);border:1px solid var(--line-strong);border-radius:12px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:780px;overflow:hidden}
+.db-h{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.db-h .ses{font-family:var(--f-display);font-weight:700;font-size:17px}
+.db-h .rnd{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.dots{display:flex;gap:4px}.dots i{width:16px;height:6px;border-radius:3px;background:var(--surface-2)}
+.dots i.done{background:rgba(124,167,230,.5)}.dots i.on{background:var(--secondary)}
+.db-h .sp{margin-left:auto;display:flex;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;border:1px solid var(--line-strong);border-radius:999px;padding:4px 10px;background:transparent}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.chip.offc .dot{background:var(--muted)}
+.db-b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:0}
+.db-l{padding:14px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto}
+.db-r{padding:14px 16px;min-height:0;overflow:auto}
+.lab{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin:0 0 6px;display:flex;justify-content:space-between;gap:8px}
+.navrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.navrow .pos{font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;min-width:0;flex:1}
+.upnext{font-size:13px;color:var(--muted)}
+.upnext b{color:var(--text);font-weight:600}
+.qcard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.qcard summary{cursor:pointer;font-weight:600;font-size:14px;list-style:none;display:flex;gap:8px;justify-content:space-between}
+.qcard summary::after{content:"Show";font-weight:500;font-size:12px;color:var(--secondary)}
+.qcard[open] summary::after{content:"Hide"}
+.qcard p{font-size:13px;margin:8px 0 0;color:var(--muted)}
+.qcard p b{color:var(--text);font-weight:600}
+.db-f{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.db-f .stat{flex:1;min-width:160px;font-size:14px}
+.db-f .stat small{display:block;font-size:12px;color:var(--muted)}
+.db-f .btn-p{font-size:16px;padding:12px 20px;min-width:180px}
+@media (max-width:1000px){.db{height:auto}.db-b{grid-template-columns:minmax(0,1fr)}.db-l{border-right:0;border-bottom:1px solid var(--line)}}
+
+/* moment panel (shared by dashboard and remote, two skins) */
+.pl{display:flex;flex-direction:column;gap:12px}
+.pl h3{font-family:var(--f-display);font-size:16px;font-weight:700;margin:0}
+.pl .note{font-size:12px;color:var(--muted);margin:0}
+.rows{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line);min-height:36px}
+.row:first-child{border-top:0}
+.row.on{background:var(--sec-tint);box-shadow:inset 3px 0 0 var(--secondary)}
+.row .i{font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600;font-size:13px;text-align:right}
+.row .t{min-width:0;font-size:14px}
+.row .t b{font-weight:600}
+.row .t span{display:block;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span.wrap{white-space:normal}
+.row .pts{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-right:6px}
+.row .act{display:flex;align-items:center;gap:6px}
+.people{display:flex;flex-wrap:wrap;gap:6px}
+.people span{font-size:13px;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+.people span.wait{border-color:rgba(246,169,76,.0);background:var(--surface-2)}
+.ask{border:1px solid var(--line-strong);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--surface);text-align:left;width:100%}
+.ask[aria-pressed="true"]{border-color:var(--secondary);box-shadow:inset 0 0 0 1px var(--secondary);background:#1E3152}
+.ask .ty{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--secondary);font-weight:600}
+.ask .q{font-size:14px;font-weight:600}
+.ask ol{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}
+.ask .why{font-size:12px;color:var(--muted)}
+.ask .mk{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 6px;margin-left:4px}
+.tl{display:flex;flex-direction:column;gap:6px}
+.tl div{display:grid;grid-template-columns:minmax(0,1fr) 28px;gap:8px;font-size:13px;align-items:center}
+.tl div i{grid-column:1/3;height:6px;border-radius:3px;background:var(--secondary);display:block}
+.pages{display:flex;flex-direction:column;gap:4px}
+.pages button{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:6px 8px;font-size:14px}
+.pages button[aria-current="page"]{border-color:var(--secondary);background:var(--sec-tint)}
+.pages button .i{color:var(--muted);font-variant-numeric:tabular-nums}
+.pages button.seen .t{color:var(--muted)}
+
+/* ---------- remote (phone) ---------- */
+.rm{width:100%;max-width:390px;height:780px;margin-inline:auto;border:10px solid #050A14;border-radius:44px;background:var(--bg);display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;box-shadow:0 0 0 1px var(--line-strong)}
+.rm-h{display:flex;align-items:center;gap:8px;padding:18px 16px 10px;border-bottom:1px solid var(--line)}
+.rm-h .t{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.rm-h .t b{display:block;color:var(--text);font-family:var(--f-display);font-size:16px}
+.rm-b{overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+.rm-b .fw{border-radius:8px}
+.rm-f{padding:10px 14px 18px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+.rm-f .stat{font-size:13px;color:var(--muted);text-align:center;min-height:18px}
+.rm-f .btn{width:100%}
+.rm-f .btn-p{min-height:64px;font-size:18px;border-radius:14px}
+.rm .navrow .btn{min-width:56px;min-height:44px}
+.rm .row{grid-template-columns:24px minmax(0,1fr) auto}
+.rm .qcard{padding:8px 10px}
+@media (max-width:440px){.rm{border-width:6px;border-radius:28px;height:740px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="tb">
+    <h1>Two-surface host <small>Call &amp; Answer, round 5 of session 5479 "Q4 Wrap up"</small></h1>
+    <div class="grp"><span class="lbl">Setup</span>
+      <div class="seg" role="group" aria-label="Setup" id="setupSeg">
+        <button id="su-a" data-setup="a">Laptop + projector</button>
+        <button id="su-b" data-setup="b">One screen + phone</button>
+        <button id="su-all" data-setup="all">All three</button>
+      </div>
+    </div>
+    <div class="grp"><label for="prof">Room screen</label>
+      <select id="prof"><option value="room">Room</option><option value="tv">TV</option><option value="call">Call</option><option value="table">Table</option></select>
+    </div>
+    <div class="grp"><span class="lbl">Responses</span>
+      <div class="seg" role="group" aria-label="Responses" id="countSeg">
+        <button id="c4" data-count="4">4 real</button>
+        <button id="c8" data-count="8">8</button>
+        <button id="c20" data-count="20">20</button>
+        <button id="c60" data-count="60">60</button>
+      </div>
+    </div>
+    <div class="grp"><span class="lbl">Names on the screen</span>
+      <div class="seg" role="group" aria-label="Names" id="nameSeg">
+        <button id="n1" data-names="1">Shown</button><button id="n0" data-names="0">Hidden</button>
+      </div>
+    </div>
+    <span class="fitstat" id="fitstat" role="status">Checking fit</span>
+    <button class="ghost-sm" id="restart" type="button">Start over</button>
+  </header>
+  <nav class="jump" id="jump" aria-label="Jump to a moment"></nav>
+  <main class="surf setup-all" id="surf">
+    <section class="s-pres" aria-label="Presentation">
+      <p class="cap"><span><b>Presentation</b> · projector or Zoom share</span><span id="presMeta"></span></p>
+      <div class="fw" id="presWrap"><div class="pf" id="pres"></div>
+        <div class="strip" id="strip"></div></div>
+      <p class="cap-note" id="presNote"></p>
+    </section>
+    <section class="s-dash" aria-label="Dashboard">
+      <p class="cap"><span><b>Dashboard</b> · the host's laptop</span><span>never shared</span></p>
+      <div class="db" id="dash"></div>
+    </section>
+    <section class="s-rem" aria-label="Remote">
+      <p class="cap"><span><b>Remote</b> · phone, tablet or laptop</span></p>
+      <div class="rm" id="rem"></div>
+    </section>
+  </main>
+</div>
+<div id="measure" class="pf" aria-hidden="true" style="position:fixed;left:-30000px;top:0;visibility:hidden"></div>
+
+<script>
+(function(){
+"use strict";
+/* ================= real content: session 5479, round 5 ================= */
+var Q={
+  title:"Ada Lovelace Programs a Machine Not Yet Built",
+  category:"New territory", set:"Professional Development",
+  background:"In 1843, Ada Lovelace wrote the first algorithm intended for Charles Babbage's Analytical Engine, a computer that didn't yet exist. She conceived of a machine's potential beyond its inventor's own vision. She was writing instructions for a future nobody could see.",
+  task:"What should our team be designing for a capability we do not have yet? Which assumptions would we be making, and how could we test them cheaply now?"
+};
+var REAL=[
+ {name:"Maya Chen",pts:8,text:"Design our incident runbooks for the day monitoring can auto-remediate the top ten alerts, but only as a written spec, not a new platform. We'd be assuming those alerts are repetitive enough to script and that people will trust a bot to restart things at 3am. Test it cheaply: have on-call log every manual fix for six weeks and see how many were truly identical."},
+ {name:"Sam Okafor",pts:7,text:"Usage-based pricing: we can't meter it today, but we should design the invoice and the margin model now. The assumption is that heavy users will pay more rather than leave; test it cheaply by sending ten customers a shadow invoice next quarter and counting who'd have churned."},
+ {name:"Priya Nair",pts:6,text:"Proactive support: designing the playbook for the day we can spot a struggling customer from their usage before they ever file a ticket. We'd be assuming customers welcome an unprompted check-in rather than finding it creepy. Test it cheaply now: if CSMs hand-pick ten accounts with dropping logins and reach out this month, then we'll learn from their replies whether it builds trust."},
+ {name:"Diego Ramos",pts:3,text:"Design the product for AI agents as first-class users: clean APIs and permissions an agent can drive end to end, not just a chat box bolted onto the UI. We're assuming agents get reliable enough within a year and customers will let them act on their behalf. Test it this month: point an off-the-shelf agent at our API for one real workflow and count where it breaks."}
+];
+var LONG_SAMPLE="Design the data export for the day every customer asks to leave with their history intact, because regulators are moving that way and a clean exit is also a reason to stay. We would be assuming three things. First, that customers want their raw records rather than a pretty report, which we have never asked. Second, that our schema is stable enough to promise a format for two years, which the last migration suggests it is not. Third, that sales will treat an easy exit as a selling point instead of a threat. Test the first one this month: offer ten accounts a one-click export of everything and see which file they open first. Test the second by freezing a draft format and counting how many fields we break in one quarter. Test the third by putting the export into two sales decks and asking the reps afterwards whether it came up, and whether the buyer leaned in or out.";
+var POOL=[
+ "Write the onboarding flow for when the product can import any spreadsheet. We assume people's files are messier than ours. Ask five customers for their worst file this week.",
+ "Plan the support desk for a second language before we have one speaker. Assumes demand is there; count tickets that start in translation tools.",
+ "Draft the pricing page for a free tier we cannot afford yet. Assumes free users convert; test with a waitlist and see who signs up.",
+ "Design the audit trail for when the largest customers ask for it in every contract. Read the last ten contracts and count the clauses.",
+ "Sketch how we would run releases daily. Assumes tests are trustworthy; measure how often a green build broke something last month.",
+ "Prepare a partner API spec before any partner asks. Test by showing it to two integrators and timing how long they take to say no.",
+ "Write the playbook for an outage in the region we are about to enter. Assumes the same on-call works across time zones; shadow one week.",
+ "Design reporting for a manager who never logs in. Assumes email is read; send one plain summary to five managers and count replies."
+];
+var READ_MD="## What the room said\n\n- **Maya's runbook spec**: *\"Design our incident runbooks for the day monitoring can auto-remediate the top ten alerts\"*, scoped to a written spec, not a new platform, and it asks on-call to log six weeks of manual fixes to test whether they are truly identical.\n- **Sam's usage pricing**: *\"we can't meter it today, but we should design the invoice and the margin model now\"*. The bet is that heavy users pay more rather than leave, checked with ten shadow invoices.\n- **No split**: all four answers share one move: design something now and test it cheaply before building it.\n\n## What the room voted\n\n- **Maya Chen leads** with the runbook answer, *\"Design our incident runbooks for the day monitoring can auto-remediate the top ten alerts\"*, on 8 vote points (2 first, 1 second, 0 third).\n- **The vote tracked the writing**: Sam Okafor's pricing answer took 7 points and Priya Nair's support playbook took 6, so the top three sit close together.\n- **Worth keeping**: Diego Ramos's answer on *\"AI agents as first-class users\"* earned 3 points, all third-place. Ignoring it would drop the only answer that thinks about who the product serves next.\n\nStandings after this round: Maya Chen 28, Sam Okafor 26, Priya Nair 23. Maya gained 8 this round and holds a 2-point lead over Sam, so this is a close race, not a runaway. Turnout: 4 answered, 4 voted, 5 joined the session.\n\n## Discussion topics\n\n1. Maya's answer says *\"trust a bot to restart things at 3am\"*. What would on-call need to see before they trust an auto-remediation script?\n2. Sam's answer assumes *\"heavy users will pay more rather than leave\"*. Which of our 120 pilot customers would you expect to push back first?\n3. Diego's answer asks us to design for *\"AI agents as first-class users\"*. Would a clean API for agents conflict with the plain-language reports the Tally brief promises?\n\n## Suggested next steps\n\n1. Whoever runs on-call rotation: start logging every manual fix on the top ten alerts this week, so the six-week test can begin.\n2. Whoever owns billing: draft one shadow invoice with the usage-based margin model from Sam's answer and pick the first ten customers to receive it.\n3. Whoever leads customer success: pick ten accounts with dropping logins, as Priya's answer describes, and reach out before the week ends.";
+var ASKS=[
+ {type:"agree",statement:"people will trust a bot to restart things at 3am",answers:[1],why:"Tests whether the top-voted runbook idea holds for those who did not rank it first, by probing its riskiest assumption.",tally:[2,2,1]},
+ {type:"choice",question:"Which test would you start first?",answers:[1,2,3,4],why:"Finds which cheap test the whole room would actually begin with, beyond the vote leader.",
+  options:[{text:"have on-call log every manual fix for six weeks",rew:1},{text:"sending ten customers a shadow invoice next quarter"},{text:"CSMs hand-pick ten accounts with dropping logins"},{text:"point an off-the-shelf agent at our API",rew:1}],tally:[2,1,2,0]}
+];
+
+/* ================= state ================= */
+var S={setup:"all",profile:"room",count:4,names:true,moment:"LOBBY",answered:0,voted:0,resp:0,part:0,page:0,seen:0,ask:0,askAns:0,armed:false,presenting:true,qOpen:false};
+var MOMENTS=["LOBBY","ANSWERING","VOTING","RESULTS","RESPONSES","READ","COMPOSE","ASK_LIVE","ASK_RESULTS","NEXT"];
+var MLABEL={LOBBY:"Lobby",ANSWERING:"Answering",VOTING:"Voting",RESULTS:"Results",RESPONSES:"Responses",READ:"What we heard",COMPOSE:"Ask the room",ASK_LIVE:"Room question",ASK_RESULTS:"Its results",NEXT:"Next round"};
+
+function list(){
+  var out=REAL.slice(0,Math.min(4,S.count));
+  for(var k=4;k<S.count;k++){
+    var t=(k===5)?LONG_SAMPLE:POOL[(k-4)%POOL.length];
+    out.push({name:"Sample person "+(k+1),pts:Math.max(0,3-Math.floor((k-3)/3)),text:t,sample:true});
+  }
+  out.sort(function(a,b){return b.pts-a.pts});
+  return out;
+}
+function joined(){return S.count+1}
+function names(){var l=list().map(function(r){return r.name});l.push("Guest (no name given)");return l}
+
+/* ================= markdown -> blocks ================= */
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function inl(s){return esc(s).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(&quot;.+?&quot;)\*/g,"<em>$1</em>").replace(/\*(.+?)\*/g,"<em>$1</em>")}
+function sections(){
+  var secs=[],cur=null;
+  READ_MD.split("\n").forEach(function(l){
+    if(/^## /.test(l)){cur={title:l.slice(3),blocks:[]};secs.push(cur);return}
+    if(!l.trim()||!cur)return;
+    var m;
+    if(/^- /.test(l))cur.blocks.push({k:"ul",h:inl(l.slice(2))});
+    else if((m=l.match(/^(\d+)\. (.*)$/)))cur.blocks.push({k:"ol",h:inl(m[2])});
+    else cur.blocks.push({k:"p",h:inl(l)});
+  });
+  return secs;
+}
+
+/* ================= fitting ================= */
+function over(el){return el.scrollHeight>el.clientHeight+1||el.scrollWidth>el.clientWidth+1}
+function px(pf,name){return parseFloat(getComputedStyle(pf).getPropertyValue(name))||0}
+function fitText(el,pf){
+  var max=px(pf,"--L-primary"),min=px(pf,"--L-secondary"),f=max;
+  el.style.fontSize=f+"px";
+  while(over(el)&&f>min){f=Math.max(min,f-2);el.style.fontSize=f+"px"}
+  return !over(el);
+}
+function fitFrame(pf){
+  var main=pf.querySelector(".pm");if(!main)return true;
+  var min=px(pf,"--fit-min")||.55,f=1;
+  main.querySelectorAll("[data-drop]").forEach(function(e){e.hidden=false});
+  pf.style.setProperty("--fit",1);
+  while(over(main)&&f>min){f=Math.max(min,+(f-.03).toFixed(2));pf.style.setProperty("--fit",f)}
+  if(over(main)){main.querySelectorAll("[data-drop]").forEach(function(e){e.hidden=true})}
+  var ok=!over(main)&&!over(pf);
+  pf.querySelectorAll(".fit-text").forEach(function(t){if(!fitText(t,pf))ok=false});
+  return ok;
+}
+var measure=document.getElementById("measure");
+function prep(el){el.className="pf p-"+S.profile}
+
+/* Workie's read: measured pages. A section is one page unless it does not fit; then it splits by block. */
+var readCache={};
+function readPages(){
+  var key=S.profile;if(readCache[key])return readCache[key];
+  prep(measure);var pages=[];
+  sections().forEach(function(sec){
+    var cur={title:sec.title,blocks:[],cont:false};
+    sec.blocks.forEach(function(b){
+      cur.blocks.push(b);
+      measure.innerHTML=readPageHTML(cur,0,9);
+      if(!fitAtOne(measure)&&cur.blocks.length>1){
+        cur.blocks.pop();pages.push(cur);cur={title:sec.title,blocks:[b],cont:true};
+      }
+    });
+    pages.push(cur);
+  });
+  return (readCache[key]=pages);
+}
+function fitAtOne(pf){pf.style.setProperty("--fit",1);var m=pf.querySelector(".pm");return !over(m)}
+
+/* A long response: fit the text between the primary and secondary sizes (read from the back of the room); past that, split it into parts by sentence. */
+var partCache={};
+function partsOf(i){
+  var r=list()[i],key=S.profile+"|"+S.count+"|"+i+"|"+S.names;
+  if(partCache[key])return partCache[key];
+  prep(measure);
+  var sents=r.text.match(/[^.!?;]+[.!?;]+["')]*\s*|[^.!?;]+$/g)||[r.text];
+  for(var k=1;k<=6;k++){
+    var groups=splitEven(sents,k),ok=true;
+    for(var g=0;g<groups.length&&ok;g++){
+      measure.innerHTML=navHTML(i,groups[g],g,groups.length);
+      ok=fitText(measure.querySelector(".fit-text"),measure);
+    }
+    if(ok)return (partCache[key]=groups);
+  }
+  return (partCache[key]=[r.text]);
+}
+function splitEven(sents,k){
+  if(k===1)return [sents.join("").trim()];
+  var total=sents.join("").length,target=total/k,out=[],cur="";
+  sents.forEach(function(s){
+    if(cur&&cur.length+s.length/2>target&&out.length<k-1){out.push(cur.trim());cur=""}
+    cur+=s;
+  });
+  if(cur.trim())out.push(cur.trim());
+  return out;
+}
+
+/* ================= the round step: one decision function (roundStep) ================= */
+function step(){
+  var N=list().length,J=joined(),m=S.moment,pages=readPages(),P=pages.length,parts=(m==="RESPONSES")?partsOf(S.resp):[1];
+  var st={label:MLABEL[m],status:"",sub:"",primary:null,secondary:null,next:""};
+  if(m==="LOBBY"){st.status=J+" joined";st.sub="The screen shows the join code.";st.primary={id:"start",label:"Start round 5"};st.next="Round 5: "+Q.title}
+  if(m==="ANSWERING"){var left=J-S.answered;
+    st.status=left?S.answered+" of "+J+" answered":"Everyone has answered";st.ready=!left;
+    st.sub=left?left+" still answering":"";
+    st.primary={id:"vote",label:(S.armed&&left)?"Start voting: "+left+" still answering":"Start voting",arm:left>0};
+    st.next="Voting: the room picks the answers they would back"}
+  if(m==="VOTING"){var lv=J-S.voted;
+    st.status=lv?S.voted+" of "+J+" voted":"Everyone has voted";st.ready=!lv;st.sub=lv?lv+" still voting":"";
+    st.primary={id:"results",label:(S.armed&&lv)?"Show results: "+lv+" still voting":"Show results",arm:lv>0};
+    st.next="Results: the tally of vote points"}
+  if(m==="RESULTS"){st.status="Results on the screen";st.sub="Workie's read is ready.";
+    st.primary={id:"responses",label:"Show response 1 of "+N};st.secondary={id:"heard",label:"What we heard"};
+    st.next="Response 1 of "+N+(S.names?", "+list()[0].name:"")}
+  if(m==="RESPONSES"){var lastR=S.resp===N-1&&S.part===parts.length-1;
+    st.status="Response "+(S.resp+1)+" of "+N+(parts.length>1?", part "+(S.part+1)+" of "+parts.length:"");
+    st.sub="Workie's read is ready.";
+    st.primary=lastR?{id:"heard",label:"What we heard"}:{id:"nextr",label:S.part<parts.length-1?"Next part":"Next response"};
+    st.secondary={id:"stop",label:"Stop showing"};
+    st.next=lastR?"What we heard, page 1 of "+P:(S.part<parts.length-1?"Part "+(S.part+2)+" of this response":"Response "+(S.resp+2)+" of "+N)}
+  if(m==="READ"){var last=S.page===P-1;
+    st.status="What we heard, page "+(S.page+1)+" of "+P;st.sub=pages[S.page].title;
+    st.primary=last?{id:"next",label:"Next round"}:{id:"nextp",label:"Next page"};
+    st.secondary=last?{id:"ask",label:"Ask the room ("+ASKS.length+" ready)"}:null;
+    st.next=last?"Round 6, or ask the room first":"Page "+(S.page+2)+": "+pages[S.page+1].title}
+  if(m==="COMPOSE"){st.status="Choose a question for the room";st.sub="The screen keeps the read until you send.";
+    st.primary={id:"send",label:"Send to the room"};st.secondary={id:"backread",label:"Back to the read"};
+    st.next="The question, on the screen and every device"}
+  if(m==="ASK_LIVE"){var la=J-S.askAns;
+    st.status=la?S.askAns+" of "+J+" answered":"Everyone has answered";st.ready=!la;st.sub=la?la+" still answering":"";
+    st.primary={id:"askres",label:(S.armed&&la)?"Show results: "+la+" still answering":"Show results",arm:la>0};
+    st.secondary={id:"cancel",label:"Cancel the question"};st.next="Its results, as counts"}
+  if(m==="ASK_RESULTS"){st.status="The room's answer is on the screen";
+    st.primary={id:"next",label:"Next round"};st.secondary={id:"another",label:"Ask another"};st.next="Round 6"}
+  if(m==="NEXT"){st.status="Round 6 is ready";st.sub="End of the prototype.";st.primary={id:"restart",label:"Start over"};st.next="Round 6"}
+  return st;
+}
+function act(id){
+  var N=list().length,P=readPages().length;S.armed=false;
+  switch(id){
+    case"start":S.moment="ANSWERING";S.answered=1;break;
+    case"vote":S.moment="VOTING";S.voted=0;break;
+    case"results":S.moment="RESULTS";break;
+    case"responses":S.moment="RESPONSES";S.resp=0;S.part=0;break;
+    case"nextr":var parts=partsOf(S.resp);if(S.part<parts.length-1)S.part++;else{S.resp=Math.min(N-1,S.resp+1);S.part=0}break;
+    case"stop":S.moment="RESULTS";break;
+    case"heard":S.moment="READ";S.page=0;S.seen=0;break;
+    case"nextp":S.page=Math.min(P-1,S.page+1);S.seen=Math.max(S.seen,S.page);break;
+    case"ask":case"another":S.moment="COMPOSE";break;
+    case"backread":S.moment="READ";S.page=P-1;break;
+    case"send":S.moment="ASK_LIVE";S.askAns=0;break;
+    case"askres":S.moment="ASK_RESULTS";break;
+    case"cancel":S.moment="READ";S.page=P-1;break;
+    case"next":S.moment="NEXT";break;
+    case"restart":reset();break;
+  }
+  render();
+}
+function primary(){var st=step();if(!st.primary)return;if(st.primary.arm&&!S.armed){S.armed=true;render();return}act(st.primary.id)}
+function back(){
+  if(S.moment==="RESPONSES"){if(S.part>0)S.part--;else if(S.resp>0){S.resp--;S.part=partsOf(S.resp).length-1}else S.moment="RESULTS"}
+  else if(S.moment==="READ"&&S.page>0)S.page--;
+  else if(S.moment==="ASK_RESULTS"){S.moment="READ";S.page=readPages().length-1}
+  S.armed=false;render();
+}
+function escape_(){
+  if(S.armed)S.armed=false;
+  else if(S.moment==="RESPONSES")S.moment="RESULTS";
+  else if(S.moment==="COMPOSE"){S.moment="READ";S.page=readPages().length-1}
+  render();
+}
+function show(i){S.moment="RESPONSES";S.resp=i;S.part=0;S.armed=false;render()}
+function gotoPage(i){S.page=i;S.seen=Math.max(S.seen,i);render()}
+function reset(){S.moment="LOBBY";S.answered=0;S.voted=0;S.resp=0;S.part=0;S.page=0;S.seen=0;S.askAns=0;S.armed=false;S.ask=0}
+
+/* ================= presentation renderers ================= */
+function top(right){return '<div class="pt"><span><b>Q4 Wrap up</b> · Round 5</span><span>'+right+'</span></div>'}
+function meter(n,of){var h='<div class="meter" aria-hidden="true">';var cap=Math.min(of,24);for(var i=0;i<cap;i++)h+='<i class="'+(i<Math.round(n*cap/of)?(n>=of?"all":"on"):"")+'"></i>';return h+'</div>'}
+function qr(){var h='<div class="qr" aria-label="QR code">',seed=5479;for(var i=0;i<441;i++){var x=i%21,y=Math.floor(i/21);seed=(seed*9301+49297)%233280;
+  var fin=(x<7&&y<7)||(x>13&&y<7)||(x<7&&y>13);var k=fin?((x%20===0||y%20===0||x===6||y===6||x===14||y===14)||((x>=2&&x<=4||x>=16&&x<=18)&&(y>=2&&y<=4||y>=16&&y<=18))):seed/233280>.52;
+  h+='<span class="'+(k?"k":"")+'"></span>'}return h+'</div>'}
+function label(r,i){return S.names?r.name:"Response "+(i+1)}
+function first(t,n){var w=t.split(/\s+/);return w.slice(0,n).join(" ")+(w.length>n?"…":"")}
+
+function navHTML(i,text,part,parts){
+  var L=list(),N=L.length,r=L[i];
+  function mini(j){var x=L[j];return '<div class="mini"><div class="n">'+(j+1)+'</div><div class="w">'+esc(S.names?x.name:first(x.text,7))+'</div></div>'}
+  function rng(a,b){return a===b?mini(a):'<div class="rng"><div class="n">'+(a+1)+'–'+(b+1)+'</div><div class="w">'+(b-a+1)+' responses</div></div>'}
+  var lf="",rf="";
+  if(i>=3)lf+=rng(0,i-3);for(var j=Math.max(0,i-2);j<i;j++)lf+=mini(j);
+  for(j=i+1;j<=Math.min(N-1,i+2);j++)rf+=mini(j);if(i+3<=N-1)rf+=rng(i+3,N-1);
+  var head='<div class="ch"><div class="badge">'+(i+1)+'</div><div class="who">'+esc(label(r,i))+(S.names?'<small>'+r.pts+' vote points</small>':'<small>'+r.pts+' vote points · name hidden</small>')+'</div>'+(r.sample?'<span class="sample">Sample</span>':'')+'</div>';
+  return top("Responses")+'<div class="pm" style="padding-block:24px"><div class="nav"><div class="fl">'+lf+'</div><div class="card">'+head+'<p class="fit-text">'+esc(text)+'</p>'+(parts>1?'<div class="part">Part '+(part+1)+' of '+parts+'</div>':'')+'</div><div class="fl">'+rf+'</div></div></div>'+
+    '<div class="pfoot">'+track(i,N)+'<span>Response <b>'+(i+1)+' of '+N+'</b></span></div>';
+}
+function track(i,N){
+  if(N<=24){var h='<div class="trk" aria-hidden="true">';for(var k=0;k<N;k++)h+='<i class="'+(k===i?"on":"")+'"></i>';return h+'</div>'}
+  return '<div class="trk long" aria-hidden="true"><em style="left:calc('+(i/(N-1))+' * (100% - 12px))"></em></div>';
+}
+function readPageHTML(pg,idx,total){
+  var h=top("What we heard")+'<div class="pm" style="justify-content:flex-start">';
+  var isTopics=/Discussion/.test(pg.title);
+  h+='<h2 class="rd-h">'+esc(pg.title)+(pg.cont?'<small>continued</small>':'')+'</h2><div class="rd'+(isTopics?" topics":"")+'">';
+  var cur=null;pg.blocks.forEach(function(b){
+    if(b.k!==cur){if(cur==="ul")h+="</ul>";if(cur==="ol")h+="</ol>";if(b.k==="ul")h+="<ul>";if(b.k==="ol")h+="<ol>";cur=b.k}
+    h+=b.k==="p"?'<p style="margin-top:.8em">'+b.h+'</p>':'<li>'+b.h+'</li>';
+  });
+  if(cur==="ul")h+="</ul>";if(cur==="ol")h+="</ol>";
+  h+='</div></div><div class="pfoot"><span>Workie\'s read</span><div class="pg" aria-hidden="true">';
+  for(var k=0;k<total;k++)h+='<i class="'+(k===idx?"on":(k<idx?"seen":""))+'"></i>';
+  return h+'</div><span>Page <b>'+(idx+1)+' of '+total+'</b></span></div>';
+}
+function askHTML(a,results){
+  var J=joined(),h=top(results?"The room's answer":"Question for the room")+'<div class="pm">';
+  if(a.type==="agree"){
+    h+='<p class="ey">Agree or disagree</p><p class="stmt">“'+esc(cap1(a.statement))+'”</p>';
+    if(!results)h+='<div class="agree3"><span>Agree</span><span>Not sure</span><span>Disagree</span></div>';
+    else h+=bars(["Agree","Not sure","Disagree"],a.tally);
+  }else{
+    h+='<p class="ey">Pick one</p><p class="stmt">'+esc(a.question)+'</p>';
+    h+=results?bars(a.options.map(function(o){return cap1(o.text)}),a.tally):'<div class="opts">'+a.options.map(function(o,i){return '<div class="opt" style="grid-template-columns:calc(var(--L-secondary)*1.3*var(--fit)) minmax(0,1fr)"><span class="k">'+(i+1)+'</span><span>'+esc(cap1(o.text))+'</span></div>'}).join("")+'</div>';
+  }
+  h+='</div><div class="pfoot">'+(results?'<span>'+sum(a.tally)+' answered</span>':meter(S.askAns,J)+'<span><b>'+S.askAns+' of '+J+'</b> answered on their phone, laptop or tablet</span>')+'</div>';
+  return h;
+}
+function bars(labels,t){var mx=Math.max.apply(null,t)||1;return '<div class="opts">'+labels.map(function(l,i){return '<div class="opt"><span class="k">'+(i+1)+'</span><span>'+esc(l)+'</span><span class="c">'+t[i]+'</span><i class="b'+(t[i]?"":" z")+'" style="width:'+Math.max(2,t[i]/mx*100)+'%"></i></div>'}).join("")+'</div>'}
+function sum(a){return a.reduce(function(x,y){return x+y},0)}
+function cap1(s){return s.charAt(0).toUpperCase()+s.slice(1)}
+
+function presHTML(){
+  var m=S.moment,J=joined(),L=list(),N=L.length;
+  if(!S.presenting&&S.setup!=="b")return '<div class="off">Present is off. The projector shows your laptop\'s own desktop.</div>';
+  if(m==="LOBBY")return top("Joining")+'<div class="pm"><div class="lob"><div><p class="ey">Join on your phone, laptop or tablet</p><p class="lead" style="max-width:none">engage.seibtribe.us/play</p><p class="code">5479</p><p class="lead">'+J+' joined</p></div>'+qr()+'</div></div><div class="pfoot"><span>Round 5 starts when the host is ready</span></div>';
+  if(m==="ANSWERING")return top("Answering")+'<div class="pm"><p class="ey">'+esc(Q.category)+'</p><h1 class="hero">'+esc(Q.title)+'</h1><p class="bodyt" data-drop="1">'+esc(Q.background)+'</p><p class="lead" style="max-width:40ch">'+esc(Q.task)+'</p></div><div class="pfoot">'+meter(S.answered,J)+'<span><b>'+S.answered+' of '+J+'</b> answered</span></div>';
+  if(m==="VOTING")return top("Voting")+'<div class="pm"><p class="ey">Vote</p><h1 class="h2">'+esc(Q.title)+'</h1><p class="lead">'+N+' answers are on your phone, laptop or tablet. Give your points to the ones you would back.</p></div><div class="pfoot">'+meter(S.voted,J)+'<span><b>'+S.voted+' of '+J+'</b> voted</span></div>';
+  if(m==="RESULTS"){var mx=L[0].pts||1,show=Math.min(N,N>6?5:N),h=top("Results")+'<div class="pm"><div class="tal">';
+    for(var i=0;i<show;i++){var r=L[i];h+='<div class="trow"><span class="rk">'+(i+1)+'</span><div class="nm">'+esc(label(r,i))+(r.sample?' <span style="color:var(--muted);font-weight:500">(sample)</span>':'')+'<small>'+esc(first(r.text,12))+'</small><div class="bar" style="width:'+Math.max(3,r.pts/mx*100)+'%"></div></div><span class="pts">'+r.pts+'<small>points</small></span></div>'}
+    h+='</div>'+(N>show?'<p class="tmore">and '+(N-show)+' more responses</p>':'')+'</div><div class="pfoot"><span><b>'+N+'</b> responses · <b>'+Math.min(J-1,N)+'</b> voted</span></div>';return h}
+  if(m==="RESPONSES"){var parts=partsOf(S.resp);return navHTML(S.resp,parts[S.part]||parts[0],S.part,parts.length)}
+  if(m==="READ"||m==="COMPOSE"){var P=readPages(),pi=m==="COMPOSE"?P.length-1:S.page;return readPageHTML(P[pi],pi,P.length)}
+  if(m==="ASK_LIVE")return askHTML(ASKS[S.ask],false);
+  if(m==="ASK_RESULTS")return askHTML(ASKS[S.ask],true);
+  if(m==="NEXT")return top("Next round")+'<div class="pm"><p class="ey">Up next</p><h1 class="hero">Round 6</h1><p class="lead">Have your phone, laptop or tablet ready. The question appears here and on your device together.</p></div><div class="pfoot"><span>Standings: Maya Chen 28, Sam Okafor 26, Priya Nair 23</span></div>';
+  return "";
+}
+
+/* ================= control panels (one component, two skins) ================= */
+function btn(cls,id,label,extra){return '<button type="button" class="btn '+cls+'" data-act="'+id+'"'+(extra||"")+'>'+esc(label)+'</button>'}
+function panelHTML(where){
+  var m=S.moment,L=list(),N=L.length,J=joined(),nm=names(),h='<div class="pl">';
+  var R=where==="rem";
+  if(m==="LOBBY"){h+='<h3>'+J+' joined</h3><div class="people">'+nm.slice(0,R?8:14).map(function(n){return '<span>'+esc(n)+'</span>'}).join("")+(nm.length>(R?8:14)?'<span>+'+(nm.length-(R?8:14))+' more</span>':'')+'</div><p class="note">Names stay on this screen. The room sees only the count.</p>'}
+  if(m==="ANSWERING"||m==="VOTING"||m==="ASK_LIVE"){
+    var done=m==="ANSWERING"?S.answered:m==="VOTING"?S.voted:S.askAns,still=nm.slice(done);
+    h+='<h3>'+(still.length?"Still to "+(m==="VOTING"?"vote":"answer")+" ("+still.length+")":"Everyone is in")+'</h3>';
+    if(still.length)h+='<div class="people">'+still.slice(0,R?6:12).map(function(n){return '<span class="wait">'+esc(n)+'</span>'}).join("")+(still.length>(R?6:12)?'<span>+'+(still.length-(R?6:12))+' more</span>':'')+'</div>';
+    if(m==="ASK_LIVE"){var a=ASKS[S.ask];h+='<p class="note">Live: '+esc(a.type==="agree"?"Agree or disagree: "+cap1(a.statement):a.question)+'</p>'}
+    else h+='<p class="note">Who has not '+(m==="VOTING"?"voted":"answered")+' is host-only. The screen shows the count.</p>';
+  }
+  if(m==="RESULTS"||m==="RESPONSES"){
+    h+='<h3>Responses ('+N+')</h3><div class="rows">';
+    var lim=R?Math.min(N,30):N;
+    for(var i=0;i<lim;i++){var r=L[i],on=m==="RESPONSES"&&S.resp===i;
+      h+='<div class="row'+(on?" on":"")+'"><span class="i">'+(i+1)+'</span><div class="t"><b>'+esc(r.name)+'</b>'+(r.sample?' <span style="display:inline;color:var(--muted)">(sample)</span>':'')+'<span title="'+esc(r.text)+'">'+esc(r.text)+'</span></div><div class="act"><span class="pts">'+r.pts+' pts</span>'+
+      (on?'<button type="button" class="btn btn-s" aria-pressed="true" data-act="stop">Showing</button>':'<button type="button" class="btn btn-s btn-g" data-show="'+i+'">Show</button>')+'</div></div>'}
+    h+='</div>';if(lim<N)h+='<p class="note">'+(N-lim)+' more. Step with the arrows.</p>';
+    if(!S.names)h+='<p class="note">Names are hidden from the room this round; you still see them here.</p>';
+  }
+  if(m==="READ"||m==="COMPOSE"){
+    var P=readPages();
+    if(m==="READ"){h+='<h3>Workie\'s read, '+P.length+' pages</h3><div class="pages">';
+      P.forEach(function(p,i){h+='<button type="button" data-page="'+i+'"'+(i===S.page?' aria-current="page"':'')+' class="'+(i<=S.seen&&i!==S.page?"seen":"")+'"><span class="i">'+(i+1)+'</span><span class="t">'+esc(p.title)+(p.cont?" (continued)":"")+'</span></button>'});
+      h+='</div><p class="note">Pages are cut to fit the screen. → turns them; the last page offers Ask the room.</p>'}
+    h+='<h3>Ask the room'+(m==="READ"?' <span style="font-weight:500;color:var(--muted);font-size:13px">('+ASKS.length+' ready)</span>':'')+'</h3>';
+    ASKS.forEach(function(a,i){
+      var sel=m==="COMPOSE"&&S.ask===i;
+      h+='<button type="button" class="ask" data-ask="'+i+'"'+(m==="COMPOSE"?' aria-pressed="'+sel+'"':'')+'><span class="ty">'+(a.type==="agree"?"Agree or disagree":"Pick one")+'</span>';
+      h+='<span class="q">'+esc(a.type==="agree"?"“"+cap1(a.statement)+"”":a.question)+'</span>';
+      if(a.options)h+='<ol>'+a.options.map(function(o){return '<li>'+esc(cap1(o.text))+(o.rew?'<span class="mk">Reworded</span>':'')+'</li>'}).join("")+'</ol>';
+      h+='<span class="why">For you: '+esc(a.why)+' From answer'+(a.answers.length>1?"s ":" ")+a.answers.join(", ")+'.</span></button>';
+    });
+    if(m==="READ")h+='<p class="note">Choosing one here never shows it to the room. Send puts it on the screen.</p>';
+    else h+='<p class="note">Selected: the '+(S.ask+1)+(S.ask===0?"st":"nd")+' suggestion. The screen still shows the read.</p>';
+  }
+  if(m==="ASK_RESULTS"){var a2=ASKS[S.ask],labs=a2.type==="agree"?["Agree","Not sure","Disagree"]:a2.options.map(function(o){return cap1(o.text)}),mx=Math.max.apply(null,a2.tally);
+    h+='<h3>The room answered ('+sum(a2.tally)+')</h3><div class="tl">'+labs.map(function(l,i){return '<div><span>'+esc(l)+'</span><b>'+a2.tally[i]+'</b><i style="width:'+Math.max(2,a2.tally[i]/mx*100)+'%"></i></div>'}).join("")+'</div><p class="note">Sample counts: the real session has no answers to this ask.</p>'}
+  if(m==="NEXT")h+='<h3>Round 6 is ready</h3><p class="note">Next round closes round 5, including any live question, then opens round 6 on the screen and every device.</p>';
+  return h+'</div>';
+}
+function questionHTML(){return '<details class="qcard" id="qd"'+(S.qOpen?" open":"")+'><summary>'+esc(Q.title)+'</summary><p><b>Task:</b> '+esc(Q.task)+'</p><p><b>Background (yours):</b> '+esc(Q.background)+'</p><p><b>Set:</b> '+esc(Q.set)+' · '+esc(Q.category)+'</p></details>'}
+function navRowHTML(){
+  var m=S.moment,N=list().length;
+  if(m==="RESPONSES"){var parts=partsOf(S.resp);return '<div class="navrow"><button type="button" class="btn btn-g" data-act="back" aria-label="Back">‹</button><span class="pos">Response '+(S.resp+1)+' of '+N+(parts.length>1?' · part '+(S.part+1)+' of '+parts.length:'')+'</span><button type="button" class="btn btn-g" data-act="fwd" aria-label="Next">›</button></div>'}
+  if(m==="READ"){var P=readPages().length;return '<div class="navrow"><button type="button" class="btn btn-g" data-act="back" aria-label="Back a page"'+(S.page?"":" disabled")+'>‹</button><span class="pos">Page '+(S.page+1)+' of '+P+'</span><button type="button" class="btn btn-g" data-act="fwd" aria-label="Next page"'+(S.page<P-1?"":" disabled")+'>›</button></div>'}
+  return "";
+}
+function footHTML(st){
+  var p=st.primary,cls="btn btn-p"+(S.armed?" armed":"")+(st.ready?" ready":"");
+  return {stat:esc(st.status)+(st.sub?'<small>'+esc(st.sub)+'</small>':''),
+    sec:st.secondary?'<button type="button" class="btn btn-g" data-act="'+st.secondary.id+'">'+esc(st.secondary.label)+'</button>':'',
+    pri:p?'<button type="button" class="'+cls+'" data-act="primary">'+esc(p.label)+'</button>':''};
+}
+
+/* ================= render ================= */
+var surf=document.getElementById("surf"),pres=document.getElementById("pres"),dash=document.getElementById("dash"),rem=document.getElementById("rem");
+function render(){
+  var st=step(),f=footHTML(st);
+  surf.className="surf setup-"+S.setup;
+  // presentation
+  prep(pres);pres.innerHTML=presHTML();
+  // dashboard
+  var dScroll=(dash.querySelector(".db-r")||{}).scrollTop||0;
+  dash.innerHTML='<div class="db-h"><span class="ses">Q4 Wrap up</span><span class="rnd">Round 5 <span class="dots" aria-hidden="true">'+[1,2,3,4,5,6].map(function(n){return '<i class="'+(n<5?"done":n===5?"on":"")+'"></i>'}).join("")+'</span> '+esc(st.label)+'</span><span class="sp">'+
+    (S.presenting?'<button type="button" class="chip" data-act="present" title="Close the presentation window"><span class="dot"></span>Presenting on screen 2</button>':'<button type="button" class="btn btn-s" data-act="present">Present</button>')+
+    '<button type="button" class="btn btn-s btn-g">Session</button></span></div>'+
+    '<div class="db-b"><div class="db-l"><div><p class="lab"><span>On the screen now</span><span>'+esc(S.profile.charAt(0).toUpperCase()+S.profile.slice(1))+' profile</span></p><div class="fw"><div class="pf" id="dprev"></div></div></div>'+navRowHTML()+
+    '<p class="upnext">Next on the screen: <b>'+esc(st.next)+'</b></p>'+questionHTML()+'</div><div class="db-r">'+panelHTML("dash")+'</div></div>'+
+    '<div class="db-f"><div class="stat">'+f.stat+'</div>'+f.sec+f.pri+'</div>';
+  dash.querySelector(".db-r").scrollTop=dScroll;
+  var dp=dash.querySelector("#dprev");prep(dp);dp.innerHTML=presHTML();
+  // remote
+  var rScroll=(rem.querySelector(".rm-b")||{}).scrollTop||0;
+  rem.innerHTML='<div class="rm-h"><div class="t"><b>Round 5 · '+esc(st.label)+'</b>Q4 Wrap up · '+joined()+' joined</div><button type="button" class="btn btn-s btn-g">Session</button></div>'+
+    '<div class="rm-b"><div><p class="lab"><span>On the screen</span></p><div class="fw"><div class="pf" id="rprev"></div></div></div>'+navRowHTML()+questionHTML().replace('id="qd"','id="qr"')+panelHTML("rem")+'</div>'+
+    '<div class="rm-f"><div class="stat">'+esc(st.status)+(st.sub?" · "+esc(st.sub):"")+'</div>'+f.sec+f.pri+'</div>';
+  rem.querySelector(".rm-b").scrollTop=rScroll;
+  var rp=rem.querySelector("#rprev");prep(rp);rp.innerHTML=presHTML();
+  // one-screen strip (setup b only)
+  var wrap=document.getElementById("presWrap");wrap.classList.toggle("stripon",S.setup==="b");
+  document.getElementById("strip").innerHTML='<span class="st">'+esc(st.status)+'</span>'+f.sec.replace("btn btn-g","btn btn-g btn-s")+f.pri.replace('class="btn btn-p','class="btn btn-p btn-s');
+  // captions
+  document.getElementById("presMeta").textContent=MLABEL[S.moment];
+  document.getElementById("presNote").textContent=S.setup==="b"?"One screen, shared or projected. The phone drives it. With no phone, Space and the arrow keys drive it, and moving the mouse shows a small strip for three seconds (hover the screen to see it); the room sees that strip too.":
+    "Its own window, opened by Present. It follows the session on the server, so closing and reopening it, or a dropped network, lands back on the same moment.";
+  // jump strip + toolbar state
+  document.querySelectorAll("#jump button").forEach(function(b){b.setAttribute("aria-current",b.dataset.m===S.moment?"step":"false")});
+  document.querySelectorAll("[data-setup]").forEach(function(b){b.setAttribute("aria-pressed",b.dataset.setup===S.setup)});
+  document.querySelectorAll("[data-count]").forEach(function(b){b.setAttribute("aria-pressed",+b.dataset.count===S.count)});
+  document.querySelectorAll("[data-names]").forEach(function(b){b.setAttribute("aria-pressed",(b.dataset.names==="1")===S.names)});
+  document.getElementById("prof").value=S.profile;
+  layout();
+}
+function layout(){
+  var bad=[];
+  document.querySelectorAll(".fw").forEach(function(w){var pf=w.querySelector(".pf");if(!pf)return;var sc=w.clientWidth/1920;pf.style.transform="scale("+sc+")";});
+  [pres,document.getElementById("dprev"),document.getElementById("rprev")].forEach(function(pf){if(pf&&!fitFrame(pf))bad.push(pf.id)});
+  var fs=document.getElementById("fitstat");
+  var okMain=bad.indexOf("pres")<0;
+  fs.className="fitstat "+(okMain?"ok":"bad");
+  fs.textContent=okMain?"Screen fits, no scroll":"Overflow on the screen";
+  window.__fit={moment:S.moment,profile:S.profile,count:S.count,ok:okMain,fit:getComputedStyle(pres).getPropertyValue("--fit"),bad:bad};
+}
+
+/* ================= wiring ================= */
+var jump=document.getElementById("jump");
+jump.innerHTML='<span>Prototype: jump to</span>'+MOMENTS.map(function(m){return '<button type="button" data-m="'+m+'">'+MLABEL[m]+'</button>'}).join("")+'<span class="keys"><kbd>Space</kbd> or <kbd>→</kbd> next step · <kbd>←</kbd> back · <kbd>Esc</kbd> stop or cancel</span>';
+jump.addEventListener("click",function(e){var b=e.target.closest("[data-m]");if(!b)return;var m=b.dataset.m;
+  S.armed=false;S.moment=m;var J=joined();
+  if(m==="ANSWERING")S.answered=Math.min(J-1,list().length);if(m==="VOTING")S.voted=Math.min(J-1,list().length);
+  if(m==="RESPONSES"){S.resp=0;S.part=0}if(m==="READ"){S.page=0;S.seen=0}if(m==="ASK_LIVE")S.askAns=Math.max(0,J-2);render()});
+document.addEventListener("click",function(e){
+  var t=e.target.closest("[data-act],[data-show],[data-page],[data-ask],[data-setup],[data-count],[data-names]");if(!t)return;
+  if(t.dataset.setup){S.setup=t.dataset.setup;render();return}
+  if(t.dataset.count){S.count=+t.dataset.count;S.resp=Math.min(S.resp,list().length-1);S.part=0;render();return}
+  if(t.dataset.names){S.names=t.dataset.names==="1";render();return}
+  if(t.dataset.show){show(+t.dataset.show);return}
+  if(t.dataset.page){gotoPage(+t.dataset.page);return}
+  if(t.dataset.ask){S.ask=+t.dataset.ask;if(S.moment==="READ")S.moment="COMPOSE";render();return}
+  var a=t.dataset.act;
+  if(a==="primary")primary();else if(a==="back")back();else if(a==="fwd"){if(S.moment==="READ")act("nextp");else{var st=step();if(st.primary.id==="nextr")act("nextr")}}
+  else if(a==="present"){S.presenting=!S.presenting;render()}
+  else act(a);
+});
+document.addEventListener("toggle",function(e){if(e.target.id==="qd"||e.target.id==="qr"){S.qOpen=e.target.open}},true);
+document.getElementById("prof").addEventListener("change",function(e){S.profile=e.target.value;S.part=0;render()});
+document.getElementById("restart").addEventListener("click",function(){reset();render()});
+document.addEventListener("keydown",function(e){
+  var tag=(e.target.tagName||"").toLowerCase();if(tag==="select"||tag==="input"||tag==="textarea")return;
+  if(e.key===" "||e.key==="ArrowRight"||e.key==="PageDown"){if(e.key===" "&&tag==="button"&&e.target.dataset.act!=="primary")return;e.preventDefault();primary()}
+  else if(e.key==="ArrowLeft"||e.key==="PageUp"){e.preventDefault();back()}
+  else if(e.key==="Escape"){escape_()}
+});
+/* the room acting: answers, votes and ask answers arrive by themselves */
+setInterval(function(){
+  var J=joined(),cap=Math.min(J-1,list().length),ch=false;
+  if(S.moment==="ANSWERING"&&S.answered<cap){S.answered=Math.min(cap,S.answered+Math.max(1,Math.round(cap/6)));ch=true}
+  if(S.moment==="VOTING"&&S.voted<cap){S.voted=Math.min(cap,S.voted+Math.max(1,Math.round(cap/6)));ch=true}
+  if(S.moment==="ASK_LIVE"&&S.askAns<J){S.askAns=Math.min(J,S.askAns+1);ch=true}
+  if(ch)render();
+},1600);
+if(window.ResizeObserver)new ResizeObserver(function(){layout()}).observe(document.body);else window.addEventListener("resize",layout);
+window.__proto={S:S,render:render,step:step,readPages:readPages,partsOf:partsOf,act:act};
+render();
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){readCache={};partCache={};render()});
+})();
+</script>
