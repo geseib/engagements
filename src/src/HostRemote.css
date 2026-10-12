@@ -550,6 +550,20 @@
   color: var(--primary);
 }
 
+/* The one secondary (R3), directly above the primary: a ghost button, never
+   amber. Its armed state reuses the ghost look; the warning line says why. */
+.hr-sec {
+  margin-bottom: 8px;
+}
+
+/* Why the primary is greyed ("Workie is writing"), said above it. */
+.hr-dock-hint {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: .8125rem;
+  color: var(--muted);
+}
+
 .hr-dock-idle {
   margin: 0;
   min-height: 64px;

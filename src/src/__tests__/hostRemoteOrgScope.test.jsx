@@ -222,7 +222,7 @@ describe('the access gate re-checks after a team switch (Task 6)', () => {
     // Refused: the banner is up, and the switcher is right there with it —
     // no round, no roster, nothing but the way to fix it.
     await screen.findByRole('alert');
-    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start \w+ 1/i })).not.toBeInTheDocument();
     const chip = await screen.findByTestId('orgsw-chip');
 
     // Fix the door's answer BEFORE switching — the switch is what re-asks it,
@@ -233,6 +233,6 @@ describe('the access gate re-checks after a team switch (Task 6)', () => {
 
     // The recheck lands and the session it was withholding appears.
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /start \w+ 1/i })).toBeInTheDocument();
   });
 });

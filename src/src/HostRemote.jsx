@@ -8,14 +8,14 @@ import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
+import { navigateTo } from './auth/navigate';
 import { useOptionalAuth } from './auth/AuthContext';
 import { categoryRows, questionKey } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
 import { fetchComments } from './utils/commentsClient';
 import { postQueueOp } from './utils/questionQueueClient';
 import {
-  primaryAction,
-  skipAction,
+  remoteStep,
   requestFor,
   askNowRequest,
   askNowNeedsConfirm,
@@ -478,11 +478,6 @@ function HostRemote() {
     the room" for a response the room is already reading.
   */
   const stageFocus = snapshot?.stageFocus || NO_FOCUS;
-  const action = useMemo(
-    () => primaryAction(snapshot?.state, gameType, stageBeat),
-    [snapshot, gameType, stageBeat]
-  );
-  const skip = useMemo(() => skipAction(snapshot?.state), [snapshot]);
   const round = snapshot?.currentQuestion || null;
   const title = snapshot?.gameMetadata?.title || '';
   const setId = snapshot?.gameMetadata?.questionSetId || '';
@@ -531,6 +526,12 @@ function HostRemote() {
    * render this one.
    */
   const onFeedback = summary.phase === 'RESULTS' && stageBeat === 'feedback';
+  /**
+   * Is a round's results up (any beat)? The responses are loaded then too, not
+   * only while the focus panel is open: roundStep's RESULTS secondary is "Show
+   * response 1 of N", and N is their count.
+   */
+  const onResults = summary.phase === 'RESULTS';
 
   /* ------------------------------------------------------- the read-back */
 
@@ -612,7 +613,7 @@ function HostRemote() {
     nothing.
   */
   useEffect(() => {
-    if (!gameId || !focusOpen || !round) return undefined;
+    if (!gameId || !round || !(focusOpen || onResults)) return undefined;
 
     let cancelled = false;
     const load = async () => {
@@ -635,7 +636,7 @@ function HostRemote() {
     load();
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [gameId, focusOpen, round]);
+  }, [gameId, focusOpen, onResults, round]);
 
   /**
    * Put something on the room's screen — or take it off.
@@ -781,8 +782,23 @@ function HostRemote() {
     return () => { cancelled = true; };
   }, [setId, gameId]);
 
-  const confirmNeeded = needsConfirmation(action, progress);
+  /*
+    THE ONE NEXT STEP, from config/roundStep.js — the same function the host
+    page's dock reads (R1). The Remote holds nothing of its own about which
+    act comes next or what it is called.
+  */
+  const step = useMemo(() => remoteStep(snapshot, {
+    playerCount: rosterCount,
+    answerCount: onResults ? focusAnswers.length : undefined,
+    notesReady: notes.ready,
+    hasQuestionSet: Boolean(setId),
+    goalLine: goal.reached ? goal.line : '',
+  }), [snapshot, rosterCount, onResults, focusAnswers.length, notes.ready, setId, goal.reached, goal.line]);
+  const action = step.primary;
+  const secondary = step.secondary;
+  const confirmNeeded = needsConfirmation(action);
   const primaryArmed = armedAction === 'primary';
+  const secondaryArmed = armedAction === 'secondary';
   const blocked = !!busyAction || cooling || !snapshot;
 
   /* ------------------------------------------------------------ actions */
@@ -823,6 +839,21 @@ function HostRemote() {
       // this file. That is why tests/session-control-routes-authorization.js
       // checks both `request.path` dispatch sites by shape rather than by
       // grepping for the routes.
+      // A step that needs something to exist first (Request feedback builds
+      // the round report before the beat moves) sends that first, and stops
+      // if it fails rather than opening a beat the room cannot load.
+      if (request.before) {
+        const first = await authFetch(`${apiBase()}${request.before.path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request.before.body),
+        });
+        if (!first.ok) {
+          const firstPayload = await first.json().catch(() => ({}));
+          setError(sessionActionMessage({ status: first.status, payload: firstPayload, live: !!snapshot, email }));
+          return;
+        }
+      }
       const res = await authFetch(`${apiBase()}${request.path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -863,22 +894,59 @@ function HostRemote() {
     }
   }, [gameId, round, snapshot, disarm, pollState, email]);
 
+  /**
+   * One of roundStep's controls, pressed. Most are a POST (requestFor); the
+   * rest act on the wall through /stage-focus, or leave this screen.
+   */
+  const runControl = useCallback(async (control) => {
+    disarm();
+    switch (control.id) {
+      case 'wait':
+      case 'show-read':
+        return;
+      case 'leave':
+        backToMenu();
+        return;
+      case 'report':
+        // The report is built and drawn by the host page; it opens it at once
+        // for an ended session (GameHostPage's `?open=report`).
+        navigateTo(`/host?gameId=${encodeURIComponent(gameId)}&open=report`);
+        return;
+      case 'show-response':
+      case 'next-response':
+      case 'next-part':
+        await setStageFocus({ focus: 'answer', index: control.index, part: control.part });
+        return;
+      case 'stop-showing':
+        await setStageFocus({ focus: 'none' });
+        return;
+      case 'field-notes':
+        // From a response on the wall, put it away before the read goes up.
+        if (step.moment === 'RESPONSES') await setStageFocus({ focus: 'none' });
+        fire(control.id);
+        return;
+      default:
+        fire(control.id);
+    }
+  }, [disarm, backToMenu, gameId, setStageFocus, fire, step.moment]);
+
   const onPrimary = useCallback(() => {
-    if (!action || blocked) return;
+    if (!action || blocked || action.disabled) return;
     // Arm-then-fire, applied EXACTLY where a mis-tap costs something: leaving
     // ASK or VOTE before the room has finished discards whoever is still
-    // typing or voting. When everyone is in — and on the RESULTS beat, which
-    // discards nothing — it is one tap, because a button that fights the host
-    // on the expected beat reads as broken in front of a room.
+    // typing or voting (roundStep's `arm`). When everyone is in — and on the
+    // RESULTS beat, which discards nothing — it is one tap, because a button
+    // that fights the host on the expected beat reads as broken in front of a
+    // room.
     if (confirmNeeded && !primaryArmed) { arm('primary'); return; }
-    fire(action.id);
-  }, [action, blocked, confirmNeeded, primaryArmed, arm, fire]);
+    runControl(action);
+  }, [action, blocked, confirmNeeded, primaryArmed, arm, runControl]);
 
-  const onSkip = useCallback(() => {
-    if (!skip || blocked) return;
-    if (armedAction !== 'skip') { arm('skip'); return; }
-    fire('skip');
-  }, [skip, blocked, armedAction, arm, fire]);
+  const onSecondary = useCallback(() => {
+    if (!secondary || blocked || secondary.disabled) return;
+    if (needsConfirmation(secondary) && !secondaryArmed) { arm('secondary'); return; }
+    runControl(secondary);
+  }, [secondary, blocked, secondaryArmed, arm, runControl]);
 
   /**
    * "Ask now" from the phone — the running order or the set browser.
@@ -1446,26 +1514,6 @@ function HostRemote() {
                   Show on the big screen
                 </button>
 
-                {/* Skip keeps its own confirmation. It is the only control here
-                    that can lose a round outright — and unlike an ordinary advance
-                    it is NOT idempotent server-side: `action: 'skip'` bypasses the
-                    "already asking a question" guard in next-question.js.
-
-                    Rendered only while there IS a round to abandon (ASK / VOTE);
-                    skipAction() returns null everywhere else, and a permanently
-                    greyed button on the results screen would be a control that
-                    never means anything. */}
-                {skip && (
-                  <button
-                    className={`hr-btn hr-btn--danger ${armedAction === 'skip' ? 'is-armed' : ''}`}
-                    type="button"
-                    disabled={blocked}
-                    onClick={onSkip}
-                  >
-                    <Icon name="SkipForward" weight="bold" size={18} color="currentColor" />
-                    {armedAction === 'skip' ? 'Tap again to skip' : 'Skip round'}
-                  </button>
-                )}
               </div>
 
               {focusOpen && (
@@ -1721,21 +1769,39 @@ function HostRemote() {
           account has not been cleared to drive the session. */}
       {access.status === ACCESS.OK && (
         <div className="hr-dock">
-          {action ? (
+          {action.id !== 'wait' ? (
             <>
-              {primaryArmed && (
+              {/* THE ONE SECONDARY (R3), directly above the primary and never
+                  amber. The same control the host page's dock shows beside
+                  its primary: roundStep gives both the same one. */}
+              {secondary && (
+                <button
+                  className={`hr-btn hr-btn--ghost hr-sec ${secondaryArmed ? 'is-armed' : ''}`}
+                  type="button"
+                  disabled={blocked || secondary.disabled}
+                  onClick={onSecondary}
+                  onBlur={() => { if (secondaryArmed) disarm(); }}
+                >
+                  <Icon name={secondaryArmed ? 'Warning' : secondary.icon} weight="bold" size={18} color="currentColor" />
+                  {secondaryArmed ? 'Tap again to confirm' : secondary.label}
+                </button>
+              )}
+              {(primaryArmed || secondaryArmed) && (
                 <p className="hr-dock-warn" role="status">
-                  {progress.applicable && !progress.allIn
-                    ? `${progress.total - progress.received} still ${progress.kind === 'votes' ? 'voting' : 'answering'}`
-                    : 'Confirm to continue'}
+                  {primaryArmed
+                    ? (action.arm ? action.arm.text : 'Confirm to continue')
+                    : (secondary && secondary.arm ? secondary.arm.text : 'Confirm to continue')}
                 </p>
+              )}
+              {action.disabled && action.hint && (
+                <p className="hr-dock-hint" role="status">{action.hint}</p>
               )}
               <button
                 className={`hr-primary ${primaryArmed ? 'is-armed' : ''}`}
                 type="button"
-                disabled={blocked}
+                disabled={blocked || action.disabled}
                 onClick={onPrimary}
-                onBlur={disarm}
+                onBlur={() => { if (primaryArmed) disarm(); }}
               >
                 <Icon
                   name={primaryArmed ? 'Warning' : action.icon}
@@ -1749,9 +1815,7 @@ function HostRemote() {
               </button>
             </>
           ) : (
-            <p className="hr-dock-idle">
-              {summary.phase === 'ENDED' ? 'Session complete' : 'Waiting for the session…'}
-            </p>
+            <p className="hr-dock-idle">{step.status.text}</p>
           )}
         </div>
       )}

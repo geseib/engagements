@@ -176,7 +176,11 @@ function secondaryFor(moment, ctx, primary) {
       return control('leave', RW.backToMenu, I.LEAVE, 'House');
     case 'ANSWERING':
     case 'VOTING':
-      return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward');
+      // Skip always asks twice on the Remote: `action: 'skip'` bypasses
+      // next-question's "already asking" guard, so two in flight consume two
+      // questions. The host page keeps its own handling (Phase 3 moves Skip
+      // behind Session, R7).
+      return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward', { arm: { text: RW.armSkip(noun) } });
     case 'RESULTS':
       return ctx.answerCount > 0
         ? control('show-response', RW.showResponse(1, ctx.answerCount), I.SHOW_RESPONSE, 'ArrowsOut', { index: 0, part: 0 })

@@ -174,7 +174,7 @@ function expectNoSessionContent() {
   expect(screen.queryByText(QUESTION_TITLE)).not.toBeInTheDocument();
   expect(screen.queryByText(ANSWER_TEXT)).not.toBeInTheDocument();
   expect(screen.queryByText('Q3 Offsite')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /start \w+ 1/i })).not.toBeInTheDocument();
 }
 
 /**
@@ -206,7 +206,7 @@ describe('200 — this account may drive the session', () => {
     serve({ hostDetails: 200 });
     await connect();
 
-    expect(await screen.findByRole('button', { name: /start first round/i })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /start \w+ 1/i })).toBeEnabled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/sign in as someone else/i)).not.toBeInTheDocument();
   });
@@ -360,7 +360,7 @@ describe('a status this surface cannot explain', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
 
-    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /start \w+ 1/i })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
@@ -391,11 +391,11 @@ describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 
       stateStatus: (call) => (call === 1 ? 200 : 404),
     });
     await connect();
-    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /start \w+ 1/i })).toBeInTheDocument();
 
     // The next 2s poll tick hits the now-404 /host-state and re-asks the door.
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument(), { timeout: 4000 });
-    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start \w+ 1/i })).not.toBeInTheDocument();
   }, 8000);
 
   // M-1 (2026-09-26 final review): `/host-state` sits behind the Lambda
@@ -412,11 +412,11 @@ describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 
       stateStatus: (call) => (call === 1 ? 200 : 403),
     });
     await connect();
-    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /start \w+ 1/i })).toBeInTheDocument();
 
     // The next 2s poll tick hits the now-403 /host-state and re-asks the door.
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument(), { timeout: 4000 });
-    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start \w+ 1/i })).not.toBeInTheDocument();
   }, 8000);
 
   it('a /players poll that comes back 404 re-runs the access check and the gate replaces the session', async () => {
@@ -429,7 +429,7 @@ describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 
     await connect();
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /start first round/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start \w+ 1/i })).not.toBeInTheDocument();
   });
 
   it('does not re-check on an ordinary 500 or a dropped connection', async () => {
@@ -441,11 +441,11 @@ describe('a later poll coming back 401/404 re-checks access (Task 6 fix round 1 
       stateStatus: (call) => (call === 1 ? 200 : 500),
     });
     await connect();
-    expect(await screen.findByRole('button', { name: /start first round/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /start \w+ 1/i })).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText('Offline')).toBeInTheDocument(), { timeout: 4000 });
     // Still showing the session — no re-check, no gate.
-    expect(screen.getByRole('button', { name: /start first round/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start \w+ 1/i })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   }, 8000);
 });

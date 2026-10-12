@@ -5586,6 +5586,23 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  /*
+    OPENED FROM THE REMOTE'S "Open session report" (two-surface Phase 1). The
+    report is built and drawn by this page, so the Remote's ENDED primary
+    links here with `?open=report`. Once, and only for an ended session: a
+    stale link must not pull a live room off its stage.
+  */
+  const openReportFromLinkRef = useRef(false);
+  useEffect(() => {
+    if (openReportFromLinkRef.current || !gameId || gameState !== 'ENDED') return;
+    if (new URLSearchParams(window.location.search).get('open') !== 'report') return;
+    openReportFromLinkRef.current = true;
+    generateReportForGame(gameId, eventTitle);
+    // generateReportForGame is a plain function redeclared each render; the
+    // ref keeps this to one build however often the page renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, gameState, eventTitle]);
+
   // An event's item is joined through the EVENT (events M4): its QR opens the
   // attendee's page, which joins the day once and follows it into this item.
   const playUrl = eventCode

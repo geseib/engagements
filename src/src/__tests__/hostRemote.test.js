@@ -1,8 +1,8 @@
 import {
   parseGamePhase,
   runsVotePhase,
-  primaryAction,
-  skipAction,
+  remoteStep,
+  snapshotFromHostState,
   requestFor,
   roundProgress,
   needsConfirmation,
@@ -11,7 +11,6 @@ import {
   fieldNotesFrom,
   rosterListing,
   remotePanelTabs,
-  ACTIONS,
   TYPES_WITH_NO_VOTE_AT_RUNTIME,
 } from '../config/hostRemote';
 import { GAME_TYPES, hasVotePhase } from '../config/gameTypes';
@@ -81,153 +80,177 @@ describe('runsVotePhase', () => {
   });
 });
 
-describe('primaryAction — every game type x every phase', () => {
-  it('opens the first round from CREATED and STARTED', () => {
+/*
+  THE REMOTE READS roundStep (two-surface Phase 1, R1). `primaryAction` and its
+  ACTIONS table restated the dock and drifted three ways (simplify-round
+  AUDIT §2); they are gone. The Remote now turns its /host-state payload into
+  roundStep's snapshot (`snapshotFromHostState`) and draws whatever comes back.
+  These cases are the old primaryAction table, re-asked through the new door.
+*/
+const stepOf = (state, gameType, stageBeat, extras = {}) =>
+  remoteStep({ state, gameType, stageBeat, ...extras.json }, extras);
+
+describe('remoteStep — every game type x every phase, through roundStep', () => {
+  it('opens round 1 from CREATED and STARTED', () => {
     for (const type of ALL_TYPES) {
-      // A survey has no first round; the remote cannot drive one (below).
       if (type === 'survey') continue;
       for (const state of ['CREATED', 'STARTED']) {
-        const action = primaryAction(state, type);
-        expect(action).not.toBeNull();
-        expect(action.id).toBe('next');
-        expect(action.label).toBe('Start First Round');
+        const step = stepOf(state, type);
+        expect(step.primary.id).toBe('start');
+        expect(step.primary.label).toMatch(/^Start \w+ 1$/);
+        expect(requestFor(step.primary.id, { gameId: '4821' }).path).toBe('games/4821/next-question');
       }
     }
   });
 
-  /*
-    THE REMOTE CANNOT DRIVE A SURVEY YET (IMPLEMENTATION-phase-2.md §5 risk 10).
-    SURVEY#OPEN / SURVEY#CLOSED parse as UNKNOWN, so there is nothing to press
-    — and on CREATED, "Start First Round" would reach next-question.js, which
-    refuses a survey. Nothing is better than a button that 409s.
-  */
-  it('offers nothing for a survey — open, closed, or not yet opened', () => {
-    expect(primaryAction('SURVEY#OPEN', 'survey')).toBeNull();
-    expect(primaryAction('SURVEY#CLOSED', 'survey')).toBeNull();
-    expect(primaryAction('CREATED', 'survey')).toBeNull();
-    expect(primaryAction('STARTED', 'survey')).toBeNull();
-    expect(skipAction('SURVEY#OPEN')).toBeNull();
+  it('offers nothing to press for a survey — open, closed, or not yet opened', () => {
+    for (const state of ['SURVEY#OPEN', 'SURVEY#CLOSED', 'CREATED', 'STARTED']) {
+      const step = stepOf(state, 'survey');
+      expect(step.primary).toMatchObject({ id: 'wait', disabled: true });
+      expect(step.secondary).toBeNull();
+    }
   });
 
   it('offers voting from ASK only for the types that actually vote', () => {
     for (const type of ALL_TYPES) {
-      const action = primaryAction('ASK#001', type);
-      expect(action.id).toBe(runsVotePhase(type) ? 'vote' : 'results');
+      if (type === 'survey') continue;
+      const step = stepOf('ASK#001', type, null, { json: { answerProgress: { answersReceived: 1, totalPlayers: 1 } } });
+      expect(step.primary.id).toBe(runsVotePhase(type) ? 'open-vote' : 'reveal-from-ask');
     }
   });
 
-  it('never offers "Start Voting" for trivia or wavelength', () => {
-    // The failure this guards: a trivia round has no VOTE phase, so pushing the
-    // room into VOTE#001 strands every player on a screen the host never shows.
-    for (const type of TYPES_WITH_NO_VOTE_AT_RUNTIME) {
+  it('never offers "Start voting" for trivia or wavelength', () => {
+    for (const type of ['trivia', 'wavelength']) {
       for (const state of ['CREATED', 'STARTED', 'ASK#001', 'VOTE#001', 'RESULTS#001', 'ENDED']) {
-        const action = primaryAction(state, type);
-        expect(action && action.id).not.toBe('vote');
+        expect(stepOf(state, type).primary.id).not.toBe('open-vote');
       }
     }
   });
 
-  it('shows results from VOTE for every type', () => {
+  it('shows results from VOTE for every round type', () => {
     for (const type of ALL_TYPES) {
-      expect(primaryAction('VOTE#004', type).id).toBe('results');
+      if (type === 'survey') continue;
+      expect(stepOf('VOTE#004', type).primary).toMatchObject({ id: 'reveal', label: 'Show results' });
     }
   });
 
-  it('offers the AI read-back first on RESULTS, for every game type', () => {
-    // THE GAP THIS CLOSES: the remote used to return `next` here, so the phone
-    // skipped the "What We Heard" beat entirely while the host's own toolbar
-    // (config/hostControls.js:190-198) offered it. Two controls for one room
-    // that disagreed about how many beats RESULTS has.
+  it('offers the read first on RESULTS, for every round type', () => {
     for (const type of ALL_TYPES) {
-      expect(primaryAction('RESULTS#001', type)).toMatchObject({
-        id: 'field-notes',
-        label: 'What We Heard',
-      });
+      if (type === 'survey') continue;
+      expect(stepOf('RESULTS#001', type).primary).toMatchObject({ id: 'field-notes', label: 'What we heard' });
     }
   });
 
-  it('advances from RESULTS using the game type\'s own round noun ONCE the beat has moved', () => {
-    // Second half of the two-step. Without this the phone would offer "What We
-    // Heard" forever and the room could never leave the round.
-    const onNotes = (type) => primaryAction('RESULTS#001', type, 'field-notes');
-    expect(onNotes('trivia')).toMatchObject({ id: 'next', label: 'Next Question' });
-    expect(onNotes('call-and-answer').label).toBe('Next Round');
-    expect(onNotes('wavelength').label).toBe('Next Subject');
-    expect(onNotes('poll').label).toBe('Next Poll');
+  it('advances from the read with the set noun, then the game type noun', () => {
+    const onNotes = (type, extras) => stepOf('RESULTS#001', type, 'field-notes', extras);
+    expect(onNotes('trivia').primary).toMatchObject({ id: 'next', label: 'Next question' });
+    expect(onNotes('call-and-answer').primary.label).toBe('Next round');
+    expect(onNotes('wavelength').primary.label).toBe('Next subject');
+    expect(onNotes('poll').primary.label).toBe('Next poll');
+    // The set's own noun wins, as on the host page (R6).
+    expect(onNotes('call-and-answer', { roundNoun: 'Lesson' }).primary.label).toBe('Next lesson');
   });
 
-  it('treats every beat BEFORE the read-back as the tally beat', () => {
-    // The comparison is against a KNOWN SET, not truthiness. `stageBeat`
-    // arrives from the server (get-game-state), and a truthy check would read
-    // the explicit default 'results' as "already past the read-back" and skip
-    // the beat again — reinstating the exact defect above.
-    //
-    // This used to read "every beat that is not field-notes", which stopped
-    // being true when `feedback` was added: an unrecognised beat still falls
-    // back to the tally, but `feedback` is past the read-back, not before it.
-    // See the feedback-round case above.
+  it('treats every beat it does not know as the tally beat', () => {
     for (const beat of [undefined, null, '', 'results', 'RESULTS', 'anything']) {
-      expect(primaryAction('RESULTS#002', 'trivia', beat).id).toBe('field-notes');
+      expect(stepOf('RESULTS#002', 'trivia', beat).primary.id).toBe('field-notes');
     }
   });
 
   it('does not offer to go backwards during a feedback round', () => {
-    /*
-      A feedback round is the third beat. The phone's RESULTS control used to be
-      a binary — `stageBeat === 'field-notes' ? next : fieldNotes` — so a
-      `feedback` beat fell into the else and the phone offered "What We Heard",
-      which is the beat BEFORE the one the room is on. Tapping it would have
-      pulled the whole room back out of the feedback round.
-
-      The rule is not "is it field-notes" but "is the room at or past the
-      read-back": from either of those beats the only way on is the next round.
-    */
-    const onFeedback = (type) => primaryAction('RESULTS#001', type, 'feedback');
-    expect(onFeedback('call-and-answer')).toMatchObject({ id: 'next', label: 'Next Round' });
-    expect(onFeedback('trivia').label).toBe('Next Question');
-    expect(onFeedback('poll').label).toBe('Next Poll');
+    const step = stepOf('RESULTS#001', 'call-and-answer', 'feedback');
+    expect(step.primary).toMatchObject({ id: 'next', label: 'Next round' });
+    expect(step.secondary).toMatchObject({ id: 'close-feedback' });
   });
 
   it('ignores the beat outside RESULTS', () => {
-    // A beat left over from the previous round must never rewrite the ASK or
-    // VOTE control. This fails if the check is hoisted above the phase switch.
-    expect(primaryAction('ASK#001', 'call-and-answer', 'field-notes').id).toBe('vote');
-    expect(primaryAction('ASK#001', 'trivia', 'field-notes').id).toBe('results');
-    expect(primaryAction('VOTE#001', 'poll', 'field-notes').id).toBe('results');
-    expect(primaryAction('CREATED', 'trivia', 'field-notes').label).toBe('Start First Round');
-    expect(primaryAction('ENDED', 'trivia', 'field-notes')).toBeNull();
+    expect(stepOf('ASK#001', 'call-and-answer', 'field-notes').primary.id).toBe('open-vote');
+    expect(stepOf('ASK#001', 'trivia', 'field-notes').primary.id).toBe('reveal-from-ask');
+    expect(stepOf('VOTE#001', 'poll', 'field-notes').primary.id).toBe('reveal');
   });
 
-  it('offers nothing once the session has ended or the state is unreadable', () => {
+  it('ENDED offers the report and the way back to the menu', () => {
     for (const type of ALL_TYPES) {
-      expect(primaryAction('ENDED', type)).toBeNull();
-      expect(primaryAction(undefined, type)).toBeNull();
-      expect(primaryAction('nonsense', type)).toBeNull();
+      if (type === 'survey') continue;
+      const step = stepOf('ENDED', type);
+      expect(step.primary).toMatchObject({ id: 'report', label: 'Open session report', disabled: false });
+      expect(step.secondary).toMatchObject({ id: 'leave', label: 'Back to menu' });
     }
   });
 
-  it('returns a copy, so a caller cannot mutate the shared ACTIONS table', () => {
-    const action = primaryAction('RESULTS#001', 'trivia');
-    action.label = 'MUTATED';
-    expect(ACTIONS.next.label).toBe('Next Round');
+  it('an unreadable state waits, and never looks like the lobby', () => {
+    for (const state of [undefined, 'nonsense', '']) {
+      const step = stepOf(state, 'trivia');
+      expect(step.primary).toMatchObject({ id: 'wait', disabled: true });
+      expect(step.status.text).toBe('Waiting for the session');
+    }
+  });
+
+  it('Skip is the secondary while the room answers or votes', () => {
+    expect(stepOf('ASK#001', 'call-and-answer').secondary).toMatchObject({ id: 'skip' });
+    expect(stepOf('VOTE#001', 'call-and-answer').secondary).toMatchObject({ id: 'skip' });
+    expect(stepOf('RESULTS#001', 'call-and-answer').secondary).toBeNull();
+  });
+
+  it('the read is paged from the server facts, and never skipped while Workie writes', () => {
+    const json = { stageNotes: { page: 0, pages: 3, plan: null, planKey: null, rev: 2 } };
+    const paged = stepOf('RESULTS#001', 'call-and-answer', 'field-notes', { json, notesReady: true });
+    expect(paged.primary).toMatchObject({ id: 'notes-page', label: 'Next page' });
+    expect(paged.secondary).toMatchObject({ id: 'next', label: 'Next round' });
+    expect(paged.status.text).toBe('Reading page 1 of 3');
+
+    const writing = stepOf('RESULTS#001', 'call-and-answer', 'field-notes', { json, notesReady: false });
+    expect(writing.primary).toMatchObject({ id: 'show-read', disabled: true, hint: 'Workie is writing' });
+    expect(writing.secondary).toMatchObject({ id: 'next' });
+  });
+
+  it('a response on the wall at RESULTS is the responses moment', () => {
+    const json = { stageFocus: { focus: 'answer', index: 0, part: 0, parts: 1, phase: 'RESULTS', rev: 1 } };
+    const step = stepOf('RESULTS#001', 'call-and-answer', 'results', { json, answerCount: 3 });
+    expect(step.moment).toBe('RESPONSES');
+    expect(step.primary).toMatchObject({ id: 'next-response', index: 1 });
+    expect(step.secondary).toMatchObject({ id: 'stop-showing' });
+  });
+
+  it('progress from /host-state arms the early advance', () => {
+    const json = { answerProgress: { answersReceived: 2, totalPlayers: 5 } };
+    expect(stepOf('ASK#001', 'call-and-answer', null, { json }).primary.arm)
+      .toEqual({ text: '3 still answering. Press again to start voting.' });
   });
 });
 
-describe('skipAction', () => {
-  it('is available only mid-round', () => {
-    expect(skipAction('ASK#001')).toMatchObject({ id: 'skip', destructive: true });
-    expect(skipAction('VOTE#001')).toMatchObject({ id: 'skip' });
-    expect(skipAction('RESULTS#001')).toBeNull();
-    expect(skipAction('CREATED')).toBeNull();
-    expect(skipAction('ENDED')).toBeNull();
-    expect(skipAction(undefined)).toBeNull();
+describe('snapshotFromHostState', () => {
+  it('normalises the payload into roundStep\'s snapshot', () => {
+    const snap = snapshotFromHostState({
+      state: 'VOTE#002', gameType: 'call-and-answer', stageBeat: 'results',
+      votingProgress: { votesReceived: 3, totalPlayers: 4, votersIds: ['a'] },
+      stageNotes: { page: 1, pages: 2 },
+    }, { playerCount: 4, answerCount: 6, roundNoun: 'Lesson', hasQuestionSet: true, notesReady: true });
+    expect(snap).toMatchObject({
+      state: 'VOTE#002', gameType: 'call-and-answer',
+      progress: { received: 3, total: 4, allIn: false },
+      notes: { page: 1, pages: 2, ready: true },
+      playerCount: 4, answerCount: 6, roundNoun: 'Lesson',
+    });
   });
 
-  it('always demands confirmation', () => {
+  it('a survey reads as a moment the Remote cannot drive', () => {
+    expect(snapshotFromHostState({ state: 'CREATED', gameType: 'survey' }).state).toMatch(/^SURVEY#/);
+  });
+
+  it('survives a missing payload', () => {
+    expect(() => snapshotFromHostState(null)).not.toThrow();
+    expect(remoteStep(null).primary.id).toBe('wait');
+  });
+});
+
+describe('skip on the Remote always asks twice', () => {
+  it('Skip carries a confirmation even when everyone is in', () => {
     // `action: 'skip'` bypasses next-question.js's "already asking" guard, so
     // unlike an ordinary advance a double-fire really does consume two
     // questions and display one.
-    expect(needsConfirmation(skipAction('ASK#001'), { applicable: true, allIn: true })).toBe(true);
+    const step = stepOf('ASK#001', 'call-and-answer', null, { json: { answerProgress: { answersReceived: 4, totalPlayers: 4 } } });
+    expect(needsConfirmation(step.secondary)).toBe(true);
   });
 });
 
@@ -277,6 +300,38 @@ describe('requestFor', () => {
     // projector would never move.
     expect(requestFor('field-notes', { gameId: '4821' })).toBeNull();
     expect(requestFor('field-notes', { gameId: '4821', round: null })).toBeNull();
+  });
+
+  it('maps every roundStep id the Remote can press to the host page\'s route', () => {
+    const at = { gameId: '4821', round: 3 };
+    expect(requestFor('start', at)).toEqual({ path: 'games/4821/next-question', body: {} });
+    expect(requestFor('open-vote', at)).toEqual({ path: 'games/4821/start-vote', body: { questionNumber: 3 } });
+    expect(requestFor('reveal-from-ask', at)).toEqual({ path: 'games/4821/close-round', body: { questionNumber: 3 } });
+    expect(requestFor('reveal', at)).toEqual({ path: 'games/4821/close-round', body: { questionNumber: 3 } });
+    // The report is built first: the room's devices fetch it as the beat moves.
+    expect(requestFor('request-feedback', at)).toEqual({
+      before: { path: 'games/4821/report', body: {} },
+      path: 'games/4821/stage-beat', body: { beat: 'feedback', questionNumber: 3 },
+    });
+    expect(requestFor('close-feedback', at)).toEqual({
+      path: 'games/4821/stage-beat', body: { beat: 'field-notes', questionNumber: 3 },
+    });
+  });
+
+  it('turns Workie\'s page relative to the stored page, so two surfaces cannot fight', () => {
+    expect(requestFor('notes-page', { gameId: '4821', round: 3 })).toEqual({
+      path: 'games/4821/stage-beat', body: { step: 'next', questionNumber: 3 },
+    });
+    expect(requestFor('notes-back', { gameId: '4821', round: 3 })).toEqual({
+      path: 'games/4821/stage-beat', body: { step: 'prev', questionNumber: 3 },
+    });
+    expect(requestFor('notes-page', { gameId: '4821' })).toBeNull();
+  });
+
+  it('the acts that are not a POST have no request', () => {
+    for (const id of ['report', 'leave', 'wait', 'show-read', 'show-response', 'next-response', 'stop-showing']) {
+      expect(requestFor(id, { gameId: '4821', round: 3 })).toBeNull();
+    }
   });
 
   it('refuses everything without a game id, and ignores unknown actions', () => {
@@ -351,29 +406,27 @@ describe('roundProgress', () => {
 });
 
 describe('needsConfirmation', () => {
-  const partial = { applicable: true, allIn: false };
-  const done = { applicable: true, allIn: true };
+  const ask = (received, total) => stepOf('ASK#001', 'call-and-answer', null,
+    { json: { answerProgress: { answersReceived: received, totalPlayers: total } } }).primary;
 
   it('demands the second tap when advancing would discard responses', () => {
-    expect(needsConfirmation(primaryAction('ASK#001', 'call-and-answer'), partial)).toBe(true);
-    expect(needsConfirmation(primaryAction('ASK#001', 'trivia'), partial)).toBe(true);
-    expect(needsConfirmation(primaryAction('VOTE#001', 'poll'), partial)).toBe(true);
+    expect(needsConfirmation(ask(1, 4))).toBe(true);
+    expect(needsConfirmation(stepOf('VOTE#001', 'poll', null,
+      { json: { votingProgress: { votesReceived: 1, totalPlayers: 4 } } }).primary)).toBe(true);
   });
 
   it('gets out of the way once the room is done', () => {
-    expect(needsConfirmation(primaryAction('ASK#001', 'call-and-answer'), done)).toBe(false);
-    expect(needsConfirmation(primaryAction('VOTE#001', 'poll'), done)).toBe(false);
+    expect(needsConfirmation(ask(4, 4))).toBe(false);
   });
 
   it('does not gate the beats that discard nothing', () => {
-    // Moving on from RESULTS, or dealing the first round, throws away no input.
-    expect(needsConfirmation(primaryAction('RESULTS#001', 'trivia'), { applicable: false })).toBe(false);
-    expect(needsConfirmation(primaryAction('CREATED', 'trivia'), { applicable: false })).toBe(false);
+    expect(needsConfirmation(stepOf('RESULTS#001', 'trivia').primary)).toBe(false);
+    expect(needsConfirmation(stepOf('CREATED', 'trivia').primary)).toBe(false);
   });
 
   it('is false when there is no action at all', () => {
-    expect(needsConfirmation(null, partial)).toBe(false);
-    expect(needsConfirmation(undefined, undefined)).toBe(false);
+    expect(needsConfirmation(null)).toBe(false);
+    expect(needsConfirmation(undefined)).toBe(false);
   });
 });
 
