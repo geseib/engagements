@@ -1,12 +1,12 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
 const { normalizeNames } = require('./survey-names');
 
-const { isPresent } = require('./player-presence');
+const { roomCounts, presentPlayers, queryAll } = require('./room-counts');
 const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 
@@ -350,6 +350,11 @@ exports.handler = async (event) => {
               image: questionItem.Image || '', // Optional artwork URL ("Art Title" rounds)
               customInstructions: questionItem.CustomInstructions || '',
               setId: questionSetId,
+              // The set's own round noun ("Lesson"), so the Remote names the
+              // round as the host page does (R6). Plaintext set metadata the
+              // public get-question.js already serves; read with the row
+              // resolveSetPartition fetched above, at no extra cost.
+              setRoundNoun: (resolvedSet.metadata && resolvedSet.metadata.roundNoun) || null,
               startedAt: questionRef.Item.StartedAt,
               // For trivia questions (check both cases)
               optionA: questionItem.optionA || questionItem.OptionA || '',
@@ -549,7 +554,26 @@ exports.handler = async (event) => {
     // The host block, on the host's door ONLY (see the top of this file). The
     // public route used to assemble it for `?includeHostData=true` and for any
     // read with no player id — a claim anyone could make.
+    /*
+      THE ROOM VIEW (two-surface PLAN 1.11, D3): `?view=room` on the PUBLIC
+      door adds counts — how many joined, answered, voted — for the
+      Presentation's "4 of 5 answered". Integers only (room-counts.js); the
+      host door's answerer and voter lists are never copied here. Computed
+      only when asked, so the ordinary public read costs what it did.
+    */
+    const query = event.queryStringParameters || {};
+    if (!onHostDoor && !playerId && query.view === 'room') {
+      const onRound = /^(ASK|VOTE|RESULTS)#/.test(String(frontendState)) ? currentQuestionNumber : null;
+      response.roomCounts = await roomCounts(db, process.env.TABLE_NAME, gameId, onRound);
+    }
+
     if (onHostDoor) {
+      /*
+        HOW MANY PRESENTATIONS ARE OPEN (two-surface D4). Viewer connections
+        arrive in Phase 2; until then nothing is presenting.
+      */
+      response.presenting = 0;
+
       /*
         THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.
 
@@ -628,54 +652,10 @@ exports.handler = async (event) => {
       if (frontendState.startsWith('VOTE#') && currentQuestionNumber) {
         const questionNumberStr = currentQuestionNumber.toString().padStart(3, '0');
         
-        // Get all votes for current question
-        const votesResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': `QUESTION#${questionNumberStr}#VOTE#`
-          }
-        }));
-
-        // Get all players to calculate voting progress
-        const playersResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': 'PLAYER#'
-          }
-        }));
-
-        // Deduplicate players by name, keeping the most recent record (same logic as get-players.js)
-        let players = (playersResult.Items || []).filter(player => {
-          const playerName = player.PlayerName || player.playerName;
-          if (!playerName) {
-            console.log(`⚠️ Filtering out player record with no name:`, player);
-            return false;
-          }
-          return true;
-        });
-
-        const playerMap = new Map();
-        players.forEach(player => {
-          const playerName = player.PlayerName || player.playerName;
-          const existing = playerMap.get(playerName);
-          
-          if (!existing || (player.JoinedAt && (!existing.JoinedAt || player.JoinedAt > existing.JoinedAt))) {
-            playerMap.set(playerName, player);
-          }
-        });
-        
-        // WHO IS STILL IN THE ROOM — the denominator of "3 of 4 have voted".
-        //
-        // A player the host removed because they left must not be voted for by
-        // nobody forever: the round would never read as complete and the host
-        // would sit waiting on an empty chair. `player-presence.js` records
-        // which counts drop them and which (the report, the AI summary) must
-        // not — this is a live number, so it drops them.
-        const uniquePlayers = Array.from(playerMap.values()).filter(isPresent);
+        // Every ballot and everyone still in the room, page after page
+        // (room-counts.js): a one-page read would undercount a big room.
+        const votesResult = { Items: (await queryAll(db, process.env.TABLE_NAME, gameId, `QUESTION#${questionNumberStr}#VOTE#`)).items };
+        const uniquePlayers = await presentPlayers(db, process.env.TABLE_NAME, gameId);
         console.log(`✅ Game state voting progress: ${uniquePlayers.length} unique players still in the room after deduplication`);
 
         response.votingProgress = {
@@ -692,49 +672,10 @@ exports.handler = async (event) => {
       if (frontendState.startsWith('ASK#') && currentQuestionNumber) {
         const questionNumberStr = currentQuestionNumber.toString().padStart(3, '0');
         
-        // Get all answers for current question
-        const answersResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': `QUESTION#${questionNumberStr}#ANSWER#`
-          }
-        }));
-
-        // Get all players to calculate answer progress
-        const playersResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': 'PLAYER#'
-          }
-        }));
-
-        // Deduplicate players by name, keeping the most recent record (same logic as get-players.js)
-        let players = (playersResult.Items || []).filter(player => {
-          const playerName = player.PlayerName || player.playerName;
-          if (!playerName) {
-            console.log(`⚠️ Filtering out player record with no name:`, player);
-            return false;
-          }
-          return true;
-        });
-
-        const playerMap = new Map();
-        players.forEach(player => {
-          const playerName = player.PlayerName || player.playerName;
-          const existing = playerMap.get(playerName);
-          
-          if (!existing || (player.JoinedAt && (!existing.JoinedAt || player.JoinedAt > existing.JoinedAt))) {
-            playerMap.set(playerName, player);
-          }
-        });
-        
-        // Removed players drop out here too, for the same reason as the voting
-        // denominator twenty lines up. See player-presence.js.
-        const uniquePlayers = Array.from(playerMap.values()).filter(isPresent);
+        // Every answer and everyone still in the room, page after page
+        // (room-counts.js). Removed players drop out, as for the vote count.
+        const answersResult = { Items: (await queryAll(db, process.env.TABLE_NAME, gameId, `QUESTION#${questionNumberStr}#ANSWER#`)).items };
+        const uniquePlayers = await presentPlayers(db, process.env.TABLE_NAME, gameId);
         console.log(`✅ Game state answer progress: ${uniquePlayers.length} unique players still in the room after deduplication`);
 
         response.answerProgress = {
