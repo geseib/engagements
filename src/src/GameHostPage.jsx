@@ -44,6 +44,7 @@ import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
 import useSessionPanelKey from './components/stage/useSessionPanelKey';
 import useFullscreenKey from './hooks/useFullscreenKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
+import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
 import {
@@ -290,6 +291,10 @@ function GameHostPage() {
   // The rev of the last focus this page applied (two-surface PLAN 1.13), so a
   // late frame cannot put back a response the host has moved on from.
   const focusRevRef = useRef(null);
+  // Workie's page in step with the server (hooks/useStageNotesSync.js). A ref
+  // so the socket handler, registered once, and the restore path reach the
+  // current render's hook.
+  const notesSyncRef = useRef(null);
   useEffect(() => {
     answersRef.current = answers;
 
@@ -434,6 +439,8 @@ function GameHostPage() {
    * lands on the last page that exists rather than on a blank stage.
    */
   const [stagePage, setStagePage] = useState(null);
+  /** The one writer of the stage's page index: the page's own turns and the server's (useStageNotesSync). */
+  const turnStagePage = (key, index) => setStagePage({ key, index });
   /**
    * The pending hidden-round participation refresh — see
    * `scheduleAnswererSync`, which is where the whole mechanism is explained.
@@ -2335,6 +2342,9 @@ Focus on actionable business strategy insights.`;
       // closure is frozen at 'CREATED'.
       const beat = stageBeatFromFrame(data, gameStateRef.current);
       if (beat) setResultsBeat(beat);
+      // The read's page, turned from the Remote (or echoed from this page's
+      // own post, which the rev drops). Never published back.
+      if (beat && notesSyncRef.current) notesSyncRef.current.applyFrame(data);
     });
 
     /*
@@ -2739,6 +2749,11 @@ Focus on actionable business strategy insights.`;
         */
         pendingFocusRef.current = gameStateData.stageFocus || null;
         focusRevRef.current = Number.isInteger(gameStateData.stageFocus?.rev) ? gameStateData.stageFocus.rev : null;
+        // A reload on What we heard comes back on the page the room was on.
+        if (hostPhaseForBeat(phaseOfGameState(gameStateData.state), gameStateData.stageBeat) === 'FIELD_NOTES'
+          && notesSyncRef.current) {
+          notesSyncRef.current.hydrate(gameStateData.stageNotes, gameStateData.currentQuestion);
+        }
 
         // THE SCOREBOARD, as the room last saw it: a reload over an open board
         // comes back up on it rather than dropping the room to the stage.
@@ -5785,6 +5800,51 @@ Focus on actionable business strategy insights.`;
     spotlightIndex, pastRoundIndex, scoreboard.open]);
 
   /*
+    WORKIE'S PAGE AS A SERVER FACT (two-surface PLAN 1.14). Every way this page
+    turns the read — the dock's Next page, → and ←, the pips, Auto — moves the
+    beat-keyed `stagePage`; this re-derives the page and count the way the
+    render does and hands them to useStageNotesSync, which posts the absolute
+    page when it changes here and follows the Remote's turns from frames.
+    Not for a survey's read, which the Remote does not drive.
+  */
+  const notesSyncPhase = gameState === 'ENDED' ? 'ENDED' : hostPhaseForBeat(phaseOfGameState(gameState), resultsBeat);
+  const notesSyncRaw = stagePage && stagePage.key === `FIELD_NOTES#${lessonNumber}` ? stagePage.index : 0;
+  let notesSyncPage = 0;
+  let notesSyncPages = 1;
+  if (currentAIInsights && currentAIInsights.markdownResponse) {
+    const slice = prosePageSlice(currentAIInsights.markdownResponse, notesSyncRaw, proseBudgetFor(profile));
+    notesSyncPage = slice.page;
+    notesSyncPages = slice.pages;
+  } else if (currentAIInsights) {
+    const points = (currentAIInsights.discussionTopics || []).length + (currentAIInsights.nextSteps || []).length;
+    notesSyncPages = pageCount(points, pageSizeFor(profile));
+    notesSyncPage = clampPage(notesSyncRaw, notesSyncPages);
+  }
+  const publishNotesPage = async (body) => {
+    try {
+      const res = await authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  const notesSync = useStageNotesSync({
+    gameId,
+    round: lessonNumber,
+    onRead: notesSyncPhase === 'FIELD_NOTES' && !isSurveyType(currentGameType),
+    ready: Boolean(currentAIInsights) && !loadingAIInsights,
+    page: notesSyncPage,
+    pages: notesSyncPages,
+    turnTo: (index, round) => turnStagePage(`FIELD_NOTES#${round ?? lessonNumber}`, index),
+    post: publishNotesPage,
+  });
+  notesSyncRef.current = notesSync;
+
+  /*
     THE SCOREBOARD — opening, closing and the look, from every surface that can.
 
     `publishScoreboard` (useScoreboardSync) is the one way this page changes
@@ -6846,7 +6906,7 @@ Focus on actionable business strategy insights.`;
      never re-runs on a notes page turn, and page 2 is drawn at the scale chosen
      for page 1. */
   const stagePageIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
-  const setStagePageIndex = (index) => setStagePage({ key: pageKey, index });
+  const setStagePageIndex = (index) => turnStagePage(pageKey, index);
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
 
   // AUTO-MODE'S HANDS — see the effect above the early returns. Assigned by

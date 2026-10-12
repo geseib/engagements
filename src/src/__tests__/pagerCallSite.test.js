@@ -116,7 +116,11 @@ describe('the stage pages its answer list, and the page keys obey the existing s
     expect(CODE).toMatch(
       /const stagePageIndex = stagePage && stagePage\.key === pageKey \? stagePage\.index : 0;/
     );
-    expect(CODE).toMatch(/const setStagePageIndex = \(index\) => setStagePage\(\{ key: pageKey, index \}\)/);
+    // Two-surface Phase 1: the page's own turns and the server's (Workie's
+    // page, hooks/useStageNotesSync.js) write through ONE helper, so the key
+    // shape cannot fork.
+    expect(CODE).toMatch(/const turnStagePage = \(key, index\) => setStagePage\(\{ key, index \}\)/);
+    expect(CODE).toMatch(/const setStagePageIndex = \(index\) => turnStagePage\(pageKey, index\)/);
     expect(CODE.match(/useState\(null\);?\s*$/gm) || []).not.toHaveLength(0);
     // ...and there is exactly one page-index state on the page.
     expect(CODE.match(/setStagePage\(/g)).toHaveLength(1);
@@ -189,7 +193,7 @@ describe('the stage pages its answer list, and the page keys obey the existing s
     expect(CODE).toMatch(
       /stagePage && stagePage\.key === pageKey \? stagePage\.index : 0/
     );
-    expect(CODE).toMatch(/setStagePage\(\{ key: pageKey, index \}\)/);
+    expect(CODE).toMatch(/turnStagePage\(pageKey, index\)/);
   });
 
   test('the answer list is sliced through the module, not by hand', () => {
