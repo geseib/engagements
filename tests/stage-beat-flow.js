@@ -53,19 +53,61 @@ let goneConnections = new Set();
  */
 function applyUpdate(input) {
   const k = key(input.Key.PK, input.Key.SK);
-  const item = store.get(k) || { ...input.Key };
+  const existing = store.get(k);
   const names = input.ExpressionAttributeNames || {};
   const values = input.ExpressionAttributeValues || {};
 
-  const setClause = String(input.UpdateExpression || '').replace(/^\s*SET\s+/i, '');
-  for (const pair of setClause.split(',')) {
-    const [lhs, rhs] = pair.split('=').map((s) => s.trim());
-    if (!lhs || !rhs) continue;
-    const attr = names[lhs] || lhs;
-    item[attr] = values[rhs];
+  // ConditionExpression, evaluated for real: a stub that ignored it would let
+  // a handler write Workie's page onto a round that is not on the read.
+  if (input.ConditionExpression && !evalCondition(input.ConditionExpression, existing, names, values)) {
+    const err = new Error('The conditional request failed');
+    err.name = 'ConditionalCheckFailedException';
+    throw err;
+  }
+
+  const item = existing ? { ...existing } : { ...input.Key };
+  const attrOf = (token) => names[token.trim()] || token.trim();
+  const sections = String(input.UpdateExpression || '').split(/\b(SET|ADD|REMOVE)\b/).map((x) => x.trim()).filter(Boolean);
+  for (let n = 0; n < sections.length; n += 2) {
+    const verb = sections[n];
+    const body = sections[n + 1] || '';
+    // Split on commas that are not inside if_not_exists( , ).
+    const parts = body.split(/,(?![^(]*\))/).map((x) => x.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (verb === 'SET') {
+        const [lhs, rhs] = part.split(/=(.*)/s).map((x) => x.trim());
+        const ine = /^if_not_exists\(\s*(#?\w+)\s*,\s*(:\w+)\s*\)$/.exec(rhs);
+        if (ine) {
+          const a = attrOf(ine[1]);
+          item[attrOf(lhs)] = item[a] !== undefined ? item[a] : values[ine[2]];
+        } else {
+          if (!(rhs in values)) throw new Error(`fake: unsupported SET right-hand side "${rhs}"`);
+          item[attrOf(lhs)] = values[rhs];
+        }
+      } else if (verb === 'ADD') {
+        const [a, v] = part.split(/\s+/);
+        item[attrOf(a)] = (Number(item[attrOf(a)]) || 0) + values[v];
+      } else if (verb === 'REMOVE') {
+        delete item[attrOf(part)];
+      }
+    }
   }
   store.set(k, item);
   return {};
+}
+
+/** `#a = :v`, `attribute_exists(x)`, `attribute_not_exists(x)`, joined by AND / OR with parentheses. */
+function evalCondition(expression, item, names, values) {
+  const row = item || {};
+  const attr = (t) => names[t] || t;
+  const js = expression
+    .replace(/attribute_not_exists\(\s*(#?\w+)\s*\)/g, (_, t) => `(row[${JSON.stringify(attr(t))}] === undefined)`)
+    .replace(/attribute_exists\(\s*(#?\w+)\s*\)/g, (_, t) => `(row[${JSON.stringify(attr(t))}] !== undefined)`)
+    .replace(/(#?\w+)\s*=\s*(:\w+)/g, (_, t, v) => `(row[${JSON.stringify(attr(t))}] === values[${JSON.stringify(v)}])`)
+    .replace(/\bAND\b/g, '&&')
+    .replace(/\bOR\b/g, '||');
+  // eslint-disable-next-line no-new-func
+  return Function('row', 'values', `return ${js};`)(row, values);
 }
 
 const fakeDoc = {
@@ -353,6 +395,150 @@ const readState = async (gameId) => {
     // at the moment it happened.
     assert.strictEqual(roundOf('2009', '001').StageBeat, 'field-notes'));
   check('no connections: nothing sent', () => assert.strictEqual(sent.length, 0));
+
+  // ---------- 12. Workie's page as a server fact (two-surface PLAN 1.9) ----------
+  console.log('\n12. the read\'s page is stored on the round, only while the room is on What we heard');
+  const onTheRead = async (gameId) => {
+    seedGame(gameId);
+    await post(gameId, { beat: 'field-notes', questionNumber: 1 });
+    sent = [];
+  };
+
+  await onTheRead('2101');
+  const absolute = await post('2101', { notesPage: 1, notesPages: 3, questionNumber: 1 });
+  check('an absolute page is 200', () => assert.strictEqual(absolute.statusCode, 200, absolute.body));
+  check('page and count land on ROUND#001', () => {
+    const r = roundOf('2101', '001');
+    assert.strictEqual(r.StageNotesPage, 1);
+    assert.strictEqual(r.StageNotesPages, 3);
+  });
+  check('the beat itself is untouched', () => assert.strictEqual(roundOf('2101', '001').StageBeat, 'field-notes'));
+  check('the round keeps a ttl', () => assert.ok(Number.isInteger(roundOf('2101', '001').ttl), 'no ttl on ROUND#001'));
+  check('rev starts at 1', () => assert.strictEqual(roundOf('2101', '001').StageNotesRev, 1));
+  check('the room is told on stageBeatChanged, with the page, the count and the rev', () => {
+    assert.strictEqual(sent.length, 2);
+    const f = sent[0].message;
+    assert.strictEqual(f.type, 'stageBeatChanged');
+    assert.strictEqual(f.beat, 'field-notes');
+    assert.strictEqual(f.questionNumber, '001');
+    assert.deepStrictEqual([f.notesPage, f.notesPages, f.rev], [1, 3, 1]);
+    assert.ok('plan' in f && 'planKey' in f, 'plan and planKey travel too');
+  });
+
+  sent = [];
+  const stepped = await post('2101', { step: 'next', questionNumber: 1 });
+  check('a relative step is 200 and moves one page', () => {
+    assert.strictEqual(stepped.statusCode, 200, stepped.body);
+    assert.strictEqual(roundOf('2101', '001').StageNotesPage, 2);
+  });
+  check('rev is monotonic', () => {
+    assert.strictEqual(roundOf('2101', '001').StageNotesRev, 2);
+    assert.strictEqual(sent[0].message.rev, 2);
+  });
+  await post('2101', { step: 'next', questionNumber: 1 });
+  check('a step past the last page stays on it', () => assert.strictEqual(roundOf('2101', '001').StageNotesPage, 2));
+  await post('2101', { step: 'prev', questionNumber: 1 });
+  check('prev goes back a page', () => assert.strictEqual(roundOf('2101', '001').StageNotesPage, 1));
+
+  const planned = await post('2101', { notesPlan: [1, 2], planKey: 'sum-abc', questionNumber: 1 });
+  check('a plan sets pages to its sum and keeps its key', () => {
+    assert.strictEqual(planned.statusCode, 200, planned.body);
+    const r = roundOf('2101', '001');
+    assert.deepStrictEqual([r.StageNotesPages, r.StageNotesPlan, r.StageNotesKey], [3, [1, 2], 'sum-abc']);
+  });
+  check('no text is stored with the page', () => {
+    const r = roundOf('2101', '001');
+    for (const k of ['StageNotesPage', 'StageNotesPages', 'StageNotesRev']) assert.ok(Number.isInteger(r[k]), k);
+  });
+
+  console.log('\n13. off the read, a page is refused and nothing is written');
+  seedGame('2102');
+  const offBeat = await post('2102', { notesPage: 1, notesPages: 3, questionNumber: 1 });
+  check('409 when the round has never left the tally', () => {
+    assert.strictEqual(offBeat.statusCode, 409, offBeat.body);
+    assert.match(JSON.parse(offBeat.body).error, /not on What we heard/);
+  });
+  check('nothing written, nothing sent', () => {
+    assert.strictEqual((roundOf('2102', '001') || {}).StageNotesPage, undefined);
+    assert.strictEqual(sent.length, 0);
+  });
+  seedGame('2103');
+  await post('2103', { beat: 'feedback', questionNumber: 1 });
+  sent = [];
+  const onFeedback = await post('2103', { step: 'next', questionNumber: 1 });
+  check('409 during a feedback round too', () => assert.strictEqual(onFeedback.statusCode, 409, onFeedback.body));
+
+  console.log('\n14. a step with no known count is 409; junk is 400');
+  await onTheRead('2104');
+  const blind = await post('2104', { step: 'next', questionNumber: 1 });
+  check('step before any count is known is 409', () => assert.strictEqual(blind.statusCode, 409, blind.body));
+  for (const body of [{ notesPage: -1 }, { step: 'sideways' }, { notesPlan: [0], planKey: 'k' }, { notesPage: 1, step: 'next' }]) {
+    const res = await post('2104', { ...body, questionNumber: 1 });
+    check(`${JSON.stringify(body)} is 400`, () => assert.strictEqual(res.statusCode, 400, res.body));
+  }
+  const both = await post('2104', { beat: 'results', notesPage: 1, questionNumber: 1 });
+  check('a beat and a page in one body is 400', () => assert.strictEqual(both.statusCode, 400, both.body));
+  check('the beat was not moved by the refused body', () => assert.strictEqual(roundOf('2104', '001').StageBeat, 'field-notes'));
+
+  console.log('\n15. a rival organisation\'s host cannot turn the page, nor set the profile');
+  await onTheRead('2105');
+  store.get(key('GAME#2105', 'METADATA')).orgId = 'org-a';
+  const rival = (body) => stageBeat({
+    requestContext: { http: { method: 'POST' }, authorizer: { lambda: { orgId: 'org-b', groups: 'hosts' } } },
+    pathParameters: { gameId: '2105' },
+    body: JSON.stringify(body),
+  });
+  const rivalPage = await rival({ notesPage: 1, notesPages: 2, questionNumber: 1 });
+  check('the page: 404, the same as a code that names nothing', () => assert.strictEqual(rivalPage.statusCode, 404, rivalPage.body));
+  const rivalProfile = await rival({ profile: 'tv' });
+  check('the profile: 404', () => assert.strictEqual(rivalProfile.statusCode, 404, rivalProfile.body));
+  check('nothing changed', () => {
+    assert.strictEqual(roundOf('2105', '001').StageNotesPage, undefined);
+    assert.strictEqual(store.get(key('GAME#2105', 'STATE')).StageProfile, undefined);
+  });
+
+  console.log('\n16. the display profile is a session fact on STATE');
+  seedGame('2106');
+  store.get(key('GAME#2106', 'STATE')).ttl = 1999999999;
+  const prof = await post('2106', { profile: 'tv' });
+  check('200', () => assert.strictEqual(prof.statusCode, 200, prof.body));
+  check('STATE.StageProfile is written', () => assert.strictEqual(store.get(key('GAME#2106', 'STATE')).StageProfile, 'tv'));
+  check('STATE keeps its session ttl', () => assert.strictEqual(store.get(key('GAME#2106', 'STATE')).ttl, 1999999999));
+  check('the room is told: stageProfileChanged', () => {
+    assert.strictEqual(sent[0].message.type, 'stageProfileChanged');
+    assert.strictEqual(sent[0].message.profile, 'tv');
+  });
+  for (const bad of ['stadium', '', 'TV', null, 3]) {
+    const res = await post('2106', { profile: bad });
+    check(`profile ${JSON.stringify(bad)} is 400`, () => assert.strictEqual(res.statusCode, 400, res.body));
+  }
+  store.delete(key('GAME#2107', 'STATE'));
+  const noState = await post('2107', { profile: 'room' });
+  check('no STATE row: 404, and no row is made without its ttl', () => {
+    assert.strictEqual(noState.statusCode, 404, noState.body);
+    assert.strictEqual(store.get(key('GAME#2107', 'STATE')), undefined);
+  });
+  check('the backend profile list is the frontend\'s PROFILES', () => {
+    const { STAGE_PROFILES } = require(path.join(REPO, 'lambda-functions/game/stage-beats.js'));
+    const mirror = require('fs').readFileSync(path.join(REPO, 'src/src/config/displayProfile.js'), 'utf8');
+    const declared = /export const PROFILES\s*=\s*\[([^\]]*)\]/.exec(mirror)[1]
+      .split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean);
+    assert.deepStrictEqual(STAGE_PROFILES, declared);
+  });
+
+  console.log('\n17. get-game-state hands the page and the profile back');
+  await onTheRead('2108');
+  await post('2108', { notesPage: 2, notesPages: 4, questionNumber: 1 });
+  await post('2108', { profile: 'call' });
+  const readBack = await readState('2108');
+  check('stageNotes on the public read', () =>
+    assert.deepStrictEqual(readBack.payload.stageNotes, { page: 2, pages: 4, plan: null, planKey: null, rev: 1 }));
+  check('stageProfile on the public read', () => assert.strictEqual(readBack.payload.stageProfile, 'call'));
+  seedGame('2109');
+  const fresh2 = await readState('2109');
+  check('a round never paged reads as page 0, count unknown', () =>
+    assert.deepStrictEqual(fresh2.payload.stageNotes, { page: 0, pages: null, plan: null, planKey: null, rev: 0 }));
+  check('no profile set reads as null', () => assert.strictEqual(fresh2.payload.stageProfile, null));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();

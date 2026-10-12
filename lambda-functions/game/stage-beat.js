@@ -57,7 +57,14 @@ const db = DynamoDBDocumentClient.from(client);
 
 // The closed set lives in its own module because `get-game-state.js` reads it
 // too — see stage-beats.js for why a second reader moved it there.
-const { BEATS } = require('./stage-beats');
+const { BEATS, STAGE_PROFILES } = require('./stage-beats');
+const { applyNotes } = require('./stage-notes');
+
+/** The beat a page of the read can only be turned on. */
+const READ_BEAT = 'field-notes';
+/** How many times a page turn re-reads after losing a race with another surface. */
+const NOTES_ATTEMPTS = 3;
+const NOTES_SHAPES = ['notesPage', 'step', 'notesPlan'];
 
 const respond = (statusCode, body) => ({
   statusCode,
@@ -134,6 +141,21 @@ exports.handler = async (event) => {
   if (!gameId) {
     return respond(400, { error: 'gameId is required' });
   }
+
+  /*
+    THREE WRITES SHARE THIS ROUTE (two-surface PLAN 1.9), one per body:
+      { beat, questionNumber }                  the beat (unchanged)
+      { notesPage | step | notesPlan, questionNumber }  Workie's page
+      { profile }                               the session's display profile
+    One shape per body. Mixing them is refused rather than half-applied.
+  */
+  const turnsPage = NOTES_SHAPES.some((k) => k in body);
+  const setsProfile = 'profile' in body;
+  if ([beat !== undefined, turnsPage, setsProfile].filter(Boolean).length > 1) {
+    return respond(400, { error: 'Send a beat, a page or a profile, one at a time' });
+  }
+  if (setsProfile) return setProfile(event, gameId, body.profile);
+  if (turnsPage) return turnPage(event, gameId, body);
 
   if (!BEATS.includes(beat)) {
     return respond(400, { error: `beat must be one of: ${BEATS.join(', ')}` });
@@ -212,6 +234,143 @@ exports.handler = async (event) => {
     return respond(500, { error: 'Failed to set the stage beat' });
   }
 };
+
+/**
+ * WHOSE ROOM IS THIS? The same read and the same 404 as the beat's own guard
+ * in the handler above — see its note for what an unscoped write was worth.
+ */
+async function mayDrive(event, gameId) {
+  const ownerRead = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+    ProjectionExpression: 'orgId'
+  }));
+  return callerMayDriveSession(event, ownerRead.Item || {});
+}
+
+const isConditionFailure = (err) => err && (err.name === 'ConditionalCheckFailedException'
+  || err.code === 'ConditionalCheckFailedException');
+
+/**
+ * WORKIE'S PAGE, A SERVER FACT (two-surface PLAN 1.9; remote-parity §2).
+ *
+ * The read's page was the host page's own React state, so the Remote could not
+ * turn it and a reload lost it. It is stored on ROUND# beside the beat, and
+ * only while the beat IS the read: the write is conditioned on
+ * `StageBeat = field-notes`, so a late turn cannot write a page onto a round
+ * the room has left (409). What a turn does is stage-notes.js's one rule.
+ *
+ * `StageNotesRev` (ADD) is the order of turns. The write is also conditioned on
+ * the rev it read, so two surfaces stepping at once each move the room one
+ * page rather than one overwriting the other; a lost race re-reads and
+ * re-applies. Clients drop any frame whose rev is not newer than theirs.
+ *
+ * UPDATE, never PUT, with the round's ttl kept (if_not_exists), like every
+ * other ROUND# writer. Integers and one validated key are stored, never text.
+ */
+async function turnPage(event, gameId, body) {
+  if (!/^\d+$/.test(String(body.questionNumber ?? '').trim())) {
+    return respond(400, { error: 'a numeric questionNumber is required' });
+  }
+  const padded = String(body.questionNumber).trim().padStart(3, '0');
+  const notesBody = {};
+  for (const k of [...NOTES_SHAPES, 'notesPages', 'planKey']) if (k in body) notesBody[k] = body[k];
+
+  try {
+    if (!(await mayDrive(event, gameId))) return respond(404, { error: 'Game not found' });
+
+    for (let attempt = 0; attempt < NOTES_ATTEMPTS; attempt += 1) {
+      const roundRead = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` }
+      }));
+      const round = roundRead.Item || {};
+      if (round.StageBeat !== READ_BEAT) {
+        return respond(409, { error: 'The room is not on What we heard' });
+      }
+      const result = applyNotes({
+        page: round.StageNotesPage,
+        pages: round.StageNotesPages,
+        plan: round.StageNotesPlan,
+        planKey: round.StageNotesKey,
+      }, notesBody);
+      if (!result.ok) return respond(result.status, { error: result.error });
+
+      const rev = Number.isInteger(round.StageNotesRev) ? round.StageNotesRev : 0;
+      const now = new Date().toISOString();
+      try {
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
+          UpdateExpression: 'SET #page = :page, #pages = :pages, #plan = :plan, #key = :key, '
+            + '#updatedAt = :now, #ttl = if_not_exists(#ttl, :ttl) ADD #rev :one',
+          ConditionExpression: rev
+            ? '#beat = :read AND #rev = :rev'
+            : '#beat = :read AND attribute_not_exists(#rev)',
+          ExpressionAttributeNames: {
+            '#page': 'StageNotesPage', '#pages': 'StageNotesPages', '#plan': 'StageNotesPlan',
+            '#key': 'StageNotesKey', '#rev': 'StageNotesRev', '#beat': 'StageBeat',
+            '#updatedAt': 'UpdatedAt', '#ttl': 'ttl'
+          },
+          ExpressionAttributeValues: {
+            ':page': result.page, ':pages': result.pages, ':plan': result.plan, ':key': result.planKey,
+            ':now': now, ':ttl': ttlFrom(null, ROUND_RECORD_DAYS), ':one': 1, ':read': READ_BEAT,
+            ...(rev ? { ':rev': rev } : {})
+          }
+        }));
+      } catch (err) {
+        if (isConditionFailure(err)) continue; // another surface turned it; read again
+        throw err;
+      }
+
+      const notes = {
+        notesPage: result.page, notesPages: result.pages, plan: result.plan, planKey: result.planKey, rev: rev + 1
+      };
+      await broadcastToGame(gameId, {
+        type: 'stageBeatChanged', gameId, questionNumber: padded, beat: READ_BEAT, ...notes, timestamp: now
+      });
+      return respond(200, { status: 'OK', gameId, questionNumber: padded, beat: READ_BEAT, ...notes });
+    }
+    return respond(409, { error: 'The read was turned from another screen. Try again.' });
+  } catch (error) {
+    console.error('❌ Stage notes error:', error);
+    return respond(500, { error: 'Failed to turn the page' });
+  }
+}
+
+/**
+ * THE SESSION'S DISPLAY PROFILE (two-surface PLAN D2). Was per browser; the
+ * measuring surface and the wall must agree on it, so it lives on STATE.
+ * Conditioned on STATE existing: a profile must never create a STATE row
+ * without the session's ttl.
+ */
+async function setProfile(event, gameId, profile) {
+  if (!STAGE_PROFILES.includes(profile)) {
+    return respond(400, { error: `profile must be one of: ${STAGE_PROFILES.join(', ')}` });
+  }
+  try {
+    if (!(await mayDrive(event, gameId))) return respond(404, { error: 'Game not found' });
+    const now = new Date().toISOString();
+    try {
+      await db.send(new UpdateCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+        UpdateExpression: 'SET #profile = :profile, #updatedAt = :now',
+        ConditionExpression: 'attribute_exists(PK)',
+        ExpressionAttributeNames: { '#profile': 'StageProfile', '#updatedAt': 'UpdatedAt' },
+        ExpressionAttributeValues: { ':profile': profile, ':now': now }
+      }));
+    } catch (err) {
+      if (isConditionFailure(err)) return respond(404, { error: 'Game not found' });
+      throw err;
+    }
+    await broadcastToGame(gameId, { type: 'stageProfileChanged', gameId, profile, timestamp: now });
+    return respond(200, { status: 'OK', gameId, profile });
+  } catch (error) {
+    console.error('❌ Stage profile error:', error);
+    return respond(500, { error: 'Failed to set the display profile' });
+  }
+}
 
 /** Re-exported so a test can assert the vocabulary without driving the handler.
  *  The canonical list is `./stage-beats.js`. */

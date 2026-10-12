@@ -57,4 +57,12 @@ function resolveBeat(value) {
   return BEATS.includes(value) ? value : DEFAULT_BEAT;
 }
 
-module.exports = { BEATS, DEFAULT_BEAT, resolveBeat };
+/**
+ * THE DISPLAY PROFILES (two-surface PLAN D2): the session's one profile, so a
+ * measuring surface and the wall agree on the ladder. Mirrors `PROFILES` in
+ * src/src/config/displayProfile.js; tests/stage-beat-flow.js §16 holds them
+ * equal. A closed set for BEATS' reason: an open one succeeds silently.
+ */
+const STAGE_PROFILES = ['room', 'tv', 'call', 'table'];
+
+module.exports = { BEATS, DEFAULT_BEAT, resolveBeat, STAGE_PROFILES };

@@ -7,7 +7,7 @@ const { POLL, pollQuestionOf } = require('./poll-question');
 const { normalizeNames } = require('./survey-names');
 
 const { isPresent } = require('./player-presence');
-const { BEATS } = require('./stage-beats');
+const { BEATS, STAGE_PROFILES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 
 /**
@@ -183,6 +183,13 @@ exports.handler = async (event) => {
      * surfaces come to disagree.
      */
     let stageFocus = { focus: 'none', index: null };
+    /*
+      WORKIE'S PAGE (two-surface PLAN 1.9/1.11): stored on ROUND# by
+      /stage-beat while the room is on the read. Integers, a list of integers
+      and one validated key; never text. A round never paged reads as page 0
+      with the count unknown, and `rev` 0, so a client's first frame is newer.
+    */
+    let stageNotes = { page: 0, pages: null, plan: null, planKey: null, rev: 0 };
     // A CLOSED SURVEY has no LessonNumber but does have beats: its Workie
     // read-back and its feedback round sit on ROUND#000 (stage-beat.js takes
     // 0 like any round), and a reload or the phone remote has to see them.
@@ -225,6 +232,16 @@ exports.handler = async (event) => {
           response and the most likely one a host enlarges, and `|| null` would
           erase exactly that case.
         */
+        const notesRow = roundRecord.Item || {};
+        const intOrNull = (v) => (Number.isInteger(v) ? v : null);
+        stageNotes = {
+          page: Number.isInteger(notesRow.StageNotesPage) && notesRow.StageNotesPage >= 0 ? notesRow.StageNotesPage : 0,
+          pages: intOrNull(notesRow.StageNotesPages),
+          plan: Array.isArray(notesRow.StageNotesPlan) && notesRow.StageNotesPlan.every(Number.isInteger)
+            ? notesRow.StageNotesPlan : null,
+          planKey: typeof notesRow.StageNotesKey === 'string' ? notesRow.StageNotesKey : null,
+          rev: Number.isInteger(notesRow.StageNotesRev) ? notesRow.StageNotesRev : 0,
+        };
         const storedFocus = roundRecord.Item && roundRecord.Item.StageFocus;
         if (storedFocus === 'question') {
           stageFocus = { focus: 'question', index: null };
@@ -375,6 +392,13 @@ exports.handler = async (event) => {
       authorsRevealed: authorsRevealed,
       stageBeat: stageBeat,
       stageFocus: stageFocus,
+      stageNotes: stageNotes,
+      /*
+        THE SESSION'S DISPLAY PROFILE (two-surface PLAN D2), set from the
+        host's surfaces through /stage-beat `{ profile }`. null until one is
+        chosen; a value outside the closed set reads as null.
+      */
+      stageProfile: STAGE_PROFILES.includes(stateItem && stateItem.StageProfile) ? stateItem.StageProfile : null,
       /*
         THE SCOREBOARD — a session fact on STATE (scoreboard.js). Here for the
         same two readers stageFocus has: a reloading host page reopens the board
