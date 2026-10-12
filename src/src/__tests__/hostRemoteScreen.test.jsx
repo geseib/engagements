@@ -291,6 +291,28 @@ describe('the AI read-back on the phone', () => {
     await connect();
     expect(await screen.findByText(/reading the responses/i)).toBeInTheDocument();
   });
+
+  it('shows the read when it lands mid-beat, having started nothing itself', async () => {
+    // Owner, 2026-10-12: the read only finished once the stage was opened.
+    // The server now starts it at close (get-results.js startRoundRead,
+    // tests/ai-summary-starts-at-close.js); the phone's part is to keep asking
+    // the PUBLIC read until it is written — never to generate. A 404 first,
+    // then the row: the next poll must pick it up without a reload.
+    serve({ state: 'RESULTS#003', stageBeat: 'field-notes', aiSummary: null });
+    await connect();
+    expect(await screen.findByText(/reading the responses/i)).toBeInTheDocument();
+
+    const notReady = global.fetch.getMockImplementation();
+    global.fetch.mockImplementation((url, init) => (String(url).includes('/ai-summary')
+      ? Promise.resolve({ ok: true, status: 200, json: async () => summary })
+      : notReady(url, init)));
+
+    expect(await screen.findByText(/nobody proposed telling a customer why/i, {}, { timeout: 6000 }))
+      .toBeInTheDocument();
+    const summaryCalls = global.fetch.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('ai-summary'));
+    expect(summaryCalls.length).toBeGreaterThan(1);
+    expect(summaryCalls.some((u) => /generateNew|\/ai-summary\/host/.test(u))).toBe(false);
+  }, 10000);
 });
 
 /**

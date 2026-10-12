@@ -54,6 +54,7 @@ const { authorTallyLines, findTallyMismatches, tallyRows } = require('./author-t
 // FOLLOWUP_ASKS_ENABLED is 'on' (dev only).
 const { runFollowUpSuggestions } = require('./followup-worker');
 const { followUpsEnabled } = require('./followup-store');
+const { claimSummaryJob, releaseSummaryJob } = require('./summary-job');
 
 /**
  * A SURVEY'S ONE SUMMARY lives at this pseudo-round. A survey has no rounds
@@ -921,7 +922,28 @@ const publicTemplateVariables = (debugInfo) => {
   return rest;
 };
 
+/**
+ * THE HANDLER, with the round's claim let go when a worker finishes.
+ *
+ * A worker started by a claim (get-results at close, or the host route above)
+ * carries its `jobId`; whatever it does — writes the read, returns early, or
+ * throws for Lambda's retry — the claim is released so a later Regenerate or
+ * Try again is never refused (summary-job.js). Only the claim's own job may
+ * release it.
+ */
 exports.handler = async (event, context) => {
+  try {
+    return await handle(event, context);
+  } finally {
+    if (event && event.__workerMode === true && event.jobId) {
+      const padded = event.paddedQuestionNumber
+        || (/^\d+$/.test(String(event.questionId || '')) ? String(event.questionId).padStart(3, '0') : null);
+      await releaseSummaryJob(db, { gameId: event.gameId, padded, jobId: event.jobId });
+    }
+  }
+};
+
+const handle = async (event, context) => {
   // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
   // with __workerMode set, so the full generation runs off the API Gateway 30s
   // ceiling. In worker mode we skip the cache/HTTP-return branches, generate,
@@ -1171,6 +1193,26 @@ exports.handler = async (event, context) => {
         };
       }
 
+      // ONE READ PER ROUND AT A TIME (summary-job.js). get-results starts the
+      // room's read the moment the host closes the round; the stage, opening
+      // on that round a second later, misses the not-yet-written row and asks
+      // here. Without the claim that was a second generation into the same
+      // row. While a fresh claim is held the answer is the same 202 — the
+      // running worker's aiSummaryReady is the one the stage waits for. A
+      // staff model variant writes its own row and takes no claim.
+      let jobId = null;
+      if (!requestedModel) {
+        jobId = await claimSummaryJob(db, { gameId, padded: paddedQuestionNumber });
+        if (!jobId) {
+          console.log(`⏳ AI SUMMARY: a read for ${gameId}:${targetQuestionId} is already running — not dispatching another`);
+          return {
+            statusCode: 202,
+            body: JSON.stringify({ status: 'generating', gameId, questionId: targetQuestionId, alreadyRunning: true }),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          };
+        }
+      }
+
       // generateNew=true: fire-and-forget self-invoke, return 202 immediately.
       console.log(`🚀 AI SUMMARY: dispatching async generation worker for ${gameId}:${targetQuestionId}`);
       await lambda.send(new InvokeCommand({
@@ -1183,6 +1225,7 @@ exports.handler = async (event, context) => {
           paddedQuestionNumber,
           debug,
           promptDebug,
+          ...(jobId ? { jobId } : {}),
           // Only a staff request on dev carries a model; the worker then writes
           // that model's variant and leaves the room's read alone.
           ...(requestedModel ? { model: requestedModel.id } : {})

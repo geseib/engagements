@@ -3228,6 +3228,11 @@ Resources:
           ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
           ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
           ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
+          # Closing a round starts Workie's read of it (get-results.js
+          # startRoundRead), so a host on the Host Remote with the stage closed
+          # still gets one. A name, not a !GetAtt, so the two functions do not
+          # depend on each other.
+          AI_SUMMARY_FUNCTION_NAME: !Sub '${StackName}-get-ai-summary'
       Policies:
         # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
         # the Anthropic API, Workload Identity Federation. Allow only where the
@@ -3250,6 +3255,14 @@ Resources:
               Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # The read at close (AI_SUMMARY_FUNCTION_NAME above): an Event invoke of
+        # the get-ai-summary worker. Without it the close still succeeds and the
+        # read waits for the stage to ask, as it did before.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-get-ai-summary'
         # get-results moves the game into RESULTS# and now announces it over the
         # WebSocket, the way next-question and start-vote already announce their
         # transitions. Without this the announcement is a silent AccessDenied and
