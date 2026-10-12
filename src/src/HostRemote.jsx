@@ -9,6 +9,7 @@ import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
 import { navigateTo } from './auth/navigate';
+import RW from './config/roundWords';
 import { useOptionalAuth } from './auth/AuthContext';
 import { categoryRows, questionKey } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
@@ -1397,8 +1398,8 @@ function HostRemote() {
                 The eyebrow, the lead, the numbered points, and the line that says
                 where the rest of it lives. */}
             {onFieldNotes && (
-              <section className="hr-notes" aria-label="What we heard">
-                <p className="hr-notes-kicker">What we heard</p>
+              <section className="hr-notes" aria-label={RW.whatWeHeard}>
+                <p className="hr-notes-kicker">{RW.whatWeHeard}</p>
                 {!notes.ready ? (
                   <p className="hr-notes-waiting">Workie is reading the responses…</p>
                 ) : (

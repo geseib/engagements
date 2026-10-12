@@ -8,6 +8,7 @@ import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
+import RW from './config/roundWords';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -7722,7 +7723,7 @@ Focus on actionable business strategy insights.`;
 
             {hostPhase === 'FIELD_NOTES' && (
               <>
-                <div className="kicker">What we heard</div>
+                <div className="kicker">{RW.whatWeHeard}</div>
                 {/* Four states, one component (components/AISummaryStatus.jsx):
                     writing, written, FAILED, and nothing yet. The fourth used
                     to stand in for the third — a trigger that never reached the
