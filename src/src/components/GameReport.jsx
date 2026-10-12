@@ -20,6 +20,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import Icon from './Icon';
+import StatusMessage from './StatusMessage';
 import RankIcon from './RankIcon';
 import MarkdownRenderer from './MarkdownRenderer';
 import { authFetch } from '../auth/authFetch';
@@ -56,6 +57,9 @@ function GameReport({
   onClose,
   onRetry = null,
   onBrowseAll = null,
+  // A one-line reason the host is looking at this report without having asked
+  // for it — e.g. "This session has ended. Here is its report." Never printed.
+  notice = '',
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveReportModal, setShowSaveReportModal] = useState(false);
@@ -168,6 +172,12 @@ function GameReport({
           </button>
         </div>
       </div>
+
+      {notice && (
+        <div className="report-noprint">
+          <StatusMessage message={notice} tone="success" className="status-message report-notice" />
+        </div>
+      )}
 
       {status === 'loading' && (
         <div className="report-state report-noprint" role="status" aria-live="polite">

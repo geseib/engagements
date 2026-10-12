@@ -99,6 +99,8 @@ import {
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
+import { isSessionExpired, takeResumeFor } from './auth/sessionExpiry';
+import { classifyHostActionFailure, ENDED_AFTER_SIGN_IN } from './utils/hostActionFailure';
 import { getEvent, runEvent } from './utils/eventsApi';
 import { navigateTo } from './auth/navigate';
 import {
@@ -443,6 +445,9 @@ function GameHostPage() {
   }, []);
 
   const [showReport, setShowReport] = useState(false);
+  // One plain line above the report when the host was brought to it rather
+  // than asking for it (back from an expired sign-in to an ended session).
+  const [reportNotice, setReportNotice] = useState('');
   const [reportData, setReportData] = useState(null);
   // 'idle' | 'loading' | 'ready' | 'error'. The report is BUILT on demand —
   // `POST games/{id}/report` re-derives it every time — so opening it is a
@@ -630,6 +635,27 @@ function GameHostPage() {
   // kept separate rather than renamed onto it — this fires for every
   // non-survey type, not only a survey's own three acts.
   const [sessionActionError, setSessionActionError] = useState('');
+  /*
+    A REFUSED HOST BUTTON, SAID WITHOUT alert() (2026-10-12, the owner's
+    "Failed to get next question: Unauthorized (HTTP 401)" — read
+    utils/hostActionFailure.js). An expired sign-in says nothing here (the
+    sign-in form is taking over); a session that has ENDED — from the remote,
+    another tab, the pool running dry — puts this screen on its ENDED phase,
+    whose primary is the report; anything else is a line in the dock.
+
+    Behind a ref so the useCallback'd queue handlers can hold one stable
+    function: setGameState is rebuilt every render.
+  */
+  const hostActionFailedRef = useRef(null);
+  hostActionFailedRef.current = async (message) => {
+    const outcome = await classifyHostActionFailure({
+      message, fetchFn: authFetch, apiBase: API_BASE, gameId,
+    });
+    if (outcome.kind === 'expired') return;
+    if (outcome.kind === 'ended') setGameState('ENDED');
+    setSessionActionError(outcome.message);
+  };
+  const hostActionFailed = useCallback((message) => hostActionFailedRef.current(message), []);
   /*
     WHERE THE ROOM IS — hooks/useSurveyProgress.js: GET /survey/progress on
     arrival, the `surveyProgress` frame after. Declared up here, above every
@@ -1834,7 +1860,7 @@ function GameHostPage() {
       // the fallback sentence in front of the host on every real failure,
       // discarding the specific one the classifier had worked out.
       const f = result.failure;
-      alert(f ? `${f.headline}\n\n${f.detail}`
+      hostActionFailed(f ? `${f.headline} ${f.detail}`
         : 'The summary could not be regenerated. Please try again.');
     }
   };
@@ -2742,6 +2768,20 @@ Focus on actionable business strategy insights.`;
         setGameState(currentState);
         console.log(`🎮 HOST: Set game state to ${currentState}`);
 
+        /*
+          BACK FROM SIGNING IN AGAIN, TO A SESSION THAT IS OVER (owner,
+          2026-10-12: "go to the report instead after login"). The marker is
+          the one sessionExpiry.js left when the sign-in ran out on this
+          session; it is consumed on the first restore either way, so a host
+          who comes back to a LIVE session is not sent to the report later
+          when they end it themselves. Opening a report changes nothing in
+          the room, so this is not a replayed action.
+        */
+        if (takeResumeFor(forGameId) && currentState === 'ENDED') {
+          setReportNotice(ENDED_AFTER_SIGN_IN);
+          generateReportForGame(forGameId, eventTitle);
+        }
+
         // The durable fact, read straight from the ROUND# record (get-game-state
         // .js now includes it) rather than inferred from the state string. An
         // early reveal — the override for a host who reveals before closing the
@@ -3569,8 +3609,8 @@ Focus on actionable business strategy insights.`;
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to toggle category');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
       }
       
       const result = await response.json();
@@ -3582,7 +3622,7 @@ Focus on actionable business strategy insights.`;
       return result;
     } catch (error) {
       console.error('❌ Failed to toggle category:', error);
-      alert(`Failed to toggle category: ${error.message}`);
+      hostActionFailed(`That category could not be changed: ${error.message}`);
       throw error;
     } finally {
       setIsTogglingCategory(false);
@@ -3777,7 +3817,7 @@ Focus on actionable business strategy insights.`;
       // `duplicate` and `not-queued` are all visible in the list in front of
       // them; a full queue is not — see REFUSALS_WORTH_SAYING.
       if (local.refused === 'full') {
-        alert('The queue is full — 24 questions is the limit. Remove one from the running order first.');
+        setSessionActionError('The queue is full — 24 questions is the limit. Remove one from the running order first.');
       }
       return;
     }
@@ -3796,14 +3836,14 @@ Focus on actionable business strategy insights.`;
       // screen: the host would end the round expecting the question they
       // "moved" to the top and get the one that was actually there.
       setQuestionQueue(before);
-      alert(`Could not change the running order: ${result.error}`);
+      hostActionFailed(`Could not change the running order: ${result.error}`);
       return;
     }
 
     // The server refused something the local copy accepted — only possible when
     // the other host surface changed the list in between. Its list is the one
     // that lands below, so this is a message, not a rollback.
-    if (result.message) alert(result.message);
+    if (result.message) setSessionActionError(result.message);
 
     // `queue: null` is a landed write whose body we could not read — re-read
     // rather than guess. Otherwise take the server's list verbatim; it is
@@ -3817,7 +3857,7 @@ Focus on actionable business strategy insights.`;
     // Queueing something changes what follows it, so the tail is re-planned.
     loadUpNext();
     setQueueVersion(result.version);
-  }, [gameId, questionQueue, queueVersion, loadQueue]);
+  }, [gameId, questionQueue, queueVersion, loadQueue, hostActionFailed]);
 
   const handleQueueQuestion = useCallback(
     (question) => runQueueOp('add', question?.id, (q) => queueEnqueue(q, question?.id)),
@@ -3864,7 +3904,7 @@ Focus on actionable business strategy insights.`;
     const plan = materializePlanOps(questionQueue, autoKeys, key, direction);
     if (!plan.ops.length) {
       if (plan.refused === 'full') {
-        alert('The queue is full — 24 questions is the limit. Remove one from the running order first.');
+        setSessionActionError('The queue is full — 24 questions is the limit. Remove one from the running order first.');
       }
       return;
     }
@@ -3887,12 +3927,12 @@ Focus on actionable business strategy insights.`;
     }
 
     setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
-    if (failed) alert(`Could not rearrange the running order: ${failed}`);
+    if (failed) hostActionFailed(`Could not rearrange the running order: ${failed}`);
     // Authoritative state after a multi-write burst is the server's, not any
     // single response — re-read both halves of the panel.
     loadQueue();
     loadUpNext();
-  }, [gameId, questionQueue, queueVersion, upNext, loadQueue, loadUpNext]);
+  }, [gameId, questionQueue, queueVersion, upNext, loadQueue, loadUpNext, hostActionFailed]);
 
   /**
    * DISABLE — the third of the owner's four queue verbs: this question is not
@@ -3922,10 +3962,10 @@ Focus on actionable business strategy insights.`;
     }
 
     setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
-    if (failed) alert(`Could not disable that question: ${failed}`);
+    if (failed) hostActionFailed(`Could not disable that question: ${failed}`);
     loadQueue();
     loadUpNext();
-  }, [gameId, queueVersion, loadQueue, loadUpNext]);
+  }, [gameId, queueVersion, loadQueue, loadUpNext, hostActionFailed]);
 
   /** The way back from Disable — the veto lifts and the walk picks it up. */
   const handleRestoreQuestion = useCallback(async (rawKey) => {
@@ -3934,10 +3974,10 @@ Focus on actionable business strategy insights.`;
     const result = await postExclusionOp({
       apiBase: API_BASE, gameId, op: 'remove', questionKey: key,
     });
-    if (!result.ok) alert(`Could not restore that question: ${result.error}`);
+    if (!result.ok) hostActionFailed(`Could not restore that question: ${result.error}`);
     loadQueue();
     loadUpNext();
-  }, [gameId, loadQueue, loadUpNext]);
+  }, [gameId, loadQueue, loadUpNext, hostActionFailed]);
 
   // "Ask now": put one named question on the room's screen straight away.
   // "Ask next" is handleQueueFirst above — the top of the running order.
@@ -3961,6 +4001,7 @@ Focus on actionable business strategy insights.`;
         if (!proceed) return;
       }
       
+      setSessionActionError('');
       // Show loading overlay (same as handleNextQuestion)
       setIsLoadingData(true);
       setLoadingMessage('Loading Selected Question...');
@@ -3984,9 +4025,9 @@ Focus on actionable business strategy insights.`;
       });
       
       if (!nextQuestionRes.ok) {
-        const errorData = await nextQuestionRes.json();
+        const errorData = await nextQuestionRes.json().catch(() => ({}));
         console.error('Failed to select specific question:', errorData);
-        alert(`Failed to select question: ${errorData.error || 'Unknown error'}`);
+        hostActionFailed(`That question could not be asked: ${errorData.message || errorData.error || `HTTP ${nextQuestionRes.status}`}`);
         return;
       }
       
@@ -4034,7 +4075,7 @@ Focus on actionable business strategy insights.`;
       
     } catch (error) {
       console.error('Error selecting question:', error);
-      alert(`Error selecting question: ${error.message}`);
+      hostActionFailed(`That question could not be asked: ${error.message}`);
     } finally {
       setIsLoadingData(false);
     }
@@ -4132,6 +4173,7 @@ Focus on actionable business strategy insights.`;
       if (!proceed) return;
     }
 
+    setSessionActionError('');
     // Show loading overlay
     setIsLoadingData(true);
     setLoadingMessage('Loading Next Question...');
@@ -4177,7 +4219,9 @@ Focus on actionable business strategy insights.`;
 
       if (!attempt.advanced) {
         console.error('Failed to get next question:', attempt.error);
-        alert(`Failed to get next question: ${attempt.error}`);
+        // Never alert(): an expired sign-in is the sign-in form's to say, an
+        // ended session moves this screen to ENDED, the rest is a dock line.
+        hostActionFailed(`The next round did not start: ${attempt.error}`);
         return;
       }
       if (attempt.error) {
@@ -4269,7 +4313,7 @@ Focus on actionable business strategy insights.`;
         let the WebSocket finish repairing the panel, which it does on its own.
       */
       console.error('Next question advanced, but the host panel could not refresh', e);
-      alert('The round moved on, but this screen could not refresh. It should catch up on its own — do not press Next again.');
+      setSessionActionError('The round moved on, but this screen could not refresh. It should catch up on its own — do not press Next again.');
     } finally {
       // Hide loading overlay
       setIsLoadingData(false);
@@ -4408,6 +4452,7 @@ Focus on actionable business strategy insights.`;
     if (openingVoteRef.current) return;
     openingVoteRef.current = true;
     setManualStateChange(true);
+    setSessionActionError('');
 
     // Get answers and update state to voting using new API
     try {
@@ -4436,8 +4481,10 @@ Focus on actionable business strategy insights.`;
         setGameState(voteState);
       } else {
         console.error(`❌ HOST: Failed to start vote:`, startVoteRes.status);
-        const errorData = await startVoteRes.json();
+        const errorData = await startVoteRes.json().catch(() => ({}));
         console.error(`❌ HOST: Vote start error:`, errorData);
+        // It used to fail in the console only, leaving a button that did nothing.
+        hostActionFailed(`Voting did not open: ${errorData.message || errorData.error || `HTTP ${startVoteRes.status}`}`);
       }
     } catch (e) {
       console.error('Failed to start vote', e);
@@ -4458,6 +4505,7 @@ Focus on actionable business strategy insights.`;
       if (!proceed) return;
     }
 
+    setSessionActionError('');
     // Show loading overlay
     setIsLoadingData(true);
     setLoadingMessage('Calculating Results...');
@@ -4483,6 +4531,8 @@ Focus on actionable business strategy insights.`;
       
       if (!resultsRes.ok) {
         console.error('Failed to get results:', resultsRes.status);
+        const errorData = await resultsRes.json().catch(() => ({}));
+        hostActionFailed(`The results did not open: ${errorData.message || errorData.error || `HTTP ${resultsRes.status}`}`);
         return;
       }
       
@@ -5262,7 +5312,10 @@ Focus on actionable business strategy insights.`;
       if (res.status === 401 || res.status === 403) {
         console.warn('GET /games refused — session expired or not a host/admin');
         setGamesList([]);
-        alert('Your session has expired. Please sign in again to see your sessions.');
+        // A 401 is an expired sign-in, and authFetch has already put the
+        // sign-in form up (auth/sessionExpiry.js) — no alert on top of it.
+        if (res.status === 401 || isSessionExpired()) return;
+        alert('This account cannot see sessions yet. Ask an admin to approve it for hosting.');
         return;
       }
       const data = await res.json();
@@ -5874,7 +5927,8 @@ Focus on actionable business strategy insights.`;
         reportData={reportData}
         status={reportStatus}
         error={reportError}
-        onClose={() => { setShowReport(false); setReportStatus('idle'); }}
+        notice={reportNotice}
+        onClose={() => { setShowReport(false); setReportStatus('idle'); setReportNotice(''); }}
         onRetry={reportTarget
           ? () => generateReportForGame(reportTarget.gameId, reportTarget.eventTitle)
           : null}
@@ -6333,7 +6387,8 @@ Focus on actionable business strategy insights.`;
   const endSessionNow = async () => {
     const result = await requestEndSession({ fetchFn: authFetch, apiBase: API_BASE, gameId });
     if (!result.ended) {
-      setSessionActionError(`The session did not end: ${result.error}`);
+      // Already ended elsewhere → the ENDED phase; expired → the sign-in form.
+      hostActionFailed(`The session did not end: ${result.error}`);
       return;
     }
     setSessionActionError('');
