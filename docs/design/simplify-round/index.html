@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simplify the round · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* SIMPLIFY THE ROUND (owner, 2026-10-12). One Call & Answer round, moment by
+   moment, on three surfaces side by side: the host screen (its Stage and its
+   dock), the Host Remote, and a participant's phone, laptop or tablet. The
+   Stage is the host screen's upper part: they are one page.
+
+   One orange per screen: the primary. A pressed toggle is blue. Remove is red
+   text. Every frame is fluid: the laptop frame is min(660px, 100%), the two
+   phones min(375px, 100%), so nothing scrolls sideways at 375 or 660.
+   Classes are prefixed (lp-, hr-, pp-) so mock.css's .dock and .notes never
+   apply here. */
+html,body{overflow-x:hidden}
+.pg-nav,.pg-title{padding-left:16px;padding-right:16px}
+.pg-title p b{color:var(--text)}
+.sec{max-width:1460px;margin:56px auto 0;padding:0 16px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 24px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:92ch}
+.sec p b{color:var(--text)}
+.frame-h{max-width:1460px;margin:34px auto 10px;padding:0 16px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:92ch}
+.frame-h p b{color:var(--text)}
+.frame-h .rec{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--m-success-text);border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green)}
+.frame-h .chg{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--secondary);border:1px solid rgba(124,167,230,.55);background:var(--m-tint-blue)}
+.row-wrap{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;padding:10px 16px 6px;align-items:flex-start;max-width:1460px;margin:0 auto}
+.cell{width:min(375px,100%);min-width:0}
+.cell--lap{width:min(660px,100%)}
+.lab{margin:0 0 8px 2px;font:700 12px/1.3 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.cap{text-align:left;font-size:13px;color:var(--muted);margin:10px 2px 0;line-height:1.45}
+.cap b{color:var(--text)}
+.cap .was{display:block;margin-top:6px;padding-left:10px;border-left:2px solid var(--m-rule)}
+code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+
+/* ---- the line of moments ---------------------------------------------- */
+.line{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0}
+.line span{display:inline-flex;flex-direction:column;gap:2px;padding:8px 12px;border-radius:10px;border:1px solid var(--m-rule);background:var(--surface);font-size:13px;color:var(--muted);min-width:0}
+.line span b{color:var(--text);font-size:14px}
+.line span i{font-style:normal;color:var(--m-success-text);font-weight:700;font-size:12px}
+
+/* ---- the host screen: Stage above, dock below --------------------------- */
+.lp{width:100%;background:var(--bg);border:1px solid rgba(155,168,190,.35);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.45);min-width:0}
+.lp-top{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--m-rule);font-size:13px;color:var(--muted);min-width:0;flex-wrap:wrap}
+.lp-top b{color:var(--text);font:700 14px/1.2 var(--font-ui)}
+.lp-top .code{margin-left:auto;font:800 15px/1 var(--font-display);color:var(--text);letter-spacing:.06em}
+.lp-stage{padding:18px 18px 16px;display:flex;flex-direction:column;gap:12px;min-height:250px;min-width:0}
+.st-k{margin:0;font:800 12px/1.2 var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.st-k span{color:var(--secondary)}
+.st-q{margin:0;font:800 clamp(19px,3.6vw,26px)/1.12 var(--font-display);max-width:28ch;overflow-wrap:anywhere}
+.st-d{margin:0;color:var(--muted);font-size:15px;max-width:56ch}
+.st-meter{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.st-meter .big{font:800 34px/1 var(--font-display)}
+.st-meter .bar{flex:1;min-width:120px;height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.st-meter .bar i{display:block;height:100%;background:var(--success)}
+.st-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.st-card{background:var(--surface);border:1px solid var(--m-rule);border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.35;min-width:0;overflow-wrap:anywhere}
+.st-card small{display:block;color:var(--muted);font-size:12px;margin-top:6px}
+.st-card.is-up{border-color:var(--secondary);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface)}
+.st-big{background:var(--surface);border:2px solid var(--secondary);border-radius:14px;padding:16px;font:600 clamp(17px,3vw,22px)/1.35 var(--font-ui);overflow-wrap:anywhere}
+.st-big small{display:block;margin-top:8px;font:600 13px/1.3 var(--font-ui);color:var(--muted)}
+.st-read{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:14px;font-size:15px;line-height:1.5}
+.st-read h4{margin:0 0 6px;font:700 16px/1.3 var(--font-ui)}
+.st-read p{margin:0}
+.st-read ol{margin:6px 0 0;padding-left:20px}
+.st-bars{display:flex;flex-direction:column;gap:8px}
+.st-bars div{display:grid;grid-template-columns:minmax(80px,auto) 1fr auto;gap:10px;align-items:center;font-size:15px}
+.st-bars i{display:block;height:14px;border-radius:7px;background:var(--secondary)}
+.st-bars b{font:800 18px/1 var(--font-display)}
+.st-wait{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:15px}
+.st-wait::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--secondary);box-shadow:0 0 0 6px var(--m-tint-blue)}
+.lp-strip{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 14px;border-top:1px solid rgba(124,167,230,.45);background:var(--m-tint-blue);font-size:14px}
+.lp-strip p{margin:0;flex:1 1 220px;min-width:0}
+.lp-strip p small{display:block;color:var(--muted);font-size:12px}
+.lp-dock{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 14px;border-top:1px solid var(--m-rule);background:linear-gradient(180deg,rgba(15,26,46,.6),var(--bg))}
+.lp-dock .stat{flex:1 1 160px;min-width:0;font-size:15px}
+.lp-dock .stat small{display:block;color:var(--muted);font-size:12px}
+.lp-dock .stat.ok{color:var(--m-success-text);font-weight:700}
+.lp-more{flex:none;display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--m-rule);color:var(--muted);font:600 14px/1 var(--font-ui)}
+.lp-btn{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid rgba(155,168,190,.35);color:var(--text);font:600 15px/1.2 var(--font-ui);background:transparent}
+.lp-btn .ct{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--surface-2);font-size:12px;font-weight:800}
+.lp-pri{flex:none;display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:0 20px;border-radius:12px;background:var(--primary);color:#1B2942;font:700 17px/1.2 var(--font-ui)}
+.lp-pri.is-ready{box-shadow:0 0 0 3px rgba(79,178,134,.7)}
+.lp-pri kbd{font:800 11px/1 var(--font-ui);letter-spacing:.1em;opacity:.7}
+.lp-drawer{border-top:2px solid var(--secondary);background:var(--m-drawer);padding:14px;display:flex;flex-direction:column;gap:10px}
+.lp-drawer h3{margin:0;font:800 17px/1.2 var(--font-ui);display:flex;align-items:center;gap:10px}
+.lp-drawer h3 .x{margin-left:auto;width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted);font-size:14px}
+
+/* ---- the Remote, in its own idiom (HostRemote.css) --------------------- */
+.ph{width:100%;background:var(--bg);border:1px solid rgba(155,168,190,.35);border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.45);min-width:0}
+.hr-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--m-rule);min-width:0}
+.hr-id{display:flex;flex-direction:column;min-width:0;flex:1}
+.hr-id b{font:800 17px/1.1 var(--font-display)}
+.hr-id span{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hr-more{flex:none;min-height:40px;display:grid;place-items:center;padding:0 12px;border-radius:8px;border:1px solid var(--m-rule);color:var(--text);font:600 14px/1 var(--font-ui)}
+.hr-live{flex:none;display:inline-flex;align-items:center;gap:6px;font:700 12px/1 var(--font-ui);color:var(--m-success-text)}
+.hr-live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.hr-body{display:flex;flex-direction:column;gap:12px;padding:14px 16px 16px;min-width:0}
+.hr-status{background:var(--surface);border:1px solid var(--m-rule);border-radius:16px;padding:16px;text-align:center}
+.hr-k{margin:0;font:600 12px/1.3 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hr-h{margin:6px 0 0;font:700 22px/1.15 var(--font-display);overflow-wrap:anywhere}
+.hr-sub{margin:8px 0 0;font-size:14px;color:var(--muted)}
+.hr-sub.ok{color:var(--m-success-text);font-weight:700}
+.hr-meter{margin:12px auto 0;height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;max-width:260px}
+.hr-meter i{display:block;height:100%;background:var(--success)}
+.hr-people{margin:10px 0 0;font-size:14px;color:var(--secondary);font-weight:600}
+.hr-btn{min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:8px;border:1px solid rgba(155,168,190,.35);background:var(--surface);color:var(--text);font:600 15px/1.2 var(--font-ui);text-align:center}
+.hr-btn--sm{min-height:44px;font-size:14px;padding:8px 12px}
+.hr-btn--on{border-color:var(--secondary);background:var(--m-tint-blue)}
+.hr-btn--solid{background:var(--secondary);border-color:var(--secondary);color:var(--bg)}
+.hr-btn--remove{background:transparent;border-color:rgba(229,100,94,.5);color:var(--danger-text)}
+.hr-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hr-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.hr-dock{display:flex;flex-direction:column;gap:8px;padding:12px 16px 16px;border-top:1px solid var(--m-rule);background:linear-gradient(180deg,rgba(15,26,46,.6),var(--bg))}
+.hr-primary{min-height:64px;display:flex;align-items:center;justify-content:center;border-radius:16px;background:var(--primary);color:#1B2942;font:700 19px/1.2 var(--font-ui);text-align:center;padding:0 12px}
+.hr-primary.is-ready{box-shadow:0 0 0 3px rgba(79,178,134,.7)}
+.hr-primary.is-armed{background:var(--primary-deep);color:#fff}
+.hr-sec{min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:1px solid rgba(155,168,190,.35);color:var(--text);font:600 16px/1.2 var(--font-ui)}
+.hr-sec .ct{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:var(--surface-2);font-size:12px;font-weight:800}
+.hr-warn{margin:0;text-align:center;font-size:14px;color:var(--text)}
+.hr-flash{display:flex;gap:8px;align-items:flex-start;margin:0;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.4;border:1px solid rgba(124,167,230,.45);background:var(--m-tint-blue)}
+.hr-flash b{color:var(--text)}
+.hr-flash .u{margin-left:auto;flex:none;color:var(--secondary);font-weight:700}
+.hr-wait{background:var(--surface);border:1px solid var(--m-rule);border-radius:14px;padding:12px 14px}
+.hr-wait h3{margin:0 0 8px;font:700 12px/1.3 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.hr-wait .nms{display:flex;flex-wrap:wrap;gap:6px}
+.hr-wait .nms span{padding:4px 10px;border-radius:999px;background:var(--surface-2);font-size:14px}
+.fold{background:var(--surface);border:1px solid var(--m-rule);border-radius:14px;min-width:0}
+.fold .hd{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 14px;min-width:0}
+.fold .hd b{flex:none;font:700 12px/1.3 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.fold .hd span{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fold .hd i{flex:none;font-style:normal;color:var(--secondary);font-weight:700;font-size:14px}
+.fold .bd{display:flex;flex-direction:column;gap:10px;padding:0 14px 14px;border-top:1px solid var(--m-rule)}
+.fold .bd h3{margin:12px 0 0;font:700 18px/1.3 var(--font-ui)}
+.fold .bd p{margin:0;font-size:15px;line-height:1.5}
+.fold .lbl{display:block;margin:0 0 4px;font:700 12px/1.3 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.fold .priv{border-left:2px solid var(--secondary);padding-left:10px}
+.fold .priv small{display:block;margin-top:4px;color:var(--muted);font-size:13px}
+.step{background:var(--surface);border:1px solid var(--m-rule);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.step .pos{display:flex;align-items:center;gap:10px;font:700 14px/1.2 var(--font-ui)}
+.step .pos small{margin-left:auto;color:var(--muted);font-weight:600;font-size:13px}
+.step .txt{margin:0;padding:12px;border-radius:10px;background:var(--bg);border:1px solid var(--m-rule);font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+.step .txt.on{border-color:var(--secondary)}
+.step .txt small{display:block;color:var(--muted);font-size:13px;margin-top:6px}
+.dots{display:flex;gap:8px;margin-left:auto}
+.dots i{width:11px;height:11px;border-radius:50%;border:2px solid var(--muted)}
+.dots i.on{background:var(--secondary);border-color:var(--secondary)}
+.hstrip{display:flex;flex-direction:column;gap:10px;border:1px solid rgba(124,167,230,.55);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface);border-radius:14px;padding:12px 14px}
+.hstrip p{margin:0;font-size:15px;line-height:1.35}
+.hstrip p small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.sheet{display:flex;flex-direction:column;gap:10px;padding:14px 16px 16px;border-top:2px solid var(--secondary);background:var(--m-drawer);border-radius:16px 16px 0 0}
+.sheet .top{display:flex;align-items:center;gap:10px}
+.sheet h3{margin:0;font:800 18px/1.2 var(--font-ui)}
+.sheet .x{margin-left:auto;flex:none;width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted);font-weight:800}
+.sheet .say{margin:0;font-size:13px;color:var(--muted);line-height:1.45}
+.sug{background:var(--surface);border:1px solid var(--m-rule);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.sug .ty{font:700 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.sug p{margin:0;font-size:15px;line-height:1.4}
+.sug .why{font-size:13px;color:var(--muted)}
+.sug .acts{display:flex;gap:8px;flex-wrap:wrap}
+.sug .acts span{flex:1 1 auto}
+.more-list{display:flex;flex-direction:column;gap:6px}
+.more-list span{display:flex;align-items:center;min-height:48px;padding:0 14px;border-radius:10px;border:1px solid var(--m-rule);background:var(--surface);font-size:15px}
+.more-list span small{margin-left:auto;color:var(--muted);font-size:13px}
+.more-h{margin:6px 0 0;font:700 12px/1.3 var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* ---- the participant ---------------------------------------------------- */
+.pp-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--m-rule);font-size:13px;color:var(--muted);min-width:0}
+.pp-bar b{color:var(--text);font:700 14px/1.2 var(--font-ui)}
+.pp-bar span{margin-left:auto}
+.pp-body{display:flex;flex-direction:column;gap:12px;padding:16px;min-width:0}
+.pp-now{margin:0;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--m-rule);font-size:14px;line-height:1.45}
+.pp-now b{display:block;font-size:15px;color:var(--text)}
+.pp-now span{color:var(--muted)}
+.pp-q{margin:0;font:800 21px/1.2 var(--font-display);overflow-wrap:anywhere}
+.pp-task{margin:0;font-size:15px;color:var(--muted);line-height:1.45}
+.pp-ta{min-height:96px;padding:10px 12px;border-radius:10px;border:1px solid var(--m-rule);background:var(--surface);font-size:15px;line-height:1.45}
+.pp-opt{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 12px;border-radius:10px;border:1px solid var(--m-rule);background:var(--surface);font-size:15px}
+.pp-opt.on{border-color:var(--secondary);background:var(--m-tint-blue)}
+.pp-opt b{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:2px solid var(--muted);font-size:13px}
+.pp-opt.on b{border-color:var(--secondary);background:var(--secondary);color:var(--bg)}
+.pp-mine{padding:12px;border-radius:12px;border:1px solid var(--m-rule);background:var(--surface);font-size:15px;line-height:1.45}
+.pp-mine small{display:block;color:var(--muted);font-size:13px;margin-bottom:4px}
+.pp-score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.pp-score div{padding:10px 4px;border-radius:10px;border:1px solid var(--m-rule);background:var(--surface);font-size:12px;color:var(--muted)}
+.pp-score b{display:block;font:800 22px/1.1 var(--font-display);color:var(--text)}
+.pp-link{align-self:flex-start;font-size:14px;color:var(--secondary);font-weight:700}
+.pp-dock{padding:12px 16px 16px;border-top:1px solid var(--m-rule)}
+.pp-pri{min-height:56px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:var(--primary);color:#1B2942;font:700 18px/1.2 var(--font-ui)}
+.pp-idle{margin:0;text-align:center;font-size:14px;color:var(--muted)}
+
+/* ---- tables ------------------------------------------------------------- */
+.tw{max-width:100%;overflow-x:auto}
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:16px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:10px 8px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 8px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45;overflow-wrap:anywhere}
+.vt td:first-child{font-weight:700}
+.vt .num{text-align:right;font-variant-numeric:tabular-nums}
+.yes{color:var(--m-success-text);font-weight:700}
+.no{color:var(--danger-text);font-weight:700}
+@media (max-width:700px){
+  .vt{font-size:13px}.vt th,.vt td{padding:8px 4px}.vt th{letter-spacing:0;overflow-wrap:anywhere}
+  .pg-title h1{font-size:21px}
+  .row-wrap{gap:28px}
+}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Simplify the round</b>
+<a href="#line">The line</a><a href="#m1">1 Lobby</a><a href="#m2">2 Answering</a><a href="#m3">3 Voting</a><a href="#m4">4 Results</a><a href="#m5">5 What we heard</a><a href="#m6">6 Last page</a><a href="#m7">7 Asking the room</a><a href="#m8">8 Its results</a><a href="#any">Any moment</a><a href="#more">Session</a><a href="#taps">Taps</a><a href="#same">Same task</a>
+<span class="sp"></span><a href="AUDIT.md">AUDIT.md</a><a href="PRINCIPLES.md">PRINCIPLES.md</a><a href="CHANGES.md">CHANGES.md</a></nav>
+<div class="pg-title"><h1>One round, three screens, one next step</h1>
+<p>Owner, 2026-10-12: <b>"Moving menus and buttons and having to do the same task differently, having unclear next steps or not moving things forward automatically when they should."</b> Each moment of a Call &amp; Answer round below: the host screen (the Stage above, the dock below), the Host Remote, and a participant. The primary is the same act, the same words and the same place on both host screens, because both read it from one function. The six pending features (name controls, Workie's pages, the question, host notes, follow-up asks, response stepping) fold into these moments; none of them adds a button to the round's path.</p></div>
+
+<!-- ================================================================ LINE -->
+<div class="sec" id="line"><h2>The line: one primary per moment, the same on both host screens</h2>
+<p>Green marks the moments the system moves on its own, or offers to (see R5 in <code>PRINCIPLES.md</code> and the open questions in <code>CHANGES.md</code>).</p>
+<div class="line">
+<span>1 Lobby<b>Start round 1</b></span>
+<span>2 Answering<b>Start voting</b><i>green when all in</i></span>
+<span>3 Voting<b>Show results</b><i>green when all in</i></span>
+<span>4 Results<b>What we heard</b><i>"ready" when Workie is</i></span>
+<span>5 What we heard<b>Next page</b><i>read shows itself</i></span>
+<span>6 Last page<b>Next round</b> + Ask the room</span>
+<span>7 Asking the room<b>Show results</b><i>offers itself when all in</i></span>
+<span>8 Its results<b>Next round</b> + Ask another</span>
+</div></div>
+
+<!-- ================================================================== M1 -->
+<div class="frame-h" id="m1"><h2>1 · Lobby: people are joining <span class="chg">Changed</span></h2><p>The host screen's dock loses Back to Menu (it moves behind Session, where it already lives mid-round). The Remote's round view loses its two cards of seven buttons; what is left is the count, the question folded, and the one button. The first round's question is already visible to the host on both screens, folded, so "what am I about to ask?" never needs the Questions tab.</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Call &amp; Answer · 5 rounds</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">Join on your phone, laptop or tablet</p>
+<p class="st-q">engage.seibtribe.us · code 4821</p>
+<div class="st-meter"><span class="big">12</span><span class="st-d">people in the room</span></div>
+</div>
+<div class="lp-dock"><span class="stat">12 ready<small>Round 1: Where should the pilot start?</small></span><span class="lp-pri">Start round 1 <kbd>SPACE</kbd></span><span class="lp-more">Session</span></div>
+</div>
+<p class="cap"><b>One button.</b> "Start First Round" becomes <b>Start round 1</b>, the number the room will see. The status line names the question that will go up, so the host is never surprised by it.<span class="was">Was: Start First Round + Back to Menu (<code>hostControls.js:442</code>, <code>:865</code>).</span></p></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Lobby · 5 rounds</p><h1 class="hr-h">12 in the room</h1><p class="hr-people">See who is here</p></section>
+<section class="fold"><div class="hd"><b>Round 1</b><span>Where should the pilot start?</span><i>Open</i></div></section>
+</div>
+<div class="hr-dock"><span class="hr-primary">Start round 1</span></div>
+</div>
+<p class="cap"><b>Three things.</b> The count (tap it for the Players list), the question, the button. Categories, Join code, Big screen, Back to Menu, the team switcher and Choose next question move behind <b>Session</b>, top right: the same word, and the same list, as the host dock's SESSION button.<span class="was">Was: status card, This round (3 buttons), Scoreboard card, Session card (5 buttons + team switcher) (<code>HostRemote.jsx:1416-1700</code>).</span></p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Monday strategy</b><span>Dana</span></div>
+<div class="pp-body">
+<p class="pp-now"><b>You're in.</b><span>The host starts round 1 soon. Your phone, laptop or tablet changes on its own when it does.</span></p>
+<p class="pp-task">Everything the room shares goes up on the main screen. This page is yours.</p>
+</div>
+<div class="pp-dock"><p class="pp-idle">Nothing to do yet</p></div>
+</div>
+<p class="cap"><b>The now line</b> is the same box in every moment, in the same place, from one words file. It always says what is happening and what this person does next, even when that is nothing.</p></div>
+</div>
+
+<!-- ================================================================== M2 -->
+<div class="frame-h" id="m2"><h2>2 · Answering <span class="chg">Changed</span></h2><p>The dock's Skip moves behind Session on both host screens: it is the only control here that loses a round, it is rarely used, and as a second button it sits beside the one the host presses every round. Starting voting early asks the same way on both host screens: the primary arms and says how many are still writing, and a second press goes. No modal on one and tap-again on the other.</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">Round 3 <span>· Answering</span></p>
+<p class="st-q">Where should the pilot start, and why there?</p>
+<p class="st-d">Write one or two sentences on your phone, laptop or tablet.</p>
+<div class="st-meter"><span class="big">10</span><div class="bar"><i style="width:71%"></i></div><span class="st-d">of 14</span></div>
+</div>
+<div class="lp-dock"><span class="stat">10 of 14 answered<small>Waiting on Sam, Ade, Lee, Jo</small></span><span class="lp-pri">Start voting <kbd>SPACE</kbd></span><span class="lp-more">Session</span></div>
+</div>
+<p class="cap"><b>The waiting names</b> sit in the dock's small line on the host screen, never on the Stage. Pressing Start voting now arms it: "4 still answering. Press again to start voting." The same words as the Remote.<span class="was">Was: Start Voting + Skip Round; early press opens a modal "Proceed to Voting?" with a different button, "Proceed to Voting" (<code>GameHostPage.jsx:4385-4391</code>).</span></p></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Answering</p><h1 class="hr-h">10 of 14 answered</h1><div class="hr-meter"><i style="width:71%"></i></div></section>
+<section class="hr-wait"><h3>Still to answer</h3><div class="nms"><span>Sam</span><span>Ade</span><span>Lee</span><span>Jo</span></div></section>
+<section class="fold"><div class="hd"><b>Question</b><span>Where should the pilot start, and why there?</span><i>Open</i></div></section>
+</div>
+<div class="hr-dock"><p class="hr-warn">4 still answering</p><span class="hr-primary is-armed">Press again to start voting</span></div>
+</div>
+<p class="cap"><b>Armed, shown.</b> The headline is the count, because the count is what the host is watching. The question is folded under it, one tap to read in full (frame Q below).<span class="was">Was: headline "Round 3", kicker "Collecting responses", and the count lower down; the button said "Tap again to confirm" (<code>HostRemote.jsx:1747</code>).</span></p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Round 3 of 5</b><span>Answering</span></div>
+<div class="pp-body">
+<p class="pp-q">Where should the pilot start, and why there?</p>
+<p class="pp-task">Your task: one or two sentences. The room votes on it without your name.</p>
+<div class="pp-ta">Start with the north team. They already asked for it, so we learn from people who want it to work.</div>
+</div>
+<div class="pp-dock"><span class="pp-pri">Send my answer</span></div>
+</div>
+<p class="cap"><b>Then:</b> "Sent. Voting opens when the host is ready. You can change it until then." Never "Application Submitted!", which is the fallback headline for every Call &amp; Answer round without an image today (<code>PlayerPage.jsx:3733</code>).</p></div>
+</div>
+
+<!-- ================================================================== M3 -->
+<div class="frame-h" id="m3"><h2>3 · Voting: everyone is in</h2><p>When the last vote lands, both host screens turn the primary green-ringed and say <b>Everyone has voted</b>. One press shows results. With Auto on, it fires after the 4-second grace, as today. Whether it should fire without Auto is open question 2 in <code>CHANGES.md</code>; the recommendation is no: the reveal is the host's moment.</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">Round 3 <span>· Voting</span></p>
+<p class="st-q">Rank your top three on your phone, laptop or tablet</p>
+<div class="st-meter"><span class="big">14</span><div class="bar"><i style="width:100%"></i></div><span class="st-d">of 14 voted</span></div>
+</div>
+<div class="lp-dock"><span class="stat ok">Everyone has voted</span><span class="lp-pri is-ready">Show results <kbd>SPACE</kbd></span><span class="lp-more">Session</span></div>
+</div></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Voting</p><h1 class="hr-h">14 of 14 voted</h1><div class="hr-meter"><i style="width:100%"></i></div><p class="hr-sub ok">Everyone has voted</p></section>
+<section class="fold"><div class="hd"><b>Question</b><span>Where should the pilot start, and why there?</span><i>Open</i></div></section>
+</div>
+<div class="hr-dock"><span class="hr-primary is-ready">Show results</span></div>
+</div>
+<p class="cap"><b>No list of names</b> once nobody is left: the list disappears rather than saying "nobody".</p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Round 3 of 5</b><span>Voting</span></div>
+<div class="pp-body">
+<p class="pp-now"><b>Votes sent.</b><span>Results go up on the main screen when the host shows them.</span></p>
+<div class="pp-mine"><small>Your ballot</small>1. Response 4 · 2. Response 9 · 3. Response 2</div>
+</div>
+<div class="pp-dock"><p class="pp-idle">Nothing to do until results</p></div>
+</div>
+<p class="cap"><b>The ballot itself is unchanged</b> (rank your top three). The default Quick ballot costs about seven taps; Detailed costs five. Open question 9 asks whether Detailed should be the default.</p></div>
+</div>
+
+<!-- ================================================================== M4 -->
+<div class="frame-h" id="m4"><h2>4 · Results: the tally, and showing one response <span class="rec">Recommended</span></h2><p>Response stepping becomes one control on both host screens. On the host screen, pressing a card (or ↓) opens the spotlight at that response; ← and → step; Esc stops. On the Remote, the same act is a stepper card: <b>Show response 1</b>, then <b>Back · Next · Stop showing</b>, with the response's text and its position, "2 of 9 on the wall". The Remote's list of nine "Show the room" toggles goes. Workie started reading when the round closed, so the primary already says whether the read is ready.</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">Round 3 <span>· Results</span></p>
+<div class="st-big">Start with the north team. They already asked for it, so we learn from people who want it to work.<small>2 of 9 · Dana · 31 points</small></div>
+<div class="st-cards"><div class="st-card">Pick the hardest region on purpose.<small>Lee · 34</small></div><div class="st-card is-up">Start with the north team…<small>Dana · 31</small></div><div class="st-card">Wherever the data is cleanest.<small>Sam · 22</small></div></div>
+</div>
+<div class="lp-dock"><span class="stat">Response 2 of 9 on the wall<small>← → step · Esc stops · Workie's read is ready</small></span><span class="lp-pri">What we heard <kbd>SPACE</kbd></span><span class="lp-more">Session</span></div>
+</div>
+<p class="cap"><b>One stepper, two skins.</b> The host screen's spotlight already steps with Previous and Next (<code>AnswerSpotlight.jsx:246-265</code>). It now publishes each step to the server, as the Remote's toggles already do (<code>stage-focus</code>), so the Remote shows the same position.</p></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Results</p><h1 class="hr-h">Results are up</h1><p class="hr-sub">Workie's read is ready</p></section>
+<section class="step" aria-label="Show one response to the room">
+<div class="pos">On the wall: response 2 of 9<small>Dana · 31 pts</small></div>
+<p class="txt on">Start with the north team. They already asked for it, so we learn from people who want it to work.</p>
+<div class="hr-row3"><span class="hr-btn hr-btn--sm">Back</span><span class="hr-btn hr-btn--sm">Next</span><span class="hr-btn hr-btn--sm">Stop</span></div>
+</section>
+<div class="hr-row2"><span class="hr-btn">Show scores</span><span class="hr-btn">Question</span></div>
+</div>
+<div class="hr-dock"><span class="hr-primary">What we heard</span></div>
+</div>
+<p class="cap"><b>Before anything is up</b> the card shows response 1's text and one button, <b>Show it to the room</b>. Scores live here, in the one moment they mean something, as one toggle; the scoreboard's three looks move behind Session.<span class="was">Was: "Show on the big screen" opens a list of every response, each its own amber "Show the room" toggle, plus "Back to the normal view" (<code>RemoteFocusPanel.jsx:56-140</code>); the Scoreboard card with five buttons on every moment.</span></p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Round 3 of 5</b><span>Results</span></div>
+<div class="pp-body">
+<p class="pp-now"><b>Results are on the main screen.</b><span>Look up. Yours is below.</span></p>
+<div class="pp-mine"><small>Yours · response 2</small>Start with the north team. They already asked for it…</div>
+<div class="pp-score"><div><b>+31</b>this round</div><div><b>90</b>total</div><div><b>2nd</b>of 14</div></div>
+<span class="pp-link">Comment on this round</span>
+</div>
+<div class="pp-dock"><p class="pp-idle">Nothing to do. Comment if you want to.</p></div>
+</div>
+<p class="cap"><b>Feedback says what it does:</b> "Comment on this round", a plain link, not an unexplained ghost button below the cue (<code>PlayerPage.jsx:4250-4257</code>).</p></div>
+</div>
+
+<!-- ================================================================== M5 -->
+<div class="frame-h" id="m5"><h2>5 · What we heard: page 2 of 3 <span class="rec">Recommended</span></h2><p>The page is a server fact (remote-parity B), so the Remote's primary is <b>Next page</b> while pages remain, as the dock's is. The skip is the one plain secondary on both. While Workie is still writing, both screens say so; the primary is <b>Show the read</b>, disabled with "Workie is writing", and <b>Next round</b> is the plain secondary. A stray Space no longer throws the read away. When the read arrives, every screen shows it without a press.</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">What we heard <span>· page 2 of 3</span></p>
+<div class="st-read"><h4>Where the room split</h4><p>Half the room wants the pilot in one region first. The other half says one region teaches nothing about the rest.</p><ol><li>Start where the team already is.</li><li>Pick the hardest region on purpose.</li></ol></div>
+</div>
+<div class="lp-dock"><span class="stat">Page 2 of 3</span><span class="lp-btn">Skip to next round</span><span class="lp-pri">Next page <kbd>→</kbd></span><span class="lp-more">Session</span></div>
+</div>
+<p class="cap"><b>One fix on the host screen.</b> While Workie is still writing, the dock today offers Next Round and Request feedback, and Space skips the read with no warning (<code>GameHostPage.jsx:7075</code>, <code>:6131-6141</code>). After: the status says "Workie is writing the read", the primary stays <b>Next page</b>-shaped but waits, and Next round is the secondary until the read is up.</p></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · What we heard</p><h1 class="hr-h">Page 2 of 3</h1></section>
+<section class="step" aria-label="What we heard, page 2 of 3">
+<div class="pos">On the wall now<span class="dots" aria-hidden="true"><i></i><i class="on"></i><i></i></span></div>
+<p class="txt">Where the room split: half the room wants the pilot in one region first. The other half says one region teaches nothing about the rest.</p>
+<span class="hr-btn hr-btn--sm">Back a page</span>
+</section>
+</div>
+<div class="hr-dock"><span class="hr-sec">Skip to next round</span><span class="hr-primary">Next page</span></div>
+</div>
+<p class="cap"><b>The secondary sits above the primary</b>, in the dock, on every moment that has one, so the host's thumb learns one place. Remote-parity B1 put the skip as a link in the body; it moves to the dock.<span class="was">Was: primary "Next Round", which skipped every unread page (<code>hostRemote.js:212-215</code>).</span></p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Round 3 of 5</b><span>What we heard</span></div>
+<div class="pp-body">
+<p class="pp-now"><b>Workie's read is on the main screen.</b><span>Talk it over with the people near you. The host may ask the room a question about it next.</span></p>
+<div class="pp-mine"><small>Topics from the read</small>1. Start where the team already is, or where it is hardest?<br>2. What would we learn from one region?</div>
+<span class="pp-link">Comment on the read</span>
+</div>
+<div class="pp-dock"><p class="pp-idle">Nothing to do yet</p></div>
+</div>
+<p class="cap"><b>The phone stops pretending nothing happened.</b> Today it keeps the results card and its "this page will not repeat them" cue through the whole read (<code>PlayerPage.jsx:964-967</code>, <code>:1433-1437</code>). Showing the read's topics (already loaded at <code>:1521</code>) is open question 8.</p></div>
+</div>
+
+<!-- ================================================================== M6 -->
+<div class="frame-h" id="m6"><h2>6 · The last page: Next round, or Ask the room <span class="rec">Recommended</span></h2><p>The one place a round offers a real choice. <b>Next round</b> stays the primary. The secondary is <b>Ask the room</b>, with the number of questions Workie has ready, on both host screens. It replaces "Request feedback", and it opens one panel holding every way of asking the room: Workie's suggested questions, writing your own, and opening comments on the read (today's feedback round). This is the owner's missing "feedback question".</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">What we heard <span>· page 3 of 3</span></p>
+<div class="st-read"><h4>Suggested next steps</h4><ol><li>Ask the two regional leads what the pilot needs from them.</li><li>Agree what "worked" means before it starts.</li></ol></div>
+</div>
+<div class="lp-drawer"><h3>Ask the room <span class="x">X</span></h3>
+<div class="sug"><span class="ty">Agree or disagree · from answers 2 and 6</span><p>"One region teaches nothing about the rest."</p><p class="why">For you: settles whether the split is real or two people.</p><div class="acts"><span class="hr-btn hr-btn--sm">Edit</span><span class="hr-btn hr-btn--sm hr-btn--solid">Send</span></div></div>
+<div class="hr-row2"><span class="hr-btn hr-btn--sm">Write your own</span><span class="hr-btn hr-btn--sm">Open comments on the read</span></div>
+</div>
+<div class="lp-dock"><span class="stat">Page 3 of 3</span><span class="lp-btn">Ask the room <span class="ct">3</span></span><span class="lp-pri">Next round <kbd>→</kbd></span><span class="lp-more">Session</span></div>
+</div>
+<p class="cap"><b>Send is blue, not amber.</b> The drawer is a choice beside the primary, not a second primary. Sending moves the room on to moment 7; the dock follows.</p></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · What we heard</p><h1 class="hr-h">Page 3 of 3</h1></section>
+</div>
+<div class="sheet"><div class="top"><h3>Ask the room</h3><span class="x">X</span></div>
+<p class="say">Workie's questions come from the room's own answers. Nothing reaches the room until you send it.</p>
+<div class="sug"><span class="ty">Agree or disagree</span><p>"One region teaches nothing about the rest."</p><p class="why">For you: settles whether the split is real.</p><div class="acts"><span class="hr-btn hr-btn--sm">Edit</span><span class="hr-btn hr-btn--sm hr-btn--solid">Send</span></div></div>
+<div class="sug"><span class="ty">Pick one</span><p>Where should the pilot start?</p><p class="why">North team · Hardest region · Cleanest data</p><div class="acts"><span class="hr-btn hr-btn--sm">Edit</span><span class="hr-btn hr-btn--sm hr-btn--solid">Send</span></div></div>
+<div class="hr-row2"><span class="hr-btn hr-btn--sm">Write your own</span><span class="hr-btn hr-btn--sm">Open comments</span></div>
+</div>
+</div>
+<p class="cap"><b>The same panel, as a sheet.</b> The follow-up spec gave the Remote only Show results and Cancel in its first build (SPEC §12); this design gives it the list from the first build, because the Remote is where a host chooses without the room reading over their shoulder (SPEC risk 1).</p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Round 3 of 5</b><span>What we heard</span></div>
+<div class="pp-body">
+<p class="pp-now"><b>Workie's read is on the main screen.</b><span>Talk it over. The host may ask the room a question about it next.</span></p>
+<span class="pp-link">Comment on the read</span>
+</div>
+<div class="pp-dock"><p class="pp-idle">Nothing to do yet</p></div>
+</div>
+<p class="cap"><b>No change for the room</b> until the host sends.</p></div>
+</div>
+
+<!-- ================================================================== M7 -->
+<div class="frame-h" id="m7"><h2>7 · Asking the room: a question is live</h2><p>The Stage shows the question and the count; phones show the card. Both host screens: <b>Show results</b> (primary) and <b>Cancel the question</b> (secondary). When everyone has answered, the primary turns green-ringed as voting's does.</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">Round 3 <span>· A question for the room</span></p>
+<p class="st-q">"One region teaches nothing about the rest."</p>
+<p class="st-d">Agree, not sure, or disagree, on your phone, laptop or tablet.</p>
+<div class="st-meter"><span class="big">9</span><div class="bar"><i style="width:64%"></i></div><span class="st-d">of 14 answered</span></div>
+</div>
+<div class="lp-dock"><span class="stat">9 of 14 answered</span><span class="lp-btn">Cancel the question</span><span class="lp-pri">Show results <kbd>SPACE</kbd></span><span class="lp-more">Session</span></div>
+</div></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 · A question for the room</p><h1 class="hr-h">9 of 14 answered</h1><div class="hr-meter"><i style="width:64%"></i></div></section>
+<section class="fold"><div class="hd"><b>Asked</b><span>"One region teaches nothing about the rest."</span><i>Open</i></div></section>
+</div>
+<div class="hr-dock"><span class="hr-sec">Cancel the question</span><span class="hr-primary">Show results</span></div>
+</div>
+<p class="cap"><b>No names here.</b> Follow-up answers are nameless everywhere, so the Remote shows the count and no "still to answer" list.</p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Round 3 of 5</b><span>A question for the room</span></div>
+<div class="pp-body">
+<p class="pp-q">"One region teaches nothing about the rest."</p>
+<p class="pp-task">From the room's own answers. Nobody sees who answered what.</p>
+<span class="pp-opt on"><b>✓</b>Agree</span><span class="pp-opt"><b></b>Not sure</span><span class="pp-opt"><b></b>Disagree</span>
+</div>
+<div class="pp-dock"><span class="pp-pri">Send</span></div>
+</div>
+<p class="cap"><b>The specific question replaces the generic Feedback</b> while it is live: the comment link hides, so the person sees one thing to do.</p></div>
+</div>
+
+<!-- ================================================================== M8 -->
+<div class="frame-h" id="m8"><h2>8 · Its results, and on to the next round</h2><p>Counts, not percentages. Next round is the primary; <b>Ask another</b> reopens the panel with the used question ticked. Next round with a question still live closes it first, with its tally.</p></div>
+<div class="row-wrap">
+<div class="cell cell--lap"><p class="lab">Host screen</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">Round 3 <span>· 13 answered</span></p>
+<p class="st-q">"One region teaches nothing about the rest."</p>
+<div class="st-bars"><div><span>Agree</span><i style="width:56%"></i><b>7</b></div><div><span>Not sure</span><i style="width:24%"></i><b>3</b></div><div><span>Disagree</span><i style="width:24%"></i><b>3</b></div></div>
+</div>
+<div class="lp-dock"><span class="stat">13 answered</span><span class="lp-btn">Ask another</span><span class="lp-pri">Next round <kbd>→</kbd></span><span class="lp-more">Session</span></div>
+</div></div>
+
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 · A question for the room</p><h1 class="hr-h">13 answered</h1><p class="hr-sub">Agree 7 · Not sure 3 · Disagree 3</p></section>
+<section class="fold"><div class="hd"><b>Round 4</b><span>Who has to say yes before it starts?</span><i>Open</i></div></section>
+</div>
+<div class="hr-dock"><span class="hr-sec">Ask another</span><span class="hr-primary">Next round</span></div>
+</div>
+<p class="cap"><b>The fold shows the next round's question</b> once this round has nothing left to do, so the host sees what Next round will put up.</p></div>
+
+<div class="cell"><p class="lab">Participant</p><div class="ph">
+<div class="pp-bar"><b>Round 3 of 5</b><span>A question for the room</span></div>
+<div class="pp-body">
+<p class="pp-now"><b>13 answered.</b><span>You said Agree. The next round starts when the host is ready.</span></p>
+<div class="pp-mine"><small>"One region teaches nothing about the rest."</small>Agree 7 · Not sure 3 · Disagree 3</div>
+</div>
+<div class="pp-dock"><p class="pp-idle">Nothing to do yet</p></div>
+</div></div>
+</div>
+
+<!-- ================================================================= ANY -->
+<div class="sec" id="any"><h2>At any moment: names, the question, a host note</h2>
+<p>Three of the pending features belong to no single moment. Each folds into something already on screen instead of adding a button to the round's path.</p></div>
+
+<div class="frame-h" id="q"><h2>Q · The question, unfolded, with a note <span class="rec">Recommended</span></h2><p>The fold under the status card is the round's own section: the question, the task, the Background marked private, and, at its foot, <b>Add a note</b>. A note is about this round, so it lives with the round, not as a fifth button in a grid. On the host screen the same section is the Session panel's Rounds row for the round on the wall.</p></div>
+<div class="row-wrap">
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Answering</p><h1 class="hr-h">10 of 14 answered</h1><div class="hr-meter"><i style="width:71%"></i></div></section>
+<section class="fold"><div class="hd"><b>Question</b><span>Where should the pilot start?</span><i>Close</i></div>
+<div class="bd"><h3>Where should the pilot start, and why there?</h3>
+<div><span class="lbl">Their task</span><p>One or two sentences. Name a place and one reason.</p></div>
+<div class="priv"><span class="lbl">Background</span><p>Two regions bid for the pilot last quarter; leadership has not chosen.</p><small>Only you and Workie see this.</small></div>
+<div class="hr-row2"><span class="hr-btn hr-btn--sm">Show on the wall</span><span class="hr-btn hr-btn--sm">Add a note</span></div>
+</div></section>
+</div>
+<div class="hr-dock"><span class="hr-primary">Start voting</span></div>
+</div>
+<p class="cap"><b>"Enlarge the question" moves here</b> as Show on the wall, next to the question it enlarges, out of the This round card.</p></div>
+
+<div class="cell"><p class="lab">Host Remote · a request arrives</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Session</span></header>
+<div class="hr-body">
+<section class="hstrip" role="region" aria-label="Someone is asking to take a name">
+<p><b>Another device wants the name Priya</b><small>Priya is away · joined 7:02</small></p>
+<div class="hr-row2"><span class="hr-btn hr-btn--sm">Not now</span><span class="hr-btn hr-btn--sm hr-btn--solid">Let them take it</span></div>
+</section>
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Answering</p><h1 class="hr-h">10 of 14 answered</h1><div class="hr-meter"><i style="width:71%"></i></div><p class="hr-people">See who is here</p></section>
+</div>
+<div class="hr-dock"><span class="hr-primary">Start voting</span></div>
+</div>
+<p class="cap"><b>Unchanged from remote-parity A1</b>, with one rule added: the same strip, the same words, on the host screen (below), in every game type, not only the Build Room.</p></div>
+
+<div class="cell cell--lap"><p class="lab">Host screen · the same request</p><div class="lp">
+<div class="lp-top"><b>Monday strategy</b><span>Round 3 of 5</span><span class="code">4821</span></div>
+<div class="lp-stage">
+<p class="st-k">Round 3 <span>· Answering</span></p>
+<p class="st-q">Where should the pilot start, and why there?</p>
+<div class="st-meter"><span class="big">10</span><div class="bar"><i style="width:71%"></i></div><span class="st-d">of 14</span></div>
+</div>
+<div class="lp-strip"><p><b>Another device wants the name Priya</b><small>Priya is away · joined 7:02 · not shown to the room</small></p><span class="lp-btn">Not now</span><span class="lp-btn" style="background:var(--secondary);color:var(--bg);border-color:var(--secondary)">Let them take it</span></div>
+<div class="lp-dock"><span class="stat">10 of 14 answered</span><span class="lp-pri">Start voting <kbd>SPACE</kbd></span><span class="lp-more">Session</span></div>
+</div>
+<p class="cap"><b>Above the dock, never on the Stage.</b> Today a request is visible on the Call &amp; Answer host screen only if the Players tab happens to be open (<code>PlayersList.jsx:121-125</code>). Remove and Bring back stay in the Players list on both screens, with an undo notice instead of a confirm.</p></div>
+</div>
+
+<!-- ================================================================ MORE -->
+<div class="frame-h" id="more"><h2>Session · everything that is not this round</h2><p>The "More" of these principles is called <b>Session</b>, because the host screen already has a SESSION button at the right end of its dock (<code>Dock.jsx:179</code>, key <code>\</code>) that opens the Players, Questions, Rounds and Settings tabs. The Remote gets the same word, top right, and the same list in the same order. Nothing on this list is on the round's path.</p></div>
+<div class="row-wrap">
+<div class="cell"><p class="lab">Host Remote</p><div class="ph">
+<header class="hr-bar"><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span><span class="hr-more">Close</span></header>
+<div class="hr-body">
+<p class="more-h">This session</p>
+<div class="more-list"><span>People<small>14 · 1 asking</small></span><span>Rounds<small>3 of 5</small></span><span>Questions<small>Choose what is next</small></span><span>Join code and link</span><span>Categories</span></div>
+<p class="more-h">This round</p>
+<div class="more-list"><span>Skip this round</span><span>Scoreboard look<small>Departure</small></span></div>
+<p class="more-h">The big screen and you</p>
+<div class="more-list"><span>Big screen</span><span>Team<small>Seib Tribe</small></span><span>Back to menu</span><span style="color:var(--danger-text)">End session</span></div>
+</div>
+</div>
+<p class="cap"><b>End session joins the Remote</b>, which cannot end a session today. Skip this round keeps its second-tap confirm.</p></div>
+</div>
+
+<!-- ================================================================ TAPS -->
+<div class="sec" id="taps"><h2>Taps for one round</h2>
+<p>A Call &amp; Answer round with 14 people, all of whom answer and vote, two responses shown to the room, a three-page read, and one question asked of the room afterwards (or, today, a feedback round). Full workings in <code>AUDIT.md</code> §5.</p>
+<div class="tw"><table class="vt">
+<colgroup><col style="width:34%"><col style="width:16%"><col style="width:16%"><col style="width:17%"><col style="width:17%"></colgroup>
+<thead><tr><th>Step</th><th class="num">Host screen today</th><th class="num">Remote today</th><th class="num">Host screen after</th><th class="num">Remote after</th></tr></thead>
+<tbody>
+<tr><td>Start voting</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+<tr><td>Show results</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+<tr><td>Show two responses, then stop</td><td class="num">3</td><td class="num">5</td><td class="num">3</td><td class="num">3</td></tr>
+<tr><td>What we heard</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+<tr><td>Read pages 2 and 3</td><td class="num">2</td><td class="no num">cannot</td><td class="num">2</td><td class="num">2</td></tr>
+<tr><td>Ask the room (today: request feedback)</td><td class="num">1</td><td class="no num">cannot</td><td class="num">2</td><td class="num">2</td></tr>
+<tr><td>Close it, show the answers</td><td class="num">0</td><td class="no num">n/a</td><td class="num">1</td><td class="num">1</td></tr>
+<tr><td>Next round</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+<tr><td><b>Total</b></td><td class="num"><b>10</b></td><td class="num"><b>9, and it skipped the read and the room's say</b></td><td class="num"><b>12</b></td><td class="num"><b>12</b></td></tr>
+</tbody></table></div>
+<p>The count barely moves on the host screen; what changes is that both screens take the <b>same</b> twelve steps, with the primary in the same place every time, and the Remote stops skipping the read. The follow-up ask costs one more press than a feedback round because it asks the room something specific, which is what the owner asked for. An early advance (someone still answering) adds one press on both, the same way.</p></div>
+
+<!-- ================================================================ SAME -->
+<div class="sec" id="same"><h2>Same task, one way</h2>
+<p>The full table with file and line is <code>AUDIT.md</code> §2. Here, what each becomes.</p>
+<div class="tw"><table class="vt">
+<colgroup><col style="width:22%"><col style="width:39%"><col style="width:39%"></colgroup>
+<thead><tr><th>Task</th><th>Today</th><th>After</th></tr></thead>
+<tbody>
+<tr><td>Move the round on</td><td>Two decision functions; the Remote names the round by game type, the host by the set</td><td><code>roundStep()</code> for both; the set's noun first</td></tr>
+<tr><td>Early advance</td><td>Modal "Proceed to Voting?" on the host screen; "Tap again to confirm" on the Remote</td><td>Arm and say "4 still answering. Press again to start voting." on both</td></tr>
+<tr><td>Workie's pages</td><td>Host pages; the Remote skips them</td><td>Next page on both; the page is a server fact</td></tr>
+<tr><td>Show one response</td><td>Host: a modal with Previous and Next; Remote: a list of toggles, each amber when on</td><td>One stepper: Show, Back, Next, Stop; position shown on both</td></tr>
+<tr><td>Ask the room after the read</td><td>Host: Request feedback (generic); Remote: nothing</td><td>Ask the room: one panel, a drawer and a sheet</td></tr>
+<tr><td>Act on a name</td><td>Host: in the Players tab only, four of six verbs; Remote: none</td><td>The same six verbs and the same strip on both</td></tr>
+<tr><td>Skip a round</td><td>Host: dock secondary; Remote: red button in a card</td><td>Behind Session on both, with a second tap on both (the host screen's skip does not confirm today)</td></tr>
+<tr><td>Scoreboard</td><td>Host: key S; Remote: a card on every moment</td><td>A toggle in the Results moment; looks behind Session</td></tr>
+</tbody></table></div></div>
+
+<div style="height:80px"></div>
+</body>
+</html>
