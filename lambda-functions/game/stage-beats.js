@@ -65,4 +65,11 @@ function resolveBeat(value) {
  */
 const STAGE_PROFILES = ['room', 'tv', 'call', 'table'];
 
-module.exports = { BEATS, DEFAULT_BEAT, resolveBeat, STAGE_PROFILES };
+/**
+ * The phases an answer focus may be set in (two-surface PLAN 1.10). Here
+ * rather than in stage-focus.js because get-game-state reads it too and must
+ * not pull a websocket client into its bundle; stage-focus.js re-exports it.
+ */
+const FOCUS_PHASES = ['VOTE', 'RESULTS'];
+
+module.exports = { BEATS, DEFAULT_BEAT, resolveBeat, STAGE_PROFILES, FOCUS_PHASES };

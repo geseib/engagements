@@ -106,7 +106,18 @@ const fakeDoc = {
           o[p[p.length - 1]] = value;
         };
 
-        const setPart = (expr.match(/SET\s+(.*?)(?=\s*REMOVE\b|$)/is) || [])[1];
+        const setPart = (expr.match(/SET\s+(.*?)(?=\s*(?:REMOVE|ADD)\b|$)/is) || [])[1];
+        // ADD counters (StageFocusRev, two-surface Phase 1): a number added to
+        // whatever is there. Without this the SET above would swallow the ADD
+        // clause into its last right-hand side and write `undefined`.
+        const addPart = (expr.match(/\bADD\s+(.*?)(?=\s*(?:REMOVE|SET)\b|$)/is) || [])[1];
+        if (addPart) {
+          for (const clause of splitClauses(addPart)) {
+            const [attr, val] = clause.trim().split(/\s+/);
+            const p = pathOf(attr);
+            setPath(item, p, (Number(getPath(item, p)) || 0) + values[val]);
+          }
+        }
         if (setPart) {
           for (const clause of splitClauses(setPart)) {
             const eq = clause.indexOf('=');

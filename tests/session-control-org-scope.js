@@ -404,7 +404,9 @@ const closeRound = (event) => getResults({
 
   console.log('\n4. POST /stage-focus is scoped (it spotlights one named person)');
 
-  seedGame();
+  // A response can be put on the wall only while its round votes or shows
+  // results (two-surface Phase 1, stage-focus.js), so the round is on RESULTS.
+  seedGame({ state: 'RESULTS#001' });
   const foreignFocus = await stageFocus({
     ...host(ORG_B), pathParameters: { gameId: GAME },
     body: JSON.stringify({ focus: 'answer', index: 0, questionNumber: 1 }),
@@ -421,7 +423,7 @@ const closeRound = (event) => getResults({
   check('the room is told nothing', () =>
     assert.strictEqual(sent.length, 0, `broadcast ${sent.length} frame(s) on a refused call`));
 
-  seedGame();
+  seedGame({ state: 'RESULTS#001' });
   const ownFocus = await stageFocus({
     ...host(ORG_A), pathParameters: { gameId: GAME },
     body: JSON.stringify({ focus: 'answer', index: 0, questionNumber: 1 }),

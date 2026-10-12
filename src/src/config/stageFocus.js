@@ -26,6 +26,14 @@
 /** The closed set the writer enforces. Mirrors FOCUS_KINDS in stage-focus.js. */
 export const FOCUS_KINDS = ['none', 'question', 'answer'];
 
+/**
+ * The phases an answer focus may be set in, stamped by the server from STATE.
+ * Mirrors FOCUS_PHASES in lambda-functions/game/stage-beats.js
+ * (tests/stage-focus-vote.js §7). VOTE's index is the voting order every
+ * ballot shows; RESULTS' is tally order (config/navigatorOrder.js).
+ */
+export const FOCUS_PHASES = ['VOTE', 'RESULTS'];
+
 /** Nothing enlarged. A value, never an absence — see stage-focus.js's header. */
 export const NO_FOCUS = { focus: 'none', index: null };
 

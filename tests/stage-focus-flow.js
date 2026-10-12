@@ -65,30 +65,11 @@ let sent = [];
 /** Connection ids the stub should reject with 410 Gone. */
 let goneConnections = new Set();
 
-/**
- * A real UpdateCommand applier, not a `return {}` stub.
- *
- * A stub that returns an empty object would let a handler which broadcasts the
- * beat but never writes it pass every assertion in this file — and that is
- * precisely the defect being fixed, since a beat that is only broadcast is lost
- * on the next reload.
- */
-function applyUpdate(input) {
-  const k = key(input.Key.PK, input.Key.SK);
-  const item = store.get(k) || { ...input.Key };
-  const names = input.ExpressionAttributeNames || {};
-  const values = input.ExpressionAttributeValues || {};
-
-  const setClause = String(input.UpdateExpression || '').replace(/^\s*SET\s+/i, '');
-  for (const pair of setClause.split(',')) {
-    const [lhs, rhs] = pair.split('=').map((s) => s.trim());
-    if (!lhs || !rhs) continue;
-    const attr = names[lhs] || lhs;
-    item[attr] = values[rhs];
-  }
-  store.set(k, item);
-  return {};
-}
+// A real UpdateCommand applier (tests/helpers/stage-table.js): SET, ADD,
+// if_not_exists and conditions. A stub returning `{}` would let a handler that
+// broadcasts the focus but never writes it pass every assertion here.
+const stageTable = require('./helpers/stage-table');
+const applyUpdate = (input) => stageTable.applyUpdate(store, key, input);
 
 const fakeDoc = {
   send: async (cmd) => {
@@ -198,6 +179,10 @@ const post = (gameId, body) => stageFocus({
   pathParameters: { gameId },
   body: JSON.stringify(body),
 });
+
+// `focus` and `index` keep their meaning for old clients; the part, phase and
+// rev added in two-surface Phase 1 are tests/stage-focus-vote.js's to hold.
+const focusAndIndex = (f) => ({ focus: f && f.focus, index: f && f.index });
 
 const readState = async (gameId) => JSON.parse(
   (await getState({ pathParameters: { gameId }, queryStringParameters: { role: 'host' } })).body
@@ -328,13 +313,13 @@ const readState = async (gameId) => JSON.parse(
   check('the state carries the focus', () =>
     // The remote holds no WebSocket (HostRemote.jsx explains why), so this
     // field is the ONLY way a spotlight opened on the projector reaches it.
-    assert.deepStrictEqual(withFocus.stageFocus, { focus: 'answer', index: 3 }));
+    assert.deepStrictEqual(focusAndIndex(withFocus.stageFocus), { focus: 'answer', index: 3 }));
 
   seedGame('3010');
   const noFocus = await readState('3010');
   check('a round nobody has focused reads as none, not undefined', () =>
     // A client inventing its own default is how two surfaces come to disagree.
-    assert.deepStrictEqual(noFocus.stageFocus, { focus: 'none', index: null }));
+    assert.deepStrictEqual(focusAndIndex(noFocus.stageFocus), { focus: 'none', index: null }));
 
   console.log('\n11. a stored kind this build does not know resolves to none');
   seedGame('3011');
@@ -343,20 +328,20 @@ const readState = async (gameId) => JSON.parse(
   check('an unknown stored kind is not passed on', () =>
     // A value from another deploy must stop here rather than travelling to a
     // client that will compare it against three strings and silently do nothing.
-    assert.deepStrictEqual(unknown.stageFocus, { focus: 'none', index: null }));
+    assert.deepStrictEqual(focusAndIndex(unknown.stageFocus), { focus: 'none', index: null }));
 
   seedGame('3012');
   put({ PK: 'GAME#3012', SK: 'ROUND#001', StageFocus: 'answer', StageFocusIndex: 'two' });
   const badIndex = await readState('3012');
   check('a stored non-integer index is not passed on', () =>
-    assert.deepStrictEqual(badIndex.stageFocus, { focus: 'none', index: null }));
+    assert.deepStrictEqual(focusAndIndex(badIndex.stageFocus), { focus: 'none', index: null }));
 
   seedGame('3013');
   put({ PK: 'GAME#3013', SK: 'ROUND#001', StageFocus: 'answer', StageFocusIndex: 0 });
   const zeroBack = await readState('3013');
   check('a stored index of 0 IS passed on', () =>
     // The read-back half of the same truthiness trap as case 3.
-    assert.deepStrictEqual(zeroBack.stageFocus, { focus: 'answer', index: 0 }));
+    assert.deepStrictEqual(focusAndIndex(zeroBack.stageFocus), { focus: 'answer', index: 0 }));
 
   console.log('\n12. a dead socket does not cost the focus');
   seedGame('3014');

@@ -7,7 +7,7 @@ const { POLL, pollQuestionOf } = require('./poll-question');
 const { normalizeNames } = require('./survey-names');
 
 const { isPresent } = require('./player-presence');
-const { BEATS, STAGE_PROFILES } = require('./stage-beats');
+const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 
 /**
@@ -182,7 +182,18 @@ exports.handler = async (event) => {
      * facts on the wire, and a client inventing its own default is how the two
      * surfaces come to disagree.
      */
-    let stageFocus = { focus: 'none', index: null };
+    /*
+      THE FOCUS, with its part, its stamped phase and its rev (two-surface
+      PLAN 1.10-1.11). `focus` and `index` keep their old meaning for old
+      clients. An answer focus is handed back ONLY in the phase it was stamped
+      for (a legacy row with no stamp reads as RESULTS): during VOTE its index
+      is a voting-order position, at RESULTS a tally position, and a VOTE
+      focus surviving into RESULTS would put a different, named response on
+      the wall (D5).
+    */
+    const NO_FOCUS_HERE = { focus: 'none', index: null, part: 0, parts: 1, phase: null };
+    let stageFocus = { ...NO_FOCUS_HERE, rev: 0 };
+    const phaseNow = (/^(VOTE|RESULTS)#/.exec(String(currentState)) || [])[1] || null;
     /*
       WORKIE'S PAGE (two-surface PLAN 1.9/1.11): stored on ROUND# by
       /stage-beat while the room is on the read. Integers, a list of integers
@@ -242,11 +253,22 @@ exports.handler = async (event) => {
           planKey: typeof notesRow.StageNotesKey === 'string' ? notesRow.StageNotesKey : null,
           rev: Number.isInteger(notesRow.StageNotesRev) ? notesRow.StageNotesRev : 0,
         };
-        const storedFocus = roundRecord.Item && roundRecord.Item.StageFocus;
+        const storedFocus = notesRow.StageFocus;
+        const focusRev = Number.isInteger(notesRow.StageFocusRev) ? notesRow.StageFocusRev : 0;
+        stageFocus = { ...NO_FOCUS_HERE, rev: focusRev };
         if (storedFocus === 'question') {
-          stageFocus = { focus: 'question', index: null };
-        } else if (storedFocus === 'answer' && Number.isInteger(roundRecord.Item.StageFocusIndex)) {
-          stageFocus = { focus: 'answer', index: roundRecord.Item.StageFocusIndex };
+          stageFocus = { ...NO_FOCUS_HERE, focus: 'question', rev: focusRev };
+        } else if (storedFocus === 'answer' && Number.isInteger(notesRow.StageFocusIndex)) {
+          const stamped = notesRow.StageFocusPhase || 'RESULTS';
+          if (FOCUS_PHASES.includes(stamped) && stamped === phaseNow) {
+            const parts = Number.isInteger(notesRow.StageFocusParts) && notesRow.StageFocusParts >= 1
+              ? notesRow.StageFocusParts : 1;
+            const part = Number.isInteger(notesRow.StageFocusPart) && notesRow.StageFocusPart >= 0
+              && notesRow.StageFocusPart < parts ? notesRow.StageFocusPart : 0;
+            stageFocus = {
+              focus: 'answer', index: notesRow.StageFocusIndex, part, parts, phase: stamped, rev: focusRev,
+            };
+          }
         }
       } catch (error) {
         console.error(`❌ Error fetching round record for question ${beatRoundNumber}:`, error);
