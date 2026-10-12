@@ -25,7 +25,7 @@ describe('HostActionBar', () => {
     render(<HostActionBar controls={controlsFor()} onAction={() => {}} />);
 
     expect(screen.getByRole('button', { name: /start voting/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /skip question/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /skip this question/i })).toBeInTheDocument();
     expect(screen.getByText('All 4 answered')).toBeInTheDocument();
   });
 
@@ -121,7 +121,7 @@ describe('HostActionBar', () => {
 
     fireEvent.keyDown(window, { key: ' ' });
     expect(onAction).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: /start first question/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /start question 1/i })).toBeDisabled();
   });
 
   // QA drive 2026-09-29, finding #6: with no answers in, the dock's paint made
@@ -132,9 +132,9 @@ describe('HostActionBar', () => {
   it.each([
     // Four values in every row: a three-value row makes jest hand the test
     // its `done` callback as the fourth argument.
-    ['trivia', /show results/i, /skip question/i, 'Question'],
-    ['call-and-answer', /start voting/i, /skip question/i, 'Question'],
-    ['trivia', /show results/i, /skip round/i, 'Round'],
+    ['trivia', /show results/i, /skip this question/i, 'Question'],
+    ['call-and-answer', /start voting/i, /skip this question/i, 'Question'],
+    ['trivia', /show results/i, /skip this round/i, 'Round'],
   ])('%s with no answers in: primary disabled, one press of Skip skips once', (gameType, primaryName, skipName, roundNoun) => {
     const onAction = jest.fn();
     render(

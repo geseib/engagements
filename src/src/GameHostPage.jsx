@@ -6238,6 +6238,14 @@ Focus on actionable business strategy insights.`;
     goalLine: stageGoal.notice,
     notesPage,
     notesPages,
+    // THE READ NEVER SKIPS BY ACCIDENT (two-surface Phase 1, roundStep): until
+    // Workie's read is here the primary is a greyed "Show the read", so Space
+    // and a clicker cannot carry the room past it. A failed read counts as
+    // here — there is nothing left to wait for.
+    notesReady: Boolean(currentAIInsights) || Boolean(aiSummaryFailure),
+    // The response on the wall, in tally order: RESULTS becomes RESPONSES and
+    // the primary walks the responses (Next response, then What we heard).
+    spotlightIndex,
   });
   /*
     AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
@@ -6444,7 +6452,27 @@ Focus on actionable business strategy insights.`;
       case HOST_INTENTS.REVEAL:
         handleShowResults();
         break;
+      case HOST_INTENTS.SHOW_RESPONSE:
+      case HOST_INTENTS.NEXT_RESPONSE:
+        // roundStep names the response by its tally position; the stage's
+        // `answers` at RESULTS are in that order (config/navigatorOrder.js).
+        openSpotlight(Number.isInteger(action.index) ? action.index : 0);
+        break;
+      case HOST_INTENTS.NEXT_PART:
+        // A long response split into parts (Phase 2 measures them). The part
+        // is a server fact on /stage-focus, so the wall and the Remote agree.
+        publishFocus({ focus: 'answer', index: action.index, part: action.part });
+        break;
+      case HOST_INTENTS.STOP_SHOWING:
+        closeSpotlight();
+        break;
+      case HOST_INTENTS.WAIT:
+        // A primary that cannot act yet (the read before Workie has written).
+        break;
       case HOST_INTENTS.FIELD_NOTES:
+        // From a response on the wall, put it away first: What we heard is
+        // the next thing the room reads, not a response with the read behind it.
+        if (spotlightIndex !== null) closeSpotlight();
         // The round does not move; the stage does. Local first so the stage
         // does not wait on a round trip, then published to /stage-beat so the
         // phone follows — that is what makes the two devices one control.

@@ -176,7 +176,7 @@ function secondaryFor(moment, ctx, primary) {
       return control('leave', RW.backToMenu, I.LEAVE, 'House');
     case 'ANSWERING':
     case 'VOTING':
-      return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward', { confirm: { text: RW.armSkip(noun) } });
+      return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward');
     case 'RESULTS':
       return ctx.answerCount > 0
         ? control('show-response', RW.showResponse(1, ctx.answerCount), I.SHOW_RESPONSE, 'ArrowsOut', { index: 0, part: 0 })
@@ -208,7 +208,7 @@ function statusFor(moment, ctx) {
 
   switch (moment) {
     case 'LOBBY':
-      if (!ctx.hasQuestionSet) return { text: RW.pickSet, tone: 'pending' };
+      if (!ctx.hasQuestionSet) return { text: RW.pickSet, tone: 'error' };
       if (playerCount === 0) return { text: RW.waitingToJoin, tone: 'pending' };
       if (!Number.isFinite(playerCount)) return { text: '', tone: '' };
       return toned(RW.ready(playerCount));
@@ -232,7 +232,7 @@ function statusFor(moment, ctx) {
       return ctx.goalLine ? { text: ctx.goalLine, tone: 'notice' } : toned(RW.readOnScreen);
     }
     case 'FEEDBACK':
-      return toned(RW.feedbackOpen);
+      return ctx.goalLine ? { text: ctx.goalLine, tone: 'notice' } : toned(RW.feedbackOpen);
     case 'ENDED':
       return toned(RW.allPlayed);
     default:

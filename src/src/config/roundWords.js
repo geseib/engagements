@@ -60,8 +60,8 @@ const RW = Object.freeze({
 
   // ── Status lines (the dock's left, the Remote's status card) ──────────
   pickSet: 'Choose a question set to begin',
-  waitingToJoin: 'Waiting for people to join',
-  ready: (n) => `${n} ${plural(n, 'person', 'people')} ready`,
+  waitingToJoin: 'Waiting for players to join',
+  ready: (n) => `${n} ${plural(n, 'player', 'players')} ready`,
   answered: (x, n) => (Number(x) >= Number(n) ? `All ${n} answered` : `${x} of ${n} answered`),
   voted: (x, n) => (Number(x) >= Number(n) ? `All ${n} voted` : `${x} of ${n} voted`),
   resultsOnScreen: 'Results are on screen',

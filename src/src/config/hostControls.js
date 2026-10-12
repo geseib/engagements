@@ -39,6 +39,7 @@
  */
 import { normalizeGameType } from './gameTypes';
 import { statusTone } from '../utils/statusTone';
+import { momentOf, roundStep } from './roundStep';
 
 /**
  * Host-facing phases.
@@ -323,6 +324,15 @@ export const HOST_INTENTS = {
   // POST /events/{code}/run start|resume, then the stage carries on here.
   // GameHostPage swaps it in as the primary; hostControlsFor never offers it.
   EVENT_GO_LIVE: 'event-go-live',
+  // THE RESPONSES ON THE WALL (two-surface Phase 1, roundStep's RESULTS and
+  // RESPONSES moments): open the first response in tally order, step to the
+  // next response or the next part of a long one, and stop showing.
+  SHOW_RESPONSE: 'show-response',
+  NEXT_RESPONSE: 'next-response',
+  NEXT_PART: 'next-part',
+  STOP_SHOWING: 'stop-showing',
+  // A primary that cannot act yet (the read before Workie has written).
+  WAIT: 'wait',
 };
 
 /**
@@ -683,15 +693,89 @@ function statusTextFor(phase, {
 }
 
 /**
+ * The host page's phase, spelled as the server facts roundStep reads.
+ *
+ * The page holds a HOST phase (LOBBY, ASK, … FIELD_NOTES), derived from the
+ * game state and the stage beat. roundStep reads server facts, so this turns
+ * the one back into the other. The round number does not matter to a moment.
+ */
+const STATE_FOR_PHASE = {
+  LOBBY: 'CREATED', ASK: 'ASK#001', VOTE: 'VOTE#001', RESULTS: 'RESULTS#001',
+  FIELD_NOTES: 'RESULTS#001', FEEDBACK: 'RESULTS#001', ENDED: 'ENDED',
+  COLLECTING: 'SURVEY#OPEN', CLOSED: 'SURVEY#CLOSED',
+};
+const BEAT_FOR_PHASE = { FIELD_NOTES: 'field-notes', FEEDBACK: 'feedback' };
+
+/**
+ * The host page's inputs as roundStep's normalised snapshot (two-surface
+ * PLAN 1.4). The Remote's twin is `snapshotFromHostState` in hostRemote.js;
+ * __tests__/roundStepParity.test.js feeds both the same round and asserts the
+ * same step.
+ *
+ * `spotlightIndex` is the response on the wall (tally order, see
+ * config/navigatorOrder.js); `notesReady` is whether Workie's read has
+ * arrived (undefined when the page cannot tell).
+ */
+export function snapshotFromHostPage({
+  gameType, phase, roundNoun = 'Question', playerCount = 0, answeredCount = 0, votedCount = 0,
+  answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
+  spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
+} = {}) {
+  const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
+  const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
+  const total = Number(playerCount) || 0;
+  const received = Number(responded) || 0;
+  const onWall = resolvedPhase === 'RESULTS' && Number.isInteger(spotlightIndex) && spotlightIndex >= 0;
+  return {
+    gameType,
+    state: STATE_FOR_PHASE[resolvedPhase],
+    stageBeat: BEAT_FOR_PHASE[resolvedPhase] || 'results',
+    focus: onWall
+      ? { focus: 'answer', index: spotlightIndex, part: responsePart, parts: responseParts, phase: 'RESULTS' }
+      : { focus: 'none', index: null },
+    notes: { page: notesPage, pages: notesPages, ready: notesReady },
+    progress: { received, total, allIn: roomIsComplete({ phase: resolvedPhase, responded, playerCount }) },
+    playerCount,
+    answerCount,
+    roundNoun,
+    hasQuestionSet,
+    goalLine,
+  };
+}
+
+/**
  * The complete control descriptor for the current moment.
  *
- * Always returns exactly one `primary`. `secondary` is at most one action and
- * only exists where abandoning the round is meaningful (mid-answer).
+ * Always returns exactly one `primary`. `secondary` is at most one action.
+ *
+ * FOR THE ROUND TYPES THIS IS A READER OF roundStep (two-surface PLAN 1.4,
+ * R1): the moment and the step are decided in config/roundStep.js, which the
+ * Remote reads too. Surveys keep the branch below, unchanged — a survey has
+ * no rounds and its moments are not round moments.
  *
  * @returns {{phase: string, primary: object, secondary: object|null,
- *            status: {text: string, tone: string}}}
+ *            tertiary: object|null, status: {text: string, tone: string},
+ *            step?: object}}
  */
-export function hostControlsFor({
+const SURVEY_PHASES = new Set(['COLLECTING', 'CLOSED']);
+
+export function hostControlsFor(input = {}) {
+  if (!isSurveyType(input.gameType) && !SURVEY_PHASES.has(input.phase)) {
+    const snapshot = snapshotFromHostPage(input);
+    const step = roundStep(momentOf(snapshot), snapshot);
+    return {
+      phase: HOST_PHASES.includes(input.phase) ? input.phase : 'LOBBY',
+      primary: step.primary,
+      secondary: step.secondary,
+      tertiary: null,
+      status: step.status,
+      step,
+    };
+  }
+  return surveyControlsFor(input);
+}
+
+function surveyControlsFor({
   gameType,
   phase,
   roundNoun = 'Question',
