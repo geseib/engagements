@@ -939,8 +939,7 @@
   .report-paper .report-toolbar,
   .report-paper .report-state,
   .report-paper button,
-  .expanded-qr-overlay,
-  .clipboard-success { display: none !important; }
+  .expanded-qr-overlay { display: none !important; }
 
   /* Kill the app chrome: the full-bleed field, the viewport height, the
      scroll container, the drop shadow, the rounded card. */

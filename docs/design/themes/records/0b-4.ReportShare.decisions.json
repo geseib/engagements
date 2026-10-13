@@ -1,0 +1,193 @@
+{
+  "unit": "0b-4.ReportShare",
+  "file": "components/ReportShare.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "e7c32301",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 7,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [
+    {
+      "id": "44:19",
+      "line": 44,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rshare",
+      "property": "--rshare-shadow",
+      "literal": "rgba(15, 26, 46, 0.28)",
+      "replacement": "rgb(var(--shade-rgb) / 0.28)",
+      "why": "channel --shade-rgb, Classic-identical"
+    },
+    {
+      "id": "236:18",
+      "line": 236,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rshare-scrim",
+      "property": "--rshare-scrim",
+      "literal": "rgba(15, 26, 46, 0.55)",
+      "replacement": "rgb(var(--shade-rgb) / 0.55)",
+      "why": "channel --shade-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "39:23",
+      "line": 39,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rshare",
+      "property": "--rshare-on-primary",
+      "literal": "#2A1B08",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 42)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 47)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 47)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:ink on the amber button (#2A1B08); --on-action is #0F1A2E and --on-accent #1B2942, both Classic deltas"
+    },
+    {
+      "id": "40:19",
+      "line": 40,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rshare",
+      "property": "--rshare-accent",
+      "literal": "#9A5B18",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 49)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 64)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 103)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:deep amber focus ring on paper. --accent-text equals it in Classic paper (the sheet renders light only: Modal overlay and SharedReportPage root carry data-theme=\"light\"), but classicEquivalence runs dark+light and reports the unrendered dark side as 2 differences; the dialog's filled button still reads --primary until its rule wave, so the ring moves with it then"
+    },
+    {
+      "id": "41:20",
+      "line": 41,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rshare",
+      "property": "--rshare-success",
+      "literal": "#1F6B47",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 56)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 66)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 66)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper success copy #1F6B47; Classic paper --success-text is #6FD0A4 (0a amendment) and no role carries this green"
+    },
+    {
+      "id": "42:17",
+      "line": 42,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rshare",
+      "property": "--rshare-rule",
+      "literal": "rgba(27, 41, 66, 0.14)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 151)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 162)"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic differs (distance 162)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper navy edge rgba(27,41,66,.14); no channel carries 27 41 66"
+    },
+    {
+      "id": "43:23",
+      "line": 43,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rshare",
+      "property": "--rshare-field-rule",
+      "literal": "rgba(27, 41, 66, 0.55)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 151)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 162)"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic differs (distance 162)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper navy field edge at .55 (3:1 non-text); no channel carries 27 41 66"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:18:34.157Z",
+    "after": {
+      "colour": 5,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {
+      "keep": 5
+    },
+    "classicDeltas": [],
+    "edits": 2
+  }
+}
