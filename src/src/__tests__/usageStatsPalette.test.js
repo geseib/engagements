@@ -21,40 +21,37 @@ const PANEL = read('components', 'UsageStatsPanel.jsx');
 const DRILL = read('components', 'StaffStatsDrill.jsx');
 const SECTIONS = read('config', 'consoleSections.js');
 
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+/* The audit's ratio and alpha-over (docs/design/admin-redesign/audit.html) live in
+   testing/skinHarness.js. */
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+const rgb = (c) => H.parseColor(c).rgb;
+/** A `.ust` token with every var() it reads resolved for one skin x theme. */
+function token(css, blk, name, opts = CLASSIC_DUSK) {
+  return H.scopeVar(css, blk, name, opts);
 }
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, blk, name) {
-  const start = css.indexOf(blk);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${blk}`);
-  return parseHex(m[1]);
+function tint(name, opts = CLASSIC_DUSK) {
+  const c = H.parseColor(token(MY_CSS, '.ust {', name, opts));
+  if (!(c.a < 1)) throw new Error(`${name} is not a translucent tint`);
+  return c;
 }
-function tint(name) {
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*rgba\\(([^)]*)\\)`));
-  if (!m) throw new Error(`${name} not declared`);
-  const [r, g, b, a] = m[1].split(',').map((x) => parseFloat(x));
-  return { rgb: [r, g, b], a };
-}
-const over = (layer, bg) => layer.rgb.map((c, i) => c * layer.a + bg[i] * (1 - layer.a));
-
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: parseHex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
-  surface: parseHex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
-  text: parseHex(H.role('--text', { skin: 'classic', theme: 'dark' })),
-  muted: parseHex(H.role('--muted', { skin: 'classic', theme: 'dark' })),
-  primary: parseHex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
-  secondary: parseHex(H.role('--secondary', { skin: 'classic', theme: 'dark' })),
-  dangerText: parseHex(H.role('--danger-text', { skin: 'classic', theme: 'dark' })),
+const over = (layer, bg) => H.alphaOver(layer.rgb, bg, layer.a);
+/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
+const norm = (c) => {
+  const p = H.parseColor(c);
+  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
 };
-const AA = 4.5;
+
+const palette = (opts) => ({
+  bg: rgb(H.role('--bg', opts)),
+  surface: rgb(H.role('--surface', opts)),
+  text: rgb(H.role('--text', opts)),
+  muted: rgb(H.role('--muted', opts)),
+  primary: rgb(H.role('--primary', opts)),
+  secondary: rgb(H.role('--secondary', opts)),
+  dangerText: rgb(H.role('--danger-text', opts)),
+});
+const AA = H.AA;
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 function block(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -63,8 +60,22 @@ function block(css, selector) {
   return m[2];
 }
 
-describe('measured contrast', () => {
-  const blue = over(tint('--ust-tint-blue'), T.bg);
+describe('Classic stays pinned: the .ust block resolves to what it used to spell out', () => {
+  test.each([
+    ['--ust-rule', 'rgba(155, 168, 190, .20)'],
+    ['--ust-rule-strong', 'rgba(155, 168, 190, .40)'],
+    ['--ust-tint-blue', 'rgba(124, 167, 230, .12)'],
+    ['--ust-tint-blue-edge', 'rgba(124, 167, 230, .45)'],
+    ['--ust-tint-danger', 'rgba(229, 100, 94, .09)'],
+  ])('%s in Classic / dark is %s', (name, literal) => {
+    expect(norm(token(MY_CSS, '.ust {', name))).toEqual(norm(literal));
+  });
+});
+
+describe.each(DUSK_CASES)('measured contrast — %s / %s', (skin, theme) => {
+  const opts = { skin, theme };
+  const T = palette(opts);
+  const blue = over(tint('--ust-tint-blue', opts), T.bg);
   const pairs = [
     ['numbers and names on the field', T.text, T.bg],
     ['heads, labels and dims on the field', T.muted, T.bg],
@@ -74,10 +85,10 @@ describe('measured contrast', () => {
     ['the counting-since note on its blue tint', T.text, blue],
     ['muted words on the blue tint', T.muted, blue],
     ['Download CSV: the field colour on amber', T.bg, T.primary],
-    ['a refused load on its danger tint', T.dangerText, over(tint('--ust-tint-danger'), T.bg)],
+    ['a refused load on its danger tint', T.dangerText, over(tint('--ust-tint-danger', opts), T.bg)],
   ];
   test.each(pairs)('%s clears AA', (_l, fg, bg) => {
-    expect(ratio(fg, bg)).toBeGreaterThanOrEqual(AA);
+    expect(H.ratio(fg, bg)).toBeGreaterThanOrEqual(AA);
   });
 });
 

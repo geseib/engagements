@@ -22,33 +22,28 @@ function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const over = (fg, a, bg) => fg.map((c, i) => Math.round(c * a + bg[i] * (1 - a)));
 
-/** A dusk token as styles.css declares it on :root — never a guess. */
-const token = (name) => {
-  const m = new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(STYLES);
-  if (!m) throw new Error(`${name} is not declared in styles.css`);
-  return hex(m[1]);
-};
-const tint = (name) => {
-  const m = new RegExp(`${name}:\\s*rgba\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\.\\d+|\\d\\.\\d+)\\)`).exec(CSS);
-  if (!m) throw new Error(`${name} not declared`);
-  return { rgb: [+m[1], +m[2], +m[3]], a: +m[4] };
-};
-const local = (name) => {
-  const m = new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(CSS);
-  if (!m) throw new Error(`${name} not declared`);
-  return hex(m[1]);
-};
+const H = require('../testing/skinHarness');
+
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+/** A role as the skin harness resolves it for one skin x theme — never a guess. */
+const token = (name, opts = CLASSIC_DUSK) => H.parseColor(H.role(name, opts)).rgb;
+/* The .lvp block points at roles since skins 0b-2 (rgb(var(--info-rgb) / .08)), so its
+   locals are resolved through the harness for one skin x theme, never grepped as literals. */
+const tint = (name, opts = CLASSIC_DUSK) => H.parseColor(H.scopeVar(CSS, '.lvp {', name, opts));
+const local = (name, opts = CLASSIC_DUSK) => tint(name, opts).rgb;
 const block = (sel) => {
   const i = stripped.indexOf(`${sel} {`);
   if (i === -1) throw new Error(`${sel} not found`);
   return stripped.slice(i, stripped.indexOf('}', i));
 };
 
-const BG = token('--bg'); const SURFACE = token('--surface');
-const TEXT = token('--text'); const MUTED = token('--muted');
-const PRIMARY = token('--primary'); const DANGER_TEXT = token('--danger-text'); const DANGER_DEEP = token('--danger-deep');
+describe.each(DUSK)('contrast, composited from the real paint stack: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const BG = token('--bg', O); const SURFACE = token('--surface', O);
+  const TEXT = token('--text', O); const MUTED = token('--muted', O);
+  const PRIMARY = token('--primary', O); const DANGER_TEXT = token('--danger-text', O); const DANGER_DEEP = token('--danger-deep', O);
 
-describe('contrast, composited from the real paint stack', () => {
   test('copy, labels and destructive copy clear AA on the card and on the field', () => {
     for (const ground of [SURFACE, BG]) {
       expect(ratio(TEXT, ground)).toBeGreaterThanOrEqual(4.5);
@@ -59,7 +54,7 @@ describe('contrast, composited from the real paint stack', () => {
 
   test('every tint keeps --text and --muted above AA where it is painted: on the card', () => {
     for (const name of ['--lvp-tint-note', '--lvp-tint-held', '--lvp-tint-ok', '--lvp-tint-bad', '--lvp-row-hover']) {
-      const t = tint(name);
+      const t = tint(name, O);
       const painted = over(t.rgb, t.a, SURFACE);
       expect(ratio(TEXT, painted)).toBeGreaterThanOrEqual(4.5);
       expect(ratio(MUTED, painted)).toBeGreaterThanOrEqual(4.5);
@@ -68,8 +63,8 @@ describe('contrast, composited from the real paint stack', () => {
   });
 
   test('the ink on the two filled buttons is a declared local, and clears AA', () => {
-    expect(ratio(local('--lvp-on-accent'), PRIMARY)).toBeGreaterThanOrEqual(4.5);
-    expect(ratio(local('--lvp-on-danger'), DANGER_DEEP)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(local('--lvp-on-accent', O), PRIMARY)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(local('--lvp-on-danger', O), DANGER_DEEP)).toBeGreaterThanOrEqual(4.5);
     expect(block('.lvp-btn--primary')).toMatch(/color:\s*var\(--lvp-on-accent\)/);
     expect(block('.lvp-btn--dangersolid')).toMatch(/background:\s*var\(--danger-deep\)/);
   });

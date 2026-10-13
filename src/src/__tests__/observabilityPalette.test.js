@@ -54,7 +54,7 @@ function bgOf(el, win) {
 }
 
 /* ---- tokens, READ rather than retyped: change a token and these numbers move */
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const parseHex = (h) => H.parseColor(h).rgb;
 
 function token(css, block, name) {
   const start = css.indexOf(block);
@@ -64,23 +64,26 @@ function token(css, block, name) {
   if (!m) throw new Error(`${name} not declared in ${block}`);
   return m[1];
 }
-function tint(name) {                       // an rgba() layer from MY_CSS
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in ObservabilityPanel.css`);
-  return m[1];
+/* A translucent layer from MY_CSS's `.pobs {` block. Since skins 0b-2 the block points at
+   roles (rgb(var(--slate-rgb) / .20), var(--row-hover)), so it is resolved through the skin
+   harness for one skin x theme and handed back as an rgba() jsdom can paint. */
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+const asRgba = (v) => { const c = H.parseColor(v); return `rgba(${c.rgb.join(', ')}, ${c.a})`; };
+function tint(name, opts = CLASSIC_DUSK) {
+  return asRgba(H.scopeVar(MY_CSS, '.pobs {', name, opts));
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-};
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokens = (skin, theme) => ({
+  bg: H.role('--bg', { skin, theme }),
+  surface: H.role('--surface', { skin, theme }),
+  text: H.role('--text', { skin, theme }),
+  muted: H.role('--muted', { skin, theme }),
+  primary: H.role('--primary', { skin, theme }),
+  danger: H.role('--danger', { skin, theme }),
+  dangerText: H.role('--danger-text', { skin, theme }),
+});
+const T = tokens('classic', 'dark');   // the premises below that are Classic facts, not AA pairings
 
 /** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf. */
 function composited(layers) {
@@ -94,11 +97,9 @@ function composited(layers) {
   }
   return bgOf(host, window);
 }
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+const on = (fg, layers) => ratio(parseHex(fg), composited(layers.map(asRgba)));
 
 const AA = 4.5;
-const FIELD = [T.bg];              // AdminShell's work body under a dark section
-const TILE = [T.bg, T.surface];    // a tile, and the definitions panel
 
 function block(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -111,7 +112,11 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /* ========================================================================== */
 
-describe('the flat pairings this screen paints', () => {
+describe.each(DUSK)('the flat pairings this screen paints: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
+  const FIELD = [T.bg];              // AdminShell's work body under a dark section
+  const TILE = [T.bg, T.surface];    // a tile, and the definitions panel
   // rejects: any token swap that makes a number unreadable on the surface it
   // is actually painted on — the Question sets tab shipped at 1.4:1 this way.
   const pairs = [
@@ -127,17 +132,19 @@ describe('the flat pairings this screen paints', () => {
   });
 });
 
-describe('the tinted composites — the half a token table cannot show', () => {
+describe.each(DUSK)('the tinted composites — the half a token table cannot show: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
   // rejects: deepening a tint until the text on it drops under AA.
   test('the “could not be read” line, amber on its warn tint', () => {
-    expect(on(T.primary, [T.bg, tint('--pobs-tint-warn')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.primary, [T.bg, tint('--pobs-tint-warn', O)])).toBeGreaterThanOrEqual(AA);
   });
   test('a refused load, danger text on its tint', () => {
-    expect(on(T.dangerText, [T.bg, tint('--pobs-tint-danger')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.dangerText, [T.bg, tint('--pobs-tint-danger', O)])).toBeGreaterThanOrEqual(AA);
   });
   test('a hovered row, the quiet teams’ row included', () => {
-    expect(on(T.text, [T.bg, tint('--pobs-row-hover')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--pobs-row-hover')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, [T.bg, tint('--pobs-row-hover', O)])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.muted, [T.bg, tint('--pobs-row-hover', O)])).toBeGreaterThanOrEqual(AA);
   });
 });
 

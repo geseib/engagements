@@ -58,29 +58,29 @@ function token(css, blockStart, name) {
   if (!m) throw new Error(`${name} not declared in ${blockStart}`);
   return m[1];
 }
-function local(css, name, kind = 'hex') {
-  const re = kind === 'hex'
-    ? new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`)
-    : new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`);
-  const m = css.match(re);
-  if (!m) throw new Error(`${name} not declared`);
-  return m[1];
+/* A scope-local value from OVW's `.ovw {` or SCP's `.scp {` block. Since skins 0b-2 those
+   blocks point at roles (rgb(var(--success-rgb) / .10), var(--success-text)), so a value is
+   resolved through the skin harness for one skin x theme and handed back as rgba(). */
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+const asRgba = (v) => { const c = H.parseColor(v); return `rgba(${c.rgb.join(', ')}, ${c.a})`; };
+function local(css, name, kind = 'hex', opts = CLASSIC_DUSK) {
+  const head = css === OVW ? '.ovw {' : '.scp {';
+  const c = H.parseColor(H.scopeVar(css, head, name, opts));
+  if (kind === 'hex' && c.a < 1) throw new Error(`${name} is translucent, not an opaque colour`);
+  return asRgba(c.rgb.concat(c.a));
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-};
-const SCP_BG = local(SCP, '--scp-bg');
-const SCP_MENU = local(SCP, '--scp-menu');
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokens = (skin, theme) => ({
+  bg: H.role('--bg', { skin, theme }),
+  surface: H.role('--surface', { skin, theme }),
+  surface2: H.role('--surface-2', { skin, theme }),
+  text: H.role('--text', { skin, theme }),
+  muted: H.role('--muted', { skin, theme }),
+  primary: H.role('--primary', { skin, theme }),
+  secondary: H.role('--secondary', { skin, theme }),
+  dangerText: H.role('--danger-text', { skin, theme }),
+});
 
 function composited(layers) {
   document.body.innerHTML = '';
@@ -93,11 +93,13 @@ function composited(layers) {
   }
   return bgOf(host, window);
 }
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+const on = (fg, layers) => ratio(H.parseColor(fg).rgb, composited(layers.map(asRgba)));
 const AA = 4.5;
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-describe('the Overview: flat pairings', () => {
+describe.each(DUSK)('the Overview: flat pairings: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
   const BOX = [T.bg, T.surface];
   test.each([
     ['a box title and its count, on the box', T.text, BOX],
@@ -120,16 +122,22 @@ describe('the Overview: flat pairings', () => {
   });
 });
 
-describe('the Overview: tinted composites', () => {
+describe.each(DUSK)('the Overview: tinted composites: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
   test('“Nothing needs you.” on the green-tinted card', () => {
-    const layers = [T.bg, T.surface, local(OVW, '--ovw-tint-green', 'rgba')];
+    const layers = [T.bg, T.surface, local(OVW, '--ovw-tint-green', 'rgba', O)];
     expect(on(T.text, layers)).toBeGreaterThanOrEqual(AA);
     expect(on(T.muted, layers)).toBeGreaterThanOrEqual(AA);
-    expect(on(local(OVW, '--ovw-success-text'), layers)).toBeGreaterThanOrEqual(AA);
+    expect(on(local(OVW, '--ovw-success-text', 'hex', O), layers)).toBeGreaterThanOrEqual(AA);
   });
 });
 
-describe('the scope row: pairings', () => {
+describe.each(DUSK)('the scope row: pairings: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
+  const SCP_BG = local(SCP, '--scp-bg', 'hex', O);
+  const SCP_MENU = local(SCP, '--scp-menu', 'hex', O);
   test.each([
     ['an inactive tab name', T.muted],
     ['the active tab name', T.text],
@@ -138,13 +146,13 @@ describe('the scope row: pairings', () => {
     expect(on(fg, [SCP_BG])).toBeGreaterThanOrEqual(AA);
   });
   test('the active tab on its tint', () => {
-    expect(on(T.text, [SCP_BG, local(SCP, '--scp-active-tint', 'rgba')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.text, [SCP_BG, local(SCP, '--scp-active-tint', 'rgba', O)])).toBeGreaterThanOrEqual(AA);
   });
   test('a count pill', () => {
     expect(on(T.text, [T.surface2])).toBeGreaterThanOrEqual(AA);
   });
   test('“n elsewhere” on its tint', () => {
-    expect(on(T.secondary, [SCP_BG, local(SCP, '--scp-else-tint', 'rgba')])).toBeGreaterThanOrEqual(AA);
+    expect(on(T.secondary, [SCP_BG, local(SCP, '--scp-else-tint', 'rgba', O)])).toBeGreaterThanOrEqual(AA);
   });
   test('the More menu and the phone sheet', () => {
     expect(on(T.text, [SCP_MENU])).toBeGreaterThanOrEqual(AA);

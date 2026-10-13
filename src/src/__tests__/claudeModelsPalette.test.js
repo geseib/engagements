@@ -17,31 +17,30 @@ function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.05
 function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
 function ratio(a, b) { const x = lum(a); const y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
 const over = (fg, bg, a) => fg.map((c, i) => c * a + bg[i] * (1 - a));
-const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not in ${block}`);
-  return hex(m[1]);
+const hex = (c) => H.parseColor(c).rgb;          // any colour a role resolves to
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+/** A scope-local custom property, every var() it reads resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC) {
+  return hex(H.scopeVar(css, block, name, opts));
 }
-function rgba(name) {
-  const m = BODY.match(new RegExp(`${name}\\s*:\\s*rgba\\(([^)]*)\\)`));
-  const p = m[1].split(',').map(Number);
-  return { c: p.slice(0, 3), a: p[3] };
+function rgba(name, opts = CLASSIC) {               // a translucent layer from the .cms block
+  const { rgb, a } = H.parseColor(H.scopeVar(CSS, '.cms {', name, opts));
+  return { c: rgb, a };
 }
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: hex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
-  surface: hex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
-  text: hex(H.role('--text', { skin: 'classic', theme: 'dark' })),
-  muted: hex(H.role('--muted', { skin: 'classic', theme: 'dark' })),
-  dangerText: hex(H.role('--danger-text', { skin: 'classic', theme: 'dark' })),
-  success: hex(BODY.match(/--cms-success:\s*(#[0-9A-Fa-f]{6})/)[1]),
-};
-const tinted = (name, base) => { const t = rgba(name); return over(t.c, base, t.a); };
+/* The panel renders dusk: every dusk case of every skin. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokensFor = (opts) => ({
+  bg: hex(H.role('--bg', opts)),
+  surface: hex(H.role('--surface', opts)),
+  text: hex(H.role('--text', opts)),
+  muted: hex(H.role('--muted', opts)),
+  dangerText: hex(H.role('--danger-text', opts)),
+  success: token(CSS, '.cms {', '--cms-success', opts),
+});
 
-describe('contrast, composited on the real stack', () => {
+describe.each(DUSK)('contrast, composited on the real stack — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
+  const tinted = (name, base) => { const t = rgba(name, { skin, theme }); return over(t.c, base, t.a); };
   const pairs = [
     ['text on surface', T.text, T.surface],
     ['muted on surface', T.muted, T.surface],

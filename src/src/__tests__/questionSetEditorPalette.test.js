@@ -31,6 +31,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -82,11 +83,6 @@ function hexIn(block, name) {
   if (!m) throw new Error(`${name} is not a hex in that block`);
   return m[1].toUpperCase();
 }
-function rgbaIn(block, name) {
-  const m = block.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} is not an rgba in that block`);
-  return m[1];
-}
 /** The body of the rule whose selector list is exactly `selector`. */
 function ruleBody(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -110,55 +106,84 @@ const specificity = (selector) => {
 const beats = (a, b) => (a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] > b[2]);
 
 const DUSK = blockOf(GLOBAL_CSS, '[data-theme="dark"] {');
-const ROOT = blockOf(GLOBAL_CSS, ':root {');
 const SCOPE = blockOf(EDITOR_CSS, '.qs-editor {');
 
-const T = {
-  bg: hexIn(DUSK, '--bg'),
-  surface: hexIn(DUSK, '--surface'),
-  surface2: hexIn(DUSK, '--surface-2'),
-  text: hexIn(DUSK, '--text'),
-  muted: hexIn(DUSK, '--muted'),
-  primary: hexIn(ROOT, '--primary'),
-  secondary: hexIn(ROOT, '--secondary'),
-  success: hexIn(SCOPE, '--success'),
-  danger: hexIn(SCOPE, '--danger'),
-  dangerText: hexIn(SCOPE, '--danger-text'),
-  dangerDeep: hexIn(SCOPE, '--danger-deep'),
-  successText: hexIn(SCOPE, '--qs-success-text'),
-  chipPublic: hexIn(SCOPE, '--qs-chip-public-ink'),
-  chipWaiting: hexIn(SCOPE, '--qs-chip-waiting-ink'),
-  tintWarn: rgbaIn(SCOPE, '--qs-tint-warn'),
-  tintDanger: rgbaIn(SCOPE, '--qs-tint-danger'),
-  tintOk: rgbaIn(SCOPE, '--qs-tint-ok'),
-  tintNeutral: rgbaIn(SCOPE, '--qs-tint-neutral'),
-  rowHover: rgbaIn(SCOPE, '--qs-row-hover'),
-};
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+const rgbaOf = (c) => { const { rgb, a } = H.parseColor(c); return `rgba(${rgb.join(', ')}, ${a})`; };
 
-/** A token's value in the editor's own scope, falling back to the dusk theme. */
-function resolve(name) {
-  for (const block of [SCOPE, DUSK, ROOT]) {
-    if (new RegExp(`${name}\\s*:\\s*#`).test(block)) return hexIn(block, name);
-    if (new RegExp(`${name}\\s*:\\s*rgba`).test(block)) return rgbaIn(block, name);
+/* The editor's scope block now writes roles (`--primary: var(--action)`,
+   `--qs-tint-warn: rgb(var(--warn-rgb) / .09)`), not literals, so a value is RESOLVED
+   through the skin harness for one skin x theme instead of grepped as a hex or an
+   rgba(). Everything that reads a colour is built per skin by `ctx()`. */
+const SCOPE_TEXT = strip(EDITOR_CSS);
+const scopeDeclares = (name) => new RegExp(`${name}\\s*:`).test(SCOPE);
+/** An opaque colour as #RRGGBB, a translucent one as rgba(). */
+const colourOf = (raw) => (H.parseColor(raw).a >= 0.999 ? hexOf(raw) : rgbaOf(raw));
+
+function ctx(skin, theme) {
+  const o = { skin, theme };
+  const role = (name) => hexOf(H.role(name, o));
+  const scoped = (name) => colourOf(H.scopeVar(SCOPE_TEXT, '.qs-editor {', name, o));
+
+  const T = {
+    bg: role('--bg'),
+    surface: role('--surface'),
+    surface2: role('--surface-2'),
+    text: role('--text'),
+    muted: role('--muted'),
+    primary: role('--primary'),
+    secondary: role('--secondary'),
+    success: scoped('--success'),
+    danger: scoped('--danger'),
+    dangerText: scoped('--danger-text'),
+    dangerDeep: scoped('--danger-deep'),
+    successText: scoped('--qs-success-text'),
+    chipPublic: scoped('--qs-chip-public-ink'),
+    chipWaiting: scoped('--qs-chip-waiting-ink'),
+    tintWarn: scoped('--qs-tint-warn'),
+    tintDanger: scoped('--qs-tint-danger'),
+    tintOk: scoped('--qs-tint-ok'),
+    tintNeutral: scoped('--qs-tint-neutral'),
+    rowHover: scoped('--qs-row-hover'),
+  };
+
+  /** A token's value in the editor's own scope, falling back to the dusk roles. */
+  function resolve(name) {
+    try {
+      return scopeDeclares(name) ? scoped(name) : colourOf(H.role(name, o));
+    } catch (e) {
+      throw new Error(`${name} is declared by no block the editor can see (${e.message})`);
+    }
   }
-  throw new Error(`${name} is declared by no block the editor can see`);
-}
 
-/**
- * The ground a rule paints, resolved in the dusk theme — or null when it paints
- * none and the layer beneath shows through. READ from the sheet, so a later
- * repaint is measured here rather than assumed away.
- */
-function groundOf(css, selector) {
-  const bg = ruleBody(css, selector).match(/background(?:-color)?:\s*var\((--[\w-]+)\)/);
-  return bg ? resolve(bg[1]) : null;
-}
+  /**
+   * The ground a rule paints, resolved in the dusk theme — or null when it paints
+   * none and the layer beneath shows through. READ from the sheet, so a later
+   * repaint is measured here rather than assumed away.
+   */
+  function groundOf(css, selector) {
+    const bg = ruleBody(css, selector).match(/background(?:-color)?:\s*var\((--[\w-]+)\)/);
+    return bg ? resolve(bg[1]) : null;
+  }
 
-/** The ink a rule draws its text in, resolved the same way. */
-function inkOf(css, selector) {
-  const fg = ruleBody(css, selector).match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
-  return fg ? resolve(fg[1]) : null;
+  /** The ink a rule draws its text in, resolved the same way. */
+  function inkOf(css, selector) {
+    const fg = ruleBody(css, selector).match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
+    return fg ? resolve(fg[1]) : null;
+  }
+
+  /* The real paint stack, read from the sheets that paint it:
+     the console's dusk work body, the editor's card, a panel cut into it, a row
+     raised back out of the panel. */
+  const CARD = [T.bg, groundOf(EDITOR_CSS, '.admin-section.qs-editor')];
+  const PANEL = [...CARD, groundOf(GLOBAL_CSS, '.qs-editor .qs-panel')];
+  const ROW = [...PANEL, groundOf(GLOBAL_CSS, '.qs-question-row')];
+  const DIALOG = [...CARD, groundOf(EDITOR_CSS, '.qs-editor .modal-content')];
+
+  return { T, resolve, groundOf, inkOf, CARD, PANEL, ROW, DIALOG };
 }
+const { T, groundOf } = ctx('classic', 'dark');
 
 function composited(layers) {
   document.body.innerHTML = '';
@@ -173,14 +198,6 @@ function composited(layers) {
 }
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 const AA = 4.5;
-
-/* The real paint stack, read from the sheets that paint it:
-   the console's dusk work body, the editor's card, a panel cut into it, a row
-   raised back out of the panel. */
-const CARD = [T.bg, groundOf(EDITOR_CSS, '.admin-section.qs-editor')];
-const PANEL = [...CARD, groundOf(GLOBAL_CSS, '.qs-editor .qs-panel')];
-const ROW = [...PANEL, groundOf(GLOBAL_CSS, '.qs-question-row')];
-const DIALOG = [...CARD, groundOf(EDITOR_CSS, '.qs-editor .modal-content')];
 
 describe('the editor is dusk, on both of its mounts', () => {
   test('the editor root declares the dark theme itself rather than inheriting one', () => {
@@ -237,98 +254,102 @@ describe('the editor is dusk, on both of its mounts', () => {
   });
 });
 
-describe('the flat pairings the editor paints', () => {
-  test.each([
-    ['--text on the card (the editor heading, the Workie group)', T.text, CARD],
-    ['--muted on the card (the set line under the heading)', T.muted, CARD],
-    ['--text on a panel (panel headings, field labels, values)', T.text, PANEL],
-    ['--muted on a panel (panel notes, the empty line, the filter)', T.muted, PANEL],
-    ['--primary on a panel (the AI field mark, links)', T.primary, PANEL],
-    ['--text on a question row (its title)', T.text, ROW],
-    ['--muted on a question row (its meta and detail lines)', T.muted, ROW],
-    ['--primary on a question row (the changed badge)', T.primary, ROW],
-    ['--danger-text on a question row (the removed badge)', T.dangerText, ROW],
-    ['the active-version ink on a version row', T.successText, ROW],
-    ['the public chip ink on a version row', T.chipPublic, ROW],
-    ['the waiting chip ink on a version row', T.chipWaiting, ROW],
-    ['--text in the question dialog', T.text, DIALOG],
-    ['--muted in the question dialog', T.muted, DIALOG],
-    ['a dialog heading, which styles.css draws in a red', T.dangerText, DIALOG],
-    ['--bg on --primary (the filled primary button)', T.bg, [T.primary]],
-    ['--text on --danger-deep (the filled destructive)', T.text, [T.dangerDeep]],
-  ])('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
-  });
-});
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const { T, resolve, groundOf, CARD, PANEL, ROW, DIALOG } = ctx(skin, theme);
 
-describe('the tinted composites — the half a token table cannot show', () => {
-  test.each([
-    ['the dirty bar, on the panel it warns about', T.text, [...PANEL, T.tintWarn]],
-    ['the dirty bar\'s own muted copy', T.muted, [...PANEL, T.tintWarn]],
-    ['a changed question row', T.text, [...ROW, T.tintWarn]],
-    ['a changed row\'s meta line', T.muted, [...ROW, T.tintWarn]],
-    ['a changed row\'s badge', T.primary, [...ROW, T.tintWarn]],
-    ['a tombstoned question row', T.text, [...ROW, T.tintDanger]],
-    ['a tombstoned row\'s struck title', T.muted, [...ROW, T.tintDanger]],
-    ['a tombstoned row\'s badge', T.dangerText, [...ROW, T.tintDanger]],
-    ['the active version row', T.text, [...ROW, T.tintOk]],
-    ['the active version badge', T.successText, [...ROW, T.tintOk]],
-    ['the AI panel, on the panel it sits in', T.text, [...PANEL, T.tintNeutral]],
-    ['the AI panel\'s muted copy', T.muted, [...PANEL, T.tintNeutral]],
-    ['a hovered pull-dialog row', T.text, [...DIALOG, T.rowHover]],
-    ['a hovered pull-dialog row\'s meta', T.muted, [...DIALOG, T.rowHover]],
-  ])('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
-  });
-});
-
-/*
- * THE FOUR CHILDREN THAT CARRY THEIR OWN PALETTE. They are measured here, on
- * this scope's stack, because none of them can measure themselves against it:
- * `RoundKindPicker` is shared with two paper builders and its own test measures
- * it there, and `CategoryPicker`'s values are this scope's tokens. Every ground
- * and every ink below is READ from the rule that draws it.
- */
-describe('the components mounted inside the editor', () => {
-  const RKP = blockOf(EDITOR_CSS, '.qs-editor .round-kind-picker {');
-  const rkp = (name) => {
-    const m = RKP.match(new RegExp(`${name}\\s*:\\s*var\\((--[\\w-]+)\\)`));
-    if (!m) throw new Error(`${name} is not re-pointed to a token in the editor's scope`);
-    return resolve(m[1]);
-  };
-
-  test.each([
-    // The round-direction cards sit in the Details panel and paint their own
-    // ground, so the card is the stack rather than the panel.
-    ['a round-direction card\'s title', () => rkp('--rkp-text'), () => [...PANEL, rkp('--rkp-card')]],
-    ['its blurb', () => rkp('--rkp-muted'), () => [...PANEL, rkp('--rkp-card')]],
-    ['the selected card\'s title', () => rkp('--rkp-text'), () => [...PANEL, rkp('--rkp-card-selected')]],
-    ['the selected card\'s blurb', () => rkp('--rkp-muted'), () => [...PANEL, rkp('--rkp-card-selected')]],
-    ['the accent on a selected card', () => rkp('--rkp-accent'), () => [...PANEL, rkp('--rkp-card-selected')]],
-    ['a hovered card\'s title', () => rkp('--rkp-text'), () => [...PANEL, rkp('--rkp-card'), rkp('--rkp-card-hover')]],
-    // The category combobox floats over the question dialog.
-    ['a category name in the open list', T.text, () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list')]],
-    ['an unreachable one, struck through', T.muted, () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list')]],
-    ['the keyboard-highlighted option', T.text,
-      () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list'), groundOf(CAT_CSS, '.qs-cat-option.active')]],
-    ['"+ New category", and the cap refusal beside it', () => resolve('--primary'),
-      () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list')]],
-    // The review banner is theme-agnostic and paints --surface-2 on the card.
-    ['the AI review banner\'s copy', T.muted, () => [...CARD, T.surface2]],
-    ['its heading', () => resolve('--primary'), () => [...CARD, T.surface2]],
-  ])('%s clears AA', (_label, fg, layers) => {
-    expect(on(typeof fg === 'function' ? fg() : fg, layers())).toBeGreaterThanOrEqual(AA);
+  describe('the flat pairings the editor paints', () => {
+    test.each([
+      ['--text on the card (the editor heading, the Workie group)', T.text, CARD],
+      ['--muted on the card (the set line under the heading)', T.muted, CARD],
+      ['--text on a panel (panel headings, field labels, values)', T.text, PANEL],
+      ['--muted on a panel (panel notes, the empty line, the filter)', T.muted, PANEL],
+      ['--primary on a panel (the AI field mark, links)', T.primary, PANEL],
+      ['--text on a question row (its title)', T.text, ROW],
+      ['--muted on a question row (its meta and detail lines)', T.muted, ROW],
+      ['--primary on a question row (the changed badge)', T.primary, ROW],
+      ['--danger-text on a question row (the removed badge)', T.dangerText, ROW],
+      ['the active-version ink on a version row', T.successText, ROW],
+      ['the public chip ink on a version row', T.chipPublic, ROW],
+      ['the waiting chip ink on a version row', T.chipWaiting, ROW],
+      ['--text in the question dialog', T.text, DIALOG],
+      ['--muted in the question dialog', T.muted, DIALOG],
+      ['a dialog heading, which styles.css draws in a red', T.dangerText, DIALOG],
+      ['--bg on --primary (the filled primary button)', T.bg, [T.primary]],
+      ['--text on --danger-deep (the filled destructive)', T.text, [T.dangerDeep]],
+    ])('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
   });
 
-  test('the round-direction picker is re-pointed to tokens, never to new literals', () => {
-    // rejects: a second palette invented inside the editor's scope. Every one
-    // of the seven values the component declares has to come back as a token
-    // this scope already measures.
-    // Colours only — `--rkp-radius` is geometry and the same in both mounts.
-    const declared = [...blockOf(read('components', 'RoundKindPicker.css'), '.round-kind-picker {')
-      .matchAll(/(--rkp-[\w-]+)\s*:\s*(#[0-9A-Fa-f]{3,8}|rgba?\()/g)].map((m) => m[1]);
-    expect(declared.length).toBeGreaterThan(0);                 // the premise
-    expect(declared.filter((name) => !new RegExp(`${name}\\s*:\\s*var\\(`).test(RKP))).toEqual([]);
+  describe('the tinted composites — the half a token table cannot show', () => {
+    test.each([
+      ['the dirty bar, on the panel it warns about', T.text, [...PANEL, T.tintWarn]],
+      ['the dirty bar\'s own muted copy', T.muted, [...PANEL, T.tintWarn]],
+      ['a changed question row', T.text, [...ROW, T.tintWarn]],
+      ['a changed row\'s meta line', T.muted, [...ROW, T.tintWarn]],
+      ['a changed row\'s badge', T.primary, [...ROW, T.tintWarn]],
+      ['a tombstoned question row', T.text, [...ROW, T.tintDanger]],
+      ['a tombstoned row\'s struck title', T.muted, [...ROW, T.tintDanger]],
+      ['a tombstoned row\'s badge', T.dangerText, [...ROW, T.tintDanger]],
+      ['the active version row', T.text, [...ROW, T.tintOk]],
+      ['the active version badge', T.successText, [...ROW, T.tintOk]],
+      ['the AI panel, on the panel it sits in', T.text, [...PANEL, T.tintNeutral]],
+      ['the AI panel\'s muted copy', T.muted, [...PANEL, T.tintNeutral]],
+      ['a hovered pull-dialog row', T.text, [...DIALOG, T.rowHover]],
+      ['a hovered pull-dialog row\'s meta', T.muted, [...DIALOG, T.rowHover]],
+    ])('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  /*
+   * THE FOUR CHILDREN THAT CARRY THEIR OWN PALETTE. They are measured here, on
+   * this scope's stack, because none of them can measure themselves against it:
+   * `RoundKindPicker` is shared with two paper builders and its own test measures
+   * it there, and `CategoryPicker`'s values are this scope's tokens. Every ground
+   * and every ink below is READ from the rule that draws it.
+   */
+  describe('the components mounted inside the editor', () => {
+    const RKP = blockOf(EDITOR_CSS, '.qs-editor .round-kind-picker {');
+    const rkp = (name) => {
+      const m = RKP.match(new RegExp(`${name}\\s*:\\s*var\\((--[\\w-]+)\\)`));
+      if (!m) throw new Error(`${name} is not re-pointed to a token in the editor's scope`);
+      return resolve(m[1]);
+    };
+
+    test.each([
+      // The round-direction cards sit in the Details panel and paint their own
+      // ground, so the card is the stack rather than the panel.
+      ['a round-direction card\'s title', () => rkp('--rkp-text'), () => [...PANEL, rkp('--rkp-card')]],
+      ['its blurb', () => rkp('--rkp-muted'), () => [...PANEL, rkp('--rkp-card')]],
+      ['the selected card\'s title', () => rkp('--rkp-text'), () => [...PANEL, rkp('--rkp-card-selected')]],
+      ['the selected card\'s blurb', () => rkp('--rkp-muted'), () => [...PANEL, rkp('--rkp-card-selected')]],
+      ['the accent on a selected card', () => rkp('--rkp-accent'), () => [...PANEL, rkp('--rkp-card-selected')]],
+      ['a hovered card\'s title', () => rkp('--rkp-text'), () => [...PANEL, rkp('--rkp-card'), rkp('--rkp-card-hover')]],
+      // The category combobox floats over the question dialog.
+      ['a category name in the open list', T.text, () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list')]],
+      ['an unreachable one, struck through', T.muted, () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list')]],
+      ['the keyboard-highlighted option', T.text,
+        () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list'), groundOf(CAT_CSS, '.qs-cat-option.active')]],
+      ['"+ New category", and the cap refusal beside it', () => resolve('--primary'),
+        () => [...DIALOG, groundOf(CAT_CSS, '.qs-cat-list')]],
+      // The review banner is theme-agnostic and paints --surface-2 on the card.
+      ['the AI review banner\'s copy', T.muted, () => [...CARD, T.surface2]],
+      ['its heading', () => resolve('--primary'), () => [...CARD, T.surface2]],
+    ])('%s clears AA', (_label, fg, layers) => {
+      expect(on(typeof fg === 'function' ? fg() : fg, layers())).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('the round-direction picker is re-pointed to tokens, never to new literals', () => {
+      // rejects: a second palette invented inside the editor's scope. Every one
+      // of the seven values the component declares has to come back as a token
+      // this scope already measures.
+      // Colours only — `--rkp-radius` is geometry and the same in both mounts.
+      const declared = [...blockOf(read('components', 'RoundKindPicker.css'), '.round-kind-picker {')
+        .matchAll(/(--rkp-[\w-]+)\s*:\s*(#[0-9A-Fa-f]{3,8}|rgba?\()/g)].map((m) => m[1]);
+      expect(declared.length).toBeGreaterThan(0);                 // the premise
+      expect(declared.filter((name) => !new RegExp(`${name}\\s*:\\s*var\\(`).test(RKP))).toEqual([]);
+    });
   });
 });
 
@@ -455,11 +476,14 @@ describe('the paper controls the editor borrows are re-inked inside the scope', 
     expect(ruleBody(GLOBAL_CSS, '.section-description')).toMatch(/color:\s*#666/);
   });
 
-  test.each([
+  const BANNERS = [
     ['success', '.qs-editor .status-message.success', '--success'],
     ['error', '.qs-editor .status-message.error', '--danger'],
     ['pending', '.qs-editor .status-message', '--muted'],
-  ])('the %s banner carries its copy, and its tone glyph, on its own ground', (_tone, selector, glyph) => {
+  ];
+  const BANNER_CASES = DUSK_CASES.flatMap(([skin, theme]) => BANNERS.map(([tone, ...rest]) => [tone, skin, theme, ...rest]));
+  test.each(BANNER_CASES)('the %s banner carries its copy, and its tone glyph, on its own ground (%s / %s)', (_tone, skin, theme, selector, glyph) => {
+    const { resolve, groundOf, inkOf, CARD } = ctx(skin, theme);
     // The banner's ground is this sheet's now; the glyph's colour is still
     // utils/statusTone.js's `statusColor()`. Both ends are READ, so a later
     // repaint of either is measured here. rejects: a dusk ground left under the
@@ -501,116 +525,120 @@ describe('the paper controls the editor borrows are re-inked inside the scope', 
  * abstract — including a dusk branch the DOM cannot produce — so this measures
  * what the editor actually renders.
  */
-describe('the needs-changes banner the editor renders', () => {
-  const SREV_CSS = read('components', 'SetReviewBanner.css');
-  const SREV = blockOf(SREV_CSS, '.srev {');
-  const PAPER_INK = hexIn(SREV, '--srev-flag-ink-paper');
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const { T, resolve, CARD, PANEL, ROW, DIALOG } = ctx(skin, theme);
 
-  /* The banner's tint, read from the rule that paints it. `.srev` writes the
-     danger red by hand as an rgba whose alpha is a token, so both halves are
-     read and the rgb is checked against --danger — a red that drifted from the
-     token would otherwise go on being measured as the token. */
-  const tintRgb = SREV.match(/background:\s*rgba\(([^,]+,[^,]+,[^,]+),/)[1].replace(/\s/g, '');
-  const tintAlpha = Number(SREV.match(/--srev-tint-alpha:\s*([\d.]+)/)[1]);
-  const TINTED = [...CARD, `rgba(${tintRgb},${tintAlpha})`];
+  describe('the needs-changes banner the editor renders', () => {
+    const SREV_CSS = read('components', 'SetReviewBanner.css');
+    const SREV = blockOf(SREV_CSS, '.srev {');
+    const PAPER_INK = hexIn(SREV, '--srev-flag-ink-paper');
 
-  test('the premise: this editor is the only thing that renders the banner', () => {
-    // rejects: measuring one surface's ground for a component drawn on several.
-    const mounts = ['components/QuestionSetEditor.jsx', 'components/QuestionsPanel.jsx',
-      'components/QuestionSetsPanel.jsx', 'AdminPage.jsx', 'GameHostPage.jsx']
-      .filter((f) => /<SetReviewBanner/.test(strip(read(...f.split('/')))));
-    expect(mounts).toEqual(['components/QuestionSetEditor.jsx']);
-    // and it is drawn by default, not behind an opt-in the console leaves off
-    expect(strip(read('components', 'QuestionSetEditor.jsx'))).toMatch(/showVersions\s*=\s*true/);
+    /* The banner's tint, read from the rule that paints it. `.srev` writes the
+       danger red by hand as an rgba whose alpha is a token, so both halves are
+       read and the rgb is checked against --danger — a red that drifted from the
+       token would otherwise go on being measured as the token. */
+    const tintRgb = SREV.match(/background:\s*rgba\(([^,]+,[^,]+,[^,]+),/)[1].replace(/\s/g, '');
+    const tintAlpha = Number(SREV.match(/--srev-tint-alpha:\s*([\d.]+)/)[1]);
+    const TINTED = [...CARD, `rgba(${tintRgb},${tintAlpha})`];
+
+    test('the premise: this editor is the only thing that renders the banner', () => {
+      // rejects: measuring one surface's ground for a component drawn on several.
+      const mounts = ['components/QuestionSetEditor.jsx', 'components/QuestionsPanel.jsx',
+        'components/QuestionSetsPanel.jsx', 'AdminPage.jsx', 'GameHostPage.jsx']
+        .filter((f) => /<SetReviewBanner/.test(strip(read(...f.split('/')))));
+      expect(mounts).toEqual(['components/QuestionSetEditor.jsx']);
+      // and it is drawn by default, not behind an opt-in the console leaves off
+      expect(strip(read('components', 'QuestionSetEditor.jsx'))).toMatch(/showVersions\s*=\s*true/);
+    });
+
+    test('the premise: the tint is the danger token, over this editor\'s card', () => {
+      expect(tintRgb).toBe(parseHex(resolve('--danger')).join(','));
+      expect(tintAlpha).toBeGreaterThan(0);
+    });
+
+    test('the premise: the paper red the html rule forces is unreadable here', () => {
+      // 1.73:1. rejects: the whole fix, if the ink ever stops being a problem.
+      expect(on(PAPER_INK, TINTED)).toBeLessThan(AA);
+    });
+
+    test('the premise: the paper swap always matches, so only a scope can out-rank it', () => {
+      // rejects: "the editor declares data-theme='dark', so the dusk branch
+      // applies" — it does not. A descendant combinator does not care that a
+      // nearer ancestor says something else, and there is no [data-theme="dark"]
+      // .srev rule to win it back.
+      expect(strip(read('..', 'public', 'index.html'))).toMatch(/<html[^>]*data-theme="light"/);
+      expect(strip(SREV_CSS)).toMatch(/\[data-theme="light"\]\s+\.srev\s*\{[^}]*--srev-flag-ink\s*:/);
+      expect(strip(SREV_CSS)).not.toMatch(/\[data-theme="dark"\]\s+\.srev\s*\{/);
+      expect(beats(specificity('[data-theme="light"] .srev'), specificity('.srev'))).toBe(true);
+    });
+
+    test('the editor re-points the flagged ink with a selector that out-ranks it', () => {
+      // rejects: a same-specificity `.qs-editor .srev`, which is 0,2,0 and ties —
+      // and a tie is settled by import order between two component sheets, which
+      // is not a contract anyone should be relying on.
+      const rule = strip(EDITOR_CSS).match(/([^{}]*\.srev[^{}]*)\{([^}]*--srev-flag-ink[^}]*)\}/);
+      expect(rule).not.toBeNull();
+      expect(beats(specificity(rule[1].trim()), specificity('[data-theme="light"] .srev'))).toBe(true);
+      expect(rule[2]).toMatch(/--srev-flag-ink:\s*var\(--danger-text\)/);
+    });
+
+    test.each([
+      ['a flagged question\'s title, on the tinted banner', () => TINTED],
+      ['the "high" band word in the waiting state, where the banner is transparent', () => CARD],
+    ])('the flagged ink clears AA for %s', (_label, layers) => {
+      // Two grounds because `.srev--waiting` sets `background: transparent` and
+      // still renders the measurement block, band word and all.
+      expect(on(resolve('--danger-text'), layers())).toBeGreaterThanOrEqual(AA);
+    });
   });
 
-  test('the premise: the tint is the danger token, over this editor\'s card', () => {
-    expect(tintRgb).toBe(parseHex(resolve('--danger')).join(','));
-    expect(tintAlpha).toBeGreaterThan(0);
-  });
+  /*
+   * THE GLYPHS, WHICH ARE PAINTED FROM THE MARKUP AND NOT FROM A STYLESHEET.
+   * components/Icon.jsx takes `color` as a prop, so a colour handed to a glyph
+   * escapes every rule the sheets above are audited by — a hex in JSX follows a
+   * theme no better than a hex in CSS, and it is not caught by the stray-literal
+   * tests because it is not in a stylesheet at all.
+   */
+  describe('the glyphs these surfaces hand a colour to', () => {
+    /* The editor's own markup. SetReviewBanner.jsx is deliberately not here: it
+       paints from --srev-flag-ink, a token of its own, measured above. */
+    const JSX = ['components/QuestionSetEditor.jsx', 'components/QuestionsPanel.jsx',
+      'components/QuestionPullDialog.jsx', 'components/QuestionPreview.jsx'];
+    const inks = JSX.flatMap((f) => [...strip(read(...f.split('/')))
+      .matchAll(/<Icon[^>]*?\scolor="([^"]*)"/g)].map((m) => [f, m[1]]));
 
-  test('the premise: the paper red the html rule forces is unreadable here', () => {
-    // 1.73:1. rejects: the whole fix, if the ink ever stops being a problem.
-    expect(on(PAPER_INK, TINTED)).toBeLessThan(AA);
-  });
+    test('the premise: these surfaces really do paint glyphs from the markup', () => {
+      expect(inks.length).toBeGreaterThan(10);
+    });
 
-  test('the premise: the paper swap always matches, so only a scope can out-rank it', () => {
-    // rejects: "the editor declares data-theme='dark', so the dusk branch
-    // applies" — it does not. A descendant combinator does not care that a
-    // nearer ancestor says something else, and there is no [data-theme="dark"]
-    // .srev rule to win it back.
-    expect(strip(read('..', 'public', 'index.html'))).toMatch(/<html[^>]*data-theme="light"/);
-    expect(strip(SREV_CSS)).toMatch(/\[data-theme="light"\]\s+\.srev\s*\{[^}]*--srev-flag-ink\s*:/);
-    expect(strip(SREV_CSS)).not.toMatch(/\[data-theme="dark"\]\s+\.srev\s*\{/);
-    expect(beats(specificity('[data-theme="light"] .srev'), specificity('.srev'))).toBe(true);
-  });
+    test('none of them is handed a raw colour', () => {
+      // rejects: #8a5300 — the deep paper amber-brown — which three Warning
+      // glyphs carried across the conversion untouched: the unsaved bar, the
+      // discard-this-edit box and the pull dialog's artwork caveat, at 2.36:1,
+      // 1.95:1 and 2.30:1 on the dusk grounds they landed on. The same defect as
+      // the review banner's ink and the same cause: an ink that was right on
+      // paper, never re-measured when the paper went away.
+      expect(inks.filter(([, ink]) => /#[0-9A-Fa-f]{3,8}|^rgba?\(/.test(ink))).toEqual([]);
+    });
 
-  test('the editor re-points the flagged ink with a selector that out-ranks it', () => {
-    // rejects: a same-specificity `.qs-editor .srev`, which is 0,2,0 and ties —
-    // and a tie is settled by import order between two component sheets, which
-    // is not a contract anyone should be relying on.
-    const rule = strip(EDITOR_CSS).match(/([^{}]*\.srev[^{}]*)\{([^}]*--srev-flag-ink[^}]*)\}/);
-    expect(rule).not.toBeNull();
-    expect(beats(specificity(rule[1].trim()), specificity('[data-theme="light"] .srev'))).toBe(true);
-    expect(rule[2]).toMatch(/--srev-flag-ink:\s*var\(--danger-text\)/);
-  });
-
-  test.each([
-    ['a flagged question\'s title, on the tinted banner', () => TINTED],
-    ['the "high" band word in the waiting state, where the banner is transparent', () => CARD],
-  ])('the flagged ink clears AA for %s', (_label, layers) => {
-    // Two grounds because `.srev--waiting` sets `background: transparent` and
-    // still renders the measurement block, band word and all.
-    expect(on(resolve('--danger-text'), layers())).toBeGreaterThanOrEqual(AA);
-  });
-});
-
-/*
- * THE GLYPHS, WHICH ARE PAINTED FROM THE MARKUP AND NOT FROM A STYLESHEET.
- * components/Icon.jsx takes `color` as a prop, so a colour handed to a glyph
- * escapes every rule the sheets above are audited by — a hex in JSX follows a
- * theme no better than a hex in CSS, and it is not caught by the stray-literal
- * tests because it is not in a stylesheet at all.
- */
-describe('the glyphs these surfaces hand a colour to', () => {
-  /* The editor's own markup. SetReviewBanner.jsx is deliberately not here: it
-     paints from --srev-flag-ink, a token of its own, measured above. */
-  const JSX = ['components/QuestionSetEditor.jsx', 'components/QuestionsPanel.jsx',
-    'components/QuestionPullDialog.jsx', 'components/QuestionPreview.jsx'];
-  const inks = JSX.flatMap((f) => [...strip(read(...f.split('/')))
-    .matchAll(/<Icon[^>]*?\scolor="([^"]*)"/g)].map((m) => [f, m[1]]));
-
-  test('the premise: these surfaces really do paint glyphs from the markup', () => {
-    expect(inks.length).toBeGreaterThan(10);
-  });
-
-  test('none of them is handed a raw colour', () => {
-    // rejects: #8a5300 — the deep paper amber-brown — which three Warning
-    // glyphs carried across the conversion untouched: the unsaved bar, the
-    // discard-this-edit box and the pull dialog's artwork caveat, at 2.36:1,
-    // 1.95:1 and 2.30:1 on the dusk grounds they landed on. The same defect as
-    // the review banner's ink and the same cause: an ink that was right on
-    // paper, never re-measured when the paper went away.
-    expect(inks.filter(([, ink]) => /#[0-9A-Fa-f]{3,8}|^rgba?\(/.test(ink))).toEqual([]);
-  });
-
-  test.each([
-    ['the card', () => CARD],
-    ['a panel', () => PANEL],
-    ['a question row', () => ROW],
-    ['a dialog', () => DIALOG],
-    ['the unsaved bar and the discard box, which tint their ground', () => [...PANEL, T.tintWarn]],
-    ['the same two inside a dialog', () => [...DIALOG, T.tintWarn]],
-  ])('every token a glyph is handed survives on %s', (_label, layers) => {
-    // A glyph is a non-text graphic: 3:1, not 4.5. Every ground the editor
-    // paints, because a glyph moves between them and the markup carries no
-    // record of which one it is standing on.
-    const tokens = [...new Set(inks.map(([, ink]) => ink))]
-      .filter((ink) => ink !== 'currentColor')
-      .map((ink) => ink.match(/^var\((--[\w-]+)\)$/));
-    expect(tokens.filter((m) => m === null)).toEqual([]);     // no bare keyword either
-    expect(tokens.length).toBeGreaterThan(0);                 // the premise
-    for (const [, name] of tokens) expect(on(resolve(name), layers())).toBeGreaterThanOrEqual(3);
+    test.each([
+      ['the card', () => CARD],
+      ['a panel', () => PANEL],
+      ['a question row', () => ROW],
+      ['a dialog', () => DIALOG],
+      ['the unsaved bar and the discard box, which tint their ground', () => [...PANEL, T.tintWarn]],
+      ['the same two inside a dialog', () => [...DIALOG, T.tintWarn]],
+    ])('every token a glyph is handed survives on %s', (_label, layers) => {
+      // A glyph is a non-text graphic: 3:1, not 4.5. Every ground the editor
+      // paints, because a glyph moves between them and the markup carries no
+      // record of which one it is standing on.
+      const tokens = [...new Set(inks.map(([, ink]) => ink))]
+        .filter((ink) => ink !== 'currentColor')
+        .map((ink) => ink.match(/^var\((--[\w-]+)\)$/));
+      expect(tokens.filter((m) => m === null)).toEqual([]);     // no bare keyword either
+      expect(tokens.length).toBeGreaterThan(0);                 // the premise
+      for (const [, name] of tokens) expect(on(resolve(name), layers())).toBeGreaterThanOrEqual(3);
+    });
   });
 });
 
@@ -662,7 +690,10 @@ describe('the sheets that paint this surface carry no stray literal', () => {
   });
 
   test('--danger never carries text on this surface', () => {
-    expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);   // the premise
+    for (const [skin, theme] of DUSK_CASES) {                                   // the premise
+      const { T } = ctx(skin, theme);
+      expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+    }
     for (const css of [EDITOR_CSS, CAT_CSS]) {
       expect(strip(css).split('\n').filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l))).toEqual([]);
     }

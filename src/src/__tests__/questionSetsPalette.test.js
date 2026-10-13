@@ -67,39 +67,40 @@ function bgOf(el, win) {
 
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+const rgbaOf = (c) => { const { rgb, a } = H.parseColor(c); return `rgba(${rgb.join(', ')}, ${a})`; };
+
+/* The .qsets block now writes roles (`var(--success-text)`, `rgb(var(--danger-rgb) / .09)`),
+   not literals, so every scope value is RESOLVED through the skin harness for one
+   skin x theme rather than grepped as a hex or an rgba(). */
+function token(css, block, name, opts = CLASSIC) {   // an opaque colour, as #RRGGBB
+  return hexOf(H.scopeVar(css, block, name, opts));
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
+function palette(skin, theme) {
+  const o = { skin, theme };
+  return {
+    bg: hexOf(H.role('--bg', o)),
+    surface: hexOf(H.role('--surface', o)),
+    surface2: hexOf(H.role('--surface-2', o)),
+    text: hexOf(H.role('--text', o)),
+    muted: hexOf(H.role('--muted', o)),
+    primary: hexOf(H.role('--primary', o)),
+    secondary: hexOf(H.role('--secondary', o)),
+    danger: hexOf(H.role('--danger', o)),
+    dangerText: hexOf(H.role('--danger-text', o)),
+    dangerDeep: hexOf(H.role('--danger-deep', o)),
+    // Declared locally, `--qsets-` prefixed, exactly as the users and sessions
+    // screens declare theirs (now as `var(--success-text)`, the role).
+    successText: token(QS_CSS, '.qsets {', '--qsets-success-text', o),
+  };
+}
 
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  // Declared locally, `--qsets-` prefixed, exactly as the users and sessions
-  // screens declare theirs: styles.css has never had a --success-text.
-  successText: token(QS_CSS, '.qsets {', '--qsets-success-text'),
-};
-
-/** An rgba() layer declared in QuestionSetsPanel.css, read rather than retyped. */
-function tint(name) {
-  const m = QS_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in QuestionSetsPanel.css`);
-  return m[1];
+/** An alpha layer declared in QuestionSetsPanel.css, resolved rather than retyped. */
+function tint(name, opts = CLASSIC) {
+  return rgbaOf(H.scopeVar(QS_CSS, '.qsets {', name, opts));
 }
 
 /**
@@ -123,77 +124,84 @@ const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const AA = 4.5;
 /** The work body AdminShell paints under this screen: contentTheme="dark". */
-const FIELD = [T.bg];
-const PANEL = [T.bg, T.surface];
+const fieldOf = (P) => [P.bg];
+const panelOf = (P) => [P.bg, P.surface];
 
 /* -------------------------------------------------------------------------- */
 
-describe('the flat pairings this screen paints', () => {
-  const pairs = [
-    ['--text on the work field (set names, row values)', T.text, FIELD],
-    ['--muted on the work field (descriptions, dates, column heads)', T.muted, FIELD],
-    ['--text on --surface (the creation panel and the delete dialog)', T.text, PANEL],
-    ['--muted on --surface (field labels, help text)', T.muted, PANEL],
-    ['--primary on the work field (counts, quickstart chip, links)', T.primary, FIELD],
-    ['--primary on --surface (the same chips inside the panel)', T.primary, PANEL],
-    ['--qsets-success-text on the work field (Active)', T.successText, FIELD],
-    ['--qsets-success-text on --surface (the deactivate-instead block)', T.successText, PANEL],
-    ['--danger-text on the work field (Delete, Not playable, Empty)', T.dangerText, FIELD],
-    ['--danger-text on --surface (the delete dialog)', T.dangerText, PANEL],
-    ['--bg on --primary (the filled New set / Upload button)', T.bg, [T.primary]],
-    ['--text on --danger-deep (the filled Delete the set)', T.text, [T.dangerDeep]],
-    ['--secondary on the work field (the Waiting for Engage chip)', T.secondary, FIELD],
-  ];
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const o = { skin, theme };
+  const T = palette(skin, theme);
+  const FIELD = fieldOf(T);
+  const PANEL = panelOf(T);
 
-  test.each(pairs)('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+  describe('the flat pairings this screen paints', () => {
+    const pairs = [
+      ['--text on the work field (set names, row values)', T.text, FIELD],
+      ['--muted on the work field (descriptions, dates, column heads)', T.muted, FIELD],
+      ['--text on --surface (the creation panel and the delete dialog)', T.text, PANEL],
+      ['--muted on --surface (field labels, help text)', T.muted, PANEL],
+      ['--primary on the work field (counts, quickstart chip, links)', T.primary, FIELD],
+      ['--primary on --surface (the same chips inside the panel)', T.primary, PANEL],
+      ['--qsets-success-text on the work field (Active)', T.successText, FIELD],
+      ['--qsets-success-text on --surface (the deactivate-instead block)', T.successText, PANEL],
+      ['--danger-text on the work field (Delete, Not playable, Empty)', T.dangerText, FIELD],
+      ['--danger-text on --surface (the delete dialog)', T.dangerText, PANEL],
+      ['--bg on --primary (the filled New set / Upload button)', T.bg, [T.primary]],
+      ['--text on --danger-deep (the filled Delete the set)', T.text, [T.dangerDeep]],
+      ['--secondary on the work field (the Waiting for Engage chip)', T.secondary, FIELD],
+    ];
+
+    test.each(pairs)('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('the filled primary is still legible when hovered', () => {
+      // .qsets-btn--primary:hover lightens to #FFBB66 and keeps --bg as its label.
+      expect(on(T.bg, ['#FFBB66'])).toBeGreaterThanOrEqual(AA);
+    });
   });
 
-  test('the filled primary is still legible when hovered', () => {
-    // .qsets-btn--primary:hover lightens to #FFBB66 and keeps --bg as its label.
-    expect(on(T.bg, ['#FFBB66'])).toBeGreaterThanOrEqual(AA);
-  });
-});
+  describe('the tinted composites, where a pairing quietly drops under AA', () => {
+    /*
+      A tint is invisible in a token table. audit.html's bgOf exists because
+      reading only the element's own background — which for a tinted panel is a
+      transparent rgba — is how dark-on-dark passes an audit. Each stack below is
+      the real nesting: work body, then the tinted tier, then the text.
+    */
+    test('the blocking tier of the CSV report', () => {
+      expect(on(T.dangerText, [T.bg, tint('--qsets-tint-danger', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, [T.bg, tint('--qsets-tint-danger', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, tint('--qsets-tint-danger', o)])).toBeGreaterThanOrEqual(AA);
+    });
 
-describe('the tinted composites, where a pairing quietly drops under AA', () => {
-  /*
-    A tint is invisible in a token table. audit.html's bgOf exists because
-    reading only the element's own background — which for a tinted panel is a
-    transparent rgba — is how dark-on-dark passes an audit. Each stack below is
-    the real nesting: work body, then the tinted tier, then the text.
-  */
-  test('the blocking tier of the CSV report', () => {
-    expect(on(T.dangerText, [T.bg, tint('--qsets-tint-danger')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, [T.bg, tint('--qsets-tint-danger')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--qsets-tint-danger')])).toBeGreaterThanOrEqual(AA);
-  });
+    test('the would-be-skipped tier, which is amber', () => {
+      expect(on(T.primary, [T.bg, tint('--qsets-tint-warn', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, [T.bg, tint('--qsets-tint-warn', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, tint('--qsets-tint-warn', o)])).toBeGreaterThanOrEqual(AA);
+    });
 
-  test('the would-be-skipped tier, which is amber', () => {
-    expect(on(T.primary, [T.bg, tint('--qsets-tint-warn')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, [T.bg, tint('--qsets-tint-warn')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--qsets-tint-warn')])).toBeGreaterThanOrEqual(AA);
-  });
+    test('the clean-file tier and the deactivate-instead block', () => {
+      // The green tier sits on the work field; the deactivate block sits on the
+      // dialog's --surface. Two different composites of the same tint.
+      expect(on(T.successText, [T.bg, tint('--qsets-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, [T.bg, tint('--qsets-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.successText, [T.bg, T.surface, tint('--qsets-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, [T.bg, T.surface, tint('--qsets-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+    });
 
-  test('the clean-file tier and the deactivate-instead block', () => {
-    // The green tier sits on the work field; the deactivate block sits on the
-    // dialog's --surface. Two different composites of the same tint.
-    expect(on(T.successText, [T.bg, tint('--qsets-tint-ok')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, [T.bg, tint('--qsets-tint-ok')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.successText, [T.bg, T.surface, tint('--qsets-tint-ok')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, [T.bg, T.surface, tint('--qsets-tint-ok')])).toBeGreaterThanOrEqual(AA);
-  });
+    test('a hovered row, and a hovered row inside the panel', () => {
+      expect(on(T.text, [T.bg, tint('--qsets-row-hover', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, tint('--qsets-row-hover', o)])).toBeGreaterThanOrEqual(AA);
+    });
 
-  test('a hovered row, and a hovered row inside the panel', () => {
-    expect(on(T.text, [T.bg, tint('--qsets-row-hover')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--qsets-row-hover')])).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('the preflight tiers sit on --bg inside a --surface panel, and that is the stack measured', () => {
-    // .qsets-pf-tier declares `background: var(--bg)` while its parent .qsets-panel is
-    // --surface. rejects: measuring against --surface because that is what the
-    // panel says — the compositing walk stops at the first opaque layer, which
-    // is the tier's own --bg.
-    expect(on(T.muted, [T.bg, T.surface, T.bg])).toBeGreaterThanOrEqual(AA);
+    test('the preflight tiers sit on --bg inside a --surface panel, and that is the stack measured', () => {
+      // .qsets-pf-tier declares `background: var(--bg)` while its parent .qsets-panel is
+      // --surface. rejects: measuring against --surface because that is what the
+      // panel says — the compositing walk stops at the first opaque layer, which
+      // is the tier's own --bg.
+      expect(on(T.muted, [T.bg, T.surface, T.bg])).toBeGreaterThanOrEqual(AA);
+    });
   });
 });
 
@@ -227,7 +235,8 @@ describe('the conversion actually happened, in both halves', () => {
       .replace(/\.qsets[^{]*--onlight[^{]*\{[^}]*\}/g, '');
     const literals = [...declarations.matchAll(/(?:^|[\s:])(#[0-9A-Fa-f]{3,8})\b/g)].map((m) => m[1]);
     // Two deliberate literals, both measured above: the primary hover, and the
-    // locally-declared --qsets-success-text that styles.css does not have.
+    // old --qsets-success-text literal (now `var(--success-text)`, the role, so it
+    // no longer appears; still allowed so this pins only what it always pinned).
     expect(literals.filter((hex) => !['#FFBB66', '#6FD0A4'].includes(hex.toUpperCase()))).toEqual([]);
   });
 
@@ -235,7 +244,10 @@ describe('the conversion actually happened, in both halves', () => {
     // 4.38:1 on --surface, under AA, which is why --danger-text exists. It keeps
     // borders and tints. rejects: `color: var(--danger)` creeping in — and
     // destructive copy is precisely the text a person must read carefully.
-    expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+    for (const [skin, theme] of DUSK_CASES) {
+      const T = palette(skin, theme);
+      expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+    }
     const offenders = QS_CSS.split('\n').filter((line) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(line));
     expect(offenders).toEqual([]);
   });
@@ -291,10 +303,10 @@ describe('the share tags, which are the distinction the owner asked for', () => 
     }
     return null;
   };
-  const RESOLVED = {
+  const resolvedFor = (T) => ({
     '--muted': T.muted, '--primary': T.primary, '--secondary': T.secondary,
     '--text': T.text, '--qsets-success-text': T.successText, '--danger-text': T.dangerText,
-  };
+  });
 
   test('the module really offers the three the owner named, as separate keys', () => {
     // rejects: renaming the words and leaving one key behind both states, which
@@ -315,13 +327,15 @@ describe('the share tags, which are the distinction the owner asked for', () => 
     expect(chipColour('behind')).not.toBe(chipColour('shared'));
   });
 
-  test.each(['shared', 'public', 'behind'])('the %s chip clears AA on the work field and inside the share picker', (key) => {
-    const colour = RESOLVED[chipColour(key)];
+  const chipCases = DUSK_CASES.flatMap(([skin, theme]) => ['shared', 'public', 'behind'].map((key) => [key, skin, theme]));
+  test.each(chipCases)('the %s chip clears AA on the work field and inside the share picker (%s / %s)', (key, skin, theme) => {
+    const T = palette(skin, theme);
+    const colour = resolvedFor(T)[chipColour(key)];
     expect(colour).toBeDefined();
-    expect(on(colour, FIELD)).toBeGreaterThanOrEqual(AA);
+    expect(on(colour, fieldOf(T))).toBeGreaterThanOrEqual(AA);
     // PublicLibraryPanel's picker draws the same chip on `.publib-dialog`,
     // which is `background: var(--surface)` over this work field.
-    expect(on(colour, PANEL)).toBeGreaterThanOrEqual(AA);
+    expect(on(colour, panelOf(T))).toBeGreaterThanOrEqual(AA);
   });
 
   test('every key shareStateOf can return has a rule, so none can render unstyled', () => {

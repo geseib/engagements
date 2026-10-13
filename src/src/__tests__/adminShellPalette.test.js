@@ -29,7 +29,7 @@ const lin = (c) => {
   const v = c / 255;
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 };
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const parseHex = (h) => H.parseColor(h).rgb;
 const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
 const ratio = (a, b) => {
   const la = lum(parseHex(a));
@@ -49,13 +49,15 @@ function token(css, block, name) {
   return m[1];
 }
 
-const DUSK = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-};
+/* Every dusk skin x theme the harness knows: the pairings are asserted for each skin. */
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+const dusk = (skin, theme) => ({
+  bg: H.role('--bg', { skin, theme }),
+  surface: H.role('--surface', { skin, theme }),
+  surface2: H.role('--surface-2', { skin, theme }),
+  text: H.role('--text', { skin, theme }),
+  muted: H.role('--muted', { skin, theme }),
+});
 
 describe('the type ladder, derived rather than inherited', () => {
   // RATIONALE §3: at ~120 CSS ppi read at 24in, 1px of cap height is 0.86
@@ -100,12 +102,13 @@ describe('the type ladder, derived rather than inherited', () => {
   });
 });
 
-describe('the two colour tokens the designers added, and why', () => {
+describe.each(DUSK_CASES)('the two colour tokens the designers added, and why: %s / %s', (skin, theme) => {
+  const DUSK = dusk(skin, theme);
   test('--danger on --surface is under AA, which is the finding', () => {
     // This is not a test of our code; it is the measurement that justifies the
     // two tokens below, asserted so that a future edit to --danger cannot
     // quietly invalidate the reason they exist.
-    const danger = H.role('--danger', { skin: 'classic', theme: 'dark' });
+    const danger = H.role('--danger', { skin, theme });
     expect(ratio(danger, DUSK.surface)).toBeLessThan(4.5);
   });
 
@@ -113,7 +116,7 @@ describe('the two colour tokens the designers added, and why', () => {
     // rejects: painting destructive copy with --danger, which is 4.38:1 on
     // --surface and 3.56:1 on --surface-2. Destructive copy is precisely the
     // text a person must read carefully, and modals sit on --surface.
-    const dangerText = H.role('--danger-text', { skin: 'classic', theme: 'dark' });
+    const dangerText = H.role('--danger-text', { skin, theme });
     expect(ratio(dangerText, DUSK.bg)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(dangerText, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(dangerText, DUSK.surface2)).toBeGreaterThanOrEqual(4.5);
@@ -121,12 +124,13 @@ describe('the two colour tokens the designers added, and why', () => {
 
   test('--danger-deep carries --text on a filled destructive button', () => {
     // rejects: a filled --danger button, which carries white at 3.32:1.
-    const dangerDeep = H.role('--danger-deep', { skin: 'classic', theme: 'dark' });
+    const dangerDeep = H.role('--danger-deep', { skin, theme });
     expect(ratio(DUSK.text, dangerDeep)).toBeGreaterThanOrEqual(4.5);
   });
 });
 
-describe('every pairing the shell chrome actually paints', () => {
+describe.each(DUSK_CASES)('every pairing the shell chrome actually paints: %s / %s', (skin, theme) => {
+  const DUSK = dusk(skin, theme);
   // Each row is a real selector in AdminShell.css. AA is 4.5:1 for normal text.
   // rejects: swapping any of these for a token that looks right and measures
   // wrong — which is how the unknown-environment chip would have shipped at
@@ -148,9 +152,9 @@ describe('every pairing the shell chrome actually paints', () => {
     // unknown=--danger-text. rejects: any of the three being tinted down for
     // looks — the chip whose whole job is telling an operator they are on
     // production must not be the one that is hard to read.
-    const secondary = H.role('--secondary', { skin: 'classic', theme: 'dark' });
-    const primary = H.role('--primary', { skin: 'classic', theme: 'dark' });
-    const dangerText = H.role('--danger-text', { skin: 'classic', theme: 'dark' });
+    const secondary = H.role('--secondary', { skin, theme });
+    const primary = H.role('--primary', { skin, theme });
+    const dangerText = H.role('--danger-text', { skin, theme });
     expect(ratio(secondary, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(primary, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(dangerText, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
@@ -159,7 +163,7 @@ describe('every pairing the shell chrome actually paints', () => {
   test('the pending-user badge label reads on its amber fill', () => {
     // rejects: white on --primary, which is 2.11:1. The badge is filled amber
     // and carries the dusk background colour as its label.
-    const primary = H.role('--primary', { skin: 'classic', theme: 'dark' });
+    const primary = H.role('--primary', { skin, theme });
     expect(ratio('#0F1A2E', primary)).toBeGreaterThanOrEqual(4.5);
     expect(SHELL_CSS).toMatch(/\.adm-nav-badge\s*\{[^}]*color:\s*#0F1A2E/i);
   });

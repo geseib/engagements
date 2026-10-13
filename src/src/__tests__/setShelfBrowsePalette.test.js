@@ -59,31 +59,26 @@ function bgOf(el, win) {
 
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+const rgbaOf = (c) => { const { rgb, a } = H.parseColor(c); return `rgba(${rgb.join(', ')}, ${a})`; };
+
+function palette(skin, theme) {
+  const o = { skin, theme };
+  return {
+    bg: hexOf(H.role('--bg', o)),
+    surface: hexOf(H.role('--surface', o)),
+    text: hexOf(H.role('--text', o)),
+    muted: hexOf(H.role('--muted', o)),
+    primary: hexOf(H.role('--primary', o)),
+  };
 }
-
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-};
-
-/** An rgba() layer declared in QuestionSetsPanel.css, read rather than retyped. */
-function tint(name) {
-  const m = QS_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in QuestionSetsPanel.css`);
-  return m[1];
+/** An alpha layer declared in the `.qsets {` block, resolved rather than retyped
+    (the block now writes roles: `var(--row-hover)`, `rgb(var(--warn-rgb) / .09)`).
+    Read from that block by name, so the paper `.qsets--onlight` copy is never the one measured. */
+function tint(name, opts = CLASSIC) {
+  return rgbaOf(H.scopeVar(QS_CSS, '.qsets {', name, opts));
 }
 
 function composited(layers) {
@@ -103,7 +98,7 @@ const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 const AA = 4.5;
 /** The real nesting: AdminShell's work body (contentTheme dark), then the
  *  browse card, which is --surface like the creation panel. */
-const CARD = [T.bg, T.surface];
+const cardOf = (P) => [P.bg, P.surface];
 
 /* -------------------------------------------------------- the declarations -- */
 
@@ -131,27 +126,33 @@ describe('the browse is really declared, so nothing below is vacuous', () => {
   });
 });
 
-describe('every ink the browse paints, on the ground it really sits on', () => {
-  const pairs = [
-    ['the lede and the section heads (--muted on the card)', T.muted, CARD],
-    ['a pill label at rest (--text on the card)', T.text, CARD],
-    ['the Show-all link (--primary on the card)', T.primary, CARD],
-    ['a hovered pill', T.text, [...CARD, tint('--qsets-row-hover')]],
-    ['the count inside a hovered pill', T.muted, [...CARD, tint('--qsets-row-hover')]],
-    ['the shelf in force, which is amber on an amber tint', T.primary, [...CARD, tint('--qsets-tint-warn')]],
-    ['the find box, which is --bg inside the --surface card', T.text, [...CARD, T.bg]],
-  ];
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const o = { skin, theme };
+  const T = palette(skin, theme);
+  const CARD = cardOf(T);
 
-  test.each(pairs)('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
-  });
+  describe('every ink the browse paints, on the ground it really sits on', () => {
+    const pairs = [
+      ['the lede and the section heads (--muted on the card)', T.muted, CARD],
+      ['a pill label at rest (--text on the card)', T.text, CARD],
+      ['the Show-all link (--primary on the card)', T.primary, CARD],
+      ['a hovered pill', T.text, [...CARD, tint('--qsets-row-hover', o)]],
+      ['the count inside a hovered pill', T.muted, [...CARD, tint('--qsets-row-hover', o)]],
+      ['the shelf in force, which is amber on an amber tint', T.primary, [...CARD, tint('--qsets-tint-warn', o)]],
+      ['the find box, which is --bg inside the --surface card', T.text, [...CARD, T.bg]],
+    ];
 
-  test('the pill tint is measured three layers deep, not two', () => {
-    // The table's own tinted tiers sit straight on the work field; these sit
-    // inside a --surface card. Same tint, different composite — rejects:
-    // assuming questionSetsPalette's two-layer numbers cover this one.
-    expect(composited([...CARD, tint('--qsets-tint-warn')]))
-      .not.toEqual(composited([T.bg, tint('--qsets-tint-warn')]));
+    test.each(pairs)('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('the pill tint is measured three layers deep, not two', () => {
+      // The table's own tinted tiers sit straight on the work field; these sit
+      // inside a --surface card. Same tint, different composite — rejects:
+      // assuming questionSetsPalette's two-layer numbers cover this one.
+      expect(composited([...CARD, tint('--qsets-tint-warn', o)]))
+        .not.toEqual(composited([T.bg, tint('--qsets-tint-warn', o)]));
+    });
   });
 });
 

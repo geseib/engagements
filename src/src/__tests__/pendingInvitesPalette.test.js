@@ -52,45 +52,40 @@ function bgOf(el, win) {
   return out;
 }
 
-/* ---- tokens, READ rather than retyped: change a token and these numbers move */
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+/* ---- tokens, READ rather than retyped: change a token and these numbers move.
+   Since skins 0b-2 the .pinv block points at roles (rgb(var(--info-rgb) / .08)), so a
+   value is read through the skin harness for one skin x theme, never grepped as a literal. */
+const parseHex = (h) => H.parseColor(h).rgb;
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+/** Any resolved colour as an rgba() string jsdom's style parser accepts. */
+const asRgba = (v) => { const c = H.parseColor(v); return `rgba(${c.rgb.join(', ')}, ${c.a})`; };
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+function hex(name, opts = CLASSIC_DUSK) {   // an opaque token from MY_CSS's .pinv block
+  return asRgba(H.scopeVar(MY_CSS, '.pinv {', name, opts));
 }
-function hex(name) {                        // a hex token from MY_CSS's .pinv block
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in PendingInvites.css`);
-  return m[1];
-}
-function tint(name) {                       // an rgba() layer from MY_CSS
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in PlatformOrgsPanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC_DUSK) {  // a translucent layer from MY_CSS's .pinv block
+  return asRgba(H.scopeVar(MY_CSS, '.pinv {', name, opts));
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
-  success: H.role('--success', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  /* No success colour on this strip: it has one state and it is a notice, not
-     an outcome. Every other screen here declares its own --*-success-text
-     because an undefined custom property invalidates the whole declaration. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokens = (skin, theme) => {
+  const o = { skin, theme };
+  return {
+    bg: H.role('--bg', o),
+    surface: H.role('--surface', o),
+    surface2: H.role('--surface-2', o),
+    text: H.role('--text', o),
+    muted: H.role('--muted', o),
+    primary: H.role('--primary', o),
+    secondary: H.role('--secondary', o),
+    success: H.role('--success', o),
+    danger: H.role('--danger', o),
+    dangerText: H.role('--danger-text', o),
+    dangerDeep: H.role('--danger-deep', o),
+    /* No success colour on this strip: it has one state and it is a notice, not
+       an outcome. Every other screen here declares its own --*-success-text
+       because an undefined custom property invalidates the whole declaration. */
+  };
 };
 
 /** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf. */
@@ -105,11 +100,9 @@ function composited(layers) {
   }
   return bgOf(host, window);
 }
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+const on = (fg, layers) => ratio(parseHex(fg), composited(layers.map(asRgba)));
 
 const AA = 4.5;
-const FIELD = [T.bg];              // AdminShell's work body under a dark section
-const PANEL = [T.bg, T.surface];   // the invitations panel, and the dialogs
 
 function block(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -122,7 +115,9 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /* ========================================================================== */
 
-describe('the strip, composited on the work field', () => {
+describe.each(DUSK)('the strip, composited on the work field: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
   /*
     BLUE, NEVER ORANGE (owner, 2026-10-10: docs/design/pending-invite-notice).
     Every screen it sits on already has its one orange (Create engagement,
@@ -130,8 +125,8 @@ describe('the strip, composited on the work field', () => {
     Build Room uses for "yours, not urgent": a blue tint, a blue edge, a blue
     icon, and a neutral Accept.
   */
-  const STACK = [T.bg, tint('--pinv-tint')];
-  const BAR = [hex('--pinv-bar'), tint('--pinv-tint')];
+  const STACK = [T.bg, tint('--pinv-tint', O)];
+  const BAR = [hex('--pinv-bar', O), tint('--pinv-tint', O)];
 
   // rejects: deepening the tint until the sentence stops clearing AA.
   test.each([
@@ -201,12 +196,12 @@ describe('the rules that are about what must NOT be there', () => {
   });
 });
 
-describe('a refusal stays readable', () => {
+describe.each(DUSK)('a refusal stays readable: %s / %s', (skin, theme) => {
   // rejects: painting the server's refusal in a colour that fails on the tint
   // it sits on. --danger is 4.38:1 on --surface, which is why --danger-text
   // exists and why this is asserted rather than assumed.
   test('the error line clears AA on the field', () => {
-    expect(on(H.role('--danger-text', { skin: 'classic', theme: 'dark' }), [T.bg]))
+    expect(on(H.role('--danger-text', { skin, theme }), [H.role('--bg', { skin, theme })]))
       .toBeGreaterThanOrEqual(AA);
   });
 });
