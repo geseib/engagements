@@ -1,0 +1,40 @@
+/* ==========================================================================
+   EYEBROW — the small capital label above a title (components/ui/Eyebrow.jsx).
+   docs/design/themes/SPEC.md §6, PLAN §3 unit L1.
+
+   Replaces, when each surface adopts it: .present-eyebrow (present/present.css),
+   the stage .kicker (styles/stage.css), .meter h4, .rail-ctx.
+
+   ROLES ONLY. Every colour, weight and tracking is a role from
+   styles/roles.css, so the skin decides the treatment:
+     Classic  muted capitals, 700, .15em   (the stage .kicker)
+     Present  accent capitals, 600, .12em  (the Presentation's eyebrow)
+   No literal colour, no font name: the skins gate (skinLiteralsPalette) holds
+   this file at zero, and uiEyebrowPalette.test.js asserts AA for every
+   skin x theme.
+
+   SIZE IS THE CALLER'S. The library never owns a ladder (SPEC §6): a surface
+   sets --ui-eyebrow-size from its own ladder (`--ui-eyebrow-size:
+   var(--t-meta)` on the stage, `calc(var(--L-meta) * var(--fit))` on the
+   wall). The property is named per component, not the SPEC's generic
+   --ui-size, because a custom property inherits: a --ui-size set for a
+   heading would otherwise resize every eyebrow beneath it. Unset, the eyebrow
+   takes the size of the text around it.
+
+   Margin is zero: spacing belongs to the surface that places it.
+   ========================================================================== */
+.ui-eyebrow {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--ui-eyebrow-size, 1em);
+  font-weight: var(--eyebrow-weight);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--eyebrow-color);
+}
+
+/* tone="muted": muted capitals in every skin (a label that must not compete). */
+.ui-eyebrow.ui-eyebrow--muted { color: var(--muted); }
+
+/* tone="accent": accent copy in every skin (orange in Classic, blue in Present). */
+.ui-eyebrow.ui-eyebrow--accent { color: var(--accent-text); }
