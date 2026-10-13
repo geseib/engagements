@@ -1,0 +1,725 @@
+{
+  "unit": "0b-1.MarketingShell",
+  "file": "marketing/MarketingShell.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "6a0c00c1",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 28,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [
+    {
+      "id": "34:13",
+      "line": 34,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-hair",
+      "literal": "rgba(244, 237, 228, 0.14)",
+      "replacement": "rgb(var(--glow-rgb) / 0.14)",
+      "why": "channel --glow-rgb, Classic-identical"
+    },
+    {
+      "id": "79:20",
+      "line": 79,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-rule-strong",
+      "literal": "rgba(244, 237, 228, 0.26)",
+      "replacement": "rgb(var(--glow-rgb) / 0.26)",
+      "why": "channel --glow-rgb, Classic-identical"
+    },
+    {
+      "id": "89:17",
+      "line": 89,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-wash-nav",
+      "literal": "rgba(15, 26, 46, 0.86)",
+      "replacement": "rgb(var(--shade-rgb) / 0.86)",
+      "why": "channel --shade-rgb, Classic-identical"
+    },
+    {
+      "id": "91:15",
+      "line": 91,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-wash-a",
+      "literal": "rgba(15, 26, 46, 0.9)",
+      "replacement": "rgb(var(--shade-rgb) / 0.9)",
+      "why": "channel --shade-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "18:11",
+      "line": 18,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-bg",
+      "literal": "#0F1A2E",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 28)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #0F1A2E; no role: .mk-root carries no data-theme (it inherits <html data-theme=\"light\">) and holds the dusk and the paper values side by side, so a role read here resolves to paper (#FBF7F1)"
+    },
+    {
+      "id": "19:16",
+      "line": 19,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-surface",
+      "literal": "#1B2942",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        },
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #1B2942; no role: .mk-root carries no data-theme (it inherits <html data-theme=\"light\">) and holds the dusk and the paper values side by side, so a role read here resolves to paper (#FFFFFF)"
+    },
+    {
+      "id": "20:18",
+      "line": 20,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-surface-2",
+      "literal": "#25375A",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 57)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #25375A; no role: .mk-root carries no data-theme (it inherits <html data-theme=\"light\">) and holds the dusk and the paper values side by side, so a role read here resolves to paper (#F1EDE4)"
+    },
+    {
+      "id": "21:13",
+      "line": 21,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-text",
+      "literal": "#F4EDE4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 119)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 119)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #F4EDE4; no role: .mk-root carries no data-theme (it inherits <html data-theme=\"light\">) and holds the dusk and the paper values side by side, so a role read here resolves to paper (#1B2942)"
+    },
+    {
+      "id": "22:14",
+      "line": 22,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-muted",
+      "literal": "#9BA8BE",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 65)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #9BA8BE; no role: .mk-root carries no data-theme (it inherits <html data-theme=\"light\">) and holds the dusk and the paper values side by side, so a role read here resolves to paper (#5E6167)"
+    },
+    {
+      "id": "23:14",
+      "line": 23,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-amber",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "action"
+    },
+    {
+      "id": "24:19",
+      "line": 24,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-amber-deep",
+      "literal": "#C77B4A",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 19)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--row-selected",
+          "classic": "Classic differs (distance 66)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:#C77B4A is --primary-deep, a migration alias with no role that a migrated sheet may not read (SPEC §4.4); read by no marketing rule today"
+    },
+    {
+      "id": "25:13",
+      "line": 25,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-blue",
+      "literal": "#7CA7E6",
+      "why": "matches several roles: --info, --phase-vote",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-vote",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "26:20",
+      "line": 26,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-ridge-front",
+      "literal": "#16233B",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 10)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 10)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 17)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:ridge-scene art colour (the front silhouette); no role, and not a skin colour"
+    },
+    {
+      "id": "27:18",
+      "line": 27,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-ridge-mid",
+      "literal": "#22344F",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 12)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 18)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 18)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:ridge-scene art colour (the middle silhouette); no role"
+    },
+    {
+      "id": "28:19",
+      "line": 28,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-ridge-back",
+      "literal": "#2E4262",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 16)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 45)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 45)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:ridge-scene art colour (the back silhouette); no role"
+    },
+    {
+      "id": "29:14",
+      "line": 29,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-paper",
+      "literal": "#FBF7F1",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 18)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 83)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 134)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper #FBF7F1 equals light --bg, but no role: .mk-root carries no data-theme (it inherits <html data-theme=\"light\">) and holds the dusk and the paper values side by side, so a role would resolve by inheritance from <html>, not from a declared theme (hard rule: never inherit the theme); the paper sections need data-theme=\"light\" first"
+    },
+    {
+      "id": "30:22",
+      "line": 30,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-paper-surface",
+      "literal": "#FFFFFF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 160)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper #FFFFFF equals light --surface, but .mk-root declares no theme, so the role would only resolve by inheritance from <html>; the report sheet needs data-theme=\"light\" first"
+    },
+    {
+      "id": "31:19",
+      "line": 31,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-paper-text",
+      "literal": "#1B2942",
+      "why": "matches a judgement role: --on-accent",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "on-accent",
+      "choice": "keep:#1B2942 is paper body text; the codemod offers --on-accent (ink on a filled accent), a different meaning, and light --text only resolves here by inheritance from <html>"
+    },
+    {
+      "id": "32:20",
+      "line": 32,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-paper-muted",
+      "literal": "#5E6167",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 95)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 121)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 128)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper muted #5E6167 equals light --muted, but .mk-root declares no theme, so the role would only resolve by inheritance from <html>"
+    },
+    {
+      "id": "33:18",
+      "line": 33,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-amber-ink",
+      "literal": "#8a5300",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 136)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 143)"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (distance 158)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper amber copy #8a5300; Classic --accent-text paper is #9A5B18, a different colour (Classic delta); no role has it"
+    },
+    {
+      "id": "58:17",
+      "line": 58,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-amber-hi",
+      "literal": "#FFBB63",
+      "why": "matches several roles: --action-hover, --accent-hover",
+      "candidates": [
+        {
+          "role": "--action-hover",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-hover",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "action-hover",
+      "choice": "action-hover"
+    },
+    {
+      "id": "59:16",
+      "line": 59,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-sky-low",
+      "literal": "#2A3A57",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 7)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 31)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 31)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the sky gradient's lowest stop (art brief §3); no role"
+    },
+    {
+      "id": "60:21",
+      "line": 60,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-device-bezel",
+      "literal": "#0B1322",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 14)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 14)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 15)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the device frame bezel #0B1322; no role"
+    },
+    {
+      "id": "61:19",
+      "line": 61,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-paper-edge",
+      "literal": "#EFE7DA",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 58)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 109)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the second sheet edge under the sample report; no role"
+    },
+    {
+      "id": "62:24",
+      "line": 62,
+      "col": 24,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-paper-edge-deep",
+      "literal": "#E2D8C8",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 39)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 39)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 86)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the third sheet edge under the sample report; no role"
+    },
+    {
+      "id": "63:19",
+      "line": 63,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-paper-rule",
+      "literal": "rgba(27, 41, 66, 0.14)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 151)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 162)"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic differs (distance 162)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper hairline rgba(27,41,66,.14); no channel role carries 27 41 66, and Classic --rule is rgba(155,168,190,.22) in both themes (0a amendment)"
+    },
+    {
+      "id": "90:18",
+      "line": 90,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-wash-card",
+      "literal": "rgba(27, 41, 66, 0.82)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        },
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the card wash rgba(27,41,66,.82) over the scene; no channel role carries 27 41 66 (the --surface colour has no -rgb channel)"
+    },
+    {
+      "id": "92:15",
+      "line": 92,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".mk-root",
+      "property": "--mk-wash-b",
+      "literal": "rgba(27, 41, 66, 0.92)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the second scene wash rgba(27,41,66,.92); no channel role carries 27 41 66"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:17:49.094Z",
+    "after": {
+      "colour": 21,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 21,
+      "action": 1,
+      "info": 1,
+      "action-hover": 1
+    },
+    "classicDeltas": [],
+    "edits": 7
+  }
+}

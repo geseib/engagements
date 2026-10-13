@@ -1,0 +1,55 @@
+{
+  "unit": "0b-1.WelcomeScreen",
+  "file": "components/WelcomeScreen.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "6a0c00c1",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 8,
+    "font": 0,
+    "primary": 6
+  },
+  "auto": [
+    {
+      "id": "36:14",
+      "line": 36,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".wel-page",
+      "property": "--wel-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "37:21",
+      "line": 37,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".wel-page",
+      "property": "--wel-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:17:49.030Z",
+    "after": {
+      "colour": 6,
+      "font": 0,
+      "primary": 6
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 2
+  }
+}

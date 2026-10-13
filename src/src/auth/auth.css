@@ -1,4 +1,4 @@
-/* skin-allowance: colour=45 font=1 primary=18 */
+/* skin-allowance: colour=44 font=1 primary=18 */
 /* Authentication Page Styles */
 .auth-page {
   min-height: 100vh;
@@ -351,7 +351,7 @@
      Both are `--au-` names rather than overrides of --muted / --success-text,
      so nothing outside .au-page can be surprised by them. */
   --au-muted: #B6C2D4;         /* 9.65:1 on --bg, 8.08:1 on --surface */
-  --au-success-text: #6FD0A4;  /* 9.30:1 on --bg */
+  --au-success-text: var(--success-text);  /* 9.30:1 on --bg */
 
   --au-rule: rgba(182, 194, 212, .20);
   --au-rule-strong: rgba(182, 194, 212, .34);

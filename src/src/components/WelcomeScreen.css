@@ -1,4 +1,4 @@
-/* skin-allowance: colour=8 font=0 primary=6 */
+/* skin-allowance: colour=6 font=0 primary=6 */
 /* ============================================================
    THE WELCOME SCREEN — components/WelcomeScreen.jsx
 
@@ -33,8 +33,8 @@
      display-profile ladders apply. */
   --wel-radius: 16px;
   --wel-radius-sm: 10px;
-  --wel-rule: rgba(155, 168, 190, .20);
-  --wel-rule-strong: rgba(155, 168, 190, .34);
+  --wel-rule: rgb(var(--slate-rgb) / .20);
+  --wel-rule-strong: rgb(var(--slate-rgb) / .34);
 
   --wel-t-display: clamp(28px, 5.2vw, 38px);
   --wel-t-title: 20px;
