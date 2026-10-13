@@ -263,6 +263,25 @@ export function PresentQuestionFocus({ model }) {
   );
 }
 
+/**
+ * FEEDBACK (owner, 2026-10-13: "not even a clue to what round or question this
+ * relates to"): the round and the question it asks about, then the ask itself.
+ */
+export function PresentFeedback({ model }) {
+  return (
+    <div className="present-moment present-frame">
+      <Top model={model} right="Feedback" />
+      <div className="present-main">
+        <Eyebrow className="present-eyebrow">{model.roundLabel ? `${model.roundLabel} · Feedback` : 'Feedback'}</Eyebrow>
+        {model.title ? <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading> : null}
+        {model.task ? <p className="present-lead" data-drop="1">{model.task}</p> : null}
+        <p className="present-lead">{`Add your comments on your ${deviceWords}.`}</p>
+      </div>
+      <div className="present-foot"><span>{model.roundLabel || ''}</span></div>
+    </div>
+  );
+}
+
 export function PresentQuiet({ model, eyebrow, line, foot }) {
   return (
     <div className="present-moment present-frame">
@@ -287,7 +306,7 @@ export function PresentMoment({ model }) {
     case 'RESPONSES': return <ResponseNavigator model={model} />;
     case 'READ': return <ReadPage model={model} />;
     case 'READ_WAIT': return <PresentQuiet model={model} eyebrow={RW.whatWeHeard} line={`${RW.workieWriting}…`} />;
-    case 'FEEDBACK': return <PresentQuiet model={model} eyebrow="Feedback" line={`Add your comments on your ${deviceWords}.`} foot={model.title} />;
+    case 'FEEDBACK': return <PresentFeedback model={model} />;
     case 'QUESTION_FOCUS': return <PresentQuestionFocus model={model} />;
     case 'ENDED': return <PresentQuiet model={model} eyebrow="Complete" line="Thank you. This session has ended." />;
     case 'OTHER': return <PresentQuiet model={model} line="This session shows on the host's screen." />;

@@ -46,6 +46,7 @@ const EVERY = [
   ['READ', snap({ state: 'RESULTS#005', stageBeat: 'field-notes', stageNotes: { page: 0, pages: 2, rev: 1 } }), { summary: { markdownResponse: MD } }],
   ['READ_WAIT', snap({ state: 'RESULTS#005', stageBeat: 'field-notes' }), {}],
   ['QUESTION_FOCUS', snap({ state: 'RESULTS#005', stageFocus: { focus: 'question', index: null, part: 0, parts: 1, phase: null, rev: 1 } }), {}],
+  ['FEEDBACK', snap({ state: 'RESULTS#005', stageBeat: 'feedback' }), {}],
   ['ENDED', snap({ state: 'ENDED' }), {}],
 ];
 
@@ -150,6 +151,16 @@ describe('every moment', () => {
     expect(container.textContent).toMatch(/Maya-Chen-7/);
     expect(container.textContent).toMatch(/8 vote points/);
     expect(container.textContent).toMatch(/Response 1 of 2/);
+  });
+  it('feedback names its round and its question (owner, 2026-10-13)', () => {
+    const { container } = drawn(...EVERY.find(([m]) => m === 'FEEDBACK').slice(1));
+    expect(container.querySelector('.ui-top-line').textContent).toMatch(/Q4 Wrap up · Round 5\s*Feedback/);
+    expect(container.querySelector('.present-eyebrow').textContent).toBe('Round 5 · Feedback');
+    const h = container.querySelector('h1.ui-heading.present-hero');
+    expect(h.textContent).toBe('What should we stop doing');
+    expect(container.querySelector('.present-lead[data-drop]').textContent).toBe('Name one habit.');
+    expect(container.textContent).toMatch(/Add your comments on your phone, laptop or tablet\./);
+    expect(container.querySelector('.present-foot').textContent).toBe('Round 5');
   });
   it('the parts are the library\'s (skins P2): top line, eyebrow, heading, pips, badge, card, tally row, ground', () => {
     const canvasOf = (c) => c.querySelector('.present-canvas');
