@@ -83,7 +83,8 @@ function fill(u, o) {
 
 function checks(units) {
   const problems = M.collisions(units);
-  const waves = units.filter((u) => /^W/.test(u.phase) || u.id === 'P2' || u.id === '0c');
+  // The component library (Phase 1, units L1..L13) owns components/ui/*.css.
+  const waves = units.filter((u) => /^W/.test(u.phase) || /^L\d+$/.test(u.id) || u.id === 'P2' || u.id === '0c');
   const owned = new Set();
   for (const u of waves) M.expandUnitFiles(u).css.forEach((f) => owned.add(f));
   // styles/roles.css is the skin mapping itself (0a), like the values files: no wave owns it.
