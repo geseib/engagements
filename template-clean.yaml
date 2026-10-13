@@ -728,6 +728,18 @@ Resources:
             Path: /join/{code}
             Method: get
             # PUBLIC: the join box asks it before anybody has an identity.
+        # THE SITE SKIN (docs/design/themes/SPEC.md §5.2): which look every
+        # page wears, read once per page load by SkinProvider. PUBLIC on
+        # purpose — marketing, /play and /present are signed out — and it
+        # answers { skin, updatedAt } only, with a 60s public cache. One GetItem
+        # on PLATFORM#SETTINGS / SITE_SKIN; this function writes nothing. One
+        # route, one Permission: the cheapest public read the stack can add.
+        SiteSkin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /site
+            Method: get
       Policies:
         # Opens an event's title for the join screen.
         - Version: '2012-10-17'
@@ -1758,23 +1770,27 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
-        # The Engage-wide Claude models switch (orgs/platform-settings.js):
-        # Anthropic 5.5 (default) or Bedrock 4.x. Staff only — authorizer.js
-        # names it ['admins'], the handler re-asks isPlatformAdmin, and a
-        # change is written to the audit log first.
-        GetClaudeModelsSetting:
+        # The Engage-wide settings (orgs/platform-settings.js dispatches on
+        # {name}): claude-models — Anthropic 5.5 (default) or Bedrock 4.x — and
+        # site-skin — Classic (default) or Present (docs/design/themes SPEC
+        # §5.2). These two events REPLACED the claude-models pair at no
+        # resource cost, so the next setting is free. Staff only —
+        # authorizer.js names `platform/settings/` ['admins'], the handler
+        # re-asks isPlatformAdmin, and a change is written to the audit log
+        # first. The public read of the skin is GET /site (ResolveJoinCode).
+        GetPlatformSetting:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
-            Path: /platform/settings/claude-models
+            Path: /platform/settings/{name}
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
-        SetClaudeModelsSetting:
+        SetPlatformSetting:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
-            Path: /platform/settings/claude-models
+            Path: /platform/settings/{name}
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer

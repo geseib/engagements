@@ -33,7 +33,8 @@
  *      set) and the four env vars on exactly the functions whose code calls a
  *      model, derived from the require graph; the settings route on the
  *      platform function; test's buildspec values; prod untouched; the same
- *      top-level resources as HEAD.
+ *      top-level resources as HEAD. Since the site skin the settings route is
+ *      GET/POST /platform/settings/{name}, which claude-models still matches.
  *
  * No network: STS, the token exchange, Messages and Bedrock are fakes.
  */
@@ -535,12 +536,16 @@ const decode = (res) => JSON.parse(new TextDecoder().decode(res.body));
   await check('authorizer: GET and POST platform/settings/claude-models are [admins]', () => {
     assert.deepStrictEqual(authorizer.requiredGroupsForRoute('GET', 'platform/settings/claude-models'), ['admins']);
     assert.deepStrictEqual(authorizer.requiredGroupsForRoute('POST', 'platform/settings/claude-models'), ['admins']);
+    // The route template, which is what routeKey carries since the {name} events.
+    assert.deepStrictEqual(authorizer.requiredGroupsForRoute('GET', 'platform/settings/{name}'), ['admins']);
+    assert.deepStrictEqual(authorizer.requiredGroupsForRoute('POST', 'platform/settings/{name}'), ['admins']);
   });
   const platformOrgs = require(path.join(LF, 'admin/orgs/platform-orgs.js')).handler;
   const SETTING = key('PLATFORM#SETTINGS', 'CLAUDE_MODELS');
   const evt = ({ method = 'GET', sub = 'u_staff', groups = 'admins,hosts', body } = {}) => ({
     rawPath: '/dev/platform/settings/claude-models',
-    routeKey: `${method} /platform/settings/claude-models`,
+    routeKey: `${method} /platform/settings/{name}`,
+    pathParameters: { name: 'claude-models' },
     requestContext: { http: { method }, authorizer: { lambda: { userId: sub, email: `${sub}@x.test`, name: sub, groups } } },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -682,8 +687,11 @@ const decode = (res) => JSON.parse(new TextDecoder().decode(res.body));
   });
   await check('the platform function: the two settings events, the ids to report `connected`, no sts', () => {
     const b = blocks.PlatformOrgsFunction;
-    assert.match(b, /GetClaudeModelsSetting:\n\s+Type: HttpApi\n\s+Properties:\n\s+ApiId: !Ref RestApi\n\s+Path: \/platform\/settings\/claude-models\n\s+Method: GET\n\s+Auth:\n\s+Authorizer: CognitoAuthorizer/);
-    assert.match(b, /SetClaudeModelsSetting:\n\s+Type: HttpApi\n\s+Properties:\n\s+ApiId: !Ref RestApi\n\s+Path: \/platform\/settings\/claude-models\n\s+Method: POST\n\s+Auth:\n\s+Authorizer: CognitoAuthorizer/);
+    // Since the site skin (docs/design/themes SPEC §5.2) the pair is the
+    // `{name}` route; /platform/settings/claude-models still matches it.
+    assert.match(b, /GetPlatformSetting:\n\s+Type: HttpApi\n\s+Properties:\n\s+ApiId: !Ref RestApi\n\s+Path: \/platform\/settings\/\{name\}\n\s+Method: GET\n\s+Auth:\n\s+Authorizer: CognitoAuthorizer/);
+    assert.match(b, /SetPlatformSetting:\n\s+Type: HttpApi\n\s+Properties:\n\s+ApiId: !Ref RestApi\n\s+Path: \/platform\/settings\/\{name\}\n\s+Method: POST\n\s+Auth:\n\s+Authorizer: CognitoAuthorizer/);
+    assert.ok(!/GetClaudeModelsSetting|SetClaudeModelsSetting/.test(b), 'the old claude-models events survive beside {name}');
     assert.ok(b.includes('ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId'));
     assert.ok(!/Action: sts:/.test(b));
   });
