@@ -32,7 +32,7 @@ const HelpPage = lazy(() => import('./marketing/HelpPage'));
 // The Presentation (/present): public, read-only, its own chunk so a player's
 // phone never downloads it (two-surface PLAN 2.9).
 const PresentPage = lazy(() => import('./PresentPage'));
-// The skin gallery (/skins/gallery): dev only, staff only, its own chunk.
+// The skin gallery (/skins): dev only, staff only, its own chunk.
 const SkinGallery = lazy(() => import('./components/SkinGallery'));
 
 // The one spinner. RootGate has to decide before ProtectedRoute runs (that is
@@ -281,8 +281,10 @@ function AppRouter() {
 
   // THE SKIN GALLERY (docs/design/themes TOOLING-BRIEF §5.3): sample-data
   // mounts of signed-in surfaces for scripts/skins/shoot.js. DEV ONLY — on any
-  // other tier the path falls through as an unknown one — and STAFF ONLY.
-  if (path === '/skins/gallery' && window.ENV === 'development') {
+  // other tier the path falls through as an unknown one — and STAFF ONLY. One
+  // path segment on purpose: its fixtures will render questions, and a nested
+  // route breaks their relative image keys (setMediaStorage.test.js).
+  if (path === '/skins' && window.ENV === 'development') {
     return (
       <ProtectedRoute requireAdmin>
         <Suspense fallback={<AuthLoading />}>

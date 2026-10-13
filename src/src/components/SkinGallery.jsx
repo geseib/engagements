@@ -4,7 +4,7 @@ import { useSkin } from './SkinProvider';
 import './SkinGallery.css';
 
 /**
- * THE SKIN GALLERY — /skins/gallery (docs/design/themes/TOOLING-BRIEF §5.3,
+ * THE SKIN GALLERY — /skins (docs/design/themes/TOOLING-BRIEF §5.3,
  * approved by the owner 2026-10-13). DEV ONLY AND STAFF ONLY: App.jsx mounts
  * it only when window.ENV is 'development', behind ProtectedRoute requireAdmin,
  * as its own lazy chunk, so no other tier and no other visitor ever loads it.

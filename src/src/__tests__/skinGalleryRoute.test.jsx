@@ -1,5 +1,5 @@
 /**
- * WHO MAY OPEN /skins/gallery (docs/design/themes TOOLING-BRIEF §5.3).
+ * WHO MAY OPEN /skins (docs/design/themes TOOLING-BRIEF §5.3).
  *
  * The gallery mounts signed-in surfaces from sample data so shoot.js can
  * screenshot them. It is a dev tool: on any tier but development the path is
@@ -29,7 +29,7 @@ import App from '../App';
 const open = (env, groups) => {
   window.ENV = env;
   mockUser = groups ? { username: 'u', groups, attributes: {} } : null;
-  window.history.pushState({}, '', '/skins/gallery');
+  window.history.pushState({}, '', '/skins');
   render(<App />);
 };
 
