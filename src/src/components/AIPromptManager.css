@@ -1,4 +1,4 @@
-/* skin-allowance: colour=20 font=4 primary=5 */
+/* skin-allowance: colour=11 font=4 primary=3 */
 /* ============================================================================
    THE PROMPT ADMIN SURFACE — section, library, editor dialog, advisor dialog.
 
@@ -202,15 +202,15 @@
      and the measured ratios; nothing below may declare a hex of its own. */
   --pc-ink: var(--text);
   --pc-muted: var(--muted);
-  --pc-link: var(--secondary);
+  --pc-link: var(--info);
   --pc-stop: var(--danger-text);
-  --pc-silent: var(--primary);
+  --pc-silent: var(--accent);
 
   /* `styles.css` has never declared a success TEXT token — RATIONALE §5 lists
      one that does not exist — so every dusk screen declares its own. This is
      `--qsets-success-text` (QuestionSetsPanel.css:65) to the digit, because two
      greens for one meaning is how a palette starts drifting. */
-  --pc-go: #6FD0A4;
+  --pc-go: var(--success-text);
 
   /* THE THREE BEDS, AND WHY THERE ARE ONLY THREE.
      --pc-card   a dialog, and the blocks that used to be `background: white`
@@ -222,19 +222,19 @@
      #25375A takes --pc-muted to 4.38:1, under AA, and nothing on this surface
      is worth a third plane. */
   --pc-card: var(--surface);
-  --pc-paper: rgba(155, 168, 190, .07);
+  --pc-paper: rgb(var(--slate-rgb) / .07);
   --pc-field: var(--bg);
 
-  --pc-rule: rgba(155, 168, 190, .20);
-  --pc-rule-strong: rgba(155, 168, 190, .34);
-  --pc-hover: rgba(155, 168, 190, .055);
+  --pc-rule: rgb(var(--slate-rgb) / .20);
+  --pc-rule-strong: rgb(var(--slate-rgb) / .34);
+  --pc-hover: var(--row-hover);
 
   /* Tints at the alphas `.qsets-tint-*` already uses (QuestionSetsPanel.css:70-72),
      over the hue of the token each one backs. */
-  --pc-tint-stop: rgba(229, 100, 94, .09);
-  --pc-tint-silent: rgba(246, 169, 76, .09);
-  --pc-tint-link: rgba(124, 167, 230, .10);
-  --pc-tint-go: rgba(79, 178, 134, .10);
+  --pc-tint-stop: rgb(var(--danger-rgb) / .09);
+  --pc-tint-silent: rgb(var(--warn-rgb) / .09);
+  --pc-tint-link: rgb(var(--info-rgb) / .10);
+  --pc-tint-go: rgb(var(--success-rgb) / .10);
 
   /* The laptop ladder (RATIONALE §3), same six steps as `--qsets-t-*`. Rows are
      36px. Nothing on this surface renders below the 12px floor. */

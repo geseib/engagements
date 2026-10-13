@@ -1,4 +1,4 @@
-/* skin-allowance: colour=7 font=0 primary=3 */
+/* skin-allowance: colour=2 font=0 primary=3 */
 /* ============================================================================
    THE PLATFORM CONSOLE'S OBSERVABILITY PAGE — components/ObservabilityPanel.jsx
 
@@ -41,11 +41,11 @@
   --pobs-t-numeral: 30px;
   --pobs-row-h: 36px;
 
-  --pobs-rule: rgba(155, 168, 190, .20);
-  --pobs-rule-strong: rgba(155, 168, 190, .34);
-  --pobs-row-hover: rgba(155, 168, 190, .055);
-  --pobs-tint-warn: rgba(246, 169, 76, .08);
-  --pobs-tint-danger: rgba(229, 100, 94, .09);
+  --pobs-rule: rgb(var(--slate-rgb) / .20);
+  --pobs-rule-strong: rgb(var(--slate-rgb) / .34);
+  --pobs-row-hover: var(--row-hover);
+  --pobs-tint-warn: rgb(var(--warn-rgb) / .08);
+  --pobs-tint-danger: rgb(var(--danger-rgb) / .09);
 
   max-width: 1120px;
   color: var(--text);

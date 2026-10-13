@@ -1,0 +1,54 @@
+{
+  "unit": "0b-2.InviteDialog",
+  "file": "components/InviteDialog.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 6,
+    "font": 0,
+    "primary": 5
+  },
+  "auto": [
+    {
+      "id": "33:14",
+      "line": 33,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "34:21",
+      "line": 34,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:17.266Z",
+    "after": {
+      "colour": 4,
+      "font": 0,
+      "primary": 5
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 2
+  }
+}

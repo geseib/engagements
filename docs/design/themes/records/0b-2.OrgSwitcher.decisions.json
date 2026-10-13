@@ -1,0 +1,118 @@
+{
+  "unit": "0b-2.OrgSwitcher",
+  "file": "components/OrgSwitcher.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 5,
+    "font": 0,
+    "primary": 4
+  },
+  "auto": [
+    {
+      "id": "55:16",
+      "line": 55,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".orgsw",
+      "property": "--orgsw-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "56:23",
+      "line": 56,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".orgsw",
+      "property": "--orgsw-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "57:21",
+      "line": 57,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".orgsw",
+      "property": "--orgsw-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "58:19",
+      "line": 58,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".orgsw",
+      "property": "--orgsw-row-sel",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "raw:var(--row-selected)"
+    },
+    {
+      "id": "59:30",
+      "line": 59,
+      "col": 30,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".orgsw",
+      "property": "--orgsw-shadow",
+      "literal": "rgba(6, 11, 22, .55)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:shadow/scrim alpha rgba(6, 11, 22, .55); no role or channel carries this black (--scrim is .72, --shade-rgb is 15 26 46)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.596Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 4
+    },
+    "decisionsByKind": {
+      "raw": 1,
+      "keep": 1
+    },
+    "classicDeltas": [
+      "58:19 .orgsw --orgsw-row-sel: rgba(246, 169, 76, .10) -> var(--row-selected) (raw: check by hand)"
+    ],
+    "edits": 4
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "unit": "0b-2.OverviewPanel",
+  "file": "components/OverviewPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 7,
+    "font": 0,
+    "primary": 6
+  },
+  "auto": [
+    {
+      "id": "33:14",
+      "line": 33,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ovw",
+      "property": "--ovw-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "34:19",
+      "line": 34,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ovw",
+      "property": "--ovw-info-edge",
+      "literal": "rgba(155, 168, 190, .45)",
+      "replacement": "rgb(var(--slate-rgb) / .45)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "35:20",
+      "line": 35,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ovw",
+      "property": "--ovw-tint-green",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "36:22",
+      "line": 36,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ovw",
+      "property": "--ovw-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:17.658Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 6
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 4
+  }
+}

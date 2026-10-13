@@ -1,4 +1,4 @@
-/* skin-allowance: colour=9 font=0 primary=9 */
+/* skin-allowance: colour=1 font=0 primary=9 */
 /* ============================================================================
    THE IMAGES PANEL — components/SetMediaPanel.jsx
 
@@ -72,19 +72,19 @@
 
   /* Re-points against the host shelf's paper scope. See the header — each of
      these is measured, not chosen. */
-  --primary: #F6A94C;
+  --primary: var(--action);
   --danger-text: #EF8C86;
 
   /* Locals, declared here rather than borrowed from a stylesheet that merely
      happens to be in the bundle: an undefined custom property invalidates the
      whole declaration, so a borrowed token disappears the day an import moves. */
-  --smed-success-text: #6FD0A4;
-  --smed-rule: rgba(155, 168, 190, .20);
-  --smed-rule-strong: rgba(155, 168, 190, .34);
-  --smed-row-hover: rgba(155, 168, 190, .055);
-  --smed-tint-danger: rgba(229, 100, 94, .09);
-  --smed-tint-warn: rgba(246, 169, 76, .09);
-  --smed-tint-ok: rgba(79, 178, 134, .10);
+  --smed-success-text: var(--success-text);
+  --smed-rule: rgb(var(--slate-rgb) / .20);
+  --smed-rule-strong: rgb(var(--slate-rgb) / .34);
+  --smed-row-hover: var(--row-hover);
+  --smed-tint-danger: rgb(var(--danger-rgb) / .09);
+  --smed-tint-warn: rgb(var(--warn-rgb) / .09);
+  --smed-tint-ok: rgb(var(--success-rgb) / .10);
   --smed-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   color: var(--text);

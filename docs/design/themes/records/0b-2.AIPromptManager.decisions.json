@@ -1,0 +1,215 @@
+{
+  "unit": "0b-2.AIPromptManager",
+  "file": "components/AIPromptManager.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 20,
+    "font": 4,
+    "primary": 5
+  },
+  "auto": [
+    {
+      "id": "213:11",
+      "line": 213,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-go",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "225:14",
+      "line": 225,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-paper",
+      "literal": "rgba(155, 168, 190, .07)",
+      "replacement": "rgb(var(--slate-rgb) / .07)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "228:13",
+      "line": 228,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "229:20",
+      "line": 229,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "230:14",
+      "line": 230,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "234:18",
+      "line": 234,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-tint-stop",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "237:16",
+      "line": 237,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-tint-go",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "205:13",
+      "line": 205,
+      "col": 13,
+      "type": "secondary",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-link",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "207:15",
+      "line": 207,
+      "col": 15,
+      "type": "primary",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-silent",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "235:20",
+      "line": 235,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-tint-silent",
+      "literal": "rgba(246, 169, 76, .09)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "236:18",
+      "line": 236,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".padm, .pmgr, .pgen, .plib",
+      "property": "--pc-tint-link",
+      "literal": "rgba(124, 167, 230, .10)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .10) -> rgba(246,169,76,0.1))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.227Z",
+    "after": {
+      "colour": 11,
+      "font": 4,
+      "primary": 3
+    },
+    "decisionsByKind": {
+      "info": 2,
+      "accent": 1,
+      "warn": 1
+    },
+    "classicDeltas": [],
+    "edits": 11
+  }
+}

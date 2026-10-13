@@ -1,4 +1,4 @@
-/* skin-allowance: colour=9 font=0 primary=10 */
+/* skin-allowance: colour=1 font=0 primary=10 */
 /* components/EventsPanel.jsx, EventDetailsDialog.jsx — the Events place.
    ==========================================================================
    Built from docs/design/agenda-redesign/01-events.html, 01b-events-personal
@@ -31,18 +31,18 @@
 
   /* The ink on a filled amber button. Invariant dusk navy, not var(--bg):
      under a paper ancestor --bg is paper, and #FBF7F1 on amber is 1.9:1. */
-  --evts-on-accent: #0F1A2E;
+  --evts-on-accent: var(--on-action);
   /* Not global tokens (see UserManagement.css): an undefined custom property
      invalidates the whole declaration it sits in. */
   --evts-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  --evts-rule: rgba(155, 168, 190, .20);
-  --evts-rule-strong: rgba(155, 168, 190, .34);
-  --evts-row-hover: rgba(155, 168, 190, .055);
-  --evts-row-sel: rgba(246, 169, 76, .10);
-  --evts-tint-note: rgba(155, 168, 190, .06);
-  --evts-tint-danger: rgba(229, 100, 94, .09);
-  --evts-scrim: rgba(6, 11, 22, .72);
+  --evts-rule: rgb(var(--slate-rgb) / .20);
+  --evts-rule-strong: rgb(var(--slate-rgb) / .34);
+  --evts-row-hover: var(--row-hover);
+  --evts-row-sel: var(--row-selected);
+  --evts-tint-note: rgb(var(--slate-rgb) / .06);
+  --evts-tint-danger: rgb(var(--danger-rgb) / .09);
+  --evts-scrim: var(--scrim);
   --evts-shadow-modal: 0 24px 64px rgba(0, 0, 0, .5);
   /* The close button's × is an icon drawn as a character, at the console's
      close-button size (.evb-x, .qsets and the others). It is not text, so it

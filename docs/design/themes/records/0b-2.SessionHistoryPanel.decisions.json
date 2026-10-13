@@ -1,0 +1,66 @@
+{
+  "unit": "0b-2.SessionHistoryPanel",
+  "file": "components/SessionHistoryPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 5,
+    "font": 0,
+    "primary": 6
+  },
+  "auto": [
+    {
+      "id": "44:16",
+      "line": 44,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".shist",
+      "property": "--shist-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "45:23",
+      "line": 45,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".shist",
+      "property": "--shist-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "46:21",
+      "line": 46,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".shist",
+      "property": "--shist-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:18.447Z",
+    "after": {
+      "colour": 2,
+      "font": 0,
+      "primary": 6
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 3
+  }
+}

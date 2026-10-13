@@ -1,4 +1,4 @@
-/* skin-allowance: colour=18 font=0 primary=8 */
+/* skin-allowance: colour=10 font=0 primary=8 */
 /* ============================================================================
    WHERE YOU WORK — components/ScopeTabs.jsx, scope .scp
 
@@ -23,12 +23,12 @@
 .scp {
   --scp-bg: #13203A;
   --scp-menu: #1E2D4A;
-  --scp-rule: rgba(155, 168, 190, .20);
-  --scp-rule-strong: rgba(155, 168, 190, .45);
-  --scp-hover: rgba(155, 168, 190, .08);
-  --scp-active-tint: rgba(124, 167, 230, .07);
-  --scp-eng-tint: rgba(124, 167, 230, .18);
-  --scp-else-tint: rgba(124, 167, 230, .12);
+  --scp-rule: rgb(var(--slate-rgb) / .20);
+  --scp-rule-strong: rgb(var(--slate-rgb) / .45);
+  --scp-hover: rgb(var(--slate-rgb) / .08);
+  --scp-active-tint: rgb(var(--info-rgb) / .07);
+  --scp-eng-tint: rgb(var(--info-rgb) / .18);
+  --scp-else-tint: rgb(var(--info-rgb) / .12);
 
   position: relative;
   min-width: 0;
@@ -223,8 +223,8 @@
   background: rgba(8, 12, 22, .6);
 }
 .scp-sheet {
-  --scp-rule: rgba(155, 168, 190, .20);
-  --scp-hover: rgba(155, 168, 190, .08);
+  --scp-rule: rgb(var(--slate-rgb) / .20);
+  --scp-hover: rgb(var(--slate-rgb) / .08);
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;

@@ -1,0 +1,222 @@
+{
+  "unit": "0b-2.QuestionPreview",
+  "file": "components/QuestionPreview.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 8,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [
+    {
+      "id": "47:16",
+      "line": 47,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "48:23",
+      "line": 48,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "49:21",
+      "line": 49,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "46:18",
+      "line": 46,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-accent",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent-text, --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "50:19",
+      "line": 50,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-row-sel",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "raw:var(--row-selected)"
+    },
+    {
+      "id": "67:11",
+      "line": 67,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev .qprev-screen",
+      "property": "--muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant #B6C2D4 with no exact role (SPEC §4.2: merging it is a Classic delta)"
+    },
+    {
+      "id": "68:13",
+      "line": 68,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev .qprev-screen",
+      "property": "--primary",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent-text, --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "action"
+    },
+    {
+      "id": "69:13",
+      "line": 69,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev .qprev-screen",
+      "property": "--success",
+      "literal": "#4FB286",
+      "why": "matches several roles: --success, --phase-results",
+      "candidates": [
+        {
+          "role": "--success",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "success",
+      "choice": "success-rgb"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.146Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "accent": 1,
+      "raw": 1,
+      "keep": 1,
+      "action": 1,
+      "success-rgb": 1
+    },
+    "classicDeltas": [
+      "50:19 .qprev, .qprev-switch --qprev-row-sel: rgba(246, 169, 76, .10) -> var(--row-selected) (raw: check by hand)"
+    ],
+    "edits": 7
+  }
+}

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=4 font=0 primary=7 */
+/* skin-allowance: colour=0 font=0 primary=7 */
 /* ============================================================================
    "HOW MANY?" — components/CountField.jsx
 
@@ -49,11 +49,11 @@
   /* Ink on the amber fill. #1B2942 is --surface in dusk and --text in paper —
      a Warm Summit colour either way, and 7.42:1 on --primary in both, which
      `var(--bg)` was not. */
-  --cnt-on-accent: #1B2942;
+  --cnt-on-accent: var(--on-accent);
   --cnt-thumb: 20px;                 /* 16px core + a 2px ring each side */
-  --cnt-rule: rgba(155, 168, 190, .22);
-  --cnt-rule-strong: rgba(155, 168, 190, .38);
-  --cnt-hover: rgba(155, 168, 190, .07);
+  --cnt-rule: var(--rule);
+  --cnt-rule-strong: rgb(var(--slate-rgb) / .38);
+  --cnt-hover: rgb(var(--slate-rgb) / .07);
 
   display: flex;
   flex-direction: column;

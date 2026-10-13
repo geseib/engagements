@@ -1,4 +1,4 @@
-/* skin-allowance: colour=4 font=0 primary=3 */
+/* skin-allowance: colour=1 font=0 primary=3 */
 /* src/src/components/ShareSetDialog.css
    THE SHARE DIALOG — 05-share-review.html. Scoped under .pubshare, not .share --
    styles.css already declares .share-url-container. Tokens only.
@@ -14,9 +14,9 @@
   --pubshare-t-label: 13px;
   --pubshare-t-body: 15px;
   --pubshare-t-head: 19px;
-  --pubshare-success-text: #6FD0A4;
-  --pubshare-rule: rgba(155, 168, 190, .20);
-  --pubshare-tint: rgba(246, 169, 76, .09);
+  --pubshare-success-text: var(--success-text);
+  --pubshare-rule: rgb(var(--slate-rgb) / .20);
+  --pubshare-tint: rgb(var(--accent-rgb) / .09);
   color: var(--text);
   font: 400 var(--pubshare-t-body)/1.5 var(--font-ui);
 }

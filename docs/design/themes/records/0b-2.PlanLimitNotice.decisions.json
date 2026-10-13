@@ -1,0 +1,407 @@
+{
+  "unit": "0b-2.PlanLimitNotice",
+  "file": "components/PlanLimitNotice.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 18,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [
+    {
+      "id": "50:15",
+      "line": 50,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-edge",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "51:15",
+      "line": 51,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-chip",
+      "literal": "rgba(155, 168, 190, .18)",
+      "replacement": "rgb(var(--slate-rgb) / .18)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "52:16",
+      "line": 52,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-hover",
+      "literal": "rgba(155, 168, 190, .12)",
+      "replacement": "rgb(var(--slate-rgb) / .12)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "45:15",
+      "line": 45,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-text",
+      "literal": "#F4EDE4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 119)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 119)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk ink on a notice that lands under data-theme=\"light\" ancestors; var(--text) would resolve paper there"
+    },
+    {
+      "id": "46:16",
+      "line": 46,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-muted",
+      "literal": "#A9B5C9",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 22)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 22)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 74)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant #A9B5C9 with no exact role (SPEC §4.2: merging it is a Classic delta)"
+    },
+    {
+      "id": "47:14",
+      "line": 47,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-ink",
+      "literal": "#F6A94C",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--danger-text",
+          "classic": "Classic differs (distance 65)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 146)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "warn"
+    },
+    {
+      "id": "48:17",
+      "line": 48,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-accent",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "49:15",
+      "line": 49,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-tint",
+      "literal": "rgba(246, 169, 76, .08)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "53:20",
+      "line": 53,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim",
+      "property": "--plim-on-accent",
+      "literal": "#1B2942",
+      "why": "matches a judgement role: --on-accent",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "on-accent",
+      "choice": "on-accent"
+    },
+    {
+      "id": "73:15",
+      "line": 73,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim--paper, .qsets--onlight .plim:not(.plim--dusk)",
+      "property": "--plim-text",
+      "literal": "#1B2942",
+      "why": "matches a judgement role: --on-accent",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "on-accent",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #1B2942 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "74:16",
+      "line": 74,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim--paper, .qsets--onlight .plim:not(.plim--dusk)",
+      "property": "--plim-muted",
+      "literal": "#5E6167",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 95)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 121)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 128)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #5E6167 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "75:14",
+      "line": 75,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim--paper, .qsets--onlight .plim:not(.plim--dusk)",
+      "property": "--plim-ink",
+      "literal": "#8A5300",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 136)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 143)"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (distance 158)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #8A5300 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "76:15",
+      "line": 76,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim--paper, .qsets--onlight .plim:not(.plim--dusk)",
+      "property": "--plim-tint",
+      "literal": "rgba(246, 169, 76, .13)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "77:15",
+      "line": 77,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim--paper, .qsets--onlight .plim:not(.plim--dusk)",
+      "property": "--plim-edge",
+      "literal": "rgba(27, 41, 66, .22)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals rgba(27, 41, 66, .22) in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "78:15",
+      "line": 78,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim--paper, .qsets--onlight .plim:not(.plim--dusk)",
+      "property": "--plim-chip",
+      "literal": "rgba(27, 41, 66, .08)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals rgba(27, 41, 66, .08) in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "79:16",
+      "line": 79,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plim--paper, .qsets--onlight .plim:not(.plim--dusk)",
+      "property": "--plim-hover",
+      "literal": "rgba(27, 41, 66, .05)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        },
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals rgba(27, 41, 66, .05) in Classic (SPEC §4.2: no near-variant merge)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.771Z",
+    "after": {
+      "colour": 10,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 8,
+      "warn": 4,
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 8
+  }
+}

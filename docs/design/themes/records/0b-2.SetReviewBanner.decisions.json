@@ -1,0 +1,93 @@
+{
+  "unit": "0b-2.SetReviewBanner",
+  "file": "components/SetReviewBanner.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 4,
+    "font": 0,
+    "primary": 2
+  },
+  "auto": [
+    {
+      "id": "23:15",
+      "line": 23,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".srev",
+      "property": "--srev-rule",
+      "literal": "rgba(155, 168, 190, .28)",
+      "replacement": "rgb(var(--slate-rgb) / .28)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "25:25",
+      "line": 25,
+      "col": 25,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".srev",
+      "property": "--srev-flag-ink-paper",
+      "literal": "#9B2C27",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 131)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 141)"
+        },
+        {
+          "role": "--danger-text",
+          "classic": "Classic differs (distance 159)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-only flag ink #9B2C27; no paper role equals it"
+    },
+    {
+      "id": "29:21",
+      "line": 29,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".srev",
+      "property": "--srev-on-primary",
+      "literal": "#0F1A2E",
+      "why": "matches a judgement role: --on-action",
+      "candidates": [
+        {
+          "role": "--on-action",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "on-action",
+      "choice": "on-action"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.610Z",
+    "after": {
+      "colour": 2,
+      "font": 0,
+      "primary": 2
+    },
+    "decisionsByKind": {
+      "keep": 1,
+      "on-action": 1
+    },
+    "classicDeltas": [],
+    "edits": 2
+  }
+}

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=7 font=0 primary=6 */
+/* skin-allowance: colour=3 font=0 primary=6 */
 /* ============================================================================
    THE CONSOLE OVERVIEW — components/OverviewPanel.jsx, scope .ovw
 
@@ -30,10 +30,10 @@
   --ovw-t-body: 15px;
   --ovw-t-head: 19px;
   --ovw-t-numeral: 30px;
-  --ovw-rule: rgba(155, 168, 190, .20);
-  --ovw-info-edge: rgba(155, 168, 190, .45);
-  --ovw-tint-green: rgba(79, 178, 134, .10);
-  --ovw-success-text: #6FD0A4;
+  --ovw-rule: rgb(var(--slate-rgb) / .20);
+  --ovw-info-edge: rgb(var(--slate-rgb) / .45);
+  --ovw-tint-green: rgb(var(--success-rgb) / .10);
+  --ovw-success-text: var(--success-text);
 
   max-width: 1000px;
   color: var(--text);

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=12 font=0 primary=12 */
+/* skin-allowance: colour=2 font=0 primary=12 */
 /* components/EventBuilder.jsx, EventItemDialog.jsx — one event's agenda.
    ==========================================================================
    Built from docs/design/agenda-redesign/02-builder.html, 02b-cap-reached
@@ -29,18 +29,18 @@
   --evb-t-numeral: 30px;
   --evb-row-h: 48px;
 
-  --evb-on-accent: #0F1A2E;
+  --evb-on-accent: var(--on-action);
   --evb-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  --evb-rule: rgba(155, 168, 190, .20);
-  --evb-rule-strong: rgba(155, 168, 190, .34);
-  --evb-rule-warn: rgba(246, 169, 76, .5);
-  --evb-row-hover: rgba(155, 168, 190, .055);
-  --evb-row-sel: rgba(246, 169, 76, .10);
-  --evb-tint-cap: rgba(246, 169, 76, .08);
-  --evb-tint-brk: rgba(155, 168, 190, .035);
-  --evb-tint-danger: rgba(229, 100, 94, .09);
-  --evb-scrim: rgba(6, 11, 22, .72);
+  --evb-rule: rgb(var(--slate-rgb) / .20);
+  --evb-rule-strong: rgb(var(--slate-rgb) / .34);
+  --evb-rule-warn: rgb(var(--warn-rgb) / .5);
+  --evb-row-hover: var(--row-hover);
+  --evb-row-sel: var(--row-selected);
+  --evb-tint-cap: rgb(var(--warn-rgb) / .08);
+  --evb-tint-brk: rgb(var(--slate-rgb) / .035);
+  --evb-tint-danger: rgb(var(--danger-rgb) / .09);
+  --evb-scrim: var(--scrim);
   --evb-shadow-modal: 0 24px 64px rgba(0, 0, 0, .5);
   --evb-shadow-menu: 0 20px 48px rgba(0, 0, 0, .5);
 

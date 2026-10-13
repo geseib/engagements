@@ -1,4 +1,4 @@
-/* skin-allowance: colour=8 font=0 primary=0 */
+/* skin-allowance: colour=1 font=0 primary=0 */
 /* ==========================================================================
    THE QUESTION PREVIEW — components/QuestionPreview.jsx
    ==========================================================================
@@ -43,11 +43,11 @@
   --qprev-t-body: 15px;
   --qprev-t-head: 19px;
 
-  --qprev-accent: #F6A94C;
-  --qprev-rule: rgba(155, 168, 190, .20);
-  --qprev-rule-strong: rgba(155, 168, 190, .34);
-  --qprev-row-hover: rgba(155, 168, 190, .055);
-  --qprev-row-sel: rgba(246, 169, 76, .10);
+  --qprev-accent: var(--accent);
+  --qprev-rule: rgb(var(--slate-rgb) / .20);
+  --qprev-rule-strong: rgb(var(--slate-rgb) / .34);
+  --qprev-row-hover: var(--row-hover);
+  --qprev-row-sel: var(--row-selected);
 }
 
 /* THE SCREEN'S TOKENS — what the stage sets and an ancestor here can take away.
@@ -65,8 +65,8 @@
    sheet (index.jsx imports App before styles.css), so one class would lose. */
 .qprev .qprev-screen {
   --muted: #B6C2D4;
-  --primary: #F6A94C;
-  --success: #4FB286;
+  --primary: var(--action);
+  --success: rgb(var(--success-rgb));
 }
 
 /* -- layout ---------------------------------------------------------------- */

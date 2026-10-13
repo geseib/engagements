@@ -1,4 +1,4 @@
-/* skin-allowance: colour=4 font=0 primary=4 */
+/* skin-allowance: colour=1 font=0 primary=4 */
 /* ============================================================================
    CREATE A TEAM — components/CreateOrgDialog.jsx
 
@@ -26,9 +26,9 @@
   --corg-t-body: 15px;
   --corg-t-head: 19px;
 
-  --corg-rule: rgba(155, 168, 190, .20);
-  --corg-rule-strong: rgba(155, 168, 190, .34);
-  --corg-row-hover: rgba(155, 168, 190, .055);
+  --corg-rule: rgb(var(--slate-rgb) / .20);
+  --corg-rule-strong: rgb(var(--slate-rgb) / .34);
+  --corg-row-hover: var(--row-hover);
 }
 
 .corg *,

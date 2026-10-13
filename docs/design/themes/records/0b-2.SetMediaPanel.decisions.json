@@ -1,0 +1,183 @@
+{
+  "unit": "0b-2.SetMediaPanel",
+  "file": "components/SetMediaPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 9,
+    "font": 0,
+    "primary": 9
+  },
+  "auto": [
+    {
+      "id": "81:23",
+      "line": 81,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--smed-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "82:15",
+      "line": 82,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--smed-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "83:22",
+      "line": 83,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--smed-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "84:20",
+      "line": 84,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--smed-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "85:22",
+      "line": 85,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--smed-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "87:18",
+      "line": 87,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--smed-tint-ok",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "75:13",
+      "line": 75,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--primary",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent-text, --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "action"
+    },
+    {
+      "id": "86:20",
+      "line": 86,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--smed-tint-warn",
+      "literal": "rgba(246, 169, 76, .09)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "76:17",
+      "line": 76,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".smed",
+      "property": "--danger-text",
+      "literal": "#EF8C86",
+      "why": "auto would self-reference (exact --danger-text in dark)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:re-declares the global role name on its own scope; var(--danger-text) here is a self-reference (guaranteed-invalid) and no channel carries #EF8C86"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.555Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 9
+    },
+    "decisionsByKind": {
+      "action": 1,
+      "warn": 1,
+      "keep": 1
+    },
+    "classicDeltas": [],
+    "edits": 8
+  }
+}

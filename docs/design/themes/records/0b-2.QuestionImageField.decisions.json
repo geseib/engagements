@@ -1,0 +1,80 @@
+{
+  "unit": "0b-2.QuestionImageField",
+  "file": "components/QuestionImageField.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 3,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [
+    {
+      "id": "45:13",
+      "line": 45,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qimg",
+      "property": "--qimg-ok",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "46:14",
+      "line": 46,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qimg",
+      "property": "--qimg-bad",
+      "literal": "#EF8C86",
+      "replacement": "var(--danger-text)",
+      "why": "exact --danger-text in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "44:16",
+      "line": 44,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qimg",
+      "property": "--qimg-muted",
+      "literal": "#9BA8BE",
+      "why": "matches several roles: --muted, --eyebrow-color",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "muted",
+      "choice": "slate-rgb"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.090Z",
+    "after": {
+      "colour": 0,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "slate-rgb": 1
+    },
+    "classicDeltas": [],
+    "edits": 3
+  }
+}

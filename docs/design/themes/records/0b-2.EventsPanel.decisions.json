@@ -1,0 +1,178 @@
+{
+  "unit": "0b-2.EventsPanel",
+  "file": "components/EventsPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 9,
+    "font": 0,
+    "primary": 10
+  },
+  "auto": [
+    {
+      "id": "39:15",
+      "line": 39,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "40:22",
+      "line": 40,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "41:20",
+      "line": 41,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "43:20",
+      "line": 43,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-tint-note",
+      "literal": "rgba(155, 168, 190, .06)",
+      "replacement": "rgb(var(--slate-rgb) / .06)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "44:22",
+      "line": 44,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "45:16",
+      "line": 45,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-scrim",
+      "literal": "rgba(6, 11, 22, .72)",
+      "replacement": "var(--scrim)",
+      "why": "exact --scrim in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "34:20",
+      "line": 34,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-on-accent",
+      "literal": "#0F1A2E",
+      "why": "matches several roles: --bg, --on-action",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "bg",
+      "choice": "on-action"
+    },
+    {
+      "id": "42:18",
+      "line": 42,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-row-sel",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "raw:var(--row-selected)"
+    },
+    {
+      "id": "46:35",
+      "line": 46,
+      "col": 35,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".evts",
+      "property": "--evts-shadow-modal",
+      "literal": "rgba(0, 0, 0, .5)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 25)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 55)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 55)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:shadow/scrim alpha rgba(0, 0, 0, .5); no role or channel carries this black (--scrim is .72, --shade-rgb is 15 26 46)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.032Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 10
+    },
+    "decisionsByKind": {
+      "on-action": 1,
+      "raw": 1,
+      "keep": 1
+    },
+    "classicDeltas": [
+      "42:18 .evts --evts-row-sel: rgba(246, 169, 76, .10) -> var(--row-selected) (raw: check by hand)"
+    ],
+    "edits": 8
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "unit": "0b-2.LeavePlanDialog",
+  "file": "components/LeavePlanDialog.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 15,
+    "font": 0,
+    "primary": 5
+  },
+  "auto": [
+    {
+      "id": "35:14",
+      "line": 35,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "36:21",
+      "line": 36,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "37:19",
+      "line": 37,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "38:19",
+      "line": 38,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-tint-note",
+      "literal": "rgba(155, 168, 190, .06)",
+      "replacement": "rgb(var(--slate-rgb) / .06)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "40:17",
+      "line": 40,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-tint-ok",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "41:18",
+      "line": 41,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-tint-bad",
+      "literal": "rgba(229, 100, 94, .10)",
+      "replacement": "rgb(var(--danger-rgb) / .10)",
+      "why": "channel --danger-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "39:19",
+      "line": 39,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-tint-held",
+      "literal": "rgba(124, 167, 230, .08)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .08) -> rgba(246,169,76,0.08))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "42:19",
+      "line": 42,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-on-accent",
+      "literal": "#1B2942",
+      "why": "matches several roles: --surface, --on-accent",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "surface",
+      "choice": "on-accent"
+    },
+    {
+      "id": "43:19",
+      "line": 43,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".lvp",
+      "property": "--lvp-on-danger",
+      "literal": "#FFFFFF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:white ink on a filled danger; no white role"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.376Z",
+    "after": {
+      "colour": 7,
+      "font": 0,
+      "primary": 5
+    },
+    "decisionsByKind": {
+      "info": 1,
+      "on-accent": 1,
+      "keep": 1
+    },
+    "classicDeltas": [],
+    "edits": 8
+  }
+}

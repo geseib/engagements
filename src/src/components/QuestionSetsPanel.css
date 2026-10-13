@@ -1,4 +1,4 @@
-/* skin-allowance: colour=45 font=0 primary=22 */
+/* skin-allowance: colour=38 font=0 primary=22 */
 /* ============================================================================
    THE QUESTION SETS SCREEN — QuestionSetsPanel / QuestionSetUploadPanel /
    QuestionSetDeleteDialog.
@@ -60,15 +60,15 @@
   /* Not global tokens. See UserManagement.css: an undefined custom property
      invalidates the whole declaration, so a colour borrowed from a stylesheet
      that only happens to be in the bundle disappears the day that import moves. */
-  --qsets-success-text: #6FD0A4;
+  --qsets-success-text: var(--success-text);
   --qsets-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  --qsets-rule: rgba(155, 168, 190, .20);
-  --qsets-rule-strong: rgba(155, 168, 190, .34);
-  --qsets-row-hover: rgba(155, 168, 190, .055);
-  --qsets-tint-danger: rgba(229, 100, 94, .09);
-  --qsets-tint-warn: rgba(246, 169, 76, .09);
-  --qsets-tint-ok: rgba(79, 178, 134, .10);
+  --qsets-rule: rgb(var(--slate-rgb) / .20);
+  --qsets-rule-strong: rgb(var(--slate-rgb) / .34);
+  --qsets-row-hover: var(--row-hover);
+  --qsets-tint-danger: rgb(var(--danger-rgb) / .09);
+  --qsets-tint-warn: rgb(var(--warn-rgb) / .09);
+  --qsets-tint-ok: rgb(var(--success-rgb) / .10);
 
   color: var(--text);
   font: 400 var(--qsets-t-body)/1.45 var(--font-ui);

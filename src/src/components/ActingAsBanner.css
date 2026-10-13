@@ -1,4 +1,4 @@
-/* skin-allowance: colour=2 font=0 primary=3 */
+/* skin-allowance: colour=0 font=0 primary=3 */
 /* ============================================================================
    THE ACTING-AS STRIP — components/ActingAsBanner.jsx
 
@@ -22,8 +22,8 @@
   --pmode-t-floor: 12px;
   --pmode-t-label: 13px;
   --pmode-t-body: 15px;
-  --pmode-rule: rgba(246, 169, 76, .38);
-  --pmode-tint: rgba(246, 169, 76, .07);
+  --pmode-rule: rgb(var(--warn-rgb) / .38);
+  --pmode-tint: rgb(var(--warn-rgb) / .07);
 
   display: flex;
   align-items: center;

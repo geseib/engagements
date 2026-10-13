@@ -1,0 +1,275 @@
+{
+  "unit": "0b-2.GenerationJobPanel",
+  "file": "components/GenerationJobPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 13,
+    "font": 0,
+    "primary": 1
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "30:14",
+      "line": 30,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-text",
+      "literal": "#2c3e50",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 181)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #2c3e50 (its rule wave converts the surface)"
+    },
+    {
+      "id": "31:15",
+      "line": 31,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-muted",
+      "literal": "#5b6b7c",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 109)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 110)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 110)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #5b6b7c (its rule wave converts the surface)"
+    },
+    {
+      "id": "32:16",
+      "line": 32,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-danger",
+      "literal": "#b3261e",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 94)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 102)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #b3261e (its rule wave converts the surface)"
+    },
+    {
+      "id": "33:19",
+      "line": 33,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-danger-bg",
+      "literal": "#fdeceb",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 77)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 127)"
+        },
+        {
+          "role": "--action-hover",
+          "classic": "Classic differs (distance 145)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #fdeceb (its rule wave converts the surface)"
+    },
+    {
+      "id": "34:14",
+      "line": 34,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-warn",
+      "literal": "#8a5300",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 69)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 93)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 132)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #8a5300 (its rule wave converts the surface)"
+    },
+    {
+      "id": "35:17",
+      "line": 35,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-warn-bg",
+      "literal": "#fdf5e3",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 79)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 130)"
+        },
+        {
+          "role": "--action-hover",
+          "classic": "Classic differs (distance 141)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #fdf5e3 (its rule wave converts the surface)"
+    },
+    {
+      "id": "36:12",
+      "line": 36,
+      "col": 12,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-ok",
+      "literal": "#1b6b4a",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 55)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 66)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 66)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #1b6b4a (its rule wave converts the surface)"
+    },
+    {
+      "id": "37:14",
+      "line": 37,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-rule",
+      "literal": "#e3e8ee",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 108)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 108)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #e3e8ee (its rule wave converts the surface)"
+    },
+    {
+      "id": "38:15",
+      "line": 38,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gjp",
+      "property": "--gjp-quiet",
+      "literal": "#f8f9fa",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 25)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 87)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 137)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #f8f9fa (its rule wave converts the surface)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.214Z",
+    "after": {
+      "colour": 13,
+      "font": 0,
+      "primary": 1
+    },
+    "decisionsByKind": {
+      "keep": 9
+    },
+    "classicDeltas": [],
+    "edits": 0
+  }
+}

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=12 font=0 primary=5 */
+/* skin-allowance: colour=8 font=0 primary=5 */
 /* ============================================================================
    THE ADMIN CONSOLE SHELL — components/AdminShell.jsx
 
@@ -61,10 +61,10 @@
   --adm-t-title: 24px;
   --adm-t-numeral: 30px;
 
-  --adm-rule: rgba(155, 168, 190, .20);
-  --adm-rule-strong: rgba(155, 168, 190, .34);
-  --adm-row-hover: rgba(155, 168, 190, .055);
-  --adm-row-sel: rgba(246, 169, 76, .10);
+  --adm-rule: rgb(var(--slate-rgb) / .20);
+  --adm-rule-strong: rgb(var(--slate-rgb) / .34);
+  --adm-row-hover: var(--row-hover);
+  --adm-row-sel: var(--row-selected);
 
   /* Density. 36px rows, 32px nav items: this surface is dense on purpose. */
   --adm-nav-w: 212px;
