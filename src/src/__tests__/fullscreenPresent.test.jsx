@@ -384,7 +384,7 @@ describe('the event\'s stage: a talk presented full screen', () => {
 
 // ── The stylesheet (jsdom lays nothing out; the design is read as text) ──
 const AG_CSS = read('components', 'event', 'EventStage.css');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

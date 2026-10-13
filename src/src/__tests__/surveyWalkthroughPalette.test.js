@@ -30,7 +30,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const STAGE_RAW = read('styles', 'stage.css');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const SVR_CSS = read('components', 'survey', 'results', 'SurveyResults.css');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const STAGE = strip(STAGE_RAW);

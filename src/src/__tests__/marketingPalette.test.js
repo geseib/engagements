@@ -93,7 +93,7 @@ const SHEETS = {};
 for (const f of topLevelSheets) SHEETS[f] = read('marketing', f);
 for (const f of componentSheets) SHEETS[f] = read('marketing', 'components', f);
 
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const JCE = read('components', 'JoinCodeEntry.css');
 const ALL = Object.values(SHEETS).join('\n');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');

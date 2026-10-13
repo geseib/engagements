@@ -15,7 +15,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('components', 'GameSetupDialog.css');
-const GLOBAL = read('styles.css');
+const GLOBAL = require('../testing/classicGlobalCss')();
 
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
 function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }

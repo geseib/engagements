@@ -22,7 +22,7 @@ const path = require('path');
 const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const BUILDER_CSS = read('BuilderPage.css');
 const PAB_CSS = read('components', 'PollAIBuilder.css');
 const PAB_JSX = read('components', 'PollAIBuilder.jsx');

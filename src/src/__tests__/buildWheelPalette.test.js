@@ -13,7 +13,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('buildroom', 'BuildWheel.css');
-const GLOBAL = read('styles.css');
+const GLOBAL = require('../testing/classicGlobalCss')();
 
 const hex = (block, name) => {
   const start = GLOBAL.indexOf(block);

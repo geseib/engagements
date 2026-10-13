@@ -27,7 +27,7 @@ const fs = require('fs');
 const path = require('path');
 
 const STAGE_RAW = fs.readFileSync(path.join(__dirname, '..', 'styles', 'stage.css'), 'utf8');
-const GLOBAL_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const STAGE = strip(STAGE_RAW);
 

@@ -55,7 +55,7 @@ const declarations = (body) => [...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+)/g)]
 const has = (rule, selector) => rule.selectors.includes(selector);
 
 const STAGE_RULES = rulesOf(strip(read('styles', 'stage.css')));
-const ALL_RULES = [...rulesOf(strip(read('styles.css'))), ...STAGE_RULES];
+const ALL_RULES = [...rulesOf(strip(require('../testing/classicGlobalCss')())), ...STAGE_RULES];
 
 /* The card's DOM: h1.q, img.stage-art, p.qdetail, div.opts > div.opt >
    span.ltr/.txt/.fill/.pct, with .correct / .dim — components/QuestionCard.jsx.
@@ -98,6 +98,17 @@ const isAboveTheWrapper = (rule) => rule.selectors.some(
 const TABLE = STAGE_RULES.find((r) => has(r, ':root.d-table'));
 const OTHER_PROFILES = STAGE_RULES.filter((r) => [':root.d-room', ':root.d-tv', ':root.d-call'].some((p) => has(r, p)));
 
+const PROFILE_SET = new Set([TABLE, ...OTHER_PROFILES].filter(Boolean)
+  .flatMap((r) => declarations(r.body).map((d) => d.name)));
+function readsAProfileValue(value, seen = new Set()) {
+  return [...value.matchAll(/var\((--[\w-]+)/g)].some(([, n]) => {
+    if (PROFILE_SET.has(n)) return true;
+    if (seen.has(n)) return false;
+    seen.add(n);
+    return declsOf(n).some((d) => readsAProfileValue(d.value, seen));
+  });
+}
+
 describe('the Table ladder, on the root and on the preview\'s scope', () => {
   test('one declaration, two selectors', () => {
     // rejects: a second copy of the Table ladder under a new class — two
@@ -118,7 +129,10 @@ describe('the Table ladder, on the root and on the preview\'s scope', () => {
     // body as var(--L-*) and would reach the card at Room size.
     const stale = [...READ].filter((name) => {
       const decls = declsOf(name);
-      const derivedAbove = decls.some((d) => isAboveTheWrapper(d.rule) && d.value.includes('var('));
+      // A role (styles/roles.css, Phase 0a of the skins) is derived on the root too, but
+      // from skin values no profile sets (SPEC §3 rule 3), so only a derivation that
+      // reaches a name a profile declares can go stale under the scope.
+      const derivedAbove = decls.some((d) => isAboveTheWrapper(d.rule) && readsAProfileValue(d.value));
       const onScope = decls.some((d) => has(d.rule, '.stage-ladder-table'));
       return derivedAbove && !onScope;
     });

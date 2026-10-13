@@ -20,7 +20,7 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8')
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const RAW = read('buildroom', 'BuildPlayer.css');
 const CSS = strip(RAW);
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const PLR_CSS = read('components', 'PlayerSurface.css');
 const JSX = read('buildroom', 'BuildPlayer.jsx');
 const CREW_JSX = read('buildroom', 'BuildPlayerCrew.jsx');

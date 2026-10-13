@@ -17,7 +17,7 @@ const path = require('path');
 const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const USERS_CSS = read('components', 'UserManagement.css');
 const SESSIONS_CSS = read('components', 'SessionsPanel.css');
 

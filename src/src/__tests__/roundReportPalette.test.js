@@ -39,7 +39,7 @@ const RAW_SHEET = fs.readFileSync(
  */
 const stripCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const SHEET = stripCss(RAW_SHEET);
-const GLOBAL_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 
 /* ------------------------------------------------------------------ colour */
 const lin = (c) => {

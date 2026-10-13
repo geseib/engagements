@@ -35,7 +35,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('components', 'AIPromptManager.css');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }

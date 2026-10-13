@@ -22,7 +22,7 @@ const path = require('path');
 const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 // The stage's ladders (--t-*), loaded app-wide by index.jsx: the Build Room's
 // Stage screen sizes its ask from them, as the regular stage does.
 const STAGE_CSS = read('styles', 'stage.css');

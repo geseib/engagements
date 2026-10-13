@@ -36,7 +36,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').trim();
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const STAGE_CSS = read('styles', 'stage.css');
 const HOST_CSS = read('HostRemote.css');
 const HRQ_CSS = read('components', 'RemoteQuestionBrowser.css');

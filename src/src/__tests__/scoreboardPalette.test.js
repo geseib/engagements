@@ -29,7 +29,7 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8')
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const SB = strip(read('components', 'stage', 'scoreboard', 'Scoreboard.css'));
 const STAGE = strip(read('styles', 'stage.css'));
-const GLOBAL = strip(read('styles.css'));
+const GLOBAL = strip(require('../testing/classicGlobalCss')());
 
 /* ---- colour: the audit's arithmetic ---- */
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }

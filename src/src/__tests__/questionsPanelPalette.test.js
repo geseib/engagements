@@ -34,7 +34,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
-const GLOBAL_CSS = strip(read('styles.css'));
+const GLOBAL_CSS = strip(require('../testing/classicGlobalCss')());
 const EDITOR_CSS = strip(read('components', 'QuestionSetEditor.css'));
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */

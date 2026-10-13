@@ -522,7 +522,7 @@ describe('the session panel stylesheet', () => {
   // An undefined custom property invalidates the WHOLE declaration, silently.
   // Every var here must be one styles.css declares or one this file declares.
   it('borrows no custom property that is not declared somewhere', () => {
-    const GLOBAL = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+    const GLOBAL = require('../testing/classicGlobalCss')();
     const declared = new Set(
       [...strip(PANEL_CSS).matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1])
         .concat([...GLOBAL.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1])),

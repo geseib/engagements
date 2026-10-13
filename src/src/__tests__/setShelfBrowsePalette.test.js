@@ -25,7 +25,7 @@ const path = require('path');
 const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const QS_CSS = read('components', 'QuestionSetsPanel.css');
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */

@@ -1,0 +1,134 @@
+/* ============================================================
+   SKIN VALUES — CLASSIC (docs/design/themes/SPEC.md §2 layer 1, §4)
+
+   Values only: flat --sk-* custom properties in ONE root block, nothing else.
+   styles/roles.css maps theme x these values -> the roles every stylesheet
+   reads. A stylesheet never reads a --sk-* value; this file never reads a role.
+
+   THIS IS WHAT RENDERS WITH NO data-skin AT ALL (`:root` alone): first paint
+   before the boot script, jest, a corrupt or unknown stored value.
+   present.css declares on :root[data-skin="present"] (0-2-0 beats 0-1-0).
+
+   CLASSIC IS TODAY, COPIED, NEVER RE-DERIVED. Every value below is what
+   styles.css (and, for three names, styles/stage.css) declared at 1174563f, so
+   Classic renders pixel-identical. Where SPEC §4's Classic column differs from
+   what renders today, today wins — see "CLASSIC AMENDMENTS" at the end of the
+   block (and docs/design/themes/records/0a.md).
+
+   A --sk-* value may read other --sk-* values, never a role. These are
+   resolved on <html>, whose data-theme is "light" (public/index.html:2), so
+   `var(--muted)` here would hand dusk the PAPER muted. skinPalette.test.js
+   enforces it.
+
+   Fonts (Archivo at 125% width + Inter) are loaded via <link> in index.html;
+   index.html loads Archivo at wdth 125 only, so the name alone selects the
+   expanded face — no rule needs a font-stretch of its own.
+   ============================================================ */
+:root, :root[data-skin="classic"] {
+  /* ---- type ---- */
+  --sk-font-display: "Archivo", system-ui, sans-serif;  /* wide+heavy, recreates PP Neue Corp Wide */
+  --sk-font-ui: "Inter", system-ui, sans-serif;
+  --sk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sk-display-weight: 800;
+  --sk-display-tracking: -.01em;
+  --sk-eyebrow-weight: 700;      /* the stage .kicker, styles/stage.css */
+  --sk-eyebrow-tracking: .15em;
+
+  /* ---- action and accent (theme-invariant) ---- */
+  --sk-action: #F6A94C;          /* AMBER summit-glow: the one action */
+  --sk-action-hover: #FFBB63;
+  --sk-on-action: #0F1A2E;       /* 8.86:1 on #F6A94C */
+  --sk-wall-action: #F6A94C;     /* Classic's wall keeps the stage's orange (SPEC §3.4) */
+  --sk-wall-on-action: #0F1A2E;
+  --sk-accent: #F6A94C;          /* states, chips, counts, selection: orange in Classic */
+  --sk-accent-rgb: 246 169 76;
+  --sk-accent-hover: #FFBB63;
+  --sk-info: #7CA7E6;            /* dusk periwinkle: links, WS-connected, non-reward (6.8:1) */
+  --sk-info-rgb: 124 167 230;
+
+  /* ---- channels, for tints written rgb(var(--x-rgb) / a) ---- */
+  --sk-slate-rgb: 155 168 190;
+  --sk-success-rgb: 79 178 134;
+  --sk-danger-rgb: 229 100 94;
+  --sk-warn-rgb: 246 169 76;
+  --sk-shade-rgb: 15 26 46;      /* added in 0a: dusk scrims and shadows, rgba(15,26,46,a) */
+  --sk-glow-rgb: 244 237 228;    /* added in 0a: warm-text tints, rgba(244,237,228,a) */
+
+  /* ---- phases ---- */
+  --sk-phase-ask: #F6A94C;       /* .chip.ask, styles/stage.css */
+  --sk-phase-vote: #7CA7E6;
+  --sk-phase-results: #4FB286;
+
+  /* ---- status (not skin colours) ---- */
+  --sk-success: #4FB286;         /* correct answer, positive delta (5.6:1) */
+  --sk-danger: #E5645E;          /* errors, destructive only. Borders, rules, bar fills. */
+  --sk-danger-deep: #B03A34;     /* filled destructive button: carries --text at 5.16:1
+                                    (a filled #E5645E carries white at only 3.32:1) */
+  --sk-gold: #F6A94C;            /* rank #1 */
+  --sk-silver: #C0C6D0;
+  --sk-bronze: #B4794A;
+  --sk-warn: #F6A94C;            /* a warning is amber in both skins; a status, not the accent */
+
+  /* ---- shape ---- */
+  --sk-radius: 16px;
+  --sk-radius-sm: 8px;
+  --sk-radius-lg: 16px;
+  --sk-select-mark: none;
+  --sk-badge-radius: 999px;
+
+  /* ---- DUSK (:root, [data-theme="dark"]) ---- */
+  --sk-dark-bg: #0F1A2E;         /* deepest dusk slate, full-viewport field */
+  --sk-dark-surface: #1B2942;    /* option cards, panels, AI panel */
+  --sk-dark-surface-2: #25375A;  /* nested/hover, ridge mid-tone */
+  --sk-dark-text: #F4EDE4;       /* warm paper-white, never pure #FFF: 14.97 / 12.53 / 10.20 */
+  --sk-dark-muted: #9BA8BE;      /* metadata, counters, secondary: 7.24 / 6.06 / 4.93 */
+  --sk-dark-accent-text: #F6A94C;
+  --sk-dark-eyebrow-color: var(--sk-dark-muted);
+  --sk-dark-success-text: #6FD0A4;  /* 9.30 on bg */
+  /* TEXT-ONLY DANGER TINT, by the same argument that produced --muted's lift.
+     --danger is UNDER the 4.5:1 AA bar for normal text on dusk: 4.38:1 on
+     --surface and 3.56:1 on --surface-2. Destructive copy is the text a person
+     must read carefully, and it lives in modals, which sit on --surface. Found
+     by the admin redesign's audit A4 (docs/design/admin-redesign/RATIONALE.md §5).
+       --danger-text  7.26 / 6.08 / 4.94  on --bg / --surface / --surface-2 */
+  --sk-dark-danger-text: #EF8C86;
+  --sk-dark-rule: rgba(155,168,190,.22);         /* CLASSIC AMENDMENT 1 */
+  --sk-dark-rule-strong: rgba(155,168,190,.34);
+  --sk-dark-row-hover: rgba(155,168,190,.055);
+  --sk-dark-row-selected: rgb(var(--sk-accent-rgb) / .10);
+  --sk-dark-scrim: rgba(6,11,22,.72);
+  --sk-dark-on-accent: #1B2942;  /* 7.42 on #F6A94C */
+  --sk-dark-field: var(--sk-dark-bg);
+  --sk-dark-wall-canvas: linear-gradient(180deg,#0C1526 0%,#12203A 46%,#1B2C4A 78%,#2A3A57 100%);
+  --sk-dark-wall-quote: #F4EDE4;
+
+  /* ---- PAPER ([data-theme="light"]) ---- */
+  --sk-light-bg: #FBF7F1;        /* warm paper, kills projector-room glare */
+  --sk-light-surface: #FFFFFF;
+  --sk-light-surface-2: #F1EDE4;
+  --sk-light-text: #1B2942;
+  --sk-light-muted: #5E6167;
+  --sk-light-accent-text: #9A5B18;
+  --sk-light-eyebrow-color: var(--sk-light-muted);
+  --sk-light-success-text: #6FD0A4;              /* CLASSIC AMENDMENT 2 */
+  --sk-light-danger-text: #EF8C86;               /* CLASSIC AMENDMENT 3 */
+  --sk-light-rule: rgba(155,168,190,.22);        /* CLASSIC AMENDMENT 1 */
+  --sk-light-rule-strong: rgba(27,41,66,.28);
+  --sk-light-field: var(--sk-light-bg);
+
+  /* ---- CLASSIC AMENDMENTS (SPEC §4.2-§4.3, decided in 0a: today wins) ----
+     Three role NAMES already render today, theme-invariant, and are read by
+     sheets 0a does not own. Giving them SPEC's per-theme Classic values would
+     repaint those readers wherever an element carries data-theme, so Classic
+     keeps today's single value in both themes:
+       1. --rule         rgba(155,168,190,.22) — styles/stage.css :root, read by
+                         unscoped .card/.opt/.btn.ghost/.pod/.dock rules, the
+                         scoreboard and the event stage (SPEC: .20 dusk,
+                         rgba(27,41,66,.14) paper).
+       2. --success-text #6FD0A4 — styles/stage.css :root (SPEC paper: #1C7350).
+       3. --danger-text  #EF8C86 — styles.css :root, read on paper by ~50 sheets
+                         (SPEC paper: #B03A34; in Classic, paper destructive copy
+                         maps to --danger-deep, which is #B03A34).
+     2 and 3 are under AA on paper, exactly as they are today; skinPalette.test.js
+     lists them as the known Classic exceptions. Present carries SPEC's values. */
+}

@@ -1,0 +1,119 @@
+/* ============================================================
+   ROLES (docs/design/themes/SPEC.md §2 layer 2, §3)
+
+   theme (dark | light) x skin values (styles/skins/*.css) -> the role tokens
+   every stylesheet reads. Written once; a new skin never edits this file.
+
+   Reads --sk-* values only, and declares only on :root and [data-theme]
+   (never on body or a scope: a custom property holding var() is resolved on
+   the element that declares it — the --k trap, styles/stage.css). The skin
+   values are declared on <html> and inherited, so they are already the right
+   skin by the time a role resolves here.
+
+   :root, [data-theme="dark"] = DUSK (big-screen / projector, the default).
+   [data-theme="light"] = PAPER (authoring / admin / host-editing UI).
+   [data-theme="dark"] lets a container re-enter dusk under a paper ancestor.
+
+   Imported by index.jsx after App (so after every component sheet, exactly
+   where styles.css's own token blocks used to sit) and before styles.css.
+
+   The migration aliases --primary / --primary-deep / --secondary / --hairline
+   stay in styles.css (SPEC §4.4) until the last phase.
+   ============================================================ */
+
+/* ---- theme-invariant ---- */
+:root {
+  --font-display: var(--sk-font-display);
+  --font-ui: var(--sk-font-ui);
+  --font-mono: var(--sk-font-mono);
+  --display-weight: var(--sk-display-weight);
+  --display-tracking: var(--sk-display-tracking);
+  --eyebrow-weight: var(--sk-eyebrow-weight);
+  --eyebrow-tracking: var(--sk-eyebrow-tracking);
+
+  --action: var(--sk-action);
+  --action-hover: var(--sk-action-hover);
+  --on-action: var(--sk-on-action);
+  --accent: var(--sk-accent);
+  --accent-rgb: var(--sk-accent-rgb);
+  --accent-hover: var(--sk-accent-hover);
+  --info: var(--sk-info);
+  --info-rgb: var(--sk-info-rgb);
+
+  --slate-rgb: var(--sk-slate-rgb);
+  --success-rgb: var(--sk-success-rgb);
+  --danger-rgb: var(--sk-danger-rgb);
+  --warn-rgb: var(--sk-warn-rgb);
+  --shade-rgb: var(--sk-shade-rgb);   /* added in 0a: rgba(15,26,46,a) scrims and shadows */
+  --glow-rgb: var(--sk-glow-rgb);     /* added in 0a: rgba(244,237,228,a) warm-text tints */
+
+  --phase-ask: var(--sk-phase-ask);
+  --phase-vote: var(--sk-phase-vote);
+  --phase-results: var(--sk-phase-results);
+
+  --success: var(--sk-success);
+  --danger: var(--sk-danger);
+  --danger-deep: var(--sk-danger-deep);
+  --gold: var(--sk-gold);
+  --silver: var(--sk-silver);
+  --bronze: var(--sk-bronze);
+  --warn: var(--sk-warn);
+
+  --radius: var(--sk-radius);
+  --radius-sm: var(--sk-radius-sm);
+  --radius-lg: var(--sk-radius-lg);
+  --select-mark: var(--sk-select-mark);
+  --badge-radius: var(--sk-badge-radius);
+}
+
+/* ---- DUSK ---- */
+:root, [data-theme="dark"] {
+  --bg: var(--sk-dark-bg);
+  --surface: var(--sk-dark-surface);
+  --surface-2: var(--sk-dark-surface-2);
+  --text: var(--sk-dark-text);
+  --muted: var(--sk-dark-muted);
+  --accent-text: var(--sk-dark-accent-text);
+  --eyebrow-color: var(--sk-dark-eyebrow-color);
+  --success-text: var(--sk-dark-success-text);
+  --danger-text: var(--sk-dark-danger-text);
+  --rule: var(--sk-dark-rule);
+  --rule-strong: var(--sk-dark-rule-strong);
+  --row-hover: var(--sk-dark-row-hover);
+  --row-selected: var(--sk-dark-row-selected);
+  --scrim: var(--sk-dark-scrim);
+  --on-accent: var(--sk-dark-on-accent);
+  --field: var(--sk-dark-field);
+  --wall-canvas: var(--sk-dark-wall-canvas);
+  --wall-quote: var(--sk-dark-wall-quote);
+}
+
+/* ---- PAPER ---- */
+[data-theme="light"] {
+  --bg: var(--sk-light-bg);
+  --surface: var(--sk-light-surface);
+  --surface-2: var(--sk-light-surface-2);
+  --text: var(--sk-light-text);
+  --muted: var(--sk-light-muted);
+  --accent-text: var(--sk-light-accent-text);
+  --eyebrow-color: var(--sk-light-eyebrow-color);
+  --success-text: var(--sk-light-success-text);
+  --danger-text: var(--sk-light-danger-text);
+  --rule: var(--sk-light-rule);
+  --rule-strong: var(--sk-light-rule-strong);
+  --field: var(--sk-light-field);
+}
+
+/* Call: wide gradients band under video compression (styles/stage.css), so
+   the field is flat in every skin. */
+:root.d-call, :root.d-call [data-theme] { --field: var(--bg); }
+
+/* The wall rule is a skin value (SPEC §3.4): orange in Classic, blue in Present. */
+[data-surface="wall"] { --action: var(--sk-wall-action); --on-action: var(--sk-wall-on-action); }
+
+/* ---- MIGRATION SHIM (0a): delete when TalkingPointsReport.css is migrated ----
+   `.tpr-src` reads `var(--info, var(--text))`. --info did not exist before 0a,
+   so the link rendered in --text; with --info declared it would turn #7CA7E6
+   on paper (2.6:1, and a Classic change). This keeps today's ink until the
+   owning unit rewrites that declaration. Not a role, not a value. */
+.report-paper .tpr { --info: var(--text); }

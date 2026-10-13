@@ -11,8 +11,10 @@
  * same running order on the phone (QueueList variant="touch") — so each tone is
  * composited on each of those grounds rather than on the token table's.
  *
- * NOTHING IS TYPED TWICE: every colour and every ground is read out of
- * styles.css. The contrast functions are docs/design/admin-redesign/audit.html's,
+ * NOTHING IS TYPED TWICE: every ground is read out of styles.css, and every
+ * role through testing/skinHarness.js (styles/skins/*.css + styles/roles.css),
+ * for every skin. The panel is dusk in every skin (its ground is the sheet's own
+ * #111D33), so the roles are resolved in the dark theme. The contrast functions are docs/design/admin-redesign/audit.html's,
  * as the other *Palette tests copy them. jsdom loads no stylesheet, so green
  * here means the palette clears AA, not that a browser draws it.
  */
@@ -20,7 +22,11 @@ const fs = require('fs');
 const path = require('path');
 
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+const H = require('../testing/skinHarness');
+
 const CSS = strip(fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'));
+/* The setup panel and the phone's queue are dusk surfaces in every skin. */
+const SKINS = H.CASES.filter(([, theme]) => theme === 'dark').map(([skin]) => skin);
 
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
 function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
@@ -43,11 +49,11 @@ function hexIn(body, name) {
   if (!m) throw new Error(`${name} is not a hex there`);
   return m[1];
 }
-/** `var(--token, #fallback)` → the token's :root value. */
-function tokenColour(body, prop = 'color') {
+/** `var(--token, #fallback)` → the token's resolved dusk value in one skin. */
+function tokenColour(body, prop = 'color', skin = 'classic') {
   const m = body.match(new RegExp(`(^|;)\\s*${prop}\\s*:\\s*var\\((--[\\w-]+)`));
   if (!m) throw new Error(`no ${prop} token`);
-  return { name: m[2], hex: hexIn(ROOT, m[2]) };
+  return { name: m[2], hex: H.role(m[2], { skin, theme: 'dark' }) };
 }
 function rgbaOf(body) {
   const m = body.match(/background:\s*rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\s*\)/);
@@ -55,22 +61,23 @@ function rgbaOf(body) {
   return { rgb: [Number(m[1]), Number(m[2]), Number(m[3])], a: Number(m[4]) };
 }
 
-const ROOT = CSS.slice(CSS.indexOf(':root {'), CSS.indexOf('}', CSS.indexOf(':root {')));
-const DUSK_AT = CSS.indexOf('[data-theme="dark"] {');
-const DUSK = CSS.slice(DUSK_AT, CSS.indexOf('}', DUSK_AT));
-
 const PANEL = parseHex(hexIn(block('.setup-panel'), 'background'));
 const TINT = rgbaOf(block('.setup-q'));
-const REMOTE = parseHex(hexIn(DUSK, '--bg'));
 
-const GROUNDS = {
-  'the panel\'s browser rows': PANEL,
-  'the running order in the panel': alphaOver(TINT.rgb, PANEL, TINT.a),
-  'the running order on the phone': alphaOver(TINT.rgb, REMOTE, TINT.a),
-};
-const AA = 4.5;
+const GROUNDS = SKINS.flatMap((skin) => {
+  const remote = parseHex(H.role('--bg', { skin, theme: 'dark' }));
+  return [
+    [`${skin}: the panel's browser rows`, skin, PANEL],
+    [`${skin}: the running order in the panel`, skin, alphaOver(TINT.rgb, PANEL, TINT.a)],
+    [`${skin}: the running order on the phone`, skin, alphaOver(TINT.rgb, remote, TINT.a)],
+  ];
+});
+const AA = H.AA;
 
 describe('the premise', () => {
+  test('every skin is measured once Present exists', () => {
+    expect(SKINS).toEqual(expect.arrayContaining(['classic', 'present']));
+  });
   test('the grounds are the sheet\'s own, not assumed', () => {
     expect(PANEL).toEqual(parseHex('#111D33'));
     expect(TINT.a).toBeGreaterThan(0);
@@ -78,24 +85,24 @@ describe('the premise', () => {
   });
 });
 
-describe.each(Object.entries(GROUNDS))('on %s', (_label, ground) => {
+describe.each(GROUNDS)('on %s', (_label, skin, ground) => {
   test('Ask next (--primary) clears AA', () => {
-    const { name, hex } = tokenColour(block('.setup-ask--next'));
+    const { name, hex } = tokenColour(block('.setup-ask--next'), 'color', skin);
     expect(name).toBe('--primary');
     expect(ratio(parseHex(hex), ground)).toBeGreaterThanOrEqual(AA);
   });
 
   test('Ask now (--danger-text, never --danger) clears AA', () => {
-    const { name, hex } = tokenColour(block('.setup-ask--now'));
+    const { name, hex } = tokenColour(block('.setup-ask--now'), 'color', skin);
     expect(name).toBe('--danger-text');
     expect(ratio(parseHex(hex), ground)).toBeGreaterThanOrEqual(AA);
   });
 });
 
-describe('armed, on the phone', () => {
+describe.each(SKINS)('armed, on the phone (%s)', (skin) => {
   test('the words on the --danger-deep fill clear AA', () => {
     const body = block('.setup-ask--now.is-armed');
-    const fill = tokenColour(body, 'background');
+    const fill = tokenColour(body, 'background', skin);
     expect(fill.name).toBe('--danger-deep');
     expect(ratio(parseHex(hexIn(body, 'color')), parseHex(fill.hex))).toBeGreaterThanOrEqual(AA);
   });

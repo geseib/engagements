@@ -23,7 +23,7 @@ const path = require('path');
 const SRC = path.join(__dirname, '..');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const STAGE = strip(fs.readFileSync(path.join(SRC, 'styles', 'stage.css'), 'utf8'));
-const GLOBAL_CSS = strip(fs.readFileSync(path.join(SRC, 'styles.css'), 'utf8'));
+const GLOBAL_CSS = strip(require('../testing/classicGlobalCss')());
 
 /* ------------------------------------------------------------------ colour */
 const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };

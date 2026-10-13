@@ -16,7 +16,7 @@ const path = require('path');
 const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const ROOM_CSS = read('buildroom', 'BuildRoom.css');
 const CREW_CSS = read('buildroom', 'BuildCrew.css');
 

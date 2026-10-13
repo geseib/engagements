@@ -13,7 +13,7 @@ const path = require('path');
 const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
 const CSS = read('components/LeavePlanDialog.css');
 const JSX = read('components/LeavePlanDialog.jsx');
-const STYLES = read('styles.css');
+const STYLES = require('../testing/classicGlobalCss')();
 const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
