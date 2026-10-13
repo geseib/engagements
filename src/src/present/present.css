@@ -326,7 +326,12 @@ html.present-locked body {
 /* THE SCOREBOARD is the host stage's own component (components/stage/
    scoreboard), sized for a whole window, so it sits over the canvas rather
    than inside it. */
-.present .present-board { position: absolute; inset: 0; z-index: 10; overflow: hidden; }
+/* The board fills the whole window (owner, 2026-10-13: it measured 544px of a
+   900px window): a flex column whose one child, the Scoreboard's .sb root, is
+   stretched, as it is as a grid item on the host's stage. Its own fit loops
+   then size the board to the window. Scoreboard.css is not touched. */
+.present .present-board { position: absolute; inset: 0; z-index: 10; overflow: hidden; display: flex; flex-direction: column; }
+.present .present-board > .sb { flex: 1 1 auto; min-height: 0; }
 
 /* THE ONE-SCREEN STRIP (D7): a host's controls for three seconds after the
    mouse moves. Outside the canvas, in window pixels, so it stays a usable size

@@ -59,6 +59,17 @@ describe('present.css never scrolls', () => {
       for (const name of LADDER) expect(`${profile} ${body}`).toMatch(new RegExp(`${name}\\s*:`));
     }
   });
+  it('the scoreboard overlay fills the window: a flex column whose .sb is stretched (owner, 2026-10-13)', () => {
+    const board = bodyOf('.present .present-board');
+    expect(board).toMatch(/position:\s*absolute/);
+    expect(board).toMatch(/inset:\s*0/);
+    expect(board).toMatch(/overflow:\s*hidden/);
+    expect(board).toMatch(/display:\s*flex/);
+    expect(board).toMatch(/flex-direction:\s*column/);
+    const sb = bodyOf('.present .present-board > .sb');
+    expect(sb).toMatch(/flex:\s*1 1 auto/);
+    expect(sb).toMatch(/min-height:\s*0/);
+  });
   it("Room's secondary, the smallest response text, is at least 40px (Q5)", () => {
     const m = bodyOf('.present[data-profile="room"] .present-canvas').match(/--L-secondary:\s*(\d+)px/);
     expect(Number(m[1])).toBeGreaterThanOrEqual(40);
