@@ -166,7 +166,7 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
             HOST_INTENTS.FEEDBACK, HOST_INTENTS.FIELD_NOTES,
             HOST_INTENTS.WARN_SURVEY, HOST_INTENTS.SURVEY_RESULTS,
             HOST_INTENTS.SHOW_RESPONSE, HOST_INTENTS.STOP_SHOWING, HOST_INTENTS.NEXT,
-            HOST_INTENTS.NEXT_RESPONSE,
+            HOST_INTENTS.NEXT_RESPONSE, HOST_INTENTS.CANCEL_ASK,
           ]).toContain(controls.secondary.intent);
           expect(controls.secondary.intent).not.toBe(controls.primary.intent);
         }

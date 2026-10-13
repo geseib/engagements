@@ -22,6 +22,7 @@ import Pips from '../components/ui/Pips';
 import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
 import TallyRow from '../components/ui/TallyRow';
+import FW, { KINDS as ASK_KINDS, RATE_ENDS } from '../config/followUpWords';
 
 /* ------------------------------------------------------------ shared parts */
 
@@ -299,6 +300,84 @@ export function PresentFeedback({ model }) {
   );
 }
 
+/**
+ * A QUESTION FOR THE ROOM (docs/design/followup-icons mockup §3-4). Live: the
+ * question, its options or scale, and how many have answered. Results: Choose
+ * as bars with counts, Rate as the average and the spread, Ideas only as the
+ * host picked them. Counts only, never a name or a percentage.
+ */
+export function PresentAsk({ model }) {
+  const a = model.ask;
+  const kind = ASK_KINDS[a.kind] || ASK_KINDS.ideas;
+  const closed = model.moment === 'ROOM_RESULTS';
+  const words = a.kind === 'rate' ? `\u201c${a.statement}\u201d` : a.question;
+  const n = closed && a.tally ? a.tally.n : model.answered;
+  const of = model.counts ? model.counts.of : 0;
+  return (
+    <div className="present-moment present-frame" data-ask={a.kind}>
+      <Top model={model} right={closed ? FW.theRoomsAnswer : FW.questionForRoom} />
+      <div className="present-main">
+        <Eyebrow className="present-eyebrow">{kind.wall}</Eyebrow>
+        <Heading level={1} size="primary" balance className="present-h2 present-ask-q">{words}</Heading>
+        {!closed && a.kind === 'choice' && (
+          <ol className="present-ask-options">
+            {a.options.map((o, i) => (
+              <li key={i}><NumberBadge as="span" n={String.fromCharCode(65 + i)} size="var(--L-body)" />{o}</li>
+            ))}
+          </ol>
+        )}
+        {!closed && a.kind === 'rate' && (
+          <div className="present-ask-scale">
+            {[1, 2, 3, 4, 5].map((v) => <span key={v}>{v}</span>)}
+            <p><span>{RATE_ENDS.low}</span><span>{RATE_ENDS.high}</span></p>
+          </div>
+        )}
+        {closed && a.kind === 'choice' && a.tally && (
+          <div className="present-tally">
+            {a.options.map((o, i) => {
+              const max = Math.max(1, ...a.tally.counts);
+              return (
+                <TallyRow key={i} className="present-trow" rank={String.fromCharCode(65 + i)} label={o}
+                  share={(a.tally.counts[i] || 0) / max} points={a.tally.counts[i] || 0} unit="" />
+              );
+            })}
+          </div>
+        )}
+        {closed && a.kind === 'rate' && a.tally && (
+          <div className="present-ask-rate">
+            <p className="present-ask-mean">
+              <b>{a.tally.mean === null ? '\u2013' : a.tally.mean.toFixed(1)}</b>
+              <span>{FW.averageOf5}</span>
+            </p>
+            <div className="present-tally">
+              {[5, 4, 3, 2, 1].map((v) => {
+                const max = Math.max(1, ...a.tally.counts);
+                const label = v === 5 ? RATE_ENDS.high : v === 1 ? RATE_ENDS.low : String(v);
+                return <TallyRow key={v} className="present-trow" label={label} share={(a.tally.counts[v - 1] || 0) / max} points={a.tally.counts[v - 1] || 0} unit="" />;
+              })}
+            </div>
+          </div>
+        )}
+        {closed && a.kind === 'ideas' && (
+          a.picked.length ? (
+            <ul className="present-ask-ideas">
+              {a.picked.map((t, i) => <li key={i}><blockquote>{t}</blockquote></li>)}
+            </ul>
+          ) : <p className="present-lead">{`${FW.answered(n)}.`}</p>
+        )}
+      </div>
+      <div className="present-foot">
+        {!closed ? <Meter done={n} of={of} /> : null}
+        <span>
+          {!closed
+            ? FW.answeredOn(n, of || n)
+            : a.kind === 'ideas' ? FW.ideasCount(n, a.picked.length) : FW.answered(n)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function PresentQuiet({ model, eyebrow, line, foot }) {
   return (
     <div className="present-moment present-frame">
@@ -324,6 +403,8 @@ export function PresentMoment({ model }) {
     case 'READ': return <ReadPage model={model} />;
     case 'READ_WAIT': return <PresentQuiet model={model} eyebrow={RW.whatWeHeard} line={`${RW.workieWriting}…`} />;
     case 'FEEDBACK': return <PresentFeedback model={model} />;
+    case 'ROOM_QUESTION':
+    case 'ROOM_RESULTS': return <PresentAsk model={model} />;
     case 'QUESTION_FOCUS': return <PresentQuestionFocus model={model} />;
     case 'ENDED': return <PresentQuiet model={model} eyebrow="Complete" line="Thank you. This session has ended." />;
     case 'OTHER': return <PresentQuiet model={model} line="This session shows on the host's screen." />;

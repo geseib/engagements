@@ -26,10 +26,10 @@ import { hostRunsVotePhase } from './hostControls';
 import { statusTone } from '../utils/statusTone';
 
 /**
- * The closed set (R2). COMPOSE, ROOM_QUESTION and ROOM_RESULTS belong to Ask
- * the room (Phase 5) and are named now so the set does not change shape later;
- * `momentOf` does not produce them yet. FEEDBACK is the existing third beat of
- * RESULTS (a feedback round), kept until Ask the room replaces it.
+ * The closed set (R2). ROOM_QUESTION and ROOM_RESULTS are Ask the room
+ * (docs/design/followup-icons): the `ask` beat, a question live and then its
+ * results; the snapshot's `roomAsk` ({ status, answered, total }) tells them
+ * apart. COMPOSE is named and unused. FEEDBACK is RESULTS' feedback beat.
  */
 export const MOMENTS = Object.freeze([
   'LOBBY', 'ANSWERING', 'VOTING', 'VOTE_RESPONSES', 'RESULTS', 'RESPONSES', 'READ', 'FEEDBACK',
@@ -52,6 +52,7 @@ const I = {
   REPORT: 'report', LEAVE: 'leave', WAIT: 'wait',
   SHOW_RESPONSE: 'show-response', NEXT_RESPONSE: 'next-response',
   NEXT_PART: 'next-part', STOP_SHOWING: 'stop-showing',
+  CLOSE_ASK: 'close-ask', CANCEL_ASK: 'cancel-ask',
 };
 
 const ROUND_STATE = /^(ASK|VOTE|RESULTS?)#(\d+)$/i;
@@ -99,6 +100,10 @@ export function momentOf(snapshot) {
   }
 
   if (snapshot.stageBeat === 'field-notes') return 'READ';
+  // A QUESTION FOR THE ROOM (the `ask` beat): live until its results are shown.
+  if (snapshot.stageBeat === 'ask') {
+    return snapshot.roomAsk && snapshot.roomAsk.status === 'closed' ? 'ROOM_RESULTS' : 'ROOM_QUESTION';
+  }
   if (snapshot.stageBeat === 'feedback') return 'FEEDBACK';
   return answerFocusAtResults(snapshot.focus) ? 'RESPONSES' : 'RESULTS';
 }
@@ -177,6 +182,16 @@ function primaryFor(moment, ctx) {
     }
     case 'FEEDBACK':
       return control('next', RW.nextRound(noun), I.NEXT, 'ArrowRight');
+    case 'ROOM_QUESTION': {
+      // The same two-press rule as a vote: the room is still answering.
+      const ask = ctx.roomAsk || {};
+      const left = stillToAct({ received: ask.answered, total: ask.total });
+      const show = control('close-ask', RW.showResults, I.CLOSE_ASK, 'ChartBar');
+      if (left > 0) show.arm = { text: RW.armResults(left, 'answering') };
+      return show;
+    }
+    case 'ROOM_RESULTS':
+      return control('next', RW.nextRound(noun), I.NEXT, 'ArrowRight');
     case 'ENDED':
       return control('report', RW.openReport, I.REPORT, 'FileText');
     default:
@@ -225,6 +240,11 @@ function secondaryFor(moment, ctx, primary) {
       return control('next', RW.nextRound(noun), I.NEXT, 'SkipForward');
     case 'FEEDBACK':
       return control('close-feedback', RW.backToRead, I.FIELD_NOTES, 'ArrowLeft');
+    case 'ROOM_QUESTION':
+      return control('cancel-ask', RW.cancelQuestion, I.CANCEL_ASK, 'X');
+    case 'ROOM_RESULTS':
+      // Back to the read, where the other asks sit beside their points.
+      return control('ask-another', RW.askAnother, I.FIELD_NOTES, 'ArrowLeft');
     default:
       return null;
   }
@@ -278,11 +298,23 @@ function statusFor(moment, ctx) {
     case 'READ': {
       const { page, pages, ready } = ctx.notes;
       if (ready === false) return { text: RW.workieWriting, tone: 'pending' };
-      if (pages > 1) return toned(RW.readingPage(page + 1, pages));
+      // "Reading page 3 of 4 · 3 asks ready" (the mockup's dock line).
+      const asks = ctx.asksReady > 0 ? ` · ${RW.asksReady(ctx.asksReady)}` : '';
+      if (pages > 1) return toned(`${RW.readingPage(page + 1, pages)}${asks}`);
+      if (asks && !ctx.goalLine) return toned(`${RW.readOnScreen}${asks}`);
       return ctx.goalLine ? { text: ctx.goalLine, tone: 'notice' } : toned(RW.readOnScreen);
     }
     case 'FEEDBACK':
       return ctx.goalLine ? { text: ctx.goalLine, tone: 'notice' } : toned(RW.feedbackOpen);
+    case 'ROOM_QUESTION': {
+      const ask = ctx.roomAsk || {};
+      const total = Number(ask.total);
+      if (!Number.isFinite(total) || total <= 0) return { text: RW.waitingToJoin, tone: 'pending' };
+      const answered = Number(ask.answered) || 0;
+      return { text: RW.answered(answered, total), tone: answered >= total ? 'success' : 'pending' };
+    }
+    case 'ROOM_RESULTS':
+      return toned(RW.resultsOnScreen);
     case 'ENDED':
       return toned(RW.allPlayed);
     default:

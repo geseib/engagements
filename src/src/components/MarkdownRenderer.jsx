@@ -59,10 +59,19 @@ const escapeHtml = (text) =>
 const SAFE_URL = /^(?:https?:\/\/|mailto:|\/|#)/i;
 const isSafeUrl = (url) => SAFE_URL.test(String(url).replace(/[\u0000-\u0020]/g, ''));
 
-function MarkdownRenderer({ content, className = '' }) {
+/*
+ * `listItemAddon(text)`: optional; given a list item's text (whitespace
+ * folded), what to draw at the end of it. The host's screens put an Ask the
+ * room icon beside the point an ask came from (config/askAnchors.js); the wall
+ * and the phones pass nothing.
+ */
+function MarkdownRenderer({ content, className = '', listItemAddon = null }) {
   const elements = useMemo(() => {
   if (!content) return null;
 
+  const addon = (text) => (typeof listItemAddon === 'function'
+    ? listItemAddon(String(text).replace(/\s+/g, ' ').trim())
+    : null);
   const lines = content.split('\n');
   const elements = [];
   let listItems = [];
@@ -330,6 +339,7 @@ function MarkdownRenderer({ content, className = '' }) {
       listItems.push(
         <li key={`${index}-li`} className="markdown-li">
           {formatListItem(content)}
+          {addon(content)}
         </li>
       );
     }
@@ -344,6 +354,7 @@ function MarkdownRenderer({ content, className = '' }) {
       listItems.push(
         <li key={`${index}-li`} className="markdown-li">
           {formatListItem(content)}
+          {addon(content)}
         </li>
       );
     }
@@ -364,7 +375,7 @@ function MarkdownRenderer({ content, className = '' }) {
   flushBlocks();
 
   return elements;
-  }, [content]);
+  }, [content, listItemAddon]);
 
   if (!elements) return null;
 

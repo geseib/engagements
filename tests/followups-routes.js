@@ -460,6 +460,15 @@ const followUpRows = () => table.prefix(PK, 'FOLLOWUP#');
     const rate = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'x' } });
     assert.strictEqual((await host('POST', `asks/${rate.body.ask.askId}/pick`, { body: { round: '003', id: 'x', picked: true } })).status, 409);
   });
+  await check('the public read counts the answers so far, never who', async () => {
+    await seed();
+    const r = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'Count me' } });
+    await answer(r.body.ask.askId, 'Ada', 'c-ada', 4);
+    await answer(r.body.ask.askId, 'Grace', undefined, 2);
+    const p = await phone('GET', 'live');
+    assert.strictEqual(p.body.ask.answered, 2);
+    assert.ok(!/Ada|Grace/.test(JSON.stringify(p.body.ask)));
+  });
   await check('the generic stage-beat route will not open the ask beat', async () => {
     const sb = require(path.join(REPO, 'lambda-functions/game/stage-beat.js'));
     const routeKey = 'POST /games/{gameId}/stage-beat';

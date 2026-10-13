@@ -103,7 +103,7 @@ function hostWire(ask, tally, ideas) {
  * `FromAnswers`, the origin or a suggestion; the count only once it is
  * closed, and never a name.
  */
-function phoneWire(ask) {
+function phoneWire(ask, answered = null) {
   const kind = ask.Kind;
   const words = kind === 'rate'
     ? { statement: ask.Statement, scale: { lowLabel: kinds.RATE.lowLabel, highLabel: kinds.RATE.highLabel } }
@@ -116,6 +116,8 @@ function phoneWire(ask) {
     kind,
     ...words,
     status: ask.Status,
+    // How many have answered so far: a count, never who (the wall's line).
+    ...(Number.isInteger(answered) ? { answered } : {}),
     ...(ask.Status === 'closed' && ask.Tally ? { tally: ask.Tally } : {}),
     // Ideas reach the room only as the host picks them, and never with a name.
     ...(kind === 'ideas' ? { picked: (ask.Picked || []).map((p) => p.text) } : {}),
@@ -260,10 +262,11 @@ async function phoneLive(db, { gameId, meta, state, query }) {
   const rows = await store.readRound(db, { gameId, round, orgId });
   // The newest ask of the round that the room may see: the live one, or the
   // last one whose results were shown. A cancelled ask is gone from phones.
-  const shown = rows.map((r) => r.ask).filter((a) => a.Status === 'live' || a.Status === 'closed');
-  const ask = shown.length ? shown[shown.length - 1] : null;
-  if (!ask) return respond(200, { gameId, ask: null });
-  const out = { gameId, ask: phoneWire(ask) };
+  const shownRows = rows.filter((r) => r.ask.Status === 'live' || r.ask.Status === 'closed');
+  const current = shownRows.length ? shownRows[shownRows.length - 1] : null;
+  if (!current) return respond(200, { gameId, ask: null });
+  const ask = current.ask;
+  const out = { gameId, ask: phoneWire(ask, (current.answerRows || []).length) };
   const name = String((query && query.playerName) || '').trim();
   if (name && await isMember(db, gameId, name, query.clientId)) {
     const mine = await store.readAnswer(db, { gameId, round, askId: ask.AskId, orgId, playerName: name });

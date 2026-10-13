@@ -43,6 +43,10 @@ const RW = Object.freeze({
   showTheRead: 'Show the read',
   workieWriting: 'Workie is writing',
   requestFeedback: 'Request feedback',
+  // ASK THE ROOM (docs/design/followup-icons).
+  cancelQuestion: 'Cancel the question',
+  askAnother: 'Ask another',
+  asksReady: (n) => `${n} ${n === 1 ? 'ask' : 'asks'} ready`,
   backToRead: 'Back to what we heard',
   openReport: 'Open session report',
   backToMenu: 'Back to menu',
@@ -86,6 +90,8 @@ const RW = Object.freeze({
     READ_WAIT: 'The read, when Workie has written it',
     READ_LAST: 'The next question',
     FEEDBACK: 'The next question',
+    ROOM_QUESTION: 'The room\'s answer',
+    ROOM_RESULTS: 'The next question',
     ENDED: 'The session report',
     UNKNOWN: 'Nothing yet',
   }),
@@ -105,7 +111,7 @@ export function allRoundLabels() {
   return [
     RW.startVoting, RW.showResults, RW.whatWeHeard, RW.nextPage, RW.backPage,
     RW.nextResponse, RW.nextPart, RW.stopShowing, RW.showTheRead, RW.workieWriting,
-    RW.requestFeedback, RW.backToRead, RW.openReport,
+    RW.requestFeedback, RW.backToRead, RW.openReport, RW.cancelQuestion, RW.askAnother,
   ];
 }
 

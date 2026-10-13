@@ -147,6 +147,24 @@ function featuredOf(comments) {
   };
 }
 
+/** The room's view of a question: the public read's fields, nothing more. */
+function askFacts(ask) {
+  const tally = ask.tally || null;
+  return {
+    kind: ['ideas', 'choice', 'rate'].includes(ask.kind) ? ask.kind : 'ideas',
+    status: ask.status,
+    question: String(ask.question || ''),
+    statement: String(ask.statement || ''),
+    options: Array.isArray(ask.options) ? ask.options.map(String) : [],
+    tally: tally ? {
+      n: int(tally.n),
+      counts: Array.isArray(tally.counts) ? tally.counts.map((c) => int(c)) : [],
+      mean: typeof tally.mean === 'number' ? tally.mean : null,
+    } : null,
+    picked: Array.isArray(ask.picked) ? ask.picked.map(String) : [],
+  };
+}
+
 /** The join address, code and room count: the lobby's, and the mid-session join code's. */
 function joinFacts(snapshot, reads, code) {
   const origin = reads.origin || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
@@ -202,7 +220,10 @@ export function presentModel(snapshot, reads = {}) {
     return { moment: 'QUESTION_FOCUS', ...common, category: q.category || '', title: String(q.title || ''), task: String(q.detail || q.questionDetail || '') };
   }
 
-  const moment = momentOf({ state: snapshot.state, stageBeat: snapshot.stageBeat, focus });
+  const liveAsk = reads.ask || null;
+  const moment = momentOf({
+    state: snapshot.state, stageBeat: snapshot.stageBeat, focus, roomAsk: liveAsk ? { status: liveAsk.status } : null,
+  });
 
   switch (moment) {
     case 'LOBBY':
@@ -269,6 +290,12 @@ export function presentModel(snapshot, reads = {}) {
     }
     case 'FEEDBACK':
       return { moment, ...common, title: String(q.title || ''), line: RW.feedbackOpen, featured: featuredOf(reads.comments) };
+    case 'ROOM_QUESTION':
+    case 'ROOM_RESULTS':
+      // A QUESTION FOR THE ROOM (docs/design/followup-icons): the words, then
+      // counts, never a name; Ideas only as the host picks them.
+      if (!liveAsk) return { moment: 'READ_WAIT', ...common };
+      return { moment, ...common, ask: askFacts(liveAsk), counts: countsOf(snapshot, 'answered'), answered: int(liveAsk.answered) };
     case 'ENDED':
       return { moment, ...common };
     case 'OTHER':

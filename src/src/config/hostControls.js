@@ -58,6 +58,9 @@ import { momentOf, roundStep } from './roundStep';
  */
 export const HOST_PHASES = [
   'LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'FEEDBACK',
+  // A QUESTION FOR THE ROOM, sent from Workie's read (the `ask` beat,
+  // docs/design/followup-icons): live, then its results.
+  'ASKING',
   // A SURVEY'S TWO PHASES. Not beats of a round and not a round of their own:
   // a survey collects at the room's own pace (COLLECTING) and is then frozen
   // (CLOSED). Listed here for the reason above — a phase missing from this
@@ -331,6 +334,8 @@ export const HOST_INTENTS = {
   NEXT_RESPONSE: 'next-response',
   NEXT_PART: 'next-part',
   STOP_SHOWING: 'stop-showing',
+  CLOSE_ASK: 'close-ask',       // a question for the room: show its results
+  CANCEL_ASK: 'cancel-ask',     // ...or take it back, to the read
   // A primary that cannot act yet (the read before Workie has written).
   WAIT: 'wait',
 };
@@ -701,7 +706,7 @@ function statusTextFor(phase, {
  */
 const STATE_FOR_PHASE = {
   LOBBY: 'CREATED', ASK: 'ASK#001', VOTE: 'VOTE#001', RESULTS: 'RESULTS#001',
-  FIELD_NOTES: 'RESULTS#001', FEEDBACK: 'RESULTS#001', ENDED: 'ENDED',
+  FIELD_NOTES: 'RESULTS#001', ASKING: 'RESULTS#001', FEEDBACK: 'RESULTS#001', ENDED: 'ENDED',
   COLLECTING: 'SURVEY#OPEN', CLOSED: 'SURVEY#CLOSED',
 };
 const BEAT_FOR_PHASE = { FIELD_NOTES: 'field-notes', ASKING: 'ask', FEEDBACK: 'feedback' };
@@ -720,6 +725,7 @@ export function snapshotFromHostPage({
   gameType, phase, roundNoun = 'Question', playerCount = 0, answeredCount = 0, votedCount = 0,
   answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
   spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
+  roomAsk = null, asksReady = 0,
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
@@ -744,6 +750,8 @@ export function snapshotFromHostPage({
     roundNoun,
     hasQuestionSet,
     goalLine,
+    roomAsk,
+    asksReady,
   };
 }
 

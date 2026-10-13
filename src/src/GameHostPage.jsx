@@ -103,6 +103,13 @@ import {
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
+import useRoundAsks from './hooks/useRoundAsks';
+import AskPreview from './components/AskPreview';
+import AskIcons from './components/AskIcons';
+import AskStage from './components/stage/AskStage';
+import FW from './config/followUpWords';
+import { placeAsks, pointKey } from './config/askAnchors';
+import { sendAsk, closeAsk, cancelAsk, pickIdea } from './utils/followUpsClient';
 import { isSessionExpired, takeResumeFor } from './auth/sessionExpiry';
 import { classifyHostActionFailure, ENDED_AFTER_SIGN_IN } from './utils/hostActionFailure';
 import { getEvent, runEvent } from './utils/eventsApi';
@@ -1066,6 +1073,24 @@ function GameHostPage() {
    */
   const [resultsBeat, setResultsBeat] = useState('results');
   /*
+    ASK THE ROOM (docs/design/followup-icons). The round's checked asks and
+    every question sent this round, read on the results of a Call & Answer
+    round with two surfaces (the laptop is then the host's own screen; on one
+    screen it is the wall, and the wall never shows an icon). `askRefresh` is
+    bumped by followUpChanged, aiSummaryReady and stageBeatChanged.
+  */
+  const [askRefresh, setAskRefresh] = useState(0);
+  const [askPreview, setAskPreview] = useState(null);
+  const askRound = /^RESULTS#(\d+)$/.exec(String(gameState || ''));
+  const roundAsks = useRoundAsks({
+    fetchFn: authFetch,
+    apiBase: API_BASE,
+    gameId,
+    round: askRound ? askRound[1] : null,
+    active: Boolean(twoSurfaces && askRound && normalizeGameType(currentGameType) === 'call-and-answer'),
+    refreshKey: askRefresh,
+  });
+  /*
     DEV'S AI MODEL PICKER, STAFF ONLY (components/stage/useModelPicker.js).
     The round whose read is on screen, and only on What We Heard. Whether the
     picker exists at all is the server's answer (dev's AiModelPicker and the
@@ -1261,6 +1286,34 @@ function GameHostPage() {
     round. The socket's commentPosted refetch brings it into the list; a
     direct reload as well, so the host sees it even if the frame is late.
   */
+  /*
+    ASK THE ROOM: send from the preview, then Show results or Cancel the
+    question from the dock, and put an Ideas answer on the wall. Every write
+    is announced (followUpChanged / stageBeatChanged) and the frames refetch;
+    a direct reload too, so this page never waits on its own echo.
+  */
+  const askRoundNumber = () => parseInt(String(gameState).split('#')[1], 10);
+  const sendRoomAsk = async (body) => {
+    const r = await sendAsk({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), ask: body });
+    if (r.ok) {
+      setResultsBeat('ask');
+      roundAsks.reload();
+    }
+    return r;
+  };
+  const finishRoomAsk = async (how) => {
+    const live = roundAsks.live;
+    if (!live) return;
+    const fn = how === 'close' ? closeAsk : cancelAsk;
+    const r = await fn({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), askId: live.askId });
+    if (r.ok && how === 'cancel') setResultsBeat('field-notes');
+    roundAsks.reload();
+  };
+  const pickRoomIdea = async (askId, id, picked) => {
+    await pickIdea({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), askId, id, picked });
+    roundAsks.reload();
+  };
+
   const handleRoomNote = async (text) => {
     if (!gameId) return { ok: false, error: 'No session.' };
     const round = String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0');
@@ -2473,6 +2526,8 @@ Focus on actionable business strategy insights.`;
       // closure is frozen at 'CREATED'.
       const beat = stageBeatFromFrame(data, gameStateRef.current);
       if (beat) setResultsBeat(beat);
+      // The ask beat opens and closes with a question for the room.
+      setAskRefresh((n) => n + 1);
       // The read's page, turned from the Remote (or echoed from this page's
       // own post, which the rev drops). Never published back.
       if (beat && notesSyncRef.current) notesSyncRef.current.applyFrame(data);
@@ -2570,7 +2625,12 @@ Focus on actionable business strategy insights.`;
       loadRoundCommentsRef.current();
     });
 
+    // ASK THE ROOM: a question sent, answered, closed, cancelled or picked.
+    webSocketClient.onMessage('followUpChanged', () => setAskRefresh((n) => n + 1));
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
+      // The asks are made right after the read: look for them too.
+      setAskRefresh((n) => n + 1);
       console.log('🔌 AI Summary ready notification:', data);
       clearAITimers();
       setAiRetrying(false);
@@ -2736,6 +2796,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('commentFeatured');
       webSocketClient.offMessage('aiSummaryReady');
+      webSocketClient.offMessage('followUpChanged');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
       // that outlived its session and fired with a stale closure. Found by the
@@ -6505,6 +6566,12 @@ Focus on actionable business strategy insights.`;
     // The response on the wall, in tally order: RESULTS becomes RESPONSES and
     // the primary walks the responses (Next response, then What we heard).
     spotlightIndex,
+    // ASK THE ROOM: the question on screen (live, then its results) and how
+    // many asks wait beside the read.
+    roomAsk: roundAsks.shown
+      ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
+      : null,
+    asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
   });
   /*
     AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
@@ -6584,7 +6651,8 @@ Focus on actionable business strategy insights.`;
     `index !== null` and nothing else.
   */
   const anyOverlayOpen = shortcutsSuppressed({
-    showConfirmModal, showExpandedQR,
+    // The ask preview is a dialog: Space and the arrows are its own.
+    showConfirmModal: showConfirmModal || Boolean(askPreview), showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
     spotlightOpen: spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
@@ -6724,6 +6792,10 @@ Focus on actionable business strategy insights.`;
         break;
       case HOST_INTENTS.STOP_SHOWING:
         closeSpotlight();
+        break;
+      case HOST_INTENTS.CLOSE_ASK:
+      case HOST_INTENTS.CANCEL_ASK:
+        finishRoomAsk(action.intent === HOST_INTENTS.CLOSE_ASK ? 'close' : 'cancel');
         break;
       case HOST_INTENTS.WAIT:
         // A primary that cannot act yet (the read before Workie has written).
@@ -6938,6 +7010,29 @@ Focus on actionable business strategy insights.`;
     || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
     ? scopedRoundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
     : null;
+  /*
+    ASK THE ROOM ICONS (option A): each unsent suggestion beside the point of
+    the read it came from, and the ones whose point the read does not hold
+    after it. Two surfaces only: on one screen this page is the wall.
+  */
+  const askPlacement = twoSurfaces && roundAsks.enabled && currentAIInsights && currentAIInsights.markdownResponse
+    ? placeAsks(currentAIInsights.markdownResponse, roundAsks.suggestions)
+    : null;
+  const unsentAsks = new Set(roundAsks.unsent.map((u) => u.index));
+  const askAddon = askPlacement
+    ? (text) => {
+      const entries = (askPlacement.byPoint.get(pointKey(text)) || []).filter((e) => unsentAsks.has(e.index));
+      return entries.length ? <AskIcons entries={entries} onOpen={setAskPreview} /> : null;
+    }
+    : null;
+  const askAfterEntries = askPlacement ? askPlacement.after.filter((e) => unsentAsks.has(e.index)) : [];
+  const askAfter = askAfterEntries.length ? (
+    <p className="askicons-after">
+      <span>{FW.afterTheRead}</span>
+      <AskIcons entries={askAfterEntries} onOpen={setAskPreview} />
+    </p>
+  ) : null;
+
   // The host's "said in the room" line, while the room is giving feedback.
   const meterCompose = hostPhase === 'FEEDBACK' ? { onSend: handleRoomNote } : null;
   const meterArrivals = (hostPhase === 'FEEDBACK'
@@ -8033,6 +8128,8 @@ Focus on actionable business strategy insights.`;
                   retrying={aiRetrying}
                   onRetry={handleRetryAISummary}
                   onRedo={handleRegenerateAISummary}
+                  listItemAddon={askAddon}
+                  afterRead={askAfter}
                   profile={profile}
                   page={stagePageIndex}
                   onPage={setStagePageIndex}
@@ -8115,6 +8212,21 @@ Focus on actionable business strategy insights.`;
               // and the comment the host put up as a pull quote (FeedbackWall.jsx).
               // The count is the meter's; the arrivals are the meter's list.
               <FeedbackWall featured={featuredComment} onTakeDown={handleFeatureComment} />
+            )}
+
+            {/* A QUESTION FOR THE ROOM (the `ask` beat): live, then its
+                results; for Ideas, the host picks what reaches the wall. */}
+            {hostPhase === 'ASKING' && (
+              <AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} />
+            )}
+            {askPreview && (
+              <AskPreview
+                entry={askPreview}
+                onSend={sendRoomAsk}
+                onClose={() => setAskPreview(null)}
+                blocked={Boolean(roundAsks.live)}
+                theme="dark"
+              />
             )}
 
             {/* ENDED LEADS WITH THE CONCLUSION, NOT THE TITLE — 10-ended.

@@ -877,3 +877,11 @@ a.hr-btn { text-decoration: none; color: inherit; }
 }
 .hr-notes .hr-room-note .room-note-add:disabled { opacity: .5; cursor: default; }
 .hr-notes .hr-room-note .room-note-error { margin: 0; font-size: .8125rem; color: var(--danger-text); }
+
+/* ASK THE ROOM (components/AskIcons.jsx, docs/design/followup-icons): the
+   asks whose point this phone does not list, with where they came from. */
+.hr-asks { margin-top: 14px; }
+.hr-asks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hr-asks-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: .8125rem; color: var(--muted); }
+.hr-asks-list .askicons { font-size: 1.4rem; margin-left: 0; }
+.hr-notes-list .askicons { font-size: 1.4rem; }

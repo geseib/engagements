@@ -152,6 +152,8 @@ export function snapshotFromHostState(json, extras = {}) {
     roundNoun: resolveRoundNoun(question, gameType, extras.roundNoun || question?.setRoundNoun),
     hasQuestionSet: extras.hasQuestionSet !== false,
     goalLine: extras.goalLine || '',
+    roomAsk: extras.roomAsk || null,
+    asksReady: extras.asksReady || 0,
   };
 }
 
@@ -226,6 +228,8 @@ export function requestFor(actionId, { gameId, round } = {}) {
     // FEEDBACK's way back to the read is the same beat.
     case 'field-notes':
     case 'close-feedback':
+    // Ask the room's results: back to the read, where the other asks sit.
+    case 'ask-another':
       if (!round) return null;
       return {
         path: `games/${gameId}/stage-beat`,

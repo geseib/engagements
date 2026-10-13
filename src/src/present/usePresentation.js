@@ -35,7 +35,7 @@ export const FOLLOW_FRAMES = [
   'gameStateChanged', 'initialStateSync', 'questionStarted', 'votingStarted', 'resultsReady',
   'gameEnded', 'playerJoined', 'playerAnswered', 'playerVoted', 'stageBeatChanged',
   'stageFocusChanged', 'stageProfileChanged', 'scoreboardChanged', 'aiSummaryReady',
-  'commentFeatured', 'authorsRevealed', 'playerRemoved',
+  'commentFeatured', 'authorsRevealed', 'playerRemoved', 'followUpChanged',
 ];
 
 const VIEWER_KEY = 'engage.presentViewerId';
@@ -67,12 +67,12 @@ async function readJson(res) {
 
 export default function usePresentation(gameId) {
   const [snapshot, setSnapshot] = useState(null);
-  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null });
+  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null, ask: null });
   const seqRef = useRef(0);
   const appliedRef = useRef(0);
   const debounceRef = useRef(null);
   const snapshotRef = useRef(null);
-  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null });
+  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null, ask: null });
 
   /** The reads the moment needs, each fetched once per round unless a frame says otherwise. */
   const refreshReads = useCallback(async (snap, force) => {
@@ -106,6 +106,17 @@ export default function usePresentation(gameId) {
           if (res.ok) {
             next.results = await readJson(res);
             readsKeyRef.current.results = key;
+          }
+        } catch (e) { /* the next poll tries again */ }
+      }
+      // A QUESTION FOR THE ROOM (the `ask` beat): the public read, which carries
+      // counts and picked ideas only. `followUpChanged` forces it.
+      if (snap.stageBeat === 'ask') {
+        try {
+          const res = await fetch(`${base}games/${gameId}/followup-play/live`);
+          if (res.ok) {
+            const body = await readJson(res);
+            next.ask = body && body.ask ? body.ask : null;
           }
         } catch (e) { /* the next poll tries again */ }
       }
@@ -154,8 +165,8 @@ export default function usePresentation(gameId) {
     const prevRound = roundOf(snapshotRef.current && snapshotRef.current.state);
     const nowRound = roundOf(snap.state);
     if (!prevRound || !nowRound || prevRound.padded !== nowRound.padded) {
-      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null };
-      setReads({ answers: null, results: null, summary: null, comments: null });
+      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null, ask: null };
+      setReads({ answers: null, results: null, summary: null, comments: null, ask: null });
     }
     snapshotRef.current = snap;
     setSnapshot(snap);

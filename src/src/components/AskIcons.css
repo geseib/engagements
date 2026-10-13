@@ -1,0 +1,31 @@
+/* ============================================================
+   .askicons — ASK THE ROOM ICONS (components/AskIcons.jsx)
+   A small labelled button at the end of a point of Workie's read, on the
+   host's screens only. Sized from the surrounding text (em), so it reads at
+   the stage's ladder on the laptop and the Remote's on the phone. Tokens only.
+   ============================================================ */
+.askicons { display: inline-flex; flex-wrap: wrap; gap: .3em; margin-left: .45em; vertical-align: .08em; }
+.askicon {
+  display: inline-flex;
+  align-items: center;
+  gap: .3em;
+  padding: .12em .55em;
+  font: inherit;
+  font-size: .62em;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.4;
+  color: var(--info);
+  background: var(--surface-2);
+  border: 1px solid var(--info);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.askicon:hover { background: var(--surface); }
+.askicon:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.askicon svg { flex: none; }
+
+/* The asks whose point the read does not hold: after the read, never lost. */
+.askicons-after { display: flex; flex-wrap: wrap; align-items: center; gap: .4em; margin: .6em 0 0; font-size: var(--t-meta, 13px); color: var(--muted); }
+.askicons-after .askicons { margin-left: 0; font-size: 1.4em; }
