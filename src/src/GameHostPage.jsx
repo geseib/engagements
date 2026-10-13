@@ -1039,6 +1039,23 @@ function GameHostPage() {
     }
   }, [qrMode, twoSurfaces]);
 
+  // J PUTS THE JOIN CODE UP AND TAKES IT DOWN, on the laptop as on the
+  // Presentation (owner, 2026-10-13). Not in a field, not with a modifier.
+  useEffect(() => {
+    if (!twoSurfaces) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'j' && e.key !== 'J') return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented) return;
+      const t = e.target;
+      if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return;
+      if (t && typeof t.closest === 'function' && t.closest('.setup-panel')) return;
+      e.preventDefault();
+      setQrMode((mode) => (mode ? null : 'pinned'));
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [twoSurfaces]);
+
   /**
    * Which beat of RESULTS is on screen.
    *
@@ -7312,8 +7329,11 @@ Focus on actionable business strategy insights.`;
                 : {
                     url: joinDisplayUrl,
                     code: eventCode || gameId,
-                    onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : 'preview')),
-                    onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' ? mode : null)),
+                    /* TWO SURFACES (owner, 2026-10-13): hovering the code puts it
+                       up on every screen and it stays until a click anywhere, or
+                       J, takes it down; the classic page keeps its hover preview. */
+                    onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : (twoSurfaces ? 'pinned' : 'preview'))),
+                    onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' || twoSurfaces ? mode : null)),
                     onPin: () => setQrMode('pinned'),
                   })
               : {}}
@@ -8329,7 +8349,19 @@ Focus on actionable business strategy insights.`;
           className={qrOverlayClassName(qrMode)}
           onClick={() => { setShowExpandedQR(false); setQrMode(null); }}
         >
-          <div className="expanded-qr-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="expanded-qr-content"
+            /* With two surfaces a click anywhere, the code included, takes it
+               down everywhere; only the copy link keeps it up. */
+            onClick={(e) => {
+              if (twoSurfaces && !(e.target && e.target.closest && e.target.closest('.clickable-url'))) {
+                setShowExpandedQR(false);
+                setQrMode(null);
+                return;
+              }
+              e.stopPropagation();
+            }}
+          >
             <div className="expanded-qr-header">
               <h2>{eventTitle || 'Engagements Session'}</h2>
             </div>

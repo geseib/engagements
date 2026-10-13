@@ -486,6 +486,13 @@ function HostRemote() {
     the room" for a response the room is already reading.
   */
   const stageFocus = snapshot?.stageFocus || NO_FOCUS;
+  /*
+    THE JOIN CODE, IN STEP WITH THE WALL (owner, 2026-10-13). Put up from any
+    surface (hover or J on the laptop, J on the Presentation, Display on screen
+    here), it opens this phone's Join code panel too; any tap on this phone,
+    other than the panel's own button, takes it down everywhere.
+  */
+  const joinOnWall = Boolean(stageFocus && stageFocus.focus === 'join');
   const round = snapshot?.currentQuestion || null;
   const title = snapshot?.gameMetadata?.title || '';
   const setId = snapshot?.gameMetadata?.questionSetId || '';
@@ -731,6 +738,32 @@ function HostRemote() {
       setFocusBusy(false);
     }
   }, [gameId, focusBusy, stageFocus, snapshot, pollState, email]);
+
+  // The join code went up somewhere: show it here too, in the Join code panel.
+  const joinOpenedBySyncRef = useRef(false);
+  useEffect(() => {
+    if (joinOnWall) {
+      setJoinOpen((open) => {
+        if (!open) joinOpenedBySyncRef.current = true;
+        return true;
+      });
+    } else if (joinOpenedBySyncRef.current) {
+      joinOpenedBySyncRef.current = false;
+      setJoinOpen(false);
+    }
+  }, [joinOnWall]);
+
+  // Any tap on this phone, other than the panel's own button, takes it down.
+  useEffect(() => {
+    if (!joinOnWall) return undefined;
+    const onTap = (e) => {
+      const t = e.target;
+      if (t && typeof t.closest === 'function' && t.closest('[data-join-toggle]')) return;
+      setStageFocus({ focus: 'none' });
+    };
+    document.addEventListener('click', onTap);
+    return () => document.removeEventListener('click', onTap);
+  }, [joinOnWall, setStageFocus]);
 
   /* ------------------------------------------------------------ scoreboard */
 
@@ -1815,12 +1848,13 @@ function HostRemote() {
                     <button
                       className="hr-btn hr-btn--ghost"
                       type="button"
-                      aria-pressed={Boolean(stageFocus && stageFocus.focus === 'join')}
+                      data-join-toggle=""
+                      aria-pressed={joinOnWall}
                       disabled={focusBusy}
-                      onClick={() => setStageFocus(stageFocus && stageFocus.focus === 'join' ? { focus: 'none' } : { focus: 'join' })}
+                      onClick={() => setStageFocus(joinOnWall ? { focus: 'none' } : { focus: 'join' })}
                     >
                       <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                      {stageFocus && stageFocus.focus === 'join' ? 'Take it off the screen' : 'Show it on the screen'}
+                      {joinOnWall ? 'Take it off the screen' : 'Display on screen'}
                     </button>
                   ) : null}
                 </div>

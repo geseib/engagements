@@ -9,7 +9,7 @@
  * Holds no state of its own: a reload, a dropped network or a second copy on
  * another computer lands on the same moment.
  */
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import PresentStage from './present/PresentStage';
 import { PresentMoment, PhaseWipe } from './present/PresentMoments';
 import usePresentation from './present/usePresentation';
@@ -49,6 +49,19 @@ export default function PresentPage() {
   const controls = usePresentControls({
     gameId, snapshot, total, refetch, notesReady: model.moment !== 'READ_WAIT',
   });
+  // A CLICK ANYWHERE TAKES THE JOIN CODE DOWN (owner, 2026-10-13), as J does,
+  // for a host who may drive the session; the strip and the ask keep their own.
+  const { joinShown, armed, toggleJoin } = controls;
+  useEffect(() => {
+    if (!joinShown || !armed) return undefined;
+    const onClick = (e) => {
+      const t = e.target;
+      if (t && typeof t.closest === 'function' && t.closest('.present-strip, .present-confirm')) return;
+      toggleJoin();
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, [joinShown, armed, toggleJoin]);
 
   const fitKey = [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined]
     .map((x) => (x === undefined ? '' : String(x))).join('|');
