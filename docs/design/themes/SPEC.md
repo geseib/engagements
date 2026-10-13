@@ -101,6 +101,18 @@ Selector skeleton (`styles/roles.css`):
 what renders with no attribute at all (first paint before the boot script, jest, a corrupt value).
 `present.css` declares on `:root[data-skin="present"]` (specificity 0-2-0 beats `:root` 0-1-0).
 
+**Amendments made in Phase 0a** (owner decisions of 2026-10-13; detail in `records/0a.md`).
+Roles and values below override the §4 tables where they differ.
+
+| Role / value | Classic | Present | Amendment |
+|---|---|---|---|
+| `--shade-rgb` (`--sk-shade-rgb`), theme-invariant | `15 26 46` | `15 26 46` | **added in 0a**: the channel for the dusk scrims and shadows written `rgba(15,26,46,a)`, so they become `rgb(var(--shade-rgb) / a)` at identical pixels |
+| `--glow-rgb` (`--sk-glow-rgb`), theme-invariant | `244 237 228` | `244 237 228` | **added in 0a**: the channel for the warm-text tints written `rgba(244,237,228,a)` |
+| `--rule` dusk and paper (`--sk-dark-rule`, `--sk-light-rule`) | `rgba(155,168,190,.22)` in both | §4 unchanged (`.22` dusk, `rgba(27,41,66,.14)` paper) | **amended in 0a**: `styles/stage.css` already declared a global `--rule` of `.22`, read by its unscoped `.card`/`.opt`/`.dock` rules, the scoreboard and the event stage. Classic keeps that value under every `data-theme`; §4's `.20` / paper-navy Classic would have repainted them. A scope's `.20` rule maps to `rgb(var(--slate-rgb) / .20)` |
+| `--success-text` paper (`--sk-light-success-text`) | `#6FD0A4` | `#1C7350` (§4) | **amended in 0a**: today's global value (`styles/stage.css`); under AA on paper, as it is today |
+| `--danger-text` paper (`--sk-light-danger-text`) | `#EF8C86` | `#B03A34` (§4) | **amended in 0a**: today's `:root` value, read on paper by ~50 sheets; under AA on paper, as it is today. Paper destructive copy that needs AA maps to `--danger-deep` (`#B03A34`) in Classic |
+| a skin value's `var()` | only other `--sk-*` | same | **rule added in 0a** (decision 2): a skin block resolves on `<html data-theme="light">`, so a role read there is paper's. `skinPalette.test.js` enforces it |
+
 ---
 
 ## 4. The two skins as values
