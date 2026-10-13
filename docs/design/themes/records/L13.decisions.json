@@ -1,0 +1,19 @@
+{
+  "unit": "L13",
+  "file": "components/ui/Dialog.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": false,
+  "base": "f9d2845f",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 0,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": []
+}
