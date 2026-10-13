@@ -1,0 +1,8 @@
+/* fixture for deadSelectors.js --selftest */
+.fx-panel { color: var(--text); }
+.fx-panel .fx-title { font-weight: 800; }
+.fx-open { display: block; }
+.fx-phase-ask { color: var(--phase-ask); }
+.fx-ghost { color: #fff; }
+.fx-comment { color: #000; }
+@media (max-width: 600px) { .fx-panel { padding: 0; } }
