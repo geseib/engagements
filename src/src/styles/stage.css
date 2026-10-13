@@ -902,16 +902,16 @@ a.dock-more{text-decoration:none}
 
 /* SAID IN THE ROOM (RoomMeter.jsx RoomNote): the host types what was said
    aloud; it lands with the room's comments. Tokens only. */
-.room-note{display:flex;flex-direction:column;gap:calc(.5vh + 4px);margin-top:calc(1.4vh + 6px);min-width:0}
-.room-note-label{font-size:var(--t-meta);color:var(--muted)}
-.room-note textarea{font:inherit;font-size:var(--t-body);color:var(--text);background:var(--surface);
+.meter .room-note{display:flex;flex-direction:column;gap:calc(.5vh + 4px);margin-top:calc(1.4vh + 6px);min-width:0}
+.meter .room-note-label{font-size:var(--t-meta);color:var(--muted)}
+.meter .room-note textarea{font:inherit;font-size:var(--t-body);color:var(--text);background:var(--surface);
   border:var(--hair) solid var(--rule);border-radius:var(--radius);padding:calc(.6vh + 4px) calc(.6vw + 6px);
   resize:vertical;min-width:0;width:100%;box-sizing:border-box}
-.room-note-add{align-self:flex-end;font:inherit;font-size:var(--t-meta);font-weight:600;cursor:pointer;
+.meter .room-note-add{align-self:flex-end;font:inherit;font-size:var(--t-meta);font-weight:600;cursor:pointer;
   color:var(--text);background:var(--surface-2);border:var(--hair) solid var(--rule);border-radius:var(--radius);
   padding:calc(.4vh + 4px) calc(.8vw + 10px)}
-.room-note-add:disabled{opacity:.5;cursor:default}
-.room-note-error{font-size:var(--t-meta);color:var(--danger-text);margin:0}
+.meter .room-note-add:disabled{opacity:.5;cursor:default}
+.meter .room-note-error{font-size:var(--t-meta);color:var(--danger-text);margin:0}
 
 /* THE FEEDBACK WALL (components/stage/FeedbackWall.jsx). Every word at a tier
    the room can read — the owner, 2026-09-24, on the shipped wall: "the small

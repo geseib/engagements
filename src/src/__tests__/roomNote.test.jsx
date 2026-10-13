@@ -38,3 +38,13 @@ test('nothing typed, nothing to add', () => {
   meter({ onSend: jest.fn() });
   expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
 });
+
+test('the Remote carries the same box in its feedback round, sent as the signed-in host', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'HostRemote.jsx'), 'utf8');
+  expect(src).toMatch(/import RoomNote from '\.\/components\/RoomNote'/);
+  expect(src).toMatch(/postRoomNote\(\{ fetchFn: authFetch/);
+  const feedback = src.slice(src.indexOf('{onFeedback && ('), src.indexOf('{onFeedback && (') + 900);
+  expect(feedback).toMatch(/<RoomNote compose=\{\{ onSend: sendRoomNote \}\}/);
+});

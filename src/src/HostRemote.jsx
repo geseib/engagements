@@ -14,7 +14,8 @@ import RW from './config/roundWords';
 import { useOptionalAuth } from './auth/AuthContext';
 import { categoryRows, questionKey } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
-import { fetchComments } from './utils/commentsClient';
+import { fetchComments, postRoomNote } from './utils/commentsClient';
+import RoomNote from './components/RoomNote';
 import { postQueueOp } from './utils/questionQueueClient';
 import {
   remoteStep,
@@ -615,6 +616,16 @@ function HostRemote() {
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, onFeedback, round]);
+
+  // SAID IN THE ROOM (owner, 2026-10-13): the host's own line, from the phone
+  // as from the laptop. The count follows straight away rather than at the poll.
+  const sendRoomNote = useCallback(async (text) => {
+    if (!gameId || !round) return { ok: false, error: 'No round is open.' };
+    const padded = String(round).padStart(3, '0');
+    const result = await postRoomNote({ fetchFn: authFetch, apiBase: apiBase(), gameId, questionNumber: padded, text });
+    if (result.ok) setFeedbackCommentCount((n) => (Number(n) || 0) + 1);
+    return result;
+  }, [gameId, round]);
 
   /* ----------------------------------------------------------- the focus */
 
@@ -1549,6 +1560,7 @@ function HostRemote() {
                       : `${feedbackCommentCount} comments so far.`}
                   </p>
                 )}
+                <RoomNote compose={{ onSend: sendRoomNote }} className="hr-room-note" />
               </section>
             )}
 

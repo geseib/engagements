@@ -860,3 +860,20 @@ a.hr-btn { text-decoration: none; color: inherit; }
   color: var(--primary);
   box-shadow: inset 0 0 0 1px var(--primary);
 }
+
+/* SAID IN THE ROOM (components/RoomNote.jsx): the host types what was said
+   aloud during a feedback round. */
+.hr-notes .hr-room-note { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.hr-notes .hr-room-note .room-note-label { font-size: .8125rem; color: var(--muted); }
+.hr-notes .hr-room-note textarea {
+  font: inherit; font-size: 1rem; color: var(--text); background: var(--surface-2);
+  border: var(--hairline); border-radius: var(--radius-md, 14px);
+  padding: 10px 12px; resize: vertical; width: 100%; box-sizing: border-box;
+}
+.hr-notes .hr-room-note .room-note-add {
+  align-self: flex-end; min-height: 44px; padding: 0 20px; font: inherit; font-weight: 600;
+  color: var(--text); background: var(--surface-2); border: var(--hairline);
+  border-radius: var(--radius-md, 14px); cursor: pointer;
+}
+.hr-notes .hr-room-note .room-note-add:disabled { opacity: .5; cursor: default; }
+.hr-notes .hr-room-note .room-note-error { margin: 0; font-size: .8125rem; color: var(--danger-text); }
