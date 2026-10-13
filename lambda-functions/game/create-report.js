@@ -5,6 +5,7 @@ const { ORG, callerMayDriveSession } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
+const followUpKeys = require('./followup-keys');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 const { displayOrder } = require('./answer-order');
 const { shapeForLog } = require('./log-shape');
@@ -183,6 +184,18 @@ exports.handler = async (event) => {
         ':sk': 'COMMENT#'
       }
     }));
+    /*
+      QUESTIONS FOR THE ROOM (docs/design/followup-icons, phase D): what the
+      host sent after each read and what the room answered — counts, and for
+      Ideas only the words the host put on the wall. No name is stored on an
+      ask, so none can reach the report. One prefix read for the session.
+    */
+    const followUpQuery = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'FOLLOWUP#' },
+    }));
+
     /** True when THIS round's authors must stay off the report. A survey's
      *  one pseudo-round (000, its Workie read and the room's comments on it)
      *  never carries a name — comments.js holds the same rule on the wire. */
@@ -272,6 +285,29 @@ exports.handler = async (event) => {
       });
       commentsByRound.set(parsed.questionNumber, list);
     }
+    const rawFollowUps = (followUpQuery.Items || []).filter((row) => {
+      const k = followUpKeys.parseFollowUpSk(row.SK);
+      return k && k.kind === 'ask';
+    });
+    const followUpItems = reportOrgId ? await decryptItems(reportOrgId, 'followup', rawFollowUps) : rawFollowUps;
+    const followUpsByRound = new Map();
+    for (const row of followUpItems.sort((a, b) => String(a.SentAt || '').localeCompare(String(b.SentAt || '')))) {
+      const list = followUpsByRound.get(row.QuestionNumber) || [];
+      list.push({
+        kind: row.Kind,
+        question: row.Question || null,
+        statement: row.Statement || null,
+        options: (row.Options || []).map((o) => (o && typeof o === 'object' ? o.text : String(o))),
+        anchor: row.Anchor || null,
+        origin: row.Origin || null,
+        status: row.Status,
+        sentAt: row.SentAt || null,
+        tally: row.Status === 'closed' ? row.Tally || null : null,
+        picked: (row.Picked || []).map((p) => p.text),
+      });
+      followUpsByRound.set(row.QuestionNumber, list);
+    }
+
     // The id is time-ordered (comment-keys.js), so this is writing order.
     for (const list of commentsByRound.values()) {
       list.sort((a, b) => String(a.commentId).localeCompare(String(b.commentId)));
@@ -718,6 +754,8 @@ exports.handler = async (event) => {
           two surfaces that draw this.
         */
         comments: commentsByRound.get(questionNumber) || [],
+        // Questions for the room sent after this round's read (always an array).
+        followUps: followUpsByRound.get(questionNumber) || [],
 
         // Results metadata
         processedAt: questionResults?.ProcessedAt,

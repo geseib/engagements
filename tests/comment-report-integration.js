@@ -127,6 +127,19 @@ function seed() {
   comment('001', 'response', '0', '000000000000003-a', 'This is the only concrete one.');
   // Round 2: exactly one.
   comment('002', 'summary', '', '000000000000004-a', 'Sharper than the last one.');
+
+  // Questions for the room (docs/design/followup-icons): round 1 sent a Choose
+  // (closed, counted) and an Ideas (closed, one picked); its answer rows carry
+  // a name in the key and must never reach the report.
+  put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#ASK#abc123def', GameId: GAME, QuestionNumber: '001', AskId: 'abc123def',
+    Kind: 'choice', Question: 'Which test first?', Options: [{ text: 'On-call logs', answer: 1 }, { text: 'Shadow invoices', ownWords: true }],
+    Anchor: { section: 'Discussion topics', point: 2 }, Origin: 'edited', Status: 'closed', SentAt: '2026-08-27T10:05:00.000Z',
+    Tally: { n: 3, counts: [2, 1] } });
+  put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#ASK#abc123def#A#Ada', GameId: GAME, QuestionNumber: '001', AskId: 'abc123def', PlayerName: 'Ada', Value: [0] });
+  put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#ASK#def456abc', GameId: GAME, QuestionNumber: '001', AskId: 'def456abc',
+    Kind: 'ideas', Question: 'Who pushes back first?', Origin: 'suggested', Status: 'closed', SentAt: '2026-08-27T10:09:00.000Z',
+    Tally: { n: 2 }, Picked: [{ id: 'x1', text: 'The two agencies' }] });
+  put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#SUGGESTED', GameId: GAME, QuestionNumber: '001', Asks: [] });
 }
 
 function comment(round, kind, ref, id, text) {
@@ -174,6 +187,17 @@ const build = () => handler({
     // report four here and pass a total-only assertion.
     assert.strictEqual((roundOf('001').comments || []).length, 3,
       `round 1 has ${(roundOf('001').comments || []).length}`);
+  });
+
+  check('round 1 carries its questions for the room, in the order sent; counts and picked words only', () => {
+    const fu = roundOf('001').followUps;
+    assert.deepStrictEqual(fu.map((f) => [f.kind, f.status]), [['choice', 'closed'], ['ideas', 'closed']]);
+    assert.deepStrictEqual(fu[0].options, ['On-call logs', 'Shadow invoices']);
+    assert.deepStrictEqual(fu[0].tally, { n: 3, counts: [2, 1] });
+    assert.deepStrictEqual(fu[0].anchor, { section: 'Discussion topics', point: 2 });
+    assert.deepStrictEqual(fu[1].picked, ['The two agencies']);
+    assert.ok(!JSON.stringify(fu).includes('Ada'), 'a name reached the report');
+    assert.deepStrictEqual(roundOf('002').followUps, []);
   });
 
   check('round 2 carries exactly its one', () => {

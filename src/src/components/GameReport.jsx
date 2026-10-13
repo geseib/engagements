@@ -23,6 +23,7 @@ import Icon from './Icon';
 import StatusMessage from './StatusMessage';
 import RankIcon from './RankIcon';
 import MarkdownRenderer from './MarkdownRenderer';
+import ReportFollowUps from './ReportFollowUps';
 import { authFetch } from '../auth/authFetch';
 import ReportSavedDialog from './ReportSavedDialog';
 import { saveReportPdf } from '../utils/saveReport';
@@ -797,6 +798,7 @@ function ReportDocument({ reportData }) {
               </div>
 
               <ReportComments comments={question.comments} />
+              <ReportFollowUps followUps={question.followUps} />
             </section>
           );
         })}
