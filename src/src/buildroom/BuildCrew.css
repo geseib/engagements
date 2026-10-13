@@ -32,7 +32,6 @@
   --brc-tint-red: rgb(var(--danger-rgb) / 0.12);
   --brc-line-amber: rgb(var(--accent-rgb) / 0.45);
   --brc-line-red: rgb(var(--danger-rgb) / 0.45);
-  --brc-line-green: rgb(var(--success-rgb) / 0.5);
 
   --brc-t-floor: 12px;
   --brc-t-label: 13px;
