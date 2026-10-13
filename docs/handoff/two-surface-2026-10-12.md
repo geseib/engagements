@@ -10,8 +10,8 @@ branch `working/build-room-host-redesign`. Read the repo `CLAUDE.md` (deploy rul
 |---|---|---|
 | prod | `324fd05d` | Unchanged, waiting at ApprovalForProd. Owner said "not yet". Still lacks the Cognito WriteAttributes fix. |
 | test | `c0c49ea0` | Merged dev of 11 Oct + test's own federation rule. Claude 5.5 switch + model picker, usage stats, Advisor fixes + shuffle, plugin 1.17.0, Share demo, two codes, Gathering fix. New C&A prompt `mv455iv02awft6oxyow` installed. **5.5 not yet proven on test** (no Claude call since deploy). |
-| dev | `1359cc2b` | All of test + follow-up asks backend (`7a99e0b2`), console Overview + scope tabs + team approval (paid teams only, `3845646e`), Remote live list + Workie starts at round close (`ed987765`), sign-in expiry fix + Google PKCE (`1359cc2b`). |
-| branch head | `e1ce95ae` + uncommitted | Phase 1 of the two-surface build IN PROGRESS (see below). Nothing after `1359cc2b` is on dev. |
+| dev | `6ad8a5ff` (Phase 1 of two-surface, on top of `1359cc2b`) | All of test + follow-up asks backend (`7a99e0b2`), console Overview + scope tabs + team approval (paid teams only, `3845646e`), Remote live list + Workie starts at round close (`ed987765`), sign-in expiry fix + Google PKCE (`1359cc2b`). |
+| branch head | = dev | Phase 1 of the two-surface build DONE and pushed to dev (`abfc044f`..`6ad8a5ff`, 15 commits, gates green: 320/321 backend, 493 suites / 12,131 jest, lint 0 errors, build ok). |
 
 AWS: `AWS_PROFILE=adminaccess`. When remote, sign in with a device code:
 `aws sso login --profile adminaccess --use-device-code --no-browser` (the owner approves at
@@ -19,14 +19,20 @@ AWS: `AWS_PROFILE=adminaccess`. When remote, sign in with a device code:
 
 ## Next, in order
 
-1. **Phase 1 of the two-surface build** (`docs/design/two-surface/PLAN.md` "Phase 1" and "First phase in
-   detail"). A subagent in the previous session was mid-way: committed `abfc044f` (round words) and
-   `e1ce95ae` (`roundStep`); **uncommitted edits** exist in `GameHostPage.jsx`, `config/hostControls.js`,
-   `config/roundStep.js`, `config/roundWords.js` and four host tests. First: `git status` / `git diff` —
-   if the previous agent's work is still being written (files changing), wait; otherwise review the diff,
-   finish Phase 1 from the plan (server facts on stage-beat/stage-focus + get-game-state, counts-only
-   room view, Remote paging the read, read never skipped, Remote ENDED action, parity test), run all
-   gates, push to dev, give the owner the plan's verification list.
+1. **Phase 2 of the two-surface build: the Presentation** (`/present?gameId=`; PLAN.md "Phase 2"). Phase 1
+   is done and on dev: `config/roundWords.js`, `config/roundStep.js` (`momentOf`, `roundStep`) used by the
+   host page and the Remote with a parity test; `config/navigatorOrder.js` (VOTE order = the phones'
+   shuffle, names hidden); server facts on `/stage-beat` (Workie's page: `StageNotesPage/Pages/Plan/Key/Rev`;
+   display profile `STATE.StageProfile`) and `/stage-focus` (phase stamp, part/parts, rev); get-game-state
+   returns `stageNotes`, `stageFocus`, `stageProfile`, `presenting: 0`, and `?view=room` adds `roomCounts`
+   (`room-counts.js`); get-answers `?view=room` strips names in every phase; `hooks/useStageNotesSync.js`.
+   Owner's Phase 1 checks on dev: same labels on both screens; the read can't be skipped while Workie
+   writes; Workie's pages turn from either screen; reload keeps the page; Show response N from either
+   screen (same order); the Remote's ENDED screen opens the report; Skip asks first; Remote can request feedback.
+   Phase 1 left open (minor): finished survey on the Remote says "Waiting for the session";
+   `roomCounts.answered` can exceed `joined` (removed players' answers); the Remote polls `/answers/host`
+   all of RESULTS; plain public `/answers` during VOTE still returns names on a named round and public
+   get-results returns `playerName` — the Presentation must use the `view=room` reads only.
 2. **Owner to test on dev**: Google sign-in (the new PKCE code flow has never run against Cognito —
    roll back `auth/googleSignIn.js` + `OAuthCallback.jsx` if it fails); a host screen open > 1 hour then
    Next Round; a session ended elsewhere → "Open Session Report".
