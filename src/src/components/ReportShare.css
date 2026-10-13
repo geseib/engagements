@@ -1,4 +1,4 @@
-/* skin-allowance: colour=7 font=0 primary=3 */
+/* skin-allowance: colour=5 font=0 primary=3 */
 /* ==========================================================================
    SHARING A SAVED REPORT — the host's "Report saved" dialog
    (ReportSavedDialog.jsx) and the recipient's page at /shared-report
@@ -41,7 +41,7 @@
   --rshare-success: #1F6B47;                /* "Downloaded" */
   --rshare-rule: rgba(27, 41, 66, 0.14);    /* card and dialog edges */
   --rshare-field-rule: rgba(27, 41, 66, 0.55); /* input and button edges: 3:1 non-text */
-  --rshare-shadow: rgba(15, 26, 46, 0.28);
+  --rshare-shadow: rgb(var(--shade-rgb) / 0.28);
   --rshare-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   color: var(--text);
@@ -233,7 +233,7 @@
 /* The scrim scrolls and the card centres by its own margin: `align-items:
    center` on a scrolling scrim overflows both ways and only one is reachable. */
 .rshare-scrim {
-  --rshare-scrim: rgba(15, 26, 46, 0.55);
+  --rshare-scrim: rgb(var(--shade-rgb) / 0.55);
   position: fixed;
   inset: 0;
   z-index: 1000;
