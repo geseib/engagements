@@ -242,6 +242,9 @@ export function roundsFrom(payload) {
           is missing".
         */
         comments: Array.isArray(round.comments) ? round.comments : [],
+        // Questions for the room sent after the read (docs/design/followup-icons);
+        // named here for the same reason as `comments`.
+        followUps: Array.isArray(round.followUps) ? round.followUps : [],
         // A closed survey's feedback round (comments.js surveyFeedbackRound):
         // its rows are the survey's questions, and RoundReport titles them so.
         ...(round.kind ? { kind: round.kind } : {}),
