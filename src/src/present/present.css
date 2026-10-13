@@ -18,18 +18,18 @@
      Call       91     60       40      30   21   .55     20   (2px hairlines)
      Table      64     43       28      22   16   .55     16
 
-   ONE ORANGE PER SCREEN (R3), and the Presentation has none: no --primary
-   anywhere in this file. The pointer accent is --info (#7CA7E6 in both skins,
-   so the wall renders as it did before the skins; records/0c.md).
+   THE WALL IS A SKIN PROPERTY (SPEC §3.4, §4.5). The pointer accent is
+   --accent and the go button is --action under data-surface="wall": blue
+   under Present (no orange on the wall, R3), the stage's orange under
+   Classic. The ground is --wall-canvas; eyebrows are the --eyebrow-* roles.
 
    Colours are roles (styles/roles.css), read under the root's
-   data-theme="dark" and data-surface="wall". The six literals left are the
-   letterbox ground, the glow stop, the mini-card fill, the quote ink and the
-   plate: no role holds them (keep: reasons in records/0c.md).
+   data-theme="dark" and data-surface="wall". The literals left are the
+   letterbox ground, the mini-card fill, the quote ink, the plate and the
+   glow stop (read now only by presentPalette.test.js): no role holds them
+   (keep: reasons in records/0c.md).
 
-   Measured contrast on --bg #0F1A2E (presentPalette.test.js and
-   presentWallPalette.test.js composite them, every skin):
-     --text 15.0:1   --muted 6.9:1   --info 7.0:1   --bg on --info 7.0:1
+   presentWallPalette.test.js composites every pairing for every skin.
    ========================================================================== */
 
 /* The page itself never scrolls: the html lock is set while /present is mounted. */
@@ -47,7 +47,7 @@ html.present-locked body {
   --present-line: var(--rule);
   --present-line-strong: rgb(var(--slate-rgb) / 0.4);
   --present-mini: rgba(27, 41, 66, 0.6);
-  --present-seen: rgb(var(--info-rgb) / 0.45);
+  --present-seen: rgb(var(--accent-rgb) / 0.45);
   --present-quote: #D9E5F7;
   --present-plate: rgba(11, 18, 32, 0.93);
   --present-success-text: var(--success-text);
@@ -77,7 +77,7 @@ html.present-locked body {
   padding: 64px 96px 56px;
   box-sizing: border-box;
   line-height: 1.3;
-  background: radial-gradient(120% 90% at 85% 0%, var(--present-glow) 0%, var(--bg) 55%), var(--bg);
+  background: var(--wall-canvas);
   --fit: 1;
   --hair: 1px;
 }
@@ -150,9 +150,9 @@ html.present-locked body {
 .present .present-eyebrow {
   font-size: calc(var(--L-meta) * var(--fit));
   text-transform: uppercase;
-  letter-spacing: .12em;
-  color: var(--info);
-  font-weight: 600;
+  letter-spacing: var(--eyebrow-tracking);
+  color: var(--eyebrow-color);
+  font-weight: var(--eyebrow-weight);
   margin: 0 0 .6em;
 }
 .present .present-hero {
@@ -182,7 +182,7 @@ html.present-locked body {
 /* the progress meter: one pill per person up to 24 */
 .present .present-meter { display: flex; gap: 8px; }
 .present .present-meter i { display: block; width: 44px; height: 12px; border-radius: 6px; background: var(--surface-2); }
-.present .present-meter i.is-on { background: var(--info); }
+.present .present-meter i.is-on { background: var(--accent); }
 .present .present-meter i.is-all { background: var(--success); }
 
 /* ---- lobby ---- */
@@ -234,7 +234,7 @@ html.present-locked body {
   text-overflow: ellipsis;
   margin-top: .2em;
 }
-.present .present-trow .present-bar { height: calc(14px * var(--fit)); border-radius: 7px; background: var(--info); margin-top: .5em; }
+.present .present-trow .present-bar { height: calc(14px * var(--fit)); border-radius: 7px; background: var(--accent); margin-top: .5em; }
 .present .present-trow .present-points {
   font-size: calc(var(--L-secondary) * var(--fit));
   font-weight: 700;
@@ -288,7 +288,7 @@ html.present-locked body {
 .present .present-range .present-w { font-size: var(--L-meta); color: var(--muted); }
 .present .present-card {
   background: var(--surface);
-  border: 3px solid var(--info);
+  border: 3px solid var(--accent);
   border-radius: 28px;
   padding: 44px 56px 40px;
   display: flex;
@@ -303,7 +303,7 @@ html.present-locked body {
   height: calc(var(--L-secondary) * 1.7);
   padding: 0 .3em;
   border-radius: 999px;
-  background: var(--info);
+  background: var(--accent);
   color: var(--bg);
   font-family: var(--font-display);
   font-weight: 800;
@@ -324,10 +324,10 @@ html.present-locked body {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.present .present-part { flex: none; font-size: var(--L-meta); color: var(--info); font-weight: 600; margin-top: 16px; }
+.present .present-part { flex: none; font-size: var(--L-meta); color: var(--accent-text); font-weight: 600; margin-top: 16px; }
 .present .present-track { display: flex; gap: 6px; align-items: center; }
 .present .present-track i { display: block; width: 30px; height: 10px; border-radius: 5px; background: var(--surface-2); }
-.present .present-track i.is-on { background: var(--info); width: 56px; }
+.present .present-track i.is-on { background: var(--accent); width: 56px; }
 .present .present-track.is-bar { position: relative; width: 640px; height: 10px; border-radius: 5px; background: var(--surface-2); }
 .present .present-track.is-bar em {
   position: absolute;
@@ -335,7 +335,7 @@ html.present-locked body {
   height: 20px;
   width: 12px;
   border-radius: 6px;
-  background: var(--info);
+  background: var(--accent);
   left: calc(var(--at, 0) * (100% - 12px));
 }
 
@@ -352,7 +352,7 @@ html.present-locked body {
 .present .present-read li { max-width: 62ch; margin: 0 0 .6em; }
 .present .present-read ul,
 .present .present-read ol { margin: 0 0 .6em; padding-left: 1.4em; }
-.present .present-read li::marker { color: var(--info); font-family: var(--font-display); font-weight: 800; }
+.present .present-read li::marker { color: var(--accent); font-family: var(--font-display); font-weight: 800; }
 .present .present-read .markdown-content h1,
 .present .present-read .markdown-content h2,
 .present .present-read .markdown-content h3,
@@ -367,12 +367,12 @@ html.present-locked body {
 .present .present-read .markdown-content h4 { font-size: calc(var(--L-secondary) * var(--fit)); }
 .present .present-read .markdown-content strong { font-weight: 700; color: var(--text); }
 .present .present-read .markdown-content em { font-style: normal; color: var(--present-quote); }
-.present .present-read .markdown-content li::marker { color: var(--info); font-family: var(--font-display); font-weight: 800; }
+.present .present-read .markdown-content li::marker { color: var(--accent); font-family: var(--font-display); font-weight: 800; }
 .present .present-read.is-topics .markdown-content ol > li { font-size: calc(var(--L-secondary) * var(--fit)); line-height: 1.3; }
 .present .present-pages { display: flex; gap: 10px; }
 .present .present-pages i { display: block; width: 48px; height: 10px; border-radius: 5px; background: var(--surface-2); }
 .present .present-pages i.is-seen { background: var(--present-seen); }
-.present .present-pages i.is-on { background: var(--info); }
+.present .present-pages i.is-on { background: var(--accent); }
 
 /* ---- waiting, ended, and an honest miss ---- */
 .present .present-quiet {
@@ -394,7 +394,8 @@ html.present-locked body {
 
 /* THE ONE-SCREEN STRIP (D7): a host's controls for three seconds after the
    mouse moves. Outside the canvas, in window pixels, so it stays a usable size
-   at any scale. Blue, never orange (R3). */
+   at any scale. The go button is --action: blue on the wall under Present,
+   orange under Classic (SPEC §3.4). */
 .present .present-strip {
   position: absolute;
   z-index: 20;
@@ -428,10 +429,10 @@ html.present-locked body {
   color: var(--text);
   cursor: pointer;
 }
-.present .present-strip-btn[aria-pressed="true"] { border-color: var(--info); background: var(--present-seen); }
-.present .present-strip-btn.is-go { background: var(--info); border-color: var(--info); color: var(--bg); }
+.present .present-strip-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--present-seen); }
+.present .present-strip-btn.is-go { background: var(--action); border-color: var(--action); color: var(--on-action); }
 .present .present-strip-btn:disabled { opacity: .45; cursor: default; }
-.present .present-strip-btn:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.present .present-strip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .present .present-strip-status.is-note { white-space: normal; color: var(--text); max-width: 60ch; padding-right: 6px; }
 
@@ -446,7 +447,7 @@ html.present-locked body {
   width: min(560px, 92%);
   padding: 24px 24px 20px;
   border-radius: 16px;
-  border: 2px solid var(--info);
+  border: 2px solid var(--accent);
   background: var(--surface);
   color: var(--text);
   display: flex;
@@ -454,15 +455,17 @@ html.present-locked body {
   gap: 10px;
   cursor: default;
 }
-.present .present-confirm-ey { margin: 0; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--info); font-weight: 600; }
+.present .present-confirm-ey { margin: 0; font-size: 13px; letter-spacing: var(--eyebrow-tracking); text-transform: uppercase; color: var(--eyebrow-color); font-weight: var(--eyebrow-weight); }
 .present .present-confirm-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1.1; }
 .present .present-confirm-note { margin: 0; font-size: 16px; color: var(--muted); }
 .present .present-confirm-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 .present:has(.present-confirm) { cursor: auto; }
 
 /* THE PHASE WIPE (components/stage/PhaseBar.jsx's band, restated for the
-   canvas): one word and one instruction across the middle, played once. Blue
-   for the room acting, green for results; never orange (R3). */
+   canvas): one word and one instruction across the middle, played once.
+   --phase-vote for the room acting (blue in both skins: the wipe's 'live'
+   tone does not yet tell answering from voting, records/0c.md), green for
+   results. */
 .present .present-wipe {
   position: absolute;
   z-index: 6;
@@ -470,15 +473,15 @@ html.present-locked body {
   right: 0;
   top: 36%;
   background: var(--present-plate);
-  border-top: 3px solid var(--info);
-  border-bottom: 3px solid var(--info);
+  border-top: 3px solid var(--phase-vote);
+  border-bottom: 3px solid var(--phase-vote);
   padding: 32px 64px;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: var(--L-primary);
   letter-spacing: .13em;
   text-transform: uppercase;
-  color: var(--info);
+  color: var(--phase-vote);
   text-align: center;
   pointer-events: none;
   animation: present-wipe 1.4s cubic-bezier(.16, 1, .3, 1) both;
