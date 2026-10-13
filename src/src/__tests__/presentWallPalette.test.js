@@ -31,7 +31,9 @@ describe.each(SKINS)('present.css under the %s skin (dusk, on the wall)', (skin)
   const r = (name) => H.role(name, o);
   const v = (name) => H.scopeVar(CSS, SCOPE, name, o);
   const FIELD = [r('--bg')];
-  const GLOW = [v('--present-glow')];              // the brightest point of the radial field
+  // Every stop of the canvas ground (--wall-canvas): Classic's stage gradient
+  // reaches #2A3A57 at the bottom, Present's glow peaks at #1E3050.
+  const STOPS = r('--wall-canvas').match(/#[0-9A-Fa-f]{6}/g).map((hex) => [hex]);
   const CARD = [r('--bg'), r('--surface')];
   const MINI = [r('--bg'), v('--present-mini')];
   const LETTERBOX = [v('--present-canvas')];
@@ -42,23 +44,27 @@ describe.each(SKINS)('present.css under the %s skin (dusk, on the wall)', (skin)
   it.each([
     ['text on the field', () => r('--text'), FIELD],
     ['muted on the field (top line, foot, rank)', () => r('--muted'), FIELD],
-    ['the eyebrow on the field', () => r('--info'), FIELD],
-    ['muted at the glow', () => r('--muted'), GLOW],
-    ['the eyebrow at the glow', () => r('--info'), GLOW],
+    ['the eyebrow on the field', () => r('--eyebrow-color'), FIELD],
+    ...STOPS.flatMap((stop) => [
+      [`text on the canvas at ${stop[0]}`, () => r('--text'), stop],
+      [`muted on the canvas at ${stop[0]}`, () => r('--muted'), stop],
+      [`the eyebrow on the canvas at ${stop[0]}`, () => r('--eyebrow-color'), stop],
+      [`the accent as copy on the canvas at ${stop[0]}`, () => r('--accent-text'), stop],
+    ]),
     ['text on the response card', () => r('--text'), CARD],
     ['muted on the response card', () => r('--muted'), CARD],
-    ['the part line on the response card', () => r('--info'), CARD],
+    ['the part line on the response card', () => r('--accent-text'), CARD],
     ['muted on a mini card', () => r('--muted'), MINI],
     ['a quote in the read', () => v('--present-quote'), FIELD],
-    ['the badge number (bg on the badge)', () => r('--bg'), [r('--info')]],
-    ['the wipe word on the plate', () => r('--info'), PLATE],
+    ['the badge number (bg on the badge)', () => r('--bg'), [r('--accent')]],
+    ['the wipe word on the plate', () => r('--phase-vote'), PLATE],
     ['the wipe line on the plate', () => r('--text'), PLATE],
     ['the results wipe word on the plate', () => v('--present-success-text'), PLATE],
     ['the strip status on the plate', () => r('--muted'), STRIP],
     ['a strip button on the plate', () => r('--text'), STRIP],
     ['a pressed strip button', () => r('--text'), PRESSED],
-    ['the go button (bg on its fill)', () => r('--bg'), [r('--info')]],
-    ['the safety-ask eyebrow on its card', () => r('--info'), CARD],
+    ['the go button (its ink on --action, on the wall)', () => r('--on-action'), [r('--action')]],
+    ['the safety-ask eyebrow on its card', () => r('--eyebrow-color'), CARD],
     ['the safety-ask note on its card', () => r('--muted'), CARD],
   ])('%s clears AA', (_label, fg, layers) => {
     expect(H.on(fg(), layers)).toBeGreaterThanOrEqual(H.AA);
@@ -86,11 +92,18 @@ describe('present.css reads roles', () => {
     expect(literals).toEqual([
       '#0A1324',                 // html lock: the letterbox before .present mounts
       '#0A1324',                 // --present-canvas: the letterbox ground
-      '#1E3050',                 // --present-glow: the glow stop
+      '#1E3050',                 // --present-glow: read only by presentPalette.test.js now
       'rgba(27, 41, 66, 0.6)',   // --present-mini: the flank mini-card fill
       '#D9E5F7',                 // --present-quote: the quote ink
       'rgba(11, 18, 32, 0.93)',  // --present-plate: the strip and wipe plate
     ]);
+  });
+
+  it('under Present the wall carries no orange: --action and --accent resolve blue', () => {
+    if (!SKINS.includes('present')) return;
+    const o = { skin: 'present', theme: 'dark', surface: 'wall' };
+    expect(H.role('--action', o).toUpperCase()).toBe('#7CA7E6');
+    expect(H.role('--accent', o).toUpperCase()).toBe('#7CA7E6');
   });
 
   it('the stage root is dusk and marked as the wall', () => {
