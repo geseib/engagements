@@ -210,3 +210,30 @@ describe('the host column', () => {
     expect(screen.getByRole('link', { name: /terms/i })).toHaveAttribute('href', '/terms');
   });
 });
+
+/*
+ * SITE SKINS (0b-1). --entry-primary reads the action role (it is the filled Join
+ * button, the focus ring, the caret and the notice stroke). .entry-page carries no
+ * data-theme, so every skin x theme is measured: --action is theme-invariant and
+ * orange in both skins, which is the point (one orange action per screen).
+ */
+describe('the entry tokens, for every skin x theme', () => {
+  const H = require('../testing/skinHarness');
+  const CSS = H.css('components/RootPage.css');
+  describe.each(H.CASES)('%s / %s', (skin, theme) => {
+    const v = (name) => H.scopeVar(CSS, '.entry-page {', name, { skin, theme });
+    test('--entry-primary is the action role, the same orange as before', () => {
+      expect(v('--entry-primary')).toBe(H.role('--action', { skin, theme }));
+      expect(v('--entry-primary').toUpperCase()).toBe('#F6A94C');
+    });
+    test('the Join label (#0F1A2E, RootPage.css .entry-btn-primary) on --entry-primary clears AA', () => {
+      expect(H.on('#0F1A2E', [v('--entry-primary')])).toBeGreaterThanOrEqual(H.AA);
+    });
+    test.each(['--entry-bg', '--entry-surface'])('the focus ring, caret and notice glyph in --entry-primary on %s clear AA', (ground) => {
+      expect(H.on(v('--entry-primary'), [v('--entry-bg'), v(ground)])).toBeGreaterThanOrEqual(H.AA);
+    });
+    test.each([['--entry-text', '--entry-bg'], ['--entry-text', '--entry-surface'], ['--entry-muted', '--entry-bg'], ['--entry-muted', '--entry-surface']])('%s on %s clears AA', (fg, ground) => {
+      expect(H.on(v(fg), [v('--entry-bg'), v(ground)])).toBeGreaterThanOrEqual(H.AA);
+    });
+  });
+});

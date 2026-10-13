@@ -284,3 +284,28 @@ describe('the one identity block in the product', () => {
     expect(screen.queryByText('Administrator')).not.toBeInTheDocument();
   });
 });
+
+/*
+ * SITE SKINS (0b-1). The two hairlines read the --slate-rgb channel at their old
+ * alphas, so they are the same pixels in every skin x theme. .wel-page declares
+ * data-theme="dark" (WelcomeScreen.jsx), so the text it carries is dusk's.
+ */
+describe('the welcome tokens, for every skin x theme', () => {
+  const H = require('../testing/skinHarness');
+  const CSS = H.css('components/WelcomeScreen.css');
+  describe.each(H.CASES)('%s / %s', (skin, theme) => {
+    const v = (name) => H.scopeVar(CSS, '.wel-page {', name, { skin, theme });
+    test.each([['--wel-rule', 0.2], ['--wel-rule-strong', 0.34]])('%s is rgba(155,168,190,%s), as before', (name, alpha) => {
+      const c = H.parseColor(v(name));
+      expect(c.rgb).toEqual([155, 168, 190]);
+      expect(c.a).toBeCloseTo(alpha, 5);
+    });
+  });
+  describe.each(H.SKINS.filter((s) => H.CASES.some(([k]) => k === s)))('%s, dusk', (skin) => {
+    const role = (n) => H.role(n, { skin, theme: 'dark' });
+    test.each(['--bg', '--surface'])('text and muted on %s clear AA', (ground) => {
+      expect(H.on(role('--text'), [role('--bg'), role(ground)])).toBeGreaterThanOrEqual(H.AA);
+      expect(H.on(role('--muted'), [role('--bg'), role(ground)])).toBeGreaterThanOrEqual(H.AA);
+    });
+  });
+});
