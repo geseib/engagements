@@ -171,13 +171,6 @@ html.present-locked body {
   margin: 0 0 .6em;
   max-width: 40ch;
 }
-.present .present-body {
-  font-size: calc(var(--L-body) * var(--fit));
-  color: var(--muted);
-  line-height: 1.4;
-  margin: 0 0 .8em;
-  max-width: 52ch;
-}
 
 /* the progress meter: one pill per person up to 24 */
 .present .present-meter { display: flex; gap: 8px; }
@@ -340,21 +333,6 @@ html.present-locked body {
 }
 
 /* ---- Workie's read ---- */
-.present .present-read-h {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: calc(var(--L-primary) * var(--fit));
-  margin: 0 0 .5em;
-  line-height: 1.1;
-}
-.present .present-read-h small {
-  font-family: var(--font-ui);
-  font-weight: 500;
-  font-size: .45em;
-  color: var(--muted);
-  margin-left: .6em;
-  letter-spacing: .02em;
-}
 .present .present-read { font-size: calc(var(--L-body) * 1.22 * var(--fit)); line-height: 1.36; }
 /* MarkdownRenderer's own classes carry the paper theme's colours and sizes
    (styles.css .markdown-*); on the wall they inherit, as the host's stage
@@ -474,17 +452,6 @@ html.present-locked body {
 .present .present-confirm-note { margin: 0; font-size: 16px; color: var(--muted); }
 .present .present-confirm-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 .present:has(.present-confirm) { cursor: auto; }
-
-/* (kept for a future in-canvas overlay) */
-.present .present-overlay {
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  padding: 64px 96px 56px;
-  overflow: hidden;
-}
 
 /* THE PHASE WIPE (components/stage/PhaseBar.jsx's band, restated for the
    canvas): one word and one instruction across the middle, played once. Blue
