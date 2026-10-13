@@ -4214,12 +4214,20 @@ function PlayerPage({ event = null } = {}) {
         ? answers[ownAnswerIdx]
         : null;
 
+      /* THE HEADING SAYS WHAT HAPPENED (owner, 2026-10-13: "Yours was /
+         Response 1" read oddly, and "Yours was / Your Response" with no
+         response at all read worse). The number is the ballot's. */
+      // The ballot's number for it (its position), never the row's label: at
+      // RESULTS the rows carry names, and that label would be their own name.
+      const resultHeading = myRow
+        ? `You wrote response ${ownAnswerIdx + 1}`
+        : mySubmittedAnswer
+          ? 'Your response is in the results'
+          : 'You didn’t send a response this round';
       body = (
         <>
-          <p className="plr-lab">Yours was</p>
-          <h1 className="plr-h1">
-            {myRow ? displayLabelFor(myRow, ownAnswerIdx) : 'Your response'}
-          </h1>
+          <p className="plr-lab">Results</p>
+          <h1 className="plr-h1">{resultHeading}</h1>
           {(mySubmittedAnswer || myRow?.answer) && (
             <div className="plr-card">
               <p className="plr-quote">{mySubmittedAnswer || myRow.answer}</p>
