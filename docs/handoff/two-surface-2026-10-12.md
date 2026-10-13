@@ -17,6 +17,27 @@ AWS: `AWS_PROFILE=adminaccess`. When remote, sign in with a device code:
 `aws sso login --profile adminaccess --use-device-code --no-browser` (the owner approves at
 `https://d-90663aa3e9.awsapps.com/start/#/device?user_code=…` on their phone; codes last ~10 min).
 
+## Update 2026-10-12 (late): Phase 2 core is on dev — `2858a8a5`
+
+Pushed and deployed (pipeline Succeeded). Gates: 321/321 backend, 503 suites frontend, lint 0
+errors, build ok. Commits `3d433547` (viewer sockets + `presenting`), `91224123` (pure pieces +
+switch), `2858a8a5` (the Presentation, host PRESENT, Remote Present).
+
+Built: `/present?gameId=` (public), `present/` (model, canvas, moments, hook, css), viewer
+connections in `websocket/connect.js`, `presentingCount` in `room-counts.js`, `config/surfaces.js`
+(on by default on dev for C&A; `?surfaces=two|classic` anywhere), host dock PRESENT/PRESENTING,
+the session display profile under the switch (host page pages Workie's read at the session's
+profile, so laptop and wall agree), Remote Present link, Scoreboard `closable={false}`.
+Seen in a browser against a mock of the public reads: lobby, answering, voting navigator,
+results tally, responses (Room and TV), the read pages. Not yet seen against a live dev session.
+
+Phase 2 still open: **2.10 the measurer** (a long response shrinks on the wall rather than
+splitting into "Part 1 of 2"; host/Remote publish `parts: 1`), **2.11 signed-in keys + 3 s strip**
+on the wall, **the lobby's Present-first primary** (`roundStep` ctx.presenting), the Remote's VOTE
+list in `RemoteFocusPanel` (2.14), Background on the wall (public state does not carry it, so the
+wall shows title + task only), the read-order "topics last" (deliberately NOT done: the wall must
+page exactly as the host page does until both share one ReadPage in Phase 3).
+
 ## Next, in order
 
 1. **Phase 2 of the two-surface build: the Presentation** (`/present?gameId=`; PLAN.md "Phase 2"). Phase 1
