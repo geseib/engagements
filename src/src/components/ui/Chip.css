@@ -1,0 +1,88 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   CHIP — components/ui/Chip.jsx (docs/design/themes/SPEC.md §6, unit L8).
+
+   ROLES ONLY: no literal colour, no font name, no --primary/--secondary, no
+   --sk-* value. Replaces the stage's .chip.ask/.vote/.results
+   (styles/stage.css) and the scoped *-chip rules as surfaces adopt it.
+
+   TWO COLOURS PER TONE. The HUE paints the outline and the dot; the INK paints
+   the word. On dusk they are the same family (the stage idiom: the word in the
+   phase colour). On paper they cannot be: --phase-*, --warn, --success and
+   Classic's paper --success-text / --danger-text are all under AA on paper
+   (#F6A94C is 1.96:1 on white). So on paper the ink is --text and the tone
+   lives in the outline and the dot; danger copy takes --danger-deep, SPEC's
+   paper destructive ink (§3 amendments).
+
+   WHY THE INK IS KEYED ON [data-theme] HERE. A descendant selector cannot pick
+   the NEAREST themed ancestor (<html> is always data-theme="light", so
+   `[data-theme="light"] .ui-chip` matches every chip). Inheritance can: the
+   inks are declared exactly where roles.css declares the roles — `:root,
+   [data-theme="dark"]` then `[data-theme="light"]`, in that order — so each
+   chip inherits the inks of its nearest themed ancestor, resolved on that
+   element against that element's roles. Only --ui-chip-*-ink names are
+   declared there (uiChipPalette.test.js holds it).
+
+   Measured (uiChipPalette.test.js, ink on --bg / --surface / --surface-2):
+     dusk   ask 8.86/7.42/6.03 Classic (Present 7.06/5.91/4.81) · vote 7.06/5.91/4.81
+            results 6.66/5.58/4.54 · ok 9.30/7.79/6.34 · warn 8.86/7.42/6.03
+            danger 7.26/6.08/4.94 · muted 7.24/6.06/4.93
+     paper  ask/vote/results/ok/warn (--text) 13.64/14.56/12.46
+            danger (--danger-deep) 5.62/6.00/5.13 · muted 5.82/6.21/5.32
+   ========================================================================== */
+
+:root, [data-theme="dark"] {
+  --ui-chip-ask-ink: var(--phase-ask);
+  --ui-chip-vote-ink: var(--phase-vote);
+  --ui-chip-results-ink: var(--phase-results);
+  --ui-chip-ok-ink: var(--success-text);
+  --ui-chip-warn-ink: var(--warn);
+  --ui-chip-danger-ink: var(--danger-text);
+}
+[data-theme="light"] {
+  --ui-chip-ask-ink: var(--text);
+  --ui-chip-vote-ink: var(--text);
+  --ui-chip-results-ink: var(--text);
+  --ui-chip-ok-ink: var(--text);
+  --ui-chip-warn-ink: var(--text);
+  --ui-chip-danger-ink: var(--danger-deep);
+}
+
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4em;
+  padding: .15em .6em;
+  border: var(--hair, 1px) solid var(--ui-chip-hue);
+  border-radius: var(--badge-radius);
+  background: transparent;
+  color: var(--ui-chip-ink);
+  font-family: var(--font-ui);
+  font-size: var(--ui-size, .8em);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ui-chip-dot {
+  flex: none;
+  width: .55em;
+  height: .55em;
+  border-radius: 50%;
+  background: var(--ui-chip-hue);
+}
+/* The stage treatment (styles/stage.css .chip): display face, capitals, tracked. */
+.ui-chip--caps {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+/* ---- tones: hue (outline, dot) and ink (the word) ---- */
+.ui-chip--ask { --ui-chip-hue: var(--phase-ask); --ui-chip-ink: var(--ui-chip-ask-ink); }
+.ui-chip--vote { --ui-chip-hue: var(--phase-vote); --ui-chip-ink: var(--ui-chip-vote-ink); }
+.ui-chip--results { --ui-chip-hue: var(--phase-results); --ui-chip-ink: var(--ui-chip-results-ink); }
+.ui-chip--ok { --ui-chip-hue: var(--success); --ui-chip-ink: var(--ui-chip-ok-ink); }
+.ui-chip--warn { --ui-chip-hue: var(--warn); --ui-chip-ink: var(--ui-chip-warn-ink); }
+.ui-chip--danger { --ui-chip-hue: var(--danger); --ui-chip-ink: var(--ui-chip-danger-ink); }
+.ui-chip--muted { --ui-chip-hue: var(--rule-strong); --ui-chip-ink: var(--muted); }
