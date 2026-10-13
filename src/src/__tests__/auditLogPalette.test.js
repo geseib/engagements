@@ -11,6 +11,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -44,12 +45,12 @@ function tint(name) {
 const DUSK = '[data-theme="dark"] {';
 const ROOT = ':root {';
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
+  bg: parseHex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
+  surface: parseHex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
+  text: parseHex(H.role('--text', { skin: 'classic', theme: 'dark' })),
+  muted: parseHex(H.role('--muted', { skin: 'classic', theme: 'dark' })),
+  danger: parseHex(H.role('--danger', { skin: 'classic', theme: 'dark' })),
+  dangerText: parseHex(H.role('--danger-text', { skin: 'classic', theme: 'dark' })),
 };
 const AA = 4.5;
 const GROUNDS = [['the console field (--bg)', T.bg], ['the staff dialog (--surface)', T.surface]];

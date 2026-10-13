@@ -14,6 +14,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -43,12 +44,12 @@ function token(css, block, name) {
 const DUSK = '[data-theme="dark"] {';
 const ROOT = ':root {';
 const T = {
-  bg: parseHex(token(GLOBAL_CSS, DUSK, '--bg')),
-  surface: parseHex(token(GLOBAL_CSS, DUSK, '--surface')),
-  text: parseHex(token(GLOBAL_CSS, DUSK, '--text')),
-  primary: parseHex(token(GLOBAL_CSS, ROOT, '--primary')),
-  secondary: parseHex(token(GLOBAL_CSS, ROOT, '--secondary')),
-  success: parseHex(token(GLOBAL_CSS, ROOT, '--success')),
+  bg: parseHex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
+  surface: parseHex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
+  text: parseHex(H.role('--text', { skin: 'classic', theme: 'dark' })),
+  primary: parseHex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
+  secondary: parseHex(H.role('--secondary', { skin: 'classic', theme: 'dark' })),
+  success: parseHex(H.role('--success', { skin: 'classic', theme: 'dark' })),
   muted: parseHex(token(CSS, '.bpl {', '--bpl-muted')),
   successText: parseHex(token(CSS, '.bpl {', '--bpl-success-text')),
 };

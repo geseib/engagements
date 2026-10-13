@@ -22,6 +22,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -71,11 +72,11 @@ const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
 
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
 };
 
 /** An rgba() layer declared in QuestionSetsPanel.css, read rather than retyped. */

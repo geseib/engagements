@@ -21,6 +21,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const RAW_SHEET = fs.readFileSync(
   path.join(__dirname, '..', 'components', 'FeedbackRoundPanel.css'), 'utf8',
@@ -67,10 +68,10 @@ function token(css, block, name) {
   return m[1];
 }
 
-const SURFACE = token(GLOBAL_CSS, ':root {', '--surface');
-const TEXT = token(GLOBAL_CSS, ':root {', '--text');
-const MUTED = token(GLOBAL_CSS, ':root {', '--muted');
-const PRIMARY = token(GLOBAL_CSS, ':root {', '--primary');
+const SURFACE = H.role('--surface', { skin: 'classic', theme: 'dark' });
+const TEXT = H.role('--text', { skin: 'classic', theme: 'dark' });
+const MUTED = H.role('--muted', { skin: 'classic', theme: 'dark' });
+const PRIMARY = H.role('--primary', { skin: 'classic', theme: 'dark' });
 
 /** What `.fbr` actually paints on: --surface under a 6% white wash. */
 const COMPOSITE = wash(SURFACE, 0.06);

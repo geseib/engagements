@@ -11,6 +11,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -51,12 +52,12 @@ const DUSK = '[data-theme="dark"] {';
 const SCOPE = '.present {';
 
 const D = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
+  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
   quote: token(CSS, SCOPE, '--present-quote'),
   mini: token(CSS, SCOPE, '--present-mini'),
   glow: token(CSS, SCOPE, '--present-glow'),

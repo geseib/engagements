@@ -13,6 +13,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -48,13 +49,13 @@ const ROOT = ':root {';
 const MINE = '.rshare {';
 
 const P = {
-  bg: token(GLOBAL_CSS, PAPER, '--bg'),
-  surface: token(GLOBAL_CSS, PAPER, '--surface'),
-  surface2: token(GLOBAL_CSS, PAPER, '--surface-2'),
-  text: token(GLOBAL_CSS, PAPER, '--text'),
-  muted: token(GLOBAL_CSS, PAPER, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'light' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'light' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'light' }),
+  text: H.role('--text', { skin: 'classic', theme: 'light' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'light' }),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
+  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
   onPrimary: token(MY_CSS, MINE, '--rshare-on-primary'),
   accent: token(MY_CSS, MINE, '--rshare-accent'),
   success: token(MY_CSS, MINE, '--rshare-success'),

@@ -16,6 +16,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const SHELL_CSS = fs.readFileSync(
   path.join(__dirname, '..', 'components', 'AdminShell.css'),
@@ -49,11 +50,11 @@ function token(css, block, name) {
 }
 
 const DUSK = {
-  bg: token(GLOBAL_CSS, '[data-theme="dark"]', '--bg'),
-  surface: token(GLOBAL_CSS, '[data-theme="dark"]', '--surface'),
-  surface2: token(GLOBAL_CSS, '[data-theme="dark"]', '--surface-2'),
-  text: token(GLOBAL_CSS, '[data-theme="dark"]', '--text'),
-  muted: token(GLOBAL_CSS, '[data-theme="dark"]', '--muted'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
 };
 
 describe('the type ladder, derived rather than inherited', () => {
@@ -104,7 +105,7 @@ describe('the two colour tokens the designers added, and why', () => {
     // This is not a test of our code; it is the measurement that justifies the
     // two tokens below, asserted so that a future edit to --danger cannot
     // quietly invalidate the reason they exist.
-    const danger = token(GLOBAL_CSS, ':root', '--danger');
+    const danger = H.role('--danger', { skin: 'classic', theme: 'dark' });
     expect(ratio(danger, DUSK.surface)).toBeLessThan(4.5);
   });
 
@@ -112,7 +113,7 @@ describe('the two colour tokens the designers added, and why', () => {
     // rejects: painting destructive copy with --danger, which is 4.38:1 on
     // --surface and 3.56:1 on --surface-2. Destructive copy is precisely the
     // text a person must read carefully, and modals sit on --surface.
-    const dangerText = token(GLOBAL_CSS, ':root', '--danger-text');
+    const dangerText = H.role('--danger-text', { skin: 'classic', theme: 'dark' });
     expect(ratio(dangerText, DUSK.bg)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(dangerText, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(dangerText, DUSK.surface2)).toBeGreaterThanOrEqual(4.5);
@@ -120,7 +121,7 @@ describe('the two colour tokens the designers added, and why', () => {
 
   test('--danger-deep carries --text on a filled destructive button', () => {
     // rejects: a filled --danger button, which carries white at 3.32:1.
-    const dangerDeep = token(GLOBAL_CSS, ':root', '--danger-deep');
+    const dangerDeep = H.role('--danger-deep', { skin: 'classic', theme: 'dark' });
     expect(ratio(DUSK.text, dangerDeep)).toBeGreaterThanOrEqual(4.5);
   });
 });
@@ -147,9 +148,9 @@ describe('every pairing the shell chrome actually paints', () => {
     // unknown=--danger-text. rejects: any of the three being tinted down for
     // looks — the chip whose whole job is telling an operator they are on
     // production must not be the one that is hard to read.
-    const secondary = token(GLOBAL_CSS, ':root', '--secondary');
-    const primary = token(GLOBAL_CSS, ':root', '--primary');
-    const dangerText = token(GLOBAL_CSS, ':root', '--danger-text');
+    const secondary = H.role('--secondary', { skin: 'classic', theme: 'dark' });
+    const primary = H.role('--primary', { skin: 'classic', theme: 'dark' });
+    const dangerText = H.role('--danger-text', { skin: 'classic', theme: 'dark' });
     expect(ratio(secondary, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(primary, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(dangerText, DUSK.surface)).toBeGreaterThanOrEqual(4.5);
@@ -158,7 +159,7 @@ describe('every pairing the shell chrome actually paints', () => {
   test('the pending-user badge label reads on its amber fill', () => {
     // rejects: white on --primary, which is 2.11:1. The badge is filled amber
     // and carries the dusk background colour as its label.
-    const primary = token(GLOBAL_CSS, ':root', '--primary');
+    const primary = H.role('--primary', { skin: 'classic', theme: 'dark' });
     expect(ratio('#0F1A2E', primary)).toBeGreaterThanOrEqual(4.5);
     expect(SHELL_CSS).toMatch(/\.adm-nav-badge\s*\{[^}]*color:\s*#0F1A2E/i);
   });

@@ -17,6 +17,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -89,28 +90,28 @@ const PAPER = '[data-theme="light"] {';
 */
 const THEMES = {
   dusk: {
-    bg: token(GLOBAL_CSS, DUSK, '--bg'),
-    surface: token(GLOBAL_CSS, DUSK, '--surface'),
-    surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-    text: token(GLOBAL_CSS, DUSK, '--text'),
-    muted: token(GLOBAL_CSS, DUSK, '--muted'),
+    bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+    surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+    surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+    text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+    muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
   },
   paper: {
-    bg: token(GLOBAL_CSS, PAPER, '--bg'),
-    surface: token(GLOBAL_CSS, PAPER, '--surface'),
-    surface2: token(GLOBAL_CSS, PAPER, '--surface-2'),
-    text: token(GLOBAL_CSS, PAPER, '--text'),
-    muted: token(GLOBAL_CSS, PAPER, '--muted'),
+    bg: H.role('--bg', { skin: 'classic', theme: 'light' }),
+    surface: H.role('--surface', { skin: 'classic', theme: 'light' }),
+    surface2: H.role('--surface-2', { skin: 'classic', theme: 'light' }),
+    text: H.role('--text', { skin: 'classic', theme: 'light' }),
+    muted: H.role('--muted', { skin: 'classic', theme: 'light' }),
   },
 };
 
 const T = {
   ...THEMES.dusk,
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  primaryDeep: token(GLOBAL_CSS, ROOT, '--primary-deep'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-  dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
+  primaryDeep: H.role('--primary-deep', { skin: 'classic', theme: 'dark' }),
+  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
+  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
+  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
   /* Read from this stylesheet, not retyped: the ink on the theme-invariant
      accent, which has to be invariant for the same reason. */
   onAccent: token(MY_CSS, '.cnt {', '--cnt-on-accent'),

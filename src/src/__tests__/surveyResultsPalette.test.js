@@ -14,6 +14,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -40,17 +41,17 @@ function token(css, block, name) {
 
 const DUSK = '[data-theme="dark"] {';
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ':root {', '--primary'),
-  primaryDeep: token(GLOBAL_CSS, ':root {', '--primary-deep'),
-  secondary: token(GLOBAL_CSS, ':root {', '--secondary'),
-  success: token(GLOBAL_CSS, ':root {', '--success'),
-  danger: token(GLOBAL_CSS, ':root {', '--danger'),
-  dangerDeep: token(GLOBAL_CSS, ':root {', '--danger-deep'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
+  primaryDeep: H.role('--primary-deep', { skin: 'classic', theme: 'dark' }),
+  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
+  success: H.role('--success', { skin: 'classic', theme: 'dark' }),
+  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
+  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
   onAccent: token(MY_CSS, '.svr-card {', '--svr-on-accent'),
 };
 

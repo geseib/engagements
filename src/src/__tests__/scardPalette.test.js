@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
 const CSS = read('components', 'ScoreCard.css');
@@ -9,7 +10,7 @@ function ratio(a, b) { const la = lum(a); const lb = lum(b); return (Math.max(la
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
 function token(css, block, name) { const s = css.indexOf(block); const body = css.slice(s, css.indexOf('}', s)); const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`)); if (!m) throw new Error(`${name} not in ${block}`); return m[1]; }
 const DUSK = '[data-theme="dark"] {'; const ROOT = ':root {';
-const T = { bg: token(GLOBAL_CSS, DUSK, '--bg'), surface: token(GLOBAL_CSS, DUSK, '--surface'), text: token(GLOBAL_CSS, DUSK, '--text'), muted: token(GLOBAL_CSS, DUSK, '--muted'), primary: token(GLOBAL_CSS, ROOT, '--primary'), secondary: token(GLOBAL_CSS, ROOT, '--secondary'), dangerText: token(GLOBAL_CSS, ROOT, '--danger-text') };
+const T = { bg: H.role('--bg', { skin: 'classic', theme: 'dark' }), surface: H.role('--surface', { skin: 'classic', theme: 'dark' }), text: H.role('--text', { skin: 'classic', theme: 'dark' }), muted: H.role('--muted', { skin: 'classic', theme: 'dark' }), primary: H.role('--primary', { skin: 'classic', theme: 'dark' }), secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }), dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }) };
 const AA = 4.5;
 /*
   RULING R22 — THE 12px FLOOR CHECK BELOW IS VACUOUS ON ITS OWN.

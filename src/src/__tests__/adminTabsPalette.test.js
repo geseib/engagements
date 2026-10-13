@@ -14,6 +14,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -56,15 +57,15 @@ const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
 
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-  dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
+  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
+  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
+  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
   // NOT a global token: styles.css has never declared --success-text. The two
   // screens declare their own, `--um-`/`--sp-` prefixed, the way auth.css:865
   // declares --au-success-text. See the "tokens that do not exist" suite below.

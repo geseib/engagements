@@ -24,6 +24,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -79,11 +80,11 @@ function tint(name) {
 const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  success: token(GLOBAL_CSS, ROOT, '--success'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
+  success: H.role('--success', { skin: 'classic', theme: 'dark' }),
   muted: token(PLR_CSS, '.plr {', '--plr-muted'),
 };
 

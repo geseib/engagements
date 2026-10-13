@@ -12,6 +12,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -45,13 +46,13 @@ const over = (layer, bg) => layer.rgb.map((c, i) => c * layer.a + bg[i] * (1 - l
 const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
+  bg: parseHex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
+  surface: parseHex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
+  text: parseHex(H.role('--text', { skin: 'classic', theme: 'dark' })),
+  muted: parseHex(H.role('--muted', { skin: 'classic', theme: 'dark' })),
+  primary: parseHex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
+  secondary: parseHex(H.role('--secondary', { skin: 'classic', theme: 'dark' })),
+  dangerText: parseHex(H.role('--danger-text', { skin: 'classic', theme: 'dark' })),
 };
 const AA = 4.5;
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');

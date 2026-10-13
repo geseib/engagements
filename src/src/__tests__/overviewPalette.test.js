@@ -12,6 +12,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -69,14 +70,14 @@ function local(css, name, kind = 'hex') {
 const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
+  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
+  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
 };
 const SCP_BG = local(SCP, '--scp-bg');
 const SCP_MENU = local(SCP, '--scp-menu');

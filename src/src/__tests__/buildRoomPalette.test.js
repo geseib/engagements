@@ -19,6 +19,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -88,27 +89,27 @@ const ROOM = '.brm {';
 const REPORT = '.brr {';
 
 const D = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
-  success: token(GLOBAL_CSS, ROOT, '--success'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-  dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
+  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
+  success: H.role('--success', { skin: 'classic', theme: 'dark' }),
+  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
+  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
+  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
   successText: token(ROOM_CSS, ROOM, '--brm-success-text'),
   term: token(ROOM_CSS, ROOM, '--brm-term'),
   termText: token(ROOM_CSS, ROOM, '--brm-term-text'),
 };
 const P = {
-  bg: token(GLOBAL_CSS, PAPER, '--bg'),
-  surface: token(GLOBAL_CSS, PAPER, '--surface'),
-  surface2: token(GLOBAL_CSS, PAPER, '--surface-2'),
-  text: token(GLOBAL_CSS, PAPER, '--text'),
-  muted: token(GLOBAL_CSS, PAPER, '--muted'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'light' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'light' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'light' }),
+  text: H.role('--text', { skin: 'classic', theme: 'light' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'light' }),
   amber: token(REPORT_CSS, REPORT, '--brr-amber'),
   link: token(REPORT_CSS, REPORT, '--brr-link'),
   desk: token(REPORT_CSS, REPORT, '--brr-desk'),

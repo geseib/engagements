@@ -15,6 +15,7 @@
  * decorative. The helpers below are copied from srevPalette.test.js. */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
@@ -53,10 +54,10 @@ const row = hex(token(GLOBAL_CSS, DUSK, rowToken));
 const ok = tint(EDITOR_CSS, SCOPE, '--qs-tint-ok');
 const activeRow = alphaOver(ok.rgb, row, ok.a);
 
-const dangerText = hex(token(GLOBAL_CSS, ROOT, '--danger-text'));
-const dangerDeep = hex(token(GLOBAL_CSS, ROOT, '--danger-deep'));
-const success = hex(token(GLOBAL_CSS, ROOT, '--success'));
-const secondary = hex(token(GLOBAL_CSS, ROOT, '--secondary'));
+const dangerText = hex(H.role('--danger-text', { skin: 'classic', theme: 'dark' }));
+const dangerDeep = hex(H.role('--danger-deep', { skin: 'classic', theme: 'dark' }));
+const success = hex(H.role('--success', { skin: 'classic', theme: 'dark' }));
+const secondary = hex(H.role('--secondary', { skin: 'classic', theme: 'dark' }));
 const publicInkHex = token(EDITOR_CSS, SCOPE, '--qs-chip-public-ink');
 const publicInk = hex(publicInkHex);
 const waitingInkHex = token(EDITOR_CSS, SCOPE, '--qs-chip-waiting-ink');

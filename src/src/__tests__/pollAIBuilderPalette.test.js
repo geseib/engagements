@@ -19,6 +19,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -60,12 +61,12 @@ const T = {
   quiet: token(PAB_CSS, '.pab', '--pab-quiet'),
   field: token(PAB_CSS, '.pab', '--pab-field'),
   onAccent: token(PAB_CSS, '.pab', '--pab-on-accent'),
-  primary: token(GLOBAL_CSS, ':root', '--primary'),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
   // The dusk card's inks and ground: `[data-theme="dark"]`, which the card
   // declares on its own root.
-  duskSurface: token(GLOBAL_CSS, '[data-theme="dark"]', '--surface'),
-  duskText: token(GLOBAL_CSS, '[data-theme="dark"]', '--text'),
-  duskMuted: token(GLOBAL_CSS, '[data-theme="dark"]', '--muted'),
+  duskSurface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  duskText: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  duskMuted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
 };
 
 const AA = 4.5;

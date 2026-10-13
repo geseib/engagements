@@ -23,6 +23,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -75,10 +76,10 @@ const T = {
   text: token(STAGE, '.stage', '--text'),
   muted: token(STAGE, '.stage', '--muted'),
   successText: token(STAGE, ':root', '--success-text'),
-  primary: token(GLOBAL, ':root', '--primary'),
-  gold: token(GLOBAL, ':root', '--gold'),
-  silver: token(GLOBAL, ':root', '--silver'),
-  bronze: token(GLOBAL, ':root', '--bronze'),
+  primary: hex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
+  gold: hex(H.role('--gold', { skin: 'classic', theme: 'dark' })),
+  silver: hex(H.role('--silver', { skin: 'classic', theme: 'dark' })),
+  bronze: hex(H.role('--bronze', { skin: 'classic', theme: 'dark' })),
   sbNew: token(SB, '.sb', '--sb-new'),
   sbBronze: token(SB, '.sb', '--sb-bronze'),
   toteRow: token(SB, '.sb', '--sb-tote-row'),

@@ -21,6 +21,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -64,7 +65,7 @@ const T = {
   onAccent: token(SAB_CSS, '.sab', '--sab-on-accent'),
   chipBg: token(SAB_CSS, '.sab', '--sab-chip-bg'),
   chipFg: token(SAB_CSS, '.sab', '--sab-chip-fg'),
-  primary: token(GLOBAL_CSS, ':root', '--primary'),
+  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
   gitChipBg: token(GIT_CSS, '.git', '--git-chip-bg'),
   gitChipFg: token(GIT_CSS, '.git', '--git-chip-fg'),
 };

@@ -3,6 +3,7 @@
    sets contentTheme 'dark' for this section. */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
 const CSS = read('components', 'ModerationPanel.css');
@@ -18,7 +19,7 @@ function token(css, block, name) {
   return m[1];
 }
 const DUSK = '[data-theme="dark"] {'; const ROOT = ':root {';
-const T = { bg: token(GLOBAL_CSS, DUSK, '--bg'), surface: token(GLOBAL_CSS, DUSK, '--surface'), text: token(GLOBAL_CSS, DUSK, '--text'), muted: token(GLOBAL_CSS, DUSK, '--muted'), primary: token(GLOBAL_CSS, ROOT, '--primary'), secondary: token(GLOBAL_CSS, ROOT, '--secondary'), dangerText: token(GLOBAL_CSS, ROOT, '--danger-text') };
+const T = { bg: H.role('--bg', { skin: 'classic', theme: 'dark' }), surface: H.role('--surface', { skin: 'classic', theme: 'dark' }), text: H.role('--text', { skin: 'classic', theme: 'dark' }), muted: H.role('--muted', { skin: 'classic', theme: 'dark' }), primary: H.role('--primary', { skin: 'classic', theme: 'dark' }), secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }), dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }) };
 const tintAlpha = Number((CSS.match(/--modq-tint-alpha:\s*([\d.]+)/) || [])[1]);
 const AA = 4.5;
 /*

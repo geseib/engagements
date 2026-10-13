@@ -9,6 +9,7 @@
    below says so rather than measuring a value the DOM cannot produce. */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
 const CSS = read('components', 'SetReviewBanner.css');
@@ -25,14 +26,14 @@ function token(css, block, name) {
 }
 const DUSK = '[data-theme="dark"] {'; const PAPER = '[data-theme="light"] {'; const ROOT = ':root {';
 const grounds = {
-  dusk: { bg: hex(token(GLOBAL_CSS, DUSK, '--bg')), text: hex(token(GLOBAL_CSS, DUSK, '--text')), muted: hex(token(GLOBAL_CSS, DUSK, '--muted')) },
-  paper: { bg: hex(token(GLOBAL_CSS, PAPER, '--bg')), text: hex(token(GLOBAL_CSS, PAPER, '--text')), muted: hex(token(GLOBAL_CSS, PAPER, '--muted')) },
+  dusk: { bg: hex(H.role('--bg', { skin: 'classic', theme: 'dark' })), text: hex(H.role('--text', { skin: 'classic', theme: 'dark' })), muted: hex(H.role('--muted', { skin: 'classic', theme: 'dark' })) },
+  paper: { bg: hex(H.role('--bg', { skin: 'classic', theme: 'light' })), text: hex(H.role('--text', { skin: 'classic', theme: 'light' })), muted: hex(H.role('--muted', { skin: 'classic', theme: 'light' })) },
 };
-const dangerText = hex(token(GLOBAL_CSS, ROOT, '--danger-text'));
+const dangerText = hex(H.role('--danger-text', { skin: 'classic', theme: 'dark' }));
 const tintAlpha = Number((CSS.match(/--srev-tint-alpha:\s*([\d.]+)/) || [])[1]);
 const AA = 4.5;
 describe.each(Object.entries(grounds))('on %s', (_name, g) => {
-  const tinted = over(hex(token(GLOBAL_CSS, ROOT, '--danger')), g.bg, tintAlpha);
+  const tinted = over(hex(H.role('--danger', { skin: 'classic', theme: 'dark' })), g.bg, tintAlpha);
   test('the banner tint is declared and the text on it clears AA', () => {
     expect(tintAlpha).toBeGreaterThan(0);
     expect(ratio(g.text, tinted)).toBeGreaterThanOrEqual(AA);
@@ -75,7 +76,7 @@ test('every selector is rooted at .srev and no --danger carries text', () => {
   the two greys the block leans on still clear AA on the tint, on both grounds.
 */
 describe.each(Object.entries(grounds))('the measurement block on %s', (_name, g) => {
-  const tinted = over(hex(token(GLOBAL_CSS, ROOT, '--danger')), g.bg, tintAlpha);
+  const tinted = over(hex(H.role('--danger', { skin: 'classic', theme: 'dark' })), g.bg, tintAlpha);
   test('the band word and the counts beside it clear AA on the tint', () => {
     expect(CSS).toMatch(/\.srev-band\b[^}]*color:\s*var\(--text\)/);
     expect(CSS).toMatch(/\.srev-band--high\s*\{\s*color:\s*var\(--srev-flag-ink\)/);

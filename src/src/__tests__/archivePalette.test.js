@@ -13,6 +13,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
 const CSS = read('components', 'ArchivePanel.css');
@@ -44,14 +45,14 @@ function tint(name) {
 const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
 const T = {
-  bg: parseHex(token(GLOBAL_CSS, DUSK, '--bg')),
-  surface: parseHex(token(GLOBAL_CSS, DUSK, '--surface')),
-  text: parseHex(token(GLOBAL_CSS, DUSK, '--text')),
-  muted: parseHex(token(GLOBAL_CSS, DUSK, '--muted')),
-  primary: parseHex(token(GLOBAL_CSS, ROOT, '--primary')),
-  secondary: parseHex(token(GLOBAL_CSS, ROOT, '--secondary')),
-  dangerText: parseHex(token(GLOBAL_CSS, ROOT, '--danger-text')),
-  dangerDeep: parseHex(token(GLOBAL_CSS, ROOT, '--danger-deep')),
+  bg: parseHex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
+  surface: parseHex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
+  text: parseHex(H.role('--text', { skin: 'classic', theme: 'dark' })),
+  muted: parseHex(H.role('--muted', { skin: 'classic', theme: 'dark' })),
+  primary: parseHex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
+  secondary: parseHex(H.role('--secondary', { skin: 'classic', theme: 'dark' })),
+  dangerText: parseHex(H.role('--danger-text', { skin: 'classic', theme: 'dark' })),
+  dangerDeep: parseHex(H.role('--danger-deep', { skin: 'classic', theme: 'dark' })),
   successText: parseHex(token(CSS, '.arch {', '--arch-success-text')),
 };
 /** Composite a stack of layers (hex or rgba strings) bottom-up onto the dusk field. */

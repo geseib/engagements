@@ -5,6 +5,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -31,11 +32,11 @@ function rgba(name) {
 }
 const DUSK = '[data-theme="dark"] {';
 const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  dangerText: token(GLOBAL_CSS, ':root {', '--danger-text'),
+  bg: hex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
+  surface: hex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
+  text: hex(H.role('--text', { skin: 'classic', theme: 'dark' })),
+  muted: hex(H.role('--muted', { skin: 'classic', theme: 'dark' })),
+  dangerText: hex(H.role('--danger-text', { skin: 'classic', theme: 'dark' })),
   success: hex(BODY.match(/--cms-success:\s*(#[0-9A-Fa-f]{6})/)[1]),
 };
 const tinted = (name, base) => { const t = rgba(name); return over(t.c, base, t.a); };

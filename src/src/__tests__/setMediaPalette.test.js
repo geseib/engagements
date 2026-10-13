@@ -26,6 +26,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -87,16 +88,16 @@ const ONLIGHT = '.qsets.qsets--onlight,';
 const T = {
   // The panel declares data-theme="dark" on its root, so these are the tokens
   // it actually gets — read from styles.css's dusk block, not assumed.
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
+  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
+  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
+  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
+  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
+  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
   // What the HOST SHELF pushes onto this panel's ancestors, and what the three
   // re-points below exist to hold off.
   hostPrimary: token(HOST_CSS, ONLIGHT, '--primary'),
   hostDangerText: token(HOST_CSS, ONLIGHT, '--danger-text'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
+  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
   // .smed's own re-points and locals.
   primary: token(SMED_CSS, SMED, '--primary'),
   dangerText: token(SMED_CSS, SMED, '--danger-text'),
