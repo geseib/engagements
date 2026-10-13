@@ -27,6 +27,9 @@ const UseCasesPage = lazy(() => import('./marketing/UseCasesPage'));
 const BuildRoomMarketingPage = lazy(() => import('./marketing/BuildRoomPage'));
 const ReportsPage = lazy(() => import('./marketing/ReportsPage'));
 const HelpPage = lazy(() => import('./marketing/HelpPage'));
+// The Presentation (/present): public, read-only, its own chunk so a player's
+// phone never downloads it (two-surface PLAN 2.9).
+const PresentPage = lazy(() => import('./PresentPage'));
 
 // The one spinner. RootGate has to decide before ProtectedRoute runs (that is
 // the whole point of it), so both need this and neither should own it.
@@ -252,6 +255,13 @@ function RootGate() {
 function AppRouter() {
   // Simple routing based on URL path
   const path = window.location.pathname;
+
+  // THE PRESENTATION (two-surface PLAN 2.9): what the room sees, following the
+  // session. Public on purpose: it shows only what anyone holding the code can
+  // already read, so it never bounces to a sign-in (D3).
+  if (path === '/present') {
+    return <MarketingRoute page={PresentPage} />;
+  }
 
   // Player routes (no authentication required)
   if (path.startsWith('/play')) {

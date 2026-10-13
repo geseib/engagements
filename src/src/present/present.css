@@ -1,0 +1,471 @@
+/* ============================================================================
+   THE PRESENTATION — /present?gameId= (docs/design/two-surface, PLAN 2.5).
+
+   What the room sees, and nothing else: a 16:9 page that follows the session,
+   NEVER SCROLLS and never shows a control. Built from the approved prototype
+   (two-surface/prototype.html) on the shipped Warm Summit dusk tokens.
+
+   The canvas is a fixed 1920x1080 logical page scaled to the window with
+   transform (PresentStage.jsx sets --present-scale), so every screen measures
+   the same thing. The four profile ladders are styles/stage.css:43-86 with
+   their clamp()s resolved at 1080px tall, restated as px literals here,
+   because a vh unit inside a scaled canvas measures the window, not the page:
+
+               hero primary secondary body meta  fit-min floor
+     Room       91     60       40      30   21   .55     20
+     TV        119     80       52      38   26   .78     26
+     Call       91     60       40      30   21   .55     20   (2px hairlines)
+     Table      64     43       28      22   16   .55     16
+
+   ONE ORANGE PER SCREEN (R3), and the Presentation has none: no --primary
+   anywhere in this file. The pointer accent is --secondary.
+
+   Measured contrast on --bg #0F1A2E (presentPalette.test.js composites them):
+     --text 15.0:1   --muted 6.9:1   --secondary 7.0:1   --bg on --secondary 7.0:1
+   ========================================================================== */
+
+/* The page itself never scrolls: the html lock is set while /present is mounted. */
+html.present-locked,
+html.present-locked body {
+  overflow: hidden;
+  height: 100%;
+  margin: 0;
+  background: #0A1324;
+}
+
+.present {
+  --present-canvas: #0A1324;
+  --present-glow: #1E3050;
+  --present-line: rgba(155, 168, 190, 0.22);
+  --present-line-strong: rgba(155, 168, 190, 0.4);
+  --present-mini: rgba(27, 41, 66, 0.6);
+  --present-seen: rgba(124, 167, 230, 0.45);
+  --present-quote: #D9E5F7;
+  --present-plate: rgba(11, 18, 32, 0.93);
+  --present-success-text: #6FD0A4;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--present-canvas);
+  color: var(--text);
+  font-family: var(--font-ui);
+  /* styles/stage.css sets tabular figures on body; on running text that
+     widens every hyphen ("auto - remediate"). Figures get them back below. */
+  font-variant-numeric: normal;
+  cursor: none;
+}
+
+.present .present-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  transform-origin: 0 0;
+  transform: translate(var(--present-x, 0px), var(--present-y, 0px)) scale(var(--present-scale, 1));
+  display: flex;
+  flex-direction: column;
+  padding: 64px 96px 56px;
+  box-sizing: border-box;
+  line-height: 1.3;
+  background: radial-gradient(120% 90% at 85% 0%, var(--present-glow) 0%, var(--bg) 55%), var(--bg);
+  --fit: 1;
+  --hair: 1px;
+}
+
+/* ---- the four ladders, as px at 1080 tall ---- */
+.present[data-profile="room"] .present-canvas,
+.present[data-profile="call"] .present-canvas {
+  --L-hero: 91px; --L-primary: 60px; --L-secondary: 40px; --L-body: 30px; --L-meta: 21px;
+  --fit-min: .55; --floor: 20px;
+}
+.present[data-profile="call"] .present-canvas { --hair: 2px; }
+.present[data-profile="tv"] .present-canvas {
+  --L-hero: 119px; --L-primary: 80px; --L-secondary: 52px; --L-body: 38px; --L-meta: 26px;
+  --fit-min: .78; --floor: 26px;
+}
+.present[data-profile="table"] .present-canvas {
+  --L-hero: 64px; --L-primary: 43px; --L-secondary: 28px; --L-body: 22px; --L-meta: 16px;
+  --fit-min: .55; --floor: 16px;
+}
+
+/* Figures line up; the rest keeps Inter's proportional punctuation (tabular
+   forms on the whole canvas widened every hyphen). */
+.present .present-foot,
+.present .present-code,
+.present .present-badge,
+.present .present-points,
+.present .present-rank,
+.present .present-n { font-variant-numeric: tabular-nums; }
+
+/* ---- frame: top line, main, foot ---- */
+.present .present-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.present .present-top {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 32px;
+  font-size: var(--L-meta);
+  color: var(--muted);
+  font-weight: 500;
+  padding-bottom: 20px;
+  border-bottom: var(--hair) solid var(--present-line);
+}
+.present .present-top b { color: var(--text); font-weight: 600; }
+.present .present-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: 28px;
+}
+.present .present-main.is-top { justify-content: flex-start; }
+.present .present-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  font-size: var(--L-meta);
+  color: var(--muted);
+  padding-top: 18px;
+  border-top: var(--hair) solid var(--present-line);
+  min-height: calc(var(--L-meta) * 2.6);
+}
+.present .present-foot b { color: var(--text); font-weight: 600; }
+
+/* ---- type ---- */
+.present .present-eyebrow {
+  font-size: calc(var(--L-meta) * var(--fit));
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--secondary);
+  font-weight: 600;
+  margin: 0 0 .6em;
+}
+.present .present-hero {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--L-hero) * var(--fit));
+  line-height: 1.04;
+  margin: 0 0 .35em;
+  text-wrap: balance;
+  letter-spacing: -.01em;
+}
+.present .present-h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--L-primary) * var(--fit));
+  line-height: 1.1;
+  margin: 0 0 .4em;
+  text-wrap: balance;
+}
+.present .present-lead {
+  font-size: calc(var(--L-secondary) * var(--fit));
+  line-height: 1.3;
+  margin: 0 0 .6em;
+  max-width: 40ch;
+}
+.present .present-body {
+  font-size: calc(var(--L-body) * var(--fit));
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0 0 .8em;
+  max-width: 52ch;
+}
+
+/* the progress meter: one pill per person up to 24 */
+.present .present-meter { display: flex; gap: 8px; }
+.present .present-meter i { display: block; width: 44px; height: 12px; border-radius: 6px; background: var(--surface-2); }
+.present .present-meter i.is-on { background: var(--secondary); }
+.present .present-meter i.is-all { background: var(--success); }
+
+/* ---- lobby ---- */
+.present .present-lobby { display: grid; grid-template-columns: 1fr auto; gap: 96px; align-items: center; }
+.present .present-code {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--L-hero) * 2 * var(--fit));
+  letter-spacing: .08em;
+  line-height: 1;
+  margin: .1em 0 .25em;
+}
+.present .present-qr {
+  width: calc(380px * var(--fit));
+  aspect-ratio: 1;
+  background: var(--text);
+  padding: 18px;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+.present .present-qr svg { display: block; width: 100%; height: 100%; }
+
+.present .present-code-label { margin: 1.2em 0 0; color: var(--muted); }
+.present .present-join-url { max-width: none; }
+
+/* ---- results tally ---- */
+.present .present-tally { display: flex; flex-direction: column; gap: calc(22px * var(--fit)); }
+.present .present-trow {
+  display: grid;
+  grid-template-columns: calc(var(--L-secondary) * 1.4 * var(--fit)) minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+}
+.present .present-trow .present-rank {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--L-secondary) * var(--fit));
+  color: var(--muted);
+  text-align: right;
+}
+.present .present-trow .present-who { font-size: calc(var(--L-secondary) * var(--fit)); font-weight: 600; line-height: 1.15; min-width: 0; }
+.present .present-trow .present-first {
+  display: block;
+  font-size: calc(var(--L-meta) * var(--fit));
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: .2em;
+}
+.present .present-trow .present-bar { height: calc(14px * var(--fit)); border-radius: 7px; background: var(--secondary); margin-top: .5em; }
+.present .present-trow .present-points {
+  font-size: calc(var(--L-secondary) * var(--fit));
+  font-weight: 700;
+  white-space: nowrap;
+}
+.present .present-trow .present-points small { font-size: .55em; color: var(--muted); font-weight: 500; margin-left: .3em; }
+.present .present-more { font-size: calc(var(--L-body) * var(--fit)); color: var(--muted); padding-left: calc(var(--L-secondary) * 1.4 * var(--fit) + 24px); margin: calc(22px * var(--fit)) 0 0; }
+
+/* ---- the response navigator ---- */
+.present .present-main.present-main-nav { padding-block: 24px; justify-content: stretch; }
+.present .present-nav {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 300px;
+  gap: 40px;
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+.present .present-flank { display: flex; flex-direction: column; justify-content: center; gap: 18px; min-width: 0; }
+.present .present-mini {
+  border: var(--hair) solid var(--present-line-strong);
+  border-radius: 16px;
+  padding: 16px 20px;
+  background: var(--present-mini);
+  min-width: 0;
+}
+.present .present-mini .present-n,
+.present .present-range .present-n {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--L-secondary);
+  line-height: 1.05;
+  color: var(--muted);
+}
+.present .present-mini .present-w {
+  font-size: var(--L-meta);
+  color: var(--muted);
+  line-height: 1.3;
+  margin-top: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.present .present-range {
+  border: var(--hair) dashed var(--present-line-strong);
+  border-radius: 16px;
+  padding: 16px 20px;
+  text-align: center;
+}
+.present .present-range .present-w { font-size: var(--L-meta); color: var(--muted); }
+.present .present-card {
+  background: var(--surface);
+  border: 3px solid var(--secondary);
+  border-radius: 28px;
+  padding: 44px 56px 40px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.present .present-card-head { display: flex; align-items: center; gap: 22px; flex: none; margin-bottom: 24px; }
+.present .present-badge {
+  flex: none;
+  min-width: calc(var(--L-secondary) * 1.7);
+  height: calc(var(--L-secondary) * 1.7);
+  padding: 0 .3em;
+  border-radius: 999px;
+  background: var(--secondary);
+  color: var(--bg);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--L-secondary);
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+}
+.present .present-card-who { font-size: var(--L-secondary); font-weight: 700; line-height: 1.1; min-width: 0; }
+.present .present-card-who small { display: block; font-size: var(--L-meta); color: var(--muted); font-weight: 500; margin-top: 4px; }
+.present .present-fit-text {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  font-size: var(--L-primary);
+  line-height: 1.28;
+  font-weight: 500;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.present .present-part { flex: none; font-size: var(--L-meta); color: var(--secondary); font-weight: 600; margin-top: 16px; }
+.present .present-track { display: flex; gap: 6px; align-items: center; }
+.present .present-track i { display: block; width: 30px; height: 10px; border-radius: 5px; background: var(--surface-2); }
+.present .present-track i.is-on { background: var(--secondary); width: 56px; }
+.present .present-track.is-bar { position: relative; width: 640px; height: 10px; border-radius: 5px; background: var(--surface-2); }
+.present .present-track.is-bar em {
+  position: absolute;
+  top: -5px;
+  height: 20px;
+  width: 12px;
+  border-radius: 6px;
+  background: var(--secondary);
+  left: calc(var(--at, 0) * (100% - 12px));
+}
+
+/* ---- Workie's read ---- */
+.present .present-read-h {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--L-primary) * var(--fit));
+  margin: 0 0 .5em;
+  line-height: 1.1;
+}
+.present .present-read-h small {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: .45em;
+  color: var(--muted);
+  margin-left: .6em;
+  letter-spacing: .02em;
+}
+.present .present-read { font-size: calc(var(--L-body) * 1.22 * var(--fit)); line-height: 1.36; }
+/* MarkdownRenderer's own classes carry the paper theme's colours and sizes
+   (styles.css .markdown-*); on the wall they inherit, as the host's stage
+   does under .notes-md (styles/stage.css). */
+.present .present-read .markdown-content,
+.present .present-read .markdown-content * { color: inherit; font-size: inherit; line-height: inherit; }
+.present .present-read .markdown-content { max-width: none; margin: 0; padding: 0; background: none; }
+.present .present-read .markdown-list { margin: 0 0 .6em; padding-left: 1.4em; }
+.present .present-read p,
+.present .present-read li { max-width: 62ch; margin: 0 0 .6em; }
+.present .present-read ul,
+.present .present-read ol { margin: 0 0 .6em; padding-left: 1.4em; }
+.present .present-read li::marker { color: var(--secondary); font-family: var(--font-display); font-weight: 800; }
+.present .present-read .markdown-content h1,
+.present .present-read .markdown-content h2,
+.present .present-read .markdown-content h3,
+.present .present-read .markdown-content h4 {
+  font-family: var(--font-display);
+  font-size: calc(var(--L-primary) * var(--fit));
+  font-weight: 700;
+  line-height: 1.1;
+  margin: 0 0 .5em;
+}
+.present .present-read .markdown-content h3,
+.present .present-read .markdown-content h4 { font-size: calc(var(--L-secondary) * var(--fit)); }
+.present .present-read .markdown-content strong { font-weight: 700; color: var(--text); }
+.present .present-read .markdown-content em { font-style: normal; color: var(--present-quote); }
+.present .present-read .markdown-content li::marker { color: var(--secondary); font-family: var(--font-display); font-weight: 800; }
+.present .present-read.is-topics .markdown-content ol > li { font-size: calc(var(--L-secondary) * var(--fit)); line-height: 1.3; }
+.present .present-pages { display: flex; gap: 10px; }
+.present .present-pages i { display: block; width: 48px; height: 10px; border-radius: 5px; background: var(--surface-2); }
+.present .present-pages i.is-seen { background: var(--present-seen); }
+.present .present-pages i.is-on { background: var(--secondary); }
+
+/* ---- waiting, ended, and an honest miss ---- */
+.present .present-quiet {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--L-secondary);
+}
+/* A slice that still does not fit at the floor is marked, never scrolled or
+   clipped silently; ?fitcheck=1 outlines it (dev only). */
+.present.is-fitcheck .present-canvas[data-fit="miss"] { outline: 6px solid var(--danger); outline-offset: -6px; }
+
+/* THE SCOREBOARD is the host stage's own component (components/stage/
+   scoreboard), sized for a whole window, so it sits over the canvas rather
+   than inside it. */
+.present .present-board { position: absolute; inset: 0; z-index: 10; overflow: hidden; }
+
+/* (kept for a future in-canvas overlay) */
+.present .present-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 64px 96px 56px;
+  overflow: hidden;
+}
+
+/* THE PHASE WIPE (components/stage/PhaseBar.jsx's band, restated for the
+   canvas): one word and one instruction across the middle, played once. Blue
+   for the room acting, green for results; never orange (R3). */
+.present .present-wipe {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  top: 36%;
+  background: var(--present-plate);
+  border-top: 3px solid var(--secondary);
+  border-bottom: 3px solid var(--secondary);
+  padding: 32px 64px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--L-primary);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--secondary);
+  text-align: center;
+  pointer-events: none;
+  animation: present-wipe 1.4s cubic-bezier(.16, 1, .3, 1) both;
+}
+.present .present-wipe small {
+  display: block;
+  margin-top: .35em;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: none;
+  color: var(--text);
+  font-size: var(--L-body);
+}
+.present .present-wipe.is-results { border-color: var(--success); color: var(--present-success-text); }
+.present[data-profile="call"] .present-wipe { background: var(--bg); }
+@media (prefers-reduced-motion: reduce) {
+  .present .present-wipe { display: none; }
+}
+@keyframes present-wipe {
+  0% { opacity: 0; transform: scaleY(.18); }
+  14% { opacity: 1; transform: none; }
+  72% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .present .present-moment { animation: present-in .35s ease-out both; }
+}
+@keyframes present-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

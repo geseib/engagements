@@ -46,7 +46,8 @@ import useFullscreenKey from './hooks/useFullscreenKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
-import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
+import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
+import { twoSurfacesHere, presentHref } from './config/surfaces';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
@@ -947,10 +948,68 @@ function GameHostPage() {
    * `engage.displayProfile` in localStorage; Room and Table are inferred from
    * the viewport width.
    */
-  const [profile, setProfile] = useState(
+  const [localProfile, setLocalProfile] = useState(
     () => loadProfile(window.localStorage, window.innerWidth)
   );
-  useEffect(() => { saveProfile(window.localStorage, profile); }, [profile]);
+  useEffect(() => { saveProfile(window.localStorage, localProfile); }, [localProfile]);
+
+  /*
+    TWO SURFACES (docs/design/two-surface PLAN D2, D6, 2.13). With the switch
+    on, the room watches /present, and the display profile is a SESSION fact
+    (STATE.StageProfile) so this page and the wall size and page Workie's read
+    the same way: "Page 2 of 4" is the same page on both. Room until the host
+    chooses. A choice here is published through /stage-beat `{ profile }`;
+    another surface's choice arrives as `stageProfileChanged` or on a reload.
+    With the switch off, the profile stays this browser's own, as before.
+  */
+  const twoSurfaces = twoSurfacesHere(currentGameType);
+  const [sessionProfile, setSessionProfile] = useState(null);
+  const profile = twoSurfaces ? (sessionProfile || DEFAULT_PROFILE) : localProfile;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const setProfile = useCallback((next) => {
+    const value = typeof next === 'function' ? next(profileRef.current) : next;
+    if (!PROFILES.includes(value)) return;
+    setLocalProfile(value);
+    if (!twoSurfaces) return;
+    setSessionProfile(value);
+    if (!gameId) return;
+    authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: value }),
+    }).catch((err) => console.error('Display profile publish failed (continuing):', err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [twoSurfaces, gameId]);
+  // For handlers registered once (the remote's postMessage listener).
+  const setProfileRef = useRef(setProfile);
+  setProfileRef.current = setProfile;
+  /** How many Presentations are open on this session (the host door's `presenting`). */
+  const [presenting, setPresenting] = useState(0);
+  /*
+    Read every 10 s while the switch is on: a Presentation connecting sends no
+    frame, so the dock's PRESENTING and the session profile come from the host
+    door. The same authorised read the restore makes.
+  */
+  useEffect(() => {
+    if (!twoSurfaces || !gameId) return undefined;
+    let live = true;
+    const read = async () => {
+      try {
+        const res = await authFetch(`${API_BASE}games/${gameId}/host-state`);
+        if (!res.ok || !live) return;
+        const data = await res.json();
+        if (!live) return;
+        setPresenting(Number(data.presenting) || 0);
+        if (PROFILES.includes(data.stageProfile)) setSessionProfile(data.stageProfile);
+      } catch (e) {
+        /* the next read tries again */
+      }
+    };
+    read();
+    const timer = setInterval(read, 10000);
+    return () => { live = false; clearInterval(timer); };
+  }, [twoSurfaces, gameId]);
 
   /**
    * Which beat of RESULTS is on screen.
@@ -1228,7 +1287,7 @@ function GameHostPage() {
             // the boolean with four profiles and says so in its own header; this
             // handler was never updated, so the remote's big-screen button threw
             // instead of doing anything.
-            setProfile((prev) => toggleBigScreen(prev, window.innerWidth));
+            setProfileRef.current((prev) => toggleBigScreen(prev, window.innerWidth));
             break;
           case 'NEXT_QUESTION':
             remoteActionsRef.current.nextQuestion?.();
@@ -2391,6 +2450,12 @@ Focus on actionable business strategy insights.`;
       applyServerBoard(data);
     });
 
+    // THE SESSION'S DISPLAY PROFILE, chosen on another surface (two-surface D2).
+    webSocketClient.onMessage('stageProfileChanged', (data) => {
+      if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
+      if (data && PROFILES.includes(data.profile)) setSessionProfile(data.profile);
+    });
+
     webSocketClient.onMessage('stageFocusChanged', (data) => {
       console.log('🔌 Stage focus notification:', data);
       // A frame no newer than the last applied is dropped (its `rev`).
@@ -2598,6 +2663,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('stageFocusChanged');
       webSocketClient.offMessage('scoreboardChanged');
+      webSocketClient.offMessage('stageProfileChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
@@ -2772,6 +2838,9 @@ Focus on actionable business strategy insights.`;
         // THE SCOREBOARD, as the room last saw it: a reload over an open board
         // comes back up on it rather than dropping the room to the stage.
         applyServerBoard(gameStateData.scoreboard);
+        // The session's display profile and how many Presentations are open.
+        setSessionProfile(PROFILES.includes(gameStateData.stageProfile) ? gameStateData.stageProfile : null);
+        setPresenting(Number(gameStateData.presenting) || 0);
 
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
@@ -7211,6 +7280,7 @@ Focus on actionable business strategy insights.`;
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
             onAgenda={eventCode ? goToAgenda : undefined}
+            present={twoSurfaces && gameId ? { href: presentHref(gameId), presenting } : null}
             complete={everybodyIn}
             /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
                `heading` / `body`, handed to the dock so that the fitter taking

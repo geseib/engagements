@@ -550,6 +550,10 @@ body, .stage-ladder-table{
   color:var(--muted);background:transparent;border:var(--hair) solid var(--rule);
   border-radius:10px;padding:.3em .7em;cursor:pointer;letter-spacing:.06em}
 .dock-more-lbl{font-size:calc(var(--t-meta) * .82);letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+/* PRESENT is a link shaped like the buttons beside it; PRESENTING says a
+   Presentation is connected, in the pressed blue (one orange per screen). */
+a.dock-more{text-decoration:none}
+.dock-present[data-presenting]{color:var(--text);border-color:var(--secondary);background:rgba(124,167,230,.16)}
 /* Room-facing copy, so it wraps rather than ellipsing — "Results are o…" is
    not a status. It is in the audit's CONTENT_SEL, which means A11 fails if it
    ever truncates, which in turn forces the copy to stay short. */

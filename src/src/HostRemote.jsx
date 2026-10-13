@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import { twoSurfacesHere, presentHref } from './config/surfaces';
 import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
 import RemoteFocusPanel from './components/RemoteFocusPanel';
@@ -1727,15 +1728,32 @@ function HostRemote() {
                   Join code
                 </button>
 
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
-                  aria-expanded={screenOpen}
-                  onClick={() => setScreenOpen((open) => !open)}
-                >
-                  <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                  Big screen
-                </button>
+                {/* PRESENT replaces Big screen under the two-surface switch
+                    (PLAN 2.14): the room's screen is /present, which follows
+                    the server and needs no link back to this phone, so a
+                    reload on either end loses nothing. */}
+                {twoSurfacesHere(gameType) ? (
+                  <a
+                    className="hr-btn hr-btn--ghost"
+                    href={presentHref(gameId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open it on the computer wired to the projector and press F"
+                  >
+                    <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                    {Number(snapshot && snapshot.presenting) > 0 ? 'Presenting' : 'Present'}
+                  </a>
+                ) : (
+                  <button
+                    className="hr-btn hr-btn--ghost"
+                    type="button"
+                    aria-expanded={screenOpen}
+                    onClick={() => setScreenOpen((open) => !open)}
+                  >
+                    <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                    Big screen
+                  </button>
+                )}
 
                 <button
                   className="hr-btn hr-btn--ghost"

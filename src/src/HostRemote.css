@@ -456,6 +456,9 @@
   transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
 }
 
+/* Present is a link (two-surface PLAN 2.14), drawn as the button beside it. */
+a.hr-btn { text-decoration: none; color: inherit; }
+
 .hr-btn:active { transform: scale(.985); }
 .hr-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 

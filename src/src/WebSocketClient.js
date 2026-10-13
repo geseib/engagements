@@ -45,6 +45,9 @@ class WebSocketClient {
     this.playerName = playerName;
     this.isHost = isHost;
     this.hostTicketProvider = typeof options.hostTicket === 'function' ? options.hostTicket : null;
+    // A PRESENTATION IS A VIEWER (two-surface D4): no name, never host, its own
+    // per-tab id so two walls do not retire each other's connection row.
+    this.viewerId = typeof options.viewerId === 'string' && options.viewerId ? options.viewerId : null;
 
     // Retire whatever we were holding before opening its replacement.
     //
@@ -60,7 +63,9 @@ class WebSocketClient {
     this._discardSocket();
     this._cancelReconnect();
 
-    const wsUrl = `${window.WS_URL}?gameId=${gameId}${playerName ? `&playerName=${encodeURIComponent(playerName)}` : ''}${isHost ? '&isHost=true' : ''}`;
+    const wsUrl = this.viewerId
+      ? `${window.WS_URL}?gameId=${gameId}&viewer=present&viewerId=${encodeURIComponent(this.viewerId)}`
+      : `${window.WS_URL}?gameId=${gameId}${playerName ? `&playerName=${encodeURIComponent(playerName)}` : ''}${isHost ? '&isHost=true' : ''}`;
 
     if (isHost && this.hostTicketProvider) return this._openWithHostTicket(wsUrl);
     return this._open(wsUrl);
@@ -193,7 +198,7 @@ class WebSocketClient {
 
   /** Reopen as whoever we were — including the host-ticket provider. */
   _reconnect() {
-    this.connect(this.gameId, this.playerName, this.isHost, { hostTicket: this.hostTicketProvider });
+    this.connect(this.gameId, this.playerName, this.isHost, { hostTicket: this.hostTicketProvider, viewerId: this.viewerId });
   }
 
   _startHeartbeat() {
