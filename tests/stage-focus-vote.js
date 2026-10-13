@@ -295,6 +295,31 @@ const setState = (gameId, State, LessonNumber = 1) => {
     assert.deepStrictEqual(m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean), FOCUS_KINDS);
   });
 
+  console.log('\n9. the join code and the scoreboard are one at a time (owner, 2026-10-13)');
+  seedGame('4017');
+  setState('4017', 'RESULTS#001');
+  {
+    const row = store.get(key('GAME#4017', 'STATE'));
+    store.set(key('GAME#4017', 'STATE'), { ...row, Scoreboard: { open: true, style: 'departure', page: 1, openedAt: '2026-10-13T10:00:00.000Z' }, ScoreboardRev: 4 });
+  }
+  const joinOverBoard = await post('4017', { focus: 'join', questionNumber: 1 });
+  check('putting the join code up closes an open scoreboard', () => {
+    assert.strictEqual(joinOverBoard.statusCode, 200, joinOverBoard.body);
+    assert.strictEqual(store.get(key('GAME#4017', 'STATE')).Scoreboard.open, false);
+  });
+  check('…and tells every screen with a scoreboardChanged frame', () => {
+    const f = sent.find((x) => x.message.type === 'scoreboardChanged');
+    assert.ok(f, 'no scoreboardChanged frame');
+    assert.strictEqual(f.message.open, false);
+  });
+  seedGame('4018');
+  setState('4018', 'RESULTS#001');
+  await post('4018', { focus: 'join', questionNumber: 1 });
+  check('with no board open, nothing about the scoreboard is written or sent', () => {
+    assert.strictEqual(store.get(key('GAME#4018', 'STATE')).Scoreboard, undefined);
+    assert.ok(!sent.some((x) => x.message.type === 'scoreboardChanged'));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

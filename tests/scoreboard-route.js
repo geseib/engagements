@@ -350,6 +350,32 @@ const readState = async () => JSON.parse(
     assert.deepStrictEqual(list, SCOREBOARD_STYLES);
   });
 
+  console.log('\n9. opening the board takes the join code down (owner, 2026-10-13: one at a time)');
+  seed({ state: 'RESULTS#003' });
+  table.put({ PK, SK: 'ROUND#003', StageFocus: 'join', StageFocusRev: 6 });
+  const overJoin = await post({ open: true });
+  await check('the board opens', () => assert.strictEqual(overJoin.statusCode, 200, overJoin.body));
+  await check('the round\'s join focus becomes none, its rev moves on', () => {
+    const r = table.get(PK, 'ROUND#003');
+    assert.strictEqual(r.StageFocus, 'none');
+    assert.strictEqual(r.StageFocusRev, 7);
+  });
+  await check('every screen is told with a stageFocusChanged frame', () => {
+    const f = frames.find((x) => x.message.type === 'stageFocusChanged');
+    assert.ok(f, 'no stageFocusChanged frame');
+    assert.strictEqual(f.message.focus, 'none');
+    assert.strictEqual(f.message.rev, 7);
+  });
+  seed({ state: 'RESULTS#003' });
+  table.put({ PK, SK: 'ROUND#003', StageFocus: 'answer', StageFocusIndex: 2, StageFocusRev: 3 });
+  await post({ open: true });
+  await check('a response on the wall is not touched (only the join code gives way)', () => {
+    const r = table.get(PK, 'ROUND#003');
+    assert.strictEqual(r.StageFocus, 'answer');
+    assert.strictEqual(r.StageFocusRev, 3);
+    assert.ok(!frames.some((x) => x.message.type === 'stageFocusChanged'));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

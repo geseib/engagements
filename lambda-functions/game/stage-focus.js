@@ -47,6 +47,7 @@
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const { callerMayDriveSession } = require('./tenant');
@@ -229,8 +230,8 @@ exports.handler = async (event) => {
       db.send(new GetCommand({
         TableName: process.env.TABLE_NAME,
         Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-        ProjectionExpression: '#state',
-        ExpressionAttributeNames: { '#state': 'State' }
+        ProjectionExpression: '#state, #sb',
+        ExpressionAttributeNames: { '#state': 'State', '#sb': 'Scoreboard' }
       }))
     ]);
     if (!callerMayDriveSession(event, ownerRead.Item || {})) {
@@ -301,6 +302,28 @@ exports.handler = async (event) => {
       rev,
       timestamp: now
     });
+
+    /*
+      THE JOIN CODE AND THE SCOREBOARD ARE ONE AT A TIME (owner, 2026-10-13:
+      "turn on qr after scoreboard or scoreboard after qr code they flip the
+      other one off and then pop up"). Putting the join code up closes an open
+      scoreboard, here on the server, so the laptop, the Remote and every wall
+      follow the one frame. scoreboard.js does the other half.
+    */
+    if (focus === 'join') {
+      const board = normaliseScoreboard(stateRead.Item && stateRead.Item.Scoreboard);
+      if (board.open) {
+        try {
+          const closed = { ...board, open: false };
+          const sbWritten = await db.send(new UpdateCommand(scoreboardWrite(process.env.TABLE_NAME, gameId, closed)));
+          closed.rev = revAfter(sbWritten);
+          await broadcastToGame(gameId, scoreboardFrame(gameId, closed));
+        } catch (sbError) {
+          // The join code is up; a board that did not close is a nuisance, not a failure.
+          console.error('⚠️ STAGE FOCUS: the scoreboard did not close for the join code:', sbError?.message);
+        }
+      }
+    }
 
     return respond(200, {
       status: 'OK', gameId, questionNumber: padded, focus, index: storedIndex,

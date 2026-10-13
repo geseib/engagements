@@ -1,0 +1,282 @@
+<title>Ask the Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one moment per band (the read with ask icons, the preview, sent, results), each band showing
+   the host's laptop, the room's wall and a participant's phone side by side. Warm Summit dusk, Present skin. */
+:root{
+  --bg:#0F1A2E; --canvas:#0A1324; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#9BA8BE; --accent:#7CA7E6; --accent-text:#9CBEF0; --action:#F6A94C; --on-action:#0F1A2E;
+  --success:#4FB286; --line:rgba(155,168,190,.22); --line-strong:rgba(155,168,190,.4); --tint:rgba(124,167,230,.16);
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif; --f-ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--canvas);color:var(--text)}
+body{font-family:var(--f-ui);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:24px 64px}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+h1{font-family:var(--f-display);font-size:28px;margin:0}
+.lede{color:var(--muted);max-width:75ch;margin:6px 0 0}
+.band{display:flex;flex-direction:column;gap:12px}
+.band>h2{font-family:var(--f-display);font-size:20px;margin:0}
+.band>p{margin:0;color:var(--muted);max-width:90ch}
+.row{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,300px);gap:20px;align-items:start}
+@media (max-width:1100px){.row{grid-template-columns:minmax(0,1fr)}}
+.cap{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.cap b{color:var(--text)}
+.frame{background:var(--bg);border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;min-width:0}
+.ey{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-text);font-weight:600;margin:0}
+.h{font-family:var(--f-display);font-weight:800;margin:0;line-height:1.1}
+.mut{color:var(--muted)}
+/* laptop read */
+.lap{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.lap .top{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:8px}
+.lap .top b{color:var(--text)}
+.sec h3{font-family:var(--f-display);font-size:17px;margin:0 0 8px}
+.sec ul,.sec ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.sec li{line-height:1.45}
+.sec li strong{font-weight:700}
+.askbtn{display:inline-flex;align-items:center;gap:5px;margin-left:6px;vertical-align:1px;border:1px solid var(--accent);background:var(--tint);color:var(--text);
+  border-radius:999px;padding:1px 9px 1px 6px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.askbtn svg{width:14px;height:14px;flex:none}
+.askbtn:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
+.dock{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);background:var(--surface);padding:10px 14px;flex-wrap:wrap}
+.dock .st{flex:1;min-width:150px;font-size:13px}
+.btn{border-radius:10px;border:1px solid var(--line-strong);background:transparent;color:var(--text);padding:9px 14px;font:inherit;font-weight:600;font-size:14px}
+.btn-p{background:var(--action);border-color:var(--action);color:var(--on-action)}
+/* wall */
+.wall{aspect-ratio:16/9;padding:5% 6% 4%;display:flex;flex-direction:column;background:radial-gradient(120% 90% at 85% 0%,#1E3050 0%,var(--bg) 55%),var(--bg);min-width:0}
+.wall .wt{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:6px}
+.wall .wt b{color:var(--text)}
+.wall .wm{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;min-height:0}
+.wall .wf{display:flex;justify-content:center;gap:10px;align-items:center;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:6px}
+.wall .h{font-size:clamp(16px,2vw,26px)}
+.pips{display:flex;gap:4px}.pips i{width:16px;height:5px;border-radius:3px;background:var(--surface-2)}.pips i.on{background:var(--accent)}
+.opts{display:flex;flex-direction:column;gap:6px}
+.opt{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:clamp(11px,1.2vw,15px)}
+.opt .k{font-family:var(--f-display);font-weight:800;color:var(--muted)}
+.opt .b{grid-column:2/4;height:7px;border-radius:4px;background:var(--accent)}
+.opt .c{font-weight:700}
+.scale{display:flex;gap:6px}.scale span{flex:1;text-align:center;border:1px solid var(--line-strong);border-radius:8px;padding:4px 0;font-weight:700;font-size:clamp(11px,1.2vw,15px)}
+.dist{display:flex;flex-direction:column;gap:4px;font-size:clamp(10px,1.1vw,13px)}
+.dist div{display:grid;grid-template-columns:70px minmax(0,1fr) 24px;gap:8px;align-items:center}
+.dist i{display:block;height:7px;border-radius:4px;background:var(--accent)}
+.avg{font-family:var(--f-display);font-weight:800;font-size:clamp(22px,3vw,40px)}
+.ideas{display:flex;flex-direction:column;gap:6px}
+.ideas p{margin:0;border:1px solid var(--line-strong);border-radius:8px;padding:5px 9px;font-size:clamp(11px,1.15vw,14px)}
+/* phone */
+.phone{border:8px solid #050A14;border-radius:30px;background:var(--bg);display:flex;flex-direction:column;min-height:540px;overflow:hidden}
+.phone .pt{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:12px 14px 8px;border-bottom:1px solid var(--line)}
+.phone .pt b{color:var(--text)}
+.phone .pb{flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;background:radial-gradient(120% 60% at 90% 0%,#1E3050 0%,var(--bg) 60%)}
+.phone .pb .h{font-size:20px}
+.pick{border:1px solid var(--line-strong);border-radius:12px;padding:10px 12px;font-weight:600;background:var(--surface)}
+.pick.on{border-color:var(--accent);background:var(--tint)}
+.ta{border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);min-height:90px;padding:10px;color:var(--muted);font-size:14px}
+.phone .pf{padding:10px 14px 16px;border-top:1px solid var(--line);background:var(--surface)}
+.phone .pf .btn-p{width:100%;min-height:48px;font-size:16px;border-radius:12px}
+/* modal */
+.scrim{position:relative;background:rgba(10,19,36,.72);padding:22px;border-radius:12px;border:1px solid var(--line)}
+.dlg{background:var(--surface);border:1px solid var(--line-strong);border-radius:16px;max-width:560px;margin:0 auto;overflow:hidden}
+.dlg .dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px 10px}
+.dlg .dh .h{font-size:19px}
+.x{border:1px solid var(--line-strong);background:transparent;color:var(--text);border-radius:8px;width:32px;height:32px;font-size:16px}
+.dlg .db{padding:4px 18px 14px;display:flex;flex-direction:column;gap:12px}
+.preview{border:1px dashed var(--line-strong);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.why{font-size:13px;color:var(--muted)}
+.mark{font-size:11px;border:1px solid var(--line-strong);border-radius:999px;padding:1px 8px;color:var(--muted);margin-left:6px}
+.dlg .df{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding:12px 18px}
+.dlg .df .sp{margin-left:auto}
+.kinds{display:flex;gap:6px}
+.kinds button{border:1px solid var(--line-strong);background:transparent;color:var(--muted);border-radius:999px;padding:4px 10px;font:inherit;font-size:13px;display:inline-flex;gap:5px;align-items:center}
+.kinds button[aria-pressed="true"]{border-color:var(--accent);background:var(--tint);color:var(--text)}
+.kinds svg{width:14px;height:14px}
+.note{border-left:3px solid var(--accent);padding:8px 12px;background:var(--surface);border-radius:0 8px 8px 0;font-size:14px;max-width:95ch}
+.legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-ideas" viewBox="0 0 256 256"><path fill="currentColor" d="M176 232a8 8 0 0 1-8 8H88a8 8 0 0 1 0-16h80a8 8 0 0 1 8 8Zm40-128a87.55 87.55 0 0 1-33.64 69.21A16.24 16.24 0 0 0 176 186v6a16 16 0 0 1-16 16H96a16 16 0 0 1-16-16v-6a16 16 0 0 0-6.23-12.66A87.59 87.59 0 0 1 40 104.49C39.74 56.83 78.26 17.14 125.88 16A88 88 0 0 1 216 104Zm-16 0a72 72 0 0 0-73.74-72c-39 .92-70.47 33.39-70.26 72.39a71.65 71.65 0 0 0 27.64 56.3A32 32 0 0 1 96 186v6h64v-6a32.15 32.15 0 0 1 12.47-25.35A71.65 71.65 0 0 0 200 104Z"/></symbol>
+    <symbol id="i-choose" viewBox="0 0 256 256"><path fill="currentColor" d="M224 128a8 8 0 0 1-8 8h-88a8 8 0 0 1 0-16h88a8 8 0 0 1 8 8ZM128 72h88a8 8 0 0 0 0-16h-88a8 8 0 0 0 0 16Zm88 112h-88a8 8 0 0 0 0 16h88a8 8 0 0 0 0-16ZM82.34 42.34 56 68.69 45.66 58.34a8 8 0 0 0-11.32 11.32l16 16a8 8 0 0 0 11.32 0l32-32a8 8 0 0 0-11.32-11.32Zm0 64L56 132.69l-10.34-10.35a8 8 0 0 0-11.32 11.32l16 16a8 8 0 0 0 11.32 0l32-32a8 8 0 0 0-11.32-11.32Zm0 64L56 196.69l-10.34-10.35a8 8 0 0 0-11.32 11.32l16 16a8 8 0 0 0 11.32 0l32-32a8 8 0 0 0-11.32-11.32Z"/></symbol>
+    <symbol id="i-rate" viewBox="0 0 256 256"><path fill="currentColor" d="M207.06 80.67A111.24 111.24 0 0 0 128 48h-.4C66.07 48.21 16 99 16 161.13V184a16 16 0 0 0 16 16h192a16 16 0 0 0 16-16v-24a111.25 111.25 0 0 0-32.94-79.33ZM224 184H119.71l54.76-75.3a8 8 0 0 0-12.94-9.42L99.92 184H32v-22.87c0-3.08.14-6.12.4-9.13H56a8 8 0 0 0 0-16H35.37c10.32-38.86 44-68.24 84.63-71.66V88a8 8 0 0 0 16 0V64.33A96.14 96.14 0 0 1 221 136h-21a8 8 0 0 0 0 16h23.67c.21 2.65.33 5.31.33 8Z"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header>
+    <h1>Ask the room, from Workie's read</h1>
+    <p class="lede">Mockup for the owner's ruling of 2026-10-13: up to three asks per round, each tied to the part of Workie's read it came from (option A), shown to the host as a small icon beside that point. Three kinds, as in Build Room. The wall never shows an ask until the host sends it. Content is session 5479, round 5. Present skin.</p>
+  </header>
+
+  <div class="band">
+    <h2>The three kinds</h2>
+    <div class="legend">
+      <span class="askbtn"><svg><use href="#i-ideas"/></svg>Ideas</span><span class="mut">The room writes a short answer (280 characters).</span>
+      <span class="askbtn"><svg><use href="#i-choose"/></svg>Choose</span><span class="mut">Pick one of 2 to 4 options taken from the room's answers.</span>
+      <span class="askbtn"><svg><use href="#i-rate"/></svg>Rate</span><span class="mut">Rate a statement from the room, 1 to 5.</span>
+    </div>
+  </div>
+
+  <!-- 1. the read with icons -->
+  <div class="band">
+    <h2>1. Workie's read, with asks beside the points they came from</h2>
+    <p>On the host's laptop and the Remote only. Each icon names its kind. The wall shows the same page without icons.</p>
+    <div class="row">
+      <div>
+        <p class="cap"><b>Laptop</b> · the host</p>
+        <div class="frame">
+          <div class="lap">
+            <div class="top"><span><b>Q4 Wrap up</b> · Round 5</span><span>What we heard · Page 3 of 4</span></div>
+            <div class="sec">
+              <h3>Discussion topics</h3>
+              <ol>
+                <li>Maya's answer says <em>"trust a bot to restart things at 3am"</em>. What would on-call need to see before they trust an auto-remediation script? <button class="askbtn" type="button"><svg><use href="#i-rate"/></svg>Rate</button></li>
+                <li>Sam's answer assumes <em>"heavy users will pay more rather than leave"</em>. Which of our 120 pilot customers would push back first? <button class="askbtn" type="button"><svg><use href="#i-ideas"/></svg>Ideas</button></li>
+                <li>Would a clean API for agents conflict with the plain-language reports the brief promises?</li>
+              </ol>
+            </div>
+            <div class="sec">
+              <h3>What the room voted</h3>
+              <ul>
+                <li><strong>Maya Chen leads</strong> with the runbook answer, on 8 vote points.</li>
+                <li><strong>The vote tracked the writing</strong>: the top three sit close together. <button class="askbtn" type="button"><svg><use href="#i-choose"/></svg>Choose</button></li>
+              </ul>
+            </div>
+          </div>
+          <div class="dock"><span class="st">Reading page 3 of 4 · 3 asks ready</span><button class="btn" type="button">Back a page</button><button class="btn btn-p" type="button">Next page</button></div>
+        </div>
+      </div>
+      <div>
+        <p class="cap"><b>Wall</b> · what the room sees</p>
+        <div class="frame wall">
+          <div class="wt"><span><b>Q4 Wrap up</b> · Round 5</span><span>What we heard</span></div>
+          <div class="wm" style="justify-content:flex-start">
+            <p class="h" style="font-size:clamp(14px,1.7vw,22px)">Discussion topics</p>
+            <ol style="margin:0;padding-left:18px;font-size:clamp(10px,1.15vw,14px);display:flex;flex-direction:column;gap:5px">
+              <li>What would on-call need to see before they trust an auto-remediation script?</li>
+              <li>Which of our 120 pilot customers would push back first?</li>
+              <li>Would a clean API for agents conflict with the plain-language reports?</li>
+            </ol>
+          </div>
+          <div class="wf"><span>Workie's read</span><span class="pips"><i></i><i></i><i class="on"></i><i></i></span><span>Page 3 of 4</span></div>
+        </div>
+      </div>
+      <div>
+        <p class="cap"><b>Phone</b> · a participant</p>
+        <div class="phone">
+          <div class="pt"><span><b>Q4 Wrap up</b> · Round 5</span><span>What we heard</span></div>
+          <div class="pb"><p class="ey">Workie's read</p><p class="h">Discussion topics</p><p class="mut" style="margin:0">Following the main screen, page 3 of 4.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. the preview modal -->
+  <div class="band">
+    <h2>2. Clicking an icon: the preview</h2>
+    <p>Exactly what the phones will show, with what it would settle for the host. The host can switch the kind or edit the words before sending. Nothing reaches the room until Send.</p>
+    <div class="row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="scrim">
+        <div class="dlg" role="dialog" aria-label="Ask the room">
+          <div class="dh"><div><p class="ey">Choose · from What the room voted, point 2</p><p class="h">Which test would you start first?</p></div><button class="x" type="button" aria-label="Close">✕</button></div>
+          <div class="db">
+            <div class="kinds"><button type="button" aria-pressed="false"><svg><use href="#i-ideas"/></svg>Ideas</button><button type="button" aria-pressed="true"><svg><use href="#i-choose"/></svg>Choose</button><button type="button" aria-pressed="false"><svg><use href="#i-rate"/></svg>Rate</button></div>
+            <div class="preview">
+              <p class="ey" style="color:var(--muted)">What the phones will show</p>
+              <div class="pick">A · On-call logs every manual fix for six weeks</div>
+              <div class="pick">B · Ten customers get a shadow invoice <span class="mark">Reworded</span></div>
+              <div class="pick">C · CSMs hand-pick ten accounts with dropping logins</div>
+            </div>
+            <p class="why">For you: finds which cheap test the whole room would start with, beyond the vote leader. From answers 1, 2 and 3.</p>
+          </div>
+          <div class="df"><button class="btn" type="button">Edit</button><button class="btn" type="button">Cancel</button><button class="btn btn-p sp" type="button">Send to the room</button></div>
+        </div>
+      </div>
+      <div class="scrim">
+        <div class="dlg" role="dialog" aria-label="Ask the room">
+          <div class="dh"><div><p class="ey">Rate · from Discussion topics, point 1</p><p class="h">"People will trust a bot to restart things at 3am"</p></div><button class="x" type="button" aria-label="Close">✕</button></div>
+          <div class="db">
+            <div class="kinds"><button type="button" aria-pressed="false"><svg><use href="#i-ideas"/></svg>Ideas</button><button type="button" aria-pressed="false"><svg><use href="#i-choose"/></svg>Choose</button><button type="button" aria-pressed="true"><svg><use href="#i-rate"/></svg>Rate</button></div>
+            <div class="preview">
+              <p class="ey" style="color:var(--muted)">What the phones will show</p>
+              <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px" class="mut"><span>1 · Disagree</span><span>5 · Agree</span></div>
+            </div>
+            <p class="why">For you: tests whether the top answer's riskiest assumption holds for the people who did not rank it first. From answer 1.</p>
+          </div>
+          <div class="df"><button class="btn" type="button">Edit</button><button class="btn" type="button">Cancel</button><button class="btn btn-p sp" type="button">Send to the room</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. sent -->
+  <div class="band">
+    <h2>3. Sent: the room answers</h2>
+    <p>The wall shows the ask and the answered count; each phone shows the card. The host's next step is Show results, with the same two-press rule while people are still answering, or Cancel the question.</p>
+    <div class="row">
+      <div>
+        <p class="cap"><b>Laptop</b></p>
+        <div class="frame">
+          <div class="lap">
+            <div class="top"><span><b>Q4 Wrap up</b> · Round 5</span><span>Question for the room</span></div>
+            <p class="ey">Choose · live</p><p class="h" style="font-size:20px">Which test would you start first?</p>
+            <p class="mut" style="margin:0">Still to answer (2): Diego Ramos, Guest</p>
+          </div>
+          <div class="dock"><span class="st">3 of 5 answered</span><button class="btn" type="button">Cancel the question</button><button class="btn btn-p" type="button">Show results</button></div>
+        </div>
+      </div>
+      <div>
+        <p class="cap"><b>Wall</b></p>
+        <div class="frame wall">
+          <div class="wt"><span><b>Q4 Wrap up</b> · Round 5</span><span>Question for the room</span></div>
+          <div class="wm"><p class="ey">Choose one</p><p class="h">Which test would you start first?</p>
+            <div class="opts"><div class="opt"><span class="k">A</span><span>On-call logs every manual fix for six weeks</span></div><div class="opt"><span class="k">B</span><span>Ten customers get a shadow invoice</span></div><div class="opt"><span class="k">C</span><span>CSMs hand-pick ten accounts with dropping logins</span></div></div></div>
+          <div class="wf"><span class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span><span><b style="color:var(--text)">3 of 5</b> answered on their phone, laptop or tablet</span></div>
+        </div>
+      </div>
+      <div>
+        <p class="cap"><b>Phone</b></p>
+        <div class="phone">
+          <div class="pt"><span><b>Q4 Wrap up</b> · Round 5</span><span>Question</span></div>
+          <div class="pb"><p class="ey">Choose one</p><p class="h">Which test would you start first?</p>
+            <div class="pick">A · On-call logs every manual fix for six weeks</div><div class="pick on">B · Ten customers get a shadow invoice</div><div class="pick">C · CSMs hand-pick ten accounts with dropping logins</div></div>
+          <div class="pf"><button class="btn btn-p" type="button">Send</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. results per kind -->
+  <div class="band">
+    <h2>4. Results on the wall, for each kind</h2>
+    <p>Counts, never names. Ideas are not shown on the wall until the host picks them on the laptop, as comments are today.</p>
+    <div class="row" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div><p class="cap"><b>Choose</b></p><div class="frame wall"><div class="wt"><span><b>Q4 Wrap up</b> · Round 5</span><span>The room's answer</span></div>
+        <div class="wm"><p class="h">Which test would you start first?</p><div class="opts">
+          <div class="opt"><span class="k">A</span><span>On-call logs every fix</span><span class="c">3</span><i class="b" style="width:100%"></i></div>
+          <div class="opt"><span class="k">B</span><span>Shadow invoices</span><span class="c">1</span><i class="b" style="width:33%"></i></div>
+          <div class="opt"><span class="k">C</span><span>Accounts with dropping logins</span><span class="c">1</span><i class="b" style="width:33%"></i></div></div></div>
+        <div class="wf"><span>5 answered</span></div></div></div>
+      <div><p class="cap"><b>Rate</b></p><div class="frame wall"><div class="wt"><span><b>Q4 Wrap up</b> · Round 5</span><span>The room's answer</span></div>
+        <div class="wm"><p class="h" style="font-size:clamp(13px,1.5vw,19px)">"People will trust a bot to restart things at 3am"</p><p class="avg">2.4 <span class="mut" style="font-size:.4em;font-family:var(--f-ui);font-weight:500">average of 5</span></p>
+          <div class="dist"><div><span>5 · Agree</span><i style="width:10%"></i><b>0</b></div><div><span>4</span><i style="width:40%"></i><b>1</b></div><div><span>3</span><i style="width:40%"></i><b>1</b></div><div><span>2</span><i style="width:80%"></i><b>2</b></div><div><span>1 · Disagree</span><i style="width:40%"></i><b>1</b></div></div></div>
+        <div class="wf"><span>5 answered</span></div></div></div>
+      <div><p class="cap"><b>Ideas</b></p><div class="frame wall"><div class="wt"><span><b>Q4 Wrap up</b> · Round 5</span><span>The room's answer</span></div>
+        <div class="wm"><p class="h" style="font-size:clamp(13px,1.5vw,19px)">Which pilot customers would push back first?</p><div class="ideas"><p>The two agencies on fixed annual budgets</p><p>Anyone who signed in the last discount push</p></div></div>
+        <div class="wf"><span>5 ideas · 2 shown</span></div></div></div>
+    </div>
+  </div>
+
+  <div class="band">
+    <h2>What this needs (option A)</h2>
+    <div class="note">
+      <p style="margin:0 0 6px"><b>Backend.</b> The asks call gains an <code>anchor</code> per ask (section heading + point number, checked against the stored read) and the three kinds: Ideas (open text), Choose (today's pick one), Rate (1 to 5, replacing agree / not sure / disagree). The prompt asks for at least one ask and up to three. An ask whose anchor does not match the read appears at the end of the read instead of being lost.</p>
+      <p style="margin:0 0 6px"><b>Host screens.</b> Icons beside the anchored points on the laptop and the Remote; the preview dialog (the shared dialog look); a new step "Question for the room" with Show results / Cancel; then Next round / Ask another.</p>
+      <p style="margin:0 0 6px"><b>Wall and phones.</b> The ask, the answered count, then results as counts (bars for Choose, the average and spread for Rate, host-picked ideas for Ideas). Phones use the existing survey inputs.</p>
+      <p style="margin:0"><b>Report.</b> Each ask and its results in the round report.</p>
+    </div>
+  </div>
+</div>

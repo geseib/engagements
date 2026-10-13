@@ -194,8 +194,8 @@ exports.handler = async (event) => {
     const stateRead = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      ProjectionExpression: '#sb, #r',
-      ExpressionAttributeNames: { '#sb': 'Scoreboard', '#r': 'ScoresAfterRound' }
+      ProjectionExpression: '#sb, #r, #state',
+      ExpressionAttributeNames: { '#sb': 'Scoreboard', '#r': 'ScoresAfterRound', '#state': 'State' }
     }));
     const was = normaliseScoreboard(stateRead.Item && stateRead.Item.Scoreboard);
 
@@ -235,6 +235,45 @@ exports.handler = async (event) => {
     console.log(`✅ SCOREBOARD ${gameId}: ${next.open ? 'open' : 'closed'}, ${next.style}, page ${next.page}, rev ${next.rev}`);
 
     await broadcastToGame(gameId, scoreboardFrame(gameId, next));
+
+    /*
+      ONE AT A TIME (owner, 2026-10-13): opening the scoreboard takes the join
+      code down, on the server, so every surface follows. Conditional on the
+      round's focus BEING the join code, so it never closes a response or the
+      question someone else put up. stage-focus.js does the other half.
+    */
+    if (next.open && !was.open) {
+      const m = /#(\d+)$/.exec(String((stateRead.Item && stateRead.Item.State) || ''));
+      if (m) {
+        const padded = m[1].padStart(3, '0');
+        try {
+          const now = new Date().toISOString();
+          const cleared = await db.send(new UpdateCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
+            UpdateExpression: 'SET #focus = :none, #idx = :null, #phase = :null, #part = :null, #parts = :null, #updatedAt = :now ADD #rev :one',
+            ConditionExpression: '#focus = :join',
+            ExpressionAttributeNames: {
+              '#focus': 'StageFocus', '#idx': 'StageFocusIndex', '#phase': 'StageFocusPhase',
+              '#part': 'StageFocusPart', '#parts': 'StageFocusParts', '#rev': 'StageFocusRev', '#updatedAt': 'UpdatedAt',
+            },
+            ExpressionAttributeValues: { ':none': 'none', ':join': 'join', ':null': null, ':now': now, ':one': 1 },
+            ReturnValues: 'ALL_NEW',
+          }));
+          const rev = Number.isInteger(cleared && cleared.Attributes && cleared.Attributes.StageFocusRev)
+            ? cleared.Attributes.StageFocusRev : null;
+          await broadcastToGame(gameId, {
+            type: 'stageFocusChanged', gameId, questionNumber: padded,
+            focus: 'none', index: null, part: null, parts: null, phase: null, rev, timestamp: now,
+          });
+        } catch (focusError) {
+          // No join code up (the usual case), or the clear failed: the board is open either way.
+          if (focusError && focusError.name !== 'ConditionalCheckFailedException') {
+            console.error('⚠️ SCOREBOARD: the join code did not come down:', focusError?.message);
+          }
+        }
+      }
+    }
 
     return respond(200, { status: 'OK', gameId, scoreboard: next });
   } catch (error) {
