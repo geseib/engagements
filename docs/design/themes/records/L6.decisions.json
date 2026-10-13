@@ -1,0 +1,18 @@
+{
+  "unit": "L6",
+  "file": "components/ui/Pips.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": false,
+  "base": "87144bb4",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 0,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": []
+}
