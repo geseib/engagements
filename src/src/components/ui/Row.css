@@ -1,0 +1,67 @@
+/* ============================================================
+   .ui-row — HOVER AND SELECTED STATES FOR A LIST OR TABLE ROW
+   (docs/design/themes/SPEC.md §6 "RowSelect", PLAN Phase 1 unit L11)
+
+   A CSS-only mixin class. It paints STATE, never layout: no size, padding,
+   border or font is set here, so a surface adopts it by adding one class to
+   the row it already has (a <tr>, an <li>, a <button>, a <div>).
+
+     <tr className="ui-row">                          hover only
+     <tr className="ui-row" aria-selected="true">     selected (a listbox/grid row)
+     <a  className="ui-row" aria-current="page">      selected (the open place in a nav)
+     <li className="ui-row is-selected">              selected, where no ARIA state fits
+
+   Roles read (and nothing else): --row-hover, --row-selected, --select-mark.
+     Classic  hover rgba(155,168,190,.055), selected amber .10, no mark —
+              the values ~25 scoped --*-row-hover / --*-row-sel aliases
+              already carry (AdminShell, ArchivePanel, AuditLog, …).
+     Present  same hover, blue .16, and an inset 3px accent bar on the
+              leading edge (the one-look prototype's selected row).
+
+   WHY A <tr> PAINTS ITS CELLS AND EVERYTHING ELSE PAINTS ITSELF. Most tables
+   here give their cells a background of their own, which would hide a tint on
+   the <tr>; and a box-shadow on a <tr> is not drawn by every engine. So the
+   state goes on the cells of a table row, and on the element itself otherwise.
+   The two selectors never both match one element, so a translucent tint is
+   never laid down twice. The select mark goes on the FIRST cell only, so the
+   bar sits on the row's leading edge, once.
+
+   Selected wins over hover: the hover rule excludes every selected state, so
+   a selected row does not flicker to the hover grey under the pointer. (A row
+   with aria-current="false" is treated as unselected but also gets no hover;
+   write no aria-current at all on an unselected row.)
+
+   Contrast (uiRowPalette.test.js, every skin x theme, composited): --text,
+   --muted and --accent-text clear AA on a hovered or selected row over --bg and
+   --surface, the grounds a row sits on. Over --surface-2 only --text is
+   asserted: --muted there is 4.93 flat and the tint takes it under 4.5 — it is
+   so today, in every scoped copy of these values, and a row is not built on
+   --surface-2.
+   ============================================================ */
+
+.ui-row:not(tr):hover:not(.is-selected):not([aria-selected="true"]):not([aria-current]),
+tr.ui-row:hover:not(.is-selected):not([aria-selected="true"]):not([aria-current]) > td,
+tr.ui-row:hover:not(.is-selected):not([aria-selected="true"]):not([aria-current]) > th {
+  background: var(--row-hover);
+}
+
+.ui-row.is-selected:not(tr),
+.ui-row[aria-selected="true"]:not(tr),
+.ui-row[aria-current]:not([aria-current="false"]):not(tr),
+tr.ui-row.is-selected > td,
+tr.ui-row.is-selected > th,
+tr.ui-row[aria-selected="true"] > td,
+tr.ui-row[aria-selected="true"] > th,
+tr.ui-row[aria-current]:not([aria-current="false"]) > td,
+tr.ui-row[aria-current]:not([aria-current="false"]) > th {
+  background: var(--row-selected);
+}
+
+.ui-row.is-selected:not(tr),
+.ui-row[aria-selected="true"]:not(tr),
+.ui-row[aria-current]:not([aria-current="false"]):not(tr),
+tr.ui-row.is-selected > :first-child,
+tr.ui-row[aria-selected="true"] > :first-child,
+tr.ui-row[aria-current]:not([aria-current="false"]) > :first-child {
+  box-shadow: var(--select-mark);
+}
