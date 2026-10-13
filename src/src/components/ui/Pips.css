@@ -1,0 +1,89 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   PIPS — components/ui/Pips.jsx (docs/design/themes/SPEC.md §6, PLAN Phase 1
+   unit L6).
+
+   Progress as a row of pills, in three variants, ported from the
+   Presentation (present/present.css, PresentMoments.jsx):
+     meter   "x of n answered": one pill per person up to 24 (.present-meter)
+     pages   Workie's read: the page on screen, the pages already read (.present-pages)
+     track   the response navigator's foot: one tick per response up to 24,
+             the focused one wider; past 24 a bar with a marker (.present-track)
+   Pages past 24 take the same bar.
+
+   DUSK ONLY (units.json L6): every place that shows pips today is the wall or
+   the stage. ROLES ONLY (SPEC §3):
+     a pill            --surface-2
+     on / the marker   --accent      (Classic orange, Present blue)
+     all done          --success
+     seen              --ui-pips-seen = rgb(var(--accent-rgb) / .45), the
+                       Presentation's --present-seen, in channel form
+   Pills are not text, so WCAG 1.4.11 (3:1) is what "on" and "all" owe against
+   a pill and against every ground they sit on; uiPipsPalette.test.js proves it
+   for every skin, the wall canvas's gradient stops included.
+
+   NO LAYOUT OF ITS OWN (SPEC §6). The defaults are the Presentation's sizes at
+   1920x1080 so the Presentation can adopt it unchanged; any other surface
+   passes its own (on the element or an ancestor):
+     meter  --ui-meter-w 44px  --ui-meter-h 12px  --ui-meter-gap 8px
+     pages  --ui-pages-w 48px  --ui-pages-h 10px  --ui-pages-gap 10px
+     track  --ui-track-w 30px  --ui-track-on-w 56px  --ui-track-h 10px  --ui-track-gap 6px
+     bar    --ui-bar-w 640px  --ui-bar-h 10px  --ui-bar-mark-w 12px  --ui-bar-mark-h 20px
+   ========================================================================== */
+
+.ui-pips {
+  --ui-pips-seen: rgb(var(--accent-rgb) / 0.45);
+  display: flex;
+  align-items: center;
+}
+
+.ui-pips > i {
+  display: block;
+  flex: none;
+  background: var(--surface-2);
+}
+
+.ui-pips > i.is-on { background: var(--accent); }
+.ui-pips > i.is-all { background: var(--success); }
+.ui-pips > i.is-seen { background: var(--ui-pips-seen); }
+
+.ui-pips.ui-pips--meter { gap: var(--ui-meter-gap, 8px); }
+.ui-pips.ui-pips--meter > i {
+  width: var(--ui-meter-w, 44px);
+  height: var(--ui-meter-h, 12px);
+  border-radius: calc(var(--ui-meter-h, 12px) / 2);
+}
+
+.ui-pips.ui-pips--pages { gap: var(--ui-pages-gap, 10px); }
+.ui-pips.ui-pips--pages > i {
+  width: var(--ui-pages-w, 48px);
+  height: var(--ui-pages-h, 10px);
+  border-radius: calc(var(--ui-pages-h, 10px) / 2);
+}
+
+.ui-pips.ui-pips--track { gap: var(--ui-track-gap, 6px); }
+.ui-pips.ui-pips--track > i {
+  width: var(--ui-track-w, 30px);
+  height: var(--ui-track-h, 10px);
+  border-radius: calc(var(--ui-track-h, 10px) / 2);
+}
+.ui-pips.ui-pips--track > i.is-on { width: var(--ui-track-on-w, 56px); }
+
+/* past 24: one bar, one marker at --ui-pips-at (0..1, set by Pips.jsx) */
+.ui-pips.is-bar {
+  position: relative;
+  display: block;
+  width: var(--ui-bar-w, 640px);
+  height: var(--ui-bar-h, 10px);
+  border-radius: calc(var(--ui-bar-h, 10px) / 2);
+  background: var(--surface-2);
+}
+.ui-pips.is-bar .ui-pips-mark {
+  position: absolute;
+  top: calc((var(--ui-bar-h, 10px) - var(--ui-bar-mark-h, 20px)) / 2);
+  left: calc(var(--ui-pips-at, 0) * (100% - var(--ui-bar-mark-w, 12px)));
+  width: var(--ui-bar-mark-w, 12px);
+  height: var(--ui-bar-mark-h, 20px);
+  border-radius: calc(var(--ui-bar-mark-w, 12px) / 2);
+  background: var(--accent);
+}

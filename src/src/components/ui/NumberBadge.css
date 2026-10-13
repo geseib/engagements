@@ -1,0 +1,53 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   NUMBER BADGE — components/ui/NumberBadge.jsx (docs/design/themes/SPEC.md §6,
+   PLAN Phase 1 unit L4).
+
+   The number in a circle: "Response 3" on the wall, the rank a host clicks to
+   open a response. Ported from the Presentation's `.present-badge`
+   (present/present.css): a pill at least as wide as it is tall (1.7em), the
+   display face at 800, figures in tabular form.
+
+   ROLES ONLY (SPEC §3). Colour, face and shape come from styles/roles.css, so
+   the skin decides them and this sheet decides nothing:
+     accent tone   ground --accent, ink --on-accent
+                   Classic #1B2942 on #F6A94C 7.42:1 · Present #1B2942 on #7CA7E6 5.91:1
+                   (the same in dusk and paper: both roles are theme-invariant)
+     muted tone    no fill, a --rule-strong ring, ink --muted on whatever ground
+                   it sits on: dusk 7.24 bg · 6.06 surface · 4.93 surface-2,
+                   paper 5.82 · 6.21 · 5.32 (identical in both skins)
+   uiNumberBadgePalette.test.js composites every pairing for every skin x theme.
+
+   NO LAYOUT OF ITS OWN (SPEC §6): the size is the caller's ladder step, passed
+   as --ui-size (the `size` prop sets it inline); everything else is in em, so
+   the badge scales with it exactly as `.present-badge` scales with
+   --L-secondary. Without a size it takes the surrounding font size.
+   ========================================================================== */
+
+.ui-badge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: 1.7em;
+  height: 1.7em;
+  padding: 0 0.3em;
+  border-radius: var(--badge-radius);
+  font-family: var(--font-display);
+  font-size: var(--ui-size, 1em);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ui-badge.ui-badge--accent {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ui-badge.ui-badge--muted {
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--hair, 1px) var(--rule-strong);
+  color: var(--muted);
+}
