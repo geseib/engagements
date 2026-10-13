@@ -238,7 +238,7 @@ export function presentModel(snapshot, reads = {}) {
       };
     }
     case 'FEEDBACK':
-      return { moment, ...common, title: String(q.title || ''), line: RW.feedbackOpen };
+      return { moment, ...common, title: String(q.title || ''), task: String(q.detail || q.questionDetail || ''), line: RW.feedbackOpen };
     case 'ENDED':
       return { moment, ...common };
     case 'OTHER':

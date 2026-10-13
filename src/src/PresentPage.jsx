@@ -18,6 +18,8 @@ import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import { hasScoreboard } from './config/scoreboard';
 import useFullscreenKey from './hooks/useFullscreenKey';
 import usePresentControls from './present/presentControls';
+import Button from './components/ui/Button';
+import Eyebrow from './components/ui/Eyebrow';
 import './present/present.css';
 
 function gameIdFromUrl() {
@@ -93,17 +95,16 @@ export default function PresentPage() {
     controls.armed ? (
       <div className="present-strip" role="toolbar" aria-label="Presentation controls">
         <span className="present-strip-status">{(step && step.status && step.status.text) || ''}</span>
-        <button type="button" className="present-strip-btn" onClick={controls.back}>‹ Back</button>
-        <button
-          type="button"
+        <Button className="present-strip-btn" onClick={controls.back}>‹ Back</Button>
+        <Button
           className="present-strip-btn"
           aria-pressed={controls.joinShown}
           onClick={controls.toggleJoin}
           disabled={!/^(ASK|VOTE|RESULTS)#/.test(String(snapshot && snapshot.state))}
         >
           {controls.joinShown ? 'Hide join code (J)' : 'Join code (J)'}
-        </button>
-        <button type="button" className="present-strip-btn is-go" onClick={controls.forward}>Forward ›</button>
+        </Button>
+        <Button variant="action" className="present-strip-btn is-go" onClick={controls.forward}>Forward ›</Button>
       </div>
     ) : (
       <div className="present-strip" role="status">
@@ -119,12 +120,12 @@ export default function PresentPage() {
   */
   const ask = controls.confirm ? (
     <div className="present-confirm" role="dialog" aria-modal="true" aria-labelledby="present-confirm-title">
-      <p className="present-confirm-ey">Next step</p>
+      <Eyebrow className="present-confirm-ey">Next step</Eyebrow>
       <p className="present-confirm-title" id="present-confirm-title">{controls.confirm.label}</p>
       {controls.confirm.note ? <p className="present-confirm-note">{controls.confirm.note}</p> : null}
       <div className="present-confirm-row">
-        <button type="button" className="present-strip-btn" onClick={controls.confirmCancel}>← Stay here</button>
-        <button type="button" className="present-strip-btn is-go" onClick={controls.confirmGo}>{`${controls.confirm.label} →`}</button>
+        <Button className="present-strip-btn" onClick={controls.confirmCancel}>← Stay here</Button>
+        <Button variant="action" className="present-strip-btn is-go" onClick={controls.confirmGo}>{`${controls.confirm.label} →`}</Button>
       </div>
     </div>
   ) : null;

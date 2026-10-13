@@ -16,6 +16,7 @@
  */
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { profileClass, PROFILES, DEFAULT_PROFILE } from '../config/displayProfile';
+import Ground from '../components/ui/Ground';
 
 export const CANVAS_W = 1920;
 export const CANVAS_H = 1080;
@@ -97,7 +98,6 @@ function useScaleToWindow(target) {
 export default function PresentStage({ profile, fitKey, overlay, fitcheck = false, children }) {
   const p = PROFILES.includes(profile) ? profile : DEFAULT_PROFILE;
   const rootRef = useRef(null);
-  const canvasRef = useRef(null);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -118,10 +118,13 @@ export default function PresentStage({ profile, fitKey, overlay, fitcheck = fals
   // Fit after layout, and again once the web fonts have arrived (a fallback
   // font measures differently).
   useLayoutEffect(() => {
-    fitCanvas(canvasRef.current, p);
+    // Ground (components/ui) paints the canvas and takes no ref, so the fitter
+    // finds the canvas inside the root.
+    const canvasOf = () => (rootRef.current ? rootRef.current.querySelector('.present-canvas') : null);
+    fitCanvas(canvasOf(), p);
     let live = true;
     if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(() => { if (live) fitCanvas(canvasRef.current, p); }).catch(() => {});
+      document.fonts.ready.then(() => { if (live) fitCanvas(canvasOf(), p); }).catch(() => {});
     }
     return () => { live = false; };
   }, [p, fitKey]);
@@ -135,9 +138,9 @@ export default function PresentStage({ profile, fitKey, overlay, fitcheck = fals
       data-profile={p}
       aria-live="polite"
     >
-      <div ref={canvasRef} className="present-canvas" data-fit="ok">
+      <Ground variant="wall" className="present-canvas" data-fit="ok">
         {children}
-      </div>
+      </Ground>
       {overlay}
     </div>
   );

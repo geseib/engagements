@@ -82,6 +82,17 @@ describe('--hair is honoured (Call = 2px)', () => {
   });
 });
 
+describe('the wall passes its own ladder (present.css, skins P2)', () => {
+  test('.present-top sets the three hooks at the px the wall always had', () => {
+    const wall = strip(read('present', 'present.css'));
+    const m = wall.match(/\.present \.present-top \{([^}]*)\}/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/--ui-top-line-size:\s*var\(--L-meta\)/);
+    expect(m[1]).toMatch(/--ui-top-line-gap:\s*32px/);
+    expect(m[1]).toMatch(/--ui-top-line-pad:\s*20px/);
+  });
+});
+
 describe('the treatment', () => {
   test('a muted line on the UI face; <b> is --text', () => {
     const d = decls('.ui-top-line');

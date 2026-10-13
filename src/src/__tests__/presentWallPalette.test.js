@@ -35,7 +35,9 @@ describe.each(SKINS)('present.css under the %s skin (dusk, on the wall)', (skin)
   // reaches #2A3A57 at the bottom, Present's glow peaks at #1E3050.
   const STOPS = r('--wall-canvas').match(/#[0-9A-Fa-f]{6}/g).map((hex) => [hex]);
   const CARD = [r('--bg'), r('--surface')];
-  const MINI = [r('--bg'), v('--present-mini')];
+  // --present-mini is color-mix(in srgb, var(--surface) 60%, transparent): the surface at .6
+  const surfaceHex = r('--surface').replace('#', '');
+  const MINI = [r('--bg'), `rgba(${[0, 2, 4].map((i) => parseInt(surfaceHex.substr(i, 2), 16)).join(', ')}, 0.6)`];
   const LETTERBOX = [v('--present-canvas')];
   const PLATE = [r('--bg'), v('--present-plate')];  // the phase wipe over the canvas
   const STRIP = [...LETTERBOX, v('--present-plate')];
@@ -56,8 +58,9 @@ describe.each(SKINS)('present.css under the %s skin (dusk, on the wall)', (skin)
     ['the part line on the response card', () => r('--accent-text'), CARD],
     ['muted on a mini card', () => r('--muted'), MINI],
     ['a quote in the read', () => v('--present-quote'), FIELD],
-    ['the badge number (bg on the badge)', () => r('--bg'), [r('--accent')]],
-    ['the wipe word on the plate', () => r('--phase-vote'), PLATE],
+    ['the badge number (--on-accent on the badge, NumberBadge)', () => r('--on-accent'), [r('--accent')]],
+    ['the answering wipe word on the plate', () => r('--phase-ask'), PLATE],
+    ['the voting wipe word on the plate', () => r('--phase-vote'), PLATE],
     ['the wipe line on the plate', () => r('--text'), PLATE],
     ['the results wipe word on the plate', () => v('--present-success-text'), PLATE],
     ['the strip status on the plate', () => r('--muted'), STRIP],
@@ -87,16 +90,26 @@ describe('present.css reads roles', () => {
     expect(BODY).not.toMatch(/var\(--(primary|primary-deep|secondary)\)/);
   });
 
-  it('keeps only the named literals, each a keep: in records/0c.md', () => {
+  it('keeps only the named literals, each a keep: in records/P2.md', () => {
     const literals = [...BODY.matchAll(/#[0-9A-Fa-f]{3,8}\b|rgba?\((?!var\()[^)]*\)/g)].map((m) => m[0]);
     expect(literals).toEqual([
       '#0A1324',                 // html lock: the letterbox before .present mounts
       '#0A1324',                 // --present-canvas: the letterbox ground
-      '#1E3050',                 // --present-glow: read only by presentPalette.test.js now
-      'rgba(27, 41, 66, 0.6)',   // --present-mini: the flank mini-card fill
-      '#D9E5F7',                 // --present-quote: the quote ink
       'rgba(11, 18, 32, 0.93)',  // --present-plate: the strip and wipe plate
     ]);
+  });
+
+  it('the mini card and the quote are roles now (P2): --surface at .6 and --wall-quote', () => {
+    expect(BODY).toMatch(/--present-mini:\s*color-mix\(in srgb, var\(--surface\) 60%, transparent\);/);
+    expect(BODY).toMatch(/--present-quote:\s*var\(--wall-quote\);/);
+  });
+
+  it('the answering wipe reads --phase-ask, voting --phase-vote (SPEC §4.5)', () => {
+    expect(BODY).toMatch(/\.present \.present-wipe\.is-ask \{ border-color: var\(--phase-ask\); color: var\(--phase-ask\); \}/);
+    expect(BODY).toMatch(/\.present \.present-wipe \{[^}]*border-top: 3px solid var\(--phase-vote\)/);
+    const moments = read('present', 'PresentMoments.jsx');
+    expect(moments).toMatch(/ANSWERING: \{[^\n]*tone: 'ask'/);
+    expect(moments).toMatch(/VOTING: \{[^\n]*tone: 'live'/);
   });
 
   it('under Present the wall carries no orange: --action and --accent resolve blue', () => {

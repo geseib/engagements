@@ -1,13 +1,19 @@
 /**
- * THE PRESENTATION'S PALETTE — present/present.css (`.present`, dusk).
+ * THE PRESENTATION'S PALETTE — present/present.css (`.present`, dusk), every skin.
  *
  * Named *Palette*, never *Token* (.gitignore swallows `*token*`). jsdom loads
- * no stylesheet, so this reads the sheet as text: every pairing the wall
- * paints is composited up its real stack and must clear AA 4.5:1; no orange
- * anywhere (R3: the Presentation has none); no hex outside the scope's own
- * token block; --danger never carries text; every var() is declared; every
- * selector is rooted at `.present` (or the html lock), and styles.css
- * declares nothing there.
+ * no stylesheet, so this reads the sheet as text and resolves every colour
+ * through the skin harness (styles/skins/*.css -> styles/roles.css -> the
+ * .present scope), for every skin whose values file exists, on dusk under
+ * data-surface="wall" (the root carries both; presentWallPalette asserts it).
+ *
+ * Every pairing the wall paints is composited up its real stack and must
+ * clear AA 4.5:1. SPEC §4.5's rule replaces the old "no orange": the sheet
+ * reads no --primary, --secondary or unnamed literal, and under the Present
+ * skin --action and --accent on the wall resolve blue (the orange the Classic
+ * wall shows is the skin's, never the sheet's). Also: --danger never carries
+ * text; every var() is declared; every selector is rooted at `.present` (or
+ * the html lock), and styles.css declares nothing there.
  */
 const fs = require('fs');
 const path = require('path');
@@ -18,104 +24,87 @@ const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const CSS = read('present', 'present.css');
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const BODY = stripComments(CSS);
-
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) { const la = lum(a); const lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function parseColor(c) {
-  if (c.startsWith('#')) return [parseHex(c), 1];
-  const m = c.match(/[\d.]+/g).map(Number);
-  return [m.slice(0, 3), m.length > 3 ? m[3] : 1];
-}
-function composite(layers) {
-  let out = null;
-  for (const l of layers) {
-    const [rgb, a] = parseColor(l);
-    out = out ? rgb.map((c, i) => c * a + out[i] * (1 - a)) : rgb;
-  }
-  return out;
-}
-const on = (fg, layers) => ratio(parseHex(fg), composite(layers));
-const AA = 4.5;
-
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6}|rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
 const SCOPE = '.present {';
+const SKINS = [...new Set(H.CASES.map(([skin]) => skin))];
 
-const D = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
-  quote: token(CSS, SCOPE, '--present-quote'),
-  mini: token(CSS, SCOPE, '--present-mini'),
-  glow: token(CSS, SCOPE, '--present-glow'),
-};
+/** --present-mini is the surface at 60% (color-mix): composite it as that tint. */
+function miniTint(o) {
+  const decl = BODY.match(/--present-mini:\s*([^;]+);/)[1].trim();
+  expect(decl).toBe('color-mix(in srgb, var(--surface) 60%, transparent)');
+  const hex = H.role('--surface', o).replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.substr(i, 2), 16));
+  return `rgba(${r}, ${g}, ${b}, 0.6)`;
+}
 
-describe('present.css: contrast, composited', () => {
-  const FIELD = [D.bg];
-  const GLOW = [D.glow];          // the brightest point of the radial field
-  const CARD = [D.bg, D.surface];
-  const MINI = [D.bg, D.mini];
+describe.each(SKINS)('present.css under the %s skin: contrast, composited', (skin) => {
+  const o = { skin, theme: 'dark', surface: 'wall' };
+  const r = (n) => H.role(n, o);
+  const FIELD = [r('--bg')];
+  const STOPS = r('--wall-canvas').match(/#[0-9A-Fa-f]{6}/g).map((hex) => [hex]);
+  const CARD = [r('--bg'), r('--surface')];
   it.each([
-    ['text on the field', D.text, FIELD],
-    ['muted on the field', D.muted, FIELD],
-    ['eyebrow (secondary) on the field', D.secondary, FIELD],
-    ['muted at the glow', D.muted, GLOW],
-    ['secondary at the glow', D.secondary, GLOW],
-    ['text on the response card', D.text, CARD],
-    ['muted on the response card', D.muted, CARD],
-    ['muted on a mini card', D.muted, MINI],
-    ['a quote in the read', D.quote, FIELD],
-    ['the badge number (bg on secondary)', D.bg, [D.secondary]],
+    ['text on the field', () => r('--text'), FIELD],
+    ['muted on the field', () => r('--muted'), FIELD],
+    ['the eyebrow on the field', () => r('--eyebrow-color'), FIELD],
+    ...STOPS.flatMap((stop) => [
+      [`muted on the canvas at ${stop[0]}`, () => r('--muted'), stop],
+      [`the eyebrow on the canvas at ${stop[0]}`, () => r('--eyebrow-color'), stop],
+    ]),
+    ['text on the response card', () => r('--text'), CARD],
+    ['muted on the response card', () => r('--muted'), CARD],
+    ['muted on a mini card', () => r('--muted'), [r('--bg'), miniTint(o)]],
+    ['a quote in the read (--wall-quote)', () => H.scopeVar(CSS, SCOPE, '--present-quote', o), FIELD],
+    ['the badge number (--on-accent on --accent, NumberBadge)', () => r('--on-accent'), [r('--accent')]],
   ])('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    expect(H.on(fg(), layers)).toBeGreaterThanOrEqual(H.AA);
   });
 });
 
-describe('present.css: house rules', () => {
-  it('has no orange: no --primary, --primary-deep or --gold', () => {
-    expect(BODY).not.toMatch(/var\(--primary/);
-    expect(BODY).not.toMatch(/var\(--gold\)/);
+describe('present.css: house rules (SPEC §4.5)', () => {
+  it('reads no --primary, --primary-deep, --secondary or --gold', () => {
+    expect(BODY).not.toMatch(/var\(--(primary|secondary|gold)/);
+  });
+  it('under the Present skin the wall carries no orange: --action and --accent resolve blue', () => {
+    if (!SKINS.includes('present')) return;
+    const o = { skin: 'present', theme: 'dark', surface: 'wall' };
+    for (const n of ['--action', '--accent', '--phase-ask', '--phase-vote']) {
+      expect(`${n} ${H.role(n, o).toUpperCase()}`).toBe(`${n} #7CA7E6`);
+    }
+  });
+  it('under Classic the wall takes the stage\'s orange from the skin (§4.5)', () => {
+    const o = { skin: 'classic', theme: 'dark', surface: 'wall' };
+    for (const n of ['--action', '--accent', '--phase-ask']) {
+      expect(`${n} ${H.role(n, o).toUpperCase()}`).toBe(`${n} #F6A94C`);
+    }
+    expect(H.role('--phase-vote', o).toUpperCase()).toBe('#7CA7E6');
   });
   it('never colours text with --danger', () => {
     expect(BODY).not.toMatch(/(^|[^-])color:\s*var\(--danger\)/m);
   });
-  it('keeps hex literals in the scope token block and the html lock only', () => {
+  it('keeps colour literals in the scope token block and the html lock only', () => {
     const scopeStart = BODY.indexOf(SCOPE);
     const scopeEnd = BODY.indexOf('}', scopeStart);
     const lockEnd = BODY.indexOf('}', BODY.indexOf('html.present-locked'));
     const outside = BODY.slice(lockEnd + 1, scopeStart) + BODY.slice(scopeEnd + 1);
-    expect(outside.match(/#[0-9A-Fa-f]{3,6}\b/g) || []).toEqual([]);
+    expect(outside.match(/#[0-9A-Fa-f]{3,8}\b|rgba?\((?!var\()/g) || []).toEqual([]);
   });
   it('declares every var() it uses', () => {
     const used = new Set((BODY.match(/var\((--[\w-]+)/g) || []).map((v) => v.slice(4)));
-    const declared = new Set([...(BODY + GLOBAL_CSS).matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
-    // Set inline by PresentStage (the scale) and the track (the marker), each
-    // with a fallback in the var() itself.
-    const INLINE = ['--present-x', '--present-y', '--present-scale', '--at'];
+    const declared = new Set([...(BODY + GLOBAL_CSS + read('styles', 'roles.css')).matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+    // Set inline by PresentStage (the scale), each with a fallback in the var() itself.
+    const INLINE = ['--present-x', '--present-y', '--present-scale'];
     INLINE.forEach((v) => expect(BODY).toMatch(new RegExp(`var\\(${v},`)));
+    // --fit is set inline by the fitter, and declared on the canvas as its start.
     const missing = [...used].filter((v) => !declared.has(v) && !INLINE.includes(v));
     expect(missing).toEqual([]);
   });
-  it('roots every selector at .present (or the html lock)', () => {
+  it('roots every selector at .present (or the html lock, or the Call profile above it)', () => {
     const rules = BODY.replace(/@keyframes[\s\S]*?\}\s*\}/g, '').match(/[^{}]+\{/g) || [];
     const selectors = rules
-      .map((r) => r.slice(0, -1).trim())
+      .map((x) => x.slice(0, -1).trim())
       .filter((s) => s && !s.startsWith('@'))
       .flatMap((s) => s.split(',').map((x) => x.trim()));
-    const stray = selectors.filter((s) => !/^(\.present\b|html\.present-locked\b)/.test(s));
+    const stray = selectors.filter((s) => !/^(\.present\b|html\.present-locked\b|:root\.d-call \.present\b)/.test(s));
     expect(stray).toEqual([]);
   });
   it('styles.css declares nothing in the .present scope', () => {
