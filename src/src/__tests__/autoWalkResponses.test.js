@@ -7,9 +7,10 @@
  * response 1 (the dock's secondary), then each response for as long as its
  * words take to read (the dock's primary: Next part, Next response, and after
  * the last, What we heard). Classic (one screen) keeps paging the cards.
- * During voting Auto still only waits for the vote: an enlarged response on
- * the wall while people vote tilts the vote (CHANGES Q15), so showing one then
- * stays the host's own act.
+ * During voting the wall shows the responses from the start (owner,
+ * 2026-10-13, superseding CHANGES Q15's "showing one tilts the vote"): Auto
+ * cycles them, over and over, through Next response (which wraps) until the
+ * whole room has voted, then shows the results.
  */
 const fs = require('fs');
 const path = require('path');
@@ -41,9 +42,14 @@ test('with no responses RESULTS moves on as before, and classic still pages the 
   expect(autoDecision({ ...ROOM, phase: 'RESULTS', page: 0, pages: 2 }).kind).toBe('page');
 });
 
-test('voting is unchanged: wait for the vote, never walk responses', () => {
-  expect(autoDecision({ ...ROOM, phase: 'VOTE', votedCount: 3, walkResponses: true, responseCount: 4 })).toBeNull();
-  expect(autoDecision({ ...ROOM, phase: 'VOTE_RESPONSES', votedCount: 3, walkResponses: true, responseCount: 4 })).toBeNull();
+test('voting cycles the responses until everyone has voted, then shows results', () => {
+  const text = 'word '.repeat(30);
+  expect(autoDecision({ ...ROOM, phase: 'VOTE', votedCount: 3, walkResponses: true, responseCount: 4, responseText: text }))
+    .toEqual({ kind: 'secondary', delayMs: responseDwellMs(text), why: 'this response has been read; the next while the room votes' });
+  expect(autoDecision({ ...ROOM, phase: 'VOTE', votedCount: 5, walkResponses: true, responseCount: 4 }).kind).toBe('primary');
+  // One response, or classic (one screen): wait for the vote.
+  expect(autoDecision({ ...ROOM, phase: 'VOTE', votedCount: 3, walkResponses: true, responseCount: 1 })).toBeNull();
+  expect(autoDecision({ ...ROOM, phase: 'VOTE', votedCount: 3 })).toBeNull();
 });
 
 test('the host page wires it: walk under two surfaces, the secondary through the dock, a spotlight no pause', () => {

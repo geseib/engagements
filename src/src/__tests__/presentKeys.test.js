@@ -62,14 +62,15 @@ describe("Workie's read and feedback", () => {
 
 describe('voting', () => {
   const vote = (focus) => snap({ state: 'VOTE#005', stageFocus: focus || { focus: 'none', index: null } });
-  it('forward shows the responses in voting order; the last stays put (results are the host\'s act)', () => {
-    expect(presentKeyStep(vote(), 'forward', { total: 4 })).toEqual([{ kind: 'focus', focus: 'answer', index: 0, part: 0 }]);
+  it('Response 1 is already up: forward steps to 2; past the last asks for results', () => {
+    expect(presentKeyStep(vote(), 'forward', { total: 4 })).toEqual([{ kind: 'focus', focus: 'answer', index: 1, part: 0 }]);
     expect(presentKeyStep(vote(answerAt(1, 'VOTE')), 'forward', { total: 4 })).toEqual([{ kind: 'focus', focus: 'answer', index: 2, part: 0 }]);
     expect(presentKeyStep(vote(answerAt(3, 'VOTE')), 'forward', { total: 4 })).toEqual([]);
   });
-  it('back walks down to the count', () => {
+  it('back steps down and wraps from the first to the last', () => {
     expect(presentKeyStep(vote(answerAt(1, 'VOTE')), 'back', { total: 4 })).toEqual([{ kind: 'focus', focus: 'answer', index: 0, part: 0 }]);
-    expect(presentKeyStep(vote(answerAt(0, 'VOTE')), 'back', { total: 4 })).toEqual([{ kind: 'focus', focus: 'none' }]);
+    expect(presentKeyStep(vote(answerAt(0, 'VOTE')), 'back', { total: 4 })).toEqual([{ kind: 'focus', focus: 'answer', index: 3, part: 0 }]);
+    expect(presentKeyStep(vote(), 'back', { total: 4 })).toEqual([{ kind: 'focus', focus: 'answer', index: 3, part: 0 }]);
   });
   it('nothing to show, nothing to do', () => {
     expect(presentKeyStep(vote(), 'forward', { total: 0 })).toEqual([]);

@@ -210,6 +210,10 @@ html.present-locked body {
 
 /* ---- the response navigator ---- */
 .present .present-main.present-main-nav { padding-block: 24px; justify-content: stretch; }
+.present .present-main-nav .present-nav { flex: 1; height: auto; }
+/* Voting: the room votes on its devices while the wall walks the responses. */
+.present .present-vote-cue { margin: 0 0 18px; text-align: center; }
+.present .present-foot-count { color: var(--text); font-weight: 600; }
 .present .present-nav {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 300px;

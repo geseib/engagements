@@ -4190,6 +4190,16 @@ Resources:
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
+        # The host types what was said in the room (owner, 2026-10-13). Not
+        # public either: Cognito here, callerMayDriveSession in the handler.
+        HostCommentEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/comments/host
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
         # The one round a participant is being asked to comment on: the round
         # actually on the `feedback` beat, its report slice and its comments,
         # and nothing else. Public, and deliberately NOT `GET /report?role=host`

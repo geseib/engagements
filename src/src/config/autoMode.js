@@ -114,6 +114,13 @@ export function autoDecision({
       if (votedCount >= playerCount && votedCount > 0) {
         return { kind: 'primary', delayMs: AUTO_GRACE_MS, why: 'everyone has voted' };
       }
+      // VOTING SHOWS THE RESPONSES (owner, 2026-10-13: "when in auto mode it
+      // will cycle through them over and over unless the host click forward or
+      // all responses have been cast"). The dock's secondary is Next response,
+      // which wraps from the last to the first.
+      if (walkResponses && responseCount > 1) {
+        return { kind: 'secondary', delayMs: responseDwellMs(responseText), why: 'this response has been read; the next while the room votes' };
+      }
       return null;
     case 'RESULTS':
       // Page through every page of responses at reading pace, dwell on the

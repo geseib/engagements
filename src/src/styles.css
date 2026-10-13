@@ -11655,6 +11655,11 @@ body {
   outline-offset: 2px;
 }
 
+/* The response the wall is showing while the room votes (two surfaces). */
+.cards .card.is-showing {
+  box-shadow: 0 0 0 3px var(--info);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    THE ROUNDS TAB, AND ONE ROUND REOPENED.
 

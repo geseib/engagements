@@ -207,6 +207,7 @@ export function ResponseNavigator({ model, vote = false }) {
     <div className="present-moment present-frame" data-mode={vote ? 'vote' : 'results'}>
       <Top model={model} right={vote ? 'Voting' : 'Responses'} />
       <div className="present-main present-main-nav">
+        {vote ? <Eyebrow className="present-eyebrow present-vote-cue">{`Vote on your ${deviceWords}`}</Eyebrow> : null}
         <div className="present-nav">
           <div className="present-flank">{flank(win.left)}</div>
           <Card selected className="present-card">
@@ -226,6 +227,7 @@ export function ResponseNavigator({ model, vote = false }) {
       <div className="present-foot">
         <Track index={model.index} total={model.total} />
         <span>{model.position}</span>
+        {vote && model.counts ? <span className="present-foot-count">{model.counts.line}</span> : null}
       </div>
     </div>
   );
@@ -273,9 +275,10 @@ export function PresentFeedback({ model }) {
       <Top model={model} right="Feedback" />
       <div className="present-main">
         <Eyebrow className="present-eyebrow">{model.roundLabel ? `${model.roundLabel} · Feedback` : 'Feedback'}</Eyebrow>
-        {model.title ? <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading> : null}
-        {model.task ? <p className="present-lead" data-drop="1">{model.task}</p> : null}
-        <p className="present-lead">{`Add your comments on your ${deviceWords}.`}</p>
+        {/* The round's title as a reminder, not the question again (owner,
+            2026-10-13: "too much like the original question"). */}
+        {model.title ? <Heading level={2} size="primary" balance className="present-h2">{model.title}</Heading> : null}
+        <p className="present-lead">{`Provide feedback on the round from your ${deviceWords}.`}</p>
       </div>
       <div className="present-foot"><span>{model.roundLabel || ''}</span></div>
     </div>

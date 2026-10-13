@@ -74,7 +74,7 @@ import {
 import { createGameBody, updateGameBody } from './config/createGame';
 import goalRules from '../../lambda-functions/websocket/session-goal';
 import { goalOnStage } from './config/goalStage';
-import { fetchComments, featureComment } from './utils/commentsClient';
+import { fetchComments, featureComment, postRoomNote } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
@@ -643,6 +643,8 @@ function GameHostPage() {
   // they exist. A ref rather than deps because those are derived per render,
   // hundreds of lines below the first early return, where no hook may live.
   const autoActRef = useRef(null);
+  // When the response Auto is cycling during voting went up (its round#index).
+  const autoShownRef = useRef(null);
 
   /*
     A SURVEY'S PER-GAME FACTS (surveys phase 2). `surveyNames` is the session's
@@ -1252,6 +1254,19 @@ function GameHostPage() {
       fetchFn: authFetch, apiBase: API_BASE, gameId, commentId, questionNumber: round, featured: next,
     });
     if (!result.ok) loadRoundCommentsRef.current();
+  };
+
+  /*
+    SAID IN THE ROOM (owner, 2026-10-13): the host's own line in a feedback
+    round. The socket's commentPosted refetch brings it into the list; a
+    direct reload as well, so the host sees it even if the frame is late.
+  */
+  const handleRoomNote = async (text) => {
+    if (!gameId) return { ok: false, error: 'No session.' };
+    const round = String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0');
+    const result = await postRoomNote({ fetchFn: authFetch, apiBase: API_BASE, gameId, questionNumber: round, text });
+    if (result.ok) loadRoundCommentsRef.current();
+    return result;
   };
 
   /*
@@ -5883,7 +5898,10 @@ Focus on actionable business strategy insights.`;
     // on the wall, the step is that response's dwell, then the dock's primary.
     const onResponse = twoSurfaces && beatPhase === 'RESULTS' && spotlightIndex !== null;
     const phase = onResponse ? 'RESPONSES' : beatPhase;
-    const shownAnswer = onResponse ? answers[spotlightIndex] : null;
+    // During voting the wall always shows a response: Response 1 until a step.
+    const votingIndex = twoSurfaces && beatPhase === 'VOTE' ? (spotlightIndex === null ? 0 : spotlightIndex) : null;
+    const shownIndex = onResponse ? spotlightIndex : votingIndex;
+    const shownAnswer = shownIndex !== null ? answers[shownIndex] : null;
 
     // The stage's own page arithmetic, re-derived the way the render derives
     // it: the shared index keyed by phase#round, cut by the same slicers.
@@ -5921,6 +5939,15 @@ Focus on actionable business strategy insights.`;
     });
     if (!decision) return undefined;
 
+    // A vote landing re-runs this effect; the response on the wall keeps its
+    // own clock, so a busy room does not hold Auto on one response forever.
+    let delayMs = decision.delayMs;
+    if (votingIndex !== null && decision.kind === 'secondary') {
+      const key = `${lessonNumber}#${votingIndex}`;
+      if (!autoShownRef.current || autoShownRef.current.key !== key) autoShownRef.current = { key, at: Date.now() };
+      delayMs = Math.max(500, decision.delayMs - (Date.now() - autoShownRef.current.at));
+    }
+
     const timer = setTimeout(() => {
       const hands = autoActRef.current;
       if (!hands) return;
@@ -5928,9 +5955,11 @@ Focus on actionable business strategy insights.`;
         hands.turnTo(page + 1);
         return;
       }
-      // Show response 1 of N — the dock's own secondary, through its runner.
+      // Show response 1 of N at RESULTS; during voting Next response (and Next
+      // part) — the dock's own secondary, through its runner.
       if (decision.kind === 'secondary') {
-        if (hands.secondary && !hands.secondary.disabled && hands.secondary.intent === HOST_INTENTS.SHOW_RESPONSE) {
+        const walkable = [HOST_INTENTS.SHOW_RESPONSE, HOST_INTENTS.NEXT_RESPONSE, HOST_INTENTS.NEXT_PART];
+        if (hands.secondary && !hands.secondary.disabled && walkable.includes(hands.secondary.intent)) {
           hands.run(hands.secondary);
         }
         return;
@@ -5942,7 +5971,7 @@ Focus on actionable business strategy insights.`;
       if (!hands.primary || hands.primary.disabled) return;
       if (hands.primary.intent === HOST_INTENTS.END_SURVEY) return;
       hands.run(hands.primary);
-    }, decision.delayMs);
+    }, delayMs);
     return () => clearTimeout(timer);
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
@@ -6909,6 +6938,8 @@ Focus on actionable business strategy insights.`;
     || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
     ? scopedRoundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
     : null;
+  // The host's "said in the room" line, while the room is giving feedback.
+  const meterCompose = hostPhase === 'FEEDBACK' ? { onSend: handleRoomNote } : null;
   const meterArrivals = (hostPhase === 'FEEDBACK'
     || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
     && wallComments !== false
@@ -7344,6 +7375,7 @@ Focus on actionable business strategy insights.`;
               phase={hostPhase} heading={meter.heading} body={meter.body}
               complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
               rows={meter.rows}
+              compose={meterCompose}
             />
           )
           : null}
@@ -7624,12 +7656,16 @@ Focus on actionable business strategy insights.`;
                   {stageResponsesReady && answerPage.items.map((answer, i) => {
                     const idx = answerPage.offset + i;
                     const label = navigatorLabel(answer, idx, { phase: 'VOTE' });
+                    // With two surfaces the wall walks the responses from the
+                    // start of voting; this card marks the one it shows.
+                    const showing = twoSurfaces && idx === (spotlightIndex === null ? 0 : spotlightIndex);
                     return (
                       <div
                         key={idx}
-                        className="card is-openable"
+                        className={`card is-openable${showing ? ' is-showing' : ''}`}
                         role="button"
                         tabIndex={0}
+                        aria-current={showing ? 'true' : undefined}
                         aria-label={`Show ${label} on the screen`}
                         onClick={() => openSpotlight(idx)}
                         onKeyDown={(e) => {
@@ -7647,10 +7683,12 @@ Focus on actionable business strategy insights.`;
                     );
                   })}
                 </div>
+                {/* One screen: the response opens here. Two surfaces: it is on
+                    the wall, and the card above is marked instead. */}
                 <AnswerSpotlight
                   surfaceClassName="stage-spot"
                   answers={answers}
-                  index={spotlightIndex}
+                  index={twoSurfaces ? null : spotlightIndex}
                   onIndex={openSpotlight}
                   onClose={closeSpotlight}
                   showPoints={false}

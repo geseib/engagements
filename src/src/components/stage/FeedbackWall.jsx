@@ -1,5 +1,6 @@
 import React from 'react';
 import { wallCreditFor } from '../../config/comments';
+import { deviceWords } from '../../config/roundWords';
 
 /**
  * THE FEEDBACK WALL — what the room reads while it comments on a round.
@@ -24,13 +25,14 @@ import { wallCreditFor } from '../../config/comments';
  */
 export default function FeedbackWall({ featured = null, onTakeDown }) {
   const credit = featured ? wallCreditFor(featured) : '';
-  const who = featured && String(featured.playerName || '').trim();
+  // A note the host typed is the room's, not a person's.
+  const who = featured && !featured.fromHost && String(featured.playerName || '').trim();
 
   return (
     <>
       <h1 className={`hero${featured ? ' fb-question' : ''}`}>What do you make of it?</h1>
       {!featured && (
-        <p className="fb-ask">Tap any part of the round on your phone and say what you think.</p>
+        <p className="fb-ask">{`Provide feedback on the round from your ${deviceWords}.`}</p>
       )}
       {featured && (
         <button
@@ -43,9 +45,11 @@ export default function FeedbackWall({ featured = null, onTakeDown }) {
         >
           <span className="mark" aria-hidden="true">“</span>
           <p className="say">{featured.text}</p>
-          {(who || credit) && (
+          {(who || credit || featured.fromHost) && (
             <p className="by">
-              {who ? <><b>{who}</b>{credit ? ` ${credit}` : ''}</> : `${credit.charAt(0).toUpperCase()}${credit.slice(1)}`}
+              {featured.fromHost
+                ? 'Said in the room'
+                : who ? <><b>{who}</b>{credit ? ` ${credit}` : ''}</> : `${credit.charAt(0).toUpperCase()}${credit.slice(1)}`}
             </p>
           )}
         </button>

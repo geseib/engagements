@@ -712,9 +712,11 @@ describe('what the host page must now render', () => {
     // it rejects. Nothing is weakened: the conjunction below still has to be
     // satisfied inside ONE element, and a page that rebuilt .rail/.dock
     // markup inline would carry none of these components at any width.
+    // 2600 -> 3200 on 2026-10-13, when the meter gained the host's "said in
+    // the room" box (compose=) and pushed <Dock to 2,626.
     const windows = [];
     for (let i = source.indexOf('<Stage'); i !== -1; i = source.indexOf('<Stage', i + 1)) {
-      windows.push(source.slice(i, i + 2600));
+      windows.push(source.slice(i, i + 3200));
     }
     expect(windows.length).toBeGreaterThan(0);
 

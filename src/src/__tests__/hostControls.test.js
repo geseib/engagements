@@ -166,6 +166,7 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
             HOST_INTENTS.FEEDBACK, HOST_INTENTS.FIELD_NOTES,
             HOST_INTENTS.WARN_SURVEY, HOST_INTENTS.SURVEY_RESULTS,
             HOST_INTENTS.SHOW_RESPONSE, HOST_INTENTS.STOP_SHOWING, HOST_INTENTS.NEXT,
+            HOST_INTENTS.NEXT_RESPONSE,
           ]).toContain(controls.secondary.intent);
           expect(controls.secondary.intent).not.toBe(controls.primary.intent);
         }
@@ -229,7 +230,7 @@ describe('the primary action per phase', () => {
     // During VOTE with responses, the secondary shows them (owner, 2026-10-13);
     // Skip is the secondary only while there is nothing to show.
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'VOTE', ...READY }).secondary)
-      .toMatchObject({ intent: 'show-response' });
+      .toMatchObject({ intent: 'next-response' });
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'VOTE', ...READY, answerCount: 0 }).secondary)
       .toMatchObject({ intent: 'skip' });
     /*
@@ -292,7 +293,7 @@ describe('status line', () => {
     expect(ask.status.tone).toBe('pending');
 
     const vote = hostControlsFor({
-      gameType: 'poll', phase: 'VOTE', ...READY, votedCount: 3, playerCount: 8,
+      gameType: 'poll', phase: 'VOTE', ...READY, votedCount: 3, playerCount: 8, answerCount: 0,
     });
     expect(vote.status.text).toBe('3 of 8 voted');
     expect(vote.status.tone).toBe('pending');

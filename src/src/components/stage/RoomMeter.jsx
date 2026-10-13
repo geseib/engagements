@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import CompletionFlag from './CompletionFlag';
 
 /**
@@ -215,8 +215,52 @@ const AGE_CLASS = ['', ' older', ' oldest'];
  * `rows`: [{ qid, label, answered, of, share (0-100), full }] —
  * `surveyMeterRows()` in hooks/useSurveyProgress.js.
  */
+/*
+ * SAID IN THE ROOM (owner, 2026-10-13: "the host should get to type things in
+ * as well, because things might be said in the room"). The host's own line in
+ * a feedback round: it lands with the room's comments, credited to the room.
+ * `compose.onSend(text)` resolves { ok, error }.
+ */
+function RoomNote({ compose }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const send = async (event) => {
+    event.preventDefault();
+    const line = text.trim();
+    if (!line || busy) return;
+    setBusy(true);
+    setError('');
+    const result = await compose.onSend(line);
+    setBusy(false);
+    if (result && result.ok) setText('');
+    else setError((result && result.error) || 'That did not save. Try again.');
+  };
+  return (
+    <form className="room-note" onSubmit={send}>
+      <label className="room-note-label" htmlFor="room-note-text">Said in the room</label>
+      <textarea
+        id="room-note-text"
+        rows={2}
+        value={text}
+        maxLength={1000}
+        placeholder="Type what someone said"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          // Enter adds it; Shift+Enter is a new line.
+          if (e.key === 'Enter' && !e.shiftKey) send(e);
+        }}
+      />
+      <button type="submit" className="room-note-add" disabled={busy || !text.trim()}>
+        {busy ? 'Adding…' : 'Add'}
+      </button>
+      {error ? <p className="room-note-error" role="alert">{error}</p> : null}
+    </form>
+  );
+}
+
 export default function RoomMeter({
-  phase, heading, body, complete = false, waiting = null, arrivals = null, rows = null,
+  phase, heading, body, complete = false, waiting = null, arrivals = null, rows = null, compose = null,
 }) {
   const featuredId = arrivals && arrivals.featuredId;
   const arriving = (arrivals && Array.isArray(arrivals.items) ? arrivals.items : [])
@@ -335,6 +379,7 @@ export default function RoomMeter({
           ))}
         </div>
       )}
+      {compose && typeof compose.onSend === 'function' ? <RoomNote compose={compose} /> : null}
       {progressRows.length > 0 && (
         <div className="sprog" data-survey-progress="">
           <h4>Answered, by question</h4>

@@ -80,7 +80,8 @@ export default function usePresentation(gameId) {
     const base = apiBase();
     const next = {};
     const focus = (snap && snap.stageFocus) || {};
-    if (round && round.phase === 'VOTE' && focus.focus === 'answer') {
+    // Voting shows the responses from the start, so the read is due all of VOTE.
+    if (round && round.phase === 'VOTE') {
       const key = `${round.padded}`;
       if (force || readsKeyRef.current.answers !== key) {
         try {

@@ -57,11 +57,13 @@ export function presentKeyStep(snapshot, dir, { total = 0 } = {}) {
   if (focus.focus === 'question' || focus.focus === 'join') return [NONE];
 
   if (phase === 'VOTE') {
-    const at = answerFocus(focus, 'VOTE');
-    if (!at) return dir === 'forward' && n > 0 ? [show(0)] : [];
+    // Response 1 is on the wall from the start of voting (owner, 2026-10-13).
+    // Forward past the last asks to Show results; back from the first wraps.
+    if (n === 0) return [];
+    const at = answerFocus(focus, 'VOTE') || { index: 0, part: 0, parts: 1 };
     const next = stepResponse(at, dir, n);
     if (next) return [next];
-    return dir === 'back' ? [NONE] : [];
+    return dir === 'back' ? [show(n - 1)] : [];
   }
 
   if (phase !== 'RESULTS') return [];

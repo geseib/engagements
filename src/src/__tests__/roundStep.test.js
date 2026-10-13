@@ -90,7 +90,8 @@ describe('roundStep: the rules', () => {
   test('VOTING not all in arms; the secondary shows the responses (owner, 2026-10-13), Skip when there are none', () => {
     const s = roundStep('VOTING', { ...CTX, gameType: 'call-and-answer', progress: { received: 4, total: 5, allIn: false } });
     expect(s.primary).toMatchObject({ id: 'reveal', label: 'Show results', arm: { text: '1 still voting. Press again to show results.' } });
-    expect(s.secondary).toMatchObject({ id: 'show-response', label: 'Show response 1 of 5', index: 0, part: 0 });
+    // Response 1 is already on the wall; the secondary steps to response 2.
+    expect(s.secondary).toMatchObject({ id: 'next-response', label: 'Next response', index: 1, part: 0 });
     expect(roundStep('VOTING', { ...CTX, answerCount: 0 }).secondary).toMatchObject({ id: 'skip', label: 'Skip this round' });
     expect(roundStep('ANSWERING', CTX).secondary).toMatchObject({ id: 'skip' });
   });
@@ -168,7 +169,9 @@ describe('roundStep: the rules', () => {
   test('counts are pending until everyone is in', () => {
     expect(roundStep('ANSWERING', { ...CTX, progress: { received: 2, total: 5, allIn: false } }).status)
       .toEqual({ text: '2 of 5 answered', tone: 'pending' });
-    expect(roundStep('VOTING', CTX).status).toEqual({ text: 'All 5 voted', tone: 'success' });
+    expect(roundStep('VOTING', { ...CTX, answerCount: 0 }).status).toEqual({ text: 'All 5 voted', tone: 'success' });
+    expect(roundStep('VOTING', { ...CTX, answerCount: 3 }).status)
+      .toEqual({ text: 'All 5 voted · Showing response 1 of 3', tone: 'success' });
   });
 
   test('every primary and secondary carries an intent for the host page', () => {

@@ -156,12 +156,22 @@ export function presentModel(snapshot, reads = {}) {
   const q = snapshot.currentQuestionData || {};
   const state = String(snapshot.state || '');
 
-  // A VOTE-stamped answer focus is the voting navigator (D5); any other phase's
-  // stamp on it is the server's to drop and ours to ignore.
-  if (/^VOTE#/.test(state) && focus.focus === 'answer' && (focus.phase === 'VOTE')) {
+  // VOTING SHOWS THE RESPONSES (owner, 2026-10-13: "when going to vote, we
+  // should automatically get the response screens up. but it should say Vote
+  // on your device"). Response 1 is up from the start; a VOTE-stamped answer
+  // focus moves it on. The join code and the question still take the wall when
+  // a host puts them up.
+  const votingFocus = focus.focus === 'answer' && focus.phase === 'VOTE' ? focus : { index: 0, part: 0, parts: 1 };
+  if (/^VOTE#/.test(state) && focus.focus !== 'join' && focus.focus !== 'question') {
     const rows = voteRows(reads.answers);
     if (rows.length) {
-      return { moment: 'VOTE_RESPONSE', ...common, title: String(q.title || ''), ...navigatorOf(rows, focus, { vote: true }) };
+      return {
+        moment: 'VOTE_RESPONSE',
+        ...common,
+        title: String(q.title || ''),
+        ...navigatorOf(rows, votingFocus, { vote: true }),
+        counts: countsOf(snapshot, 'voted'),
+      };
     }
   }
   // THE JOIN CODE, put up mid-session from any host surface (owner, 2026-10-13).
@@ -238,7 +248,7 @@ export function presentModel(snapshot, reads = {}) {
       };
     }
     case 'FEEDBACK':
-      return { moment, ...common, title: String(q.title || ''), task: String(q.detail || q.questionDetail || ''), line: RW.feedbackOpen };
+      return { moment, ...common, title: String(q.title || ''), line: RW.feedbackOpen };
     case 'ENDED':
       return { moment, ...common };
     case 'OTHER':

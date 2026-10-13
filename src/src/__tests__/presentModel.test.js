@@ -123,12 +123,12 @@ describe('presentModel: the moment', () => {
     expect(presentModel(base({ scoreboard: { open: true, look: 'departure' } })).scoreboard).toEqual({ open: true, look: 'departure' });
     expect(presentModel(base({ state: 'ENDED' })).moment).toBe('ENDED');
   });
-  it('FEEDBACK carries the round, the question and its task (owner, 2026-10-13)', () => {
+  it('FEEDBACK carries the round and the title, not the task (owner, 2026-10-13)', () => {
     const m = presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }));
     expect(m.moment).toBe('FEEDBACK');
     expect(m.roundLabel).toBe('Round 5');
     expect(m.title).toBe('What should we stop doing');
-    expect(m.task).toBe('Name one habit.');
+    expect(m.task).toBeUndefined();
   });
   it('the profile is the session fact, Room by default', () => {
     expect(presentModel(base()).profile).toBe('room');

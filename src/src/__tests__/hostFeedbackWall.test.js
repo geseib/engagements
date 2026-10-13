@@ -97,7 +97,7 @@ describe('arrivals do not depend on the feedback beat (owner\'s ruling, 26 Sep 2
 
 describe('featuring', () => {
   test('goes through the client helper with the host\'s authFetch, then the socket refetches', () => {
-    expect(SRC).toMatch(/import \{ fetchComments, featureComment \} from '\.\/utils\/commentsClient';/);
+    expect(SRC).toMatch(/import \{ fetchComments, featureComment, postRoomNote \} from '\.\/utils\/commentsClient';/);
     const fn = SRC.slice(SRC.indexOf('const handleFeatureComment'), SRC.indexOf('\n  };', SRC.indexOf('const handleFeatureComment')));
     expect(fn).toMatch(/featureComment\(\{/);
     expect(fn).toMatch(/fetchFn:\s*authFetch/);

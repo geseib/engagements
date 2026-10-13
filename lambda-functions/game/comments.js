@@ -304,6 +304,8 @@ function toWire(row) {
     // featured" from "written before featuring existed".
     featured: row.Featured === true,
     featuredAt: row.FeaturedAt || null,
+    // Typed by the host for something said in the room.
+    fromHost: row.FromHost === true,
   };
 }
 
@@ -329,11 +331,15 @@ const roundRecord = async (gameId, padded) => (await db.send(new GetCommand({
 
 // ─────────────────────────────────────────────────────────── POST ──────────
 
-async function writeComment(gameId, body) {
+/** Who a host-typed comment is from: nobody in particular, the room. */
+const HOST_AUTHOR = 'Said in the room';
+
+async function writeComment(gameId, body, { asHost = false } = {}) {
   const {
-    questionNumber, playerName, anchorKind, anchorRef,
+    questionNumber, anchorKind, anchorRef,
     anchorLabel, anchorExcerpt, text,
   } = body;
+  const playerName = asHost ? HOST_AUTHOR : body.playerName;
 
   // Validate BEFORE reading the table: a malformed request should cost nothing.
   if (!/^\d+$/.test(String(questionNumber ?? '').trim())) {
@@ -397,14 +403,17 @@ async function writeComment(gameId, body) {
     joined player whether or not their row happens to carry proof — not a
     claim that the two routes agree; see the header for the full comparison.
   */
-  const playerRow = (await db.send(new GetCommand({
+  // The host noting what was said aloud (owner, 2026-10-13: "the host should
+  // get to type things in as well, because things might be said in the
+  // room"). Its proof is the signed-in host check in hostComment, not a seat.
+  const playerRow = asHost ? { host: true } : (await db.send(new GetCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${author}` },
   }))).Item;
   if (!playerRow) {
     return respond(409, { error: 'you have not joined this session' });
   }
-  const storedClientId = playerRow.ClientId || null;
+  const storedClientId = asHost ? null : (playerRow.ClientId || null);
   if (storedClientId) {
     const suppliedClientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
     if (!suppliedClientId || suppliedClientId !== storedClientId) {
@@ -476,6 +485,7 @@ async function writeComment(gameId, body) {
     */
     playerName: author,
     name: author,
+    ...(asHost ? { FromHost: true } : {}),
     SubmittedAt: now,
     ttl: Math.floor(Date.now() / 1000) + COMMENT_TTL_SECONDS,
   };
@@ -737,6 +747,24 @@ async function readFeedbackRound(gameId) {
   });
 }
 
+// ──────────────────────────────────────────── POST /comments/host ────────
+
+/**
+ * THE HOST TYPES WHAT WAS SAID IN THE ROOM (owner, 2026-10-13). Not public:
+ * Cognito in front and callerMayDriveSession behind, 404 on anyone else, the
+ * same pair and shape as featureComment. Then the player write, with the room
+ * as its author and no seat to prove.
+ */
+async function hostComment(event, gameId, body) {
+  const { meta } = await readSession(gameId);
+  if (!meta) return respond(404, { error: 'Game not found' });
+  const claims = event?.requestContext?.authorizer?.jwt?.claims || event?.requestContext?.authorizer?.lambda;
+  if (!claims || !callerMayDriveSession(event, meta)) {
+    return respond(404, { error: 'Game not found' });
+  }
+  return writeComment(gameId, body, { asHost: true });
+}
+
 // ─────────────────────────────────── POST /comments/{commentId}/feature ────
 
 /**
@@ -850,6 +878,9 @@ exports.handler = async (event) => {
       return respond(400, { error: 'Body must be JSON' });
     }
     const route = event.requestContext?.routeKey || event.routeKey || '';
+    if (route.endsWith('/comments/host')) {
+      return await hostComment(event, gameId, body);
+    }
     if (route.includes('/feature')) {
       return await featureComment(event, gameId, event.pathParameters?.commentId, body);
     }
