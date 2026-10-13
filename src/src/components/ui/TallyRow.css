@@ -1,0 +1,82 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   TALLY ROW — components/ui/TallyRow.jsx (docs/design/themes/SPEC.md §6,
+   PLAN Phase 1 unit L10).
+
+   rank · label (its first words below, its share as a bar) · points. Ported
+   from the Presentation's results tally, `.present-trow` (present/present.css):
+   the same three-column grid, the same weights, figures in tabular form.
+
+   DUSK ONLY (units.json L10): a tally is drawn on the wall and the stage.
+   ROLES ONLY (SPEC §3):
+     rank        --muted, the display face at 700
+     label       --text at 600          sub (first words)  --muted
+     points      --text at 700          its unit ("points") --muted
+     bar         --accent (Classic orange, Present blue)
+   Every ink clears AA on --bg, --surface and each colour stop of the wall
+   canvas in every skin; the bar clears 3:1 (non-text). The narrowest is
+   --muted on Classic's lightest field stop #2A3A57, 4.75:1.
+   uiTallyRowPalette.test.js proves each one through the harness.
+
+   NO LAYOUT OF ITS OWN (SPEC §6). The row is built from one size, the
+   caller's ladder step (--ui-size, set by the `size` prop; the Presentation
+   passes calc(var(--L-secondary) * var(--fit))); every other measure is in em
+   of it, at the Presentation's proportions for Room (secondary 40px, meta 21px):
+     --ui-size-sub     the first-words line   default .525em (21/40)
+     --ui-trow-gap     column gap              default .6em   (24/40)
+     --ui-trow-bar-h   bar height              default .35em  (14/40)
+   ========================================================================== */
+
+.ui-trow {
+  display: grid;
+  grid-template-columns: 1.4em minmax(0, 1fr) auto;
+  gap: var(--ui-trow-gap, 0.6em);
+  align-items: center;
+  font-size: var(--ui-size, 1em);
+  color: var(--text);
+}
+
+.ui-trow .ui-trow-rank {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: right;
+}
+
+.ui-trow .ui-trow-who {
+  min-width: 0;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.ui-trow .ui-trow-sub {
+  display: block;
+  margin-top: 0.2em;
+  overflow: hidden;
+  font-size: var(--ui-size-sub, 0.525em);
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ui-trow .ui-trow-bar {
+  height: var(--ui-trow-bar-h, 0.35em);
+  margin-top: 0.5em;
+  border-radius: calc(var(--ui-trow-bar-h, 0.35em) / 2);
+  background: var(--accent);
+}
+
+.ui-trow .ui-trow-points {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ui-trow .ui-trow-unit {
+  margin-left: 0.3em;
+  font-size: 0.55em;
+  font-weight: 500;
+  color: var(--muted);
+}
