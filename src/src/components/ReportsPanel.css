@@ -1,4 +1,4 @@
-/* skin-allowance: colour=12 font=0 primary=5 */
+/* skin-allowance: colour=7 font=0 primary=4 */
 /* components/ReportsPanel.jsx — the saved-reports list.
    ==========================================================================
    SessionsPanel.css, verbatim, under its own scope. The namespace tests hold
@@ -83,8 +83,6 @@
   margin: 14px 0 7px;
 }
 .rp-empty p { color: var(--muted); margin: 0 0 14px; line-height: 1.55; }
-.rp-empty-hint { font-size: var(--rp-t-label); }
-.rp-dim { color: var(--muted); }
 
 /* -------------------------------------------------------------- controls --- */
 
@@ -129,24 +127,6 @@
 .rp-btn:hover:not(:disabled) { background: var(--rp-row-hover); border-color: var(--muted); }
 .rp-btn:disabled { opacity: .42; cursor: not-allowed; }
 .rp-btn--sm { height: 26px; padding: 0 9px; font-size: var(--rp-t-floor); }
-.rp-btn--danger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
-.rp-btn--danger:hover:not(:disabled) {
-  background: rgba(229, 100, 94, .12);
-  border-color: var(--danger-text);
-}
-.rp-btn--ghostdanger { border-color: transparent; color: var(--danger-text); }
-.rp-btn--ghostdanger:hover:not(:disabled) {
-  background: rgba(229, 100, 94, .12);
-  border-color: var(--danger-text);
-}
-/* The one filled destructive control in this screen. --danger-deep, not
-   --danger: see the header. */
-.rp-btn--dangersolid {
-  background: var(--danger-deep);
-  border-color: var(--danger-deep);
-  color: var(--text);
-}
-.rp-btn--dangersolid:disabled { opacity: .42; }
 .rp-btn--link {
   height: auto;
   min-height: 0;
@@ -268,7 +248,6 @@
 .rp-subrow td:first-child { padding-left: 30px; }
 .rp-when { font-size: var(--rp-t-label); color: var(--muted); white-space: nowrap; }
 .rp-mono { font-family: var(--rp-font-mono); font-size: 14px; }
-.rp-danger-text { color: var(--danger-text); }
 
 /* Two things differ from SessionsPanel's rule, on purpose.
    margin-left: auto on the first action and a wrap, NOT justify-content:
@@ -340,66 +319,6 @@
 .rp-chip--type { color: var(--text); }
 .rp-chip--on   { color: var(--rp-success-text); border-color: rgba(79, 178, 134, .5); }
 .rp-chip--off  { color: var(--muted); border-style: dashed; }
-
-/* ----------------------------------------------------------------- modal --- */
-
-.rp-scrim {
-  position: fixed;
-  inset: 0;
-  background: rgba(6, 11, 22, .72);
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-}
-.rp-modal {
-  background: var(--surface);
-  border: 1px solid var(--rp-rule-strong);
-  border-radius: 12px;
-  width: min(560px, 100%);
-  max-height: 86vh;
-  overflow: auto;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .5);
-  color: var(--text);
-  font: 400 var(--rp-t-body)/1.45 var(--font-ui);
-}
-.rp-modal > header { padding: 16px 18px 10px; display: flex; gap: 10px; align-items: flex-start; }
-.rp-modal > header h2 {
-  margin: 0;
-  font-size: var(--rp-t-head);
-  font-family: var(--font-display);
-  font-weight: 800;
-}
-.rp-modal > header .rp-dim { margin: 4px 0 0; font-size: var(--rp-t-label); }
-.rp-modal-body { padding: 0 18px 4px; }
-
-.rp-impact { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
-.rp-impact li { display: flex; gap: 9px; align-items: flex-start; line-height: 1.5; }
-.rp-impact li > svg { flex: none; margin-top: 3px; }
-.rp-bad { color: var(--danger-text); }
-.rp-ok { color: var(--rp-success-text); }
-
-.rp-field { display: flex; flex-direction: column; gap: 5px; }
-.rp-field label { font-size: var(--rp-t-label); font-weight: 600; color: var(--muted); }
-.rp-field .rp-input { padding-left: 9px; }
-
-.rp-modal footer {
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  padding: 14px 18px 16px;
-  border-top: 1px solid var(--rp-rule);
-  margin-top: 12px;
-}
-.rp-grow { flex: 1 1 auto; }
-.rp-envwarn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--rp-t-label);
-  color: var(--muted);
-}
-.rp-envwarn b { color: var(--primary); }
 
 /* ---------------------------------------------------------- reports only -- */
 .rp-col-name  { width: 30%; }
