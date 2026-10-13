@@ -1,0 +1,42 @@
+/* ==========================================================================
+   HEADING — the display title (components/ui/Heading.jsx).
+   docs/design/themes/SPEC.md §6, PLAN §3 unit L2.
+
+   Replaces, when each surface adopts it: .present-hero, the stage .q and
+   .hero, the console's .adm-work-head h1.
+
+   ROLES ONLY: the display face, weight and tracking (--font-display,
+   --display-weight, --display-tracking) and the ink (--text). No literal
+   colour, no font name: the skins gate holds this file at zero, and
+   uiHeadingPalette.test.js asserts AA for every skin x theme.
+
+   THE SIZE IS THE CALLER'S LADDER, NEVER A PX (PLAN L2). Each size reads one
+   hook the surface sets from the ladder it already has, e.g.
+     the stage      .stage    { --ui-t-hero: var(--t-hero); --ui-t-primary: var(--t-primary); }
+     the wall       .present-canvas { --ui-t-hero: calc(var(--L-hero) * var(--fit)); }
+     the console    .adm-shell { --ui-t-title: var(--adm-t-title); --ui-t-head: var(--adm-t-head); }
+   A ladder applies to a whole surface, so these hooks inherit on purpose.
+   Unset, a heading takes the size of the text around it (1em): visibly
+   wrong, never a guessed px.
+
+   Margin is zero: spacing belongs to the surface that places it. Line height
+   is a hook too (--ui-heading-leading), because the wall (1.04) and the stage
+   (1.05) set theirs to the hundredth.
+   ========================================================================== */
+.ui-heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: var(--ui-heading-leading, 1.1);
+  color: var(--text);
+}
+
+.ui-heading.ui-heading--hero { font-size: var(--ui-t-hero, 1em); }
+.ui-heading.ui-heading--primary { font-size: var(--ui-t-primary, 1em); }
+.ui-heading.ui-heading--secondary { font-size: var(--ui-t-secondary, 1em); }
+.ui-heading.ui-heading--title { font-size: var(--ui-t-title, 1em); }
+.ui-heading.ui-heading--head { font-size: var(--ui-t-head, 1em); }
+
+/* balance: even line lengths for a title that wraps (the wall's hero does). */
+.ui-heading.ui-heading--balance { text-wrap: balance; }
