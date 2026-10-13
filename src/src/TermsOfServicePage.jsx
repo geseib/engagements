@@ -1,3 +1,4 @@
+// skin-allowance: colour=15
 import React from 'react';
 import './auth/auth.css';
 

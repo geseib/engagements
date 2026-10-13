@@ -1,3 +1,4 @@
+// skin-allowance: colour=3
 import React, { Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import AuthPage from './auth/AuthPage';

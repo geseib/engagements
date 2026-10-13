@@ -1,3 +1,4 @@
+/* skin-allowance SC-00: colour=38 font=0 primary=5 */
 /* ============================================================
    WARM SUMMIT — design token layer
    Fonts (Archivo at 125% width + Inter) are loaded via <link> in index.html.
@@ -226,6 +227,7 @@ body {
   border-color: var(--primary);
 }
 
+/* skin-allowance SC-01: colour=99 font=0 primary=25 */
 /* Game Host Page Styles */
 
 /* ---------------------------------------------------------------------------
@@ -1481,6 +1483,7 @@ body {
 
 .setup-loading { color: #B6C2D4; font-size: 13px; }
 
+/* skin-allowance SC-02: colour=102 font=1 primary=29 */
 /* --- The remote ---------------------------------------------------------- */
 /* The word "join" must never appear in here: this QR is behind the host
    sign-in, and it shipped once under a "Join In" heading — so a host who told
@@ -2519,6 +2522,7 @@ body {
   flex-wrap: wrap;
 }
 
+/* skin-allowance SC-03: colour=106 font=2 primary=44 */
 /* Answer Navigator Styles */
 .answer-navigator {
   background: white;
@@ -3831,6 +3835,7 @@ body {
   box-shadow: 0 5px 15px rgba(255, 215, 0, 0.2);
 }
 
+/* skin-allowance SC-04: colour=170 font=0 primary=36 */
 /* Trivia Report Styles */
 .report-trivia-results {
   background: #f8f9fa;
@@ -5280,6 +5285,7 @@ body {
   50% { opacity: 0.7; }
 }
 
+/* skin-allowance SC-05: colour=111 font=6 primary=19 */
 /* Quickstart checkbox styling */
 .quickstart-checkbox {
   display: flex;
@@ -6629,6 +6635,7 @@ body {
   }
 }
 
+/* skin-allowance SC-06: colour=138 font=0 primary=41 */
 /* AI Insights Section Styles */
 .ai-insights-section {
   margin-top: 30px;
@@ -7706,6 +7713,7 @@ body {
   }
 }
 
+/* skin-allowance SC-07: colour=40 font=0 primary=19 */
 /* ============================================================================
    BIG SCREEN MODE — Warm Summit dusk stage (projector / conference display)
    Full-bleed mountain-hiker photo hero + dusk scrim; content floats above it.
@@ -8817,6 +8825,7 @@ body {
   font-weight: 800;
 }
 
+/* skin-allowance SC-08: colour=158 font=7 primary=17 */
 /* Big Screen QR Code Styles */
 .big-screen-join-qr {
   text-align: center;
@@ -10036,6 +10045,7 @@ body {
   justify-content: flex-end;
 }
 
+/* skin-allowance SC-09: colour=33 font=1 primary=17 */
 /* Question Browser Table Styles */
 .questions-table-container {
   flex: 1;
@@ -11136,6 +11146,7 @@ body {
   }
 }
 
+/* skin-allowance SC-10: colour=49 font=0 primary=15 */
 /* ===========================================================
    ANONYMOUS RESPONSES
    Every class below rendered as an unstyled browser-default

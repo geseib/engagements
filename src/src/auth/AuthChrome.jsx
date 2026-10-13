@@ -1,3 +1,4 @@
+// skin-allowance: colour=4
 import React from 'react';
 import './auth.css';
 import BrandMark from '../components/BrandMark';
