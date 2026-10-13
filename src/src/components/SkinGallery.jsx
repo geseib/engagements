@@ -2,6 +2,19 @@ import React from 'react';
 import { SKINS } from '../config/skins';
 import { useSkin } from './SkinProvider';
 import './SkinGallery.css';
+import EyebrowFixture from './ui/fixtures/Eyebrow';
+import HeadingFixture from './ui/fixtures/Heading';
+import ButtonFixture from './ui/fixtures/Button';
+import NumberBadgeFixture from './ui/fixtures/NumberBadge';
+import CardFixture from './ui/fixtures/Card';
+import PipsFixture from './ui/fixtures/Pips';
+import TopLineFixture from './ui/fixtures/TopLine';
+import ChipFixture from './ui/fixtures/Chip';
+import GroundFixture from './ui/fixtures/Ground';
+import TallyRowFixture from './ui/fixtures/TallyRow';
+import RowFixture from './ui/fixtures/Row';
+import NoticeFixture from './ui/fixtures/Notice';
+import DialogFixture from './ui/fixtures/Dialog';
 
 /**
  * THE SKIN GALLERY — /skins (docs/design/themes/TOOLING-BRIEF §5.3,
@@ -88,6 +101,20 @@ export const FIXTURES = [
       </div>
     ),
   },
+  // THE SHARED COMPONENTS (Phase 1, components/ui), one fixture each.
+  { id: 'ui-eyebrow', title: 'Eyebrow (L1)', render: () => <EyebrowFixture /> },
+  { id: 'ui-heading', title: 'Heading (L2)', render: () => <HeadingFixture /> },
+  { id: 'ui-button', title: 'Button (L3)', render: () => <ButtonFixture /> },
+  { id: 'ui-number-badge', title: 'Number badge (L4)', render: () => <NumberBadgeFixture /> },
+  { id: 'ui-card', title: 'Card (L5)', render: () => <CardFixture /> },
+  { id: 'ui-pips', title: 'Pips: meter, pages, track (L6)', render: () => <PipsFixture /> },
+  { id: 'ui-top-line', title: 'Top line (L7)', render: () => <TopLineFixture /> },
+  { id: 'ui-chip', title: 'Chip (L8)', render: () => <ChipFixture /> },
+  { id: 'ui-ground', title: 'Ground (L9)', render: () => <GroundFixture /> },
+  { id: 'ui-tally-row', title: 'Tally row (L10)', render: () => <TallyRowFixture /> },
+  { id: 'ui-row', title: 'Row look (L11)', render: () => <RowFixture /> },
+  { id: 'ui-notice', title: 'Notice (L12)', render: () => <NoticeFixture /> },
+  { id: 'ui-dialog', title: 'Dialog look (L13)', render: () => <DialogFixture /> },
 ];
 
 export default function SkinGallery() {
