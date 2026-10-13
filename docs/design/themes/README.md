@@ -135,3 +135,19 @@ mounts of the presentational surfaces that take a model as props (`PresentMoment
 become `/dev/skins?gallery=1#<id>` shots of that element. Each wave unit adds its surface's
 fixture mount as part of its work. Cost: one route branch in `App.jsx`, one lazy chunk, no
 backend. Until then, signed-in surfaces rely on `classicEquivalence.js` plus an owner walk.
+
+## Lessons from Phase 0 (coordinator, 2026-10-13)
+
+- **Check the theme the element really sits under.** `codemod.js` and `classicEquivalence.js`
+  judge only the theme passed with `--theme`. An element with no `data-theme` of its own (a
+  dialog such as `.gsd`, portaled modals) inherits `<html>`'s `data-theme="light"`, so a role that
+  looks Classic-identical under `--theme dark` renders paper in a browser. 0b-3 caught four such
+  grounds by hand. Pass `--theme both`, or the light theme for anything that can mount under
+  paper, and say in the record which theme each scope renders in.
+- **The codemod no longer proposes a custom property as a read of itself** (`84e3402c`); 0b-2
+  and 0b-3 each refused such proposals by hand.
+- **Shot noise.** Repeated shoots of the same build differ by a few dozen pixels on the response
+  navigator and on anti-aliased text. Judge a diff by its images (a colour region versus glyph
+  edges), not by the count; computed-style comparison is the stronger proof.
+- **Ports.** Parallel units collided on the default shoot port 4719; give each unit its own
+  `--port`.
