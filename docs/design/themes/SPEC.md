@@ -1,5 +1,10 @@
 # Site skins: Classic and Present
 
+> **APPROVED by the owner, 2026-10-13** ("approved, go with your recommendations"): every open
+> question in §9 is decided as its recommendation, including the scoreboard (accents and ground
+> only) and the dev-only staff gallery route for screenshots of signed-in pages.
+
+
 **Status: PROPOSED, 2026-10-13. Not built.** Companion files: `INVENTORY.md` (every stylesheet
 and surface, measured), `PLAN.md` (phases and work units), `TOOLING-BRIEF.md` (what the next agent
 builds so a fleet can adopt pages).
