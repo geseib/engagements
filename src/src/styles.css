@@ -1,4 +1,4 @@
-/* skin-allowance SC-00: colour=38 font=0 primary=5 */
+/* skin-allowance SC-00: colour=33 font=0 primary=5 */
 /* ============================================================
    WARM SUMMIT — design token layer
    Fonts (Archivo at 125% width + Inter) are loaded via <link> in index.html.
@@ -39,10 +39,7 @@
   --bronze:        #B4794A;
 
   /* signature sky — ONLY behind the mountain, never on buttons */
-  --summit-sky: linear-gradient(180deg, #16233B 0%, #2A3A57 52%, #C77B4A 100%);
   --ridge-front: #16233B;
-  --ridge-mid:   #22344F;
-  --ridge-back:  #2E4262;
 
   /* geometry */
   --radius: 16px;
@@ -79,7 +76,7 @@
 }
 
 /* tabular figures everywhere numbers must not jitter */
-.tnum, .timer, .score, .vote-pct { font-feature-settings: "tnum" 1; }
+.timer, .score { font-feature-settings: "tnum" 1; }
 
 /* ---- Phosphor icon defaults (every <Icon> carries .ws-icon) ----
    SVGs sit on the text baseline, which reads a touch low beside a label, so
@@ -97,7 +94,6 @@
 .success-icon > .ws-icon,      /* 48px */
 .ai-review-icon > .ws-icon,    /* 24px */
 .type-icon > .ws-icon,         /* 24px */
-.alert-icon > .ws-icon,        /* 18px */
 .help-role-icon > .ws-icon {   /* 2.5rem */
   width: 1em;
   height: 1em;
