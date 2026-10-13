@@ -267,14 +267,45 @@ function jsxPragma(src) {
 }
 
 function formatFields(f) {
-  const parts = [`colour=${f.colour || 0}`, `font=${f.font || 0}`];
-  if (f.primary) parts.push(`primary=${f.primary}`);
-  return parts.join(' ');
+  return `colour=${f.colour || 0} font=${f.font || 0} primary=${f.primary || 0}`;
+}
+
+/** The three ratcheted numbers of a scan: what an allowance pragma must equal. */
+function gateCounts(counts) {
+  return { colour: counts.colour, font: counts.font || 0, primary: counts.primaryReads || 0 };
+}
+
+const FIELDS = ['colour', 'font', 'primary'];
+const KIND = {
+  colour: (f) => f.type === 'colour',
+  font: (f) => f.type === 'font',
+  primary: (f) => f.type === 'primary' || f.type === 'secondary',
+};
+
+/**
+ * One ratchet check, shared by the jest gate and scripts/skins/seed-allowances.js --selftest:
+ * returns problem strings (empty = green). fixArgs is what follows `--file` in the fix command.
+ */
+function checkAllowance(label, findings, counts, allowance, fixArgs) {
+  const problems = [];
+  const have = gateCounts(counts);
+  for (const k of FIELDS) {
+    const allowed = (allowance && allowance[k]) || 0;
+    if (have[k] > allowed) {
+      const list = findings.filter(KIND[k]).slice(-Math.min(12, have[k] - allowed + 3))
+        .map((f) => `    line ${f.line}  ${f.selector || '(top level)'}  ${f.property || ''}: ${f.literal}`);
+      problems.push(`${have[k] - allowed} new ${k} literal(s) in ${label} (allowance ${k}=${allowed}, found ${have[k]}). The latest:\n${list.join('\n')}\n  fix: node scripts/skins/codemod.js --report --file ${fixArgs}`);
+    } else if (have[k] < allowed) {
+      problems.push(`lower ${label}'s allowance to ${k}=${have[k]} (it says ${allowed}). Run: node scripts/skins/seed-allowances.js --apply --file ${fixArgs.split(' ')[0]}`);
+    }
+  }
+  return problems;
 }
 
 module.exports = {
+  checkAllowance,
   stripComments, stripJsComments, lineAt, pieces, colourLiterals, fontLiteral,
   scanCss, scanJsx, countsOf,
-  filePragma, unitPragmas, jsxPragma, parseFields, formatFields,
+  filePragma, unitPragmas, jsxPragma, parseFields, formatFields, gateCounts,
   FILE_PRAGMA_RE, UNIT_PRAGMA_RE, JSX_PRAGMA_RE,
 };
