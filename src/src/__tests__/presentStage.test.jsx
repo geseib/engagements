@@ -151,6 +151,32 @@ describe('every moment', () => {
     expect(container.textContent).toMatch(/8 vote points/);
     expect(container.textContent).toMatch(/Response 1 of 2/);
   });
+  it('the parts are the library\'s (skins P2): top line, eyebrow, heading, pips, badge, card, tally row, ground', () => {
+    const canvasOf = (c) => c.querySelector('.present-canvas');
+    const answering = drawn(...EVERY[1].slice(1)).container;
+    expect(canvasOf(answering).classList.contains('ui-ground--wall')).toBe(true);
+    expect(answering.querySelector('.present-top').classList.contains('ui-top-line')).toBe(true);
+    expect(answering.querySelector('.present-eyebrow').classList.contains('ui-eyebrow')).toBe(true);
+    expect(answering.querySelector('h1.present-hero').className).toMatch(/ui-heading--hero/);
+    expect(answering.querySelector('.present-meter').className).toMatch(/ui-pips--meter/);
+    const voting = drawn(...EVERY[2].slice(1)).container;
+    expect(voting.querySelector('h1.present-h2').className).toMatch(/ui-heading--primary/);
+    const nav = drawn(...EVERY[5].slice(1)).container;
+    expect(nav.querySelector('.present-card').className).toMatch(/ui-card is-selected/);
+    expect(nav.querySelector('.present-badge').className).toMatch(/ui-badge ui-badge--accent/);
+    expect(nav.querySelector('.present-track').className).toMatch(/ui-pips--track/);
+    const tally = drawn(...EVERY[4].slice(1)).container;
+    expect(tally.querySelectorAll('.present-trow.ui-trow').length).toBeGreaterThan(0);
+    const read = drawn(...EVERY[6].slice(1)).container;
+    expect(read.querySelector('.present-pages').className).toMatch(/ui-pips--pages/);
+    const lobby = drawn(...EVERY[0].slice(1)).container;
+    expect(lobby.querySelector('.present-code-label').className).toMatch(/ui-eyebrow--muted/);
+  });
+  it('the fitter finds the canvas inside the root (Ground takes no ref)', () => {
+    const { container } = drawn(...EVERY[1].slice(1));
+    expect(container.querySelector('.present-canvas').dataset.fit).toBe('ok');
+    expect(container.querySelector('.present-canvas').style.getPropertyValue('--fit')).toBe('1');
+  });
   it('the read shows its page and "Page 1 of 2"', () => {
     const { container } = drawn(...EVERY[6].slice(1));
     expect(container.textContent).toMatch(/What the room said/);

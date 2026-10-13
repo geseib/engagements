@@ -1,0 +1,171 @@
+{
+  "unit": "P2",
+  "file": "present/present.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": false,
+  "base": "93c9b48b",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 5,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "41:14",
+      "line": 41,
+      "col": 14,
+      "type": "colour",
+      "kind": "rule",
+      "selector": "html.present-locked, html.present-locked body",
+      "property": "background",
+      "literal": "#0A1324",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 17)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 41)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the html lock paints the letterbox before .present mounts and outside it; a scope custom property cannot reach <html>, and no role holds #0A1324 (--bg is #0F1A2E)"
+    },
+    {
+      "id": "45:20",
+      "line": 45,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-canvas",
+      "literal": "#0A1324",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 17)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the letterbox ground outside the scaled 1920x1080 canvas; no role holds #0A1324, and --wall-canvas is a gradient that would repaint the whole window in both skins"
+    },
+    {
+      "id": "48:18",
+      "line": 48,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-mini",
+      "literal": "rgba(27, 41, 66, 0.6)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "raw:color-mix(in srgb, var(--surface) 60%, transparent)"
+    },
+    {
+      "id": "50:19",
+      "line": 50,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-quote",
+      "literal": "#D9E5F7",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 56)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 104)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "raw:var(--wall-quote)"
+    },
+    {
+      "id": "51:19",
+      "line": 51,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-plate",
+      "literal": "rgba(11, 18, 32, 0.93)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 17)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 17)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the strip and wipe plate, a near-opaque #0B1220; no role or channel holds it (--scrim is rgba(6,11,22,.72), --shade-rgb is 15 26 46)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T17:33:59.493Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 3,
+      "raw": 2
+    },
+    "classicDeltas": [
+      "48:18 .present --present-mini: rgba(27, 41, 66, 0.6) -> color-mix(in srgb, var(--surface) 60%, transparent) (raw: check by hand)",
+      "50:19 .present --present-quote: #D9E5F7 -> var(--wall-quote) (raw: check by hand)"
+    ],
+    "edits": 2
+  }
+}

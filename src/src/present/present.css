@@ -1,4 +1,4 @@
-/* skin-allowance: colour=6 font=0 primary=0 */
+/* skin-allowance: colour=3 font=0 primary=0 */
 /* ============================================================================
    THE PRESENTATION — /present?gameId= (docs/design/two-surface, PLAN 2.5).
 
@@ -25,9 +25,14 @@
 
    Colours are roles (styles/roles.css), read under the root's
    data-theme="dark" and data-surface="wall". The literals left are the
-   letterbox ground, the mini-card fill, the quote ink, the plate and the
-   glow stop (read now only by presentPalette.test.js): no role holds them
-   (keep: reasons in records/0c.md).
+   letterbox ground (twice: <html> and the scope) and the strip/wipe plate:
+   no role holds them (keep: reasons in records/P2.md).
+
+   THE PARTS ARE THE LIBRARY'S (skins Phase 2, components/ui): TopLine,
+   Eyebrow, Heading, Pips, NumberBadge, Card, TallyRow, Button and Ground.
+   This sheet passes them the wall's ladder through their size hooks and keeps
+   only what is the wall's own (the canvas, the frame, the lobby, the
+   navigator's flanks, the read, the strip, the safety ask, the wipe).
 
    presentWallPalette.test.js composites every pairing for every skin.
    ========================================================================== */
@@ -43,12 +48,11 @@ html.present-locked body {
 
 .present {
   --present-canvas: #0A1324;
-  --present-glow: #1E3050;
   --present-line: var(--rule);
   --present-line-strong: rgb(var(--slate-rgb) / 0.4);
-  --present-mini: rgba(27, 41, 66, 0.6);
+  --present-mini: color-mix(in srgb, var(--surface) 60%, transparent);
   --present-seen: rgb(var(--accent-rgb) / 0.45);
-  --present-quote: #D9E5F7;
+  --present-quote: var(--wall-quote);
   --present-plate: rgba(11, 18, 32, 0.93);
   --present-success-text: var(--success-text);
   position: fixed;
@@ -77,10 +81,16 @@ html.present-locked body {
   padding: 64px 96px 56px;
   box-sizing: border-box;
   line-height: 1.3;
-  background: var(--wall-canvas);
   --fit: 1;
   --hair: 1px;
 }
+
+/* THE GROUND is components/ui/Ground (variant wall: --wall-canvas, dusk).
+   Ground flattens itself under :root.d-call; the wall's canvas is not flat
+   under Call today (the Presentation picks Call through data-profile, and only
+   its wipe goes flat), so the wall keeps its ground there. Flattening the
+   projected canvas under Call is the owner's call (records/P2.md). */
+:root.d-call .present .present-canvas.ui-ground { background: var(--wall-canvas); }
 
 /* ---- the four ladders, as px at 1080 tall ---- */
 .present[data-profile="room"] .present-canvas,
@@ -102,26 +112,17 @@ html.present-locked body {
    forms on the whole canvas widened every hyphen). */
 .present .present-foot,
 .present .present-code,
-.present .present-badge,
-.present .present-points,
-.present .present-rank,
 .present .present-n { font-variant-numeric: tabular-nums; }
 
 /* ---- frame: top line, main, foot ---- */
 .present .present-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* the top line is components/ui/TopLine; the wall passes its ladder */
 .present .present-top {
   flex: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 32px;
-  font-size: var(--L-meta);
-  color: var(--muted);
-  font-weight: 500;
-  padding-bottom: 20px;
-  border-bottom: var(--hair) solid var(--present-line);
+  --ui-top-line-size: var(--L-meta);
+  --ui-top-line-gap: 32px;
+  --ui-top-line-pad: 20px;
 }
-.present .present-top b { color: var(--text); font-weight: 600; }
 .present .present-main {
   flex: 1;
   min-height: 0;
@@ -146,31 +147,23 @@ html.present-locked body {
 }
 .present .present-foot b { color: var(--text); font-weight: 600; }
 
-/* ---- type ---- */
+/* ---- type: components/ui Eyebrow and Heading, sized from the wall's ladder ---- */
 .present .present-eyebrow {
-  font-size: calc(var(--L-meta) * var(--fit));
-  text-transform: uppercase;
-  letter-spacing: var(--eyebrow-tracking);
-  color: var(--eyebrow-color);
-  font-weight: var(--eyebrow-weight);
+  --ui-eyebrow-size: calc(var(--L-meta) * var(--fit));
   margin: 0 0 .6em;
 }
 .present .present-hero {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: calc(var(--L-hero) * var(--fit));
-  line-height: 1.04;
+  --ui-t-hero: calc(var(--L-hero) * var(--fit));
+  --ui-heading-leading: 1.04;
   margin: 0 0 .35em;
-  text-wrap: balance;
-  letter-spacing: -.01em;
 }
+/* the voting title: Heading at the primary step, 700 and untracked, as the wall has it */
 .present .present-h2 {
-  font-family: var(--font-display);
+  --ui-t-primary: calc(var(--L-primary) * var(--fit));
+  --ui-heading-leading: 1.1;
   font-weight: 700;
-  font-size: calc(var(--L-primary) * var(--fit));
-  line-height: 1.1;
+  letter-spacing: inherit;
   margin: 0 0 .4em;
-  text-wrap: balance;
 }
 .present .present-lead {
   font-size: calc(var(--L-secondary) * var(--fit));
@@ -179,11 +172,8 @@ html.present-locked body {
   max-width: 40ch;
 }
 
-/* the progress meter: one pill per person up to 24 */
-.present .present-meter { display: flex; gap: 8px; }
-.present .present-meter i { display: block; width: 44px; height: 12px; border-radius: 6px; background: var(--surface-2); }
-.present .present-meter i.is-on { background: var(--accent); }
-.present .present-meter i.is-all { background: var(--success); }
+/* the progress meter, the navigator's track and the read's pages are
+   components/ui/Pips, whose default sizes are the wall's own */
 
 /* ---- lobby ---- */
 .present .present-lobby { display: grid; grid-template-columns: 1fr auto; gap: 96px; align-items: center; }
@@ -205,42 +195,17 @@ html.present-locked body {
 }
 .present .present-qr svg { display: block; width: 100%; height: 100%; }
 
-.present .present-code-label { margin: 1.2em 0 0; color: var(--muted); }
+.present .present-code-label { margin: 1.2em 0 0; }
 .present .present-join-url { max-width: none; }
 
-/* ---- results tally ---- */
+/* ---- results tally: components/ui/TallyRow, its sizes pinned to the wall's px ---- */
 .present .present-tally { display: flex; flex-direction: column; gap: calc(22px * var(--fit)); }
 .present .present-trow {
-  display: grid;
-  grid-template-columns: calc(var(--L-secondary) * 1.4 * var(--fit)) minmax(0, 1fr) auto;
-  gap: 24px;
-  align-items: center;
+  --ui-size: calc(var(--L-secondary) * var(--fit));
+  --ui-size-sub: calc(var(--L-meta) * var(--fit));
+  --ui-trow-gap: 24px;
+  --ui-trow-bar-h: calc(14px * var(--fit));
 }
-.present .present-trow .present-rank {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: calc(var(--L-secondary) * var(--fit));
-  color: var(--muted);
-  text-align: right;
-}
-.present .present-trow .present-who { font-size: calc(var(--L-secondary) * var(--fit)); font-weight: 600; line-height: 1.15; min-width: 0; }
-.present .present-trow .present-first {
-  display: block;
-  font-size: calc(var(--L-meta) * var(--fit));
-  font-weight: 400;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: .2em;
-}
-.present .present-trow .present-bar { height: calc(14px * var(--fit)); border-radius: 7px; background: var(--accent); margin-top: .5em; }
-.present .present-trow .present-points {
-  font-size: calc(var(--L-secondary) * var(--fit));
-  font-weight: 700;
-  white-space: nowrap;
-}
-.present .present-trow .present-points small { font-size: .55em; color: var(--muted); font-weight: 500; margin-left: .3em; }
 .present .present-more { font-size: calc(var(--L-body) * var(--fit)); color: var(--muted); padding-left: calc(var(--L-secondary) * 1.4 * var(--fit) + 24px); margin: calc(22px * var(--fit)) 0 0; }
 
 /* ---- the response navigator ---- */
@@ -286,32 +251,20 @@ html.present-locked body {
   text-align: center;
 }
 .present .present-range .present-w { font-size: var(--L-meta); color: var(--muted); }
-.present .present-card {
-  background: var(--surface);
-  border: 3px solid var(--accent);
+/* the response card: components/ui/Card, selected. Its 3px accent border IS
+   the mark, so the skin's --select-mark is not painted on top of it. */
+.present .present-card.ui-card {
+  --ui-card-border: 3px;
+  --ui-card-pad: 44px 56px 40px;
   border-radius: 28px;
-  padding: 44px 56px 40px;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
 }
 .present .present-card-head { display: flex; align-items: center; gap: 22px; flex: none; margin-bottom: 24px; }
-.present .present-badge {
-  flex: none;
-  min-width: calc(var(--L-secondary) * 1.7);
-  height: calc(var(--L-secondary) * 1.7);
-  padding: 0 .3em;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--bg);
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: var(--L-secondary);
-  display: grid;
-  place-items: center;
-  box-sizing: border-box;
-}
+/* the badge is components/ui/NumberBadge at --L-secondary (set by its size prop) */
 .present .present-card-who { font-size: var(--L-secondary); font-weight: 700; line-height: 1.1; min-width: 0; }
 .present .present-card-who small { display: block; font-size: var(--L-meta); color: var(--muted); font-weight: 500; margin-top: 4px; }
 .present .present-fit-text {
@@ -325,19 +278,6 @@ html.present-locked body {
   overflow-wrap: anywhere;
 }
 .present .present-part { flex: none; font-size: var(--L-meta); color: var(--accent-text); font-weight: 600; margin-top: 16px; }
-.present .present-track { display: flex; gap: 6px; align-items: center; }
-.present .present-track i { display: block; width: 30px; height: 10px; border-radius: 5px; background: var(--surface-2); }
-.present .present-track i.is-on { background: var(--accent); width: 56px; }
-.present .present-track.is-bar { position: relative; width: 640px; height: 10px; border-radius: 5px; background: var(--surface-2); }
-.present .present-track.is-bar em {
-  position: absolute;
-  top: -5px;
-  height: 20px;
-  width: 12px;
-  border-radius: 6px;
-  background: var(--accent);
-  left: calc(var(--at, 0) * (100% - 12px));
-}
 
 /* ---- Workie's read ---- */
 .present .present-read { font-size: calc(var(--L-body) * 1.22 * var(--fit)); line-height: 1.36; }
@@ -369,10 +309,6 @@ html.present-locked body {
 .present .present-read .markdown-content em { font-style: normal; color: var(--present-quote); }
 .present .present-read .markdown-content li::marker { color: var(--accent); font-family: var(--font-display); font-weight: 800; }
 .present .present-read.is-topics .markdown-content ol > li { font-size: calc(var(--L-secondary) * var(--fit)); line-height: 1.3; }
-.present .present-pages { display: flex; gap: 10px; }
-.present .present-pages i { display: block; width: 48px; height: 10px; border-radius: 5px; background: var(--surface-2); }
-.present .present-pages i.is-seen { background: var(--present-seen); }
-.present .present-pages i.is-on { background: var(--accent); }
 
 /* ---- waiting, ended, and an honest miss ---- */
 .present .present-quiet {
@@ -419,6 +355,8 @@ html.present-locked body {
 .present .present-strip-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .present .present-strip-btn {
   flex: none;
+  display: inline-block;
+  white-space: normal;
   font: inherit;
   font-weight: 600;
   min-height: 40px;
@@ -428,6 +366,12 @@ html.present-locked body {
   background: transparent;
   color: var(--text);
   cursor: pointer;
+}
+/* Button's quiet hover would tint the strip; the wall's buttons have no hover look. */
+.present .present-strip .present-strip-btn.ui-btn:hover:not(.is-go):not([aria-pressed="true"]),
+.present .present-confirm .present-strip-btn.ui-btn:hover:not(.is-go) {
+  background: transparent;
+  border-color: var(--present-line-strong);
 }
 .present .present-strip-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--present-seen); }
 .present .present-strip-btn.is-go { background: var(--action); border-color: var(--action); color: var(--on-action); }
@@ -455,7 +399,7 @@ html.present-locked body {
   gap: 10px;
   cursor: default;
 }
-.present .present-confirm-ey { margin: 0; font-size: 13px; letter-spacing: var(--eyebrow-tracking); text-transform: uppercase; color: var(--eyebrow-color); font-weight: var(--eyebrow-weight); }
+.present .present-confirm-ey { --ui-eyebrow-size: 13px; }
 .present .present-confirm-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1.1; }
 .present .present-confirm-note { margin: 0; font-size: 16px; color: var(--muted); }
 .present .present-confirm-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
@@ -463,9 +407,9 @@ html.present-locked body {
 
 /* THE PHASE WIPE (components/stage/PhaseBar.jsx's band, restated for the
    canvas): one word and one instruction across the middle, played once.
-   --phase-vote for the room acting (blue in both skins: the wipe's 'live'
-   tone does not yet tell answering from voting, records/0c.md), green for
-   results. */
+   Answering is .is-ask, --phase-ask (orange in Classic, blue in Present,
+   SPEC §4.5); voting is .is-live, --phase-vote (blue in both skins); results
+   green. */
 .present .present-wipe {
   position: absolute;
   z-index: 6;
@@ -496,6 +440,7 @@ html.present-locked body {
   color: var(--text);
   font-size: var(--L-body);
 }
+.present .present-wipe.is-ask { border-color: var(--phase-ask); color: var(--phase-ask); }
 .present .present-wipe.is-results { border-color: var(--success); color: var(--present-success-text); }
 .present[data-profile="call"] .present-wipe { background: var(--bg); }
 @media (prefers-reduced-motion: reduce) {

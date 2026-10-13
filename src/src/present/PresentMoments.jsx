@@ -14,34 +14,41 @@ import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import RW, { deviceWords } from '../config/roundWords';
-import { navigatorWindow, trackOf } from './navigatorWindow';
+import { navigatorWindow } from './navigatorWindow';
+import TopLine from '../components/ui/TopLine';
+import Eyebrow from '../components/ui/Eyebrow';
+import Heading from '../components/ui/Heading';
+import Pips from '../components/ui/Pips';
+import NumberBadge from '../components/ui/NumberBadge';
+import Card from '../components/ui/Card';
+import TallyRow from '../components/ui/TallyRow';
 
 /* ------------------------------------------------------------ shared parts */
 
+/* The library's parts (components/ui, skins Phase 2): the top line, the
+   eyebrow, the headings, the pips, the badge, the card and the tally row. The
+   present-* classes stay on each so present.css can pass the wall's ladder to
+   them; the colours and the treatment are the skin's. */
+
 function Top({ model, right }) {
   return (
-    <div className="present-top">
-      <span>
-        {model.sessionTitle ? <b>{model.sessionTitle}</b> : null}
-        {model.sessionTitle && model.roundLabel ? ' · ' : null}
-        {model.roundLabel || null}
-      </span>
-      <span>{right}</span>
-    </div>
+    <TopLine
+      className="present-top"
+      left={(
+        <>
+          {model.sessionTitle ? <b>{model.sessionTitle}</b> : null}
+          {model.sessionTitle && model.roundLabel ? ' · ' : null}
+          {model.roundLabel || null}
+        </>
+      )}
+      right={right}
+    />
   );
 }
 
+/** "x of n answered": one pill per person up to 24 (Pips, the meter). */
 export function Meter({ done, of }) {
-  const cap = Math.min(Math.max(0, of), 24);
-  const on = of > 0 ? Math.round((Math.min(done, of) * cap) / of) : 0;
-  const all = of > 0 && done >= of;
-  return (
-    <div className="present-meter" aria-hidden="true">
-      {Array.from({ length: cap }, (_, i) => (
-        <i key={i} className={i < on ? (all ? 'is-all' : 'is-on') : undefined} />
-      ))}
-    </div>
-  );
+  return <Pips variant="meter" done={done} of={of} className="present-meter" />;
 }
 
 function CountsFoot({ counts }) {
@@ -56,10 +63,12 @@ function CountsFoot({ counts }) {
 /**
  * THE PHASE WIPE, as the host's stage plays it (components/stage/PhaseBar.jsx):
  * one band across the middle when the phase changes, never on first mount and
- * never into the lobby. Blue and green here, never orange (R3).
+ * never into the lobby. Answering reads --phase-ask (orange in Classic, blue in
+ * Present), voting --phase-vote (blue), results green: under Present the wall
+ * carries no orange (R3).
  */
 const WIPE = {
-  ANSWERING: { word: 'Answering', line: `Answer on your ${deviceWords}`, tone: 'live' },
+  ANSWERING: { word: 'Answering', line: `Answer on your ${deviceWords}`, tone: 'ask' },
   VOTING: { word: 'Voting', line: `Vote on your ${deviceWords}`, tone: 'live' },
   RESULTS: { word: 'Results', line: 'Look up', tone: 'results' },
 };
@@ -92,9 +101,9 @@ export function PresentLobby({ model }) {
       <div className="present-main">
         <div className="present-lobby">
           <div>
-            <p className="present-eyebrow">Scan to join · no app, no account</p>
+            <Eyebrow className="present-eyebrow">Scan to join · no app, no account</Eyebrow>
             <p className="present-lead present-join-url">{model.joinHost}</p>
-            <p className="present-eyebrow present-code-label">Session code</p>
+            <Eyebrow tone="muted" className="present-eyebrow present-code-label">Session code</Eyebrow>
             <p className="present-code">{model.code}</p>
             <p className="present-lead">{`${model.joined} in the room`}</p>
           </div>
@@ -115,8 +124,8 @@ export function PresentAnswering({ model }) {
     <div className="present-moment present-frame">
       <Top model={model} right="Answering" />
       <div className="present-main">
-        {model.category ? <p className="present-eyebrow">{model.category}</p> : null}
-        <h1 className="present-hero">{model.title}</h1>
+        {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
+        <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
         {model.task ? <p className="present-lead" data-drop="1">{model.task}</p> : null}
       </div>
       <CountsFoot counts={model.counts} />
@@ -129,8 +138,8 @@ export function PresentVoting({ model }) {
     <div className="present-moment present-frame">
       <Top model={model} right="Voting" />
       <div className="present-main">
-        <p className="present-eyebrow">Vote</p>
-        <h1 className="present-h2">{model.title}</h1>
+        <Eyebrow className="present-eyebrow">Vote</Eyebrow>
+        <Heading level={1} size="primary" balance className="present-h2">{model.title}</Heading>
         <p className="present-lead">{model.lead}</p>
       </div>
       <CountsFoot counts={model.counts} />
@@ -148,19 +157,15 @@ export function PresentTally({ model }) {
         ) : (
           <div className="present-tally">
             {model.rows.map((row) => (
-              <div className="present-trow" key={row.n}>
-                <span className="present-rank">{row.n}</span>
-                <div className="present-who">
-                  {row.label}
-                  <span className="present-first">{row.first}</span>
-                  {row.share !== null ? (
-                    <div className="present-bar" style={{ width: `${Math.max(3, Math.round(row.share * 100))}%` }} />
-                  ) : null}
-                </div>
-                {row.points !== null ? (
-                  <span className="present-points">{row.points}<small>points</small></span>
-                ) : <span />}
-              </div>
+              <TallyRow
+                key={row.n}
+                className="present-trow"
+                rank={row.n}
+                label={row.label}
+                sub={row.first}
+                share={row.share}
+                points={row.points}
+              />
             ))}
           </div>
         )}
@@ -173,16 +178,9 @@ export function PresentTally({ model }) {
   );
 }
 
+/** The foot track: one tick per response up to 24, then a bar (Pips, the track). */
 function Track({ index, total }) {
-  const t = trackOf(index, total);
-  if (t.kind === 'bar') {
-    return <div className="present-track is-bar" aria-hidden="true"><em style={{ '--at': t.at }} /></div>;
-  }
-  return (
-    <div className="present-track" aria-hidden="true">
-      {t.ticks.map((on, i) => <i key={i} className={on ? 'is-on' : undefined} />)}
-    </div>
-  );
+  return <Pips variant="track" done={index} of={total} className="present-track" />;
 }
 
 /**
@@ -211,9 +209,9 @@ export function ResponseNavigator({ model, vote = false }) {
       <div className="present-main present-main-nav">
         <div className="present-nav">
           <div className="present-flank">{flank(win.left)}</div>
-          <div className="present-card">
+          <Card selected className="present-card">
             <div className="present-card-head">
-              <div className="present-badge">{model.focused.n}</div>
+              <NumberBadge as="div" n={model.focused.n} size="var(--L-secondary)" className="present-badge" />
               <div className="present-card-who">
                 {model.focused.label}
                 {model.focused.meta ? <small>{model.focused.meta}</small> : null}
@@ -221,7 +219,7 @@ export function ResponseNavigator({ model, vote = false }) {
             </div>
             <p className="present-fit-text">{model.text}</p>
             {model.parts > 1 ? <div className="present-part">{RW.partOf(model.part + 1, model.parts)}</div> : null}
-          </div>
+          </Card>
           <div className="present-flank">{flank(win.right)}</div>
         </div>
       </div>
@@ -234,7 +232,6 @@ export function ResponseNavigator({ model, vote = false }) {
 }
 
 export function ReadPage({ model }) {
-  const pips = Array.from({ length: model.pages }, (_, i) => (i === model.page ? 'is-on' : i < model.page ? 'is-seen' : undefined));
   return (
     <div className="present-moment present-frame">
       <Top model={model} right={RW.whatWeHeard} />
@@ -245,9 +242,7 @@ export function ReadPage({ model }) {
       </div>
       <div className="present-foot">
         <span>{"Workie's read"}</span>
-        <div className="present-pages" aria-hidden="true">
-          {pips.map((cls, i) => <i key={i} className={cls} />)}
-        </div>
+        <Pips variant="pages" done={model.page} of={model.pages} className="present-pages" />
         <span>{model.position}</span>
       </div>
     </div>
@@ -259,8 +254,8 @@ export function PresentQuestionFocus({ model }) {
     <div className="present-moment present-frame">
       <Top model={model} right="The question" />
       <div className="present-main">
-        {model.category ? <p className="present-eyebrow">{model.category}</p> : null}
-        <h1 className="present-hero">{model.title}</h1>
+        {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
+        <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
         {model.task ? <p className="present-lead" data-drop="1">{model.task}</p> : null}
       </div>
       <div className="present-foot"><span>{model.roundLabel}</span></div>
