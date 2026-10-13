@@ -26,6 +26,9 @@
   --sk-success-rgb: 79 178 134;
   --sk-danger-rgb: 229 100 94;
   --sk-warn-rgb: 246 169 76;
+  /* PROPOSED for Phase 0a, not in SPEC §4: channels for the 32 dusk scrims and 8 warm-text tints */
+  --sk-shade-rgb: 15 26 46;
+  --sk-glow-rgb: 244 237 228;
   --sk-phase-ask: #F6A94C;
   --sk-phase-vote: #7CA7E6;
   --sk-phase-results: #4FB286;

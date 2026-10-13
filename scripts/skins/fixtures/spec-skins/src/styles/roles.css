@@ -19,6 +19,8 @@
   --success-rgb: var(--sk-success-rgb);
   --danger-rgb: var(--sk-danger-rgb);
   --warn-rgb: var(--sk-warn-rgb);
+  --shade-rgb: var(--sk-shade-rgb);   /* PROPOSED, not in SPEC §4 */
+  --glow-rgb: var(--sk-glow-rgb);     /* PROPOSED, not in SPEC §4 */
   --phase-ask: var(--sk-phase-ask);
   --phase-vote: var(--sk-phase-vote);
   --phase-results: var(--sk-phase-results);

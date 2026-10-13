@@ -1,0 +1,4 @@
+/* fixture: the base side's global tokens (today's shape) */
+:root { --bg: #0F1A2E; --text: #F4EDE4; --primary: #F6A94C; --secondary: #7CA7E6; }
+[data-theme="light"] { --bg: #FBF7F1; --text: #1B2942; }
+[data-theme="dark"] { --bg: #0F1A2E; --text: #F4EDE4; }

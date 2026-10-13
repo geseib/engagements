@@ -142,7 +142,7 @@ function scanCss(css, opts = {}) {
     const prop = (decl.match(/^([\w-]+)\s*:/) || [])[1] || '';
     for (const c of colourLiterals(p.text)) {
       findings.push({
-        type: 'colour', kind: p.kind, literal: c.literal, line: lineAt(stripped, p.start + c.index),
+        type: 'colour', kind: p.kind, literal: c.literal, line: lineAt(stripped, p.start + c.index), offset: p.start + c.index,
         selector: p.selector, property: prop, declaration: decl, named: !!c.named,
       });
     }
@@ -150,6 +150,7 @@ function scanCss(css, opts = {}) {
     if (f) {
       findings.push({
         type: 'font', kind: p.kind, literal: f, line, selector: p.selector, property: prop, declaration: decl,
+        offset: p.start + p.text.indexOf(f),
         shorthand: prop.toLowerCase() === 'font',
       });
     }
@@ -157,6 +158,7 @@ function scanCss(css, opts = {}) {
       findings.push({
         type: m[1] === 'secondary' ? 'secondary' : 'primary', kind: p.kind, literal: m[0],
         line: lineAt(stripped, p.start + m.index), selector: p.selector, property: prop, declaration: decl,
+        offset: p.start + m.index,
       });
     }
   }
