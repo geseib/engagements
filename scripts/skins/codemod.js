@@ -184,7 +184,9 @@ function analyse(root, o) {
       continue;
     }
     const kinds = R.kindsFor(f.property, f.kind);
-    const exact = R.ROLES.filter((r) => kinds.includes(r.kind) && themes.every((t) => table[t][r.name] && R.colourKey(table[t][r.name]) === key));
+    // Never propose a declaration as a read of itself (`--danger: var(--danger)` is an
+    // invalid cycle; 0b-2 found three, caught only by classicEquivalence).
+    const exact = R.ROLES.filter((r) => r.name !== f.property && kinds.includes(r.kind) && themes.every((t) => table[t][r.name] && R.colourKey(table[t][r.name]) === key));
     if (exact.length === 1 && !exact[0].decide) {
       auto.push({ ...base, replacement: `var(${exact[0].name})`, why: `exact ${exact[0].name} in ${themes.join('+')}` });
       continue;
@@ -195,7 +197,7 @@ function analyse(root, o) {
       continue;
     }
     const [r, g, b, a] = key.split(',').map(Number);
-    const chan = R.CHANNELS.filter((c) => themes.every((t) => table[t][c.name] && table[t][c.name].split(/[\s,]+/).map(Number).join(',') === `${r},${g},${b}`));
+    const chan = R.CHANNELS.filter((c) => c.name !== f.property && themes.every((t) => table[t][c.name] && table[t][c.name].split(/[\s,]+/).map(Number).join(',') === `${r},${g},${b}`));
     if (chan.length && a < 1) {
       const sure = chan.filter((c) => !c.decide);
       if (chan.length === 1 && sure.length === 1) {
