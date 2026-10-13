@@ -1016,27 +1016,25 @@ function GameHostPage() {
     ability to show qr code"). With two surfaces, pinning the join code here
     also puts it on /present — a `join` focus on /stage-focus, so the Remote
     and every wall agree — and unpinning takes it down. A `join` arriving from
-    another surface pins it here (joinFromServerRef stops the echo back).
+    another surface pins it here.
     `publishFocusRef` because publishFocus is defined below the early returns.
+
+    `joinOnServerRef` is whether the code is up on the server's screens, as far
+    as this page knows: set when this page publishes and by every focus frame.
+    The page publishes only when what it shows (qrMode pinned) differs from it,
+    so the echo of its own publish never stops the next one. (A one-shot "came
+    from the server" flag did: the echo arrived while the code was already
+    pinned, nothing re-rendered to clear it, and the click that took the code
+    down here was swallowed, leaving it on the Presentation. Owner, 2026-10-13.)
   */
   const publishFocusRef = useRef(null);
-  const joinPublishedRef = useRef(false);
-  const joinFromServerRef = useRef(false);
+  const joinOnServerRef = useRef(false);
   useEffect(() => {
     if (!twoSurfaces) return;
     const pinned = qrMode === 'pinned';
-    if (joinFromServerRef.current) {
-      joinFromServerRef.current = false;
-      joinPublishedRef.current = pinned;
-      return;
-    }
-    if (pinned && !joinPublishedRef.current) {
-      joinPublishedRef.current = true;
-      if (publishFocusRef.current) publishFocusRef.current({ focus: 'join' });
-    } else if (!pinned && joinPublishedRef.current) {
-      joinPublishedRef.current = false;
-      if (publishFocusRef.current) publishFocusRef.current({ focus: 'none' });
-    }
+    if (pinned === joinOnServerRef.current) return;
+    joinOnServerRef.current = pinned;
+    if (publishFocusRef.current) publishFocusRef.current({ focus: pinned ? 'join' : 'none' });
   }, [qrMode, twoSurfaces]);
 
   // J PUTS THE JOIN CODE UP AND TAKES IT DOWN, on the laptop as on the
@@ -2511,13 +2509,14 @@ Focus on actionable business strategy insights.`;
       const next = focusToStage(focus, { answerCount: answersRef.current.length });
       setLessonExpanded(next.lessonExpanded);
       setSpotlightIndex(next.spotlightIndex);
-      // The join code, put up or taken down on another surface.
+      // The join code, put up or taken down on any surface (this page's own
+      // echo included): record what the screens show, then match it here.
       if (focus.focus === 'join') {
-        joinFromServerRef.current = true;
+        joinOnServerRef.current = true;
         setQrMode('pinned');
-      } else if (joinPublishedRef.current) {
-        joinFromServerRef.current = true;
-        setQrMode(null);
+      } else if (joinOnServerRef.current) {
+        joinOnServerRef.current = false;
+        setQrMode((mode) => (mode === 'pinned' ? null : mode));
       }
     });
 

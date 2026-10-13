@@ -23,12 +23,15 @@ describe('host page (two surfaces)', () => {
     expect(HOST).toMatch(/onPreview: \(\) => setQrMode\(\(mode\) => \(mode === 'pinned' \? mode : \(twoSurfaces \? 'pinned' : 'preview'\)\)\)/);
     expect(HOST).toMatch(/onPreviewEnd: \(\) => setQrMode\(\(mode\) => \(mode === 'pinned' \|\| twoSurfaces \? mode : null\)\)/);
   });
-  test('pinning publishes a join focus and unpinning publishes none', () => {
-    expect(HOST).toMatch(/publishFocusRef\.current\(\{ focus: 'join' \}\)/);
-    expect(HOST).toMatch(/publishFocusRef\.current\(\{ focus: 'none' \}\)/);
+  test('it publishes whenever what this page shows differs from what the screens show', () => {
+    expect(HOST).toMatch(/if \(pinned === joinOnServerRef\.current\) return;\s*joinOnServerRef\.current = pinned;\s*if \(publishFocusRef\.current\) publishFocusRef\.current\(\{ focus: pinned \? 'join' : 'none' \}\)/);
   });
-  test('a join set elsewhere pins it here, and anything else takes it down', () => {
-    expect(HOST).toMatch(/if \(focus\.focus === 'join'\) \{\s*joinFromServerRef\.current = true;\s*setQrMode\('pinned'\);/);
+  test('a join frame (its own echo included) records the screens and pins it here; anything else takes it down', () => {
+    expect(HOST).toMatch(/if \(focus\.focus === 'join'\) \{\s*joinOnServerRef\.current = true;\s*setQrMode\('pinned'\);/);
+    expect(HOST).toMatch(/else if \(joinOnServerRef\.current\) \{\s*joinOnServerRef\.current = false;/);
+  });
+  test('no one-shot "from the server" flag survives (the swallowed take-down, 2026-10-13)', () => {
+    expect(HOST).not.toMatch(/joinFromServerRef|joinPublishedRef/);
   });
   test('J toggles it, outside fields', () => {
     expect(HOST).toMatch(/e\.key !== 'j' && e\.key !== 'J'/);
