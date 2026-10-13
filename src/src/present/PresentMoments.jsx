@@ -278,7 +278,21 @@ export function PresentFeedback({ model }) {
         {/* The round's title as a reminder, not the question again (owner,
             2026-10-13: "too much like the original question"). */}
         {model.title ? <Heading level={2} size="primary" balance className="present-h2">{model.title}</Heading> : null}
-        <p className="present-lead">{`Provide feedback on the round from your ${deviceWords}.`}</p>
+        {model.featured ? (
+          // The comment the host put up, as the laptop shows it.
+          <figure className="present-quote">
+            <blockquote data-drop="1">{model.featured.text}</blockquote>
+            {model.featured.who || model.featured.credit ? (
+              <figcaption>
+                {model.featured.who ? <b>{model.featured.who}</b> : null}
+                {model.featured.who && model.featured.credit ? ' ' : ''}
+                {model.featured.credit}
+              </figcaption>
+            ) : null}
+          </figure>
+        ) : (
+          <p className="present-lead">{`Provide feedback on the round from your ${deviceWords}.`}</p>
+        )}
       </div>
       <div className="present-foot"><span>{model.roundLabel || ''}</span></div>
     </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { deviceWords } from '../../config/roundWords';
 
 /**
  * The room's persistent phase signal — the `.bar` grid area. Ported (as CSS)
@@ -27,8 +28,9 @@ const KNOWN_PHASES = new Set(['lobby', 'ask', 'vote', 'results', 'done']);
 
 const WIPE = {
   // "Answer", not "write": a poll or trivia round is a tap, not a sentence.
-  ask: ['wipe', 'Answering', 'Answer on your phone'],
-  vote: ['wipe', 'Voting', 'Choose on your phone'],
+  // The room has phones, laptops and tablets (copy style): name all three.
+  ask: ['wipe', 'Answering', `Answer on your ${deviceWords}`],
+  vote: ['wipe', 'Voting', `Vote on your ${deviceWords}`],
   results: ['wipe results', 'Results', 'Look up'],
 };
 

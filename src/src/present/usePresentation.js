@@ -67,12 +67,12 @@ async function readJson(res) {
 
 export default function usePresentation(gameId) {
   const [snapshot, setSnapshot] = useState(null);
-  const [reads, setReads] = useState({ answers: null, results: null, summary: null });
+  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null });
   const seqRef = useRef(0);
   const appliedRef = useRef(0);
   const debounceRef = useRef(null);
   const snapshotRef = useRef(null);
-  const readsKeyRef = useRef({ answers: null, results: null, summary: null });
+  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null });
 
   /** The reads the moment needs, each fetched once per round unless a frame says otherwise. */
   const refreshReads = useCallback(async (snap, force) => {
@@ -109,6 +109,19 @@ export default function usePresentation(gameId) {
           }
         } catch (e) { /* the next poll tries again */ }
       }
+      // THE FEEDBACK ROUND'S FEATURED COMMENT (owner, 2026-10-13): the host
+      // puts one up on the laptop or the Remote; the wall shows it too.
+      // `commentFeatured` forces this read.
+      if (snap.stageBeat === 'feedback' && (force || readsKeyRef.current.comments !== key)) {
+        try {
+          const res = await fetch(`${base}games/${gameId}/comments?questionNumber=${encodeURIComponent(round.padded)}`);
+          if (res.ok) {
+            const body = await readJson(res);
+            next.comments = Array.isArray(body && body.comments) ? body.comments : [];
+            readsKeyRef.current.comments = key;
+          }
+        } catch (e) { /* the next poll tries again */ }
+      }
       if (snap.stageBeat === 'field-notes' && (force || readsKeyRef.current.summary !== key)) {
         try {
           const res = await fetch(`${base}games/${gameId}/ai-summary?questionId=${encodeURIComponent(round.padded)}`);
@@ -141,8 +154,8 @@ export default function usePresentation(gameId) {
     const prevRound = roundOf(snapshotRef.current && snapshotRef.current.state);
     const nowRound = roundOf(snap.state);
     if (!prevRound || !nowRound || prevRound.padded !== nowRound.padded) {
-      readsKeyRef.current = { answers: null, results: null, summary: null };
-      setReads({ answers: null, results: null, summary: null });
+      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null };
+      setReads({ answers: null, results: null, summary: null, comments: null });
     }
     snapshotRef.current = snap;
     setSnapshot(snap);

@@ -335,8 +335,8 @@ describe('the phase bar', () => {
   });
 
   test.each([
-    ['ASK', 'wipe', 'Answering', 'Answer on your phone'],
-    ['VOTE', 'wipe', 'Voting', 'Choose on your phone'],
+    ['ASK', 'wipe', 'Answering', 'Answer on your phone, laptop or tablet'],
+    ['VOTE', 'wipe', 'Voting', 'Vote on your phone, laptop or tablet'],
   ])('a change to %s wipes with its own words', (phase, className, word, small) => {
     const { container, rerender } = render(<PhaseBar phase="LOBBY" />);
     rerender(<PhaseBar phase={phase} />);

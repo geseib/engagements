@@ -130,6 +130,18 @@ describe('presentModel: the moment', () => {
     expect(m.title).toBe('What should we stop doing');
     expect(m.task).toBeUndefined();
   });
+  it('FEEDBACK carries the comment the host put up: the newest featured, credited as the laptop does', () => {
+    const comments = [
+      { text: 'Old pick', featured: true, featuredAt: '2026-10-13T10:00:00Z', playerName: 'Bea', anchorKind: 'summary' },
+      { text: 'Not up', featured: false, playerName: 'Ada', anchorKind: 'results' },
+      { text: 'Name the customer.', featured: true, featuredAt: '2026-10-13T10:05:00Z', playerName: 'Said in the room', fromHost: true, anchorKind: 'results' },
+    ];
+    const m = presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }), { comments });
+    expect(m.featured).toEqual({ text: 'Name the customer.', who: '', credit: 'Said in the room' });
+    const named = presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }), { comments: comments.slice(0, 2) });
+    expect(named.featured).toEqual({ text: 'Old pick', who: 'Bea', credit: 'on the summary' });
+    expect(presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }), { comments: [] }).featured).toBeNull();
+  });
   it('the profile is the session fact, Room by default', () => {
     expect(presentModel(base()).profile).toBe('room');
     expect(presentModel(base({ stageProfile: 'tv' })).profile).toBe('tv');

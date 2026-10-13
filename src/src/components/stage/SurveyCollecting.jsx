@@ -1,4 +1,5 @@
 import React from 'react';
+import { deviceWords } from '../../config/roundWords';
 import { QRCodeSVG } from 'qrcode.react';
 import { surveyWallSubtitle } from '../../hooks/useSurveyProgress';
 
@@ -26,7 +27,7 @@ import { surveyWallSubtitle } from '../../hooks/useSurveyProgress';
  * passed nothing — so every survey on every wall asked the room how today
  * went, whatever it was about. With no name, a neutral instruction.
  */
-export const SURVEY_WALL_FALLBACK = 'Answer on your phone';
+export const SURVEY_WALL_FALLBACK = `Answer on your ${deviceWords}`;
 
 export default function SurveyCollecting({
   questionCount = 0,

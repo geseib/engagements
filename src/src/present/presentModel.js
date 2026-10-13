@@ -30,6 +30,7 @@ import { authorsHiddenNow } from '../config/anonymity';
 import { PROFILES, DEFAULT_PROFILE } from '../config/displayProfile';
 import { prosePageSlice, proseBudgetFor } from '../config/stagePaging';
 import { partText } from './presentFit';
+import { wallCreditFor } from '../config/comments';
 
 /** The results tally shows five; up to six fit whole (NOTES §5). */
 export const TALLY_TOP = 5;
@@ -124,6 +125,25 @@ function navigatorOf(rows, focus, { vote }) {
     parts,
     neighbours,
     position: RW.responseOf(index + 1, total),
+  };
+}
+
+/**
+ * The comment the host has put up, newest first: its words and its credit,
+ * exactly as the laptop's FeedbackWall gives them. A note the host typed for
+ * the room is credited to the room, never a person.
+ */
+function featuredOf(comments) {
+  const up = (Array.isArray(comments) ? comments : [])
+    .filter((c) => c && c.featured)
+    .sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0];
+  if (!up) return null;
+  const credit = wallCreditFor(up);
+  const who = up.fromHost ? '' : String(up.playerName || '').trim();
+  return {
+    text: String(up.text || ''),
+    who,
+    credit: up.fromHost ? 'Said in the room' : (who ? credit : `${credit.charAt(0).toUpperCase()}${credit.slice(1)}`),
   };
 }
 
@@ -248,7 +268,7 @@ export function presentModel(snapshot, reads = {}) {
       };
     }
     case 'FEEDBACK':
-      return { moment, ...common, title: String(q.title || ''), line: RW.feedbackOpen };
+      return { moment, ...common, title: String(q.title || ''), line: RW.feedbackOpen, featured: featuredOf(reads.comments) };
     case 'ENDED':
       return { moment, ...common };
     case 'OTHER':

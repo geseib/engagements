@@ -152,6 +152,14 @@ describe('every moment', () => {
     expect(container.textContent).toMatch(/8 vote points/);
     expect(container.textContent).toMatch(/Response 1 of 2/);
   });
+  it('a featured comment replaces the prompt with a quote and its credit', () => {
+    const { container } = drawn(snap({ state: 'RESULTS#005', stageBeat: 'feedback' }), {
+      comments: [{ text: 'Name the customer.', featured: true, featuredAt: '2026-10-13T10:05:00Z', playerName: 'Said in the room', fromHost: true, anchorKind: 'results' }],
+    });
+    expect(container.querySelector('.present-quote blockquote').textContent).toBe('Name the customer.');
+    expect(container.querySelector('.present-quote figcaption').textContent).toBe('Said in the room');
+    expect(container.textContent).not.toMatch(/Provide feedback/);
+  });
   it('feedback names its round and the title, not the question again (owner, 2026-10-13)', () => {
     const { container } = drawn(...EVERY.find(([m]) => m === 'FEEDBACK').slice(1));
     expect(container.querySelector('.ui-top-line').textContent).toMatch(/Q4 Wrap up · Round 5\s*Feedback/);

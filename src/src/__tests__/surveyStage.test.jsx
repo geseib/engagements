@@ -94,7 +94,7 @@ describe('the collecting stage keeps the way in', () => {
       const { container, unmount } = draw(mode.id);
       expect(container.querySelector('.stitle')).toHaveTextContent(/\S/);
       const sub = container.querySelector('.ssub');
-      expect(sub).toHaveTextContent('Eight quick questions on your phone.');
+      expect(sub).toHaveTextContent('Eight quick questions on your phone, laptop or tablet.');
       expect(sub).toHaveTextContent(mode.wallLine);
       unmount();
     }
@@ -121,16 +121,16 @@ describe('the collecting stage keeps the way in', () => {
       const { container } = render(
         <SurveyCollecting questionCount={8} names="anonymous" playUrl="u" joinUrl="j" code="4821" title={title} />,
       );
-      expect(container.querySelector('.stitle')).toHaveTextContent('Answer on your phone');
+      expect(container.querySelector('.stitle')).toHaveTextContent('Answer on your phone, laptop or tablet');
       expect(container.textContent).not.toMatch(/Tell us how today went/);
     },
   );
 
   test('the subtitle helper counts in words the room reads aloud', () => {
     expect(surveyWallSubtitle({ questionCount: 1, names: 'anonymous' }))
-      .toBe(`One quick question on your phone. ${namesMode('anonymous').wallLine}`);
+      .toBe(`One quick question on your phone, laptop or tablet. ${namesMode('anonymous').wallLine}`);
     expect(surveyWallSubtitle({ questionCount: 24, names: 'named' }))
-      .toBe(`24 quick questions on your phone. ${namesMode('named').wallLine}`);
+      .toBe(`24 quick questions on your phone, laptop or tablet. ${namesMode('named').wallLine}`);
     // Count not known yet: the promise still goes up, alone.
     expect(surveyWallSubtitle({ questionCount: 0, names: 'finished' })).toBe(namesMode('finished').wallLine);
   });
