@@ -61,7 +61,9 @@ function testsNaming(rel, root = SRC) {
   };
 }
 
-/** Minimal argv: --flag, --key value, --key=value; positional in _. */
+/** Minimal argv: --flag, --key value, --key=value; positional in _.
+ *  Keys in ALWAYS_VALUE take the next word even when it starts with -- (a role name). */
+const ALWAYS_VALUE = new Set(['role']);
 function args(argv = process.argv.slice(2)) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
@@ -71,7 +73,7 @@ function args(argv = process.argv.slice(2)) {
     if (eq > 0) { out[a.slice(2, eq)] = a.slice(eq + 1); continue; }
     const key = a.slice(2);
     const next = argv[i + 1];
-    if (next !== undefined && !next.startsWith('--')) { out[key] = next; i += 1; } else out[key] = true;
+    if (next !== undefined && (!next.startsWith('--') || ALWAYS_VALUE.has(key))) { out[key] = next; i += 1; } else out[key] = true;
   }
   return out;
 }

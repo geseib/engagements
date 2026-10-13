@@ -1,0 +1,12 @@
+/* fixture for retarget-tests.js --selftest */
+:root {
+  --bg: #0F1A2E;
+  --primary: #F6A94C;  /* amber */
+  --hairline: 1px solid rgba(155,168,190,.18);
+}
+[data-theme="light"] {
+  --bg: #FBF7F1;
+}
+[data-theme="dark"] {
+  --bg: #0F1A2E;
+}

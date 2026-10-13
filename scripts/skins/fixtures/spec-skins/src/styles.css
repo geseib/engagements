@@ -1,0 +1,6 @@
+/* FIXTURE: styles.css after Phase 0a keeps only the migration aliases (SPEC §4.4). */
+:root {
+  --primary: #F6A94C;
+  --primary-deep: #C77B4A;
+  --secondary: #7CA7E6;
+}

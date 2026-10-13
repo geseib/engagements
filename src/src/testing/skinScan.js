@@ -1,3 +1,4 @@
+/* eslint-env node */
 /**
  * skinScan — THE ONE literal-colour / literal-font scanner of the site-skins work.
  *
