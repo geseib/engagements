@@ -127,6 +127,17 @@ function navigatorOf(rows, focus, { vote }) {
   };
 }
 
+/** The join address, code and room count: the lobby's, and the mid-session join code's. */
+function joinFacts(snapshot, reads, code) {
+  const origin = reads.origin || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
+  return {
+    code,
+    joinUrl: `${origin}/play?gameId=${encodeURIComponent(code)}`,
+    joinHost: `${String(origin).replace(/^https?:\/\//, '')}/play`,
+    joined: int(snapshot.roomCounts && snapshot.roomCounts.joined),
+  };
+}
+
 export function presentModel(snapshot, reads = {}) {
   if (!snapshot || typeof snapshot !== 'object') return { moment: 'WAITING', profile: DEFAULT_PROFILE };
   if (snapshot.notFound) return { moment: 'NOT_FOUND', profile: DEFAULT_PROFILE };
@@ -153,6 +164,10 @@ export function presentModel(snapshot, reads = {}) {
       return { moment: 'VOTE_RESPONSE', ...common, title: String(q.title || ''), ...navigatorOf(rows, focus, { vote: true }) };
     }
   }
+  // THE JOIN CODE, put up mid-session from any host surface (owner, 2026-10-13).
+  if (focus.focus === 'join' && /^(ASK|VOTE|RESULTS)#/.test(state)) {
+    return { moment: 'JOIN', ...common, ...joinFacts(snapshot, reads, common.gameId) };
+  }
   if (focus.focus === 'question' && /^(ASK|VOTE|RESULTS)#/.test(state)) {
     return { moment: 'QUESTION_FOCUS', ...common, category: q.category || '', title: String(q.title || ''), task: String(q.detail || q.questionDetail || '') };
   }
@@ -160,19 +175,13 @@ export function presentModel(snapshot, reads = {}) {
   const moment = momentOf({ state: snapshot.state, stageBeat: snapshot.stageBeat, focus });
 
   switch (moment) {
-    case 'LOBBY': {
-      const origin = reads.origin || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
-      const code = common.gameId;
+    case 'LOBBY':
       return {
         moment,
         ...common,
-        code,
-        joinUrl: `${origin}/play?gameId=${encodeURIComponent(code)}`,
-        joinHost: `${String(origin).replace(/^https?:\/\//, '')}/play`,
-        joined: int(snapshot.roomCounts && snapshot.roomCounts.joined),
+        ...joinFacts(snapshot, reads, common.gameId),
         nextLabel: roundLabelOf(snapshot, Math.max(1, int(snapshot.currentQuestion) + 1)),
       };
-    }
     case 'ANSWERING':
       return {
         moment,

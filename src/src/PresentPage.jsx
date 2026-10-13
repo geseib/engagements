@@ -46,7 +46,9 @@ export default function PresentPage() {
   const total = Number.isInteger(model.total) && model.total > 0
     ? model.total
     : Number(snapshot && snapshot.roomCounts && snapshot.roomCounts.answered) || 0;
-  usePresentControls({ gameId, snapshot, total, refetch });
+  const controls = usePresentControls({
+    gameId, snapshot, total, refetch, notesReady: model.moment !== 'READ_WAIT',
+  });
 
   const fitKey = [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined]
     .map((x) => (x === undefined ? '' : String(x))).join('|');
@@ -67,8 +69,35 @@ export default function PresentPage() {
     </div>
   ) : null;
 
+  /*
+    THE ONE-SCREEN STRIP (two-surface D7): moving the mouse shows it for three
+    seconds, only to a host who may drive this session. The room sees it too,
+    so it is the fallback, not the design: back, the join code, and the round's
+    next step, with the armed text when an early advance needs a second press.
+  */
+  const step = controls.step;
+  const primary = step && step.primary;
+  const strip = controls.strip ? (
+    <div className="present-strip" role="toolbar" aria-label="Presentation controls">
+      <span className="present-strip-status">{controls.arming || (step && step.status && step.status.text) || ''}</span>
+      <button type="button" className="present-strip-btn" onClick={controls.back} aria-label="Back">‹ Back</button>
+      <button
+        type="button"
+        className="present-strip-btn"
+        aria-pressed={controls.joinShown}
+        onClick={controls.toggleJoin}
+        disabled={!/^(ASK|VOTE|RESULTS)#/.test(String(snapshot && snapshot.state))}
+      >
+        {controls.joinShown ? 'Hide join code' : 'Join code'}
+      </button>
+      <button type="button" className="present-strip-btn is-go" onClick={controls.forward} disabled={Boolean(primary && primary.disabled)}>
+        {controls.arming ? 'Press again' : 'Forward ›'}
+      </button>
+    </div>
+  ) : null;
+
   return (
-    <PresentStage profile={model.profile} fitKey={fitKey} overlay={overlay} fitcheck={fitcheckOn()}>
+    <PresentStage profile={model.profile} fitKey={fitKey} overlay={<>{overlay}{strip}</>} fitcheck={fitcheckOn()}>
       <PresentMoment model={model} />
       <PhaseWipe moment={model.moment} />
     </PresentStage>

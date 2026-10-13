@@ -70,3 +70,72 @@ test('a clicker\'s double pulse is one press', async () => {
   await waitFor(() => expect(authFetch).toHaveBeenCalledTimes(2));
   expect(KEY_DEBOUNCE_MS).toBe(250);
 });
+
+describe('the round\'s own next step from the wall (owner, 2026-10-13)', () => {
+  const host = (over = {}) => ({
+    state: 'ASK#005', gameType: 'call-and-answer', currentQuestion: 5,
+    answerProgress: { answersReceived: 4, totalPlayers: 4 }, stageFocus: { focus: 'none' }, ...over,
+  });
+  const reply = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  const ASK = { state: 'ASK#005', stageFocus: { focus: 'none' }, roomCounts: { joined: 4, answered: 4 } };
+  const posts = () => authFetch.mock.calls.filter(([, init]) => init && init.method === 'POST');
+
+  test('everyone in: → starts voting, through the same request the Remote sends', async () => {
+    authFetch.mockImplementation((url) => (String(url).includes('host-state') ? reply(host()) : ok()));
+    const { result } = renderHook(() => usePresentControls({ gameId: '5479', snapshot: ASK, total: 4, refetch: jest.fn() }));
+    await waitFor(() => expect(result.current.step && result.current.step.primary.id).toBe('open-vote'));
+    press('ArrowRight');
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0][0]).toBe('https://api.test.invalid/dev/games/5479/start-vote');
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ questionNumber: 5 });
+  });
+
+  test('an early advance takes two presses, and the first says why', async () => {
+    authFetch.mockImplementation((url) => (String(url).includes('host-state')
+      ? reply(host({ answerProgress: { answersReceived: 2, totalPlayers: 4 } })) : ok()));
+    const snapshot = { ...ASK, roomCounts: { joined: 4, answered: 2 } };
+    const { result } = renderHook(() => usePresentControls({ gameId: '5479', snapshot, total: 2, refetch: jest.fn() }));
+    await waitFor(() => expect(result.current.step && result.current.step.primary.arm).toBeTruthy());
+    press('PageDown');
+    await waitFor(() => expect(result.current.arming).toMatch(/still answering/));
+    expect(posts()).toHaveLength(0);
+    await new Promise((r) => setTimeout(r, 300));
+    press('PageDown');
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0][0]).toMatch(/start-vote$/);
+  });
+
+  test('the walk comes first: at results → shows response 1, not What we heard', async () => {
+    authFetch.mockImplementation((url) => (String(url).includes('host-state')
+      ? reply(host({ state: 'RESULTS#005', stageBeat: 'results' })) : ok()));
+    const snapshot = { state: 'RESULTS#005', stageBeat: 'results', stageFocus: { focus: 'none' }, roomCounts: { joined: 4 } };
+    const { result } = renderHook(() => usePresentControls({ gameId: '5479', snapshot, total: 3, refetch: jest.fn() }));
+    await waitFor(() => expect(result.current.step).not.toBeNull());
+    press('ArrowRight');
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0][0]).toMatch(/stage-focus$/);
+  });
+
+  test('J puts the join code on the wall, and takes it down', async () => {
+    authFetch.mockImplementation((url) => (String(url).includes('host-state') ? reply(host()) : ok()));
+    const { result, rerender } = renderHook(({ snap }) => usePresentControls({ gameId: '5479', snapshot: snap, total: 4, refetch: jest.fn() }),
+      { initialProps: { snap: ASK } });
+    await waitFor(() => expect(result.current.armed).toBe(true));
+    press('j');
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ focus: 'join', index: null, questionNumber: 5 });
+    rerender({ snap: { ...ASK, stageFocus: { focus: 'join' } } });
+    expect(result.current.joinShown).toBe(true);
+    press('J');
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(JSON.parse(posts()[1][1].body)).toEqual({ focus: 'none', index: null, questionNumber: 5 });
+  });
+
+  test('a round move the wall never makes: Next round is fine, the report and Skip are not offered', () => {
+    const { WALL_PRIMARIES } = require('../present/presentControls');
+    expect(WALL_PRIMARIES).toContain('next');
+    expect(WALL_PRIMARIES).not.toContain('skip');
+    expect(WALL_PRIMARIES).not.toContain('report');
+    expect(WALL_PRIMARIES).not.toContain('leave');
+  });
+});

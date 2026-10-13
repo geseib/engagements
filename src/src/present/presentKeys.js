@@ -54,7 +54,7 @@ export function presentKeyStep(snapshot, dir, { total = 0 } = {}) {
   const n = Math.max(0, intOr(total, 0));
   const focus = s.stageFocus || {};
 
-  if (focus.focus === 'question') return [NONE];
+  if (focus.focus === 'question' || focus.focus === 'join') return [NONE];
 
   if (phase === 'VOTE') {
     const at = answerFocus(focus, 'VOTE');

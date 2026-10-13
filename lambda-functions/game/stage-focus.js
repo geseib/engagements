@@ -61,7 +61,13 @@ const db = DynamoDBDocumentClient.from(client);
  * out, every client compares the value against the three it knows, and the host
  * watches a button do nothing with no error anywhere in the system.
  */
-const FOCUS_KINDS = ['none', 'question', 'answer'];
+/*
+ * 'join' puts the join code and QR on the wall mid-session (owner,
+ * 2026-10-13: "when presenting i still need ability to show qr code"). Like
+ * 'question', it carries no index, part or phase. Mirrored in
+ * src/src/config/stageFocus.js (tests/stage-focus-vote.js §8).
+ */
+const FOCUS_KINDS = ['none', 'question', 'answer', 'join'];
 
 /**
  * THE PHASES AN ANSWER FOCUS MAY BE SET IN (two-surface PLAN 1.10, D5), a
@@ -307,3 +313,4 @@ exports.handler = async (event) => {
 };
 
 exports.FOCUS_PHASES = FOCUS_PHASES;
+exports.FOCUS_KINDS = FOCUS_KINDS;

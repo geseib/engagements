@@ -85,9 +85,10 @@ export function PhaseWipe({ moment }) {
 /* ------------------------------------------------------------ the moments */
 
 export function PresentLobby({ model }) {
+  const midSession = model.moment === 'JOIN';
   return (
     <div className="present-moment present-frame">
-      <Top model={model} right="Joining" />
+      <Top model={model} right={midSession ? 'Join' : 'Joining'} />
       <div className="present-main">
         <div className="present-lobby">
           <div>
@@ -103,7 +104,7 @@ export function PresentLobby({ model }) {
         </div>
       </div>
       <div className="present-foot">
-        <span>{`${model.nextLabel} starts when the host is ready`}</span>
+        <span>{midSession ? `${model.roundLabel} is under way. Join on your ${deviceWords}.` : `${model.nextLabel} starts when the host is ready`}</span>
       </div>
     </div>
   );
@@ -282,7 +283,8 @@ export function PresentQuiet({ model, eyebrow, line, foot }) {
 /** The one moment for each model; unknown models are a quiet wait. */
 export function PresentMoment({ model }) {
   switch (model.moment) {
-    case 'LOBBY': return <PresentLobby model={model} />;
+    case 'LOBBY':
+    case 'JOIN': return <PresentLobby model={model} />;
     case 'ANSWERING': return <PresentAnswering model={model} />;
     case 'VOTING': return <PresentVoting model={model} />;
     case 'VOTE_RESPONSE': return <ResponseNavigator model={model} vote />;

@@ -272,6 +272,29 @@ const setState = (gameId, State, LessonNumber = 1) => {
     assert.deepStrictEqual(m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean), FOCUS_PHASES);
   });
 
+  console.log('\n8. the join code on the wall (owner, 2026-10-13: "when presenting i still need ability to show qr code")');
+  for (const [gid, state] of [['4014', 'ASK#001'], ['4015', 'VOTE#001'], ['4016', 'RESULTS#001']]) {
+    seedGame(gid);
+    setState(gid, state);
+    const res = await post(gid, { focus: 'join', index: 4, part: 1, parts: 2, questionNumber: 1 });
+    check(`${state}: a join focus is stored, with no index, part or phase`, () => {
+      assert.strictEqual(res.statusCode, 200, res.body);
+      const r = roundOf(gid, '001');
+      assert.strictEqual(r.StageFocus, 'join');
+      assert.deepStrictEqual([r.StageFocusIndex, r.StageFocusPart, r.StageFocusParts, r.StageFocusPhase], [null, null, null, null]);
+    });
+    const read = await readState(gid);
+    check(`${state}: get-game-state hands it back`, () =>
+      assert.deepStrictEqual(read.stageFocus, { focus: 'join', index: null, part: 0, parts: 1, phase: null, rev: 1 }));
+  }
+  check('FOCUS_KINDS is mirrored in config/stageFocus.js, join included', () => {
+    const { FOCUS_KINDS } = require(path.join(REPO, 'lambda-functions/game/stage-focus.js'));
+    assert.deepStrictEqual(FOCUS_KINDS, ['none', 'question', 'answer', 'join']);
+    const mirror = require('fs').readFileSync(path.join(REPO, 'src/src/config/stageFocus.js'), 'utf8');
+    const m = /export const FOCUS_KINDS\s*=\s*\[([^\]]*)\]/.exec(mirror);
+    assert.deepStrictEqual(m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean), FOCUS_KINDS);
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

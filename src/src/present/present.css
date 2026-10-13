@@ -406,6 +406,47 @@ html.present-locked body {
    than inside it. */
 .present .present-board { position: absolute; inset: 0; z-index: 10; overflow: hidden; }
 
+/* THE ONE-SCREEN STRIP (D7): a host's controls for three seconds after the
+   mouse moves. Outside the canvas, in window pixels, so it stays a usable size
+   at any scale. Blue, never orange (R3). */
+.present .present-strip {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: 3%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 94%;
+  padding: 8px 10px 8px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--present-line-strong);
+  background: var(--present-plate);
+  color: var(--muted);
+  font-size: 14px;
+  cursor: default;
+}
+/* The pointer comes back while the strip is up. */
+.present:has(.present-strip) { cursor: auto; }
+.present .present-strip-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present .present-strip-btn {
+  flex: none;
+  font: inherit;
+  font-weight: 600;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--present-line-strong);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.present .present-strip-btn[aria-pressed="true"] { border-color: var(--secondary); background: var(--present-seen); }
+.present .present-strip-btn.is-go { background: var(--secondary); border-color: var(--secondary); color: var(--bg); }
+.present .present-strip-btn:disabled { opacity: .45; cursor: default; }
+.present .present-strip-btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
 /* (kept for a future in-canvas overlay) */
 .present .present-overlay {
   position: absolute;

@@ -256,8 +256,9 @@ exports.handler = async (event) => {
         const storedFocus = notesRow.StageFocus;
         const focusRev = Number.isInteger(notesRow.StageFocusRev) ? notesRow.StageFocusRev : 0;
         stageFocus = { ...NO_FOCUS_HERE, rev: focusRev };
-        if (storedFocus === 'question') {
-          stageFocus = { ...NO_FOCUS_HERE, focus: 'question', rev: focusRev };
+        if (storedFocus === 'question' || storedFocus === 'join') {
+          // The question enlarged, or the join code and QR on the wall.
+          stageFocus = { ...NO_FOCUS_HERE, focus: storedFocus, rev: focusRev };
         } else if (storedFocus === 'answer' && Number.isInteger(notesRow.StageFocusIndex)) {
           const stamped = notesRow.StageFocusPhase || 'RESULTS';
           if (FOCUS_PHASES.includes(stamped) && stamped === phaseNow) {

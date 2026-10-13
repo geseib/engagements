@@ -1808,6 +1808,21 @@ function HostRemote() {
                   >
                     <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
                   </button>
+                  {/* THE JOIN CODE ON THE ROOM'S SCREEN (owner, 2026-10-13): a
+                      `join` focus, so the Presentation and the host page show
+                      it too. Only while a round is on; the lobby already does. */}
+                  {round ? (
+                    <button
+                      className="hr-btn hr-btn--ghost"
+                      type="button"
+                      aria-pressed={Boolean(stageFocus && stageFocus.focus === 'join')}
+                      disabled={focusBusy}
+                      onClick={() => setStageFocus(stageFocus && stageFocus.focus === 'join' ? { focus: 'none' } : { focus: 'join' })}
+                    >
+                      <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                      {stageFocus && stageFocus.focus === 'join' ? 'Take it off the screen' : 'Show it on the screen'}
+                    </button>
+                  ) : null}
                 </div>
               )}
 

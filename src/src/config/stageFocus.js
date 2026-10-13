@@ -24,7 +24,7 @@
  */
 
 /** The closed set the writer enforces. Mirrors FOCUS_KINDS in stage-focus.js. */
-export const FOCUS_KINDS = ['none', 'question', 'answer'];
+export const FOCUS_KINDS = ['none', 'question', 'answer', 'join'];
 
 /**
  * The phases an answer focus may be set in, stamped by the server from STATE.
@@ -121,6 +121,8 @@ export function normaliseFocus(value) {
   const kind = value && value.focus;
 
   if (kind === 'question') return { focus: 'question', index: null, ...extrasOf(value, 'question') };
+  // The join code and QR on the wall (owner, 2026-10-13); no index, like the question.
+  if (kind === 'join') return { focus: 'join', index: null, ...extrasOf(value, 'join') };
 
   if (kind === 'answer') {
     /*

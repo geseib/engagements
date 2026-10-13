@@ -1011,6 +1011,34 @@ function GameHostPage() {
     return () => { live = false; clearInterval(timer); };
   }, [twoSurfaces, gameId]);
 
+  /*
+    THE JOIN CODE ON THE WALL (owner, 2026-10-13: "when presenting i still need
+    ability to show qr code"). With two surfaces, pinning the join code here
+    also puts it on /present — a `join` focus on /stage-focus, so the Remote
+    and every wall agree — and unpinning takes it down. A `join` arriving from
+    another surface pins it here (joinFromServerRef stops the echo back).
+    `publishFocusRef` because publishFocus is defined below the early returns.
+  */
+  const publishFocusRef = useRef(null);
+  const joinPublishedRef = useRef(false);
+  const joinFromServerRef = useRef(false);
+  useEffect(() => {
+    if (!twoSurfaces) return;
+    const pinned = qrMode === 'pinned';
+    if (joinFromServerRef.current) {
+      joinFromServerRef.current = false;
+      joinPublishedRef.current = pinned;
+      return;
+    }
+    if (pinned && !joinPublishedRef.current) {
+      joinPublishedRef.current = true;
+      if (publishFocusRef.current) publishFocusRef.current({ focus: 'join' });
+    } else if (!pinned && joinPublishedRef.current) {
+      joinPublishedRef.current = false;
+      if (publishFocusRef.current) publishFocusRef.current({ focus: 'none' });
+    }
+  }, [qrMode, twoSurfaces]);
+
   /**
    * Which beat of RESULTS is on screen.
    *
@@ -2466,6 +2494,14 @@ Focus on actionable business strategy insights.`;
       const next = focusToStage(focus, { answerCount: answersRef.current.length });
       setLessonExpanded(next.lessonExpanded);
       setSpotlightIndex(next.spotlightIndex);
+      // The join code, put up or taken down on another surface.
+      if (focus.focus === 'join') {
+        joinFromServerRef.current = true;
+        setQrMode('pinned');
+      } else if (joinPublishedRef.current) {
+        joinFromServerRef.current = true;
+        setQrMode(null);
+      }
     });
 
     /*
@@ -7093,6 +7129,8 @@ Focus on actionable business strategy insights.`;
    * same order. `closeSpotlight` immediately above carries the same note for
    * the same reason. It runs from a click and memoising it buys nothing.
    */
+  // eslint-disable-next-line no-use-before-define
+  publishFocusRef.current = (focus) => publishFocus(focus);
   const publishFocus = (focus) => {
     const body = focusRequest({ ...focus, state: gameStateRef.current });
     // No round on screen — nothing can be focused, so there is nothing to say.

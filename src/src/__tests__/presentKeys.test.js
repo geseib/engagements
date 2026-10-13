@@ -86,3 +86,9 @@ describe('everything else is still', () => {
     expect(presentKeyStep(q, 'forward', { total: 3 })).toEqual([{ kind: 'focus', focus: 'none' }]);
   });
 });
+
+test('the join code comes down with either key', () => {
+  const j = { state: 'RESULTS#005', stageBeat: 'results', stageFocus: { focus: 'join' } };
+  expect(presentKeyStep(j, 'forward', { total: 3 })).toEqual([{ kind: 'focus', focus: 'none' }]);
+  expect(presentKeyStep(j, 'back', { total: 3 })).toEqual([{ kind: 'focus', focus: 'none' }]);
+});

@@ -133,3 +133,15 @@ describe('presentModel: the moment', () => {
     expect(JSON.stringify(m)).not.toMatch(/Chen|Okafor|Nair/);
   });
 });
+
+describe('the join code mid-session (owner, 2026-10-13)', () => {
+  it('a join focus during a round shows the code, the QR address and the room count', () => {
+    const m = presentModel(base({ state: 'VOTE#005', stageFocus: { focus: 'join', index: null, part: 0, parts: 1, phase: null, rev: 2 } }),
+      { origin: 'https://engage.dev.seibtribe.us' });
+    expect(m.moment).toBe('JOIN');
+    expect(m.code).toBe('5479');
+    expect(m.joinUrl).toBe('https://engage.dev.seibtribe.us/play?gameId=5479');
+    expect(m.joined).toBe(5);
+    expect(m.roundLabel).toBe('Round 5');
+  });
+});
