@@ -484,6 +484,18 @@ const readState = async (gameId) => {
     assert.deepStrictEqual(fresh2.payload.stageNotes, { page: 0, pages: null, plan: null, planKey: null, rev: 0 }));
   check('no profile set reads as null', () => assert.strictEqual(fresh2.payload.stageProfile, null));
 
+  console.log('\n18. a body that is JSON but not an object is a 400, not a crash');
+  for (const raw of ['5', '"field-notes"', 'null', '[1]']) {
+    seedGame('2110');
+    let res;
+    try {
+      res = await stageBeat({ requestContext: { http: { method: 'POST' } }, pathParameters: { gameId: '2110' }, body: raw });
+    } catch (e) {
+      res = { statusCode: 'threw', body: e.message };
+    }
+    check(`body ${raw} is a 400`, () => assert.strictEqual(res.statusCode, 400, String(res.body)));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

@@ -136,6 +136,12 @@ exports.handler = async (event) => {
     return respond(400, { error: 'Body must be JSON' });
   }
 
+  // JSON that is not an object ("5", "\"x\"", "[1]") is refused here: the
+  // `in` checks below would throw on a primitive.
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return respond(400, { error: 'Body must be a JSON object' });
+  }
+
   const { beat, questionNumber } = body;
 
   if (!gameId) {

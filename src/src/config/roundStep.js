@@ -140,7 +140,7 @@ function primaryFor(moment, ctx) {
     case 'RESPONSES': {
       const { index, part, parts, total } = ctx.responses;
       if (parts > 1 && part < parts - 1) {
-        return control('next-part', RW.nextPart, I.NEXT_PART, 'ArrowRight', { index, part: part + 1 });
+        return control('next-part', RW.nextPart, I.NEXT_PART, 'ArrowRight', { index, part: part + 1, parts });
       }
       if (index < total - 1) {
         return control('next-response', RW.nextResponse, I.NEXT_RESPONSE, 'ArrowRight', { index: index + 1, part: 0 });

@@ -107,7 +107,7 @@ describe('roundStep: the rules', () => {
     expect(mid.secondary).toMatchObject({ id: 'stop-showing', label: 'Stop showing' });
 
     const part = roundStep('RESPONSES', { ...CTX, answerCount: 3, focus: { focus: 'answer', index: 1, part: 0, parts: 2 } });
-    expect(part.primary).toMatchObject({ id: 'next-part', label: 'Next part', index: 1, part: 1 });
+    expect(part.primary).toMatchObject({ id: 'next-part', label: 'Next part', index: 1, part: 1, parts: 2 });
 
     const lastPart = roundStep('RESPONSES', { ...CTX, answerCount: 3, focus: { focus: 'answer', index: 2, part: 1, parts: 2 } });
     expect(lastPart.primary).toMatchObject({ id: 'field-notes', label: 'What we heard' });

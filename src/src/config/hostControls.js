@@ -759,6 +759,27 @@ export function snapshotFromHostPage({
  */
 const SURVEY_PHASES = new Set(['COLLECTING', 'CLOSED']);
 
+/**
+ * Is Workie's read in, for roundStep's "the read never skips by accident"?
+ * True when it has arrived, when it failed, and when it will never be asked
+ * for: the host page requests a read only for a round with answers, or for
+ * trivia and polls, which get one without (GameHostPage's insights effect).
+ * A greyed primary waiting on a read nobody asked for would strand a clicker.
+ */
+export function notesReadyFor({ insights, failure, answerCount = 0, gameType } = {}) {
+  if (insights || failure) return true;
+  const answerless = ['trivia', 'poll'].includes(normalizeGameType(gameType));
+  return !(Number(answerCount) > 0 || answerless);
+}
+
+/** The host page's confirm for Skip (roundStep's `arm`; HostActionBar does not read arm until Phase 3). */
+const skipConfirm = (label) => ({
+  title: `${label}?`,
+  message: 'The room loses this round: answers and votes so far are not counted.',
+  confirmText: label,
+  irreversible: false,
+});
+
 export function hostControlsFor(input = {}) {
   if (!isSurveyType(input.gameType) && !SURVEY_PHASES.has(input.phase)) {
     const snapshot = snapshotFromHostPage(input);
@@ -766,7 +787,12 @@ export function hostControlsFor(input = {}) {
     return {
       phase: HOST_PHASES.includes(input.phase) ? input.phase : 'LOBBY',
       primary: step.primary,
-      secondary: step.secondary,
+      // Skip throws a round away, and next-question's skip bypasses its own
+      // "already asking" guard: on the host page it asks first, as the
+      // Remote's arm does (review finding 5).
+      secondary: step.secondary && step.secondary.id === 'skip'
+        ? { ...step.secondary, confirm: skipConfirm(step.secondary.label) }
+        : step.secondary,
       tertiary: null,
       status: step.status,
       step,

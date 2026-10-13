@@ -951,7 +951,7 @@ function HostRemote() {
       case 'show-response':
       case 'next-response':
       case 'next-part':
-        await setStageFocus({ focus: 'answer', index: control.index, part: control.part });
+        await setStageFocus({ focus: 'answer', index: control.index, part: control.part, parts: control.parts });
         return;
       case 'stop-showing':
         await setStageFocus({ focus: 'none' });

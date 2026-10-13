@@ -77,7 +77,7 @@ import { fetchComments, featureComment } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
-  hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
+  hostControlsFor, notesReadyFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
   resultsRoundOf, SURVEY_ROUND,
 } from './config/hostControls';
@@ -291,6 +291,13 @@ function GameHostPage() {
   // The rev of the last focus this page applied (two-surface PLAN 1.13), so a
   // late frame cannot put back a response the host has moved on from.
   const focusRevRef = useRef(null);
+  /*
+    A RESPONSE ON THE WALL BELONGS TO ITS PHASE (two-surface D5, review
+    finding 1). VOTE numbers responses in voting order and RESULTS in tally
+    order, so an open spotlight never survives the move from one to the
+    other: response i of the vote is not rank i of the tally.
+  */
+  const spotlightPhaseRef = useRef(null);
   // Workie's page in step with the server (hooks/useStageNotesSync.js). A ref
   // so the socket handler, registered once, and the restore path reach the
   // current render's hook.
@@ -549,6 +556,13 @@ function GameHostPage() {
     is, because a function is not a hook.
   */
   const [spotlightIndex, setSpotlightIndex] = useState(null);
+  useEffect(() => {
+    // Only a move OUT OF a phase that can hold a response clears it: a reload
+    // (from the lobby's CREATED to RESULTS) keeps the focus it restores.
+    const previous = spotlightPhaseRef.current;
+    if (previous && previous !== gameState && /^(VOTE|RESULTS)#/.test(previous)) setSpotlightIndex(null);
+    spotlightPhaseRef.current = gameState;
+  }, [gameState]);
   const [regeneratingRounds, setRegeneratingRounds] = useState([]);
 
   const loadRounds = useCallback(async () => {
@@ -6318,7 +6332,9 @@ Focus on actionable business strategy insights.`;
     // Workie's read is here the primary is a greyed "Show the read", so Space
     // and a clicker cannot carry the room past it. A failed read counts as
     // here — there is nothing left to wait for.
-    notesReady: Boolean(currentAIInsights) || Boolean(aiSummaryFailure),
+    notesReady: notesReadyFor({
+      insights: currentAIInsights, failure: aiSummaryFailure, answerCount: answers.length, gameType: currentGameType,
+    }),
     // The response on the wall, in tally order: RESULTS becomes RESPONSES and
     // the primary walks the responses (Next response, then What we heard).
     spotlightIndex,
@@ -6537,7 +6553,7 @@ Focus on actionable business strategy insights.`;
       case HOST_INTENTS.NEXT_PART:
         // A long response split into parts (Phase 2 measures them). The part
         // is a server fact on /stage-focus, so the wall and the Remote agree.
-        publishFocus({ focus: 'answer', index: action.index, part: action.part });
+        publishFocus({ focus: 'answer', index: action.index, part: action.part, parts: action.parts });
         break;
       case HOST_INTENTS.STOP_SHOWING:
         closeSpotlight();

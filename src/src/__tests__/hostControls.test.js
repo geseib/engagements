@@ -822,7 +822,9 @@ describe('a survey: the four phases, each with exactly one primary', () => {
         const { primary, secondary } = hostControlsFor({ gameType: type, phase, ...READY });
         if (primary.intent === HOST_INTENTS.CLOSE_SURVEY) expect(primary.confirm).toMatchObject({ irreversible: true });
         else expect(primary.confirm).toBeFalsy();
-        if (secondary) expect(secondary.confirm).toBeFalsy();
+        // Skip is the one secondary that asks first: it throws a round away
+        // (two-surface Phase 1 review, finding 5).
+        if (secondary && secondary.intent !== HOST_INTENTS.SKIP) expect(secondary.confirm).toBeFalsy();
       }
     }
   });
@@ -1094,5 +1096,27 @@ describe('a closed survey: What We Heard, then feedback, then the end', () => {
     expect(stageBeatFromFrame(frame('field-notes', '001'), 'SURVEY#CLOSED')).toBeNull();
     expect(stageBeatFromFrame(frame('field-notes', '000'), 'SURVEY#OPEN')).toBeNull();
     expect(stageBeatFromFrame(frame('field-notes', '000'), 'RESULTS#001')).toBeNull();
+  });
+});
+
+describe('review findings: skip asks first on the host page; a read that will never come does not grey the round', () => {
+  // eslint-disable-next-line global-require
+  const { notesReadyFor } = require('../config/hostControls');
+
+  test('Skip, during ASK and VOTE, carries a confirm the host page honours', () => {
+    for (const phase of ['ASK', 'VOTE']) {
+      const skip = hostControlsFor({ gameType: 'call-and-answer', phase, ...READY }).secondary;
+      expect(skip.intent).toBe(HOST_INTENTS.SKIP);
+      expect(skip.confirm).toEqual(expect.objectContaining({ title: expect.any(String), confirmText: expect.any(String) }));
+      expect(skip.confirm.title).not.toMatch(/!/);
+    }
+  });
+
+  test('notesReadyFor: ready when the read is here, failed, or will never be asked for', () => {
+    expect(notesReadyFor({ insights: null, failure: null, answerCount: 3, gameType: 'call-and-answer' })).toBe(false);
+    expect(notesReadyFor({ insights: { x: 1 }, failure: null, answerCount: 3, gameType: 'call-and-answer' })).toBe(true);
+    expect(notesReadyFor({ insights: null, failure: 'boom', answerCount: 3, gameType: 'call-and-answer' })).toBe(true);
+    expect(notesReadyFor({ insights: null, failure: null, answerCount: 0, gameType: 'call-and-answer' })).toBe(true);
+    expect(notesReadyFor({ insights: null, failure: null, answerCount: 0, gameType: 'trivia' })).toBe(false);
   });
 });

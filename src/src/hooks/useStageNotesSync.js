@@ -28,7 +28,11 @@
  * @param {(index:number, round:number)=>void} p.turnTo
  * @param {(body:object)=>Promise<object|null>} p.post
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+/** How long a failed post waits before it is sent again, and how often. */
+const RETRY_MS = 1000;
+const MAX_RETRIES = 3;
 
 const roundNumber = (value) => {
   const n = parseInt(String(value ?? '').trim(), 10);
@@ -58,20 +62,64 @@ export default function useStageNotesSync({
     revRef.current = null;
   }, [round, gameId]);
 
+  /*
+    ONE POST IN FLIGHT (review finding 4). Turns made while a post is out
+    wait, and only the latest is sent when it returns, so the server cannot
+    apply page 2 and then page 1 and walk the room back.
+
+    A POST THAT FAILS IS SENT AGAIN (finding 3): the first post of a read can
+    reach the server before the beat itself does (409), and without a retry
+    the server never learns the count the Remote steps against.
+  */
+  const inFlightRef = useRef(false);
+  const wantedRef = useRef(null);
+  const retriesRef = useRef(0);
+  const [retryTick, setRetryTick] = useState(0);
+
+  const send = useCallback((want) => {
+    inFlightRef.current = true;
+    Promise.resolve(postRef.current({ notesPage: want.page, notesPages: want.pages, questionNumber: roundNumber(want.round) }))
+      .catch(() => null)
+      .then((reply) => {
+        inFlightRef.current = false;
+        if (reply && Number.isInteger(reply.rev) && (revRef.current === null || reply.rev > revRef.current)) {
+          revRef.current = reply.rev;
+        }
+        if (!reply) {
+          // Not in step after all: forget it, and ask again shortly.
+          syncedRef.current = null;
+          if (retriesRef.current < MAX_RETRIES) {
+            retriesRef.current += 1;
+            setTimeout(() => setRetryTick((n) => n + 1), RETRY_MS);
+          }
+          return;
+        }
+        retriesRef.current = 0;
+        const next = wantedRef.current;
+        if (next && (next.page !== want.page || next.pages !== want.pages || next.round !== want.round)) {
+          syncedRef.current = { ...next, source: 'local' };
+          send(next);
+        }
+      });
+  }, []);
+
   useEffect(() => {
     if (!gameId || !onRead || !ready || roundNumber(round) === null) return;
     if (!Number.isInteger(page) || !Number.isInteger(pages) || pages < 1) return;
     const last = syncedRef.current;
-    if (last && roundNumber(last.round) === roundNumber(round) && last.page === page && last.pages === pages) return;
-    syncedRef.current = { round, page, pages };
-    Promise.resolve(postRef.current({ notesPage: page, notesPages: pages, questionNumber: roundNumber(round) }))
-      .then((reply) => {
-        if (reply && Number.isInteger(reply.rev) && (revRef.current === null || reply.rev > revRef.current)) {
-          revRef.current = reply.rev;
-        }
-      })
-      .catch(() => {});
-  }, [gameId, onRead, ready, round, page, pages]);
+    const sameRound = last && roundNumber(last.round) === roundNumber(round);
+    if (sameRound && last.page === page && last.pages === pages) return;
+    // NO PING-PONG (finding 2): after adopting the server's page, a count
+    // that differs only because this screen measures differently is not a
+    // turn, and is not posted. Two host pages on two profiles would
+    // otherwise answer each other forever.
+    if (sameRound && last.source === 'server' && last.page === page) return;
+    const want = { round, page, pages };
+    wantedRef.current = want;
+    if (inFlightRef.current) return;
+    syncedRef.current = { ...want, source: 'local' };
+    send(want);
+  }, [gameId, onRead, ready, round, page, pages, retryTick, send]);
 
   /** Take the server's page as already in step, and draw it. */
   const adopt = useCallback((notesPage, notesPages, rev, forRound) => {
@@ -81,7 +129,9 @@ export default function useStageNotesSync({
       round: r,
       page: notesPage,
       pages: Number.isInteger(notesPages) ? notesPages : (prior && prior.pages),
+      source: 'server',
     };
+    wantedRef.current = null;
     if (Number.isInteger(rev)) revRef.current = rev;
     // The round travels with the page: on a reload the page's own round state
     // may not have caught up yet, and the page index is keyed by round.

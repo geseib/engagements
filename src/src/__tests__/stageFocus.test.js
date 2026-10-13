@@ -248,3 +248,15 @@ describe('the part, the stamped phase and the rev', () => {
     expect(sameFocus({ focus: 'answer', index: 1 }, { focus: 'answer', index: 1, part: 0 })).toBe(true);
   });
 });
+
+describe('a focus stamped for another phase is not applied (review finding 1)', () => {
+  test('a VOTE frame arriving at RESULTS is dropped: voting position i is not tally rank i', () => {
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 1, phase: 'VOTE' }, 'RESULTS#004')).toBeNull();
+  });
+  test('a RESULTS frame arriving during VOTE is dropped', () => {
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 1, phase: 'RESULTS' }, 'VOTE#004')).toBeNull();
+  });
+  test('a frame with no stamp (an older deploy) is still applied at RESULTS', () => {
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 1 }, 'RESULTS#004')).toEqual({ focus: 'answer', index: 1 });
+  });
+});

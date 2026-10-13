@@ -149,7 +149,63 @@ describe('the host page wires it', () => {
     expect(code).toMatch(/onMessage\('stageBeatChanged'[\s\S]*?notesSyncRef\.current\.applyFrame\(data\)/);
   });
 
+  test('a spotlight does not survive the move out of VOTE or RESULTS (review finding 1)', () => {
+    expect(code).toMatch(/if \(previous && previous !== gameState && \/\^\(VOTE\|RESULTS\)#\/\.test\(previous\)\) setSpotlightIndex\(null\);/);
+  });
+
+  test('the read counts as in when none will be asked for (review finding 6)', () => {
+    expect(code).toMatch(/notesReady: notesReadyFor\(\{/);
+  });
+
   test('a reload on the read hydrates from stageNotes', () => {
     expect(code).toMatch(/notesSyncRef\.current\.hydrate\(gameStateData\.stageNotes, gameStateData\.currentQuestion\)/);
+  });
+});
+
+describe('review findings: no ping-pong, retry a lost post, one post in flight', () => {
+  test('a frame whose count differs from this page\'s own is not answered with a post', async () => {
+    const { result, post, rerender, props } = setup();
+    await flush();
+    post.mockClear();
+    act(() => { result.current.applyFrame({ beat: 'field-notes', questionNumber: 3, notesPage: 1, notesPages: 4, rev: 5 }); });
+    // This page measures 3 pages, the frame said 4: same page, no post.
+    rerender({ ...props, page: 1, pages: 3 });
+    await flush();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  test('a post that failed (the beat had not landed yet) is sent again', async () => {
+    jest.useFakeTimers();
+    try {
+      const post = jest.fn().mockResolvedValueOnce(null).mockResolvedValue({ rev: 1 });
+      renderHook((p) => useStageNotesSync(p), {
+        initialProps: { gameId: '4821', round: 3, onRead: true, ready: true, page: 0, pages: 3, post, turnTo: jest.fn() },
+      });
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(post).toHaveBeenCalledTimes(1);
+      await act(async () => { jest.advanceTimersByTime(1500); await Promise.resolve(); await Promise.resolve(); });
+      expect(post).toHaveBeenCalledTimes(2);
+      expect(post).toHaveBeenLastCalledWith({ notesPage: 0, notesPages: 3, questionNumber: 3 });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('turns made while a post is in flight wait, and only the latest is sent', async () => {
+    let release;
+    const post = jest.fn()
+      .mockImplementationOnce(() => new Promise((r) => { release = () => r({ rev: 1 }); }))
+      .mockResolvedValue({ rev: 2 });
+    const props = { gameId: '4821', round: 3, onRead: true, ready: true, page: 0, pages: 3, post, turnTo: jest.fn() };
+    const { rerender } = renderHook((p) => useStageNotesSync(p), { initialProps: props });
+    await flush();
+    expect(post).toHaveBeenCalledTimes(1);
+    rerender({ ...props, page: 1 });
+    rerender({ ...props, page: 2 });
+    await flush();
+    expect(post).toHaveBeenCalledTimes(1);
+    await act(async () => { release(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenLastCalledWith({ notesPage: 2, notesPages: 3, questionNumber: 3 });
   });
 });

@@ -76,6 +76,15 @@ export function focusFromFrame(frame, currentState, lastRev = null) {
   // deploy) is applied as before.
   if (Number.isInteger(frame.rev) && Number.isInteger(lastRev) && frame.rev <= lastRev) return null;
 
+  // AN ANSWER FOCUS STAMPED FOR ANOTHER PHASE is not ours (D5): during VOTE
+  // its index is a voting-order position, at RESULTS a tally position, so a
+  // VOTE frame applied at RESULTS would put a different, named response up.
+  // An unstamped frame (an older deploy) is applied as before.
+  if (frame.focus === 'answer' && FOCUS_PHASES.includes(frame.phase)) {
+    const phaseHere = (/^(VOTE|RESULTS)#/.exec(String(currentState ?? '').trim()) || [])[1];
+    if (frame.phase !== phaseHere) return null;
+  }
+
   return normaliseFocus(frame);
 }
 
