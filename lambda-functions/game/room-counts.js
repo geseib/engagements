@@ -74,4 +74,18 @@ async function roomCounts(db, tableName, gameId, round) {
   return { joined: players.length, answered, voted };
 }
 
-module.exports = { roomCounts, presentPlayers, queryAll };
+/**
+ * How many Presentations are open on this game (two-surface D4): connection
+ * rows marked `Viewer: 'present'` by websocket/connect.js. A closed tab's row
+ * goes on $disconnect; a missed one on its 2-hour ttl.
+ */
+async function presentingCount(db, tableName, gameId) {
+  const { count } = await queryAll(db, tableName, gameId, 'CONNECTION#', {
+    Select: 'COUNT',
+    FilterExpression: 'Viewer = :viewer',
+    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':viewer': 'present' },
+  });
+  return count;
+}
+
+module.exports = { roomCounts, presentPlayers, presentingCount, queryAll };

@@ -354,7 +354,7 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   await check('stageFocus, defaulted, with part, phase and rev', () =>
     assert.deepStrictEqual(host.body.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 0 }));
   await check('stageProfile, null until chosen', () => assert.strictEqual(host.body.stageProfile, null));
-  await check('presenting is 0 until viewer connections exist (Phase 2)', () => assert.strictEqual(host.body.presenting, 0));
+  await check('presenting is 0 with no Presentation open (tests/viewer-connections.js counts them)', () => assert.strictEqual(host.body.presenting, 0));
   const pub = await call(PUBLIC_ROUTE, VOTE_GAME);
   await check('the public door carries the same three stage facts, and no presenting', () => {
     assert.deepStrictEqual(pub.body.stageNotes, host.body.stageNotes);

@@ -6,7 +6,7 @@ const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
 const { normalizeNames } = require('./survey-names');
 
-const { roomCounts, presentPlayers, queryAll } = require('./room-counts');
+const { roomCounts, presentPlayers, presentingCount, queryAll } = require('./room-counts');
 const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 
@@ -569,10 +569,17 @@ exports.handler = async (event) => {
 
     if (onHostDoor) {
       /*
-        HOW MANY PRESENTATIONS ARE OPEN (two-surface D4). Viewer connections
-        arrive in Phase 2; until then nothing is presenting.
+        HOW MANY PRESENTATIONS ARE OPEN (two-surface D4): the viewer rows
+        websocket/connect.js stores for /present. Drives "Presenting on
+        screen 2" and the lobby's "Present first". A failed count reads as 0,
+        never as a lost state payload.
       */
-      response.presenting = 0;
+      try {
+        response.presenting = await presentingCount(db, process.env.TABLE_NAME, gameId);
+      } catch (presentingError) {
+        console.error('presenting count failed (reporting 0):', presentingError);
+        response.presenting = 0;
+      }
 
       /*
         THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.
