@@ -41,68 +41,61 @@ const stripCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const SHEET = stripCss(RAW_SHEET);
 const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 
-/* ------------------------------------------------------------------ colour */
-const lin = (c) => {
-  const v = c / 255;
-  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-};
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
-const ratio = (a, b) => {
-  const la = lum(parseHex(a));
-  const lb = lum(parseHex(b));
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-};
-const hex = (rgb) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+/*
+ * EVERY SKIN, DUSK ONLY. `.rr-c` declares no theme of its own and is drawn only
+ * inside dusk containers (PastRound's modal, the player's shell — see the
+ * sheet's header), so the paper column of H.CASES is not a surface this block
+ * ever paints and is left out on purpose, not by accident.
+ */
+const DUSK_CASES = H.CASES.filter(([, theme]) => theme === 'dark');
 
-/** Composite `over` (white at `alpha`) onto `base`. The real paint stack. */
-const wash = (base, alpha) => hex(parseHex(base).map((c) => c + (255 - c) * alpha));
+describe.each(DUSK_CASES)('%s / %s: every pairing clears AA on the surface it is really drawn on', (skin, theme) => {
+  const opts = { skin, theme };
+  /** What `.rr-c` actually paints on: --surface under the sheet's own wash. */
+  const layers = () => [H.role('--surface', opts), H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-wash', opts)];
 
-/** Read a token's hex out of a `:root`-style block. */
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-
-const SURFACE = H.role('--surface', { skin: 'classic', theme: 'dark' });
-const TEXT = H.role('--text', { skin: 'classic', theme: 'dark' });
-const MUTED = H.role('--muted', { skin: 'classic', theme: 'dark' });
-const PRIMARY = H.role('--primary', { skin: 'classic', theme: 'dark' });
-
-/** What `.rr-c` actually paints on: --surface under a 6% white wash. */
-const COMPOSITE = wash(SURFACE, 0.06);
-
-const AA = 4.5;
-
-describe('every pairing clears AA on the surface it is really drawn on', () => {
   test('the comment text', () => {
-    expect(ratio(TEXT, COMPOSITE)).toBeGreaterThanOrEqual(AA);
+    const text = H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-text', opts);
+    expect(H.on(text, layers())).toBeGreaterThanOrEqual(H.AA);
   });
 
   test('the author byline and the anchor label', () => {
     // These are the ones the wash endangers: --muted is the closest token to
     // the bar, and lifting the background is what pushes a pairing under it.
-    expect(ratio(MUTED, COMPOSITE)).toBeGreaterThanOrEqual(AA);
+    const muted = H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-muted', opts);
+    expect(H.on(muted, layers())).toBeGreaterThanOrEqual(H.AA);
   });
 
   test('the Comment affordance and the Comments heading', () => {
-    expect(ratio(PRIMARY, COMPOSITE)).toBeGreaterThanOrEqual(AA);
+    // --rr-c-accent reads the --accent role (0b-4): orange in Classic, blue in
+    // Present, and the same value the old --primary read gave in Classic.
+    const accent = H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-accent', opts);
+    expect(accent.toUpperCase()).toBe(H.role('--accent', opts).toUpperCase());
+    expect(H.on(accent, layers())).toBeGreaterThanOrEqual(H.AA);
   });
 
-  test('and the wash the sheet declares is the one measured here', () => {
+  test('the call-out edge is the accent at .28, and Classic keeps today\'s amber', () => {
+    const rule = H.parseColor(H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-rule', opts));
+    expect(rule.a).toBeCloseTo(0.28, 3);
+    expect(rule.rgb).toEqual(H.channel('--accent-rgb', opts));
+    if (skin === 'classic') expect(rule.rgb).toEqual([246, 169, 76]);
+  });
+});
+
+describe('the wash', () => {
+  test('the wash the sheet declares is the one measured above', () => {
     /*
       Guards the arithmetic above against the sheet drifting away from it. If
-      somebody deepens the tint, the composite this file computes stops being
-      the paint that ships and every ratio above becomes a measurement of
-      nothing.
+      somebody deepens the tint, the composite stops being the paint that
+      ships and every ratio above becomes a measurement of nothing.
     */
     const declared = /--rr-c-wash:\s*rgba\(255,\s*255,\s*255,\s*([0-9.]+)\)/.exec(SHEET);
     expect(declared).not.toBeNull();
     expect(Number(declared[1])).toBeCloseTo(0.06, 3);
+  });
+
+  test('the block reads roles, never the --primary alias', () => {
+    expect(SHEET).not.toMatch(/var\(--primary\)/);
   });
 });
 

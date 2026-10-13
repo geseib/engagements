@@ -613,11 +613,17 @@ describe('the caveat can actually be read', () => {
     .replace(/\/\*[\s\S]*?\*\//g, '');
   const declared = (/--report-caution:\s*(#[0-9a-fA-F]{6})/.exec(screenCss) || [])[1];
 
-  const PAPER_BG = '#FBF7F1';      // styles.css [data-theme="light"] --bg
-  const PAPER_SURFACE = '#FFFFFF'; // styles.css [data-theme="light"] --surface
+  // The report is paper in every skin (GameReport.jsx sets data-theme="light"
+  // on the container), so the grounds come from the harness for each skin's
+  // paper set. 0b-4 kept --report-caution a literal: it is a status, not the
+  // accent, and --accent-text would turn it blue under Present.
+  const H = require('../testing/skinHarness');
+  const PAPER_CASES = H.CASES.filter(([, theme]) => theme === 'light');
 
-  test('the caution amber clears AA on both paper grounds', () => {
+  test.each(PAPER_CASES)('%s / %s: the caution amber clears AA on both paper grounds', (skin, theme) => {
     expect(declared).toBeTruthy();
+    const PAPER_BG = H.role('--bg', { skin, theme });
+    const PAPER_SURFACE = H.role('--surface', { skin, theme });
     expect(ratio(hex(declared), hex(PAPER_BG))).toBeGreaterThanOrEqual(4.5);
     expect(ratio(hex(declared), hex(PAPER_SURFACE))).toBeGreaterThanOrEqual(4.5);
   });

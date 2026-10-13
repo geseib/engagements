@@ -16,39 +16,28 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8')
 const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const MY_CSS = read('components', 'SurveyResultsPanel.css');
 
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
-}
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+/*
+ * EVERY SKIN, DUSK ONLY. The page root declares data-theme="dark" (asserted at
+ * the foot of this file), so the paper column of H.CASES is not a surface this
+ * sheet paints and is left out on purpose.
+ */
+const DUSK_CASES = H.CASES.filter(([, theme]) => theme === 'dark');
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  onPrimary: token(MY_CSS, '.svrp-page {', '--svrp-on-primary'),
+const palette = (skin, theme) => {
+  const opts = { skin, theme };
+  return {
+    bg: H.role('--bg', opts),
+    surface: H.role('--surface', opts),
+    surface2: H.role('--surface-2', opts),
+    text: H.role('--text', opts),
+    muted: H.role('--muted', opts),
+    primary: H.role('--primary', opts),
+    onPrimary: H.scopeVar(MY_CSS, '.svrp-page {', '--svrp-on-primary', opts),
+  };
 };
 
-const on = (fgHex, bgHexes) => ratio(parseHex(fgHex), parseHex(bgHexes[bgHexes.length - 1]));
-const AA = 4.5;
-
-describe('flat pairings this page paints', () => {
+describe.each(DUSK_CASES)('%s / %s: flat pairings this page paints', (skin, theme) => {
+  const T = palette(skin, theme);
   const pairs = [
     ['--text on --bg (the page field: h1, kpi numeral)', T.text, [T.bg]],
     ['--muted on --bg (subtitle, kpi label, empty state)', T.muted, [T.bg]],
@@ -58,12 +47,17 @@ describe('flat pairings this page paints', () => {
     ['--muted on --surface-2 (the names chip, the search box)', T.muted, [T.bg, T.surface, T.surface2]],
   ];
   test.each(pairs)('%s clears AA', (_l, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    expect(H.on(fg, layers)).toBeGreaterThanOrEqual(H.AA);
   });
-});
 
-test('--svrp-on-primary on --primary (the filled "Try again" button) clears AA', () => {
-  expect(on(T.onPrimary, [T.primary])).toBeGreaterThanOrEqual(AA);
+  test('--svrp-on-primary on --primary (the filled "Try again" button) clears AA', () => {
+    expect(H.on(T.onPrimary, [T.primary])).toBeGreaterThanOrEqual(H.AA);
+  });
+
+  test('--svrp-on-primary reads the --on-accent role, Classic keeping #1B2942', () => {
+    expect(T.onPrimary.toUpperCase()).toBe(H.role('--on-accent', { skin, theme }).toUpperCase());
+    if (skin === 'classic') expect(T.onPrimary.toUpperCase()).toBe('#1B2942');
+  });
 });
 
 test('--danger never carries text in this stylesheet', () => {
@@ -72,11 +66,11 @@ test('--danger never carries text in this stylesheet', () => {
   expect(offenders).toEqual([]);
 });
 
-test('no hex literal survives outside the one documented --svrp-on-primary token', () => {
+test('no hex literal survives: --svrp-on-primary reads --on-accent since 0b-4', () => {
   const stripped = MY_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
   const literals = [...stripped.matchAll(/(?:^|[\s:])(#[0-9A-Fa-f]{3,8})\b/gm)].map((m) => m[1]);
-  expect(literals.filter((h) => h.toUpperCase() !== '#1B2942')).toEqual([]);
-  expect(literals.filter((h) => h.toUpperCase() === '#1B2942').length).toBe(1);
+  expect(literals).toEqual([]);
+  expect(stripped).toMatch(/--svrp-on-primary:\s*var\(--on-accent\)/);
 });
 
 test('every custom property this stylesheet uses is declared somewhere', () => {

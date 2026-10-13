@@ -21,77 +21,79 @@ const MY_CSS = read('components', 'ReportShare.css');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const CSS = stripped(MY_CSS);
 
-/* ---- colour: the same arithmetic as docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-function parseRgba(s) {
-  const m = s.match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
-  return { rgb: [Number(m[1]), Number(m[2]), Number(m[3])], a: Number(m[4]) };
-}
-
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6}|rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-
-const PAPER = '[data-theme="light"] {';
-const ROOT = ':root {';
 const MINE = '.rshare {';
-
-const P = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'light' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'light' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'light' }),
-  text: H.role('--text', { skin: 'classic', theme: 'light' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'light' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  onPrimary: token(MY_CSS, MINE, '--rshare-on-primary'),
-  accent: token(MY_CSS, MINE, '--rshare-accent'),
-  success: token(MY_CSS, MINE, '--rshare-success'),
-  fieldRule: token(MY_CSS, MINE, '--rshare-field-rule'),
-};
-
-const AA = 4.5;
+const SCRIM = '.rshare-scrim {';
 const NON_TEXT = 3;
 
-describe('every words-on-paper pairing clears AA', () => {
+/*
+ * EVERY SKIN, PAPER ONLY. Both surfaces declare data-theme="light" themselves
+ * (asserted at the foot of this file), so the dusk column of H.CASES is not a
+ * surface this sheet ever paints and is left out on purpose.
+ */
+const PAPER_CASES = H.CASES.filter(([, theme]) => theme === 'light');
+
+const palette = (skin, theme) => {
+  const opts = { skin, theme };
+  const mine = (name) => H.scopeVar(MY_CSS, MINE, name, opts);
+  return {
+    bg: H.role('--bg', opts),
+    surface: H.role('--surface', opts),
+    surface2: H.role('--surface-2', opts),
+    text: H.role('--text', opts),
+    muted: H.role('--muted', opts),
+    primary: H.role('--primary', opts),
+    dangerDeep: H.role('--danger-deep', opts),
+    onPrimary: mine('--rshare-on-primary'),
+    accent: mine('--rshare-accent'),
+    success: mine('--rshare-success'),
+    fieldRule: mine('--rshare-field-rule'),
+    shadow: mine('--rshare-shadow'),
+    scrim: H.scopeVar(MY_CSS, SCRIM, '--rshare-scrim', opts),
+  };
+};
+
+describe.each(PAPER_CASES)('%s / %s: every words-on-paper pairing clears AA', (skin, theme) => {
+  const P = palette(skin, theme);
   // rejects: a quieter grey, a dusk tint, or amber ink on white.
   test.each([
-    ['body text on the card and dialog', P.text, P.surface],
-    ['body text on the page field', P.text, P.bg],
-    ['the kicker, dates, facts and placeholder', P.muted, P.surface],
-    ['a refusal ("does not open this report")', P.dangerDeep, P.surface],
-    ['"Downloaded"', P.success, P.surface],
-    ['the Done / Download report button', P.onPrimary, P.primary],
-    ['a secondary button on hover', P.text, P.surface2],
+    ['body text on the card and dialog', 'text', 'surface'],
+    ['body text on the page field', 'text', 'bg'],
+    ['the kicker, dates, facts and placeholder', 'muted', 'surface'],
+    ['a refusal ("does not open this report")', 'dangerDeep', 'surface'],
+    ['"Downloaded"', 'success', 'surface'],
+    ['the Done / Download report button', 'onPrimary', 'primary'],
+    ['a secondary button on hover', 'text', 'surface2'],
   ])('%s', (_label, fg, bg) => {
-    expect(ratio(parseHex(fg), parseHex(bg))).toBeGreaterThanOrEqual(AA);
+    expect(H.ratio(P[fg], P[bg])).toBeGreaterThanOrEqual(H.AA);
   });
 });
 
-describe('what is not text still has to be found (WCAG 1.4.11, 3:1)', () => {
+describe.each(PAPER_CASES)('%s / %s: what is not text still has to be found (WCAG 1.4.11, 3:1)', (skin, theme) => {
+  const P = palette(skin, theme);
   // rejects: a focus ring in --primary, which is 1.96:1 on white.
   test('the focus ring', () => {
-    expect(ratio(parseHex(P.accent), parseHex(P.surface))).toBeGreaterThanOrEqual(NON_TEXT);
+    expect(H.ratio(P.accent, P.surface)).toBeGreaterThanOrEqual(NON_TEXT);
     expect(CSS).toMatch(/\.rshare :focus-visible\s*\{[^}]*outline:\s*3px solid var\(--rshare-accent\)/);
   });
 
   // rejects: an input edge that fades until the field cannot be seen.
   test('the input and button edge, composited on white', () => {
-    const { rgb, a } = parseRgba(P.fieldRule);
-    const edge = alphaOver(rgb, parseHex(P.surface), a);
-    expect(ratio(edge, parseHex(P.surface))).toBeGreaterThanOrEqual(NON_TEXT);
+    const edge = H.composite([P.surface, P.fieldRule]);
+    expect(H.ratio(edge, P.surface)).toBeGreaterThanOrEqual(NON_TEXT);
+  });
+});
+
+describe.each(H.CASES)('%s / %s: the shade channel keeps Classic\'s navy', (skin, theme) => {
+  // 0b-4 moved the shadow and the scrim onto --shade-rgb; the alphas did not move.
+  test('shadow .28 and scrim .55, both in 15 26 46', () => {
+    const P = palette(skin, theme);
+    const shadow = H.parseColor(P.shadow);
+    const scrim = H.parseColor(P.scrim);
+    expect(shadow.rgb).toEqual(H.channel('--shade-rgb', { skin, theme }));
+    expect(scrim.rgb).toEqual(H.channel('--shade-rgb', { skin, theme }));
+    if (skin === 'classic') expect(shadow.rgb).toEqual([15, 26, 46]);
+    expect(shadow.a).toBeCloseTo(0.28, 3);
+    expect(scrim.a).toBeCloseTo(0.55, 3);
   });
 });
 
