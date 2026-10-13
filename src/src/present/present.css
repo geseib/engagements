@@ -447,6 +447,33 @@ html.present-locked body {
 .present .present-strip-btn:disabled { opacity: .45; cursor: default; }
 .present .present-strip-btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
 
+.present .present-strip-status.is-note { white-space: normal; color: var(--text); max-width: 60ch; padding-right: 6px; }
+
+/* THE SAFETY ASK: one card in the middle of the wall before the round moves.
+   Window pixels, like the strip. → or Enter goes on, ← or Esc stays. */
+.present .present-confirm {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 92%);
+  padding: 24px 24px 20px;
+  border-radius: 16px;
+  border: 2px solid var(--secondary);
+  background: var(--surface);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: default;
+}
+.present .present-confirm-ey { margin: 0; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--secondary); font-weight: 600; }
+.present .present-confirm-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1.1; }
+.present .present-confirm-note { margin: 0; font-size: 16px; color: var(--muted); }
+.present .present-confirm-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.present:has(.present-confirm) { cursor: auto; }
+
 /* (kept for a future in-canvas overlay) */
 .present .present-overlay {
   position: absolute;

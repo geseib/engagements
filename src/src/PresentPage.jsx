@@ -71,33 +71,53 @@ export default function PresentPage() {
 
   /*
     THE ONE-SCREEN STRIP (two-surface D7): moving the mouse shows it for three
-    seconds, only to a host who may drive this session. The room sees it too,
-    so it is the fallback, not the design: back, the join code, and the round's
-    next step, with the armed text when an early advance needs a second press.
+    seconds. To a host who may drive this session it holds Back, the join code
+    and Forward; to anyone else it says why the keys do nothing, rather than
+    staying silent (the owner pressed keys and saw nothing happen).
   */
   const step = controls.step;
-  const primary = step && step.primary;
   const strip = controls.strip ? (
-    <div className="present-strip" role="toolbar" aria-label="Presentation controls">
-      <span className="present-strip-status">{controls.arming || (step && step.status && step.status.text) || ''}</span>
-      <button type="button" className="present-strip-btn" onClick={controls.back} aria-label="Back">‹ Back</button>
-      <button
-        type="button"
-        className="present-strip-btn"
-        aria-pressed={controls.joinShown}
-        onClick={controls.toggleJoin}
-        disabled={!/^(ASK|VOTE|RESULTS)#/.test(String(snapshot && snapshot.state))}
-      >
-        {controls.joinShown ? 'Hide join code' : 'Join code'}
-      </button>
-      <button type="button" className="present-strip-btn is-go" onClick={controls.forward} disabled={Boolean(primary && primary.disabled)}>
-        {controls.arming ? 'Press again' : 'Forward ›'}
-      </button>
+    controls.armed ? (
+      <div className="present-strip" role="toolbar" aria-label="Presentation controls">
+        <span className="present-strip-status">{(step && step.status && step.status.text) || ''}</span>
+        <button type="button" className="present-strip-btn" onClick={controls.back}>‹ Back</button>
+        <button
+          type="button"
+          className="present-strip-btn"
+          aria-pressed={controls.joinShown}
+          onClick={controls.toggleJoin}
+          disabled={!/^(ASK|VOTE|RESULTS)#/.test(String(snapshot && snapshot.state))}
+        >
+          {controls.joinShown ? 'Hide join code (J)' : 'Join code (J)'}
+        </button>
+        <button type="button" className="present-strip-btn is-go" onClick={controls.forward}>Forward ›</button>
+      </div>
+    ) : (
+      <div className="present-strip" role="status">
+        <span className="present-strip-status is-note">{controls.note}</span>
+      </div>
+    )
+  ) : null;
+
+  /*
+    THE SAFETY ASK (owner, 2026-10-13: "perhaps with a safety ask? modal pops
+    up"). Forward with nothing left to step through asks before the round
+    moves: → or Enter goes on, ← or Esc stays.
+  */
+  const ask = controls.confirm ? (
+    <div className="present-confirm" role="dialog" aria-modal="true" aria-labelledby="present-confirm-title">
+      <p className="present-confirm-ey">Next step</p>
+      <p className="present-confirm-title" id="present-confirm-title">{controls.confirm.label}</p>
+      {controls.confirm.note ? <p className="present-confirm-note">{controls.confirm.note}</p> : null}
+      <div className="present-confirm-row">
+        <button type="button" className="present-strip-btn" onClick={controls.confirmCancel}>← Stay here</button>
+        <button type="button" className="present-strip-btn is-go" onClick={controls.confirmGo}>{`${controls.confirm.label} →`}</button>
+      </div>
     </div>
   ) : null;
 
   return (
-    <PresentStage profile={model.profile} fitKey={fitKey} overlay={<>{overlay}{strip}</>} fitcheck={fitcheckOn()}>
+    <PresentStage profile={model.profile} fitKey={fitKey} overlay={<>{overlay}{strip}{ask}</>} fitcheck={fitcheckOn()}>
       <PresentMoment model={model} />
       <PhaseWipe moment={model.moment} />
     </PresentStage>
