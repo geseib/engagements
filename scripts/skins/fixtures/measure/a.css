@@ -1,0 +1,17 @@
+/* fixture for measure.js --selftest. The #000 in this comment must not count. */
+.a {
+  --a-rule: rgba(155,168,190,.20);
+  --a-ink: #1B2942;
+  --a-ok: var(--success);
+  color: #F4EDE4;
+  background: rgba(246, 169, 76, .12);
+  border-color: hsl(210 50% 50%);
+  outline-color: rgb(var(--slate-rgb) / .28);
+  box-shadow: 0 0 0 1px rgba(124,167,230,.3);
+  fill: white;
+  font-family: Menlo, monospace;
+  font: 12px ui-monospace, monospace;
+  caret-color: var(--primary);
+  text-decoration-color: var(--primary-deep);
+  column-rule-color: var(--secondary);
+}
