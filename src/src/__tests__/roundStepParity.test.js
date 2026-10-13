@@ -55,7 +55,25 @@ function cases(gameType) {
       name: 'VOTING',
       dock: { ...base, phase: 'VOTE', playerCount: 5, votedCount: 4, answerCount: 5 },
       json: { state: 'VOTE#003', gameType, votingProgress: { votesReceived: 4, totalPlayers: 5 } },
-      extras: { ...remoteBase, playerCount: 5 },
+      extras: { ...remoteBase, playerCount: 5, answerCount: 5 },
+    },
+    {
+      name: 'VOTE_RESPONSES, the second of five',
+      dock: { ...base, phase: 'VOTE', playerCount: 5, votedCount: 4, answerCount: 5, spotlightIndex: 1 },
+      json: {
+        state: 'VOTE#003', gameType, votingProgress: { votesReceived: 4, totalPlayers: 5 },
+        stageFocus: { focus: 'answer', index: 1, part: 0, parts: 1, phase: 'VOTE' },
+      },
+      extras: { ...remoteBase, playerCount: 5, answerCount: 5 },
+    },
+    {
+      name: 'VOTE_RESPONSES, the last of five',
+      dock: { ...base, phase: 'VOTE', playerCount: 5, votedCount: 5, answerCount: 5, spotlightIndex: 4 },
+      json: {
+        state: 'VOTE#003', gameType, votingProgress: { votesReceived: 5, totalPlayers: 5 },
+        stageFocus: { focus: 'answer', index: 4, part: 0, parts: 1, phase: 'VOTE' },
+      },
+      extras: { ...remoteBase, playerCount: 5, answerCount: 5 },
     },
     {
       name: 'RESULTS with responses',

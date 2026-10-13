@@ -5816,15 +5816,22 @@ Focus on actionable business strategy insights.`;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
       lessonExpanded, isLoadingData, qrMode,
-      spotlightOpen: spotlightIndex !== null,
+      // With two surfaces a response on the wall is a step Auto walks, not a
+      // pause: the laptop's spotlight is the host's view of the wall.
+      spotlightOpen: !twoSurfaces && spotlightIndex !== null,
       pastRoundOpen: pastRoundIndex !== null,
       scoreboardOpen: scoreboard.open,
     })) return undefined;
 
     const roundPhase = phaseOfGameState(gameState);
-    const phase = gameState === 'ENDED'
+    const beatPhase = gameState === 'ENDED'
       ? 'ENDED'
       : hostPhaseForBeat(roundPhase, resultsBeat);
+    // AUTO WALKS THE RESPONSES (owner, 2026-10-13): at RESULTS with a response
+    // on the wall, the step is that response's dwell, then the dock's primary.
+    const onResponse = twoSurfaces && beatPhase === 'RESULTS' && spotlightIndex !== null;
+    const phase = onResponse ? 'RESPONSES' : beatPhase;
+    const shownAnswer = onResponse ? answers[spotlightIndex] : null;
 
     // The stage's own page arithmetic, re-derived the way the render derives
     // it: the shared index keyed by phase#round, cut by the same slicers.
@@ -5856,6 +5863,9 @@ Focus on actionable business strategy insights.`;
       answeredCount,
       votedCount: playersWhoVoted.length,
       page, pages, pageText, notesReady,
+      walkResponses: twoSurfaces,
+      responseCount: answers.length,
+      responseText: shownAnswer ? answerText(shownAnswer.answer) : '',
     });
     if (!decision) return undefined;
 
@@ -5864,6 +5874,13 @@ Focus on actionable business strategy insights.`;
       if (!hands) return;
       if (decision.kind === 'page') {
         hands.turnTo(page + 1);
+        return;
+      }
+      // Show response 1 of N — the dock's own secondary, through its runner.
+      if (decision.kind === 'secondary') {
+        if (hands.secondary && !hands.secondary.disabled && hands.secondary.intent === HOST_INTENTS.SHOW_RESPONSE) {
+          hands.run(hands.secondary);
+        }
         return;
       }
       // The dock's own primary, through the dock's own runner — disabled means
@@ -5880,7 +5897,7 @@ Focus on actionable business strategy insights.`;
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
-    spotlightIndex, pastRoundIndex, scoreboard.open]);
+    spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces]);
 
   /*
     WORKIE'S PAGE AS A SERVER FACT (two-surface PLAN 1.14). Every way this page
@@ -7000,6 +7017,7 @@ Focus on actionable business strategy insights.`;
   // turns the same shared page index the arrow keys turn.
   autoActRef.current = {
     primary: hostControls.primary,
+    secondary: hostControls.secondary,
     run: runHostAction,
     turnTo: setStagePageIndex,
   };
@@ -7539,21 +7557,49 @@ Focus on actionable business strategy insights.`;
                 {stageResponsesReady && answers.length === 0 && (
                   <p className="qdetail">No responses yet.</p>
                 )}
+                {/* OPENABLE DURING VOTING TOO (owner, 2026-10-13): a card puts
+                    that response on the wall exactly as results do, in the
+                    voting order every ballot shows (`answers` here is
+                    /answers/host, already in that order), and ALWAYS as
+                    "Response N" — never a name during voting, whatever the
+                    round's names setting, so a shared laptop cannot leak one. */}
                 <div className="cards">
                   {stageResponsesReady && answerPage.items.map((answer, i) => {
                     const idx = answerPage.offset + i;
+                    const label = navigatorLabel(answer, idx, { phase: 'VOTE' });
                     return (
-                      <div key={idx} className="card">
+                      <div
+                        key={idx}
+                        className="card is-openable"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Show ${label} on the screen`}
+                        onClick={() => openSpotlight(idx)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openSpotlight(idx);
+                          }
+                        }}
+                      >
                         <div className="body">
                           <div className="ans">{`“${answerText(answer.answer)}”`}</div>
-                          <span className={`who ${authorsRevealed ? 'revealed' : 'anon'}`}>
-                            {displayLabelFor(answer, idx)}
-                          </span>
+                          <span className="who anon">{label}</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                <AnswerSpotlight
+                  surfaceClassName="stage-spot"
+                  answers={answers}
+                  index={spotlightIndex}
+                  onIndex={openSpotlight}
+                  onClose={closeSpotlight}
+                  showPoints={false}
+                  labelFor={(answer, idx) => navigatorLabel(answer, idx, { phase: 'VOTE' })}
+                  title={`Round ${lessonNumber} response`}
+                />
                 {stageResponsesReady && (
                   <Pager
                     total={answers.length}

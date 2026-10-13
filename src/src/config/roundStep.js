@@ -32,7 +32,7 @@ import { statusTone } from '../utils/statusTone';
  * RESULTS (a feedback round), kept until Ask the room replaces it.
  */
 export const MOMENTS = Object.freeze([
-  'LOBBY', 'ANSWERING', 'VOTING', 'RESULTS', 'RESPONSES', 'READ', 'FEEDBACK',
+  'LOBBY', 'ANSWERING', 'VOTING', 'VOTE_RESPONSES', 'RESULTS', 'RESPONSES', 'READ', 'FEEDBACK',
   'COMPOSE', 'ROOM_QUESTION', 'ROOM_RESULTS', 'ENDED', 'OTHER', 'UNKNOWN',
 ]);
 
@@ -86,7 +86,17 @@ export function momentOf(snapshot) {
   if (!m) return 'UNKNOWN';
   const kind = m[1].toUpperCase();
   if (kind === 'ASK') return 'ANSWERING';
-  if (kind === 'VOTE') return 'VOTING';
+  if (kind === 'VOTE') {
+    // RESPONSES DURING VOTING (owner, 2026-10-13): a focus the server stamped
+    // VOTE is a response on the wall in voting order, names hidden. An
+    // unstamped one is a legacy RESULTS focus and is not this.
+    const f = snapshot.focus;
+    const idx = f && Number(f.index);
+    if (f && f.focus === 'answer' && f.phase === 'VOTE' && Number.isInteger(idx) && idx >= 0 && f.index !== null) {
+      return 'VOTE_RESPONSES';
+    }
+    return 'VOTING';
+  }
 
   if (snapshot.stageBeat === 'field-notes') return 'READ';
   if (snapshot.stageBeat === 'feedback') return 'FEEDBACK';
@@ -137,6 +147,18 @@ function primaryFor(moment, ctx) {
     }
     case 'RESULTS':
       return control('field-notes', RW.whatWeHeard, I.FIELD_NOTES, 'Sparkle');
+    case 'VOTE_RESPONSES': {
+      // Step the room through the responses in voting order; after the last,
+      // the step is what VOTING's was: Show results, armed while people vote.
+      const { index, part, parts, total } = ctx.responses;
+      if (parts > 1 && part < parts - 1) {
+        return control('next-part', RW.nextPart, I.NEXT_PART, 'ArrowRight', { index, part: part + 1, parts });
+      }
+      if (index < total - 1) {
+        return control('next-response', RW.nextResponse, I.NEXT_RESPONSE, 'ArrowRight', { index: index + 1, part: 0 });
+      }
+      return primaryFor('VOTING', ctx);
+    }
     case 'RESPONSES': {
       const { index, part, parts, total } = ctx.responses;
       if (parts > 1 && part < parts - 1) {
@@ -174,8 +196,15 @@ function secondaryFor(moment, ctx, primary) {
     case 'LOBBY':
     case 'ENDED':
       return control('leave', RW.backToMenu, I.LEAVE, 'House');
-    case 'ANSWERING':
     case 'VOTING':
+      // THE RESPONSES, DURING VOTING (owner, 2026-10-13): shown like results,
+      // names hidden, in the voting order every ballot shows. Skip stays the
+      // secondary while there is nothing to show.
+      if (ctx.answerCount > 0) {
+        return control('show-response', RW.showResponse(1, ctx.answerCount), I.SHOW_RESPONSE, 'ArrowsOut', { index: 0, part: 0 });
+      }
+      return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward', { arm: { text: RW.armSkip(noun) } });
+    case 'ANSWERING':
       // Skip always asks twice on the Remote: `action: 'skip'` bypasses
       // next-question's "already asking" guard, so two in flight consume two
       // questions. The host page keeps its own handling (Phase 3 moves Skip
@@ -186,6 +215,7 @@ function secondaryFor(moment, ctx, primary) {
         ? control('show-response', RW.showResponse(1, ctx.answerCount), I.SHOW_RESPONSE, 'ArrowsOut', { index: 0, part: 0 })
         : null;
     case 'RESPONSES':
+    case 'VOTE_RESPONSES':
       return control('stop-showing', RW.stopShowing, I.STOP_SHOWING, 'X');
     case 'READ':
       // Mid-read (or before it is written) the way past the rest is the plain
@@ -222,6 +252,14 @@ function statusFor(moment, ctx) {
       return counted(RW.voted);
     case 'RESULTS':
       return ctx.goalLine ? { text: ctx.goalLine, tone: 'notice' } : toned(RW.resultsOnScreen);
+    case 'VOTE_RESPONSES': {
+      const { index, part, parts, total } = ctx.responses;
+      const which = parts > 1
+        ? `${RW.showingResponse(index + 1, total)} · ${RW.partOf(part + 1, parts)}`
+        : RW.showingResponse(index + 1, total);
+      const vote = counted(RW.voted);
+      return toned(vote.text && vote.text !== RW.waitingToJoin ? `${which} · ${vote.text}` : which);
+    }
     case 'RESPONSES': {
       const { index, part, parts, total } = ctx.responses;
       const text = parts > 1
@@ -248,6 +286,10 @@ function nextFor(moment, ctx, primary) {
   const L = RW.nextLine;
   switch (moment) {
     case 'ANSWERING': return hostRunsVotePhase(ctx.gameType) ? L.ANSWERING : L.ANSWERING_NO_VOTE;
+    case 'VOTE_RESPONSES':
+      if (primary.id === 'next-part') return L.RESPONSES_PART;
+      if (primary.id === 'next-response') return L.RESPONSES_NEXT;
+      return L.VOTING;
     case 'RESPONSES':
       if (primary.id === 'next-part') return L.RESPONSES_PART;
       if (primary.id === 'next-response') return L.RESPONSES_NEXT;

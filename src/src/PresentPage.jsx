@@ -17,6 +17,7 @@ import { presentModel } from './present/presentModel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import { hasScoreboard } from './config/scoreboard';
 import useFullscreenKey from './hooks/useFullscreenKey';
+import usePresentControls from './present/presentControls';
 import './present/present.css';
 
 function gameIdFromUrl() {
@@ -37,9 +38,15 @@ function fitcheckOn() {
 
 export default function PresentPage() {
   const gameId = useMemo(gameIdFromUrl, []);
-  const { snapshot, reads } = usePresentation(gameId);
+  const { snapshot, reads, refetch } = usePresentation(gameId);
   const model = gameId ? presentModel(snapshot, reads) : { moment: 'NOT_FOUND', profile: 'room' };
   useFullscreenKey();
+  // Forward and back with the keys or a clicker, for a host who may drive
+  // this session (present/presentControls.js); the room's own view is unchanged.
+  const total = Number.isInteger(model.total) && model.total > 0
+    ? model.total
+    : Number(snapshot && snapshot.roomCounts && snapshot.roomCounts.answered) || 0;
+  usePresentControls({ gameId, snapshot, total, refetch });
 
   const fitKey = [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined]
     .map((x) => (x === undefined ? '' : String(x))).join('|');

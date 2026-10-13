@@ -165,7 +165,9 @@ describe('the stage pages its answer list, and the page keys obey the existing s
     expect(offsets).toHaveLength(2);
     // And the labels are still derived from that index rather than from the
     // page-local one.
-    expect(CODE).toMatch(/displayLabelFor\(answer, idx\)/);
+    // VOTE labels through navigatorLabel since voting cards open on the wall
+    // (owner, 2026-10-13): always "Response N", from the same absolute index.
+    expect(CODE).toMatch(/navigatorLabel\(answer, idx, \{ phase: 'VOTE' \}\)/);
     expect(CODE).toMatch(/stageLabelFor\(answer, idx,/);
   });
 

@@ -540,6 +540,9 @@ function HostRemote() {
    * response 1 of N", and N is their count.
    */
   const onResults = summary.phase === 'RESULTS';
+  // During voting the host may show the responses too (owner, 2026-10-13):
+  // the list loads, and roundStep offers Show response 1 of N.
+  const onVoting = summary.phase === 'VOTE';
 
   /* ------------------------------------------------------- the read-back */
 
@@ -647,7 +650,7 @@ function HostRemote() {
     nothing.
   */
   useEffect(() => {
-    if (!gameId || !round || !(focusOpen || onResults)) return undefined;
+    if (!gameId || !round || !(focusOpen || onResults || onVoting)) return undefined;
 
     let cancelled = false;
     const load = async () => {
@@ -670,7 +673,7 @@ function HostRemote() {
     load();
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [gameId, focusOpen, onResults, round]);
+  }, [gameId, focusOpen, onResults, onVoting, round]);
 
   /**
    * Put something on the room's screen — or take it off.
@@ -823,11 +826,11 @@ function HostRemote() {
   */
   const step = useMemo(() => remoteStep(snapshot, {
     playerCount: rosterCount,
-    answerCount: onResults ? focusAnswers.length : undefined,
+    answerCount: onResults || onVoting ? focusAnswers.length : undefined,
     notesReady: notes.ready,
     hasQuestionSet: Boolean(setId),
     goalLine: goal.reached ? goal.line : '',
-  }), [snapshot, rosterCount, onResults, focusAnswers.length, notes.ready, setId, goal.reached, goal.line]);
+  }), [snapshot, rosterCount, onResults, onVoting, focusAnswers.length, notes.ready, setId, goal.reached, goal.line]);
   const action = step.primary;
   /* Workie's page, as the server holds it (get-game-state `stageNotes`). */
   const notesPages = Number.isInteger(snapshot?.stageNotes?.pages) ? snapshot.stageNotes.pages : 1;

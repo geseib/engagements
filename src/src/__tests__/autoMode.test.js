@@ -126,7 +126,7 @@ describe('the wiring — source contracts on what jsdom cannot mount', () => {
   // rejects: the timer acting through some fifth path instead of the dock's
   //          own primary and the stage's own pager.
   test('the timer presses the dock primary through runHostAction and turns the shared page', () => {
-    expect(host).toMatch(/autoActRef\.current = \{\s*primary: hostControls\.primary,\s*run: runHostAction,\s*turnTo: setStagePageIndex,\s*\}/);
+    expect(host).toMatch(/autoActRef\.current = \{\s*primary: hostControls\.primary,\s*secondary: hostControls\.secondary,\s*run: runHostAction,\s*turnTo: setStagePageIndex,\s*\}/);
     expect(host).toMatch(/autoDecision\(\{/);
     expect(host).toMatch(/hands\.primary\.disabled\) return/);
   });

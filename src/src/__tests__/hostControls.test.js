@@ -226,7 +226,11 @@ describe('the primary action per phase', () => {
     // Two-surface Phase 1: the Remote has always offered Skip during VOTE too,
     // and roundStep gives both surfaces one answer (R1). Skip moves behind
     // Session in Phase 3 (R7).
+    // During VOTE with responses, the secondary shows them (owner, 2026-10-13);
+    // Skip is the secondary only while there is nothing to show.
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'VOTE', ...READY }).secondary)
+      .toMatchObject({ intent: 'show-response' });
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'VOTE', ...READY, answerCount: 0 }).secondary)
       .toMatchObject({ intent: 'skip' });
     /*
       LOBBY left this list when it grew its own secondary — Back to Menu, the
@@ -1105,7 +1109,7 @@ describe('review findings: skip asks first on the host page; a read that will ne
 
   test('Skip, during ASK and VOTE, carries a confirm the host page honours', () => {
     for (const phase of ['ASK', 'VOTE']) {
-      const skip = hostControlsFor({ gameType: 'call-and-answer', phase, ...READY }).secondary;
+      const skip = hostControlsFor({ gameType: 'call-and-answer', phase, ...READY, ...(phase === 'VOTE' ? { answerCount: 0 } : {}) }).secondary;
       expect(skip.intent).toBe(HOST_INTENTS.SKIP);
       expect(skip.confirm).toEqual(expect.objectContaining({ title: expect.any(String), confirmText: expect.any(String) }));
       expect(skip.confirm.title).not.toMatch(/!/);

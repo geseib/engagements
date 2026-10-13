@@ -6,7 +6,7 @@ import { roundStep, MOMENTS, MORE_IDS } from '../config/roundStep';
 import RW from '../config/roundWords';
 
 const TYPES = ['call-and-answer', 'trivia', 'poll', 'wavelength'];
-const ROUND_MOMENTS = ['LOBBY', 'ANSWERING', 'VOTING', 'RESULTS', 'RESPONSES', 'READ', 'FEEDBACK', 'ENDED', 'UNKNOWN', 'OTHER'];
+const ROUND_MOMENTS = ['LOBBY', 'ANSWERING', 'VOTING', 'VOTE_RESPONSES', 'RESULTS', 'RESPONSES', 'READ', 'FEEDBACK', 'ENDED', 'UNKNOWN', 'OTHER'];
 
 /** Every string roundWords can produce for the arguments roundStep uses. */
 function knownLabels(noun) {
@@ -87,10 +87,11 @@ describe('roundStep: the rules', () => {
     expect(s.primary).toMatchObject({ disabled: true, hint: RW.nobodyAnswered });
   });
 
-  test('VOTING not all in arms; skip is the secondary on ANSWERING and VOTING', () => {
+  test('VOTING not all in arms; the secondary shows the responses (owner, 2026-10-13), Skip when there are none', () => {
     const s = roundStep('VOTING', { ...CTX, gameType: 'call-and-answer', progress: { received: 4, total: 5, allIn: false } });
     expect(s.primary).toMatchObject({ id: 'reveal', label: 'Show results', arm: { text: '1 still voting. Press again to show results.' } });
-    expect(s.secondary).toMatchObject({ id: 'skip', label: 'Skip this round' });
+    expect(s.secondary).toMatchObject({ id: 'show-response', label: 'Show response 1 of 5', index: 0, part: 0 });
+    expect(roundStep('VOTING', { ...CTX, answerCount: 0 }).secondary).toMatchObject({ id: 'skip', label: 'Skip this round' });
     expect(roundStep('ANSWERING', CTX).secondary).toMatchObject({ id: 'skip' });
   });
 

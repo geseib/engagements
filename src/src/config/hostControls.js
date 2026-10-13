@@ -725,13 +725,17 @@ export function snapshotFromHostPage({
   const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
   const total = Number(playerCount) || 0;
   const received = Number(responded) || 0;
-  const onWall = resolvedPhase === 'RESULTS' && Number.isInteger(spotlightIndex) && spotlightIndex >= 0;
+  // A response on the wall: at RESULTS in tally order, during VOTE in voting
+  // order with names hidden (owner, 2026-10-13). The phase stamp is the one
+  // the server writes, so the dock and the Remote read the same moment.
+  const onWall = (resolvedPhase === 'RESULTS' || resolvedPhase === 'VOTE')
+    && Number.isInteger(spotlightIndex) && spotlightIndex >= 0;
   return {
     gameType,
     state: STATE_FOR_PHASE[resolvedPhase],
     stageBeat: BEAT_FOR_PHASE[resolvedPhase] || 'results',
     focus: onWall
-      ? { focus: 'answer', index: spotlightIndex, part: responsePart, parts: responseParts, phase: 'RESULTS' }
+      ? { focus: 'answer', index: spotlightIndex, part: responsePart, parts: responseParts, phase: resolvedPhase }
       : { focus: 'none', index: null },
     notes: { page: notesPage, pages: notesPages, ready: notesReady },
     progress: { received, total, allIn: roomIsComplete({ phase: resolvedPhase, responded, playerCount }) },
