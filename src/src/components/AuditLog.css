@@ -1,4 +1,4 @@
-/* skin-allowance: colour=6 font=0 primary=2 */
+/* skin-allowance: colour=3 font=0 primary=2 */
 /* ============================================================================
    THE AUDIT LOG — components/AuditLog.jsx
 
@@ -36,9 +36,9 @@
   --alog-t-head: 19px;
   --alog-row-h: 36px;
 
-  --alog-rule: rgba(155, 168, 190, .20);
-  --alog-rule-strong: rgba(155, 168, 190, .34);
-  --alog-row-hover: rgba(155, 168, 190, .055);
+  --alog-rule: rgb(var(--slate-rgb) / .20);
+  --alog-rule-strong: rgb(var(--slate-rgb) / .34);
+  --alog-row-hover: var(--row-hover);
 
   color: var(--text);
   font: 400 var(--alog-t-body)/1.45 var(--font-ui);

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=7 font=0 primary=3 */
+/* skin-allowance: colour=3 font=0 primary=3 */
 /* components/AdjustmentsLedger.jsx — the ledger list and the bill in miniature.
    One scope, `.adjl`, mounted inside `.bill` (the customer's Plan & usage) and
    inside the platform billing drawer; it declares its own locals for the
@@ -10,10 +10,10 @@
   --adjl-t-label: 13px;
   --adjl-t-body: 15px;
   --adjl-t-head: 19px;
-  --adjl-rule: rgba(155, 168, 190, .20);
-  --adjl-rule-strong: rgba(155, 168, 190, .34);
-  --adjl-success-text: #6FD0A4;
-  --adjl-tint-note: rgba(155, 168, 190, .06);
+  --adjl-rule: rgb(var(--slate-rgb) / .20);
+  --adjl-rule-strong: rgb(var(--slate-rgb) / .34);
+  --adjl-success-text: var(--success-text);
+  --adjl-tint-note: rgb(var(--slate-rgb) / .06);
   color: var(--text);
   font: 400 var(--adjl-t-body)/1.45 var(--font-ui);
   font-variant-numeric: tabular-nums;

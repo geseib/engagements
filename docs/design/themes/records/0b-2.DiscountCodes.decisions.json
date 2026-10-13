@@ -1,0 +1,116 @@
+{
+  "unit": "0b-2.DiscountCodes",
+  "file": "components/DiscountCodes.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 10,
+    "font": 0,
+    "primary": 6
+  },
+  "auto": [
+    {
+      "id": "11:16",
+      "line": 11,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".dcode",
+      "property": "--dcode-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "12:23",
+      "line": 12,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".dcode",
+      "property": "--dcode-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "13:21",
+      "line": 13,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".dcode",
+      "property": "--dcode-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "14:20",
+      "line": 14,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".dcode",
+      "property": "--dcode-tint-bad",
+      "literal": "rgba(229, 100, 94, .10)",
+      "replacement": "rgb(var(--danger-rgb) / .10)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "15:24",
+      "line": 15,
+      "col": 24,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".dcode",
+      "property": "--dcode-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "16:21",
+      "line": 16,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".dcode",
+      "property": "--dcode-on-accent",
+      "literal": "#1B2942",
+      "why": "matches several roles: --surface, --on-accent",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "surface",
+      "choice": "on-accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.916Z",
+    "after": {
+      "colour": 4,
+      "font": 0,
+      "primary": 6
+    },
+    "decisionsByKind": {
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 6
+  }
+}

@@ -125,11 +125,45 @@ describe('ReportsPanel', () => {
 describe('the reports stylesheet is the sessions sheet under its own scope', () => {
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'components', f), 'utf8');
   it('carries the same token block, renamed', () => {
+    // Compared as RESOLVED Classic values, not as text: either sheet may have its
+    // scope block re-pointed to roles (`var(--success-text)`, `rgb(var(--slate-rgb) / .20)`)
+    // while the other still writes the literal, and the two must still render the same.
+    const H = require('../testing/skinHarness');
+    const CLASSIC = { skin: 'classic', theme: 'dark' };
     const sp = read('SessionsPanel.css');
     const rp = read('ReportsPanel.css');
-    const spTokens = sp.slice(sp.indexOf('.sp {'), sp.indexOf('}', sp.indexOf('.sp {')));
-    const rpTokens = rp.slice(rp.indexOf('.rp {'), rp.indexOf('}', rp.indexOf('.rp {')));
-    expect(rpTokens).toBe(spTokens.replace(/\.sp\b/g, '.rp').replace(/--sp-/g, '--rp-'));
+    const declsOf = (css, head) => {
+      const start = css.indexOf(head);
+      const body = css.slice(start + head.length, css.indexOf('}', start)).replace(/\/\*[\s\S]*?\*\//g, '');
+      return body.split(';').map((d) => d.trim()).filter(Boolean).map((d) => {
+        const at = d.indexOf(':');
+        return [d.slice(0, at).trim(), d.slice(at + 1).replace(/\s+/g, ' ').trim()];
+      });
+    };
+    const spDecls = declsOf(sp, '.sp {');
+    const rpDecls = declsOf(rp, '.rp {');
+    const rename = (t) => t.replace(/\.sp\b/g, '.rp').replace(/--sp-/g, '--rp-');
+    // The same declarations, in the same order, under the renamed scope.
+    expect(rpDecls.map(([prop]) => prop)).toEqual(spDecls.map(([prop]) => rename(prop)));
+    expect(spDecls.length).toBeGreaterThan(0);
+    const norm = (v) => {
+      try {
+        const { rgb, a } = H.parseColor(v);
+        return `colour ${rgb.map((n) => Math.round(n)).join(',')} / ${Math.round(a * 1000) / 1000}`;
+      } catch (e) {
+        return v;
+      }
+    };
+    spDecls.forEach(([prop, value], i) => {
+      const [rpProp, rpValue] = rpDecls[i];
+      if (!prop.startsWith('--')) {
+        expect(rpValue).toBe(rename(value));     // plain declarations still match as text
+        return;
+      }
+      const resolvedRp = norm(rename(H.scopeVar(rp, '.rp {', rpProp, CLASSIC)));
+      const resolvedSp = norm(rename(H.scopeVar(sp, '.sp {', prop, CLASSIC)));
+      expect([rpProp, resolvedRp]).toEqual([rpProp, resolvedSp]);
+    });
     // Every selector is rooted at .rp — nothing leaks onto another screen.
     const selectors = rp.replace(/\/\*[\s\S]*?\*\//g, '').match(/^[^\s@}][^{]*(?=\{)/gm) || [];
     selectors.forEach((sel) => sel.split(',').forEach((s) => expect(s.trim()).toMatch(/^\.rp(\b|-)/)));

@@ -29,6 +29,7 @@ const path = require('path');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const QS_CSS = read('components', 'QuestionSetsPanel.css');
 const GLOBAL_CSS = require('../testing/classicGlobalCss')();
+const H = require('../testing/skinHarness');
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
@@ -231,16 +232,20 @@ describe('the editor, mounted inside the host dialog', () => {
     expect(leaking).toEqual([]);
   });
 
-  test('the accent this scope keeps really is the one the dusk editor cannot use', () => {
+  /* The editor's amber and its row are read through the skin harness since skins 0b-2
+     (`--primary: var(--action)` in the .qs-editor block), once per dusk skin. The host
+     scope's own values are literal paper and skin-invariant, so L stays as read above. */
+  test.each(H.CASES.filter(([, t]) => t === 'dark'))('the accent this scope keeps really is the one the dusk editor cannot use: %s / %s', (skin, theme) => {
     // THE PREMISE, so the assertion above cannot become decorative. #9A5B18 is
-    // this dialog's accent because #F6A94C is 1.96:1 on its white card; the
-    // editor restates #F6A94C because #9A5B18 is under AA on its dusk one.
-    // Both halves are true at once, which is why the boundary has to exist.
+    // this dialog's accent because the dusk amber (#F6A94C in Classic) is 1.96:1 on its
+    // white card; the editor restates the dusk amber because #9A5B18 is under AA on its
+    // dusk one. Both halves are true at once, which is why the boundary has to exist.
     const hostAmber = L.primary;
-    const editorAmber = parseHex(EDITOR_SCOPE.match(/--primary:\s*(#[0-9A-Fa-f]{6})/)[1]);
+    const editorAmber = H.parseColor(H.scopeVar(EDITOR_CSS, '.qs-editor {', '--primary', { skin, theme })).rgb;
+    if (skin === 'classic') expect(editorAmber).toEqual(parseHex('#F6A94C'));
     expect(ratio(editorAmber, L.surface)).toBeLessThan(AA);          // amber on the host card
     expect(ratio(hostAmber, L.surface)).toBeGreaterThanOrEqual(AA);
-    const editorRow = parseHex(GLOBAL_CSS.match(/\[data-theme="dark"\] \{[\s\S]*?--surface:\s*(#[0-9A-Fa-f]{6})/)[1]);
+    const editorRow = H.parseColor(H.role('--surface', { skin, theme })).rgb;
     expect(ratio(hostAmber, editorRow)).toBeLessThan(AA);            // and back the other way
     expect(ratio(editorAmber, editorRow)).toBeGreaterThanOrEqual(AA);
   });

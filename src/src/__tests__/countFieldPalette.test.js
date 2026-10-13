@@ -53,25 +53,21 @@ function bgOf(el, win) {
 }
 
 /* ---- tokens, READ rather than retyped: change a token and these numbers move */
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const parseHex = (c) => H.parseColor(c).rgb;     // any colour a role resolves to
+const CLASSIC = { skin: 'classic', theme: 'dark' };
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+/** A scope-local custom property, every var() it reads resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC) {
+  return H.scopeVar(css, block, name, opts);
 }
-function tint(name) {                       // an rgba() layer from MY_CSS
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in PlatformOrgsPanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC) {               // a translucent layer from the .cnt block
+  return token(MY_CSS, '.cnt {', name, opts);
 }
 
 const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
 const PAPER = '[data-theme="light"] {';
+/* Every skin, each measured on both themes below. */
+const SKINS = [...new Set(H.CASES.map(([skin]) => skin))];
 
 /*
   BOTH THEMES, AND PAPER IS NOT THE HYPOTHETICAL ONE.
@@ -88,37 +84,26 @@ const PAPER = '[data-theme="light"] {';
   #FBF7F1 on amber: 1.84:1, on the single element whose entire job is to say
   which value is current. Every pairing below is asserted on both grounds.
 */
-const THEMES = {
-  dusk: {
-    bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-    surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-    surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-    text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-    muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  },
-  paper: {
-    bg: H.role('--bg', { skin: 'classic', theme: 'light' }),
-    surface: H.role('--surface', { skin: 'classic', theme: 'light' }),
-    surface2: H.role('--surface-2', { skin: 'classic', theme: 'light' }),
-    text: H.role('--text', { skin: 'classic', theme: 'light' }),
-    muted: H.role('--muted', { skin: 'classic', theme: 'light' }),
-  },
-};
-
-const T = {
-  ...THEMES.dusk,
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  primaryDeep: H.role('--primary-deep', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  /* Read from this stylesheet, not retyped: the ink on the theme-invariant
-     accent, which has to be invariant for the same reason. */
-  onAccent: token(MY_CSS, '.cnt {', '--cnt-on-accent'),
-  /* No success colour on this strip: it has one state and it is a notice, not
-     an outcome. Every other screen here declares its own --*-success-text
-     because an undefined custom property invalidates the whole declaration. */
-};
+/* One skin x theme: the grounds and inks, plus the theme-invariant accent and
+   the ink this stylesheet puts on it — read from the .cnt block, not retyped,
+   because it has to be invariant for the same reason. (No success colour on
+   this field: it has no outcome state.) */
+const rolesFor = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  surface2: H.role('--surface-2', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  primaryDeep: H.role('--primary-deep', opts),
+  onAccent: token(MY_CSS, '.cnt {', '--cnt-on-accent', opts),
+  opts,
+});
+const themesFor = (skin) => ({
+  dusk: rolesFor({ skin, theme: 'dark' }),
+  paper: rolesFor({ skin, theme: 'light' }),
+});
+const CASES = SKINS.flatMap((skin) => Object.entries(themesFor(skin)).map(([name, theme]) => [skin, name, theme]));
 
 /** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf. */
 function composited(layers) {
@@ -126,7 +111,8 @@ function composited(layers) {
   let host = document.body;
   for (const background of layers) {
     const el = document.createElement('div');
-    el.style.backgroundColor = background;
+    const { rgb, a } = H.parseColor(background);   // jsdom reads only the comma form
+    el.style.backgroundColor = `rgba(${rgb.join(', ')}, ${a})`;
     host.appendChild(el);
     host = el;
   }
@@ -135,8 +121,6 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const AA = 4.5;
-const FIELD = [T.bg];              // AdminShell's work body under a dark section
-const PANEL = [T.bg, T.surface];   // the invitations panel, and the dialogs
 
 function block(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -149,7 +133,7 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /* ========================================================================== */
 
-describe.each(Object.entries(THEMES))('the field, composited on %s', (_name, theme) => {
+describe.each(CASES)('the field, composited on %s / %s', (_skin, _name, theme) => {
   /*
     Every pairing here sits on ONE stack: the surface the field was dropped on,
     plus this field's own hover tint. Nothing else nests inside it — it is a
@@ -175,17 +159,18 @@ describe.each(Object.entries(THEMES))('the field, composited on %s', (_name, the
   */
   // rejects: the ink on the accent going back to a theme-dependent token.
   test('the filled preset clears AA', () => {
-    expect(on(T.onAccent, [T.primary])).toBeGreaterThanOrEqual(AA);
+    expect(on(theme.onAccent, [theme.primary])).toBeGreaterThanOrEqual(AA);
   });
 
   // rejects: an unselected preset or the typed digits fading into the field.
   test('an unselected preset clears AA, hovered and not', () => {
     expect(on(theme.text, [theme.bg])).toBeGreaterThanOrEqual(AA);
-    expect(on(theme.text, [theme.bg, tint('--cnt-hover')])).toBeGreaterThanOrEqual(AA);
+    expect(on(theme.text, [theme.bg, tint('--cnt-hover', theme.opts)])).toBeGreaterThanOrEqual(AA);
   });
 });
 
-describe('the track, and the state boundaries that are not text', () => {
+describe.each(SKINS)('the track, and the state boundaries that are not text — %s', (skin) => {
+  const THEMES = themesFor(skin);
   /*
     NOT 4.5:1, AND NOT EVERYTHING. None of this is text, so the bar is WCAG
     1.4.11's 3:1 — and 1.4.11 asks it of the visual information needed to
@@ -211,8 +196,8 @@ describe('the track, and the state boundaries that are not text', () => {
   // rejects: the fill going back to bright --primary, which is 1.84:1 on paper
   // and therefore invisible on the surface these builders actually render on.
   test.each(Object.entries(THEMES))('the filled rail reads against %s', (_name, theme) => {
-    expect(on(T.primaryDeep, [theme.bg])).toBeGreaterThanOrEqual(UI);
-    expect(on(T.primaryDeep, [theme.bg, theme.surface])).toBeGreaterThanOrEqual(UI);
+    expect(on(theme.primaryDeep, [theme.bg])).toBeGreaterThanOrEqual(UI);
+    expect(on(theme.primaryDeep, [theme.bg, theme.surface])).toBeGreaterThanOrEqual(UI);
   });
 
   /*
@@ -222,7 +207,7 @@ describe('the track, and the state boundaries that are not text', () => {
   */
   // rejects: the selected chip's boundary collapsing back into the fill colour.
   test.each(Object.entries(THEMES))('the selected preset is bounded against %s', (_name, theme) => {
-    expect(on(T.primaryDeep, [theme.bg, theme.surface])).toBeGreaterThanOrEqual(UI);
+    expect(on(theme.primaryDeep, [theme.bg, theme.surface])).toBeGreaterThanOrEqual(UI);
     expect(block(MY_CSS, '.cnt-preset.is-on')).toMatch(/border-color:\s*var\(--primary-deep\)/);
   });
 

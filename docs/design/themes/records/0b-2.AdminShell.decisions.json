@@ -1,0 +1,90 @@
+{
+  "unit": "0b-2.AdminShell",
+  "file": "components/AdminShell.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 12,
+    "font": 0,
+    "primary": 5
+  },
+  "auto": [
+    {
+      "id": "64:14",
+      "line": 64,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adm-shell",
+      "property": "--adm-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "65:21",
+      "line": 65,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adm-shell",
+      "property": "--adm-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "66:19",
+      "line": 66,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adm-shell",
+      "property": "--adm-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "67:17",
+      "line": 67,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adm-shell",
+      "property": "--adm-row-sel",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "raw:var(--row-selected)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.387Z",
+    "after": {
+      "colour": 8,
+      "font": 0,
+      "primary": 5
+    },
+    "decisionsByKind": {
+      "raw": 1
+    },
+    "classicDeltas": [
+      "67:17 .adm-shell --adm-row-sel: rgba(246, 169, 76, .10) -> var(--row-selected) (raw: check by hand)"
+    ],
+    "edits": 4
+  }
+}

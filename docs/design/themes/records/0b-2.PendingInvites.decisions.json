@@ -1,0 +1,143 @@
+{
+  "unit": "0b-2.PendingInvites",
+  "file": "components/PendingInvites.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 6,
+    "font": 0,
+    "primary": 4
+  },
+  "auto": [
+    {
+      "id": "33:18",
+      "line": 33,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pinv",
+      "property": "--pinv-ok-rule",
+      "literal": "rgba(79, 178, 134, .4)",
+      "replacement": "rgb(var(--success-rgb) / .4)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "34:18",
+      "line": 34,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pinv",
+      "property": "--pinv-ok-tint",
+      "literal": "rgba(79, 178, 134, .09)",
+      "replacement": "rgb(var(--success-rgb) / .09)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "35:19",
+      "line": 35,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pinv",
+      "property": "--pinv-btn-rule",
+      "literal": "rgba(155, 168, 190, .55)",
+      "replacement": "rgb(var(--slate-rgb) / .55)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "31:15",
+      "line": 31,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pinv",
+      "property": "--pinv-rule",
+      "literal": "rgba(124, 167, 230, .38)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .38) -> rgba(246,169,76,0.38))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "32:15",
+      "line": 32,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pinv",
+      "property": "--pinv-tint",
+      "literal": "rgba(124, 167, 230, .08)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .08) -> rgba(246,169,76,0.08))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "36:14",
+      "line": 36,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pinv",
+      "property": "--pinv-bar",
+      "literal": "#0F1E36",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 9)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 9)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 20)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant #0F1E36 with no exact role (SPEC §4.2: merging it is a Classic delta)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.710Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 4
+    },
+    "decisionsByKind": {
+      "info": 2,
+      "keep": 1
+    },
+    "classicDeltas": [],
+    "edits": 5
+  }
+}

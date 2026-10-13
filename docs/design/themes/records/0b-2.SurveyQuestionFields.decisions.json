@@ -1,0 +1,118 @@
+{
+  "unit": "0b-2.SurveyQuestionFields",
+  "file": "components/SurveyQuestionFields.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 5,
+    "font": 0,
+    "primary": 5
+  },
+  "auto": [
+    {
+      "id": "57:14",
+      "line": 57,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sqf",
+      "property": "--sqf-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "58:21",
+      "line": 58,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sqf",
+      "property": "--sqf-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "59:19",
+      "line": 59,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sqf",
+      "property": "--sqf-row-hover",
+      "literal": "rgba(155, 168, 190, .08)",
+      "replacement": "rgb(var(--slate-rgb) / .08)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "60:17",
+      "line": 60,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sqf",
+      "property": "--sqf-row-sel",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "raw:var(--row-selected)"
+    },
+    {
+      "id": "61:16",
+      "line": 61,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sqf",
+      "property": "--sqf-shadow",
+      "literal": "rgba(4, 8, 16, .50)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 7)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 37)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 37)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:shadow/scrim alpha rgba(4, 8, 16, .50); no role or channel carries this black (--scrim is .72, --shade-rgb is 15 26 46)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.773Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 5
+    },
+    "decisionsByKind": {
+      "raw": 1,
+      "keep": 1
+    },
+    "classicDeltas": [
+      "60:17 .sqf --sqf-row-sel: rgba(246, 169, 76, .10) -> var(--row-selected) (raw: check by hand)"
+    ],
+    "edits": 4
+  }
+}

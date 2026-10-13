@@ -1,0 +1,114 @@
+{
+  "unit": "0b-2.PrivacyPanel",
+  "file": "components/PrivacyPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 13,
+    "font": 0,
+    "primary": 9
+  },
+  "auto": [
+    {
+      "id": "57:23",
+      "line": 57,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".priv",
+      "property": "--priv-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "59:15",
+      "line": 59,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".priv",
+      "property": "--priv-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "60:22",
+      "line": 60,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".priv",
+      "property": "--priv-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "61:20",
+      "line": 61,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".priv",
+      "property": "--priv-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "62:20",
+      "line": 62,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".priv",
+      "property": "--priv-tint-note",
+      "literal": "rgba(155, 168, 190, .06)",
+      "replacement": "rgb(var(--slate-rgb) / .06)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "63:18",
+      "line": 63,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".priv",
+      "property": "--priv-tint-ok",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "64:22",
+      "line": 64,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".priv",
+      "property": "--priv-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:17.987Z",
+    "after": {
+      "colour": 6,
+      "font": 0,
+      "primary": 9
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 7
+  }
+}

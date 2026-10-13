@@ -1,0 +1,89 @@
+{
+  "unit": "0b-2.CountField",
+  "file": "components/CountField.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 4,
+    "font": 0,
+    "primary": 7
+  },
+  "auto": [
+    {
+      "id": "54:14",
+      "line": 54,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cnt",
+      "property": "--cnt-rule",
+      "literal": "rgba(155, 168, 190, .22)",
+      "replacement": "var(--rule)",
+      "why": "exact --rule in dark+light"
+    },
+    {
+      "id": "55:21",
+      "line": 55,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cnt",
+      "property": "--cnt-rule-strong",
+      "literal": "rgba(155, 168, 190, .38)",
+      "replacement": "rgb(var(--slate-rgb) / .38)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "56:15",
+      "line": 56,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cnt",
+      "property": "--cnt-hover",
+      "literal": "rgba(155, 168, 190, .07)",
+      "replacement": "rgb(var(--slate-rgb) / .07)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "52:19",
+      "line": 52,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cnt",
+      "property": "--cnt-on-accent",
+      "literal": "#1B2942",
+      "why": "matches a judgement role: --on-accent",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "on-accent",
+      "choice": "on-accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.814Z",
+    "after": {
+      "colour": 0,
+      "font": 0,
+      "primary": 7
+    },
+    "decisionsByKind": {
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 4
+  }
+}

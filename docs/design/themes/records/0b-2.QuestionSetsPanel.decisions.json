@@ -1,0 +1,561 @@
+{
+  "unit": "0b-2.QuestionSetsPanel",
+  "file": "components/QuestionSetsPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 45,
+    "font": 0,
+    "primary": 22
+  },
+  "auto": [
+    {
+      "id": "63:24",
+      "line": 63,
+      "col": 24,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets",
+      "property": "--qsets-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "66:16",
+      "line": 66,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets",
+      "property": "--qsets-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "67:23",
+      "line": 67,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets",
+      "property": "--qsets-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "68:21",
+      "line": 68,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets",
+      "property": "--qsets-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "69:23",
+      "line": 69,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets",
+      "property": "--qsets-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "71:19",
+      "line": 71,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets",
+      "property": "--qsets-tint-ok",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "70:21",
+      "line": 70,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets",
+      "property": "--qsets-tint-warn",
+      "literal": "rgba(246, 169, 76, .09)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "835:8",
+      "line": 835,
+      "col": 8,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--bg",
+      "literal": "#FFFFFF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 160)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #FFFFFF in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "836:13",
+      "line": 836,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--surface",
+      "literal": "#FFFFFF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 160)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #FFFFFF in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "837:15",
+      "line": 837,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--surface-2",
+      "literal": "#FAF7F2",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 83)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 134)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 150)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #FAF7F2 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "838:10",
+      "line": 838,
+      "col": 10,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--text",
+      "literal": "#2C2E33",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 23)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 36)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 209)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #2C2E33 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "839:11",
+      "line": 839,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--muted",
+      "literal": "#5E6167",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 95)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 121)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 128)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #5E6167 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "840:13",
+      "line": 840,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--primary",
+      "literal": "#9A5B18",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 49)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 64)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 103)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #9A5B18 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "841:12",
+      "line": 841,
+      "col": 12,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--danger",
+      "literal": "#C0392B",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 18)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 72)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 76)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #C0392B in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "842:17",
+      "line": 842,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--danger-text",
+      "literal": "#A32B25",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 139)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 149)"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (distance 156)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #A32B25 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "843:17",
+      "line": 843,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--danger-deep",
+      "literal": "#A32B25",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 25)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 88)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 104)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #A32B25 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "845:24",
+      "line": 845,
+      "col": 24,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--qsets-success-text",
+      "literal": "#1C7350",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 75)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 96)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 150)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #1C7350 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "846:16",
+      "line": 846,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--qsets-rule",
+      "literal": "#E4DFD6",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 44)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 94)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 94)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #E4DFD6 in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "847:23",
+      "line": 847,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--qsets-rule-strong",
+      "literal": "#D2CBBE",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 26)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 65)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 65)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals #D2CBBE in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "848:21",
+      "line": 848,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--qsets-row-hover",
+      "literal": "rgba(30, 35, 45, .04)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 18)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 22)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 41)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals rgba(30, 35, 45, .04) in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "849:23",
+      "line": 849,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--qsets-tint-danger",
+      "literal": "rgba(192, 57, 43, .07)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 18)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 72)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 76)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals rgba(192, 57, 43, .07) in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "850:21",
+      "line": 850,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--qsets-tint-warn",
+      "literal": "rgba(154, 91, 24, .09)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 49)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 64)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 103)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals rgba(154, 91, 24, .09) in Classic (SPEC §4.2: no near-variant merge)"
+    },
+    {
+      "id": "851:19",
+      "line": 851,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qsets.qsets--onlight, .qsets--onlight .qsets",
+      "property": "--qsets-tint-ok",
+      "literal": "rgba(28, 115, 80, .09)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 61)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 75)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 96)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper re-point inside the on-light scope; no paper role equals rgba(28, 115, 80, .09) in Classic (SPEC §4.2: no near-variant merge)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.281Z",
+    "after": {
+      "colour": 38,
+      "font": 0,
+      "primary": 22
+    },
+    "decisionsByKind": {
+      "warn": 1,
+      "keep": 16
+    },
+    "classicDeltas": [],
+    "edits": 7
+  }
+}

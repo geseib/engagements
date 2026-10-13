@@ -26,7 +26,7 @@ const lin = (c) => {
   const v = c / 255;
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 };
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const parseHex = (c) => H.parseColor(c).rgb;   // any colour a role resolves to
 const lum = (rgb) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
 const ratioOf = (a, b) => {
   const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
@@ -43,38 +43,38 @@ const over = (hex, alpha, baseHex) => {
 const ratioOnTint = (textHex, tintHex, alpha, baseHex) =>
   ratioOf(parseHex(textHex), over(tintHex, alpha, baseHex));
 
-/** Read a token's hex out of a `:root`-style block. */
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+
+/** A scope-local custom property, every var() it reads resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC) {
+  return H.scopeVar(css, block, name, opts);
 }
 
 const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
+/* Both sections render dusk (contentTheme="dark"): every dusk case of every skin. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
 
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  // NOT a global token: styles.css has never declared --success-text. The two
-  // screens declare their own, `--um-`/`--sp-` prefixed, the way auth.css:865
-  // declares --au-success-text. See the "tokens that do not exist" suite below.
-  successText: token(USERS_CSS, '.um {', '--um-success-text'),
-};
+const tokensFor = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  surface2: H.role('--surface-2', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  danger: H.role('--danger', opts),
+  dangerText: H.role('--danger-text', opts),
+  dangerDeep: H.role('--danger-deep', opts),
+  // The two screens declare their own success colour, `--um-`/`--sp-` prefixed,
+  // the way auth.css:865 declares --au-success-text; since 0b it reads the
+  // --success-text role (styles/roles.css). See the "tokens that do not exist"
+  // suite below.
+  successText: token(USERS_CSS, '.um {', '--um-success-text', opts),
+});
 
 const AA = 4.5;
 
-describe('every pairing these two screens introduce clears AA for normal text', () => {
+describe.each(DUSK)('every pairing these two screens introduce clears AA for normal text — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
   // AdminPage passes contentTheme="dark" for both sections, so the work body is
   // --bg and the panels are --surface. These are the surfaces the copy sits on.
   const pairs = [
@@ -113,7 +113,8 @@ describe('every pairing these two screens introduce clears AA for normal text', 
   });
 });
 
-describe('the token that is under AA, and must never carry text here', () => {
+describe.each(DUSK)('the token that is under AA, and must never carry text here — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
   test('--danger is under AA on --surface, which is why --danger-text exists', () => {
     // The premise. If this ever stops being true the rule below is pointless
     // and should be revisited rather than silently kept.

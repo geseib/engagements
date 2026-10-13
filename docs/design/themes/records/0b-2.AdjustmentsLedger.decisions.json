@@ -1,0 +1,78 @@
+{
+  "unit": "0b-2.AdjustmentsLedger",
+  "file": "components/AdjustmentsLedger.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 7,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [
+    {
+      "id": "13:15",
+      "line": 13,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adjl, .adjl-bill, .adjl-empty",
+      "property": "--adjl-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "14:22",
+      "line": 14,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adjl, .adjl-bill, .adjl-empty",
+      "property": "--adjl-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "15:23",
+      "line": 15,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adjl, .adjl-bill, .adjl-empty",
+      "property": "--adjl-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "16:20",
+      "line": 16,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".adjl, .adjl-bill, .adjl-empty",
+      "property": "--adjl-tint-note",
+      "literal": "rgba(155, 168, 190, .06)",
+      "replacement": "rgb(var(--slate-rgb) / .06)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:16.330Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 4
+  }
+}

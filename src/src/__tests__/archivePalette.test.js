@@ -27,48 +27,44 @@ function ratio(a, b) {
   return (h + 0.05) / (l + 0.05);
 }
 const alphaOver = (fg, bg, a) => fg.map((c, i) => c * a + bg[i] * (1 - a));
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-const parseRgba = (s) => { const m = String(s).match(/[\d.]+/g).map(Number); return { rgb: m.slice(0, 3), a: m.length > 3 ? m[3] : 1 }; };
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+const parseHex = (c) => H.parseColor(c).rgb;     // any colour a role resolves to
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+/** A scope-local custom property, every var() it reads resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC) {
+  return H.scopeVar(css, block, name, opts);
 }
-function tint(name) {
-  const m = CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in ArchivePanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC) {               // a translucent layer from the .arch block
+  return token(CSS, '.arch {', name, opts);
 }
 const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: parseHex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
-  surface: parseHex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
-  text: parseHex(H.role('--text', { skin: 'classic', theme: 'dark' })),
-  muted: parseHex(H.role('--muted', { skin: 'classic', theme: 'dark' })),
-  primary: parseHex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
-  secondary: parseHex(H.role('--secondary', { skin: 'classic', theme: 'dark' })),
-  dangerText: parseHex(H.role('--danger-text', { skin: 'classic', theme: 'dark' })),
-  dangerDeep: parseHex(H.role('--danger-deep', { skin: 'classic', theme: 'dark' })),
-  successText: parseHex(token(CSS, '.arch {', '--arch-success-text')),
-};
-/** Composite a stack of layers (hex or rgba strings) bottom-up onto the dusk field. */
-function composited(layers) {
-  let out = T.bg;
+/* The archive section renders dusk: every dusk case of every skin. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokensFor = (opts) => ({
+  bg: parseHex(H.role('--bg', opts)),
+  surface: parseHex(H.role('--surface', opts)),
+  text: parseHex(H.role('--text', opts)),
+  muted: parseHex(H.role('--muted', opts)),
+  primary: parseHex(H.role('--primary', opts)),
+  secondary: parseHex(H.role('--secondary', opts)),
+  dangerText: parseHex(H.role('--danger-text', opts)),
+  dangerDeep: parseHex(H.role('--danger-deep', opts)),
+  successText: parseHex(token(CSS, '.arch {', '--arch-success-text', opts)),
+});
+/** Composite a stack of layers (any colour, or [r,g,b]) bottom-up onto the dusk field. */
+function composited(layers, base) {
+  let out = base;
   for (const layer of layers) {
-    const { rgb, a } = layer.startsWith('#') ? { rgb: parseHex(layer), a: 1 } : parseRgba(layer);
+    const { rgb, a } = H.parseColor(layer);
     out = alphaOver(rgb, out, a);
   }
   return out;
 }
 const AA = 4.5;
 const FIELD = [];
-const PANEL = ['#1B2942'];
 
-describe('the flat pairings this screen paints', () => {
+describe.each(DUSK)('the flat pairings this screen paints — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
+  const PANEL = [T.surface];
   test.each([
     ['--text on the work field (titles, row values)', T.text, FIELD],
     ['--muted on the work field (sub-lines, dates, column heads)', T.muted, FIELD],
@@ -79,24 +75,26 @@ describe('the flat pairings this screen paints', () => {
     ['--arch-success-text on the work field (the dev chip)', T.successText, FIELD],
     ['--danger-text on the work field (Delete, the outage heading)', T.dangerText, FIELD],
     ['--danger-text on --surface (the delete dialog)', T.dangerText, PANEL],
-    ['--bg on --primary (the filled Import / Restore)', T.bg, ['#F6A94C']],
-    ['--text on --danger-deep (the filled Delete the backup)', T.text, ['#B03A34']],
+    ['--bg on --primary (the filled Import / Restore)', T.bg, [T.primary]],
+    ['--text on --danger-deep (the filled Delete the backup)', T.text, [T.dangerDeep]],
   ])('%s clears AA', (_label, fg, layers) => {
-    expect(ratio(fg, composited(layers))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(fg, composited(layers, T.bg))).toBeGreaterThanOrEqual(AA);
   });
 });
 
-describe('the tinted composites, which a token table cannot see', () => {
+describe.each(DUSK)('the tinted composites, which a token table cannot see — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
+  const at = (name) => [tint(name, { skin, theme })];
   test.each([
-    ['--danger-text on the outage tint', T.dangerText, [tint('--arch-tint-danger')]],
-    ['--text on the outage tint', T.text, [tint('--arch-tint-danger')]],
-    ['--arch-success-text on the success tint (alerts, the restore report)', T.successText, [tint('--arch-tint-ok')]],
-    ['--text on the success tint (the restore report lines)', T.text, [tint('--arch-tint-ok')]],
-    ['--text on a selected row', T.text, [tint('--arch-tint-warn')]],
-    ['--muted on a selected row', T.muted, [tint('--arch-tint-warn')]],
-    ['--muted on a hovered row', T.muted, [tint('--arch-row-hover')]],
+    ['--danger-text on the outage tint', T.dangerText, at('--arch-tint-danger')],
+    ['--text on the outage tint', T.text, at('--arch-tint-danger')],
+    ['--arch-success-text on the success tint (alerts, the restore report)', T.successText, at('--arch-tint-ok')],
+    ['--text on the success tint (the restore report lines)', T.text, at('--arch-tint-ok')],
+    ['--text on a selected row', T.text, at('--arch-tint-warn')],
+    ['--muted on a selected row', T.muted, at('--arch-tint-warn')],
+    ['--muted on a hovered row', T.muted, at('--arch-row-hover')],
   ])('%s clears AA', (_label, fg, layers) => {
-    expect(ratio(fg, composited(layers))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(fg, composited(layers, T.bg))).toBeGreaterThanOrEqual(AA);
   });
 });
 
@@ -124,7 +122,7 @@ describe('the sheet keeps the rules', () => {
   test('--danger never carries text', () => {
     expect(stripped).not.toMatch(/color:\s*var\(--danger\)/);
   });
-  test('every custom property the sheet reads is declared, here or in styles.css', () => {
+  test('every custom property the sheet reads is declared, here or in styles.css / styles/roles.css', () => {
     const declared = new Set([...stripped.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
     const globals = new Set([...GLOBAL_CSS.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
     const used = new Set([...stripped.matchAll(/var\((--[a-z0-9-]+)/g)].map((m) => m[1]));

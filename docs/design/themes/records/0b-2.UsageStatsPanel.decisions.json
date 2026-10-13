@@ -1,0 +1,115 @@
+{
+  "unit": "0b-2.UsageStatsPanel",
+  "file": "components/UsageStatsPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 6,
+    "font": 0,
+    "primary": 5
+  },
+  "auto": [
+    {
+      "id": "39:14",
+      "line": 39,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ust",
+      "property": "--ust-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "40:21",
+      "line": 40,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ust",
+      "property": "--ust-rule-strong",
+      "literal": "rgba(155, 168, 190, .40)",
+      "replacement": "rgb(var(--slate-rgb) / .40)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "43:21",
+      "line": 43,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ust",
+      "property": "--ust-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "41:19",
+      "line": 41,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ust",
+      "property": "--ust-tint-blue",
+      "literal": "rgba(124, 167, 230, .12)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .12) -> rgba(246,169,76,0.12))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "42:24",
+      "line": 42,
+      "col": 24,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ust",
+      "property": "--ust-tint-blue-edge",
+      "literal": "rgba(124, 167, 230, .45)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .45) -> rgba(246,169,76,0.45))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.938Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 5
+    },
+    "decisionsByKind": {
+      "info": 2
+    },
+    "classicDeltas": [],
+    "edits": 5
+  }
+}

@@ -52,37 +52,37 @@ function bgOf(el, win) {
   return out;
 }
 
-/* ---- tokens, READ rather than retyped: change a token and these numbers move */
+/* ---- tokens, READ rather than retyped: change a token and these numbers move.
+   The scope block now writes roles (`var(--success-text)`, `rgb(var(--danger-rgb) / .09)`),
+   not literals, so every value is RESOLVED through the skin harness for one skin x theme. */
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+const rgbaOf = (c) => { const { rgb, a } = H.parseColor(c); return `rgba(${rgb.join(', ')}, ${a})`; };
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+function token(css, block, name, opts = CLASSIC) {   // an opaque colour, as #RRGGBB
+  return hexOf(H.scopeVar(css, block, name, opts));
 }
-function tint(name) {                       // an rgba() layer from MY_CSS
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in PlatformOrgsPanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC) {               // an alpha layer from MY_CSS, as rgba()
+  return rgbaOf(H.scopeVar(MY_CSS, '.porgs {', name, opts));
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  successText: token(MY_CSS, '.porgs {', '--porgs-success-text'),
-};
+function palette(skin, theme) {
+  const o = { skin, theme };
+  return {
+    bg: hexOf(H.role('--bg', o)),
+    surface: hexOf(H.role('--surface', o)),
+    surface2: hexOf(H.role('--surface-2', o)),
+    text: hexOf(H.role('--text', o)),
+    muted: hexOf(H.role('--muted', o)),
+    primary: hexOf(H.role('--primary', o)),
+    danger: hexOf(H.role('--danger', o)),
+    dangerText: hexOf(H.role('--danger-text', o)),
+    dangerDeep: hexOf(H.role('--danger-deep', o)),
+    successText: token(MY_CSS, '.porgs {', '--porgs-success-text', o),
+  };
+}
 
 /** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf. */
 function composited(layers) {
@@ -99,8 +99,6 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const AA = 4.5;
-const FIELD = [T.bg];              // AdminShell's work body under a dark section
-const PANEL = [T.bg, T.surface];   // the invitations panel, and the dialogs
 
 function block(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -113,50 +111,57 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /* ========================================================================== */
 
-describe('the flat pairings this screen paints', () => {
-  // rejects: any token swap that makes a control unreadable on the surface it
-  // is actually painted on — the Question sets tab shipped at 1.4:1 this way.
-  const pairs = [
-    ['organisation names and row values on the work field', T.text, FIELD],
-    ['dates, column heads and the Personal mark on the work field', T.muted, FIELD],
-    ['the Pending status on the work field', T.primary, FIELD],
-    ['Suspend and the Suspended status on the work field', T.dangerText, FIELD],
-    ['the standing note, which is painted on --surface', T.muted, PANEL],
-    ['the emphasised first line of that note', T.text, PANEL],
-  ];
-  test.each(pairs)('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const o = { skin, theme };
+  const T = palette(skin, theme);
+  const FIELD = [T.bg];              // AdminShell's work body under a dark section
+  const PANEL = [T.bg, T.surface];   // the invitations panel, and the dialogs
+
+  describe('the flat pairings this screen paints', () => {
+    // rejects: any token swap that makes a control unreadable on the surface it
+    // is actually painted on — the Question sets tab shipped at 1.4:1 this way.
+    const pairs = [
+      ['organisation names and row values on the work field', T.text, FIELD],
+      ['dates, column heads and the Personal mark on the work field', T.muted, FIELD],
+      ['the Pending status on the work field', T.primary, FIELD],
+      ['Suspend and the Suspended status on the work field', T.dangerText, FIELD],
+      ['the standing note, which is painted on --surface', T.muted, PANEL],
+      ['the emphasised first line of that note', T.text, PANEL],
+    ];
+    test.each(pairs)('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
+
+    // The Active status is the one colour on this screen that is not a
+    // styles.css token — every screen declares its own success text, because an
+    // undefined custom property invalidates the whole declaration.
+    test('the Active status clears AA on the work field', () => {
+      expect(on(T.successText, FIELD)).toBeGreaterThanOrEqual(AA);
+    });
   });
 
-  // The Active status is the one colour on this screen that is not a
-  // styles.css token — every screen declares its own success text, because an
-  // undefined custom property invalidates the whole declaration.
-  test('the Active status clears AA on the work field', () => {
-    expect(on(T.successText, FIELD)).toBeGreaterThanOrEqual(AA);
-  });
-});
-
-describe('the tinted composites — the half a token table cannot show', () => {
-  // rejects: deepening a tint until the text on it drops under AA. Every stack
-  // below is the real nesting the markup produces.
-  test('the Pending status chip, tinted amber on the work field', () => {
-    expect(on(T.primary, [T.bg, tint('--porgs-tint-warn')])).toBeGreaterThanOrEqual(AA);
-  });
-  test('the Suspended status chip and the error alert', () => {
-    expect(on(T.dangerText, [T.bg, tint('--porgs-tint-danger')])).toBeGreaterThanOrEqual(AA);
-  });
-  test('the success alert', () => {
-    expect(on(T.successText, [T.bg, tint('--porgs-tint-ok')])).toBeGreaterThanOrEqual(AA);
-  });
-  test('a hovered row, including the status chips sitting on it', () => {
-    expect(on(T.text, [T.bg, tint('--porgs-row-hover')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--porgs-row-hover')])).toBeGreaterThanOrEqual(AA);
-    // A chip's own tint composites ON TOP of the hover tint — the stack the
-    // markup really produces when the pointer is over a suspended row.
-    expect(on(T.dangerText, [T.bg, tint('--porgs-row-hover'), tint('--porgs-tint-danger')]))
-      .toBeGreaterThanOrEqual(AA);
-    expect(on(T.primary, [T.bg, tint('--porgs-row-hover'), tint('--porgs-tint-warn')]))
-      .toBeGreaterThanOrEqual(AA);
+  describe('the tinted composites — the half a token table cannot show', () => {
+    // rejects: deepening a tint until the text on it drops under AA. Every stack
+    // below is the real nesting the markup produces.
+    test('the Pending status chip, tinted amber on the work field', () => {
+      expect(on(T.primary, [T.bg, tint('--porgs-tint-warn', o)])).toBeGreaterThanOrEqual(AA);
+    });
+    test('the Suspended status chip and the error alert', () => {
+      expect(on(T.dangerText, [T.bg, tint('--porgs-tint-danger', o)])).toBeGreaterThanOrEqual(AA);
+    });
+    test('the success alert', () => {
+      expect(on(T.successText, [T.bg, tint('--porgs-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+    });
+    test('a hovered row, including the status chips sitting on it', () => {
+      expect(on(T.text, [T.bg, tint('--porgs-row-hover', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, tint('--porgs-row-hover', o)])).toBeGreaterThanOrEqual(AA);
+      // A chip's own tint composites ON TOP of the hover tint — the stack the
+      // markup really produces when the pointer is over a suspended row.
+      expect(on(T.dangerText, [T.bg, tint('--porgs-row-hover', o), tint('--porgs-tint-danger', o)]))
+        .toBeGreaterThanOrEqual(AA);
+      expect(on(T.primary, [T.bg, tint('--porgs-row-hover', o), tint('--porgs-tint-warn', o)]))
+        .toBeGreaterThanOrEqual(AA);
+    });
   });
 });
 
@@ -164,7 +169,10 @@ describe('the rules that are about what must NOT be there', () => {
   // rejects: `color: var(--danger)` creeping in. It is 4.38:1 on --surface —
   // under AA — which is the whole reason --danger-text exists.
   test('--danger never carries text here', () => {
-    expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);   // the premise
+    for (const [skin, theme] of DUSK_CASES) {                                   // the premise
+      const T = palette(skin, theme);
+      expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+    }
     const offenders = MY_CSS.split('\n')
       .filter((line) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(line));
     expect(offenders).toEqual([]);
@@ -175,9 +183,9 @@ describe('the rules that are about what must NOT be there', () => {
   test('no hex literal survives outside the token block', () => {
     const declarations = stripped(MY_CSS);
     const literals = [...declarations.matchAll(/(?:^|[\s:])(#[0-9A-Fa-f]{3,8})\b/g)].map((m) => m[1]);
-    // #6FD0A4 is this scope's own --success-text (styles.css declares none) and
-    // #FFBB66 is the hover lift of --primary. Both are named, both have a
-    // comment in the stylesheet saying why they are literals.
+    // #6FD0A4 was this scope's own --success-text literal (now `var(--success-text)`,
+    // the role) and #FFBB66 the hover lift of --primary. Neither is written in the
+    // sheet today; they stay allowed so this test pins only what it always pinned.
     const allowed = ['#6FD0A4', '#FFBB66'];
     expect(literals.filter((h) => !allowed.includes(h.toUpperCase()))).toEqual([]);
   });

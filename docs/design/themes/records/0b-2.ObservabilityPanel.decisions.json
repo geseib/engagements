@@ -1,0 +1,104 @@
+{
+  "unit": "0b-2.ObservabilityPanel",
+  "file": "components/ObservabilityPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 7,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [
+    {
+      "id": "44:15",
+      "line": 44,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pobs",
+      "property": "--pobs-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "45:22",
+      "line": 45,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pobs",
+      "property": "--pobs-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "46:20",
+      "line": 46,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pobs",
+      "property": "--pobs-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "48:22",
+      "line": 48,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pobs",
+      "property": "--pobs-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "47:20",
+      "line": 47,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pobs",
+      "property": "--pobs-tint-warn",
+      "literal": "rgba(246, 169, 76, .08)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.490Z",
+    "after": {
+      "colour": 2,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {
+      "warn": 1
+    },
+    "classicDeltas": [],
+    "edits": 5
+  }
+}

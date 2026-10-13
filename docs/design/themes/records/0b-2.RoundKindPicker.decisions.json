@@ -1,0 +1,221 @@
+{
+  "unit": "0b-2.RoundKindPicker",
+  "file": "components/RoundKindPicker.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 13,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "51:14",
+      "line": 51,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".round-kind-picker",
+      "property": "--rkp-text",
+      "literal": "#2c3e50",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 181)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #2c3e50 (its rule wave converts the surface)"
+    },
+    {
+      "id": "52:15",
+      "line": 52,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".round-kind-picker",
+      "property": "--rkp-muted",
+      "literal": "#5b6b7c",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 109)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 110)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 110)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #5b6b7c (its rule wave converts the surface)"
+    },
+    {
+      "id": "53:16",
+      "line": 53,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".round-kind-picker",
+      "property": "--rkp-accent",
+      "literal": "#8a5300",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 69)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 93)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 132)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #8a5300 (its rule wave converts the surface)"
+    },
+    {
+      "id": "54:14",
+      "line": 54,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".round-kind-picker",
+      "property": "--rkp-card",
+      "literal": "#ffffff",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 160)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #ffffff (its rule wave converts the surface)"
+    },
+    {
+      "id": "55:20",
+      "line": 55,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".round-kind-picker",
+      "property": "--rkp-card-hover",
+      "literal": "#f8f9fa",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 87)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 137)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 150)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #f8f9fa (its rule wave converts the surface)"
+    },
+    {
+      "id": "56:23",
+      "line": 56,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".round-kind-picker",
+      "property": "--rkp-card-selected",
+      "literal": "#fdf3e4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 78)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 129)"
+        },
+        {
+          "role": "--action-hover",
+          "classic": "Classic differs (distance 141)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #fdf3e4 (its rule wave converts the surface)"
+    },
+    {
+      "id": "57:14",
+      "line": 57,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".round-kind-picker",
+      "property": "--rkp-rule",
+      "literal": "#e3e8ee",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 108)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 108)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #e3e8ee (its rule wave converts the surface)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.338Z",
+    "after": {
+      "colour": 13,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 7
+    },
+    "classicDeltas": [],
+    "edits": 0
+  }
+}

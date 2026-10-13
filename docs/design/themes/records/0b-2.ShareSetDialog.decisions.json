@@ -1,0 +1,80 @@
+{
+  "unit": "0b-2.ShareSetDialog",
+  "file": "components/ShareSetDialog.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 4,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [
+    {
+      "id": "17:27",
+      "line": 17,
+      "col": 27,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pubshare",
+      "property": "--pubshare-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "18:19",
+      "line": 18,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pubshare",
+      "property": "--pubshare-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "19:19",
+      "line": 19,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pubshare",
+      "property": "--pubshare-tint",
+      "literal": "rgba(246, 169, 76, .09)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.662Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {
+      "accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 3
+  }
+}

@@ -1,0 +1,343 @@
+{
+  "unit": "0b-2.QuestionSetEditor",
+  "file": "components/QuestionSetEditor.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 16,
+    "font": 0,
+    "primary": 12
+  },
+  "auto": [
+    {
+      "id": "84:21",
+      "line": 84,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "85:24",
+      "line": 85,
+      "col": 24,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-chip-public-ink",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "88:13",
+      "line": 88,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "89:20",
+      "line": 89,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "90:18",
+      "line": 90,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "91:21",
+      "line": 91,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-tint-neutral",
+      "literal": "rgba(155, 168, 190, .08)",
+      "replacement": "rgb(var(--slate-rgb) / .08)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "93:20",
+      "line": 93,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "94:16",
+      "line": 94,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-tint-ok",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "69:13",
+      "line": 69,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--primary",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent-text, --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "action"
+    },
+    {
+      "id": "77:13",
+      "line": 77,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--success",
+      "literal": "#4FB286",
+      "why": "matches several roles: --success, --phase-results",
+      "candidates": [
+        {
+          "role": "--success",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "success",
+      "choice": "success-rgb"
+    },
+    {
+      "id": "86:25",
+      "line": 86,
+      "col": 25,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-chip-waiting-ink",
+      "literal": "#7CA7E6",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 51)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 51)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 79)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "info"
+    },
+    {
+      "id": "92:18",
+      "line": 92,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-tint-warn",
+      "literal": "rgba(246, 169, 76, .09)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "95:15",
+      "line": 95,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--qs-shadow",
+      "literal": "rgba(4, 8, 16, .45)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 7)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 37)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 37)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:shadow/scrim alpha rgba(4, 8, 16, .45); no role or channel carries this black (--scrim is .72, --shade-rgb is 15 26 46)"
+    },
+    {
+      "id": "339:16",
+      "line": 339,
+      "col": 16,
+      "type": "primary",
+      "kind": "token",
+      "selector": ".qs-editor .round-kind-picker",
+      "property": "--rkp-accent",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "70:12",
+      "line": 70,
+      "col": 12,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--danger",
+      "literal": "#E5645E",
+      "why": "auto would self-reference (exact --danger in dark)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "danger-rgb"
+    },
+    {
+      "id": "71:17",
+      "line": 71,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--danger-text",
+      "literal": "#EF8C86",
+      "why": "auto would self-reference (exact --danger-text in dark)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:re-declares the global role name on its own scope; var(--danger-text) here is a self-reference (guaranteed-invalid) and no channel carries #EF8C86"
+    },
+    {
+      "id": "72:17",
+      "line": 72,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qs-editor",
+      "property": "--danger-deep",
+      "literal": "#B03A34",
+      "why": "auto would self-reference (exact --danger-deep in dark)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:re-declares the global role name on its own scope; var(--danger-deep) here is a self-reference (guaranteed-invalid) and no channel carries #B03A34"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.204Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 11
+    },
+    "decisionsByKind": {
+      "action": 1,
+      "success-rgb": 1,
+      "info": 1,
+      "warn": 1,
+      "keep": 3,
+      "accent": 1,
+      "danger-rgb": 1
+    },
+    "classicDeltas": [],
+    "edits": 14
+  }
+}

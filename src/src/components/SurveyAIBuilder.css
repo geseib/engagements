@@ -1,4 +1,4 @@
-/* skin-allowance: colour=9 font=0 primary=2 */
+/* skin-allowance: colour=8 font=0 primary=2 */
 /* ============================================================================
    GENERATE A SURVEY — components/SurveyAIBuilder.jsx
 
@@ -33,7 +33,7 @@
   --sab-rule: #e3e8ee;
   --sab-quiet: #f8f9fa;
   --sab-field: #ffffff;
-  --sab-on-accent: #1b2942;
+  --sab-on-accent: var(--on-accent);
   --sab-chip-bg: #eef2f7;
   --sab-chip-fg: #35506b;
 

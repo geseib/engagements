@@ -1,0 +1,66 @@
+{
+  "unit": "0b-2.AuditLog",
+  "file": "components/AuditLog.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 6,
+    "font": 0,
+    "primary": 2
+  },
+  "auto": [
+    {
+      "id": "39:15",
+      "line": 39,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".alog",
+      "property": "--alog-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "40:22",
+      "line": 40,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".alog",
+      "property": "--alog-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "41:20",
+      "line": 41,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".alog",
+      "property": "--alog-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:16.547Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 2
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 3
+  }
+}

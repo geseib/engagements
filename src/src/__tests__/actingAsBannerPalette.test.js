@@ -52,39 +52,33 @@ function bgOf(el, win) {
   return out;
 }
 
-/* ---- tokens, READ rather than retyped: change a token and these numbers move */
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+/* ---- tokens, READ rather than retyped: change a token and these numbers move.
+   Roles come from skinHarness for one skin x theme; the strip's own tint is its
+   scope-local custom property with every var() resolved for the same skin. */
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+const parseHex = (c) => H.parseColor(c).rgb;
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-function tint(name) {                       // an rgba() layer from MY_CSS
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in PlatformOrgsPanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC) {       // an rgba() layer from MY_CSS's .pmode block
+  return H.scopeVar(MY_CSS, '.pmode {', name, opts);
 }
 
 const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
+/* The strip renders on dusk: every dusk case of every skin. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokensFor = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  surface2: H.role('--surface-2', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  danger: H.role('--danger', opts),
+  dangerText: H.role('--danger-text', opts),
+  dangerDeep: H.role('--danger-deep', opts),
   /* No success colour on this strip: it has one state and it is a notice, not
      an outcome. Every other screen here declares its own --*-success-text
      because an undefined custom property invalidates the whole declaration. */
-};
+});
 
 /** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf. */
 function composited(layers) {
@@ -92,7 +86,8 @@ function composited(layers) {
   let host = document.body;
   for (const background of layers) {
     const el = document.createElement('div');
-    el.style.backgroundColor = background;
+    const { rgb, a } = H.parseColor(background);   // jsdom reads only the comma form
+    el.style.backgroundColor = `rgba(${rgb.join(', ')}, ${a})`;
     host.appendChild(el);
     host = el;
   }
@@ -101,8 +96,6 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const AA = 4.5;
-const FIELD = [T.bg];              // AdminShell's work body under a dark section
-const PANEL = [T.bg, T.surface];   // the invitations panel, and the dialogs
 
 function block(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -115,13 +108,14 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /* ========================================================================== */
 
-describe('the strip, composited on the work field', () => {
+describe.each(DUSK)('the strip, composited on the work field — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
   /*
     Every pairing here sits on ONE stack: the work field, plus this strip's own
     amber tint. Nothing else nests inside it — it is three elements on a line —
     which is why this file is short where the panel palettes are long.
   */
-  const STACK = [T.bg, tint('--pmode-tint')];
+  const STACK = [T.bg, tint('--pmode-tint', { skin, theme })];
 
   // rejects: deepening the tint until the sentence stops clearing AA, which is
   // the change somebody makes to "make the warning stand out more".

@@ -41,26 +41,22 @@ function bgOf(el, win) {
   for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
   return out;
 }
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+const parseHex = (c) => H.parseColor(c).rgb;     // any colour a role resolves to
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+/** A scope-local custom property, every var() it reads resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC) {
+  return H.scopeVar(css, block, name, opts);
 }
-function tint(name) {
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in EventBuilder.css`);
-  return m[1];
+function tint(name, opts = CLASSIC) {               // a translucent layer from the .evb block
+  return token(MY_CSS, '.evb {', name, opts);
 }
 function composited(layers) {
   document.body.innerHTML = '';
   let host = document.body;
   for (const background of layers) {
     const el = document.createElement('div');
-    el.style.backgroundColor = background;
+    const { rgb, a } = H.parseColor(background);   // jsdom reads only the comma form
+    el.style.backgroundColor = `rgba(${rgb.join(', ')}, ${a})`;
     host.appendChild(el);
     host = el;
   }
@@ -69,20 +65,28 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  onAccent: token(MY_CSS, '.evb {', '--evb-on-accent'),
-};
+/* The builder renders dusk: every dusk case of every skin. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokensFor = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  dangerText: H.role('--danger-text', opts),
+  onAccent: token(MY_CSS, '.evb {', '--evb-on-accent', opts),
+});
 const AA = 4.5;
-const PANEL = [T.bg, T.surface];
+/** A colour as rgb + alpha (3 dp), so a comparison ignores how it is spelled. */
+const colorOf = (c) => {
+  const { rgb, a } = H.parseColor(c);
+  return { rgb: rgb.map(Math.round), a: Math.round(a * 1000) / 1000 };
+};
 
-describe('the item dialog (03)', () => {
+describe.each(DUSK)('the item dialog (03) — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
+  const PANEL = [T.bg, T.surface];
+  const tint = (name) => token(MY_CSS, '.evb {', name, { skin, theme });
   test.each([
     ['dialog copy on the dialog surface', T.text, PANEL],
     ['labels and hints on the dialog surface', T.muted, PANEL],
@@ -125,7 +129,8 @@ describe('the contract', () => {
   });
   test('the warn chip\'s border is a token, not a raw colour, matching the mockup\'s .chip.warn', () => {
     const css = stripped(MY_CSS);
-    expect(css).toMatch(/--evb-rule-warn:\s*rgba\(246,\s*169,\s*76,\s*\.5\)/);
+    // Classic stays pinned to the mockup's value; the spelling is the warn role's.
+    expect(colorOf(token(MY_CSS, '.evb {', '--evb-rule-warn', CLASSIC))).toEqual(colorOf('rgba(246, 169, 76, .5)'));
     expect(css).toMatch(/\.evb-chip--warn\s*\{[^}]*border-color:\s*var\(--evb-rule-warn\)/);
   });
   test('every custom property used is declared somewhere', () => {
@@ -149,7 +154,10 @@ describe('the contract', () => {
   });
 });
 
-describe('the agenda place (02, 02b)', () => {
+describe.each(DUSK)('the agenda place (02, 02b) — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
+  const PANEL = [T.bg, T.surface];
+  const tint = (name) => token(MY_CSS, '.evb {', name, { skin, theme });
   test.each([
     ['titles and times on the panel', T.text, PANEL],
     ['source lines and the foot on the panel', T.muted, PANEL],

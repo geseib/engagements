@@ -1,0 +1,152 @@
+{
+  "unit": "0b-2.InvoicePanel",
+  "file": "components/InvoicePanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 11,
+    "font": 0,
+    "primary": 5
+  },
+  "auto": [
+    {
+      "id": "14:14",
+      "line": 14,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "15:21",
+      "line": 15,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "16:19",
+      "line": 16,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "17:19",
+      "line": 17,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-tint-note",
+      "literal": "rgba(155, 168, 190, .06)",
+      "replacement": "rgb(var(--slate-rgb) / .06)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "19:18",
+      "line": 19,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-tint-bad",
+      "literal": "rgba(229, 100, 94, .10)",
+      "replacement": "rgb(var(--danger-rgb) / .10)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "20:22",
+      "line": 20,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "18:19",
+      "line": 18,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-tint-warn",
+      "literal": "rgba(246, 169, 76, .08)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "21:19",
+      "line": 21,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".inv",
+      "property": "--inv-on-accent",
+      "literal": "#1B2942",
+      "why": "matches several roles: --surface, --on-accent",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "surface",
+      "choice": "on-accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.320Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 5
+    },
+    "decisionsByKind": {
+      "warn": 1,
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 8
+  }
+}

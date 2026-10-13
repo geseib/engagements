@@ -1,4 +1,4 @@
-/* skin-allowance: colour=6 font=0 primary=4 */
+/* skin-allowance: colour=1 font=0 primary=4 */
 /* ============================================================================
    THE INVITATION PROMPT — components/PendingInvites.jsx
 
@@ -28,11 +28,11 @@
   --pinv-t-floor: 12px;
   --pinv-t-label: 13px;
   --pinv-t-body: 15px;
-  --pinv-rule: rgba(124, 167, 230, .38);
-  --pinv-tint: rgba(124, 167, 230, .08);
-  --pinv-ok-rule: rgba(79, 178, 134, .4);
-  --pinv-ok-tint: rgba(79, 178, 134, .09);
-  --pinv-btn-rule: rgba(155, 168, 190, .55);
+  --pinv-rule: rgb(var(--info-rgb) / .38);
+  --pinv-tint: rgb(var(--info-rgb) / .08);
+  --pinv-ok-rule: rgb(var(--success-rgb) / .4);
+  --pinv-ok-tint: rgb(var(--success-rgb) / .09);
+  --pinv-btn-rule: rgb(var(--slate-rgb) / .55);
   --pinv-bar: #0F1E36;
 
   display: flex;

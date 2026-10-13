@@ -1,4 +1,4 @@
-/* skin-allowance: colour=6 font=0 primary=3 */
+/* skin-allowance: colour=5 font=0 primary=3 */
 /* ============================================================================
    GENERATE POLLS — the typed-poll pieces of components/PollAIBuilder.jsx, `.pab`
 
@@ -42,7 +42,7 @@
   --pab-edge: #7a8898;
   --pab-quiet: #f8f9fa;
   --pab-field: #ffffff;
-  --pab-on-accent: #1b2942;
+  --pab-on-accent: var(--on-accent);
 
   --pab-t-label: 13px;
   --pab-t-body: 15px;

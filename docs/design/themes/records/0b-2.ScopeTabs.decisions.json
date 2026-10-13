@@ -1,0 +1,217 @@
+{
+  "unit": "0b-2.ScopeTabs",
+  "file": "components/ScopeTabs.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 18,
+    "font": 0,
+    "primary": 8
+  },
+  "auto": [
+    {
+      "id": "26:14",
+      "line": 26,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "27:21",
+      "line": 27,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-rule-strong",
+      "literal": "rgba(155, 168, 190, .45)",
+      "replacement": "rgb(var(--slate-rgb) / .45)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "28:15",
+      "line": 28,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-hover",
+      "literal": "rgba(155, 168, 190, .08)",
+      "replacement": "rgb(var(--slate-rgb) / .08)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "226:14",
+      "line": 226,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp-sheet",
+      "property": "--scp-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "227:15",
+      "line": 227,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp-sheet",
+      "property": "--scp-hover",
+      "literal": "rgba(155, 168, 190, .08)",
+      "replacement": "rgb(var(--slate-rgb) / .08)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "24:12",
+      "line": 24,
+      "col": 12,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-bg",
+      "literal": "#13203A",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 14)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 14)"
+        },
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant #13203A with no exact role (SPEC §4.2: merging it is a Classic delta)"
+    },
+    {
+      "id": "25:14",
+      "line": 25,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-menu",
+      "literal": "#1E2D4A",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 9)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 9)"
+        },
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 20)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant #1E2D4A with no exact role (SPEC §4.2: merging it is a Classic delta)"
+    },
+    {
+      "id": "29:21",
+      "line": 29,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-active-tint",
+      "literal": "rgba(124, 167, 230, .07)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .07) -> rgba(246,169,76,0.07))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "30:18",
+      "line": 30,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-eng-tint",
+      "literal": "rgba(124, 167, 230, .18)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .18) -> rgba(246,169,76,0.18))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "31:19",
+      "line": 31,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scp",
+      "property": "--scp-else-tint",
+      "literal": "rgba(124, 167, 230, .12)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .12) -> rgba(246,169,76,0.12))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.394Z",
+    "after": {
+      "colour": 10,
+      "font": 0,
+      "primary": 8
+    },
+    "decisionsByKind": {
+      "keep": 2,
+      "info": 3
+    },
+    "classicDeltas": [],
+    "edits": 8
+  }
+}
