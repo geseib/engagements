@@ -29,3 +29,14 @@
 /* The asks whose point the read does not hold: after the read, never lost. */
 .askicons-after { display: flex; flex-wrap: wrap; align-items: center; gap: .4em; margin: .6em 0 0; font-size: var(--t-meta, 13px); color: var(--muted); }
 .askicons-after .askicons { margin-left: 0; font-size: 1.4em; }
+
+/* On the stage a point is a flex row (stage.css .notes-md li): the icons are
+   their own column at the point's top right, never shrunk under the text. */
+.markdown-li > .askicons {
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: flex-start;
+  margin-left: .8em;
+  vertical-align: baseline;
+}

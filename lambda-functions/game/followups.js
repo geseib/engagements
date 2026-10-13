@@ -41,6 +41,7 @@
 const { GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { callerMayDriveSession } = require('./tenant');
 const { isCallAndAnswer } = require('./briefing');
+const { resolveBeat } = require('./stage-beats');
 const { pollAnswerText } = require('./poll-question');
 const keys = require('./followup-keys');
 const kinds = require('./followup-kinds');
@@ -266,7 +267,12 @@ async function phoneLive(db, { gameId, meta, state, query }) {
   const current = shownRows.length ? shownRows[shownRows.length - 1] : null;
   if (!current) return respond(200, { gameId, ask: null });
   const ask = current.ask;
-  const out = { gameId, ask: phoneWire(ask, (current.answerRows || []).length) };
+  // The round's beat, so a device that missed the frame (it joined or reloaded
+  // after the question went out) still knows the room is on the question.
+  const roundRow = (await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME, Key: { PK: `GAME#${gameId}`, SK: `ROUND#${round}` },
+  }))).Item;
+  const out = { gameId, beat: resolveBeat(roundRow && roundRow.StageBeat), ask: phoneWire(ask, (current.answerRows || []).length) };
   const name = String((query && query.playerName) || '').trim();
   if (name && await isMember(db, gameId, name, query.clientId)) {
     const mine = await store.readAnswer(db, { gameId, round, askId: ask.AskId, orgId, playerName: name });

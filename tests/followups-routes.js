@@ -467,6 +467,8 @@ const followUpRows = () => table.prefix(PK, 'FOLLOWUP#');
     await answer(r.body.ask.askId, 'Grace', undefined, 2);
     const p = await phone('GET', 'live');
     assert.strictEqual(p.body.ask.answered, 2);
+    // A device that missed the frame still learns the room is on the question.
+    assert.strictEqual(p.body.beat, 'ask');
     assert.ok(!/Ada|Grace/.test(JSON.stringify(p.body.ask)));
   });
   await check('the generic stage-beat route will not open the ask beat', async () => {

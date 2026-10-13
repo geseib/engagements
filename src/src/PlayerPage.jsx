@@ -1448,6 +1448,7 @@ function PlayerPage({ event = null } = {}) {
     if (!gameId) return;
     const r = await fetchLiveAsk({ apiBase: API_BASE, gameId, playerName, clientId: getClientId(gameId) });
     if (!r.ok) return;
+    if (r.beat) askBeatRef.current = r.beat === 'ask';
     setFollowUp(r.ask ? { ask: r.ask, yours: r.yours } : null);
   };
   followUpLoadRef.current = loadFollowUp;

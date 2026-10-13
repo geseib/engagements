@@ -52,7 +52,7 @@ export async function fetchLiveAsk({ fetchFn = fetch, apiBase, gameId, playerNam
   const r = await call(fetchFn, `${apiBase}games/${encodeURIComponent(gameId)}/followup-play/live${q}`);
   if (r.status === 404) return { ok: true, ask: null, yours: null };
   if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true, ask: r.body.ask || null, yours: r.body.yours === undefined ? null : r.body.yours };
+  return { ok: true, ask: r.body.ask || null, yours: r.body.yours === undefined ? null : r.body.yours, beat: r.body.beat || null };
 }
 
 export function answerAsk({ fetchFn = fetch, apiBase, gameId, round, askId, playerName, clientId, value }) {

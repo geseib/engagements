@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import RatingInput from './survey/RatingInput';
 import ChoiceInput from './survey/ChoiceInput';
 import TextInput from './survey/TextInput';
-import FW, { KINDS, RATE_ENDS } from '../config/followUpWords';
+import FW, { KINDS } from '../config/followUpWords';
 import './FollowUpCard.css';
 
 /**
@@ -95,7 +95,6 @@ export default function FollowUpCard({ ask, yours = null, onSend }) {
           onBlur={() => {}}
         />
       </form>
-      {ask.kind === 'rate' && <p className="fu-ends"><span>{RATE_ENDS.low}</span><span>{RATE_ENDS.high}</span></p>}
       {sent && <p className="fu-sent" role="status">{FW.sent}</p>}
       {error && <p className="fu-error" role="alert">{error}</p>}
       <button type="submit" form="fu-form" className="plr-btn" disabled={busy || sent || !answered(ask, value)}>
