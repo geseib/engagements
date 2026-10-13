@@ -8,13 +8,15 @@
  *   type unknown, or not sendable in this build      dropped ('type')
  *   cited answers missing or out of range             dropped ('answers')
  *   the fields its type needs are missing             dropped ('fields')
- *   agree statement not words copied, in order, from
+ *   rate statement not words copied, in order, from
  *     ONE cited answer, or over 20 words              dropped ('not-copied' / 'too-long')
  *   any roster name, first or last, in what the room
  *     would see (statement, question, options)       dropped ('names')
  *   a choice option not copied from its own answer,
  *     over 8 words, or two from one answer            kept, marked 'reworded'
  *   a question over 110 characters                    kept, marked 'long'
+ *   an anchor that is not a point of the stored read  kept, anchor null, marked 'unanchored'
+ *                                                     (shown after the read, never lost)
  *
  * Owner, 2026-10-11: "drop agree statements not in the room's words and
  * anything naming a person, keep reworded options marked 'Reworded'".
@@ -27,6 +29,7 @@
  * none, and a slip there never reaches the room.
  */
 const { KINDS } = require('./followup-kinds');
+const { pointAt } = require('./read-sections');
 
 const RULES = Object.freeze({
   statementWords: 20,
@@ -85,11 +88,12 @@ const inRange = (n, count) => Number.isInteger(n) && n >= 1 && n <= count;
  * @param {string[]} rosterNames  every name known in the session
  * @param {object}   [opts]
  * @param {string[]} [opts.kinds] the kinds that may be kept (default: the sendable kinds)
+ * @param {string}   [opts.read]  the stored read's markdown, to check each anchor against
  * @returns {{ kept: object[], dropped: number, reasons: object, raw: number }}
- *   each kept ask: { type, statement?, question?, options?, answers, why, marks }
+ *   each kept ask: { type, statement?, question?, options?, answers, why, anchor, marks }
  *   `reasons` counts drops by reason word — never the text.
  */
-function checkSuggestions(asks, answers, rosterNames, { kinds = KINDS } = {}) {
+function checkSuggestions(asks, answers, rosterNames, { kinds = KINDS, read = '' } = {}) {
   const list = Array.isArray(asks) ? asks : [];
   const texts = Array.isArray(answers) ? answers.map((a) => String(a || '')) : [];
   const parts = nameParts(rosterNames);
@@ -116,7 +120,7 @@ function checkSuggestions(asks, answers, rosterNames, { kinds = KINDS } = {}) {
     const marks = [];
     const out = { type, answers: cited, why };
 
-    if (type === 'agree') {
+    if (type === 'rate') {
       const statement = fold(a.statement);
       if (!statement) { drop('fields'); continue; }
       // A name is the first reason given: it is the one that must never be missed.
@@ -156,6 +160,12 @@ function checkSuggestions(asks, answers, rosterNames, { kinds = KINDS } = {}) {
         drop('names'); continue;
       }
     }
+
+    // THE ANCHOR (option A): the section and point of the read this came
+    // from, exactly as the read printed them. A miss is kept, after the read.
+    const at = pointAt(read, a.anchor);
+    out.anchor = at ? { section: at.section, point: at.point } : null;
+    if (!at) marks.push('unanchored');
 
     out.marks = marks;
     kept.push(out);

@@ -180,7 +180,7 @@ async function suggestFollowUps(p) {
   if (!input) return finish({ servedBy, reason: REASONS.NO_TOOL_CALL });
   if (!Array.isArray(input.asks)) return finish({ servedBy, reason: REASONS.MALFORMED });
 
-  const checked = checkSuggestions(input.asks, ranked.map((a) => a.text), p.rosterNames || []);
+  const checked = checkSuggestions(input.asks, ranked.map((a) => a.text), p.rosterNames || [], { read: p.readBack || '' });
   return finish({
     servedBy,
     asks: checked.kept,

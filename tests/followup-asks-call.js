@@ -48,10 +48,10 @@ const SECRET_BITS = ['interface diff', 'backfill', 'stopped reading bodies', 'Ma
 const reply = (content, extra = {}) => ({ body: new TextEncoder().encode(JSON.stringify({ content, stop_reason: 'tool_use', ...extra })) });
 const toolCall = (asks) => reply([{ type: 'tool_use', id: 't1', name: 'suggest_follow_up_asks', input: { asks } }]);
 const GOOD = [
-  { type: 'agree', statement: 'Code can be rolled back; a bad backfill cannot.', answers: [3], why: 'Tests the backfill line.' },
+  { type: 'rate', statement: 'Code can be rolled back; a bad backfill cannot.', answers: [3], why: 'Tests the backfill line.', anchor: { section: 'What the room said', point: 1 } },
   { type: 'choice', question: 'What do you read first?', answers: [1, 2], why: 'Settles the split.',
     options: [{ text: 'the interface diff', answer: 1 }, { text: 'Security-sensitive files only', answer: 2 }] },
-  { type: 'agree', statement: 'Marcus reads the interface diff', answers: [1], why: '' },
+  { type: 'rate', statement: 'Marcus reads the interface diff', answers: [1], why: '' },
 ];
 
 const call = (send, extra = {}) => F.suggestFollowUps({
@@ -105,7 +105,9 @@ const call = (send, extra = {}) => F.suggestFollowUps({
   const good = await call(async () => toolCall(GOOD));
   await check('a good tool call: checked, the named one dropped, the rest kept', () => {
     assert.strictEqual(good.reason, null);
-    assert.deepStrictEqual(good.asks.map((a) => a.type), ['agree', 'choice']);
+    assert.deepStrictEqual(good.asks.map((a) => a.type), ['rate', 'choice']);
+    // The read gives the anchor's section no list, so the ask is kept after it.
+    assert.strictEqual(good.asks[0].anchor, null);
     assert.deepStrictEqual(good.reasons, { names: 1 });
     assert.strictEqual(good.raw, 3);
     assert.strictEqual(good.servedBy, F.FOLLOWUP_MODEL_ID);
@@ -165,16 +167,20 @@ const call = (send, extra = {}) => F.suggestFollowUps({
     assert.deepStrictEqual(F.promptVariables().sort(),
       ['eventTitle', 'numberedAnswers', 'questionTitle', 'readBack', 'responseCount', 'task', 'voteCount'].sort());
   });
-  await check('the tool schema parses and offers the first build\'s two kinds', () => {
+  await check('the tool schema parses: the three kinds, one to three asks, each with an anchor', () => {
     const t = F.PROMPT.tool;
     assert.strictEqual(t.name, 'suggest_follow_up_asks');
-    assert.deepStrictEqual(t.input_schema.properties.asks.items.properties.type.enum, ['agree', 'choice']);
+    assert.deepStrictEqual(t.input_schema.properties.asks.items.properties.type.enum, ['ideas', 'choice', 'rate']);
+    assert.deepStrictEqual(t.input_schema.properties.asks.items.properties.type.enum, [...require(path.join(REPO, 'lambda-functions/game/followup-kinds.js')).KINDS]);
     assert.strictEqual(t.input_schema.properties.asks.maxItems, 3);
-    assert.ok(!/"open"/.test(F.PROMPT.instructions), 'the instructions still offer open asks');
+    assert.strictEqual(t.input_schema.properties.asks.minItems, 1);
+    assert.ok(t.input_schema.properties.asks.items.required.includes('anchor'));
+    assert.deepStrictEqual(t.input_schema.properties.asks.items.properties.anchor.required, ['section', 'point']);
+    assert.ok(!/"agree"|"open"/.test(F.PROMPT.instructions), 'the instructions still offer the first build\'s kinds');
   });
   await check('it is the design draft\'s v2 rules otherwise, word for word', () => {
     const draft = require(path.join(REPO, 'docs/design/ca-followup-asks/prompt-draft.json')).followUpAsks.instructions;
-    for (const rule of ['A1. Ground it.', 'A2. Do not lead.', 'A4. A statement every person', 'A5. Name nobody.', 'A9. Never ask for anything personal']) {
+    for (const rule of ['A2. Do not lead.', 'A4. A statement every person', 'A5. Name nobody.', 'A9. Never ask for anything personal']) {
       const line = draft.split('\n').find((l) => l.startsWith(rule));
       assert.ok(line && F.PROMPT.instructions.includes(line), rule);
     }

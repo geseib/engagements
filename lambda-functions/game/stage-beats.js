@@ -38,8 +38,12 @@
  * copy as text and fails the build if the two drift.
  */
 
-/** The only three there are, in the order a round moves through them. */
-const BEATS = ['results', 'field-notes', 'feedback'];
+/**
+ * The only four there are, in the order a round moves through them. `ask` is
+ * a question for the room, sent from Workie's read (docs/design/followup-icons);
+ * only followups.js writes it, when the host sends one.
+ */
+const BEATS = ['results', 'field-notes', 'ask', 'feedback'];
 
 /**
  * The beat a round is on when nothing has been written.

@@ -1,5 +1,6 @@
 /**
- * CALL & ANSWER FOLLOW-UP ASKS: THE ROUTES (docs/design/ca-followup-asks SPEC §6).
+ * CALL & ANSWER FOLLOW-UP ASKS: THE ROUTES (docs/design/ca-followup-asks SPEC §6,
+ * reworked by docs/design/followup-icons: Ideas / Choose / Rate, anchored to the read).
  *
  * Served by the comments function (comments.js hands these paths here): the
  * feature replaces "Request feedback" with comments kept inside it, and the
@@ -14,6 +15,7 @@
  *     POST /games/{id}/followups/send              send one ask
  *     POST /games/{id}/followups/asks/{askId}/close    freeze the count
  *     POST /games/{id}/followups/asks/{askId}/cancel
+ *     POST /games/{id}/followups/asks/{askId}/pick     an Ideas answer on or off the wall
  *
  *   THE PHONES — public, as /comments and /votes are: participants hold no
  *   token. The gate is comments.js writeComment's, exactly.
@@ -28,11 +30,10 @@
  * SWITCHED OFF, NOTHING. While FOLLOWUP_ASKS_ENABLED is not `on` for the tier
  * (dev only, for now) every route answers 404, as an unknown path does.
  *
- * NOT YET: the `ask` beat. Sending does not move the Stage; the beat, the
- * drawer, the phone card, the Stage and the report are the UI build (PLAN
- * phases 4-5), which adds `ask` to the closed set in every copy at once
- * (stage-beats.js). Until then an unknown beat would read as `results` on
- * every screen, so nothing here writes one.
+ * THE `ask` BEAT. Sending sets the round's beat to `ask` (stage-beats.js), so
+ * every screen moves to the question; cancelling returns it to `field-notes`;
+ * closing keeps it, and every screen shows the results. The generic
+ * /stage-beat route refuses `ask`: only a sent question opens it.
  *
  * NOTIFY, THEN REFETCH. Every write broadcasts `followUpChanged` with where
  * something changed and never the words.
@@ -74,13 +75,14 @@ const isHost = (event, meta) => {
 // ─────────────────────────────────────────────────────────── wires ──
 
 /** An ask as the host sees it: everything, with its count. */
-function hostWire(ask, tally) {
+function hostWire(ask, tally, ideas) {
   return {
     askId: ask.AskId,
     round: ask.QuestionNumber,
     kind: ask.Kind,
     statement: ask.Statement || null,
     question: ask.Question || null,
+    anchor: ask.Anchor || null,
     options: (ask.Options || []).map((o) => ({ text: o.text, ...(o.ownWords ? { ownWords: true } : { answer: o.answer }) })),
     fromAnswers: ask.FromAnswers || [],
     origin: ask.Origin,
@@ -90,6 +92,9 @@ function hostWire(ask, tally) {
     closedAt: ask.ClosedAt || null,
     cancelledAt: ask.CancelledAt || null,
     tally: tally || null,
+    // Ideas: every answer's words (never a name) with an id to pick by, and
+    // the ones the host has put on the wall.
+    ...(ask.Kind === 'ideas' ? { ideas: ideas || [], picked: ask.Picked || [] } : {}),
   };
 }
 
@@ -99,16 +104,21 @@ function hostWire(ask, tally) {
  * closed, and never a name.
  */
 function phoneWire(ask) {
-  const agree = ask.Kind === 'agree';
+  const kind = ask.Kind;
+  const words = kind === 'rate'
+    ? { statement: ask.Statement, scale: { lowLabel: kinds.RATE.lowLabel, highLabel: kinds.RATE.highLabel } }
+    : kind === 'ideas'
+      ? { question: ask.Question, maxLength: kinds.LIMITS.idea }
+      : { question: ask.Question, options: (ask.Options || []).map((o) => o.text) };
   return {
     askId: ask.AskId,
     round: ask.QuestionNumber,
-    kind: ask.Kind,
-    ...(agree
-      ? { statement: ask.Statement, answers: { yesLabel: kinds.AGREE.yesLabel, noLabel: kinds.AGREE.noLabel, unsureLabel: kinds.AGREE.unsureLabel } }
-      : { question: ask.Question, options: (ask.Options || []).map((o) => o.text) }),
+    kind,
+    ...words,
     status: ask.Status,
     ...(ask.Status === 'closed' && ask.Tally ? { tally: ask.Tally } : {}),
+    // Ideas reach the room only as the host picks them, and never with a name.
+    ...(kind === 'ideas' ? { picked: (ask.Picked || []).map((p) => p.text) } : {}),
   };
 }
 
@@ -132,7 +142,8 @@ async function hostRound(db, { gameId, meta, state, round }) {
     } else if (ask.Status === 'live') {
       tally = await store.countAnswers(ask, answerRows, orgId);
     }
-    asks.push(hostWire(ask, tally));
+    const ideas = ask.Kind === 'ideas' ? await store.ideasOf(answerRows, orgId) : null;
+    asks.push(hostWire(ask, tally, ideas));
   }
   return respond(200, {
     gameId,
@@ -174,9 +185,14 @@ async function send(db, broadcast, { gameId, meta, state, body }) {
     if (!suggestion) return respond(409, { error: 'That suggestion has been replaced; open the list again', code: 'STALE_SUGGESTION' });
   }
   const origin = kinds.resolveOrigin(value, suggestion);
-  const created = await store.createAsk(db, { gameId, round, orgId, value, origin });
+  // Where it sits beside the read: the suggestion's checked anchor, or none.
+  const anchor = suggestion && suggestion.anchor ? suggestion.anchor : null;
+  const created = await store.createAsk(db, { gameId, round, orgId, value, origin, anchor });
   if (!created.ok) return respond(409, { error: 'Finish the open question first', code: 'LIVE' });
 
+  // Every screen moves to the question: the round's beat becomes `ask`.
+  await store.setBeat(db, { gameId, round, beat: 'ask' });
+  await broadcast(gameId, { type: 'stageBeatChanged', gameId, questionNumber: round, beat: 'ask', timestamp: new Date().toISOString() });
   await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId: created.ask.AskId, status: 'live' });
   return respond(201, { gameId, ask: hostWire(created.ask, kinds.tallyOf(created.ask, { n: 0 })) });
 }
@@ -190,8 +206,35 @@ async function finish(db, broadcast, { gameId, meta, askId, body, status }) {
       ? respond(404, { error: 'Follow-up question not found' })
       : respond(409, { error: 'This question is not open', code: 'NOT_LIVE' });
   }
+  // Cancelled: the room goes back to the read. Closed: the beat stays `ask`
+  // and every screen shows the results.
+  if (status === 'cancelled') {
+    await store.setBeat(db, { gameId, round, beat: 'field-notes' });
+    await broadcast(gameId, { type: 'stageBeatChanged', gameId, questionNumber: round, beat: 'field-notes', timestamp: new Date().toISOString() });
+  }
   await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status });
   return respond(200, { gameId, ask: hostWire(done.ask, status === 'closed' ? done.ask.Tally : null) });
+}
+
+/**
+ * THE HOST PICKS AN IDEA FOR THE WALL (or takes it down). The words are copied
+ * onto the ask, sealed, without a name, so the wall and the report keep them
+ * after the answer rows expire.
+ */
+async function pick(db, broadcast, { gameId, meta, askId, body }) {
+  const round = keys.roundOf(body.round);
+  if (!round || !keys.isAskId(askId)) return respond(400, { error: 'round and a follow-up id are required' });
+  if (typeof body.id !== 'string' || !body.id || typeof body.picked !== 'boolean') {
+    return respond(400, { error: 'id and picked are required' });
+  }
+  const done = await store.pickIdea(db, { gameId, round, askId, orgId: orgOf(meta), id: body.id, picked: body.picked });
+  if (!done.ok) {
+    return done.code === 'NOT_FOUND'
+      ? respond(404, { error: 'Not found' })
+      : respond(409, { error: 'Only an Ideas question has answers to pick', code: done.code });
+  }
+  await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status: 'picked' });
+  return respond(200, { gameId, askId, picked: done.picked });
 }
 
 // ────────────────────────────────────────────────────────── phones ──
@@ -294,6 +337,9 @@ async function handleFollowUps(event, { db, broadcast }) {
   if (method === 'GET' && parts.length === 2 && parts[0] === 'round') return hostRound(db, { gameId, meta, state, round: parts[1] });
   if (method === 'GET' && parts.length === 1 && parts[0] === 'rounds') return hostRounds(db, { gameId, meta });
   if (method === 'POST' && parts.length === 1 && parts[0] === 'send') return send(db, broadcast, { gameId, meta, state, body });
+  if (method === 'POST' && parts.length === 3 && parts[0] === 'asks' && parts[2] === 'pick') {
+    return pick(db, broadcast, { gameId, meta, askId: parts[1], body });
+  }
   if (method === 'POST' && parts.length === 3 && parts[0] === 'asks' && (parts[2] === 'close' || parts[2] === 'cancel')) {
     return finish(db, broadcast, { gameId, meta, askId: parts[1], body, status: parts[2] === 'close' ? 'closed' : 'cancelled' });
   }

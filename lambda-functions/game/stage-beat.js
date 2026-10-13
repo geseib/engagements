@@ -163,6 +163,10 @@ exports.handler = async (event) => {
   if (setsProfile) return setProfile(event, gameId, body.profile);
   if (turnsPage) return turnPage(event, gameId, body);
 
+  // `ask` comes with a question: only sending one (followups.js) opens it.
+  if (beat === 'ask') {
+    return respond(400, { error: 'Send a question to the room to open it' });
+  }
   if (!BEATS.includes(beat)) {
     return respond(400, { error: `beat must be one of: ${BEATS.join(', ')}` });
   }

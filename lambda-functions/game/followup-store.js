@@ -29,6 +29,7 @@ const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS, STARTED_DAYS } = require('./session-ttl');
 const { pollTally } = require('./poll-round');
 const keys = require('./followup-keys');
+const crypto = require('crypto');
 const { toSurveyQuestion, tallyOf } = require('./followup-kinds');
 
 const SUGGESTED_DAYS = 30;
@@ -220,7 +221,7 @@ async function countAnswers(ask, answerRows, orgId) {
  *
  * @returns {Promise<{ok: true, ask: object} | {ok: false, code: 'LIVE'}>}
  */
-async function createAsk(db, { gameId, round, orgId, value, origin, now = new Date().toISOString(), askId = keys.newAskId() }) {
+async function createAsk(db, { gameId, round, orgId, value, origin, anchor = null, now = new Date().toISOString(), askId = keys.newAskId() }) {
   const sk = keys.askSk(round, askId);
   if (!sk) throw new Error('followup-store: bad round or ask id');
   const item = {
@@ -230,7 +231,10 @@ async function createAsk(db, { gameId, round, orgId, value, origin, now = new Da
     QuestionNumber: keys.roundOf(round),
     AskId: askId,
     Kind: value.kind,
-    ...(value.kind === 'agree' ? { Statement: value.statement } : { Question: value.question, Options: origin.options }),
+    ...(value.kind === 'rate' ? { Statement: value.statement } : {}),
+    ...(value.kind === 'ideas' ? { Question: value.question } : {}),
+    ...(value.kind === 'choice' ? { Question: value.question, Options: origin.options } : {}),
+    ...(anchor ? { Anchor: anchor } : {}),
     FromAnswers: origin.fromAnswers || [],
     Origin: origin.origin,
     SuggestionIndex: value.suggestionIndex,
@@ -336,6 +340,65 @@ async function settleLive(db, { gameId, orgId, onScreenRound }) {
   return null;
 }
 
+/**
+ * The round's beat (stage-beats.js), written as stage-beat.js writes it:
+ * UPDATE, never PUT, so AuthorsRevealed on the same row survives.
+ */
+async function setBeat(db, { gameId, round, beat, now = new Date().toISOString() }) {
+  const padded = keys.roundOf(round);
+  await db.send(new UpdateCommand({
+    TableName: table(),
+    Key: { PK: pkOf(gameId), SK: `ROUND#${padded}` },
+    UpdateExpression: 'SET #beat = :beat, #updatedAt = :now, #qn = :qn, #ttl = if_not_exists(#ttl, :ttl)',
+    ExpressionAttributeNames: { '#beat': 'StageBeat', '#updatedAt': 'UpdatedAt', '#qn': 'QuestionNumber', '#ttl': 'ttl' },
+    ExpressionAttributeValues: { ':beat': beat, ':now': now, ':qn': padded, ':ttl': ttlFrom(now, ROUND_RECORD_DAYS) },
+  }));
+}
+
+// ──────────────────────────────────────────────────────────── ideas ──
+
+/** A stable id for one answer that says nothing about whose it is. */
+const ideaId = (sk) => crypto.createHash('sha256').update(String(sk)).digest('hex').slice(0, 12);
+
+/** An Ideas ask's answers as the host sees them: the words and an id, oldest first, never a name. */
+async function ideasOf(answerRows, orgId) {
+  const opened = await openAll(orgId, answerRows || []);
+  return opened
+    .filter((r) => typeof r.Value === 'string' && r.Value.trim())
+    .sort((a, b) => String(a.At || '').localeCompare(String(b.At || '')))
+    .map((r) => ({ id: ideaId(r.SK), text: r.Value.trim() }));
+}
+
+/**
+ * Put one idea on the wall, or take it down. The words are copied onto the
+ * ask as `Picked` (sealed), in the order picked.
+ *
+ * @returns {Promise<{ok: true, picked: object[]} | {ok: false, code: 'NOT_FOUND'|'NOT_IDEAS'}>}
+ */
+async function pickIdea(db, { gameId, round, askId, orgId, id, picked }) {
+  const ask = await readAsk(db, { gameId, round, askId, orgId });
+  if (!ask) return { ok: false, code: 'NOT_FOUND' };
+  if (ask.Kind !== 'ideas') return { ok: false, code: 'NOT_IDEAS' };
+  const prefix = keys.answersPrefix(round, askId);
+  const ideas = await ideasOf(prefix ? await queryAll(db, gameId, prefix) : [], orgId);
+  const current = Array.isArray(ask.Picked) ? ask.Picked : [];
+  let next = current.filter((p) => p.id !== id);
+  if (picked) {
+    const idea = ideas.find((i) => i.id === id);
+    if (!idea) return { ok: false, code: 'NOT_FOUND' };
+    next = [...next, { id, text: idea.text }];
+  }
+  const sealed = await seal(orgId, { Picked: next });
+  await db.send(new UpdateCommand({
+    TableName: table(),
+    Key: { PK: pkOf(gameId), SK: ask.SK },
+    UpdateExpression: 'SET #p = :p',
+    ExpressionAttributeNames: { '#p': 'Picked' },
+    ExpressionAttributeValues: { ':p': sealed.Picked },
+  }));
+  return { ok: true, picked: next };
+}
+
 // ──────────────────────────────────────────────────────────── answers ──
 
 /**
@@ -410,4 +473,7 @@ module.exports = {
   settleLive,
   writeAnswer,
   readAnswer,
+  setBeat,
+  ideasOf,
+  pickIdea,
 };

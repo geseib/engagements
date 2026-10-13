@@ -82,7 +82,7 @@ export const HOST_PHASES = [
  * comments have to land in the round report of the round being commented on,
  * and a state carrying its own ordinal would orphan them from it.
  */
-export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
+export const STAGE_BEATS = ['results', 'field-notes', 'ask', 'feedback'];
 
 /**
  * The host phase a round is in, given its round phase and its beat.
@@ -102,7 +102,7 @@ export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
  * An unrecognised beat leaves the phase alone rather than throwing — an older
  * or newer deploy's value should degrade to the tally, not white-screen a host.
  */
-const PHASE_FOR_BEAT = { 'field-notes': 'FIELD_NOTES', feedback: 'FEEDBACK' };
+const PHASE_FOR_BEAT = { 'field-notes': 'FIELD_NOTES', ask: 'ASKING', feedback: 'FEEDBACK' };
 
 /*
   A CLOSED SURVEY HAS THE SAME BEATS (27 Sep 2026, the owner: the Workie
@@ -704,7 +704,7 @@ const STATE_FOR_PHASE = {
   FIELD_NOTES: 'RESULTS#001', FEEDBACK: 'RESULTS#001', ENDED: 'ENDED',
   COLLECTING: 'SURVEY#OPEN', CLOSED: 'SURVEY#CLOSED',
 };
-const BEAT_FOR_PHASE = { FIELD_NOTES: 'field-notes', FEEDBACK: 'feedback' };
+const BEAT_FOR_PHASE = { FIELD_NOTES: 'field-notes', ASKING: 'ask', FEEDBACK: 'feedback' };
 
 /**
  * The host page's inputs as roundStep's normalised snapshot (two-surface

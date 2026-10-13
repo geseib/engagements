@@ -1,38 +1,40 @@
 /**
- * CALL & ANSWER FOLLOW-UP ASKS: WHAT ONE ASK IS (docs/design/ca-followup-asks).
+ * CALL & ANSWER FOLLOW-UP ASKS: WHAT ONE ASK IS (docs/design/followup-icons).
  *
  * After the round's read, the host may send ONE short question to the room's
  * phones, laptops and tablets. Pure: no AWS, no I/O. The rows live in
  * followup-store.js, the routes in followups.js.
  *
- * THE KINDS, FIRST BUILD (owner, 2026-10-11: "agree + pick-one, open questions
- * in the second build"):
+ * THE KINDS (owner, 2026-10-13, the "Ask the room" mockup), as Build Room
+ * names its asks:
  *
- *   agree   a statement from the room. Fixed answers, nobody relabels them:
- *           Agree / Not sure / Disagree — as Build Room fixed its rating scale,
- *           so an "agree" means the same thing in the room and in the report.
+ *   ideas   one open question; the room writes a short answer (280 characters).
+ *           The wall shows only the answers the host picks, never a name.
  *   choice  a question and 2 to 4 options, one pick, no write-in ("Other" was
- *           ruled out: the options are the room's own).
+ *           ruled out: the options are the room's own). Shown as "Choose".
+ *   rate    a statement from the room, rated 1 to 5. The ends are fixed,
+ *           "1 · Disagree" and "5 · Agree", and nobody relabels them — as Build
+ *           Room fixed its rating scale — so a 4 means the same thing in the
+ *           room and in the report. It replaces the first build's agree /
+ *           not sure / disagree.
  *
- * `open` is in the tool's vocabulary (followup-prompt.json keeps it out of the
- * first build's prompt) and is refused here until it ships with the comments
- * wall's handling for free text on the Stage.
+ * An `agree` row from the first build (dev only, 30-day ttl) is not a kind any
+ * more: it cannot be sent or answered, and reads as nothing.
  *
  * AN ANSWER IS A SURVEY VALUE. toSurveyQuestion() maps an ask onto the
  * survey's own question shapes, so the phone draws it with the existing
- * YesNoInput / ChoiceInput and the server checks it with survey-answer.js and
- * counts it with survey-aggregate.js. Nothing here learns a second way to
- * validate or count an answer.
+ * TextInput / ChoiceInput / RatingInput and the server checks it with
+ * survey-answer.js and counts it with survey-aggregate.js. Nothing here learns
+ * a second way to validate or count an answer.
  */
 const { checkAnswer } = require('./survey-answer');
 
-/** What may be SENT in this build. */
-const KINDS = Object.freeze(['agree', 'choice']);
-/** What the model may SUGGEST, the tool's vocabulary (open is the second build). */
-const TOOL_KINDS = Object.freeze(['agree', 'choice', 'open']);
+/** What may be sent, and what the model may suggest: one vocabulary. */
+const KINDS = Object.freeze(['ideas', 'choice', 'rate']);
+const TOOL_KINDS = KINDS;
 
-/** The one agree scale. */
-const AGREE = Object.freeze({ yesLabel: 'Agree', noLabel: 'Disagree', unsure: true, unsureLabel: 'Not sure' });
+/** The one rating scale. */
+const RATE = Object.freeze({ scale: '1-5', lowLabel: 'Disagree', highLabel: 'Agree' });
 
 /** Where a sent ask came from: a suggestion as written, one the host edited, or the host's own. */
 const ORIGINS = Object.freeze(['suggested', 'edited', 'host']);
@@ -44,6 +46,7 @@ const ORIGINS = Object.freeze(['suggested', 'edited', 'host']);
  */
 const LIMITS = Object.freeze({
   statement: 300,
+  idea: 280,
   question: 200,
   option: 120,
   minOptions: 2,
@@ -77,20 +80,21 @@ function normalizeFollowUp(body) {
       ? b.suggestionIndex : null,
   };
 
-  if (kind === 'agree') {
+  if (kind === 'rate') {
     const raw = String(b.statement === undefined || b.statement === null ? '' : b.statement).replace(/\s+/g, ' ').trim();
-    if (!raw) return { error: 'Write the statement the room will agree or disagree with' };
+    if (!raw) return { error: 'Write the statement the room will rate' };
     if (raw.length > LIMITS.statement) return { error: `A statement is at most ${LIMITS.statement} characters` };
     value.statement = raw;
     return { value };
   }
 
-  // choice
   const q = String(b.question === undefined || b.question === null ? '' : b.question).replace(/\s+/g, ' ').trim();
   if (!q) return { error: 'Write the question' };
   if (q.length > LIMITS.question) return { error: `A question is at most ${LIMITS.question} characters` };
   value.question = q;
+  if (kind === 'ideas') return { value };
 
+  // choice
   const list = Array.isArray(b.options) ? b.options : [];
   const options = [];
   const seen = new Set();
@@ -118,14 +122,11 @@ function normalizeFollowUp(body) {
 function toSurveyQuestion(ask) {
   const a = ask || {};
   const kind = a.Kind || a.kind;
-  if (kind === 'agree') {
-    return {
-      kind: 'yesno',
-      yesLabel: AGREE.yesLabel,
-      noLabel: AGREE.noLabel,
-      unsure: true,
-      followUpWhen: '',
-    };
+  if (kind === 'rate') {
+    return { kind: 'rating', scale: RATE.scale, lowLabel: RATE.lowLabel, highLabel: RATE.highLabel, required: true };
+  }
+  if (kind === 'ideas') {
+    return { kind: 'text', maxLength: LIMITS.idea, required: true };
   }
   if (kind === 'choice') {
     const options = (a.Options || a.options || []).map((o) => (o && typeof o === 'object' ? o.text : String(o)));
@@ -143,10 +144,10 @@ function checkValue(ask, value) {
   const question = toSurveyQuestion(ask);
   if (!question) return { ok: false, error: 'This question cannot be answered' };
   if (value === null || value === undefined) return { ok: false, error: 'Pick an answer' };
-  if (question.kind === 'yesno' && value && typeof value === 'object' && value.why !== undefined) {
-    return { ok: false, error: 'A follow-up answer carries no why' };
-  }
-  return checkAnswer(question, value);
+  const checked = checkAnswer(question, value);
+  // An empty idea is no answer: the survey's text check lets a blank through.
+  if (checked.ok && (checked.value === null || checked.value === '')) return { ok: false, error: 'Write an answer' };
+  return checked;
 }
 
 /**
@@ -157,7 +158,8 @@ function wordsOf(ask) {
   const a = ask || {};
   const kind = a.Kind || a.kind || a.type;
   const fold = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-  if (kind === 'agree') return { kind, statement: fold(a.Statement || a.statement) };
+  if (kind === 'rate') return { kind, statement: fold(a.Statement || a.statement) };
+  if (kind === 'ideas') return { kind, question: fold(a.Question || a.question) };
   return {
     kind,
     question: fold(a.Question || a.question),
@@ -204,17 +206,19 @@ function resolveOrigin(value, suggestion) {
  * ask's survey question (poll-round.js pollTally). Counts only, never a
  * percentage (the reads' rule), never a name.
  *
- *   agree   { n, counts: { agree, unsure, disagree } }
+ *   rate    { n, counts: [1s, 2s, 3s, 4s, 5s], mean }
  *   choice  { n, counts: [per option, in the ask's order] }
+ *   ideas   { n }  — the texts are rows of their own, shown only when picked
  */
 function tallyOf(ask, aggregateResult) {
   const kind = (ask && (ask.Kind || ask.kind)) || '';
   const r = aggregateResult || {};
   const n = Number.isInteger(r.n) ? r.n : 0;
-  if (kind === 'agree') {
-    const c = r.counts || {};
-    return { n, counts: { agree: c.yes || 0, unsure: c.unsure || 0, disagree: c.no || 0 } };
+  if (kind === 'rate') {
+    const counts = Array.from({ length: 5 }, (_, i) => (Array.isArray(r.counts) ? r.counts[i] || 0 : 0));
+    return { n, counts, mean: n && typeof r.mean === 'number' ? r.mean : null };
   }
+  if (kind === 'ideas') return { n };
   const size = ((ask && (ask.Options || ask.options)) || []).length;
   const counts = Array.from({ length: size }, (_, i) => (Array.isArray(r.counts) ? r.counts[i] || 0 : 0));
   return { n, counts };
@@ -223,7 +227,7 @@ function tallyOf(ask, aggregateResult) {
 module.exports = {
   KINDS,
   TOOL_KINDS,
-  AGREE,
+  RATE,
   ORIGINS,
   LIMITS,
   normalizeFollowUp,

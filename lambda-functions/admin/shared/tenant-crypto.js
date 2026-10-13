@@ -558,7 +558,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  `Kind`, `Status`, `Origin`, `FromAnswers`, the counts of drops and marks,
    *  the times, `Model` and `PlayerName` (plaintext on every player row) are
    *  structure and stay readable. */
-  followup: Object.freeze(['Asks', 'Statement', 'Question', 'Options', 'Tally', 'Value', 'Text']),
+  followup: Object.freeze(['Asks', 'Statement', 'Question', 'Options', 'Tally', 'Value', 'Text', 'Picked', 'Anchor']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

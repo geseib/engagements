@@ -1,5 +1,6 @@
 /**
  * THE PURE PIECES OF THE FOLLOW-UP ASKS (docs/design/ca-followup-asks PLAN
+ * T2, reworked for Ideas / Choose / Rate by docs/design/followup-icons A1;
  * T2, T4, T9): what one ask is (followup-kinds.js), the numbered answers the
  * suggestion call is given (numbered-answers.js), and the keys
  * (followup-keys.js).
@@ -19,18 +20,23 @@ function check(label, fn) {
   catch (e) { console.log(`  FAIL  ${label}\n        ${e.message}`); fail++; }
 }
 
-console.log('\n1. the kinds (first build: agree and pick-one)');
-check('agree and choice only; open and anything else refused with words the host can act on', () => {
-  assert.deepStrictEqual([...K.KINDS], ['agree', 'choice']);
-  for (const kind of ['open', 'rating', '', undefined]) {
+console.log('\n1. the kinds (Ideas, Choose, Rate — docs/design/followup-icons)');
+check('ideas, choice and rate only; agree and anything else refused with words the host can act on', () => {
+  assert.deepStrictEqual([...K.KINDS], ['ideas', 'choice', 'rate']);
+  for (const kind of ['agree', 'open', 'rating', '', undefined]) {
     const r = K.normalizeFollowUp({ kind, question: 'Q?' });
-    assert.ok(r.error && /kind must be one of: agree, choice/.test(r.error), JSON.stringify(r));
+    assert.ok(r.error && /kind must be one of: ideas, choice, rate/.test(r.error), JSON.stringify(r));
   }
 });
-check('an agree statement is trimmed, whitespace folded, capped', () => {
-  assert.deepStrictEqual(K.normalizeFollowUp({ kind: 'agree', statement: '  Code can be\n rolled back ' }).value.statement, 'Code can be rolled back');
-  assert.match(K.normalizeFollowUp({ kind: 'agree', statement: '' }).error, /Write the statement/);
-  assert.match(K.normalizeFollowUp({ kind: 'agree', statement: 'x'.repeat(K.LIMITS.statement + 1) }).error, /at most 300/);
+check('a rate statement is trimmed, whitespace folded, capped', () => {
+  assert.deepStrictEqual(K.normalizeFollowUp({ kind: 'rate', statement: '  Code can be\n rolled back ' }).value.statement, 'Code can be rolled back');
+  assert.match(K.normalizeFollowUp({ kind: 'rate', statement: '' }).error, /Write the statement/);
+  assert.match(K.normalizeFollowUp({ kind: 'rate', statement: 'x'.repeat(K.LIMITS.statement + 1) }).error, /at most 300/);
+});
+check('an ideas question is a question and nothing else', () => {
+  assert.deepStrictEqual(K.normalizeFollowUp({ kind: 'ideas', question: ' Which customer first? ', options: [{ text: 'x' }] }).value,
+    { kind: 'ideas', statement: '', question: 'Which customer first?', options: [], fromAnswers: [], suggestionIndex: null });
+  assert.match(K.normalizeFollowUp({ kind: 'ideas' }).error, /Write the question/);
 });
 check('a pick-one takes 2 to 4 distinct options, each capped', () => {
   const opts = (n) => Array.from({ length: n }, (_, i) => ({ text: `option ${i}`, answer: i + 1 }));
@@ -47,31 +53,37 @@ check('a pick-one takes 2 to 4 distinct options, each capped', () => {
   });
 });
 check('every kind round-trips through the survey shape the phone already draws', () => {
-  const agree = K.toSurveyQuestion({ Kind: 'agree', Statement: 'x' });
-  assert.deepStrictEqual(agree, { kind: 'yesno', yesLabel: 'Agree', noLabel: 'Disagree', unsure: true, followUpWhen: '' });
+  assert.deepStrictEqual(K.toSurveyQuestion({ Kind: 'rate', Statement: 'x' }),
+    { kind: 'rating', scale: '1-5', lowLabel: 'Disagree', highLabel: 'Agree', required: true });
+  assert.deepStrictEqual(K.toSurveyQuestion({ kind: 'ideas', question: 'q' }), { kind: 'text', maxLength: 280, required: true });
   const choice = K.toSurveyQuestion({ kind: 'choice', options: [{ text: 'a' }, { text: 'b' }] });
   assert.deepStrictEqual(choice, { kind: 'choice', options: ['a', 'b'], allowMultiple: false, allowOther: false, maxPicks: 1 });
-  assert.strictEqual(K.toSurveyQuestion({ kind: 'open' }), null);
+  assert.strictEqual(K.toSurveyQuestion({ kind: 'agree' }), null);
 });
-check('values are checked with the survey\'s own rules; no clear, no why, no write-in, one pick', () => {
-  const agree = { Kind: 'agree', Statement: 'x' };
+check('values are checked with the survey\'s own rules; no clear, no blank idea, no write-in, one pick', () => {
+  const rate = { Kind: 'rate', Statement: 'x' };
+  const ideas = { Kind: 'ideas', Question: 'q' };
   const choice = { Kind: 'choice', Options: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] };
-  assert.deepStrictEqual(K.checkValue(agree, { v: 'unsure' }), { ok: true, value: { v: 'unsure' } });
-  assert.strictEqual(K.checkValue(agree, { v: 'maybe' }).ok, false);
-  assert.strictEqual(K.checkValue(agree, { v: 'yes', why: 'because' }).ok, false);
-  assert.strictEqual(K.checkValue(agree, null).ok, false);
+  assert.deepStrictEqual(K.checkValue(rate, 4), { ok: true, value: 4 });
+  for (const bad of [0, 6, 2.5, '4', null]) assert.strictEqual(K.checkValue(rate, bad).ok, false, String(bad));
+  assert.deepStrictEqual(K.checkValue(ideas, '  the agencies on fixed budgets '), { ok: true, value: 'the agencies on fixed budgets' });
+  assert.strictEqual(K.checkValue(ideas, '   ').ok, false);
+  assert.strictEqual(K.checkValue(ideas, 'x'.repeat(281)).ok, false);
+  assert.strictEqual(K.checkValue({ Kind: 'agree' }, { v: 'yes' }).ok, false);
   assert.deepStrictEqual(K.checkValue(choice, [2]), { ok: true, value: [2] });
   assert.strictEqual(K.checkValue(choice, [0, 1]).ok, false);
   assert.strictEqual(K.checkValue(choice, [3]).ok, false);
   assert.strictEqual(K.checkValue(choice, [{ other: 'lunch' }]).ok, false);
   assert.strictEqual(K.checkValue(choice, 'a').ok, false);
 });
-check('the tally is the aggregate\'s, in the fixed agree words; counts only', () => {
-  const ask = { Kind: 'agree' };
+check('the tally is the aggregate\'s: rate gives the five counts and the average; counts only', () => {
+  const ask = { Kind: 'rate' };
   const q = K.toSurveyQuestion(ask);
-  const rows = [{ v: 'yes' }, { v: 'yes' }, { v: 'no' }, { v: 'unsure' }].map((v) => ({ Answers: { q: v } }));
+  const rows = [5, 4, 4, 1, 2].map((v) => ({ Answers: { q: v } }));
   const { PerQuestion } = aggregate([{ qid: 'q', ...q }], rows);
-  assert.deepStrictEqual(K.tallyOf(ask, PerQuestion.q), { n: 4, counts: { agree: 2, unsure: 1, disagree: 1 } });
+  assert.deepStrictEqual(K.tallyOf(ask, PerQuestion.q), { n: 5, counts: [1, 1, 0, 2, 1], mean: 3.2 });
+  assert.deepStrictEqual(K.tallyOf(ask, { n: 0 }), { n: 0, counts: [0, 0, 0, 0, 0], mean: null });
+  assert.deepStrictEqual(K.tallyOf({ Kind: 'ideas' }, { n: 3 }), { n: 3 });
   const c = { Kind: 'choice', Options: [{ text: 'a' }, { text: 'b' }] };
   const cr = aggregate([{ qid: 'q', ...K.toSurveyQuestion(c) }], [[1], [1], [0]].map((v) => ({ Answers: { q: v } })));
   assert.deepStrictEqual(K.tallyOf(c, cr.PerQuestion.q), { n: 3, counts: [1, 2] });
@@ -100,10 +112,12 @@ check('no suggestion: the host\'s own, every option their words, no answers clai
   const v = K.normalizeFollowUp({ kind: 'choice', question: 'Q?', options: [{ text: 'a', answer: 1 }, { text: 'b', answer: 2 }] }).value;
   assert.deepStrictEqual(K.resolveOrigin(v, null), { origin: 'host', options: [{ text: 'a', ownWords: true }, { text: 'b', ownWords: true }], fromAnswers: [] });
 });
-check('an agree sent as suggested is "suggested"; a changed statement is "edited"', () => {
-  const s = { type: 'agree', statement: 'Code can be rolled back', answers: [2], why: '', marks: [] };
-  assert.strictEqual(K.resolveOrigin(K.normalizeFollowUp({ kind: 'agree', statement: 'Code can be rolled back' }).value, s).origin, 'suggested');
-  assert.strictEqual(K.resolveOrigin(K.normalizeFollowUp({ kind: 'agree', statement: 'Code can always be rolled back' }).value, s).origin, 'edited');
+check('a rate sent as suggested is "suggested"; a changed statement is "edited"; ideas the same', () => {
+  const s = { type: 'rate', statement: 'Code can be rolled back', answers: [2], why: '', marks: [] };
+  assert.strictEqual(K.resolveOrigin(K.normalizeFollowUp({ kind: 'rate', statement: 'Code can be rolled back' }).value, s).origin, 'suggested');
+  assert.strictEqual(K.resolveOrigin(K.normalizeFollowUp({ kind: 'rate', statement: 'Code can always be rolled back' }).value, s).origin, 'edited');
+  const i = { type: 'ideas', question: 'Which customer first?', answers: [1], why: '', marks: [] };
+  assert.strictEqual(K.resolveOrigin(K.normalizeFollowUp({ kind: 'ideas', question: 'Which customer first?' }).value, i).origin, 'suggested');
 });
 
 console.log('\n3. the numbered answers (no names, the read\'s order)');

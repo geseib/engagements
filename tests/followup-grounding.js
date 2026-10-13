@@ -9,7 +9,9 @@
  *   - Sonnet r2's 115-character question marked long;
  *   - punctuation, case and curly quotes ignored when copying is judged;
  *   - a statement or option naming anybody in the roster dropped;
- *   - open asks are not kept in the first build (owner, 2026-10-11).
+ *   - (2026-10-13, docs/design/followup-icons) the kinds are Ideas / Choose /
+ *     Rate: the prototype's `agree` reads as `rate` and `open` as `ideas` (the
+ *     same shapes), and every ask's anchor is checked against the stored read.
  */
 const path = require('path');
 const assert = require('assert');
@@ -25,7 +27,12 @@ function check(label, fn) {
   catch (e) { console.log(`  FAIL  ${label}\n        ${e.message}`); fail++; }
 }
 
-const ALL = ['agree', 'choice', 'open'];
+const ALL = ['ideas', 'choice', 'rate'];
+// The prototype ran the first build's vocabulary; the shapes are the same.
+const RENAME = { agree: 'rate', open: 'ideas' };
+const renamed = (asks) => asks.map((a) => ({ ...a, type: RENAME[a.type] || a.type }));
+// Marks other than the anchor's: the prototype's reads gave no anchors.
+const own = (a) => a.marks.filter((m) => m !== 'unanchored');
 /** The B run's answers in the order the call was given them: by points, ties in the room's order. */
 function material(roundKey) {
   const r = rounds[roundKey];
@@ -39,7 +46,7 @@ const run = (name) => runs.find((r) => r.run === name);
 const checkRun = (name, opts) => {
   const r = run(name);
   const m = material(r.round);
-  return G.checkSuggestions(r.asks, m.answers, m.names, opts);
+  return G.checkSuggestions(renamed(r.asks), m.answers, m.names, opts);
 };
 
 console.log('\n1. the prototype runs (separate call, v2 rules), every kind allowed');
@@ -49,18 +56,18 @@ const sr3 = checkRun('B_sonnet_r3', { kinds: ALL });
 const sr2 = checkRun('B_sonnet_r2', { kinds: ALL });
 
 check("Haiku r3's backfill statement is kept, unmarked", () => {
-  const agree = hr3.kept.find((a) => a.type === 'agree');
-  assert.ok(agree, JSON.stringify(hr3));
-  assert.match(agree.statement, /backfill cannot/);
-  assert.deepStrictEqual(agree.marks, []);
+  const rate = hr3.kept.find((a) => a.type === 'rate');
+  assert.ok(rate, JSON.stringify(hr3));
+  assert.match(rate.statement, /backfill cannot/);
+  assert.deepStrictEqual(own(rate), []);
 });
 check("Sonnet r3's 26-word statement is dropped, as too long", () => {
-  assert.ok(!sr3.kept.some((a) => a.type === 'agree'));
+  assert.ok(!sr3.kept.some((a) => a.type === 'rate'));
   assert.deepStrictEqual(sr3.reasons, { 'too-long': 1 });
   assert.strictEqual(sr3.dropped, 1);
 });
-check('3 of 4 agree statements survive', () => {
-  const n = [hr3, hr2, sr3, sr2].reduce((s, r) => s + r.kept.filter((a) => a.type === 'agree').length, 0);
+check('3 of 4 rate statements survive', () => {
+  const n = [hr3, hr2, sr3, sr2].reduce((s, r) => s + r.kept.filter((a) => a.type === 'rate').length, 0);
   assert.strictEqual(n, 3);
 });
 check('every choice ask is kept and marked reworded', () => {
@@ -72,26 +79,26 @@ check('every choice ask is kept and marked reworded', () => {
   }
 });
 check("Sonnet r2's 115-character question is kept and marked long", () => {
-  const open = sr2.kept.find((a) => a.type === 'open');
-  assert.ok(open.question.length > 110);
-  assert.deepStrictEqual(open.marks, ['long']);
+  const ideas = sr2.kept.find((a) => a.type === 'ideas');
+  assert.ok(ideas.question.length > 110);
+  assert.deepStrictEqual(own(ideas), ['long']);
 });
 check('every kept ask carries its cited answers and its why, nothing more', () => {
   for (const r of [hr3, hr2, sr3, sr2]) {
     for (const a of r.kept) {
       assert.ok(Array.isArray(a.answers) && a.answers.length);
       assert.strictEqual(typeof a.why, 'string');
-      for (const key of Object.keys(a)) assert.ok(['type', 'statement', 'question', 'options', 'answers', 'why', 'marks'].includes(key), key);
+      for (const key of Object.keys(a)) assert.ok(['type', 'statement', 'question', 'options', 'answers', 'why', 'anchor', 'marks'].includes(key), key);
     }
   }
 });
 
-console.log('\n2. the first build keeps agree and pick-one only');
-check('the default kinds drop an open ask, by reason "type"', () => {
-  const r = checkRun('B_sonnet_r2');
-  assert.ok(!r.kept.some((a) => a.type === 'open'));
-  assert.strictEqual(r.reasons.type, 1);
-  assert.strictEqual(r.kept.length, 2);
+console.log('\n2. the kinds are Ideas, Choose and Rate');
+check('the default kinds keep all three; the first build\'s agree is dropped by reason "type"', () => {
+  const r = G.checkSuggestions(run('B_sonnet_r2').asks, material(run('B_sonnet_r2').round).answers, []);
+  assert.ok(r.reasons.type >= 1, JSON.stringify(r.reasons));
+  const k = checkRun('B_sonnet_r2');
+  assert.deepStrictEqual(new Set(k.kept.map((a) => a.type)).size, k.kept.length);
 });
 
 console.log('\n3. the copy rule');
@@ -100,7 +107,7 @@ const ANSWERS = [
   'Ship it to one percent and watch the dashboards.',
   'Senior engineers write the tickets now.',
 ];
-const agree = (statement, answers = [1]) => ({ type: 'agree', statement, answers, why: 'Tests it.' });
+const agree = (statement, answers = [1]) => ({ type: 'rate', statement, answers, why: 'Tests it.' });
 check('case, punctuation and curly apostrophes are ignored', () => {
   const r = G.checkSuggestions([agree("code can be rolled back, a bad backfill can't")], ANSWERS, []);
   assert.strictEqual(r.kept.length, 1, JSON.stringify(r));
@@ -124,7 +131,7 @@ check('citing an answer that does not exist drops the ask', () => {
 check('an option copied exactly is unmarked; reworded, too long and same-answer options are marked', () => {
   const ask = (options) => ({ type: 'choice', question: 'Which first?', options, answers: [1, 2], why: 'Settles it.' });
   const exact = G.checkSuggestions([ask([{ text: 'read every migration', answer: 1 }, { text: 'Ship it to one percent', answer: 2 }])], ANSWERS, []);
-  assert.deepStrictEqual(exact.kept[0].marks, []);
+  assert.deepStrictEqual(own(exact.kept[0]), []);
   const reworded = G.checkSuggestions([ask([{ text: 'read the migrations', answer: 1 }, { text: 'Ship it to one percent', answer: 2 }])], ANSWERS, []);
   assert.deepStrictEqual(reworded.kept[0].options.map((o) => o.marks), [['reworded'], []]);
   const long = G.checkSuggestions([ask([{ text: 'I read every migration line by line and more', answer: 1 }, { text: 'watch the dashboards', answer: 2 }])], ANSWERS, []);
@@ -141,6 +148,22 @@ check('more than three asks: the fourth is dropped', () => {
   const r = G.checkSuggestions([s, s, s, s], ANSWERS, []);
   assert.strictEqual(r.kept.length, 3);
   assert.deepStrictEqual(r.reasons, { 'over-three': 1 });
+});
+
+console.log('\n2b. the anchor: a point of the read, or after it');
+const READ = '## Discussion topics\n1. Would on-call trust a bot at 3am?\n2. Who would push back first?\n\n## Next steps\n- Run the shadow invoice.';
+check('a real section and point is kept as written; case and a trailing colon do not matter', () => {
+  const r = G.checkSuggestions([{ ...agree('Ship it to one percent', [2]), anchor: { section: 'discussion topics:', point: 2 } }], ANSWERS, [], { read: READ });
+  assert.deepStrictEqual(r.kept[0].anchor, { section: 'Discussion topics', point: 2 });
+  assert.deepStrictEqual(r.kept[0].marks, []);
+});
+check('a heading the read never printed, a point past the list, or no anchor: kept, after the read, marked', () => {
+  for (const anchor of [{ section: 'Risks', point: 1 }, { section: 'Next steps', point: 2 }, undefined]) {
+    const r = G.checkSuggestions([{ ...agree('Ship it to one percent', [2]), anchor }], ANSWERS, [], { read: READ });
+    assert.strictEqual(r.kept.length, 1);
+    assert.strictEqual(r.kept[0].anchor, null);
+    assert.deepStrictEqual(r.kept[0].marks, ['unanchored']);
+  }
 });
 
 console.log('\n4. nobody is named to the room');

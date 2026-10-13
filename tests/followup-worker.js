@@ -55,8 +55,8 @@ let bedrockCalls = [];
 let readMode = 'ok';      // 'ok' | 'throw'
 let asksMode = 'ok';      // 'ok' | 'throw'
 const ASKS = [
-  { type: 'agree', statement: 'Prioritise the easy-fix tickets', answers: [1], why: 'Tests the top line.' },
-  { type: 'agree', statement: 'Grace says one owner per ticket', answers: [2], why: '' },
+  { type: 'rate', statement: 'Prioritise the easy-fix tickets', answers: [1], why: 'Tests the top line.' },
+  { type: 'rate', statement: 'Grace says one owner per ticket', answers: [2], why: '' },
 ];
 class InvokeModelCommand { constructor(i) { this.input = i; } }
 stub('@aws-sdk/client-bedrock-runtime', {

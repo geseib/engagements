@@ -49,7 +49,15 @@ function holds(expression, item, names = {}, values = {}) {
 function applySet(item, expression, names = {}, values = {}) {
   const m = /^SET\s+(.+)$/.exec(String(expression || '').trim());
   if (!m) throw new Error(`followup-table: unsupported UpdateExpression "${expression}"`);
-  for (const part of m[1].split(',')) {
+  // `#a = if_not_exists(#a, :v)` is one clause; split on commas outside parentheses.
+  for (const part of m[1].split(/,(?![^(]*\))/)) {
+    const ine = /^\s*(#?\w+)\s*=\s*if_not_exists\(\s*(#?\w+)\s*,\s*(:\w+)\s*\)\s*$/.exec(part);
+    if (ine) {
+      const a = ine[1].startsWith('#') ? names[ine[1]] : ine[1];
+      if (!a || !(ine[3] in values)) throw new Error(`followup-table: unbound SET clause "${part}"`);
+      if (item[a] === undefined) item[a] = clone(values[ine[3]]);
+      continue;
+    }
     const p = /^\s*(#?\w+)\s*=\s*(:\w+)\s*$/.exec(part);
     if (!p) throw new Error(`followup-table: unsupported SET clause "${part}"`);
     const a = p[1].startsWith('#') ? names[p[1]] : p[1];
