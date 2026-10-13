@@ -204,7 +204,7 @@
   --pc-muted: var(--muted);
   --pc-link: var(--info);
   --pc-stop: var(--danger-text);
-  --pc-silent: var(--accent);
+  --pc-silent: var(--warn);
 
   /* `styles.css` has never declared a success TEXT token — RATIONALE §5 lists
      one that does not exist — so every dusk screen declares its own. This is

@@ -148,7 +148,7 @@
         }
       ],
       "proposal": "accent",
-      "choice": "accent"
+      "choice": "warn"
     },
     {
       "id": "235:20",

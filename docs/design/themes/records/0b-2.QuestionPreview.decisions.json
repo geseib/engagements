@@ -13,44 +13,7 @@
     "font": 0,
     "primary": 0
   },
-  "auto": [
-    {
-      "id": "47:16",
-      "line": 47,
-      "col": 16,
-      "type": "colour",
-      "kind": "token",
-      "selector": ".qprev, .qprev-switch",
-      "property": "--qprev-rule",
-      "literal": "rgba(155, 168, 190, .20)",
-      "replacement": "rgb(var(--slate-rgb) / .20)",
-      "why": "channel --slate-rgb, Classic-identical"
-    },
-    {
-      "id": "48:23",
-      "line": 48,
-      "col": 23,
-      "type": "colour",
-      "kind": "token",
-      "selector": ".qprev, .qprev-switch",
-      "property": "--qprev-rule-strong",
-      "literal": "rgba(155, 168, 190, .34)",
-      "replacement": "rgb(var(--slate-rgb) / .34)",
-      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
-    },
-    {
-      "id": "49:21",
-      "line": 49,
-      "col": 21,
-      "type": "colour",
-      "kind": "token",
-      "selector": ".qprev, .qprev-switch",
-      "property": "--qprev-row-hover",
-      "literal": "rgba(155, 168, 190, .055)",
-      "replacement": "var(--row-hover)",
-      "why": "exact --row-hover in dark"
-    }
-  ],
+  "auto": [],
   "decide": [
     {
       "id": "46:18",
@@ -89,7 +52,7 @@
         }
       ],
       "proposal": "accent",
-      "choice": "accent"
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: accent)"
     },
     {
       "id": "50:19",
@@ -108,7 +71,7 @@
         }
       ],
       "proposal": "accent",
-      "choice": "raw:var(--row-selected)"
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: raw:var(--row-selected))"
     },
     {
       "id": "67:11",
@@ -174,7 +137,7 @@
         }
       ],
       "proposal": "accent",
-      "choice": "action"
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: action)"
     },
     {
       "id": "69:13",
@@ -197,26 +160,62 @@
         }
       ],
       "proposal": "success",
-      "choice": "success-rgb"
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: success-rgb)"
+    },
+    {
+      "id": "47:16",
+      "line": 47,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "why": "auto (channel --slate-rgb, Classic-identical), held: rgb(var(--slate-rgb) / .20)",
+      "candidates": [],
+      "proposal": "rgb(var(--slate-rgb) / .20)",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands"
+    },
+    {
+      "id": "48:23",
+      "line": 48,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "why": "auto (channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)), held: rgb(var(--slate-rgb) / .34)",
+      "candidates": [],
+      "proposal": "rgb(var(--slate-rgb) / .34)",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands"
+    },
+    {
+      "id": "49:21",
+      "line": 49,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "why": "auto (exact --row-hover in dark), held: var(--row-hover)",
+      "candidates": [],
+      "proposal": "var(--row-hover)",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands"
     }
   ],
   "applied": {
-    "at": "2026-10-13T14:15:18.146Z",
+    "at": "2026-10-13T14:18:57.799Z",
     "after": {
-      "colour": 1,
+      "colour": 8,
       "font": 0,
       "primary": 0
     },
     "decisionsByKind": {
-      "accent": 1,
-      "raw": 1,
-      "keep": 1,
-      "action": 1,
-      "success-rgb": 1
+      "keep": 8
     },
-    "classicDeltas": [
-      "50:19 .qprev, .qprev-switch --qprev-row-sel: rgba(246, 169, 76, .10) -> var(--row-selected) (raw: check by hand)"
-    ],
-    "edits": 7
+    "classicDeltas": [],
+    "edits": 0
   }
 }
