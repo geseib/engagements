@@ -1,0 +1,43 @@
+/* ==========================================================================
+   TOP LINE — "**Session** · Round 5  ……  moment" (components/ui/TopLine.jsx).
+   docs/design/themes/SPEC.md §6, PLAN §3 unit L7.
+
+   Replaces, when each surface adopts it: .present-top (present/present.css)
+   and the text of the stage .rail (styles/stage.css).
+
+   DUSK. It sits on the wall and the stage, both dusk; uiTopLinePalette.test.js
+   composites it on every dusk ground in every skin (and checks paper too, so a
+   paper mount is not a surprise).
+
+   ROLES ONLY: --muted for the line, --text for its emphasis (<b>), --rule for
+   the rule beneath. No literal colour, no font name: the skins gate holds this
+   file at zero.
+
+   THE RULE HONOURS --hair. The display profiles own it (styles/stage.css:
+   1px, and 2px under :root.d-call because a 1px rule does not survive a video
+   codec; the wall sets its own on .present-canvas). This sheet only READS it
+   — declaring it here would cut the profile's value off from everything
+   below.
+
+   SIZE AND SPACING ARE THE CALLER'S, through hooks that default to the text
+   around it: --ui-top-line-size, --ui-top-line-gap, --ui-top-line-pad. The
+   right side is pushed with margin-left:auto rather than flex-end
+   (hard rule 9), so it stays put when the left side is empty.
+   ========================================================================== */
+.ui-top-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ui-top-line-gap, 1.5em);
+  padding-bottom: var(--ui-top-line-pad, .95em);
+  border-bottom: var(--hair, 1px) solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--ui-top-line-size, 1em);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ui-top-line .ui-top-line-left { min-width: 0; }
+.ui-top-line .ui-top-line-right { margin-left: auto; text-align: right; }
+
+/* The emphasis inside either side: "**Session** · Round 5". */
+.ui-top-line b { font-weight: 600; color: var(--text); }
