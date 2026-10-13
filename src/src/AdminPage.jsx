@@ -13,6 +13,7 @@ import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import ObservabilityPanel from './components/ObservabilityPanel';
 import ClaudeModelsPanel from './components/ClaudeModelsPanel';
+import SiteSkinPanel from './components/SiteSkinPanel';
 import UsageStatsPanel from './components/UsageStatsPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
@@ -2091,7 +2092,7 @@ function AdminPage() {
           )}
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
           {resolvedTab === 'observability' && onPlatform && <ObservabilityPanel />}
-          {resolvedTab === 'engagesettings' && onPlatform && <ClaudeModelsPanel />}
+          {resolvedTab === 'engagesettings' && onPlatform && <><ClaudeModelsPanel /><SiteSkinPanel /></>}
           {resolvedTab === 'activity' && activeOrg && !onPlatform && (
             <UsageStatsPanel
               key={activeOrgId}

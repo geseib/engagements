@@ -319,17 +319,19 @@ const SECTION = {
     contentTheme: 'dark',
   },
   /*
-    ENGAGE SETTINGS — the platform-wide switches (owner, 2026-10-11), today one:
+    ENGAGE SETTINGS — the platform-wide switches (owner, 2026-10-11), two:
     which Claude models Engage calls (ClaudeModelsPanel.jsx,
-    docs/design/claude-55-switch). Not the foot's Settings, which is three
-    browser-local switches; this changes Engage for everyone and is audited.
+    docs/design/claude-55-switch) and which look every page wears
+    (SiteSkinPanel.jsx, docs/design/themes SPEC §5.4). Not the foot's Settings,
+    which is three browser-local switches; this changes Engage for everyone and
+    is audited. The icon is neutral now it holds two (`Gear` is the foot's).
   */
   engagesettings: {
     id: 'engagesettings',
     label: 'Engage settings',
-    icon: 'Brain',
+    icon: 'SlidersHorizontal',
     title: 'Engage settings',
-    subtitle: 'Settings for all of Engage. Every change is written to the audit log.',
+    subtitle: 'Settings for all of Engage: the Claude models and the site look. Every change is written to the audit log.',
     contentTheme: 'dark',
   },
   settings: {
