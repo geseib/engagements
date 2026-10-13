@@ -1,0 +1,127 @@
+{
+  "unit": "0b-1.auth",
+  "file": "auth/auth.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "6a0c00c1",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 45,
+    "font": 1,
+    "primary": 18
+  },
+  "auto": [
+    {
+      "id": "354:21",
+      "line": 354,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".au-page",
+      "property": "--au-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark+light"
+    }
+  ],
+  "decide": [
+    {
+      "id": "353:14",
+      "line": 353,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".au-page",
+      "property": "--au-muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the auth set's lifted muted (#B6C2D4, 9.65:1 on --bg) is a near-variant of --muted #9BA8BE; merging it is a Classic change (SPEC §4.2), and there is no channel for 182 194 212"
+    },
+    {
+      "id": "356:13",
+      "line": 356,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".au-page",
+      "property": "--au-rule",
+      "literal": "rgba(182, 194, 212, .20)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant hairline on the lifted grey 182 194 212; no channel role carries it (--slate-rgb is 155 168 190), so merging into --rule would repaint Classic (SPEC §4.2)"
+    },
+    {
+      "id": "357:20",
+      "line": 357,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".au-page",
+      "property": "--au-rule-strong",
+      "literal": "rgba(182, 194, 212, .34)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant strong hairline on 182 194 212; no channel role carries it, merging into --rule-strong would repaint Classic (SPEC §4.2)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:17:48.870Z",
+    "after": {
+      "colour": 44,
+      "font": 1,
+      "primary": 18
+    },
+    "decisionsByKind": {
+      "keep": 3
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}
