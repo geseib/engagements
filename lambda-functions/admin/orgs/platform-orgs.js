@@ -272,8 +272,9 @@ exports.handler = async (event) => {
   if (method === 'GET' && /\/platform\/stats$/.test(String(event?.rawPath || event?.routeKey || ''))) {
     return platformStats(event);
   }
-  // The Engage-wide Claude models switch (orgs/platform-settings.js).
-  if (/\/platform\/settings\/claude-models$/.test(String(event?.rawPath || event?.routeKey || ''))) {
+  // The Engage-wide settings, GET/POST /platform/settings/{name}: the Claude
+  // models switch and the site skin (orgs/platform-settings.js dispatches on name).
+  if (/\/platform\/settings\/[^/]+$/.test(String(event?.rawPath || event?.routeKey || ''))) {
     return platformSettings(event);
   }
   if (method === 'GET') return listOrgs(event);

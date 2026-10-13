@@ -2,6 +2,22 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
+  <!-- THE SITE SKIN, BEFORE ANY CSS (docs/design/themes/SPEC.md §5.3). The
+       app's styles arrive with the bundle (style-loader), so setting the
+       attribute here means the first styled paint is already the remembered
+       skin. A staff preview (engage.skin.preview) wins in that browser. The id
+       must look like one (kept equal to SKIN_ID_RE in src/config/skins.js); an
+       unknown id renders Classic, which is declared on bare :root. Storage
+       throws in private mode, hence the try. SkinProvider then asks GET /site
+       and corrects it. Pinned by src/src/__tests__/skinBoot.test.js. -->
+  <script>
+    (function () {
+      try {
+        var s = localStorage.getItem('engage.skin.preview') || localStorage.getItem('engage.skin');
+        if (s && /^[a-z][a-z0-9-]{1,23}$/.test(s)) document.documentElement.dataset.skin = s;
+      } catch (e) { /* no storage: Classic */ }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- The mountain from the nav. SVG for browsers that take one, a 32px PNG for
        the ones that do not, and a 180px touch icon; all three are drawn from

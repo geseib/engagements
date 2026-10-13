@@ -540,9 +540,14 @@ function requiredGroupsForRoute(method, path) {
   if (path === 'platform/stats') {
     return ['admins'];
   }
-  // The Engage-wide Claude models switch (orgs/platform-settings.js). Engage's
-  // alone; the handler re-asks isPlatformAdmin and audits a change first.
-  if (path === 'platform/settings/claude-models') {
+  // The Engage-wide settings, `platform/settings/{name}` (orgs/platform-settings.js):
+  // the Claude models switch and the site skin, and every setting after them.
+  // Engage's alone; the handler re-asks isPlatformAdmin and audits a change
+  // first. Anchored, never a prefix (tests/org-route-authorization.js): it
+  // matches the route template (`{name}`, what `routeKey` gives) and one
+  // concrete name segment (the `rawPath` fallback), nothing deeper. The public
+  // read of the skin is GET /site, which has no authorizer at all.
+  if (/^platform\/settings\/(\{name\}|[a-z0-9-]+)$/.test(path)) {
     return ['admins'];
   }
 
