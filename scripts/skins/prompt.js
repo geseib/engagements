@@ -86,7 +86,8 @@ function checks(units) {
   const waves = units.filter((u) => /^W/.test(u.phase) || u.id === 'P2' || u.id === '0c');
   const owned = new Set();
   for (const u of waves) M.expandUnitFiles(u).css.forEach((f) => owned.add(f));
-  for (const f of C.cssFiles()) if (f !== 'styles.css' && !C.isSkinValuesFile(f) && !owned.has(f)) problems.push(`no wave unit owns ${f}`);
+  // styles/roles.css is the skin mapping itself (0a), like the values files: no wave owns it.
+  for (const f of C.cssFiles()) if (f !== 'styles.css' && f !== 'styles/roles.css' && !C.isSkinValuesFile(f) && !owned.has(f)) problems.push(`no wave unit owns ${f}`);
   const css = fs.readFileSync(path.join(C.SRC, 'styles.css'), 'utf8');
   const sc = new Set(units.flatMap((u) => u.scRanges || []));
   for (const r of unitRanges(css)) if (r.id !== 'SC-00' && !sc.has(r.id)) problems.push(`no unit owns styles.css ${r.id}`);
