@@ -131,6 +131,7 @@ export default function PresentStage({ profile, fitKey, overlay, fitcheck = fals
       ref={rootRef}
       className={`present${fitcheck ? ' is-fitcheck' : ''}`}
       data-theme="dark"
+      data-surface="wall"
       data-profile={p}
       aria-live="polite"
     >
