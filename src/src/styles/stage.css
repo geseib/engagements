@@ -1,4 +1,4 @@
-/* skin-allowance: colour=42 font=1 primary=37 */
+/* skin-allowance: colour=40 font=1 primary=37 */
 /**
  * The host stage shell: display profiles, the stage grid, and the field
  * backdrop. Ported verbatim from the audited mockup
@@ -494,7 +494,7 @@ body, .stage-ladder-table{
   --svr-t-body:var(--t-secondary);
   --svr-t-head:var(--t-secondary);
   --svr-t-numeral:var(--t-hero);
-  --svr-on-accent:#1B2942;
+  --svr-on-accent:var(--on-accent);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1248,7 +1248,12 @@ a.dock-more{text-decoration:none}
    codec, which is the whole reason that override exists.
    =========================================================================== */
 :root{
-  --rule:rgba(155,168,190,.22);
+  /* Channel form (skins 0b-3): the same .22 slate in both skins. This stays on
+     :root rather than leaving --rule to styles/roles.css because <html> is
+     data-theme="light", the stage carries no data-theme, and roles.css's paper
+     --rule (Present: navy .14) would otherwise reach every unthemed dusk scope.
+     var(--rule) here would be self-referential, i.e. invalid. */
+  --rule:rgb(var(--slate-rgb) / .22);
   --hair:1px;
   /* #4FB286 is a border/fill green; as small TEXT on the lifted dusk field it
      measures 4.03:1, under AA. The mockup lightens it for text only and keeps

@@ -29,94 +29,52 @@ const STAGE_CSS = read('styles', 'stage.css');
 const ROOM_CSS = read('buildroom', 'BuildRoom.css');
 const REPORT_CSS = read('buildroom', 'BuildReport.css');
 
-/* ---- colour: lifted from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-function bgOf(el, win) {
-  let node = el; const stack = [];
-  while (node && node.nodeType === 1) {
-    const c = win.getComputedStyle(node).backgroundColor;
-    const m = String(c).match(/[\d.]+/g);
-    if (m) {
-      const a = m.length > 3 ? parseFloat(m[3]) : 1;
-      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
-    }
-    node = node.parentElement;
-  }
-  if (!stack.length) return [15, 26, 46];
-  let out = stack[stack.length - 1][0];
-  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
-  return out;
-}
+/* Composite with the harness (the audit's bgOf as arithmetic; it reads rgb(var() / a)
+   channel forms, which jsdom's style parser does not). */
+const on = (fg, layers) => H.on(fg, layers);
+const AA = H.AA;
 
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-function tint(css, name) {
-  const m = css.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared`);
-  return m[1];
-}
-function composited(layers) {
-  document.body.innerHTML = '';
-  let host = document.body;
-  for (const background of layers) {
-    const el = document.createElement('div');
-    el.style.backgroundColor = background;
-    host.appendChild(el);
-    host = el;
-  }
-  return bgOf(host, window);
-}
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
-const AA = 4.5;
-
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const PAPER = '[data-theme="light"] {';
 const ROOM = '.brm {';
 const REPORT = '.brr {';
 
-const D = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
-  success: H.role('--success', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  successText: token(ROOM_CSS, ROOM, '--brm-success-text'),
-  term: token(ROOM_CSS, ROOM, '--brm-term'),
-  termText: token(ROOM_CSS, ROOM, '--brm-term-text'),
-};
-const P = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'light' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'light' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'light' }),
-  text: H.role('--text', { skin: 'classic', theme: 'light' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'light' }),
-  amber: token(REPORT_CSS, REPORT, '--brr-amber'),
-  link: token(REPORT_CSS, REPORT, '--brr-link'),
-  desk: token(REPORT_CSS, REPORT, '--brr-desk'),
-};
-const rt = (name) => tint(ROOM_CSS, name);
+/* Values RESOLVED per skin through the harness (skins -> roles -> the scope block), never
+   retyped. The room renders dusk (every .brm root is data-theme="dark", asserted below) and
+   the report paper (data-theme="light"), in every skin. */
+function dusk(skin) {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  const v = (name) => H.scopeVar(ROOM_CSS, ROOM, name, { skin, theme: 'dark' });
+  return {
+    bg: r('--bg'), surface: r('--surface'), surface2: r('--surface-2'), text: r('--text'),
+    muted: r('--muted'), primary: r('--primary'), secondary: r('--secondary'), success: r('--success'),
+    danger: r('--danger'), dangerText: r('--danger-text'), dangerDeep: r('--danger-deep'),
+    successText: v('--brm-success-text'), term: v('--brm-term'), termText: v('--brm-term-text'),
+  };
+}
+function paper(skin) {
+  const r = (name) => H.role(name, { skin, theme: 'light' });
+  const v = (name) => H.scopeVar(REPORT_CSS, REPORT, name, { skin, theme: 'light' });
+  return {
+    bg: r('--bg'), surface: r('--surface'), surface2: r('--surface-2'), text: r('--text'),
+    muted: r('--muted'), amber: v('--brr-amber'), link: v('--brr-link'), desk: v('--brr-desk'),
+  };
+}
+const D = dusk('classic');   // skin-invariant premises in the house rules below
 
-describe('the room (dusk): flat pairings', () => {
+test('Classic is unchanged: the room and report tokens resolve to their pre-skin literals', () => {
+  const room = (n) => H.parseColor(H.scopeVar(ROOM_CSS, ROOM, n, { skin: 'classic', theme: 'dark' }));
+  expect(room('--brm-tint-amber')).toEqual(H.parseColor('rgba(246, 169, 76, 0.13)'));
+  expect(room('--brm-tint-amber-soft')).toEqual(H.parseColor('rgba(246, 169, 76, 0.08)'));
+  expect(room('--brm-tint-blue')).toEqual(H.parseColor('rgba(124, 167, 230, 0.14)'));
+  expect(room('--brm-line-amber')).toEqual(H.parseColor('rgba(246, 169, 76, 0.45)'));
+  expect(room('--brm-line-blue')).toEqual(H.parseColor('rgba(124, 167, 230, 0.55)'));
+  expect(room('--brm-rule')).toEqual(H.parseColor('rgba(155, 168, 190, 0.22)'));
+  expect(room('--brm-success-text')).toEqual(H.parseColor('#6FD0A4'));
+  expect(room('--brm-qr-scrim')).toEqual(H.parseColor('rgba(15, 26, 46, 0.94)'));
+  expect(H.parseColor(paper('classic').amber)).toEqual(H.parseColor('#9A5B18'));
+});
+
+describe.each(H.SKINS)('the room (dusk, %s): flat pairings', (skin) => {
+  const D = dusk(skin);   // eslint-disable-line no-shadow
   const FIELD = [D.bg];
   const PANEL = [D.bg, D.surface];
   const pairs = [
@@ -143,7 +101,9 @@ describe('the room (dusk): flat pairings', () => {
   });
 });
 
-describe('the room (dusk): tinted composites', () => {
+describe.each(H.SKINS)('the room (dusk, %s): tinted composites', (skin) => {
+  const D = dusk(skin);   // eslint-disable-line no-shadow
+  const rt = (name) => H.scopeVar(ROOM_CSS, ROOM, name, { skin, theme: 'dark' });
   const cases = [
     ['amber chip on a panel', D.primary, [D.bg, D.surface, rt('--brm-tint-amber')]],
     ['amber chip in the asks table', D.primary, [D.bg, D.surface, rt('--brm-tint-amber')]],
@@ -166,7 +126,8 @@ describe('the room (dusk): tinted composites', () => {
   });
 });
 
-describe('the report (paper)', () => {
+describe.each(H.SKINS)('the report (paper, %s)', (skin) => {
+  const P = paper(skin);
   const SHEET = [P.surface];
   const pairs = [
     ['--text on the sheet', P.text, SHEET],
@@ -185,7 +146,7 @@ describe('the report (paper)', () => {
   });
 
   test('--primary cannot carry text on paper, which is why the report has its own amber', () => {
-    expect(ratio(parseHex(D.primary), parseHex(P.surface))).toBeLessThan(AA);
+    expect(H.ratio(D.primary, P.surface)).toBeLessThan(AA);
     expect(REPORT_CSS.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/var\(--primary\)/);
   });
 });
@@ -204,7 +165,7 @@ describe.each([
   });
 
   test('--danger never carries text', () => {
-    expect(ratio(parseHex(D.danger), parseHex(D.surface))).toBeLessThan(AA);
+    expect(H.ratio(D.danger, D.surface)).toBeLessThan(AA);
     const offenders = CSS.split('\n').filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l));
     expect(offenders).toEqual([]);
   });

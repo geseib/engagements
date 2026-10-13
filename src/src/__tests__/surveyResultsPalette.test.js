@@ -20,55 +20,30 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8')
 const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const MY_CSS = read('components', 'survey', 'results', 'SurveyResults.css');
 
-/* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
+/* Values RESOLVED per skin through the harness (skins -> roles -> the .svr-card block),
+   never retyped. SurveyResultsPanel sets data-theme="dark" on its root, a card paints
+   --surface on that field, and some elements (the split bars, the "Most picked" tag)
+   paint a solid accent on the card. */
+function palette(skin, theme = 'dark') {
+  const r = (name) => H.role(name, { skin, theme });
+  return {
+    bg: r('--bg'), surface: r('--surface'), surface2: r('--surface-2'), text: r('--text'),
+    muted: r('--muted'), primary: r('--primary'), primaryDeep: r('--primary-deep'),
+    secondary: r('--secondary'), success: r('--success'), danger: r('--danger'),
+    dangerDeep: r('--danger-deep'),
+    onAccent: H.scopeVar(MY_CSS, '.svr-card {', '--svr-on-accent', { skin, theme }),
+  };
 }
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const T = palette('classic');
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
+/* Opaque solid layers: the LAST one wins (nothing here is translucent). */
+const on = (fg, bgs) => H.ratio(fg, bgs[bgs.length - 1]);
 
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: H.role('--bg', { skin: 'classic', theme: 'dark' }),
-  surface: H.role('--surface', { skin: 'classic', theme: 'dark' }),
-  surface2: H.role('--surface-2', { skin: 'classic', theme: 'dark' }),
-  text: H.role('--text', { skin: 'classic', theme: 'dark' }),
-  muted: H.role('--muted', { skin: 'classic', theme: 'dark' }),
-  primary: H.role('--primary', { skin: 'classic', theme: 'dark' }),
-  primaryDeep: H.role('--primary-deep', { skin: 'classic', theme: 'dark' }),
-  secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }),
-  success: H.role('--success', { skin: 'classic', theme: 'dark' }),
-  danger: H.role('--danger', { skin: 'classic', theme: 'dark' }),
-  dangerDeep: H.role('--danger-deep', { skin: 'classic', theme: 'dark' }),
-  onAccent: token(MY_CSS, '.svr-card {', '--svr-on-accent'),
-};
+const AA = H.AA;
 
-/* Composite the real paint stack: SurveyResultsPanel sets data-theme="dark"
-   on its root, a card paints --surface on that field, and some elements
-   (the split bars, the "Most picked" tag) paint a solid accent on the card. */
-const on = (fgHex, bgHexes) => {
-  // Opaque solid layers: the LAST one wins (nothing here is translucent).
-  const bg = bgHexes[bgHexes.length - 1];
-  return ratio(parseHex(fgHex), parseHex(bg));
-};
-
-const AA = 4.5;
-const FIELD = [T.bg];
-const CARD = [T.bg, T.surface];
-
-describe('flat pairings this card paints', () => {
+describe.each(H.SKINS)('flat pairings this card paints (%s)', (skin) => {
+  const T = palette(skin);   // eslint-disable-line no-shadow
+  const CARD = [T.bg, T.surface];
   const pairs = [
     ['--text on --surface (card title, body, values)', T.text, CARD],
     ['--muted on --surface (chip, count, foot notes)', T.muted, CARD],
@@ -90,7 +65,8 @@ describe('flat pairings this card paints', () => {
   });
 });
 
-describe('text sitting directly on a solid accent fill (the split bars, the "Most picked" tag)', () => {
+describe.each(H.SKINS)('text sitting directly on a solid accent fill (the split bars, the "Most picked" tag) (%s)', (skin) => {
+  const T = palette(skin);   // eslint-disable-line no-shadow
   test('--svr-on-accent on --primary (the "Most picked" tag)', () => {
     expect(on(T.onAccent, [T.primary])).toBeGreaterThanOrEqual(AA);
   });
@@ -124,12 +100,16 @@ test('--danger never carries text in this stylesheet', () => {
   expect(offenders).toEqual([]);
 });
 
-test('no hex literal survives outside the one documented --svr-on-accent token', () => {
+test('no hex literal survives: --svr-on-accent reads the --on-accent role (skins 0b-3)', () => {
   const stripped = MY_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
   const literals = [...stripped.matchAll(/(?:^|[\s:])(#[0-9A-Fa-f]{3,8})\b/gm)].map((m) => m[1]);
-  expect(literals.filter((h) => h.toUpperCase() !== '#1B2942')).toEqual([]);
-  // And it appears exactly once — the declaration — never a second, drifted copy.
-  expect(literals.filter((h) => h.toUpperCase() === '#1B2942').length).toBe(1);
+  expect(literals).toEqual([]);
+  expect(stripped).toMatch(/--svr-on-accent:\s*var\(--on-accent\)/);
+  // The card renders under either data-theme; the ink is #1B2942 in every skin and theme
+  // (Classic is unchanged, and --on-accent is theme-invariant).
+  for (const [skin, theme] of H.CASES) {
+    expect(H.parseColor(palette(skin, theme).onAccent)).toEqual(H.parseColor('#1B2942'));
+  }
 });
 
 test('every custom property this stylesheet uses is declared somewhere', () => {

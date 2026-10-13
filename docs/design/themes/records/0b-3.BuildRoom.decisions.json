@@ -1,0 +1,405 @@
+{
+  "unit": "0b-3.BuildRoom",
+  "file": "buildroom/BuildRoom.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 27,
+    "font": 7,
+    "primary": 143
+  },
+  "auto": [
+    {
+      "id": "32:22",
+      "line": 32,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "36:14",
+      "line": 36,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-rule",
+      "literal": "rgba(155, 168, 190, 0.22)",
+      "replacement": "var(--rule)",
+      "why": "exact --rule in dark"
+    },
+    {
+      "id": "38:18",
+      "line": 38,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-qr-scrim",
+      "literal": "rgba(15, 26, 46, 0.94)",
+      "replacement": "rgb(var(--shade-rgb) / 0.94)",
+      "why": "channel --shade-rgb, Classic-identical"
+    },
+    {
+      "id": "42:20",
+      "line": 42,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tint-green",
+      "literal": "rgba(79, 178, 134, 0.14)",
+      "replacement": "rgb(var(--success-rgb) / 0.14)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "43:18",
+      "line": 43,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tint-red",
+      "literal": "rgba(229, 100, 94, 0.12)",
+      "replacement": "rgb(var(--danger-rgb) / 0.12)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "48:18",
+      "line": 48,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-line-red",
+      "literal": "rgba(229, 100, 94, 0.45)",
+      "replacement": "rgb(var(--danger-rgb) / 0.45)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "49:20",
+      "line": 49,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-line-green",
+      "literal": "rgba(79, 178, 134, 0.5)",
+      "replacement": "rgb(var(--success-rgb) / 0.5)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "53:17",
+      "line": 53,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tbd-ink",
+      "literal": "rgba(155, 168, 190, 0.30)",
+      "replacement": "rgb(var(--slate-rgb) / 0.30)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "54:17",
+      "line": 54,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tbd-dot",
+      "literal": "rgba(155, 168, 190, 0.16)",
+      "replacement": "rgb(var(--slate-rgb) / 0.16)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "55:18",
+      "line": 55,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tbd-line",
+      "literal": "rgba(155, 168, 190, 0.40)",
+      "replacement": "rgb(var(--slate-rgb) / 0.40)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "33:14",
+      "line": 33,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-term",
+      "literal": "#0A0F18",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 6)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 25)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 25)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the terminal ground #0A0F18 (the agent log pane); a deliberate step below --bg, no role"
+    },
+    {
+      "id": "34:19",
+      "line": 34,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-term-text",
+      "literal": "#D9DEE7",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 31)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 92)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 92)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:terminal ink #D9DEE7 on the terminal ground; no role"
+    },
+    {
+      "id": "35:15",
+      "line": 35,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-qr-bg",
+      "literal": "#FFFFFF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 160)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the QR code ground must be white in every skin and theme for phone cameras to scan it; no white role"
+    },
+    {
+      "id": "37:15",
+      "line": 37,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-scrim",
+      "literal": "rgba(5, 8, 15, 0.72)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 8)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 37)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 65)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the QR/dialog scrim rgba(5,8,15,.72); a near-variant of --scrim rgba(6,11,22,.72) (SPEC §4.2)"
+    },
+    {
+      "id": "39:20",
+      "line": 39,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tint-amber",
+      "literal": "rgba(246, 169, 76, 0.13)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "40:25",
+      "line": 40,
+      "col": 25,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tint-amber-soft",
+      "literal": "rgba(246, 169, 76, 0.08)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "41:19",
+      "line": 41,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-tint-blue",
+      "literal": "rgba(124, 167, 230, 0.14)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, 0.14) -> rgba(246,169,76,0.14))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "44:20",
+      "line": 44,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-line-amber",
+      "literal": "rgba(246, 169, 76, 0.45)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "46:21",
+      "line": 46,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-alert-amber",
+      "literal": "#FFD27A",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--action-hover",
+          "classic": "Classic differs (distance 33)"
+        },
+        {
+          "role": "--accent-hover",
+          "classic": "Classic differs (distance 33)"
+        },
+        {
+          "role": "--row-selected",
+          "classic": "Classic differs (distance 62)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the host-alert light amber #FFD27A (alert copy on its amber tint); no role (--action-hover is #FFBB63)"
+    },
+    {
+      "id": "47:19",
+      "line": 47,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brm",
+      "property": "--brm-line-blue",
+      "literal": "rgba(124, 167, 230, 0.55)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, 0.55) -> rgba(246,169,76,0.55))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.539Z",
+    "after": {
+      "colour": 12,
+      "font": 7,
+      "primary": 143
+    },
+    "decisionsByKind": {
+      "keep": 5,
+      "accent": 3,
+      "info": 2
+    },
+    "classicDeltas": [],
+    "edits": 15
+  }
+}

@@ -1,0 +1,153 @@
+{
+  "unit": "0b-3.stage",
+  "file": "styles/stage.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 41,
+    "font": 1,
+    "primary": 37
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "497:18",
+      "line": 497,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".svw",
+      "property": "--svr-on-accent",
+      "literal": "#1B2942",
+      "why": "matches several roles: --surface, --on-accent",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "surface",
+      "choice": "on-accent"
+    },
+    {
+      "id": "1278:26",
+      "line": 1278,
+      "col": 26,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".stage",
+      "property": "--muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the stage lifted muted #B6C2D4 (4.03:1 fix on the lifted field, see the .stage comment); a near-variant of --muted, no role carries it (SPEC §4.2); also self-referential as a role"
+    },
+    {
+      "id": "1261:17",
+      "line": 1261,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ":root",
+      "property": "--success-text",
+      "literal": "#6FD0A4",
+      "why": "auto match refused: exact --success-text in dark (self-referential)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:self-reference: the codemod proposed var(--X) for a declaration OF --X, which is a cycle and makes the property invalid. The stage re-enters dusk on .stage/:root because <html> is data-theme=\"light\" and Stage.jsx sets no data-theme; retire these when the stage root carries data-theme=\"dark\" (W5-a owns Stage.jsx). A role --success-text would also be paper on <html> (Present #1C7350, fails AA on the dusk stage)"
+    },
+    {
+      "id": "1277:7",
+      "line": 1277,
+      "col": 7,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".stage",
+      "property": "--bg",
+      "literal": "#0F1A2E",
+      "why": "auto match refused: exact --bg in dark (self-referential)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:self-reference: the codemod proposed var(--X) for a declaration OF --X, which is a cycle and makes the property invalid. The stage re-enters dusk on .stage/:root because <html> is data-theme=\"light\" and Stage.jsx sets no data-theme; retire these when the stage root carries data-theme=\"dark\" (W5-a owns Stage.jsx)"
+    },
+    {
+      "id": "1277:26",
+      "line": 1277,
+      "col": 26,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".stage",
+      "property": "--surface",
+      "literal": "#1B2942",
+      "why": "auto match refused: exact --surface in dark (self-referential)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:self-reference: the codemod proposed var(--X) for a declaration OF --X, which is a cycle and makes the property invalid. The stage re-enters dusk on .stage/:root because <html> is data-theme=\"light\" and Stage.jsx sets no data-theme; retire these when the stage root carries data-theme=\"dark\" (W5-a owns Stage.jsx)"
+    },
+    {
+      "id": "1277:47",
+      "line": 1277,
+      "col": 47,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".stage",
+      "property": "--surface-2",
+      "literal": "#25375A",
+      "why": "auto match refused: exact --surface-2 in dark (self-referential)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:self-reference: the codemod proposed var(--X) for a declaration OF --X, which is a cycle and makes the property invalid. The stage re-enters dusk on .stage/:root because <html> is data-theme=\"light\" and Stage.jsx sets no data-theme; retire these when the stage root carries data-theme=\"dark\" (W5-a owns Stage.jsx)"
+    },
+    {
+      "id": "1278:9",
+      "line": 1278,
+      "col": 9,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".stage",
+      "property": "--text",
+      "literal": "#F4EDE4",
+      "why": "auto match refused: exact --text in dark (self-referential)",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:self-reference: the codemod proposed var(--X) for a declaration OF --X, which is a cycle and makes the property invalid. The stage re-enters dusk on .stage/:root because <html> is data-theme=\"light\" and Stage.jsx sets no data-theme; retire these when the stage root carries data-theme=\"dark\" (W5-a owns Stage.jsx)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:47.417Z",
+    "after": {
+      "colour": 40,
+      "font": 1,
+      "primary": 37
+    },
+    "decisionsByKind": {
+      "on-accent": 1,
+      "keep": 6
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}

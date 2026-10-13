@@ -8,9 +8,10 @@ function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.05
 function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
 function ratio(a, b) { const la = lum(a); const lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) { const s = css.indexOf(block); const body = css.slice(s, css.indexOf('}', s)); const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`)); if (!m) throw new Error(`${name} not in ${block}`); return m[1]; }
-const DUSK = '[data-theme="dark"] {'; const ROOT = ':root {';
-const T = { bg: H.role('--bg', { skin: 'classic', theme: 'dark' }), surface: H.role('--surface', { skin: 'classic', theme: 'dark' }), text: H.role('--text', { skin: 'classic', theme: 'dark' }), muted: H.role('--muted', { skin: 'classic', theme: 'dark' }), primary: H.role('--primary', { skin: 'classic', theme: 'dark' }), secondary: H.role('--secondary', { skin: 'classic', theme: 'dark' }), dangerText: H.role('--danger-text', { skin: 'classic', theme: 'dark' }) };
+/* Roles resolved per skin through the harness; the card's root is `.scard data-theme="dark"`,
+   so every case is dusk. */
+const paletteFor = (skin) => { const r = (n) => H.role(n, { skin, theme: 'dark' }); return { bg: r('--bg'), surface: r('--surface'), text: r('--text'), muted: r('--muted'), primary: r('--primary'), secondary: r('--secondary'), dangerText: r('--danger-text') }; };
+const T = paletteFor('classic');
 const AA = 4.5;
 /*
   RULING R22 — THE 12px FLOOR CHECK BELOW IS VACUOUS ON ITS OWN.
@@ -24,12 +25,21 @@ const AA = 4.5;
   fail the loop.
 */
 const floorTokens = (css, scope) => [...css.matchAll(new RegExp(`--${scope}-t-[a-z]+:\\s*(\\d+)px`, 'g'))].map((m) => Number(m[1]));
-describe('ScoreCard palette', () => {
+describe.each(H.SKINS)('ScoreCard palette (%s)', (skin) => {
+  const T = paletteFor(skin);   // eslint-disable-line no-shadow
   test.each([
     ['--text on --bg', T.text, T.bg], ['--muted on --bg', T.muted, T.bg], ['--primary on --bg', T.primary, T.bg], ['--danger-text on --bg', T.dangerText, T.bg],
     ['--text on --surface', T.text, T.surface], ['--muted on --surface', T.muted, T.surface],
     ['--secondary on --bg (the low band chip, the back link)', T.secondary, T.bg], ['--secondary on --surface', T.secondary, T.surface],
   ])('%s clears AA', (_l, fg, bg) => expect(ratio(hex(fg), hex(bg))).toBeGreaterThanOrEqual(AA));
+});
+test('Classic is unchanged: the re-pointed --scard-* tokens resolve to their pre-skin literals', () => {
+  const lit = (n) => H.parseColor(H.scopeVar(CSS, '.scard {', n, { skin: 'classic', theme: 'dark' }));
+  expect(lit('--scard-rule')).toEqual(H.parseColor('rgba(155, 168, 190, .20)'));
+  expect(lit('--scard-rule-strong')).toEqual(H.parseColor('rgba(155, 168, 190, .34)'));
+  expect(lit('--scard-row-hover')).toEqual(H.parseColor('rgba(155, 168, 190, .055)'));
+});
+describe('ScoreCard contract', () => {
   test('scoped, token-only, no --danger text, 12px floor', () => {
     const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
     const tokenBlock = stripped.slice(stripped.indexOf('.scard {'), stripped.indexOf('}', stripped.indexOf('.scard {')));
@@ -79,22 +89,18 @@ const colourOf = (selector) => {
   if (!m) throw new Error(`"${selector}" paints no colour token`);
   return m[1];
 };
-/** A colour token's hex: the dusk block first (theme tokens), then :root (the invariant ones). */
-const hexOf = (name) => {
-  for (const block of [DUSK, ROOT]) {
-    try { return token(GLOBAL_CSS, block, name); } catch (e) { /* not in this block */ }
-  }
-  throw new Error(`${name} is declared nowhere in styles.css`);
-};
+/** A colour token, resolved for the card's dusk theme in one skin. */
+const hexOf = (name, skin = 'classic') => H.role(name, { skin, theme: 'dark' });
 const widthIn = (selector) => {
   const m = rule(selector).match(/width:\s*([\d.]+)%/);
   if (!m) throw new Error(`No percentage width on "${selector}"`);
   return parseFloat(m[1]);
 };
 
-describe('every band the card measures has its own chip', () => {
+describe.each(H.SKINS)('every band the card measures has its own chip (%s)', (skin) => {
+  const T = paletteFor(skin);   // eslint-disable-line no-shadow
   test.each([['high'], ['medium'], ['low']])('the %s chip clears AA on the work field and on a dialog', (band) => {
-    const fg = hex(hexOf(colourOf(`.scard-chip--${band}`)));
+    const fg = hex(hexOf(colourOf(`.scard-chip--${band}`), skin));
     expect(ratio(fg, hex(T.bg))).toBeGreaterThanOrEqual(AA);
     expect(ratio(fg, hex(T.surface))).toBeGreaterThanOrEqual(AA);
   });
@@ -110,7 +116,7 @@ describe('every band the card measures has its own chip', () => {
   test('every colour the sheet paints text with clears AA on the work field and on a dialog', () => {
     const names = [...new Set([...STRIPPED.matchAll(/(?:^|[;{\s])color:\s*var\((--[a-z-]+)\)/g)].map((m) => m[1]))];
     expect(names).toEqual(expect.arrayContaining(['--text', '--muted', '--secondary']));
-    const under = names.filter((n) => ratio(hex(hexOf(n)), hex(T.bg)) < AA || ratio(hex(hexOf(n)), hex(T.surface)) < AA);
+    const under = names.filter((n) => ratio(hex(hexOf(n, skin)), hex(T.bg)) < AA || ratio(hex(hexOf(n, skin)), hex(T.surface)) < AA);
     expect(under).toEqual([]);
   });
 });

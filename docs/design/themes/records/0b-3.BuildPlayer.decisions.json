@@ -1,0 +1,255 @@
+{
+  "unit": "0b-3.BuildPlayer",
+  "file": "buildroom/BuildPlayer.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 10,
+    "font": 2,
+    "primary": 34
+  },
+  "auto": [
+    {
+      "id": "49:22",
+      "line": 49,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "56:19",
+      "line": 56,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-good-tint",
+      "literal": "rgba(79, 178, 134, .12)",
+      "replacement": "rgb(var(--success-rgb) / .12)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "48:15",
+      "line": 48,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the player/stage lifted muted #B6C2D4 (4.03:1 fix on the lifted field); a near-variant of --muted #9BA8BE, no role or channel carries it (SPEC §4.2)"
+    },
+    {
+      "id": "50:14",
+      "line": 50,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-rule",
+      "literal": "rgba(182, 194, 212, .20)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the player rule grey rgba(182,194,212,.20) (from #B6C2D4); no channel carries 182 194 212, and --rule is 155 168 190 (SPEC §4.2 near-variant)"
+    },
+    {
+      "id": "51:21",
+      "line": 51,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-rule-strong",
+      "literal": "rgba(182, 194, 212, .34)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the player strong rule rgba(182,194,212,.34); no channel carries 182 194 212 (SPEC §4.2 near-variant)"
+    },
+    {
+      "id": "52:20",
+      "line": 52,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-amber-tint",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "53:20",
+      "line": 53,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-amber-edge",
+      "literal": "rgba(246, 169, 76, .40)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "54:19",
+      "line": 54,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-blue-tint",
+      "literal": "rgba(124, 167, 230, .12)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .12) -> rgba(246,169,76,0.12))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "55:19",
+      "line": 55,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-blue-edge",
+      "literal": "rgba(124, 167, 230, .50)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .50) -> rgba(246,169,76,0.5))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "57:19",
+      "line": 57,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bpl",
+      "property": "--bpl-good-edge",
+      "literal": "rgba(111, 208, 164, .45)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 53)"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic differs (distance 53)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a --success-text edge rgba(111,208,164,.45); no channel carries 111 208 164 (--success-rgb is 79 178 134)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.108Z",
+    "after": {
+      "colour": 4,
+      "font": 2,
+      "primary": 34
+    },
+    "decisionsByKind": {
+      "keep": 4,
+      "accent": 2,
+      "info": 2
+    },
+    "classicDeltas": [],
+    "edits": 6
+  }
+}

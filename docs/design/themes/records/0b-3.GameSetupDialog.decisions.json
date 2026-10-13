@@ -1,0 +1,274 @@
+{
+  "unit": "0b-3.GameSetupDialog",
+  "file": "components/GameSetupDialog.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 31,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [
+    {
+      "id": "62:14",
+      "line": 62,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-rule",
+      "literal": "rgba(155, 168, 190, 0.24)",
+      "replacement": "rgb(var(--slate-rgb) / 0.24)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "63:21",
+      "line": 63,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-rule-strong",
+      "literal": "rgba(155, 168, 190, 0.38)",
+      "replacement": "rgb(var(--slate-rgb) / 0.38)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "61:15",
+      "line": 61,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-muted",
+      "literal": "#A9B5C9",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 22)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 22)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 74)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the dialog lifted muted #A9B5C9 (AA on the green-tinted option cards, where #9BA8BE is 4.23:1); no role"
+    },
+    {
+      "id": "64:17",
+      "line": 64,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-primary",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent-text, --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "65:19",
+      "line": 65,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-secondary",
+      "literal": "#7CA7E6",
+      "why": "matches several roles: --info, --phase-vote",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-vote",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "66:17",
+      "line": 66,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-success",
+      "literal": "#4FB286",
+      "why": "matches several roles: --success, --phase-results",
+      "candidates": [
+        {
+          "role": "--success",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "success",
+      "choice": "success"
+    },
+    {
+      "id": "72:17",
+      "line": 72,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-row-sel",
+      "literal": "rgba(246, 169, 76, 0.10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "75:17",
+      "line": 75,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-confirm",
+      "literal": "#2A2E42",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 16)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 16)"
+        },
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 26)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the discard foot ground #2A2E42; no role"
+    },
+    {
+      "id": "49:14",
+      "line": 49,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-card",
+      "literal": "#1B2942",
+      "why": "auto match refused: exact --surface in dark; scope is not under a dusk [data-theme]",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:.gsd has no data-theme (Modal owns the content element, and the dialog mounts outside any dusk [data-theme], under <html data-theme=\"light\">), so a theme-varying role here resolves PAPER: Classic would paint this dark dialog paper, and Present paper's value"
+    },
+    {
+      "id": "50:15",
+      "line": 50,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-field",
+      "literal": "#25375A",
+      "why": "auto match refused: exact --surface-2 in dark; scope is not under a dusk [data-theme]",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:.gsd has no data-theme (Modal owns the content element, and the dialog mounts outside any dusk [data-theme], under <html data-theme=\"light\">), so a theme-varying role here resolves PAPER: Classic would paint this dark dialog paper, and Present paper's value"
+    },
+    {
+      "id": "51:14",
+      "line": 51,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-text",
+      "literal": "#F4EDE4",
+      "why": "auto match refused: exact --text in dark; scope is not under a dusk [data-theme]",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:.gsd has no data-theme (Modal owns the content element, and the dialog mounts outside any dusk [data-theme], under <html data-theme=\"light\">), so a theme-varying role here resolves PAPER: Classic would paint this dark dialog paper, and Present paper's value"
+    },
+    {
+      "id": "67:22",
+      "line": 67,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".gsd",
+      "property": "--gsd-success-text",
+      "literal": "#6FD0A4",
+      "why": "auto match refused: exact --success-text in dark; scope is not under a dusk [data-theme]",
+      "candidates": [],
+      "proposal": "keep",
+      "choice": "keep:.gsd has no data-theme (Modal owns the content element, and the dialog mounts outside any dusk [data-theme], under <html data-theme=\"light\">), so a theme-varying role here resolves PAPER: Classic would paint this dark dialog paper, and Present paper's value (Present paper --success-text #1C7350 on the dusk card fails AA)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.676Z",
+    "after": {
+      "colour": 25,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 6,
+      "accent": 2,
+      "info": 1,
+      "success": 1
+    },
+    "classicDeltas": [],
+    "edits": 6
+  }
+}

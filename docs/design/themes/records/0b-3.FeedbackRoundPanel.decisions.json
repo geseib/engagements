@@ -1,0 +1,154 @@
+{
+  "unit": "0b-3.FeedbackRoundPanel",
+  "file": "components/FeedbackRoundPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 4,
+    "font": 0,
+    "primary": 1
+  },
+  "auto": [
+    {
+      "id": "56:14",
+      "line": 56,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".fbr",
+      "property": "--fbr-lift",
+      "literal": "rgba(15, 26, 46, 0.55)",
+      "replacement": "rgb(var(--shade-rgb) / 0.55)",
+      "why": "channel --shade-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "48:16",
+      "line": 48,
+      "col": 16,
+      "type": "primary",
+      "kind": "token",
+      "selector": ".fbr",
+      "property": "--fbr-accent",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "51:14",
+      "line": 51,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".fbr",
+      "property": "--fbr-wash",
+      "literal": "rgba(255, 255, 255, 0.06)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a white wash rgba(255,255,255,.06) over the phone panel; no white channel (--glow-rgb is 244 237 228)"
+    },
+    {
+      "id": "52:14",
+      "line": 52,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".fbr",
+      "property": "--fbr-well",
+      "literal": "rgba(255, 255, 255, 0.10)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a white well rgba(255,255,255,.10); no white channel"
+    },
+    {
+      "id": "53:14",
+      "line": 53,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".fbr",
+      "property": "--fbr-rule",
+      "literal": "rgba(255, 255, 255, 0.14)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a white rule rgba(255,255,255,.14); no white channel, and --rule is slate"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.605Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "accent": 1,
+      "keep": 3
+    },
+    "classicDeltas": [],
+    "edits": 2
+  }
+}

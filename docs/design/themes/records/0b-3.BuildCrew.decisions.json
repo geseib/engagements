@@ -1,0 +1,175 @@
+{
+  "unit": "0b-3.BuildCrew",
+  "file": "buildroom/BuildCrew.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 9,
+    "font": 0,
+    "primary": 25
+  },
+  "auto": [
+    {
+      "id": "27:22",
+      "line": 27,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "28:14",
+      "line": 28,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-rule",
+      "literal": "rgba(155, 168, 190, 0.22)",
+      "replacement": "var(--rule)",
+      "why": "exact --rule in dark"
+    },
+    {
+      "id": "31:20",
+      "line": 31,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-tint-green",
+      "literal": "rgba(79, 178, 134, 0.14)",
+      "replacement": "rgb(var(--success-rgb) / 0.14)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "32:18",
+      "line": 32,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-tint-red",
+      "literal": "rgba(229, 100, 94, 0.12)",
+      "replacement": "rgb(var(--danger-rgb) / 0.12)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "34:18",
+      "line": 34,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-line-red",
+      "literal": "rgba(229, 100, 94, 0.45)",
+      "replacement": "rgb(var(--danger-rgb) / 0.45)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "35:20",
+      "line": 35,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-line-green",
+      "literal": "rgba(79, 178, 134, 0.5)",
+      "replacement": "rgb(var(--success-rgb) / 0.5)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "29:20",
+      "line": 29,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-tint-amber",
+      "literal": "rgba(246, 169, 76, 0.13)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "30:19",
+      "line": 30,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-tint-blue",
+      "literal": "rgba(124, 167, 230, 0.14)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, 0.14) -> rgba(246,169,76,0.14))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "33:20",
+      "line": 33,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brc",
+      "property": "--brc-line-amber",
+      "literal": "rgba(246, 169, 76, 0.45)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.022Z",
+    "after": {
+      "colour": 0,
+      "font": 0,
+      "primary": 25
+    },
+    "decisionsByKind": {
+      "accent": 2,
+      "info": 1
+    },
+    "classicDeltas": [],
+    "edits": 9
+  }
+}

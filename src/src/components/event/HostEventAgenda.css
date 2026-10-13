@@ -1,4 +1,4 @@
-/* skin-allowance: colour=3 font=0 primary=4 */
+/* skin-allowance: colour=0 font=0 primary=4 */
 /* components/event/HostEventAgenda.jsx — an event's agenda on the host's side.
    ==========================================================================
    The frame around the console's own builder (EventBuilder.jsx, `.evb`), so a
@@ -22,9 +22,9 @@
   --hea-t-label: 13px;
   --hea-t-body: 15px;
   --hea-t-title: 24px;
-  --hea-on-accent: #0F1A2E;
-  --hea-rule: rgba(155, 168, 190, .20);
-  --hea-rule-strong: rgba(155, 168, 190, .34);
+  --hea-on-accent: var(--on-action);
+  --hea-rule: rgb(var(--slate-rgb) / .20);
+  --hea-rule-strong: var(--rule-strong);
 
   min-height: 100vh;
   display: flex;

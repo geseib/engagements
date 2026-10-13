@@ -1,0 +1,55 @@
+{
+  "unit": "0b-3.SurveyResults",
+  "file": "components/survey/results/SurveyResults.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 1,
+    "font": 0,
+    "primary": 9
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "39:19",
+      "line": 39,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".svr-card",
+      "property": "--svr-on-accent",
+      "literal": "#1B2942",
+      "why": "matches several roles: --surface, --on-accent",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "surface",
+      "choice": "on-accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:47.256Z",
+    "after": {
+      "colour": 0,
+      "font": 0,
+      "primary": 9
+    },
+    "decisionsByKind": {
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}

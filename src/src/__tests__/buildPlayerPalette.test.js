@@ -30,31 +30,21 @@ const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : Math.p
 const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
 const ratio = (a, b) => { const x = lum(a); const y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-const parseRgba = (s) => { const m = s.match(/[\d.]+/g).map(Number); return { rgb: m.slice(0, 3), a: m[3] }; };
-const over = (top, base) => top.rgb.map((c, i) => c * top.a + base[i] * (1 - top.a));
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6}|rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+/* Values RESOLVED per skin through the harness (skins -> roles -> the .bpl block), never
+   retyped. .bpl is drawn inside PlayerShell (`.plr data-theme="dark"`): dusk in every skin. */
+const bplVar = (name, skin) => H.scopeVar(RAW, '.bpl {', name, { skin, theme: 'dark' });
+const rgb = (c) => H.composite([c]);
+function palette(skin) {
+  const r = (name) => rgb(H.role(name, { skin, theme: 'dark' }));
+  return {
+    bg: r('--bg'), surface: r('--surface'), text: r('--text'), primary: r('--primary'),
+    secondary: r('--secondary'), success: r('--success'),
+    muted: rgb(bplVar('--bpl-muted', skin)),
+    successText: rgb(bplVar('--bpl-success-text', skin)),
+  };
 }
-const DUSK = '[data-theme="dark"] {';
-const ROOT = ':root {';
-const T = {
-  bg: parseHex(H.role('--bg', { skin: 'classic', theme: 'dark' })),
-  surface: parseHex(H.role('--surface', { skin: 'classic', theme: 'dark' })),
-  text: parseHex(H.role('--text', { skin: 'classic', theme: 'dark' })),
-  primary: parseHex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
-  secondary: parseHex(H.role('--secondary', { skin: 'classic', theme: 'dark' })),
-  success: parseHex(H.role('--success', { skin: 'classic', theme: 'dark' })),
-  muted: parseHex(token(CSS, '.bpl {', '--bpl-muted')),
-  successText: parseHex(token(CSS, '.bpl {', '--bpl-success-text')),
-};
-const tint = (name) => parseRgba(token(CSS, '.bpl {', name));
-
+const over = (tintValue, base) => { const t = H.parseColor(tintValue); return t.rgb.map((c, i) => c * t.a + base[i] * (1 - t.a)); };
 /** The declaration body for one exact selector; throws if it was renamed. */
 function block(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -65,7 +55,9 @@ function block(selector) {
 
 const AA = 4.5;
 
-describe('every pairing clears AA on what it is really drawn on', () => {
+describe.each(H.SKINS)('every pairing clears AA on what it is really drawn on (%s)', (skin) => {
+  const T = palette(skin);
+  const tint = (name) => bplVar(name, skin);
   const amberCard = over(tint('--bpl-amber-tint'), T.surface);
   const amberField = over(tint('--bpl-amber-tint'), T.bg);
   const goodField = over(tint('--bpl-good-tint'), T.bg);
@@ -131,8 +123,9 @@ describe('every pairing clears AA on what it is really drawn on', () => {
   });
 
   test('the local greys are the player surface\'s own, not a third grey', () => {
-    expect(token(CSS, '.bpl {', '--bpl-muted')).toBe(token(PLR_CSS, '.plr {', '--plr-muted'));
-    expect(token(CSS, '.bpl {', '--bpl-success-text')).toBe(token(PLR_CSS, '.plr {', '--plr-success-text'));
+    const plr = (name) => H.scopeVar(PLR_CSS, '.plr {', name, { skin, theme: 'dark' });
+    expect(bplVar('--bpl-muted', skin)).toBe(plr('--plr-muted'));
+    expect(bplVar('--bpl-success-text', skin)).toBe(plr('--plr-success-text'));
   });
 });
 

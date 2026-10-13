@@ -1,0 +1,18 @@
+{
+  "unit": "0b-3.EventAttendeePage",
+  "file": "components/event/EventAttendeePage.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 0,
+    "font": 0,
+    "primary": 6
+  },
+  "auto": [],
+  "decide": []
+}

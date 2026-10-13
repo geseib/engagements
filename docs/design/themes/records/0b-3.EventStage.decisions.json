@@ -1,0 +1,104 @@
+{
+  "unit": "0b-3.EventStage",
+  "file": "components/event/EventStage.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 4,
+    "font": 0,
+    "primary": 13
+  },
+  "auto": [
+    {
+      "id": "38:13",
+      "line": 38,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ag-stage-root",
+      "property": "--ag-rule",
+      "literal": "rgba(155, 168, 190, .22)",
+      "replacement": "var(--rule)",
+      "why": "exact --rule in dark"
+    },
+    {
+      "id": "40:14",
+      "line": 40,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ag-stage-root",
+      "property": "--ag-scrim",
+      "literal": "rgba(6, 11, 22, .72)",
+      "replacement": "var(--scrim)",
+      "why": "exact --scrim in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "39:17",
+      "line": 39,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ag-stage-root",
+      "property": "--ag-now-tint",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "43:23",
+      "line": 43,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".ag-stage-root",
+      "property": "--ag-present-ground",
+      "literal": "#000000",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 25)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 55)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 82)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the presenting letterbox is black in every skin (a video/slide ground); no black role"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.983Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 13
+    },
+    "decisionsByKind": {
+      "accent": 1,
+      "keep": 1
+    },
+    "classicDeltas": [],
+    "edits": 3
+  }
+}

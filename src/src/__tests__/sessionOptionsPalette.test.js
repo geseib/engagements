@@ -12,6 +12,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('components', 'GameSetupDialog.css');
@@ -35,9 +36,16 @@ const AA = 4.5;
 const card = () => tokenIn(CSS, '.gsd {', '--gsd-card');
 
 describe('the goal', () => {
-  test('a goal the set cannot meet is said in --danger-text, at AA on the card', () => {
+  /* The rule reads var(--danger-text) directly, and the dialog has no dusk ancestor
+     (gameSetupPalette.test.js's header), so it resolves on PAPER: Classic keeps today's
+     #EF8C86 there (SPEC §3 amendment) and clears AA; Present's paper value #B03A34 does
+     not. A rule-level fault for W5-b (the dialog needs data-theme="dark"), pinned so it
+     goes red the day it is fixed. */
+  test.each(H.SKINS)('a goal the set cannot meet is said in --danger-text, on the card (%s)', (skin) => {
     expect(CSS).toMatch(/\.gsd \.dialog-help-text\.gsd-goal-problem\s*\{[^}]*color:\s*var\(--danger-text\)/);
-    expect(ratio(tokenIn(GLOBAL, ':root {', '--danger-text'), card())).toBeGreaterThanOrEqual(AA);
+    const r = H.ratio(H.role('--danger-text', { skin, theme: 'light' }), card());
+    if (skin === 'present') expect(r).toBeLessThan(AA);
+    else expect(r).toBeGreaterThanOrEqual(AA);
   });
 
   test('the unit beside the number is muted copy, at AA on the card', () => {
