@@ -1,0 +1,19 @@
+{
+  "unit": "L8",
+  "file": "components/ui/Chip.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": false,
+  "base": "40b7f768",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 0,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": []
+}
