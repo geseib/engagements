@@ -1,4 +1,4 @@
-/* skin-allowance: colour=8 font=2 primary=33 */
+/* skin-allowance: colour=4 font=2 primary=31 */
 /* PlayerSurface.css — the participant's own device.
  *
  * WHAT THIS IS. The one stylesheet `PlayerPage.jsx` owns. Before it existed the
@@ -84,12 +84,12 @@
          WHOLE declaration, so nothing here reaches for a token declared in a
          stylesheet that merely happens to be in the bundle. --- */
   --plr-muted: #B6C2D4;
-  --plr-success-text: #6FD0A4;
+  --plr-success-text: var(--success-text);
   --plr-rule: rgba(182, 194, 212, .20);
   --plr-rule-strong: rgba(182, 194, 212, .34);
-  --plr-amber-tint: rgba(246, 169, 76, .11);
-  --plr-amber-edge: rgba(246, 169, 76, .45);
-  --plr-amber-banner: rgba(246, 169, 76, .13);
+  --plr-amber-tint: rgb(var(--accent-rgb) / .11);
+  --plr-amber-edge: rgb(var(--accent-rgb) / .45);
+  --plr-amber-banner: rgb(var(--accent-rgb) / .13);
   --plr-good-edge: rgba(111, 208, 164, .45);
 
   /* The 4px phase strip. Set per PHASE, not per volume — it is the whole of
@@ -206,8 +206,8 @@
    element in REST or WATCH. There is nothing here to hide, which is the only
    version of this rule that survives contact with a future feature request. */
 
-.plr[data-phase="ask"] { --plr-phase: var(--primary); }
-.plr[data-phase="vote"] { --plr-phase: var(--secondary); }
+.plr[data-phase="ask"] { --plr-phase: var(--phase-ask); }
+.plr[data-phase="vote"] { --plr-phase: var(--phase-vote); }
 .plr[data-phase="join"] { --plr-phase: var(--plr-muted); }
 
 /* ==========================================================================

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=9 font=0 primary=25 */
+/* skin-allowance: colour=0 font=0 primary=25 */
 /* ==========================================================================
    BUILD ROOM CREW MODE — the host's crew board, early looks, tasks, the
    Run crew code switch and the Open to a crew dialog (buildroom/BuildCrew.jsx).
@@ -24,15 +24,14 @@
 
 .brc {
   /* Local tokens. Hex lives here and nowhere else. */
-  --brc-success-text: #6FD0A4;   /* styles.css has no success-text token */
-  --brc-rule: rgba(155, 168, 190, 0.22);
-  --brc-tint-amber: rgba(246, 169, 76, 0.13);
-  --brc-tint-blue: rgba(124, 167, 230, 0.14);
-  --brc-tint-green: rgba(79, 178, 134, 0.14);
-  --brc-tint-red: rgba(229, 100, 94, 0.12);
-  --brc-line-amber: rgba(246, 169, 76, 0.45);
-  --brc-line-red: rgba(229, 100, 94, 0.45);
-  --brc-line-green: rgba(79, 178, 134, 0.5);
+  --brc-success-text: var(--success-text);   /* styles.css has no success-text token */
+  --brc-rule: var(--rule);
+  --brc-tint-amber: rgb(var(--accent-rgb) / 0.13);
+  --brc-tint-blue: rgb(var(--info-rgb) / 0.14);
+  --brc-tint-green: rgb(var(--success-rgb) / 0.14);
+  --brc-tint-red: rgb(var(--danger-rgb) / 0.12);
+  --brc-line-amber: rgb(var(--accent-rgb) / 0.45);
+  --brc-line-red: rgb(var(--danger-rgb) / 0.45);
 
   --brc-t-floor: 12px;
   --brc-t-label: 13px;

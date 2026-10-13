@@ -27,6 +27,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const STAGE_RAW = read('styles', 'stage.css');
@@ -123,18 +124,23 @@ describe('the ladder: every re-declared property reads a stage token, never a pi
   });
 });
 
-describe('--svr-on-accent is the SAME literal SurveyResults.css already measured', () => {
-  test('.svw declares the documented literal, not a new one', () => {
-    expect(decl(svwRule(), '--svr-on-accent')).toBe('#1B2942');
+describe('--svr-on-accent is the SAME value SurveyResults.css already measured', () => {
+  /* Since skins 0b-3 both sheets read the --on-accent role instead of each writing
+     #1B2942. --on-accent is theme-invariant (declared on :root's dusk block, never
+     redeclared on paper), so `.svw`, which sits under the stage's paper <html> with no
+     data-theme of its own, resolves it to #1B2942 in every skin, as it did before. */
+  test('.svw reads the role, not a new literal', () => {
+    expect(decl(svwRule(), '--svr-on-accent')).toBe('var(--on-accent)');
   });
 
   test('it is byte-identical to the console\'s own --svr-on-accent', () => {
-    const consoleValue = tokenIn(strip(SVR_CSS), '.svr-card {', '--svr-on-accent');
-    expect(decl(svwRule(), '--svr-on-accent').toUpperCase()).toBe(consoleValue.toUpperCase());
+    const consoleValue = decl(strip(SVR_CSS).slice(strip(SVR_CSS).indexOf('.svr-card {')), '--svr-on-accent');
+    expect(decl(svwRule(), '--svr-on-accent')).toBe(consoleValue);
   });
 
-  test('it is also, not coincidentally, the stage\'s own --surface', () => {
-    expect(decl(svwRule(), '--svr-on-accent').toUpperCase()).toBe(T.surface.toUpperCase());
+  test.each(H.CASES)('it resolves to #1B2942, the stage\'s own --surface (%s / %s)', (skin, theme) => {
+    expect(H.role('--on-accent', { skin, theme }).toUpperCase()).toBe('#1B2942');
+    expect(T.surface.toUpperCase()).toBe('#1B2942');
   });
 
   test('no other hex literal in the rule', () => {

@@ -70,25 +70,40 @@ function token(css, selector, name) {
   }
   throw new Error(`${name} not declared in ${selector}`);
 }
-const T = {
-  bg: token(STAGE, '.stage', '--bg'),
-  surface: token(STAGE, '.stage', '--surface'),
-  text: token(STAGE, '.stage', '--text'),
-  muted: token(STAGE, '.stage', '--muted'),
-  successText: token(STAGE, ':root', '--success-text'),
-  primary: hex(H.role('--primary', { skin: 'classic', theme: 'dark' })),
-  gold: hex(H.role('--gold', { skin: 'classic', theme: 'dark' })),
-  silver: hex(H.role('--silver', { skin: 'classic', theme: 'dark' })),
-  bronze: hex(H.role('--bronze', { skin: 'classic', theme: 'dark' })),
-  sbNew: token(SB, '.sb', '--sb-new'),
-  sbBronze: token(SB, '.sb', '--sb-bronze'),
-  toteRow: token(SB, '.sb', '--sb-tote-row'),
-};
+/* The board's own literals (the stage's dusk restatement, the --sb-* board palette) are the
+   same in every skin until their wave; the roles are resolved per skin through the harness.
+   The board sits inside `.stage` (no data-theme, under <html data-theme="light">) on the
+   host and inside PresentStage's dusk root on the wall: the roles read here are
+   theme-invariant, so either ancestry resolves them the same. */
+function paletteFor(skin) {
+  const r = (name) => hex(H.role(name, { skin, theme: 'light' }));
+  return {
+    bg: token(STAGE, '.stage', '--bg'),
+    surface: token(STAGE, '.stage', '--surface'),
+    text: token(STAGE, '.stage', '--text'),
+    muted: token(STAGE, '.stage', '--muted'),
+    successText: token(STAGE, ':root', '--success-text'),
+    primary: r('--primary'),
+    gold: r('--gold'),
+    silver: r('--silver'),
+    bronze: r('--bronze'),
+    sbNew: token(SB, '.sb', '--sb-new'),
+    sbBronze: token(SB, '.sb', '--sb-bronze'),
+    toteRow: token(SB, '.sb', '--sb-tote-row'),
+  };
+}
+const T = paletteFor('classic');
+
+test('Classic is unchanged: the amber bulb\'s middle stop (--gold) is the --primary it replaced', () => {
+  expect(block(SB, '.sb')).toMatch(/--sb-bulb-amber:radial-gradient\([^;]*var\(--gold\) 46%/);
+  for (const skin of H.SKINS) expect(H.role('--gold', { skin, theme: 'light' })).toBe(H.role('--primary', { skin: 'classic', theme: 'light' }));
+});
 
 const AA = 4.5;
 const pair = (name, fg, bg) => [name, fg, bg];
 
-describe('1. contrast, flat and on the projector', () => {
+describe.each(H.SKINS)('1. contrast, flat and on the projector (%s)', (skin) => {
+  const T = paletteFor(skin);   // eslint-disable-line no-shadow
   const PAIRS = [
     // A · the flaps' top half is --surface (the lower half is darker and scores higher)
     pair('A name/points on a flap', T.text, T.surface),

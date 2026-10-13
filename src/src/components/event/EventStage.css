@@ -1,4 +1,4 @@
-/* skin-allowance: colour=4 font=0 primary=13 */
+/* skin-allowance: colour=1 font=0 primary=13 */
 /* ===========================================================================
    EventStage.css — the event's stage (events M3, reworked 27 Sep 2026): the
    host's agenda BOARD, a talk's or a break's own screen, the join QR and the
@@ -35,9 +35,9 @@
    ======================================================================== */
 
 .ag-stage-root {
-  --ag-rule: rgba(155, 168, 190, .22);
-  --ag-now-tint: rgba(246, 169, 76, .10);
-  --ag-scrim: rgba(6, 11, 22, .72);
+  --ag-rule: var(--rule);
+  --ag-now-tint: rgb(var(--accent-rgb) / .10);
+  --ag-scrim: var(--scrim);
   /* A presented slide's letterbox: black, as every projector expects and as
      the browser's own full-screen backdrop already is. */
   --ag-present-ground: #000000;

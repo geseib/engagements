@@ -1,4 +1,4 @@
-/* skin-allowance: colour=5 font=1 primary=0 */
+/* skin-allowance: colour=4 font=1 primary=0 */
 /* ==========================================================================
    BUILD ROOM REPORT — buildroom/BuildReport.jsx.
 
@@ -22,7 +22,7 @@
    ========================================================================== */
 
 .brr {
-  --brr-amber: #9A5B18;          /* amber that carries text on paper */
+  --brr-amber: var(--accent-text);          /* amber that carries text on paper */
   --brr-link: #2F5E9E;           /* a link on white */
   --brr-desk: #E9E4DB;           /* the desk the sheet sits on */
   --brr-rule: rgba(27, 41, 66, 0.16);

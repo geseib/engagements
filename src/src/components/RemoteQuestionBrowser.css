@@ -1,4 +1,4 @@
-/* skin-allowance: colour=3 font=0 primary=6 */
+/* skin-allowance: colour=2 font=0 primary=6 */
 /*
  * The phone's question browser — `17-remote.html`, right phone.
  *
@@ -231,7 +231,7 @@
   /* The pressed segment's tint. An explicit rgba rather than a color-mix, so a
      palette test can composite it — which is the only honest way to measure the
      accent that sits on top of it. */
-  --hrq-pressed: rgba(246, 169, 76, .16);
+  --hrq-pressed: rgb(var(--accent-rgb) / .16);
 }
 
 /* -- getting back, and what the card shows ---------------------------------- */

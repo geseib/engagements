@@ -1,4 +1,4 @@
-/* skin-allowance: colour=31 font=0 primary=0 */
+/* skin-allowance: colour=25 font=0 primary=0 */
 /* ============================================================================
    THE CREATE / EDIT ENGAGEMENT DIALOG — dusk, at last.
 
@@ -59,17 +59,17 @@
     first draft of this file eyeballed it and the test caught it.
   */
   --gsd-muted: #A9B5C9;
-  --gsd-rule: rgba(155, 168, 190, 0.24);
-  --gsd-rule-strong: rgba(155, 168, 190, 0.38);
-  --gsd-primary: #F6A94C;
-  --gsd-secondary: #7CA7E6;
-  --gsd-success: #4FB286;
+  --gsd-rule: rgb(var(--slate-rgb) / 0.24);
+  --gsd-rule-strong: rgb(var(--slate-rgb) / 0.38);
+  --gsd-primary: var(--accent);
+  --gsd-secondary: var(--info);
+  --gsd-success: var(--success);
   --gsd-success-text: #6FD0A4;   /* styles.css never declared one; every scope
                                     redeclares it locally (skill §6) */
   /* The chosen Names option's wash (07-start-survey's --row-sel). It REPLACES
      the option's card background, so it sits on the Names card's field:
      muted on it measures 4.8:1, text 8.9:1 (gameSetupPalette.test.js). */
-  --gsd-row-sel: rgba(246, 169, 76, 0.10);
+  --gsd-row-sel: rgb(var(--accent-rgb) / 0.10);
   /* The discard question's ground (session-setup-redesign ss-dialog.css): a
      step warmer and darker than the card, so the foot visibly changes mode. */
   --gsd-confirm: #2A2E42;

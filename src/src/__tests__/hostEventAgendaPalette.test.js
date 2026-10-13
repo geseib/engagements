@@ -18,43 +18,37 @@ const JSX = read('components/event/HostEventAgenda.jsx');
 const STYLES = require('../testing/classicGlobalCss')();
 const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum([r, g, b]) { return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); }
-function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); }
-const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const token = (name) => {
-  const m = new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(STYLES);
-  if (!m) throw new Error(`${name} is not declared in styles.css`);
-  return hex(m[1]);
-};
-const local = (name) => {
-  const m = new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(CSS);
-  if (!m) throw new Error(`${name} not declared`);
-  return hex(m[1]);
-};
+const H = require('../testing/skinHarness');
+
 const block = (sel) => {
   const i = stripped.indexOf(`${sel} {`);
   if (i === -1) throw new Error(`${sel} not found`);
   return stripped.slice(i, stripped.indexOf('}', i));
 };
 
-const BG = token('--bg');
-const TEXT = token('--text');
-const MUTED = token('--muted');
-const PRIMARY = token('--primary');
-
-describe('contrast on the dusk field', () => {
+/* Resolved per skin through the harness (skins -> roles -> the .hea block). The page
+   declares dusk on its own root (asserted below), so every case is the dark theme. */
+describe.each(H.SKINS)('contrast on the dusk field (%s)', (skin) => {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  const local = (name) => H.scopeVar(CSS, '.hea {', name, { skin, theme: 'dark' });
   test('the title, the kicker and the ghost buttons clear AA on --bg', () => {
-    expect(ratio(TEXT, BG)).toBeGreaterThanOrEqual(4.5);
-    expect(ratio(MUTED, BG)).toBeGreaterThanOrEqual(4.5);
+    expect(H.ratio(r('--text'), r('--bg'))).toBeGreaterThanOrEqual(H.AA);
+    expect(H.ratio(r('--muted'), r('--bg'))).toBeGreaterThanOrEqual(H.AA);
   });
   test('the filled button\'s ink is a declared local and clears AA on --primary', () => {
-    expect(ratio(local('--hea-on-accent'), PRIMARY)).toBeGreaterThanOrEqual(4.5);
+    expect(H.ratio(local('--hea-on-accent'), r('--primary'))).toBeGreaterThanOrEqual(H.AA);
     expect(block('.hea .hea-btn--primary')).toMatch(/color:\s*var\(--hea-on-accent\)/);
   });
   test('--danger never carries text', () => {
     expect(stripped).not.toMatch(/(^|[^-])color:\s*var\(--danger\)/m);
   });
+});
+
+test('Classic is unchanged: the re-pointed --hea-* tokens resolve to their pre-skin literals', () => {
+  const lit = (name) => H.parseColor(H.scopeVar(CSS, '.hea {', name, { skin: 'classic', theme: 'dark' }));
+  expect(lit('--hea-on-accent')).toEqual(H.parseColor('#0F1A2E'));
+  expect(lit('--hea-rule')).toEqual(H.parseColor('rgba(155, 168, 190, .20)'));
+  expect(lit('--hea-rule-strong')).toEqual(H.parseColor('rgba(155, 168, 190, .34)'));
 });
 
 describe('the scope', () => {

@@ -1,0 +1,160 @@
+{
+  "unit": "0b-3.BuildReport",
+  "file": "buildroom/BuildReport.css",
+  "range": null,
+  "themes": [
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 5,
+    "font": 1,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "25:15",
+      "line": 25,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brr",
+      "property": "--brr-amber",
+      "literal": "#9A5B18",
+      "why": "matches a judgement role: --accent-text",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent-text",
+      "choice": "accent-text"
+    },
+    {
+      "id": "26:14",
+      "line": 26,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brr",
+      "property": "--brr-link",
+      "literal": "#2F5E9E",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 72)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 72)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 93)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the paper link blue #2F5E9E; no Classic role has it (--info #7CA7E6 is 2.6:1 on white)"
+    },
+    {
+      "id": "27:14",
+      "line": 27,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brr",
+      "property": "--brr-desk",
+      "literal": "#E9E4DB",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 15)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 50)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the desk the printed sheet sits on; no role (a darker step than paper --surface-2)"
+    },
+    {
+      "id": "28:14",
+      "line": 28,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brr",
+      "property": "--brr-rule",
+      "literal": "rgba(27, 41, 66, 0.16)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 151)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 162)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a navy 27 41 66 paper rule at .16; no channel carries 27 41 66 (--shade-rgb is 15 26 46) and paper --rule is .14"
+    },
+    {
+      "id": "29:16",
+      "line": 29,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".brr",
+      "property": "--brr-shadow",
+      "literal": "rgba(27, 41, 66, 0.18)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 0)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the sheet shadow, navy 27 41 66 at .18; no channel carries it"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.163Z",
+    "after": {
+      "colour": 4,
+      "font": 1,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "accent-text": 1,
+      "keep": 4
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}

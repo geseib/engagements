@@ -1,4 +1,4 @@
-/* skin-allowance: colour=10 font=2 primary=34 */
+/* skin-allowance: colour=4 font=2 primary=34 */
 /* BuildPlayer.css — a Build Room on the participant's phone.
  *
  * WHAT THIS IS. The `.bpl` scope: what a Build Room adds to the player surface
@@ -46,14 +46,14 @@
 
 .bpl {
   --bpl-muted: #B6C2D4;
-  --bpl-success-text: #6FD0A4;
+  --bpl-success-text: var(--success-text);
   --bpl-rule: rgba(182, 194, 212, .20);
   --bpl-rule-strong: rgba(182, 194, 212, .34);
-  --bpl-amber-tint: rgba(246, 169, 76, .10);
-  --bpl-amber-edge: rgba(246, 169, 76, .40);
-  --bpl-blue-tint: rgba(124, 167, 230, .12);
-  --bpl-blue-edge: rgba(124, 167, 230, .50);
-  --bpl-good-tint: rgba(79, 178, 134, .12);
+  --bpl-amber-tint: rgb(var(--accent-rgb) / .10);
+  --bpl-amber-edge: rgb(var(--accent-rgb) / .40);
+  --bpl-blue-tint: rgb(var(--info-rgb) / .12);
+  --bpl-blue-edge: rgb(var(--info-rgb) / .50);
+  --bpl-good-tint: rgb(var(--success-rgb) / .12);
   --bpl-good-edge: rgba(111, 208, 164, .45);
   --bpl-tap: 44px;
 }
