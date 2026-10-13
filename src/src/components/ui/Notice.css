@@ -1,0 +1,94 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   NOTICE — components/ui/Notice.jsx (docs/design/themes/SPEC.md §6, unit L12).
+
+   ROLES ONLY: no literal colour, no font name, no --primary/--secondary, no
+   --sk-* value. Replaces StatusMessage's styling (styles.css .status-message,
+   paper-only literals) as surfaces adopt it; behaviour stays in StatusMessage.
+
+   THE TINTS ARE CHANNEL FORMS. SPEC §6 names --tint-ok/-warn/-danger/-note;
+   no such role was ever declared (styles/roles.css), so each tone builds its
+   tint from the channel roles: rgb(var(--success-rgb) / .08) and so on. They
+   resolve per skin like every role (Present's note is the same blue as
+   Classic's: --info is not the accent).
+
+   WHY .08. The tint sits under the words, so it lowers their contrast. On
+   dusk --danger-text over a .10 red tint on --surface-2 is 4.49:1, under AA;
+   at .08 it is 4.58. One alpha for every tone; the .45 edge carries the hue.
+
+   THE INK is keyed on the nearest [data-theme], declared where roles.css
+   declares the roles (`:root, [data-theme="dark"]`, then `[data-theme=
+   "light"]`): Chip.css explains why a descendant selector cannot do it. On
+   dusk the words take the tone's text role (SPEC: "matching *-text"); on
+   paper every tone's text role is under AA in Classic (--success-text and
+   --danger-text are the dusk values there, §3 amendments; --warn is 1.96:1
+   on white), so the words are --text and danger takes --danger-deep.
+
+   Measured (uiNoticePalette.test.js, ink over the .08 tint on --bg /
+   --surface / --surface-2, every skin):
+     dusk   ok 8.26/6.84/5.61 · warn 7.75/6.41/5.26 · danger 6.67/5.57/4.58
+            note 13.17/10.90/8.92
+     paper  ok 12.77/13.58/11.73 · warn 13.00/13.82/11.95 · note 12.85/13.66/11.80
+            danger (--danger-deep) 5.16/5.49/4.74
+   ========================================================================== */
+
+:root, [data-theme="dark"] {
+  --ui-notice-ok-ink: var(--success-text);
+  --ui-notice-warn-ink: var(--warn);
+  --ui-notice-danger-ink: var(--danger-text);
+  --ui-notice-note-ink: var(--text);
+}
+[data-theme="light"] {
+  --ui-notice-ok-ink: var(--text);
+  --ui-notice-warn-ink: var(--text);
+  --ui-notice-danger-ink: var(--danger-deep);
+  --ui-notice-note-ink: var(--text);
+}
+
+.ui-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: .6em;
+  padding: .75em 1em;
+  border: var(--hair, 1px) solid var(--ui-notice-edge);
+  border-radius: var(--radius-sm);
+  background: var(--ui-notice-tint);
+  color: var(--ui-notice-ink);
+  font-family: var(--font-ui);
+  font-size: var(--ui-size, 1em);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.ui-notice-icon {
+  flex: none;
+  display: inline-flex;
+  margin-top: .1em;
+  color: var(--ui-notice-hue);
+}
+.ui-notice-body { min-width: 0; }
+
+/* ---- tones: tint (ground), edge, hue (icon), ink (words) ---- */
+.ui-notice--ok {
+  --ui-notice-tint: rgb(var(--success-rgb) / .08);
+  --ui-notice-edge: rgb(var(--success-rgb) / .45);
+  --ui-notice-hue: var(--success);
+  --ui-notice-ink: var(--ui-notice-ok-ink);
+}
+.ui-notice--warn {
+  --ui-notice-tint: rgb(var(--warn-rgb) / .08);
+  --ui-notice-edge: rgb(var(--warn-rgb) / .45);
+  --ui-notice-hue: var(--warn);
+  --ui-notice-ink: var(--ui-notice-warn-ink);
+}
+.ui-notice--danger {
+  --ui-notice-tint: rgb(var(--danger-rgb) / .08);
+  --ui-notice-edge: rgb(var(--danger-rgb) / .45);
+  --ui-notice-hue: var(--danger);
+  --ui-notice-ink: var(--ui-notice-danger-ink);
+}
+.ui-notice--note {
+  --ui-notice-tint: rgb(var(--info-rgb) / .08);
+  --ui-notice-edge: rgb(var(--info-rgb) / .45);
+  --ui-notice-hue: var(--info);
+  --ui-notice-ink: var(--ui-notice-note-ink);
+}

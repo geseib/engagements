@@ -1,0 +1,19 @@
+{
+  "unit": "L12",
+  "file": "components/ui/Notice.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": false,
+  "base": "ddaf1144",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 0,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": []
+}
