@@ -18,60 +18,40 @@ const fs = require('fs');
 const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const STAGE_CSS = read('styles', 'stage.css');
 const PLAYER_CSS = read('components', 'PlayerSurface.css');
 const EVP_CSS = read('components', 'event', 'EventAttendeePage.css');
 const AG_CSS = read('components', 'event', 'EventStage.css');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function parseRgba(s) {
-  const m = String(s).match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
-  if (!m) throw new Error(`not an rgba: ${s}`);
-  return { rgb: [Number(m[1]), Number(m[2]), Number(m[3])], a: Number(m[4]) };
-}
-const over = (fg, a, bg) => fg.map((c, i) => c * a + bg[i] * (1 - a));
+const H = require('../testing/skinHarness');
 
-function hexToken(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return parseHex(m[1]);
-}
-function rgbaToken(css, name) {
-  const m = css.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared`);
-  return parseRgba(m[1]);
+const ratio = (a, b) => H.ratio(a, b);
+const rgb = (c) => H.composite([c]);
+const over = (tintValue, base) => { const t = H.parseColor(tintValue); return t.rgb.map((c, i) => c * t.a + base[i] * (1 - t.a)); };
+const AA = H.AA;
+
+/* Values RESOLVED per skin through the harness (skins -> roles -> the scope block), never
+   retyped. Both surfaces are dusk in every skin: the attendee's page draws inside
+   `.plr data-theme="dark"` (PlayerShell), the wall and board inside
+   `.ag-stage-root data-theme="dark"` (EventStage.jsx). */
+function palette(skin) {
+  const r = (name) => rgb(H.role(name, { skin, theme: 'dark' }));
+  const plr = (name) => H.scopeVar(PLAYER_CSS, '.plr {', name, { skin, theme: 'dark' });
+  return {
+    bg: r('--bg'), surface: r('--surface'), text: r('--text'), muted: r('--muted'),
+    primary: r('--primary'), dangerText: r('--danger-text'),
+    plrMuted: rgb(plr('--plr-muted')), plrGood: rgb(plr('--plr-success-text')),
+    stageGood: r('--success-text'),
+    plrAmber: plr('--plr-amber-tint'),
+    nowTint: H.scopeVar(AG_CSS, '.ag-stage-root {', '--ag-now-tint', { skin, theme: 'dark' }),
+  };
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: hexToken(GLOBAL_CSS, DUSK, '--bg'),
-  surface: hexToken(GLOBAL_CSS, DUSK, '--surface'),
-  text: hexToken(GLOBAL_CSS, DUSK, '--text'),
-  muted: hexToken(GLOBAL_CSS, DUSK, '--muted'),
-  primary: hexToken(GLOBAL_CSS, ROOT, '--primary'),
-  dangerText: hexToken(GLOBAL_CSS, ROOT, '--danger-text'),
-  plrMuted: hexToken(PLAYER_CSS, '.plr {', '--plr-muted'),
-  plrGood: hexToken(PLAYER_CSS, '.plr {', '--plr-success-text'),
-  stageGood: parseHex((STAGE_CSS.match(/--success-text:\s*(#[0-9A-Fa-f]{6})/) || [])[1]),
-};
-const AA = 4.5;
-const surfaceOnBg = T.surface;
-
-describe('the attendee\'s page', () => {
-  const amber = rgbaToken(PLAYER_CSS, '--plr-amber-tint');
-  const nowRow = over(amber.rgb, amber.a, T.bg);
+describe.each(H.SKINS)('the attendee\'s page (%s)', (skin) => {
+  const T = palette(skin);
+  const nowRow = over(T.plrAmber, T.bg);
   test.each([
     ['titles on the page', T.text, T.bg],
     ['times, type lines and kickers', T.plrMuted, T.bg],
@@ -85,27 +65,35 @@ describe('the attendee\'s page', () => {
   });
 });
 
-describe('the wall and the host\'s panel', () => {
-  const nowTint = rgbaToken(AG_CSS, '--ag-now-tint');
+describe.each(H.SKINS)('the wall and the host\'s panel (%s)', (skin) => {
+  const T = palette(skin);
+  const surfaceOnBg = T.surface;
+  const live = over(T.nowTint, T.bg);
   test.each([
     ['wall titles on the stage', T.text, T.bg],
     ['wall times and type lines', T.muted, T.bg],
     ['wall "Done"', T.stageGood, T.bg],
     ['wall "Now", "First", the kicker', T.primary, T.bg],
-    ['the wall\'s live row: its title', T.text, over(nowTint.rgb, nowTint.a, T.bg)],
-    ['the wall\'s live row: its word', T.primary, over(nowTint.rgb, nowTint.a, T.bg)],
+    ['the wall\'s live row: its title', T.text, live],
+    ['the wall\'s live row: its word', T.primary, live],
     ['board titles on the stage', T.text, T.bg],
     ['board times and kind lines', T.muted, T.bg],
     ['board "Live" and "Paused"', T.primary, T.bg],
     ['END EVENT in the dock', T.dangerText, T.bg],
     ['a Go live button\'s ink on amber', T.bg, T.primary],
-    ['a live board row\'s title on its tint', T.text, over(nowTint.rgb, nowTint.a, T.bg)],
-    ['a live board row\'s kind line on its tint', T.muted, over(nowTint.rgb, nowTint.a, T.bg)],
+    ['a live board row\'s title on its tint', T.text, live],
+    ['a live board row\'s kind line on its tint', T.muted, live],
     ['the confirm\'s copy on its dialog', T.text, surfaceOnBg],
     ['"End the event" on its dialog', T.dangerText, surfaceOnBg],
   ])('%s clears AA', (_label, fg, bg) => {
     expect(ratio(fg, bg)).toBeGreaterThanOrEqual(AA);
   });
+});
+
+test('Classic is unchanged: the live-row tints resolve to their pre-skin literals', () => {
+  const T = palette('classic');
+  expect(H.parseColor(T.plrAmber)).toEqual(H.parseColor('rgba(246, 169, 76, .11)'));
+  expect(H.parseColor(T.nowTint)).toEqual(H.parseColor('rgba(246, 169, 76, .10)'));
 });
 
 describe('the contract', () => {

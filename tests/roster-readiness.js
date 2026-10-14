@@ -265,6 +265,44 @@ async function seed({ phase = 'ASK', round = 1, answered = [], voted = [] } = {}
     assert.strictEqual(list.removedPlayers.length, 1);
   });
 
+  /* --- §5 the ballot as submit-vote.js really writes it -------------------- */
+  //
+  // Owner, 2026-10-12, session 5479 on dev: "the users left to … vote does not
+  // update when the box above shows there has been progress". Every fixture
+  // above seeds a ballot with BOTH `PlayerName` and `VoterName`; the real
+  // writer (submit-vote.js) stamps `VoterName` ONLY. get-players read
+  // `PlayerName`, so in a live session `hasVoted` was false for everybody for
+  // the whole of VOTE (CloudWatch: "0 ready" at 13:04:56 and 13:05:02, after
+  // four ballots landed at 13:04:52-53), while the count — a row COUNT, which
+  // needs no name — moved. The fixture's extra field is what hid it.
+
+  /** A ballot exactly as submit-vote.js writes it: VoterName, no PlayerName. */
+  const realBallot = (round, name) => {
+    const padded = String(round).padStart(3, '0');
+    store.set(key(PK, `QUESTION#${padded}#VOTE#${name}`), {
+      PK, SK: `QUESTION#${padded}#VOTE#${name}`, VoterName: name, QuestionNumber: padded, Votes: { 0: 1 },
+    });
+  };
+
+  await check('§5 a real ballot (VoterName only) marks its voter as having voted', async () => {
+    await seed({ phase: 'VOTE', answered: ['Ada', 'Dana'] });
+    realBallot(1, 'Dana');
+    const list = bodyOf(await roster());
+    assert.strictEqual(readinessOf(list, 'Dana').hasVoted, true,
+      'get-players still reads the voter off PlayerName, which submit-vote never writes');
+    assert.strictEqual(readinessOf(list, 'Ada').hasVoted, false);
+    assert.strictEqual(list.stats.votedCount, 1);
+  });
+
+  await check('§5 the host state names the same voters the count counts', async () => {
+    await seed({ phase: 'VOTE', answered: ['Ada', 'Dana'] });
+    realBallot(1, 'Dana');
+    const snapshot = bodyOf(await state());
+    assert.strictEqual(snapshot.votingProgress.votesReceived, 1);
+    assert.deepStrictEqual(snapshot.votingProgress.votersIds, ['Dana'],
+      'votersIds is [undefined] for a real ballot — it reads PlayerName');
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

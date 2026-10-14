@@ -45,6 +45,19 @@ export const NOTES_MS_PER_WORD = 300;
 export const NOTES_MIN_MS = 9000;
 export const NOTES_MAX_MS = 26000;
 
+/**
+ * One response on the wall (two surfaces): long enough to read it aloud-ish,
+ * never a flash, never parked. A quote reads faster than Workie's prose.
+ */
+export const RESPONSE_MS_PER_WORD = 280;
+export const RESPONSE_MIN_MS = 7000;
+export const RESPONSE_MAX_MS = 22000;
+
+export function responseDwellMs(text) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(RESPONSE_MIN_MS, Math.min(RESPONSE_MAX_MS, words * RESPONSE_MS_PER_WORD));
+}
+
 /** How long a page of prose deserves, from what is actually on it. */
 export function notesDwellMs(pageText) {
   const words = String(pageText || '').trim().split(/\s+/).filter(Boolean).length;
@@ -72,8 +85,24 @@ export function autoDecision({
   pages = 1,
   pageText = '',
   notesReady = false,
+  // TWO SURFACES (owner, 2026-10-13): walk the response navigator at RESULTS
+  // instead of paging cards. `responseCount` is how many there are,
+  // `responseText` the one on the wall in RESPONSES.
+  walkResponses = false,
+  responseCount = 0,
+  responseText = '',
 } = {}) {
   if (!enabled || playerCount <= 0) return null;
+
+  if (walkResponses && phase === 'RESULTS' && responseCount > 0) {
+    // The tally first, then the first response, through the dock's secondary.
+    return { kind: 'secondary', delayMs: RESULTS_PAGE_MS, why: 'the tally has had its moment; the responses next' };
+  }
+  if (phase === 'RESPONSES') {
+    // The dock's primary is already the right step: Next part, Next response,
+    // and after the last, What we heard.
+    return { kind: 'primary', delayMs: responseDwellMs(responseText), why: 'this response has been read' };
+  }
 
   switch (phase) {
     case 'ASK':
@@ -84,6 +113,13 @@ export function autoDecision({
     case 'VOTE':
       if (votedCount >= playerCount && votedCount > 0) {
         return { kind: 'primary', delayMs: AUTO_GRACE_MS, why: 'everyone has voted' };
+      }
+      // VOTING SHOWS THE RESPONSES (owner, 2026-10-13: "when in auto mode it
+      // will cycle through them over and over unless the host click forward or
+      // all responses have been cast"). The dock's secondary is Next response,
+      // which wraps from the last to the first.
+      if (walkResponses && responseCount > 1) {
+        return { kind: 'secondary', delayMs: responseDwellMs(responseText), why: 'this response has been read; the next while the room votes' };
       }
       return null;
     case 'RESULTS':

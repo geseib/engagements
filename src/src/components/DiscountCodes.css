@@ -1,3 +1,4 @@
+/* skin-allowance: colour=4 font=0 primary=6 */
 /* components/DiscountCodesPanel.jsx — the platform's codes list and the
    create dialog. Scope `.dcode`. Same locals as PlanRequests.css, measured on
    --bg #0F1A2E / --surface #1B2942 (adjustmentsLedgerPalette.test.js). */
@@ -7,12 +8,12 @@
   --dcode-t-body: 15px;
   --dcode-t-head: 19px;
   --dcode-row-h: 36px;
-  --dcode-rule: rgba(155, 168, 190, .20);
-  --dcode-rule-strong: rgba(155, 168, 190, .34);
-  --dcode-row-hover: rgba(155, 168, 190, .055);
-  --dcode-tint-bad: rgba(229, 100, 94, .10);
-  --dcode-success-text: #6FD0A4;
-  --dcode-on-accent: #1B2942;
+  --dcode-rule: rgb(var(--slate-rgb) / .20);
+  --dcode-rule-strong: rgb(var(--slate-rgb) / .34);
+  --dcode-row-hover: var(--row-hover);
+  --dcode-tint-bad: rgb(var(--danger-rgb) / .10);
+  --dcode-success-text: var(--success-text);
+  --dcode-on-accent: var(--on-accent);
   --dcode-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   color: var(--text);
   font: 400 var(--dcode-t-body)/1.45 var(--font-ui);

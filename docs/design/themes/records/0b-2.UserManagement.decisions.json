@@ -1,0 +1,78 @@
+{
+  "unit": "0b-2.UserManagement",
+  "file": "components/UserManagement.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 17,
+    "font": 0,
+    "primary": 8
+  },
+  "auto": [
+    {
+      "id": "55:21",
+      "line": 55,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".um",
+      "property": "--um-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "57:13",
+      "line": 57,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".um",
+      "property": "--um-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "58:20",
+      "line": 58,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".um",
+      "property": "--um-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "59:18",
+      "line": 59,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".um",
+      "property": "--um-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:18.993Z",
+    "after": {
+      "colour": 13,
+      "font": 0,
+      "primary": 8
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 4
+  }
+}

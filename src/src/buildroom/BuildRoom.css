@@ -1,3 +1,4 @@
+/* skin-allowance: colour=12 font=7 primary=143 */
 /* ==========================================================================
    BUILD ROOM — the host's page and the wall (buildroom/BuildRoomPage.jsx).
 
@@ -28,30 +29,30 @@
 
 .brm {
   /* Local tokens. Hex lives here and nowhere else. */
-  --brm-success-text: #6FD0A4;   /* styles.css has no success-text token */
+  --brm-success-text: var(--success-text);   /* styles.css has no success-text token */
   --brm-term: #0A0F18;           /* the command block: a terminal, darker than --bg */
   --brm-term-text: #D9DEE7;
   --brm-qr-bg: #FFFFFF;          /* a QR code needs a white quiet zone */
-  --brm-rule: rgba(155, 168, 190, 0.22);
+  --brm-rule: var(--rule);
   --brm-scrim: rgba(5, 8, 15, 0.72);
-  --brm-qr-scrim: rgba(15, 26, 46, 0.94); /* QrZoom: denser, so the code is all a projector shows */
-  --brm-tint-amber: rgba(246, 169, 76, 0.13);
-  --brm-tint-amber-soft: rgba(246, 169, 76, 0.08);
-  --brm-tint-blue: rgba(124, 167, 230, 0.14);
-  --brm-tint-green: rgba(79, 178, 134, 0.14);
-  --brm-tint-red: rgba(229, 100, 94, 0.12);
-  --brm-line-amber: rgba(246, 169, 76, 0.45);
+  --brm-qr-scrim: rgb(var(--shade-rgb) / 0.94); /* QrZoom: denser, so the code is all a projector shows */
+  --brm-tint-amber: rgb(var(--accent-rgb) / 0.13);
+  --brm-tint-amber-soft: rgb(var(--accent-rgb) / 0.08);
+  --brm-tint-blue: rgb(var(--info-rgb) / 0.14);
+  --brm-tint-green: rgb(var(--success-rgb) / 0.14);
+  --brm-tint-red: rgb(var(--danger-rgb) / 0.12);
+  --brm-line-amber: rgb(var(--accent-rgb) / 0.45);
   /* The Host alert's amber: text and outline only. The one filled orange (--primary) belongs to the screen's main button. */
   --brm-alert-amber: #FFD27A;
-  --brm-line-blue: rgba(124, 167, 230, 0.55);
-  --brm-line-red: rgba(229, 100, 94, 0.45);
-  --brm-line-green: rgba(79, 178, 134, 0.5);
+  --brm-line-blue: rgb(var(--info-rgb) / 0.55);
+  --brm-line-red: rgb(var(--danger-rgb) / 0.45);
+  --brm-line-green: rgb(var(--success-rgb) / 0.5);
   /* The demo slot before there is a demo (two codes, "QR code TBD"): a QR's
      corner marks and a dot field, faint, behind a solid label. Decoration
      only; no text is ever drawn on them (__tests__/buildRoomCodesPalette). */
-  --brm-tbd-ink: rgba(155, 168, 190, 0.30);
-  --brm-tbd-dot: rgba(155, 168, 190, 0.16);
-  --brm-tbd-line: rgba(155, 168, 190, 0.40);
+  --brm-tbd-ink: rgb(var(--slate-rgb) / 0.30);
+  --brm-tbd-dot: rgb(var(--slate-rgb) / 0.16);
+  --brm-tbd-line: rgb(var(--slate-rgb) / 0.40);
 
   --brm-t-floor: 12px;
   --brm-t-label: 13px;

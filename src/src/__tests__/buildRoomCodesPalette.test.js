@@ -13,10 +13,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('buildroom', 'BuildRoom.css').replace(/\/\*[\s\S]*?\*\//g, '');
-const GLOBAL = read('styles.css');
 
 const FLOOR = 160;
 
@@ -102,31 +102,23 @@ describe('the 160px floor', () => {
   });
 });
 
-/* ---- contrast, measured ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) { const x = lum(a); const y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
-const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+/* ---- contrast, measured: resolved per skin through the harness (skins -> roles -> .brm),
+        dusk in every skin (every .brm root is data-theme="dark") ---- */
+const ROOM_RAW = read('buildroom', 'BuildRoom.css');
+const ratio = (a, b) => H.ratio(a, b);
 const over = (fg, bg, a) => fg.map((c, i) => c * a + bg[i] * (1 - a));
-function rootToken(name) {
-  const root = GLOBAL.slice(GLOBAL.indexOf(':root'), GLOBAL.indexOf('}', GLOBAL.indexOf(':root')));
-  return hex(root.match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`))[1]);
-}
-function brmToken(name) {
-  const m = CSS.match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6}|rgba\\([^)]*\\))`));
-  if (m[1].startsWith('#')) return { rgb: hex(m[1]), a: 1 };
-  const n = m[1].match(/[\d.]+/g).map(Number);
-  return { rgb: n.slice(0, 3), a: n[3] };
-}
-const AA = 4.5;
+const AA = H.AA;
 
-describe('the words on the codes clear AA, composited', () => {
-  const text = rootToken('--text');
-  const muted = rootToken('--muted');
-  const surface = rootToken('--surface');
-  const bg = rootToken('--bg');
-  const success = brmToken('--brm-success-text').rgb;
-  const danger = rootToken('--danger-text');
+describe.each(H.SKINS)('the words on the codes clear AA, composited (%s)', (skin) => {
+  const r = (name) => H.composite([H.role(name, { skin, theme: 'dark' })]);
+  const v = (name) => H.parseColor(H.scopeVar(ROOM_RAW, '.brm {', name, { skin, theme: 'dark' }));
+  const text = r('--text');
+  const muted = r('--muted');
+  const surface = r('--surface');
+  const bg = r('--bg');
+  const success = v('--brm-success-text').rgb;
+  const danger = r('--danger-text');
+  const brmToken = v;
 
   test('a framed tile (--surface): heading, address, line, count, the failed heading', () => {
     expect(ratio(text, surface)).toBeGreaterThanOrEqual(AA);

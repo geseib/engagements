@@ -1,0 +1,1230 @@
+{
+  "_": "Machine-readable PLAN.md: one entry per work unit. scripts/skins/prompt.js fills WORKER-PROMPT.md from it; classicEquivalence.js --unit and shoot.js --unit read it. File patterns are relative to src/src: an exact path, a basename glob with no slash (QuestionSetsPanel.* matches it anywhere), or a path glob (marketing/**/*.css). When PLAN changes, change this file in the same commit. Owned and foreign tests are computed by prompt.js (the owner of a shared test is the unit owning the first stylesheet it names, PLAN \u00a77); list a test under ownedTests here only to override that.",
+  "units": [
+    {
+      "id": "0a",
+      "phase": "0",
+      "title": "Values and roles",
+      "files": [
+        "styles/skins/classic.css",
+        "styles/skins/present.css",
+        "styles/roles.css",
+        "index.jsx"
+      ],
+      "scRanges": [
+        "SC-00"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "components": [],
+      "routes": [
+        "public"
+      ],
+      "notes": "Run scripts/skins/retarget-tests.js --apply in this unit (313 reads, 42 files at 2026-10-13). Skin values read only --sk-* values, never a role (harness.js --selftest shows why). Decide the PROPOSED --shade-rgb/--glow-rgb channels (README 'Gaps found'). Start present.css/classic.css from scripts/skins/fixtures/spec-skins if useful."
+    },
+    {
+      "id": "0b-1",
+      "phase": "0",
+      "title": "Scope blocks: marketing, auth, entry",
+      "tokensOnly": true,
+      "files": [
+        "marketing/**/*.css",
+        "components/JoinCodeEntry.css",
+        "components/RootPage.css",
+        "components/WelcomeScreen.css",
+        "auth/auth.css"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "public"
+      ]
+    },
+    {
+      "id": "0b-2",
+      "phase": "0",
+      "title": "Scope blocks: admin",
+      "tokensOnly": true,
+      "files": [
+        "ActingAsBanner.css",
+        "AdminShell.css",
+        "CreateOrgDialog.css",
+        "InviteDialog.css",
+        "OrgSwitcher.css",
+        "OverviewPanel.css",
+        "PendingInvites.css",
+        "PlanLimitNotice.css",
+        "ScopeTabs.css",
+        "UsageMeter.css",
+        "UsageStatsPanel.css",
+        "BuilderPage.css",
+        "AIPromptManager.css",
+        "AppendModeSwitch.css",
+        "BatchGuidanceField.css",
+        "CategoryPicker.css",
+        "CountField.css",
+        "FileUploadPrompt.css",
+        "GeneratedItemsTable.css",
+        "GenerationJobPanel.css",
+        "PollAIBuilder.css",
+        "PublicLibraryPanel.css",
+        "QuestionImageField.css",
+        "QuestionPreview.css",
+        "QuestionSetEditor.css",
+        "QuestionSetsPanel.css",
+        "RoundKindPicker.css",
+        "SetMediaPanel.css",
+        "SetReviewBanner.css",
+        "ShareSetDialog.css",
+        "SurveyAIBuilder.css",
+        "SurveyQuestionFields.css",
+        "AdjustmentsLedger.css",
+        "ArchivePanel.css",
+        "AuditLog.css",
+        "BillingPanel.css",
+        "ClaudeModelsPanel.css",
+        "DiscountCodes.css",
+        "InvoicePanel.css",
+        "LeavePlanDialog.css",
+        "ModerationPanel.css",
+        "ObservabilityPanel.css",
+        "OrgBillingDrawer.css",
+        "PlanRequests.css",
+        "PlatformOrgsPanel.css",
+        "PrivacyPanel.css",
+        "TeamPanel.css",
+        "UserManagement.css",
+        "EventBuilder.css",
+        "EventsPanel.css",
+        "SessionHistoryPanel.css",
+        "SessionsPanel.css"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "routes": []
+    },
+    {
+      "id": "0b-3",
+      "phase": "0",
+      "title": "Scope blocks: session surfaces",
+      "tokensOnly": true,
+      "files": [
+        "FeedbackRoundPanel.css",
+        "GameSetupDialog.css",
+        "RemoteCategoryList.css",
+        "RemoteQuestionBrowser.css",
+        "RemoteSessionPanel.css",
+        "components/stage/ModelCompare.css",
+        "components/survey/results/SurveyResults.css",
+        "styles/stage.css",
+        "HostRemote.css",
+        "components/PlayerSurface.css",
+        "components/ScoreCard.css",
+        "components/event/*.css",
+        "buildroom/*.css",
+        "components/stage/scoreboard/Scoreboard.css"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "routes": [
+        "play",
+        "present"
+      ]
+    },
+    {
+      "id": "0b-4",
+      "phase": "0",
+      "title": "Scope blocks: reports, help",
+      "tokensOnly": true,
+      "files": [
+        "GameReport.css",
+        "ReportShare.css",
+        "ReportsPanel.css",
+        "RoundReport.css",
+        "SurveyResultsPanel.css",
+        "TalkingPointsReport.css",
+        "components/documentation/documentation.css",
+        "HelpButton.css",
+        "HelpSystem.css",
+        "IssueReportForm.css"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "public"
+      ]
+    },
+    {
+      "id": "0c",
+      "phase": "0",
+      "title": "The Presentation on roles",
+      "files": [
+        "present/present.css",
+        "present/PresentStage.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [],
+      "routes": [
+        "present"
+      ],
+      "notes": "PresentStage.jsx: only the one data-surface=\"wall\" attribute (PLAN 0c)."
+    },
+    {
+      "id": "0d",
+      "phase": "0",
+      "title": "The setting",
+      "files": [
+        "config/skins.js",
+        "components/SkinProvider.jsx",
+        "components/SiteSkinPanel.jsx",
+        "components/SiteSkinPanel.css",
+        "App.jsx",
+        "AdminPage.jsx",
+        "config/consoleSections.js",
+        "../public/index.html"
+      ],
+      "backendFiles": [
+        "lambda-functions/admin/shared/site-skin.js",
+        "lambda-functions/websocket/site-skin.js",
+        "lambda-functions/admin/orgs/platform-settings.js",
+        "lambda-functions/websocket/events/resolve-code.js",
+        "template-clean.yaml",
+        "lambda-functions/auth/authorizer.js"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "routes": [
+        "public"
+      ],
+      "notes": "Per SPEC \u00a75. App.jsx/AdminPage.jsx/consoleSections.js: the one-line edits PLAN 0d lists, nothing else."
+    },
+    {
+      "id": "0e",
+      "phase": "0",
+      "title": "The gate (re-seed after 0b)",
+      "files": [],
+      "themes": [
+        "dark"
+      ],
+      "routes": [],
+      "notes": "The gate and the pragmas landed with the tooling (2026-10-13). 0e is: node scripts/skins/seed-allowances.js (dry run) after 0b merges; every change must be a LOWER number; then --apply. A REFUSED line is a unit that added literals: send it back."
+    },
+    {
+      "id": "L1",
+      "phase": "1",
+      "title": "Eyebrow",
+      "files": [
+        "components/ui/Eyebrow.jsx",
+        "components/ui/Eyebrow.css"
+      ],
+      "ownedTests": [
+        "uiEyebrowPalette.test.js",
+        "uiEyebrow.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-eyebrow"
+      ]
+    },
+    {
+      "id": "L2",
+      "phase": "1",
+      "title": "Heading",
+      "files": [
+        "components/ui/Heading.jsx",
+        "components/ui/Heading.css"
+      ],
+      "ownedTests": [
+        "uiHeadingPalette.test.js",
+        "uiHeading.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-heading"
+      ]
+    },
+    {
+      "id": "L3",
+      "phase": "1",
+      "title": "Button",
+      "files": [
+        "components/ui/Button.jsx",
+        "components/ui/Button.css"
+      ],
+      "ownedTests": [
+        "uiButtonPalette.test.js",
+        "uiButton.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-button"
+      ]
+    },
+    {
+      "id": "L4",
+      "phase": "1",
+      "title": "NumberBadge",
+      "files": [
+        "components/ui/NumberBadge.jsx",
+        "components/ui/NumberBadge.css"
+      ],
+      "ownedTests": [
+        "uiNumberBadgePalette.test.js",
+        "uiNumberBadge.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-number-badge"
+      ]
+    },
+    {
+      "id": "L5",
+      "phase": "1",
+      "title": "Card",
+      "files": [
+        "components/ui/Card.jsx",
+        "components/ui/Card.css"
+      ],
+      "ownedTests": [
+        "uiCardPalette.test.js",
+        "uiCard.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-card"
+      ]
+    },
+    {
+      "id": "L6",
+      "phase": "1",
+      "title": "Pips",
+      "files": [
+        "components/ui/Pips.jsx",
+        "components/ui/Pips.css"
+      ],
+      "ownedTests": [
+        "uiPipsPalette.test.js",
+        "uiPips.test.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "routes": [
+        "gallery:ui-pips"
+      ]
+    },
+    {
+      "id": "L7",
+      "phase": "1",
+      "title": "TopLine",
+      "files": [
+        "components/ui/TopLine.jsx",
+        "components/ui/TopLine.css"
+      ],
+      "ownedTests": [
+        "uiTopLinePalette.test.js",
+        "uiTopLine.test.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "routes": [
+        "gallery:ui-top-line"
+      ]
+    },
+    {
+      "id": "L8",
+      "phase": "1",
+      "title": "Chip",
+      "files": [
+        "components/ui/Chip.jsx",
+        "components/ui/Chip.css"
+      ],
+      "ownedTests": [
+        "uiChipPalette.test.js",
+        "uiChip.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-chip"
+      ]
+    },
+    {
+      "id": "L9",
+      "phase": "1",
+      "title": "Ground",
+      "files": [
+        "components/ui/Ground.jsx",
+        "components/ui/Ground.css"
+      ],
+      "ownedTests": [
+        "uiGroundPalette.test.js",
+        "uiGround.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-ground"
+      ]
+    },
+    {
+      "id": "L10",
+      "phase": "1",
+      "title": "TallyRow",
+      "files": [
+        "components/ui/TallyRow.jsx",
+        "components/ui/TallyRow.css"
+      ],
+      "ownedTests": [
+        "uiTallyRowPalette.test.js",
+        "uiTallyRow.test.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "routes": [
+        "gallery:ui-tally-row"
+      ]
+    },
+    {
+      "id": "L11",
+      "phase": "1",
+      "title": ".ui-row (CSS only)",
+      "files": [
+        "components/ui/Row.css"
+      ],
+      "ownedTests": [
+        "uiRowPalette.test.js"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-row"
+      ]
+    },
+    {
+      "id": "L12",
+      "phase": "1",
+      "title": "Notice",
+      "files": [
+        "components/ui/Notice.jsx",
+        "components/ui/Notice.css"
+      ],
+      "ownedTests": [
+        "uiNoticePalette.test.js",
+        "uiNotice.test.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-notice"
+      ]
+    },
+    {
+      "id": "L13",
+      "phase": "1",
+      "title": "Modal look (.ui-dialog, .ui-scrim)",
+      "files": [
+        "components/ui/Dialog.css"
+      ],
+      "ownedTests": [
+        "uiDialogPalette.test.js"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "gallery:ui-dialog"
+      ]
+    },
+    {
+      "id": "P2",
+      "phase": "2",
+      "title": "The Presentation adopts the library",
+      "files": [
+        "present/PresentMoments.jsx",
+        "present/PresentStage.jsx",
+        "present/present.css",
+        "PresentPage.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Eyebrow",
+        "Heading",
+        "Button",
+        "NumberBadge",
+        "Card",
+        "Pips",
+        "TopLine",
+        "Chip",
+        "Ground",
+        "TallyRow"
+      ],
+      "routes": [
+        "present"
+      ],
+      "notes": "Present skin pixel-identical to the Phase 0c baseline; Classic per SPEC \u00a74.5; fitcheck=1 reports no new misses at all four profiles."
+    },
+    {
+      "id": "W3-a",
+      "phase": "W3",
+      "title": "Marketing",
+      "files": [
+        "marketing/**/*.css",
+        "marketing/**/*.jsx"
+      ],
+      "exclude": [
+        "marketing/HelpPage.css",
+        "marketing/HelpPage.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "components": [
+        "Ground",
+        "Heading",
+        "Eyebrow",
+        "Button",
+        "Card"
+      ],
+      "routes": [
+        "/home",
+        "/how-it-works",
+        "/use-cases",
+        "/build-room",
+        "/reports"
+      ],
+      "notes": "Owner of marketingPalette (W3-b sends its assertions here). Add palette tests for the sheets without one."
+    },
+    {
+      "id": "W3-b",
+      "phase": "W3",
+      "title": "Entry",
+      "files": [
+        "RootPage.css",
+        "RootPage.jsx",
+        "JoinCodeEntry.css",
+        "JoinCodeEntry.jsx",
+        "WelcomeScreen.css",
+        "WelcomeScreen.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Heading",
+        "Button",
+        "Card"
+      ],
+      "routes": [
+        "/",
+        "/join"
+      ],
+      "foreignTestsOverride": [
+        "marketingPalette.test.js"
+      ]
+    },
+    {
+      "id": "W3-c",
+      "phase": "W3",
+      "title": "Auth and legal",
+      "files": [
+        "auth/*",
+        "PrivacyPolicyPage.jsx",
+        "TermsOfServicePage.jsx",
+        "PendingInvites.css",
+        "InviteAcceptPage.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "components": [
+        "Heading",
+        "Button",
+        "Notice"
+      ],
+      "routes": [
+        "/auth",
+        "/privacy",
+        "/terms"
+      ],
+      "notes": "New authPalette.test.js. Remove the JSX colour literals (measure.js --jsx)."
+    },
+    {
+      "id": "W3-d",
+      "phase": "W3",
+      "title": "Scoreboard",
+      "files": [
+        "components/stage/scoreboard/*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Ground",
+        "NumberBadge",
+        "TallyRow"
+      ],
+      "routes": [
+        "gallery:scoreboard"
+      ],
+      "notes": "Owner decision Q (scoreboard): accents and the housing ground only; the three looks keep their --sb-* board palettes."
+    },
+    {
+      "id": "W3-e",
+      "phase": "W3",
+      "title": "Help",
+      "files": [
+        "HelpSystem.*",
+        "HelpButton.*",
+        "components/documentation/*",
+        "IssueReportForm.*",
+        "marketing/HelpPage.css",
+        "marketing/HelpPage.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "components": [
+        "Heading",
+        "Notice"
+      ],
+      "routes": [
+        "/help"
+      ],
+      "notes": "Write helpPalette.test.js FIRST (3 sheets have none)."
+    },
+    {
+      "id": "W4-a",
+      "phase": "W4",
+      "title": "Admin shell",
+      "files": [
+        "AdminShell.*",
+        "ScopeTabs.*",
+        "OrgSwitcher.*",
+        "ActingAsBanner.*",
+        "OverviewPanel.*",
+        "UsageMeter.*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Heading",
+        "Eyebrow",
+        "Chip"
+      ],
+      "routes": [
+        "gallery:admin-shell"
+      ],
+      "ownedTests": [
+        "adminShellPalette.test.js",
+        "adminTabsPalette.test.js"
+      ]
+    },
+    {
+      "id": "W4-b",
+      "phase": "W4",
+      "title": "Sets list and dialogs",
+      "files": [
+        "QuestionSetsPanel.*",
+        "QuestionSetDeleteDialog.*",
+        "HostQuestionSetsDialog.*",
+        "QuestionSetUploadPanel.*",
+        "PublicLibraryPanel.*",
+        "ShareSetDialog.*"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "components": [
+        "Button",
+        "Chip",
+        "Notice"
+      ],
+      "routes": [
+        "gallery:question-sets"
+      ],
+      "ownedTests": [
+        "questionSetsPalette.test.js"
+      ]
+    },
+    {
+      "id": "W4-c",
+      "phase": "W4",
+      "title": "Set editor",
+      "files": [
+        "QuestionSetEditor.*",
+        "QuestionPreview.*",
+        "SetMediaPanel.*",
+        "SetReviewBanner.*",
+        "CategoryPicker.*",
+        "RoundKindPicker.*",
+        "CountField.*",
+        "QuestionImageField.*",
+        "AppendModeSwitch.*",
+        "BatchGuidanceField.*",
+        "FileUploadPrompt.*"
+      ],
+      "scRanges": [
+        "SC-09"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Chip",
+        "Button",
+        "Card"
+      ],
+      "routes": [
+        "gallery:set-editor"
+      ],
+      "notes": "CategoryPicker.css uses literals on purpose (component-library.md): move it to roles and give its tests a roles stub."
+    },
+    {
+      "id": "W4-d",
+      "phase": "W4",
+      "title": "AI authoring",
+      "files": [
+        "PollAIBuilder.*",
+        "SurveyAIBuilder.*",
+        "SurveyQuestionFields.*",
+        "GeneratedItemsTable.*",
+        "GenerationJobPanel.*",
+        "AIPromptManager.*",
+        "AIGenerationPromptEditor.*"
+      ],
+      "scRanges": [
+        "SC-05"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "components": [
+        "Button",
+        "Notice"
+      ],
+      "routes": [
+        "gallery:ai-authoring"
+      ],
+      "notes": "If codemod --report on AIPromptManager.css exceeds 150 decisions, stop and ask the coordinator to split the unit."
+    },
+    {
+      "id": "W4-e",
+      "phase": "W4",
+      "title": "Sessions, reports list, events",
+      "files": [
+        "SessionsPanel.*",
+        "SessionHistoryPanel.*",
+        "ReportsPanel.*",
+        "EventsPanel.*",
+        "EventBuilder.*",
+        "EventDetailsDialog.*",
+        "EventItemDialog.*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Chip",
+        "Card",
+        "Button"
+      ],
+      "routes": [
+        "gallery:sessions"
+      ]
+    },
+    {
+      "id": "W4-f",
+      "phase": "W4",
+      "title": "Team and billing",
+      "files": [
+        "TeamPanel.*",
+        "InviteDialog.*",
+        "CreateOrgDialog.*",
+        "BillingPanel.*",
+        "InvoicePanel.*",
+        "DiscountCodes.css",
+        "DiscountCodesPanel.*",
+        "AdjustmentsLedger.*",
+        "OrgBillingDrawer.*",
+        "PlanRequests.css",
+        "PlanRequest*.jsx",
+        "LeavePlanDialog.*",
+        "PlanLimitNotice.*",
+        "PrivacyPanel.*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Notice",
+        "Button"
+      ],
+      "routes": [
+        "gallery:billing"
+      ]
+    },
+    {
+      "id": "W4-g",
+      "phase": "W4",
+      "title": "Platform",
+      "files": [
+        "PlatformOrgsPanel.*",
+        "ObservabilityPanel.*",
+        "ModerationPanel.*",
+        "UsageStatsPanel.*",
+        "StaffStatsDrill.*",
+        "AuditLog.*",
+        "ArchivePanel.*",
+        "UserManagement.*",
+        "ClaudeModelsPanel.*",
+        "SiteSkinPanel.*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Chip",
+        "Notice"
+      ],
+      "routes": [
+        "gallery:platform"
+      ]
+    },
+    {
+      "id": "W4-h",
+      "phase": "W4",
+      "title": "Builder",
+      "files": [
+        "BuilderPage.css",
+        "BuilderPage.jsx"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "components": [
+        "Button",
+        "Card"
+      ],
+      "routes": [],
+      "notes": "Prove /builder is still mounted first (deadSelectors.js and a route check). 158 rule literals."
+    },
+    {
+      "id": "W5-a",
+      "phase": "W5",
+      "title": "Stage chrome",
+      "files": [
+        "styles/stage.css",
+        "components/stage/Rail.jsx",
+        "components/stage/Dock.jsx",
+        "components/stage/PhaseBar.jsx",
+        "components/stage/RoomMeter.jsx",
+        "components/stage/CompletionFlag.jsx",
+        "components/stage/Pager.jsx",
+        "components/stage/Podium.jsx",
+        "components/stage/QueueList.jsx",
+        "components/stage/PlayersList.jsx",
+        "components/stage/StageGathering.jsx",
+        "components/stage/Stage.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "TopLine",
+        "Eyebrow",
+        "Heading",
+        "Chip",
+        "Pips",
+        "Button",
+        "Ground"
+      ],
+      "routes": [
+        "gallery:stage"
+      ],
+      "notes": "Owns styles/stage.css (rules). W5-d sends its podium change here."
+    },
+    {
+      "id": "W5-b",
+      "phase": "W5",
+      "title": "Setup",
+      "files": [
+        "GameSetupDialog.*",
+        "SessionOptions.*",
+        "components/stage/SessionSetupPanel.jsx",
+        "components/stage/WorkieSettings.jsx"
+      ],
+      "scRanges": [
+        "SC-01"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Button",
+        "Card"
+      ],
+      "routes": [
+        "gallery:setup"
+      ]
+    },
+    {
+      "id": "W5-c",
+      "phase": "W5",
+      "title": "Call and Answer",
+      "files": [
+        "FeedbackRoundPanel.*",
+        "components/stage/FeedbackWall.*",
+        "components/stage/ModelCompare.*"
+      ],
+      "scRanges": [
+        "SC-03"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Card",
+        "NumberBadge",
+        "Pips"
+      ],
+      "routes": [
+        "gallery:call-and-answer"
+      ]
+    },
+    {
+      "id": "W5-d",
+      "phase": "W5",
+      "title": "Trivia and categories",
+      "files": [],
+      "scRanges": [
+        "SC-06"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "NumberBadge",
+        "TallyRow"
+      ],
+      "routes": [
+        "gallery:trivia"
+      ],
+      "notes": "Podium styles live in styles/stage.css, owned by W5-a: send the change there."
+    },
+    {
+      "id": "W5-e",
+      "phase": "W5",
+      "title": "Poll and survey",
+      "files": [
+        "components/survey/results/*",
+        "components/stage/PollBoard.jsx",
+        "components/stage/SurveyWalkthrough.jsx",
+        "components/stage/SurveyCollecting.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "TallyRow",
+        "Chip",
+        "Pips"
+      ],
+      "routes": [
+        "gallery:poll-survey"
+      ]
+    },
+    {
+      "id": "W5-f",
+      "phase": "W5",
+      "title": "Wavelength and big screen",
+      "files": [
+        "components/stage/Wavelength*.jsx",
+        "WavelengthBuilder.jsx"
+      ],
+      "scRanges": [
+        "SC-07",
+        "SC-08"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Heading",
+        "Chip"
+      ],
+      "routes": [
+        "gallery:wavelength"
+      ]
+    },
+    {
+      "id": "W5-g",
+      "phase": "W5",
+      "title": "Events host",
+      "files": [
+        "components/event/EventStage.*",
+        "components/event/HostEventAgenda.*"
+      ],
+      "scRanges": [
+        "SC-10"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "TopLine",
+        "Heading",
+        "Eyebrow",
+        "Ground",
+        "Card",
+        "Chip"
+      ],
+      "routes": [
+        "gallery:event-stage"
+      ]
+    },
+    {
+      "id": "W6-a",
+      "phase": "W6",
+      "title": "Participant (and the attendee page)",
+      "files": [
+        "components/PlayerSurface.css",
+        "PlayerPage.jsx",
+        "PlayerShell.jsx",
+        "components/survey/*Input.jsx",
+        "ScoreCard.*",
+        "components/event/EventAttendeePage.*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "TopLine",
+        "Eyebrow",
+        "Heading",
+        "Card",
+        "NumberBadge",
+        "Button",
+        "Pips",
+        "TallyRow"
+      ],
+      "routes": [
+        "play"
+      ],
+      "notes": "PLAN recommends W6-a owns EventAttendeePage too (it reads PlayerSurface.css); W6-b is folded in."
+    },
+    {
+      "id": "W6-c",
+      "phase": "W6",
+      "title": "Remote",
+      "files": [
+        "HostRemote.css",
+        "HostRemote.jsx",
+        "RemoteQuestionBrowser.*",
+        "RemoteCategoryList.*",
+        "RemoteSessionPanel.*"
+      ],
+      "scRanges": [
+        "SC-02"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "TopLine",
+        "Eyebrow",
+        "Card",
+        "NumberBadge",
+        "Button",
+        "Pips"
+      ],
+      "routes": [
+        "gallery:remote"
+      ]
+    },
+    {
+      "id": "W6-d",
+      "phase": "W6",
+      "title": "Build Room host",
+      "files": [
+        "buildroom/*.css",
+        "buildroom/*.jsx"
+      ],
+      "exclude": [
+        "buildroom/BuildPlayer.css",
+        "buildroom/BuildPlayer.jsx",
+        "buildroom/BuildCrew.css",
+        "buildroom/BuildCrew.jsx",
+        "buildroom/BuildPlayerCrew.jsx",
+        "buildroom/BuildPlayerPoints.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Eyebrow",
+        "Heading",
+        "Button",
+        "Card",
+        "Chip",
+        "Pips",
+        "Ground"
+      ],
+      "routes": [
+        "gallery:build-room"
+      ]
+    },
+    {
+      "id": "W6-e",
+      "phase": "W6",
+      "title": "Build Room phones",
+      "files": [
+        "buildroom/BuildPlayer.*",
+        "buildroom/BuildCrew.*",
+        "buildroom/BuildPlayerCrew.jsx",
+        "buildroom/BuildPlayerPoints.jsx"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "Card",
+        "Button",
+        "Pips"
+      ],
+      "routes": [
+        "gallery:build-phone"
+      ]
+    },
+    {
+      "id": "W7-a",
+      "phase": "W7",
+      "title": "Game report",
+      "files": [
+        "GameReport.css",
+        "GameReport.jsx"
+      ],
+      "scRanges": [
+        "SC-04"
+      ],
+      "themes": [
+        "light"
+      ],
+      "components": [
+        "Heading",
+        "Eyebrow",
+        "TallyRow"
+      ],
+      "routes": [
+        "gallery:game-report"
+      ],
+      "notes": "Paper. Also check the html2pdf output in both skins."
+    },
+    {
+      "id": "W7-b",
+      "phase": "W7",
+      "title": "Shared and round reports",
+      "files": [
+        "ReportShare.*",
+        "SharedReportPage.*",
+        "RoundReport.*",
+        "TalkingPointsReport.*",
+        "SurveyResultsPanel.*",
+        "SurveyOpenAnswersPanel.*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [
+        "TallyRow",
+        "Card",
+        "Heading",
+        "Button"
+      ],
+      "routes": [
+        "/shared-report"
+      ]
+    },
+    {
+      "id": "W7-c",
+      "phase": "W7",
+      "title": "Sweep",
+      "files": [
+        "App.jsx",
+        "components/BrandMark.jsx",
+        "WordCloudTest.jsx",
+        "SkinGallery.*"
+      ],
+      "themes": [
+        "dark"
+      ],
+      "components": [],
+      "routes": [],
+      "notes": "Re-measure; take every remaining allowance > 0 that no unit owns; decide WordCloudTest.jsx (delete or a permanent allowance with reason)."
+    },
+    {
+      "id": "P8",
+      "phase": "8",
+      "title": "Close",
+      "files": [
+        "styles.css"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "routes": [
+        "public",
+        "present",
+        "play"
+      ],
+      "notes": "Remove --primary/--primary-deep/--secondary/--hairline aliases; every pragma gone or 0; switch the gate to 'no pragma allowed'. Then the owner."
+    }
+  ]
+}

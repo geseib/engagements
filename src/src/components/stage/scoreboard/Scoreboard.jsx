@@ -67,6 +67,9 @@ function usePrefersReducedMotion() {
 export default function Scoreboard({
   gameId, apiBase = '', title = '', profile = 'room', board, refreshKey = '', keysEnabled = true,
   onClose = () => {},
+  // The Presentation (/present) shows the board and never a control: it
+  // passes closable={false} and keysEnabled={false}.
+  closable = true,
 }) {
   const { style, openedAt, page: remotePage } = normaliseScoreboard({ ...board, open: true });
   const size = placesPerPage(profile);
@@ -209,9 +212,11 @@ export default function Scoreboard({
           {rows.length ? (
             <span className="sb-page"><b>{pageRange(current, size, rows.length)}</b><span>{`of ${rows.length}`}</span></span>
           ) : null}
-          <button type="button" className="sb-close" onClick={() => onClose()} aria-label="Close scoreboard">
-            <Icon name="X" weight="bold" size={18} />
-          </button>
+          {closable ? (
+            <button type="button" className="sb-close" onClick={() => onClose()} aria-label="Close scoreboard">
+              <Icon name="X" weight="bold" size={18} />
+            </button>
+          ) : null}
         </div>
       </header>
       <div className="sb-body">

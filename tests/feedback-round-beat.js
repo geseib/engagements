@@ -163,13 +163,13 @@ function seedGame(gameId, lessonNumber = 3) {
   // ---------- 1. the vocabulary ----------
   console.log('\n1. feedback is a beat, on both sides of the wire');
 
-  await check('the server knows three beats, in flow order', () => {
+  await check('the server knows four beats, in flow order (ask joined 2026-10-13, docs/design/followup-icons)', () => {
     // Written out by hand. Comparing against the module's own export twice
     // would prove only that it agrees with itself.
-    assert.deepStrictEqual(stageBeatModule.BEATS, ['results', 'field-notes', 'feedback']);
+    assert.deepStrictEqual(stageBeatModule.BEATS, ['results', 'field-notes', 'ask', 'feedback']);
   });
 
-  await check('the frontend mirror declares the same three, in the same order', () => {
+  await check('the frontend mirror declares the same four, in the same order', () => {
     // Read as TEXT, the way tests/round-kind-steering.js:216 reads its mirror.
     // The frontend module is ESM and cannot be require()d into this bundle, and
     // a mirror that drifts fails in the worst way available: the write succeeds,
@@ -179,7 +179,7 @@ function seedGame(gameId, lessonNumber = 3) {
     const mirror = fs.readFileSync(path.join(REPO, 'src/src/config/hostControls.js'), 'utf8');
     const declared = /STAGE_BEATS\s*=\s*\[([^\]]*)\]/.exec(mirror)[1]
       .split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
-    assert.deepStrictEqual(declared, ['results', 'field-notes', 'feedback']);
+    assert.deepStrictEqual(declared, ['results', 'field-notes', 'ask', 'feedback']);
   });
 
   // ---------- 2. the write ----------

@@ -1,0 +1,81 @@
+{
+  "state": {
+    "gameId": "fixture",
+    "gameType": "call-and-answer",
+    "gameMetadata": {
+      "title": "Q4 Wrap up"
+    },
+    "state": "RESULTS#005",
+    "currentQuestion": 5,
+    "currentQuestionData": {
+      "title": "What should we stop doing",
+      "detail": "Name one habit that costs the team more than it gives back.",
+      "category": "Retro",
+      "setRoundNoun": null
+    },
+    "joinCode": "4821",
+    "stageBeat": "field-notes",
+    "stageFocus": {
+      "focus": "none",
+      "index": null,
+      "part": 0,
+      "parts": 1,
+      "phase": null,
+      "rev": 0
+    },
+    "stageNotes": {
+      "page": 0,
+      "pages": 1,
+      "rev": 4
+    },
+    "stageProfile": null,
+    "scoreboard": {
+      "open": false
+    },
+    "authorsRevealed": true,
+    "roomCounts": {
+      "joined": 12,
+      "answered": 7,
+      "voted": 0
+    }
+  },
+  "summary": {
+    "markdownResponse": "## What the room said\n\n- Meetings that could be notes cost the most.\n- Double reviews slow the team without catching more.\n\n## Discussion topics\n\n1. Which recurring meeting would nobody miss?\n2. What would one careful review need?"
+  },
+  "results": {
+    "voteTallies": {
+      "0": {
+        "playerName": "Maya",
+        "answerText": "Status meetings that could be a two-line note. Write the note, cancel the meeting.",
+        "totalScore": 8,
+        "firstPlace": 2,
+        "secondPlace": 1,
+        "thirdPlace": 0
+      },
+      "1": {
+        "playerName": "Sam",
+        "answerText": "Reviewing every pull request twice. One careful review beats two quick ones.",
+        "totalScore": 7,
+        "firstPlace": 1,
+        "secondPlace": 2,
+        "thirdPlace": 0
+      },
+      "2": {
+        "playerName": "Priya",
+        "answerText": "Saying yes to every request in the sprint. Protect the plan we agreed.",
+        "totalScore": 9,
+        "firstPlace": 3,
+        "secondPlace": 0,
+        "thirdPlace": 0
+      },
+      "3": {
+        "playerName": "Jon",
+        "answerText": "Rebuilding the dashboard every quarter.",
+        "totalScore": 3,
+        "firstPlace": 0,
+        "secondPlace": 1,
+        "thirdPlace": 0
+      }
+    }
+  }
+}

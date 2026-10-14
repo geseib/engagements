@@ -1,3 +1,4 @@
+/* skin-allowance: colour=3 font=0 primary=0 */
 /*
  * THE PARTICIPANT'S FEEDBACK ROUND — the shell and the composer.
  *
@@ -44,7 +45,7 @@
 .fbr {
   --fbr-text: var(--text);
   --fbr-muted: var(--muted);
-  --fbr-accent: var(--primary);
+  --fbr-accent: var(--accent);
   --fbr-error: var(--danger-text);
   --fbr-ink: var(--bg);
   --fbr-wash: rgba(255, 255, 255, 0.06);
@@ -52,7 +53,7 @@
   --fbr-rule: rgba(255, 255, 255, 0.14);
   /* --bg at 55%. A scoped local rather than a literal at the use site: the
      design rule allows a raw colour only inside a scope's own token block. */
-  --fbr-lift: rgba(15, 26, 46, 0.55);
+  --fbr-lift: rgb(var(--shade-rgb) / 0.55);
 
   --fbr-t-floor: 12px;
   --fbr-t-label: 13px;

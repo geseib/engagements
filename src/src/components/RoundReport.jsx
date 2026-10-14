@@ -8,6 +8,7 @@ import {
 } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
 import { anchorLabelFor, excerptOf } from '../config/comments';
+import ReportFollowUps from './ReportFollowUps';
 import './RoundReport.css';
 
 /**
@@ -455,6 +456,7 @@ export default function RoundReport({
           regenerated.
         */}
         <CommentList comments={summaryComments} />
+        <ReportFollowUps followUps={round.followUps} className="past-round__followups" />
 
         {onRegenerate && (
           <button

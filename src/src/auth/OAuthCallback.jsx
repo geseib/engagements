@@ -4,6 +4,7 @@ import './auth.css';
 import Icon from '../components/Icon';
 import { takeReturnPath } from './returnPath';
 import { navigateTo } from './navigate';
+import { PKCE_VERIFIER_KEY } from './googleSignIn';
 
 // ============================================================================
 // LEGACY_POOL — rollback only. Remove after the old Cognito pool is deleted.
@@ -18,6 +19,11 @@ const LEGACY_POOL = {
   clientId: '5brt6hub6e2gmi7hmuuidfi3nc',
   knownGoogleUsername: 'Google_113956208956782440356',
 };
+
+// A code is single-use: exchanging it twice fails the second time with
+// invalid_grant and would put an error over a sign-in that worked. Module
+// scope, so a remount (or a StrictMode double effect) cannot run it again.
+const exchangedCodes = new Set();
 
 const OAuthCallback = ({ onError }) => {
   const [processing, setProcessing] = useState(true);
@@ -326,6 +332,8 @@ const OAuthCallback = ({ onError }) => {
 
         // Handle authorization code flow - manually exchange code for tokens
         if (code) {
+          if (exchangedCodes.has(code)) return;
+          exchangedCodes.add(code);
           console.log('✅ OAuth authorization code received');
           console.log('🔍 Code details:', {
             code: code.substring(0, 20) + '...',
@@ -347,11 +355,18 @@ const OAuthCallback = ({ onError }) => {
             code: code,
             redirect_uri: redirectUri,
           };
+          // The PKCE verifier startGoogleSignIn left in this tab. Single use.
+          let codeVerifier = null;
+          try {
+            codeVerifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
+            sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+          } catch (_) { /* private mode: exchange without it */ }
+          if (codeVerifier) tokenParams.code_verifier = codeVerifier;
           
           try {
             console.log('🔍 Exchanging code for tokens...');
             console.log('🔍 Token endpoint:', tokenEndpoint);
-            console.log('🔍 Token params:', { ...tokenParams, code: tokenParams.code.substring(0, 10) + '...' });
+            console.log('🔍 Token params:', { ...tokenParams, code: tokenParams.code.substring(0, 10) + '...', code_verifier: tokenParams.code_verifier ? '(set)' : undefined });
             
             const tokenResponse = await fetch(tokenEndpoint, {
               method: 'POST',

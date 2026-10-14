@@ -100,7 +100,12 @@ function serve({
       });
     }
     if (href.includes('/players')) {
-      return Promise.resolve({ ok: true, status: 200, json: async () => ({ players: [], stats: { totalPlayers: 0 } }) });
+      // One person in the room: since two-surface Phase 1 the Remote's start
+      // is greyed in an empty room, exactly as the host page's is (roundStep).
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ players: [{ playerName: 'Ada', totalScore: 0, readiness: {} }], stats: { totalPlayers: 1 } }),
+      });
     }
     if (href.includes('/categories')) {
       if (categories && categories.status) {
@@ -393,7 +398,7 @@ describe('the round controls', () => {
     serve({ dispatch: { status: 404, error: 'Game not found' } });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /start first round/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start \w+ 1/i }));
 
     const flash = await screen.findByRole('alert');
     expect(flash.textContent).toMatch(/team/i);

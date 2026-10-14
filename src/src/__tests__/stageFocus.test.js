@@ -198,3 +198,65 @@ describe('the double-tap', () => {
     expect(sameFocus({ focus: 'answer', index: 0 }, { focus: 'question' })).toBe(false);
   });
 });
+
+/*
+  TWO-SURFACE PHASE 1 (PLAN 1.13): the focus carries the part of a long
+  response, the phase the server stamped it in, and its rev — and a frame
+  whose rev is not newer than the one already applied is dropped.
+*/
+describe('the part, the stamped phase and the rev', () => {
+  test('normaliseFocus carries part, parts, phase and rev when they are sound', () => {
+    expect(normaliseFocus({ focus: 'answer', index: 2, part: 1, parts: 2, phase: 'VOTE', rev: 7 }))
+      .toEqual({ focus: 'answer', index: 2, part: 1, parts: 2, phase: 'VOTE', rev: 7 });
+  });
+
+  test('a part out of bounds, an unknown phase or a junk rev is dropped, never passed on', () => {
+    expect(normaliseFocus({ focus: 'answer', index: 2, part: 2, parts: 2, phase: 'ASK', rev: 'x' }))
+      .toEqual({ focus: 'answer', index: 2 });
+  });
+
+  test('a non-answer focus carries no part, but keeps its rev', () => {
+    expect(normaliseFocus({ focus: 'none', part: 1, parts: 2, rev: 3 })).toEqual({ focus: 'none', index: null, rev: 3 });
+  });
+
+  test('focusFromFrame drops a frame whose rev is not newer than the last applied', () => {
+    const f = { questionNumber: '004', focus: 'answer', index: 1, rev: 5 };
+    expect(focusFromFrame(f, 'RESULTS#004', 5)).toBeNull();
+    expect(focusFromFrame(f, 'RESULTS#004', 6)).toBeNull();
+    expect(focusFromFrame(f, 'RESULTS#004', 4)).toEqual({ focus: 'answer', index: 1, rev: 5 });
+    // A frame from an older deploy carries no rev: applied as before.
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 1 }, 'RESULTS#004', 9))
+      .toEqual({ focus: 'answer', index: 1 });
+  });
+
+  test('focusFromFrame applies a VOTE focus during VOTE', () => {
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 0, phase: 'VOTE' }, 'VOTE#004'))
+      .toEqual({ focus: 'answer', index: 0, phase: 'VOTE' });
+  });
+
+  test('focusRequest takes part and parts for an answer', () => {
+    expect(focusRequest({ focus: 'answer', index: 1, part: 1, parts: 3, state: 'RESULTS#002' }))
+      .toEqual({ focus: 'answer', index: 1, part: 1, parts: 3, questionNumber: 2 });
+    expect(focusRequest({ focus: 'answer', index: 1, part: 1, state: 'RESULTS#002' }))
+      .toEqual({ focus: 'answer', index: 1, part: 1, questionNumber: 2 });
+    expect(focusRequest({ focus: 'question', part: 1, parts: 3, state: 'RESULTS#002' }))
+      .toEqual({ focus: 'question', index: null, questionNumber: 2 });
+  });
+
+  test('sameFocus tells two parts of one response apart', () => {
+    expect(sameFocus({ focus: 'answer', index: 1, part: 0 }, { focus: 'answer', index: 1, part: 1 })).toBe(false);
+    expect(sameFocus({ focus: 'answer', index: 1 }, { focus: 'answer', index: 1, part: 0 })).toBe(true);
+  });
+});
+
+describe('a focus stamped for another phase is not applied (review finding 1)', () => {
+  test('a VOTE frame arriving at RESULTS is dropped: voting position i is not tally rank i', () => {
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 1, phase: 'VOTE' }, 'RESULTS#004')).toBeNull();
+  });
+  test('a RESULTS frame arriving during VOTE is dropped', () => {
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 1, phase: 'RESULTS' }, 'VOTE#004')).toBeNull();
+  });
+  test('a frame with no stamp (an older deploy) is still applied at RESULTS', () => {
+    expect(focusFromFrame({ questionNumber: 4, focus: 'answer', index: 1 }, 'RESULTS#004')).toEqual({ focus: 'answer', index: 1 });
+  });
+});

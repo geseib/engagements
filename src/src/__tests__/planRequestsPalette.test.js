@@ -15,15 +15,20 @@ function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const over = (fg, a, bg) => fg.map((c, i) => Math.round(c * a + bg[i] * (1 - a)));
 
-const BG = hex('#0F1A2E'); const SURFACE = hex('#1B2942');
-const TEXT = hex('#F4EDE4'); const MUTED = hex('#9BA8BE'); const PRIMARY = hex('#F6A94C'); const DANGER_TEXT = hex('#EF8C86');
-const tint = (name) => {
-  const m = new RegExp(`${name}:\\s*rgba\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\.\\d+|\\d\\.\\d+)\\)`).exec(CSS);
-  if (!m) throw new Error(`${name} not declared`);
-  return { rgb: [+m[1], +m[2], +m[3]], a: +m[4] };
-};
+const H = require('../testing/skinHarness');
 
-describe('contrast, composited from the real paint stack', () => {
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const role = (name, opts) => H.parseColor(H.role(name, opts)).rgb;
+/* The .preq block points at roles since skins 0b-2 (rgb(var(--success-rgb) / .10)), so a
+   tint is resolved through the skin harness for one skin x theme, never grepped. */
+const tint = (name, opts = CLASSIC_DUSK) => H.parseColor(H.scopeVar(CSS, '.preq {', name, opts));
+
+describe.each(DUSK)('contrast, composited from the real paint stack: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const BG = role('--bg', O); const SURFACE = role('--surface', O);
+  const TEXT = role('--text', O); const MUTED = role('--muted', O);
+  const PRIMARY = role('--primary', O); const DANGER_TEXT = role('--danger-text', O);
   test('copy and labels clear AA on the field and on the dialog surface', () => {
     for (const ground of [BG, SURFACE]) {
       expect(ratio(TEXT, ground)).toBeGreaterThanOrEqual(4.5);
@@ -33,7 +38,7 @@ describe('contrast, composited from the real paint stack', () => {
   });
   test('every tint keeps --text and --muted above AA', () => {
     for (const name of ['--preq-tint-note', '--preq-tint-ok', '--preq-tint-bad']) {
-      const t = tint(name);
+      const t = tint(name, O);
       for (const ground of [BG, SURFACE]) {
         const painted = over(t.rgb, t.a, ground);
         expect(ratio(TEXT, painted)).toBeGreaterThanOrEqual(4.5);
@@ -42,8 +47,9 @@ describe('contrast, composited from the real paint stack', () => {
     }
   });
   test('ink on the filled button is the invariant dusk navy, not var(--bg)', () => {
-    expect(CSS).toMatch(/--preq-on-accent:\s*#1B2942/);
-    expect(ratio(hex('#1B2942'), PRIMARY)).toBeGreaterThanOrEqual(4.5);
+    expect(CSS).toMatch(/--preq-on-accent:\s*var\(--on-accent\)/);
+    if (skin === 'classic') expect(tint('--preq-on-accent', O).rgb).toEqual(hex('#1B2942'));
+    expect(ratio(tint('--preq-on-accent', O).rgb, PRIMARY)).toBeGreaterThanOrEqual(4.5);
     expect(stripped).not.toMatch(/\.preq-btn--primary\s*\{[^}]*color:\s*var\(--bg\)/);
   });
 });

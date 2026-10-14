@@ -1,0 +1,67 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   THE SKIN GALLERY — components/SkinGallery.jsx (dev only, staff only).
+
+   Roles only, like every new sheet (docs/design/themes/SPEC.md §3): the point
+   of the page is to show what the skin values do, so it may paint nothing of
+   its own. Scoped under `.sg`. Not a product surface: no ladder of its own
+   beyond the laptop steps, and it is never shipped to a visitor.
+   ========================================================================== */
+
+.sg {
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 15px/1.45 var(--font-ui);
+}
+
+.sg .sg-head { margin: 0 0 20px; }
+.sg .sg-h1 { margin: 0; font: var(--display-weight) 30px/1.1 var(--font-display); letter-spacing: var(--display-tracking); }
+.sg .sg-note { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+.sg .sg-fixture { margin: 0 0 28px; }
+.sg .sg-h2 { margin: 0 0 10px; font: 700 19px/1.25 var(--font-ui); }
+
+.sg .sg-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+
+.sg .sg-sheet {
+  padding: 18px 20px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.sg .sg-eyebrow {
+  margin: 0 0 6px;
+  color: var(--eyebrow-color);
+  font: var(--eyebrow-weight) 12px/1.2 var(--font-ui);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+}
+.sg .sg-title { margin: 0 0 8px; font: var(--display-weight) 24px/1.15 var(--font-display); letter-spacing: var(--display-tracking); }
+.sg .sg-body { margin: 0 0 12px; color: var(--muted); }
+.sg .sg-accent-text { color: var(--accent-text); font-weight: 600; }
+.sg .sg-info-text { color: var(--info); text-decoration: underline; }
+
+.sg .sg-swatches { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 12px; padding: 0; list-style: none; font-size: 12px; }
+.sg .sg-swatches li { display: inline-flex; align-items: center; gap: 6px; }
+.sg .sg-swatches code { font-family: var(--font-mono); color: var(--muted); }
+.sg .sg-sw { width: 18px; height: 18px; border: 1px solid var(--rule-strong); border-radius: var(--radius-sm); }
+.sg .sg-sw--bg { background: var(--bg); }
+.sg .sg-sw--surface { background: var(--surface); }
+.sg .sg-sw--surface-2 { background: var(--surface-2); }
+.sg .sg-sw--text { background: var(--text); }
+.sg .sg-sw--muted { background: var(--muted); }
+.sg .sg-sw--accent { background: var(--accent); }
+.sg .sg-sw--action { background: var(--action); }
+.sg .sg-sw--info { background: var(--info); }
+.sg .sg-sw--success { background: var(--success); }
+.sg .sg-sw--danger { background: var(--danger); }
+
+.sg .sg-rows { display: flex; flex-direction: column; gap: 6px; }
+.sg .sg-row { min-height: 36px; padding: 8px 12px; border: 1px solid var(--rule); border-radius: var(--radius-sm); }
+.sg .sg-row.is-selected { border-color: var(--accent); background: var(--row-selected); box-shadow: var(--select-mark); }
+
+.sg .sg-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }

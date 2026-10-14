@@ -71,6 +71,11 @@ export default function AISummaryStatus({
   page = 0,
   onPage = null,
   enabled = true,
+  // ASK THE ROOM (docs/design/followup-icons): the host's screens put an ask's
+  // icon at the end of its point, and unanchored asks after the read. The
+  // wall passes neither.
+  listItemAddon = null,
+  afterRead = null,
 }) {
   if (failure) {
     return (
@@ -136,8 +141,9 @@ export default function AISummaryStatus({
     return (
       <>
         <div className="notes">
-          <MarkdownRenderer content={slice.content} className="notes-md" />
+          <MarkdownRenderer content={slice.content} className="notes-md" listItemAddon={listItemAddon} />
         </div>
+        {afterRead}
         {/* `total` IS THE PAGE COUNT and `pageSize` is 1: for prose the item
             being paged is the page itself, and `caption` means the from/to
             clause is never printed. A room cannot use "lines 18–34 of 61"; it

@@ -101,10 +101,10 @@ function useCrowded(ref, deps) {
 }
 
 export default function Dock({
-  status, hint, kbd, onSetup, onAgenda, complete = false, notice = false, progress = null, children, ...rest
+  status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null, children, ...rest
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, notice, progress, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, children]);
   return (
     <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined} {...rest}>
       {status && (
@@ -172,6 +172,26 @@ export default function Dock({
         >
           <span className="dock-more-lbl">AGENDA</span>
         </button>
+      )}
+      {/*
+        PRESENT (two-surface PLAN 2.13): opens /present, the page the room
+        sees, in a new window — a real link, so the browser's own "open in new
+        window" and a drag to the projector both work. Shaped like AGENDA and
+        SESSION. Reads PRESENTING once a Presentation has connected (the host
+        door's `presenting`). Only where the two-surface switch is on.
+      */}
+      {present && present.href && (
+        <a
+          className="dock-more dock-present"
+          href={present.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={present.presenting > 0 ? 'Presenting. Open another Presentation window' : 'Open the Presentation in a new window'}
+          title="Drag it to the second screen and press F"
+          data-presenting={present.presenting > 0 ? '' : undefined}
+        >
+          <span className="dock-more-lbl">{present.presenting > 0 ? 'PRESENTING' : 'PRESENT'}</span>
+        </a>
       )}
       {onSetup && (
         <button

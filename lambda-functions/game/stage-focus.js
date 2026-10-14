@@ -47,6 +47,7 @@
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
 const { callerMayDriveSession } = require('./tenant');
@@ -61,7 +62,26 @@ const db = DynamoDBDocumentClient.from(client);
  * out, every client compares the value against the three it knows, and the host
  * watches a button do nothing with no error anywhere in the system.
  */
-const FOCUS_KINDS = ['none', 'question', 'answer'];
+/*
+ * 'join' puts the join code and QR on the wall mid-session (owner,
+ * 2026-10-13: "when presenting i still need ability to show qr code"). Like
+ * 'question', it carries no index, part or phase. Mirrored in
+ * src/src/config/stageFocus.js (tests/stage-focus-vote.js §8).
+ */
+const FOCUS_KINDS = ['none', 'question', 'answer', 'join'];
+
+/**
+ * THE PHASES AN ANSWER FOCUS MAY BE SET IN (two-surface PLAN 1.10, D5), a
+ * closed set mirrored in src/src/config/stageFocus.js (tests/stage-focus-vote.js
+ * §7). The index means a different order in each: the voting order every
+ * ballot shows during VOTE (answer-order.js), tally order at RESULTS. So the
+ * phase is STAMPED, from STATE — never taken from the client — and
+ * get-game-state hands a focus back only in the phase it was stamped for.
+ */
+const { FOCUS_PHASES } = require('./stage-beats');
+
+/** The most parts one response may be split into on the wall. */
+const MAX_PARTS = 9;
 
 const respond = (statusCode, body) => ({
   statusCode,
@@ -130,7 +150,7 @@ exports.handler = async (event) => {
     return respond(400, { error: 'Body must be JSON' });
   }
 
-  const { focus, index, questionNumber } = body;
+  const { focus, index, questionNumber, part, parts } = body;
 
   if (!gameId) {
     return respond(400, { error: 'gameId is required' });
@@ -166,6 +186,23 @@ exports.handler = async (event) => {
     storedIndex = Number(index);
   }
 
+  /*
+    THE PART OF A LONG RESPONSE (two-surface D1): a response too long for the
+    wall at the profile's floor is split by sentence, and "Part 1 of 2" is a
+    server fact so every surface agrees on it. Integers, 0 <= part < parts <= 9.
+    Absent means the whole response: part 0 of 1. A non-answer focus has none.
+  */
+  let storedPart = null;
+  let storedParts = null;
+  if (focus === 'answer') {
+    storedPart = part === undefined ? 0 : part;
+    storedParts = parts === undefined ? 1 : parts;
+    if (!Number.isInteger(storedPart) || !Number.isInteger(storedParts)
+        || storedPart < 0 || storedParts < 1 || storedParts > MAX_PARTS || storedPart >= storedParts) {
+      return respond(400, { error: `part and parts must be integers with 0 <= part < parts <= ${MAX_PARTS}` });
+    }
+  }
+
   const padded = String(questionNumber).trim().padStart(3, '0');
   const now = new Date().toISOString();
 
@@ -184,13 +221,36 @@ exports.handler = async (event) => {
       owning org lives on METADATA and this handler otherwise touches only the
       ROUND# record. 404 rather than 403: see tenant.callerMayDriveSession.
     */
-    const ownerRead = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
-      ProjectionExpression: 'orgId'
-    }));
+    const [ownerRead, stateRead] = await Promise.all([
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+        ProjectionExpression: 'orgId'
+      })),
+      db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+        ProjectionExpression: '#state, #sb',
+        ExpressionAttributeNames: { '#state': 'State', '#sb': 'Scoreboard' }
+      }))
+    ]);
     if (!callerMayDriveSession(event, ownerRead.Item || {})) {
       return respond(404, { error: 'Game not found' });
+    }
+
+    /*
+      AN ANSWER ON THE WALL BELONGS TO ITS ROUND'S VOTE OR RESULTS, and to
+      no other moment. Before VOTE the answers are still arriving and nobody
+      has agreed to see them; after the round they are another round's rows.
+      The phase is read here and stamped on the row (FOCUS_PHASES above).
+    */
+    let stampedPhase = null;
+    if (focus === 'answer') {
+      const m = /^(VOTE|RESULTS)#(\d+)$/.exec(String((stateRead.Item && stateRead.Item.State) || ''));
+      if (!m || Number(m[2]) !== Number(padded)) {
+        return respond(409, { error: 'A response can be shown only while its round is voting or showing results' });
+      }
+      stampedPhase = m[1];
     }
 
     /*
@@ -204,22 +264,31 @@ exports.handler = async (event) => {
       all. Whichever of the four ROUND# writers touches a round first stamps
       the 30-day clock; the rest leave it alone.
     */
-    await db.send(new UpdateCommand({
+    const written = await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
-      UpdateExpression: 'SET #focus = :focus, #idx = :idx, #updatedAt = :now, #qn = :qn, #ttl = if_not_exists(#ttl, :ttl)',
+      UpdateExpression: 'SET #focus = :focus, #idx = :idx, #phase = :phase, #part = :part, #parts = :parts, '
+        + '#updatedAt = :now, #qn = :qn, #ttl = if_not_exists(#ttl, :ttl) ADD #rev :one',
       ExpressionAttributeNames: {
         '#focus': 'StageFocus',
         '#idx': 'StageFocusIndex',
+        '#phase': 'StageFocusPhase',
+        '#part': 'StageFocusPart',
+        '#parts': 'StageFocusParts',
+        '#rev': 'StageFocusRev',
         '#updatedAt': 'UpdatedAt',
         '#qn': 'QuestionNumber',
         '#ttl': 'ttl'
       },
       ExpressionAttributeValues: {
-        ':focus': focus, ':idx': storedIndex, ':now': now, ':qn': padded,
-        ':ttl': ttlFrom(null, ROUND_RECORD_DAYS)
-      }
+        ':focus': focus, ':idx': storedIndex, ':phase': stampedPhase, ':part': storedPart, ':parts': storedParts,
+        ':now': now, ':qn': padded, ':ttl': ttlFrom(null, ROUND_RECORD_DAYS), ':one': 1
+      },
+      // The new rev comes back with the write, so the frame can carry it.
+      ReturnValues: 'UPDATED_NEW'
     }));
+    const rev = Number.isInteger(written && written.Attributes && written.Attributes.StageFocusRev)
+      ? written.Attributes.StageFocusRev : null;
 
     await broadcastToGame(gameId, {
       type: 'stageFocusChanged',
@@ -227,12 +296,44 @@ exports.handler = async (event) => {
       questionNumber: padded,
       focus,
       index: storedIndex,
+      part: storedPart,
+      parts: storedParts,
+      phase: stampedPhase,
+      rev,
       timestamp: now
     });
 
-    return respond(200, { status: 'OK', gameId, questionNumber: padded, focus, index: storedIndex });
+    /*
+      THE JOIN CODE AND THE SCOREBOARD ARE ONE AT A TIME (owner, 2026-10-13:
+      "turn on qr after scoreboard or scoreboard after qr code they flip the
+      other one off and then pop up"). Putting the join code up closes an open
+      scoreboard, here on the server, so the laptop, the Remote and every wall
+      follow the one frame. scoreboard.js does the other half.
+    */
+    if (focus === 'join') {
+      const board = normaliseScoreboard(stateRead.Item && stateRead.Item.Scoreboard);
+      if (board.open) {
+        try {
+          const closed = { ...board, open: false };
+          const sbWritten = await db.send(new UpdateCommand(scoreboardWrite(process.env.TABLE_NAME, gameId, closed)));
+          closed.rev = revAfter(sbWritten);
+          await broadcastToGame(gameId, scoreboardFrame(gameId, closed));
+        } catch (sbError) {
+          // The join code is up; a board that did not close is a nuisance, not a failure.
+          console.error('⚠️ STAGE FOCUS: the scoreboard did not close for the join code:', sbError?.message);
+        }
+      }
+    }
+
+    return respond(200, {
+      status: 'OK', gameId, questionNumber: padded, focus, index: storedIndex,
+      part: storedPart, parts: storedParts, phase: stampedPhase, rev,
+    });
   } catch (error) {
     console.error('❌ Stage focus error:', error);
     return respond(500, { error: 'Failed to set the stage focus' });
   }
 };
+
+exports.FOCUS_PHASES = FOCUS_PHASES;
+exports.FOCUS_KINDS = FOCUS_KINDS;

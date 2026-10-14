@@ -49,6 +49,12 @@ const { describeSurveyResults } = require('./survey-digest');
 const { resolveTask, authoredTaskOf } = require('./task-instruction');
 const { displayOrder } = require('./answer-order');
 const { authorTallyLines, findTallyMismatches, tallyRows } = require('./author-tally');
+// Call & Answer follow-up asks (docs/design/ca-followup-asks): suggestions
+// made after the read is stored, never in its way. Off unless
+// FOLLOWUP_ASKS_ENABLED is 'on' (dev only).
+const { runFollowUpSuggestions } = require('./followup-worker');
+const { followUpsEnabled } = require('./followup-store');
+const { claimSummaryJob, releaseSummaryJob } = require('./summary-job');
 
 /**
  * A SURVEY'S ONE SUMMARY lives at this pseudo-round. A survey has no rounds
@@ -186,11 +192,11 @@ async function sessionOrgId(gameId) {
  */
 const HOST_ROUTE = /\/ai-summary\/host$/;
 
-async function refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug }) {
+async function refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug, followUps }) {
   const rc = event.requestContext || {};
   const route = rc.routeKey || event.routeKey || event.rawPath || '';
   if (!HOST_ROUTE.test(route)) {
-    const hostOnly = Boolean(generateNew) || debug === 'true' || promptDebug === 'true';
+    const hostOnly = Boolean(generateNew) || debug === 'true' || promptDebug === 'true' || Boolean(followUps);
     if (!hostOnly) return null;
     return {
       statusCode: 403,
@@ -916,14 +922,38 @@ const publicTemplateVariables = (debugInfo) => {
   return rest;
 };
 
-exports.handler = async (event) => {
+/**
+ * THE HANDLER, with the round's claim let go when a worker finishes.
+ *
+ * A worker started by a claim (get-results at close, or the host route above)
+ * carries its `jobId`; whatever it does — writes the read, returns early, or
+ * throws for Lambda's retry — the claim is released so a later Regenerate or
+ * Try again is never refused (summary-job.js). Only the claim's own job may
+ * release it.
+ */
+exports.handler = async (event, context) => {
+  try {
+    return await handle(event, context);
+  } finally {
+    if (event && event.__workerMode === true && event.jobId) {
+      const padded = event.paddedQuestionNumber
+        || (/^\d+$/.test(String(event.questionId || '')) ? String(event.questionId).padStart(3, '0') : null);
+      await releaseSummaryJob(db, { gameId: event.gameId, padded, jobId: event.jobId });
+    }
+  }
+};
+
+const handle = async (event, context) => {
   // Async worker mode: the HTTP path fires an InvocationType:'Event' self-invoke
   // with __workerMode set, so the full generation runs off the API Gateway 30s
   // ceiling. In worker mode we skip the cache/HTTP-return branches, generate,
   // persist, and broadcast the result over WebSocket.
   const workerMode = event.__workerMode === true;
   try {
-    let gameId, questionId, generateNew, debug, promptDebug, model, variants;
+    let gameId, questionId, generateNew, debug, promptDebug, model, variants, followUps;
+    // The follow-up suggestions alone, from the read already stored (the
+    // host's "make them again"). Never the read itself.
+    const followUpsOnly = workerMode && event.followUpsOnly === true;
     if (workerMode) {
       ({ gameId, questionId, debug, promptDebug } = event); // questionId === targetQuestionId
       generateNew = 'true';
@@ -931,7 +961,7 @@ exports.handler = async (event) => {
     } else {
       ({ gameId } = event.pathParameters || {});
       const queryParams = event.queryStringParameters || {};
-      ({ questionId, generateNew, debug, promptDebug, model, variants } = queryParams);
+      ({ questionId, generateNew, debug, promptDebug, model, variants, followUps } = queryParams);
     }
 
     if (!gameId) {
@@ -945,7 +975,7 @@ exports.handler = async (event) => {
     // generateNew, debug and promptDebug are the host's (refuseUnlessHost).
     // The worker was started by a request that already passed this.
     if (!workerMode) {
-      const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug });
+      const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug, followUps });
       if (refusal) return refusal;
     }
 
@@ -1019,6 +1049,34 @@ exports.handler = async (event) => {
     }
     
     console.log(`🔍 Using question number ${paddedQuestionNumber} for lookups`);
+
+    /*
+      THE HOST REMAKES THE FOLLOW-UP SUGGESTIONS for a round whose read is
+      stored (followups.js names this door). The work is this function's own
+      worker — it has the model grants, the time and the round's material —
+      started as an Event, like generateNew. 404 while the feature is off.
+    */
+    if (!workerMode && followUps) {
+      if (followUps !== 'suggest' || !followUpsEnabled()) {
+        return {
+          statusCode: 404,
+          body: JSON.stringify({ error: 'Not found' }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      await lambda.send(new InvokeCommand({
+        FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
+        InvocationType: 'Event',
+        Payload: Buffer.from(JSON.stringify({
+          __workerMode: true, followUpsOnly: true, gameId, questionId: targetQuestionId, paddedQuestionNumber,
+        }))
+      }));
+      return {
+        statusCode: 202,
+        body: JSON.stringify({ status: 'suggesting', gameId, questionId: targetQuestionId }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
 
     // STAFF COMPARE: every model's latest read of this round, newest model
     // first in catalogue order. The room's own read is not among them unless
@@ -1135,6 +1193,26 @@ exports.handler = async (event) => {
         };
       }
 
+      // ONE READ PER ROUND AT A TIME (summary-job.js). get-results starts the
+      // room's read the moment the host closes the round; the stage, opening
+      // on that round a second later, misses the not-yet-written row and asks
+      // here. Without the claim that was a second generation into the same
+      // row. While a fresh claim is held the answer is the same 202 — the
+      // running worker's aiSummaryReady is the one the stage waits for. A
+      // staff model variant writes its own row and takes no claim.
+      let jobId = null;
+      if (!requestedModel) {
+        jobId = await claimSummaryJob(db, { gameId, padded: paddedQuestionNumber });
+        if (!jobId) {
+          console.log(`⏳ AI SUMMARY: a read for ${gameId}:${targetQuestionId} is already running — not dispatching another`);
+          return {
+            statusCode: 202,
+            body: JSON.stringify({ status: 'generating', gameId, questionId: targetQuestionId, alreadyRunning: true }),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          };
+        }
+      }
+
       // generateNew=true: fire-and-forget self-invoke, return 202 immediately.
       console.log(`🚀 AI SUMMARY: dispatching async generation worker for ${gameId}:${targetQuestionId}`);
       await lambda.send(new InvokeCommand({
@@ -1147,6 +1225,7 @@ exports.handler = async (event) => {
           paddedQuestionNumber,
           debug,
           promptDebug,
+          ...(jobId ? { jobId } : {}),
           // Only a staff request on dev carries a model; the worker then writes
           // that model's variant and leaves the room's read alone.
           ...(requestedModel ? { model: requestedModel.id } : {})
@@ -1822,6 +1901,29 @@ exports.handler = async (event) => {
       recordModel: modelPickerOn()
     };
 
+    // THE FOLLOW-UPS ALONE: from the read already stored, and nothing else
+    // is generated or written. runFollowUpSuggestions never throws.
+    if (followUpsOnly) {
+      const storedRead = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionNumber}#AISummary` }
+      }));
+      if (!storedRead.Item) return { ok: false, gameId, questionId: targetQuestionId, followUps: 'no-read' };
+      const readRow = summaryOrgId
+        ? await decryptItem(summaryOrgId, 'aiSummary', storedRead.Item)
+        : storedRead.Item;
+      const ran = await runFollowUpSuggestions({
+        db, bedrock, gameId, round: paddedQuestionNumber, orgId: summaryOrgId, aiData, metadata,
+        read: {
+          markdownResponse: readRow.MarkdownResponse || '',
+          fallback: readRow.Fallback === true,
+          generatedAt: readRow.GeneratedAt || null,
+        },
+        context, broadcast: broadcastToGame,
+      });
+      return { ok: true, gameId, questionId: targetQuestionId, followUps: ran.reason || 'made' };
+    }
+
     // Generate AI summary
     const summaryData = await generateAISummary(aiData);
 
@@ -1937,6 +2039,18 @@ exports.handler = async (event) => {
     // register under message.type, so do NOT wrap it as a hostMessage.
     if (workerMode) {
       await broadcastToGame(gameId, { type: 'aiSummaryReady', gameId, questionId: targetQuestionId });
+      // THE FOLLOW-UP SUGGESTIONS, after the read is out (followup-worker.js).
+      // Off, not Call & Answer, or a fallback read: nothing is called. It
+      // never throws, so it can never make Lambda retry this read.
+      await runFollowUpSuggestions({
+        db, bedrock, gameId, round: paddedQuestionNumber, orgId: summaryOrgId, aiData, metadata,
+        read: {
+          markdownResponse: summaryData.markdownResponse || '',
+          fallback: summaryData.fallback === true,
+          generatedAt: now,
+        },
+        context, broadcast: broadcastToGame,
+      });
       return { ok: true, gameId, questionId: targetQuestionId };
     }
 
@@ -1984,6 +2098,12 @@ exports.handler = async (event) => {
     // Worker mode: tell clients generation failed so the spinner can't hang, then
     // rethrow so the Event invoke's automatic retries kick in (the Put is an
     // idempotent overwrite, so retries are safe).
+    // The follow-ups alone failed before they began: the room's read is
+    // untouched, so nobody is told it failed, and nothing is retried.
+    if (workerMode && event.followUpsOnly === true) {
+      console.warn(JSON.stringify({ event: 'followup-asks-failed', gameId: event.gameId, error: (error && error.name) || 'Error' }));
+      return { ok: false, gameId: event.gameId, followUps: 'error' };
+    }
     if (workerMode) {
       const failedQuestionId = event.questionId;
       await broadcastToGame(event.gameId, {

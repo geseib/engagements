@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import RoomNote from '../RoomNote';
 import CompletionFlag from './CompletionFlag';
 
 /**
@@ -216,7 +217,7 @@ const AGE_CLASS = ['', ' older', ' oldest'];
  * `surveyMeterRows()` in hooks/useSurveyProgress.js.
  */
 export default function RoomMeter({
-  phase, heading, body, complete = false, waiting = null, arrivals = null, rows = null,
+  phase, heading, body, complete = false, waiting = null, arrivals = null, rows = null, compose = null,
 }) {
   const featuredId = arrivals && arrivals.featuredId;
   const arriving = (arrivals && Array.isArray(arrivals.items) ? arrivals.items : [])
@@ -335,6 +336,7 @@ export default function RoomMeter({
           ))}
         </div>
       )}
+      {compose && typeof compose.onSend === 'function' ? <RoomNote compose={compose} /> : null}
       {progressRows.length > 0 && (
         <div className="sprog" data-survey-progress="">
           <h4>Answered, by question</h4>

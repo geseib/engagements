@@ -1,3 +1,4 @@
+/* skin-allowance: colour=12 font=0 primary=10 */
 /* ============================================================================
    THE ARCHIVE SCREEN — ArchivePanel.
 
@@ -44,15 +45,15 @@
   /* Not global tokens. See UserManagement.css: an undefined custom property
      invalidates the whole declaration, so nothing here borrows a token another
      stylesheet merely happens to declare. */
-  --arch-success-text: #6FD0A4;
+  --arch-success-text: var(--success-text);
   --arch-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --arch-rule: rgba(155, 168, 190, .20);
-  --arch-rule-strong: rgba(155, 168, 190, .34);
-  --arch-row-hover: rgba(155, 168, 190, .055);
-  --arch-tint-danger: rgba(229, 100, 94, .09);
-  --arch-tint-warn: rgba(246, 169, 76, .09);
-  --arch-tint-ok: rgba(79, 178, 134, .10);
-  --arch-tint-info: rgba(124, 167, 230, .10);
+  --arch-rule: rgb(var(--slate-rgb) / .20);
+  --arch-rule-strong: rgb(var(--slate-rgb) / .34);
+  --arch-row-hover: var(--row-hover);
+  --arch-tint-danger: rgb(var(--danger-rgb) / .09);
+  --arch-tint-warn: rgb(var(--warn-rgb) / .09);
+  --arch-tint-ok: rgb(var(--success-rgb) / .10);
+  --arch-tint-info: rgb(var(--info-rgb) / .10);
   color: var(--text);
   font: 400 var(--arch-t-body)/1.45 var(--font-ui);
   font-variant-numeric: tabular-nums;

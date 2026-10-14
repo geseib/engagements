@@ -1,0 +1,386 @@
+{
+  "unit": "0a",
+  "file": "styles.css",
+  "range": "SC-00",
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": false,
+  "base": "64a5ecab",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 8,
+    "font": 0,
+    "primary": 5
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "15:19",
+      "line": 15,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ":root",
+      "property": "--primary-deep",
+      "literal": "#C77B4A",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 19)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--row-selected",
+          "classic": "Classic differs (distance 66)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:--primary-deep is a migration alias (SPEC §4.4) with no role; #C77B4A is its only definition and Phase 8 deletes it"
+    },
+    {
+      "id": "20:17",
+      "line": 20,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ":root",
+      "property": "--ridge-front",
+      "literal": "#16233B",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 10)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 10)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 17)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:--ridge-front (#16233B) is the summit-art ridge, read only by Scoreboard.css (--sb-flap-bot); no role, and that sheet's unit owns localising it"
+    },
+    {
+      "id": "105:14",
+      "line": 105,
+      "col": 14,
+      "type": "primary",
+      "kind": "rule",
+      "selector": ".btn-primary",
+      "property": "background",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (light: #F6A94C -> #9A5B18)"
+        }
+      ],
+      "proposal": "action",
+      "choice": "action"
+    },
+    {
+      "id": "106:9",
+      "line": 106,
+      "col": 9,
+      "type": "colour",
+      "kind": "rule",
+      "selector": ".btn-primary",
+      "property": "color",
+      "literal": "white",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:white ink on the filled action button; no white role (--on-action is #0F1A2E), so a role here would repaint Classic"
+    },
+    {
+      "id": "118:25",
+      "line": 118,
+      "col": 25,
+      "type": "colour",
+      "kind": "rule",
+      "selector": ".btn-primary:hover",
+      "property": "box-shadow",
+      "literal": "rgba(27, 41, 66, 0.3)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 151)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 162)"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic differs (distance 162)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:rgba(27,41,66,.3) navy lift shadow; no channel role carries 27 41 66 (--shade-rgb is 15 26 46)"
+    },
+    {
+      "id": "128:14",
+      "line": 128,
+      "col": 14,
+      "type": "colour",
+      "kind": "rule",
+      "selector": ".btn-secondary",
+      "property": "background",
+      "literal": "white",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 160)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:white fill of the outlined button; no theme-invariant white role (--surface is #1B2942 on dusk)"
+    },
+    {
+      "id": "129:9",
+      "line": 129,
+      "col": 9,
+      "type": "primary",
+      "kind": "rule",
+      "selector": ".btn-secondary",
+      "property": "color",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (light: #F6A94C -> #9A5B18)"
+        }
+      ],
+      "proposal": "accent-text",
+      "choice": "accent"
+    },
+    {
+      "id": "130:20",
+      "line": 130,
+      "col": 20,
+      "type": "primary",
+      "kind": "rule",
+      "selector": ".btn-secondary",
+      "property": "border",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (light: #F6A94C -> #9A5B18)"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "140:14",
+      "line": 140,
+      "col": 14,
+      "type": "primary",
+      "kind": "rule",
+      "selector": ".btn-secondary:hover",
+      "property": "background",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (light: #F6A94C -> #9A5B18)"
+        }
+      ],
+      "proposal": "action",
+      "choice": "accent"
+    },
+    {
+      "id": "141:9",
+      "line": 141,
+      "col": 9,
+      "type": "colour",
+      "kind": "rule",
+      "selector": ".btn-secondary:hover",
+      "property": "color",
+      "literal": "white",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:white ink on the filled hover state; no white role"
+    },
+    {
+      "id": "146:9",
+      "line": 146,
+      "col": 9,
+      "type": "colour",
+      "kind": "rule",
+      "selector": ".btn-danger",
+      "property": "color",
+      "literal": "white",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:white ink on --danger; no white role (and --danger-deep, not --danger, is the filled destructive role: a wave decision)"
+    },
+    {
+      "id": "164:20",
+      "line": 164,
+      "col": 20,
+      "type": "colour",
+      "kind": "rule",
+      "selector": ".input-field",
+      "property": "border",
+      "literal": "#e1e1e1",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 46)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 97)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:#e1e1e1 grey input border (BuilderPage form); no role or channel carries it"
+    },
+    {
+      "id": "172:16",
+      "line": 172,
+      "col": 16,
+      "type": "primary",
+      "kind": "rule",
+      "selector": ".input-field:focus",
+      "property": "border-color",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (light: #F6A94C -> #9A5B18)"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T13:38:25.816Z",
+    "after": {
+      "colour": 8,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 8,
+      "action": 1,
+      "accent": 4
+    },
+    "classicDeltas": [],
+    "edits": 5
+  }
+}

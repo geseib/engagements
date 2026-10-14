@@ -13,9 +13,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const ROOM_CSS = read('buildroom', 'BuildRoom.css');
 const CREW_CSS = read('buildroom', 'BuildCrew.css');
 
@@ -26,59 +27,36 @@ function ratio(a, b) {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function parseColor(c) {
-  if (c.startsWith('#')) return [parseHex(c), 1];
-  const m = c.match(/[\d.]+/g).map(Number);
-  return [m.slice(0, 3), m.length > 3 ? m[3] : 1];
-}
-/** Paint the layers bottom-up, alpha over alpha, as a browser composites them. */
-function composite(layers) {
-  let out = null;
-  for (const l of layers) {
-    const [rgb, a] = parseColor(l);
-    out = out ? rgb.map((c, i) => c * a + out[i] * (1 - a)) : rgb;
-  }
-  return out;
-}
-const on = (fg, layers) => ratio(parseHex(fg), composite(layers));
-const AA = 4.5;
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6}|rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
 const CREW = '.brc {';
 
-const D = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
-  success: token(GLOBAL_CSS, ROOT, '--success'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-  successText: token(CREW_CSS, CREW, '--brc-success-text'),
-};
-const T = {
-  amber: token(CREW_CSS, CREW, '--brc-tint-amber'),
-  blue: token(CREW_CSS, CREW, '--brc-tint-blue'),
-  green: token(CREW_CSS, CREW, '--brc-tint-green'),
-  red: token(CREW_CSS, CREW, '--brc-tint-red'),
-};
-const FIELD = [D.bg];
-const LANE = [D.bg, D.surface];          // lanes, help, base notice, an Incoming card, the header bar, a dialog
-const RAISED = [D.bg, D.surface2];       // comments, notes, version tabs
+/* Values are RESOLVED, per skin, through the harness (styles/skins/*.css -> styles/roles.css
+   -> the .brc block), never retyped. The crew is mounted inside the Build Room root
+   `.brm data-theme="dark"`, so every case is dusk; the light theme is not a surface here. */
+const crewVar = (name, skin) => H.scopeVar(CREW_CSS, CREW, name, { skin, theme: 'dark' });
+function palette(skin) {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  const D = {
+    bg: r('--bg'), surface: r('--surface'), surface2: r('--surface-2'), text: r('--text'),
+    muted: r('--muted'), primary: r('--primary'), secondary: r('--secondary'), success: r('--success'),
+    danger: r('--danger'), dangerText: r('--danger-text'),
+    successText: crewVar('--brc-success-text', skin),
+  };
+  const T = {
+    amber: crewVar('--brc-tint-amber', skin),
+    blue: crewVar('--brc-tint-blue', skin),
+    green: crewVar('--brc-tint-green', skin),
+    red: crewVar('--brc-tint-red', skin),
+  };
+  return { D, T, FIELD: [D.bg], LANE: [D.bg, D.surface], RAISED: [D.bg, D.surface2] };
+}
+const on = (fg, layers) => H.on(fg, layers);
+const AA = H.AA;
+const D = palette('classic').D;      // the skin-invariant house-rule premises below
 
-describe('crew (dusk): flat pairings', () => {
+describe.each(H.SKINS)('crew (dusk, %s): flat pairings', (skin) => {
+  const { D, LANE, FIELD, RAISED } = palette(skin);   // eslint-disable-line no-shadow
+  // LANE: lanes, help, base notice, an Incoming card, the header bar, a dialog. RAISED: comments, notes, version tabs.
   const pairs = [
     ['names, tasks and summaries on a lane', D.text, LANE],
     ['checkpoints and hints on a lane', D.muted, LANE],
@@ -108,7 +86,8 @@ describe('crew (dusk): flat pairings', () => {
   });
 });
 
-describe('crew (dusk): tinted composites', () => {
+describe.each(H.SKINS)('crew (dusk, %s): tinted composites', (skin) => {
+  const { D, T, LANE, FIELD } = palette(skin);   // eslint-disable-line no-shadow
   const cases = [
     ['amber chip on a lane', D.primary, [...LANE, T.amber]],
     ['blue chip on a lane', D.secondary, [...LANE, T.blue]],
@@ -127,6 +106,14 @@ describe('crew (dusk): tinted composites', () => {
   test.each(cases)('%s clears AA', (_l, fg, layers) => {
     expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
   });
+});
+
+test('Classic is unchanged: the crew tints resolve to their pre-skin literals', () => {
+  expect(H.parseColor(crewVar('--brc-tint-amber', 'classic'))).toEqual(H.parseColor('rgba(246, 169, 76, 0.13)'));
+  expect(H.parseColor(crewVar('--brc-tint-blue', 'classic'))).toEqual(H.parseColor('rgba(124, 167, 230, 0.14)'));
+  expect(H.parseColor(crewVar('--brc-line-amber', 'classic'))).toEqual(H.parseColor('rgba(246, 169, 76, 0.45)'));
+  expect(H.parseColor(crewVar('--brc-success-text', 'classic'))).toEqual(H.parseColor('#6FD0A4'));
+  expect(H.parseColor(crewVar('--brc-rule', 'classic'))).toEqual(H.parseColor('rgba(155, 168, 190, 0.22)'));
 });
 
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');

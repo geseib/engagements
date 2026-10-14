@@ -1,3 +1,4 @@
+/* skin-allowance: colour=2 font=0 primary=6 */
 /* ============================================================================
    THE HOST'S SESSIONS LIST ("Your sessions") — components/SessionHistoryPanel.jsx
 
@@ -40,9 +41,9 @@
      invalidates the whole declaration, so a token borrowed from a stylesheet
      that merely happens to be in the bundle is a rule that silently does
      nothing. Same values as `.sp`, declared here. */
-  --shist-rule: rgba(155, 168, 190, .20);
-  --shist-rule-strong: rgba(155, 168, 190, .34);
-  --shist-row-hover: rgba(155, 168, 190, .055);
+  --shist-rule: rgb(var(--slate-rgb) / .20);
+  --shist-rule-strong: rgb(var(--slate-rgb) / .34);
+  --shist-row-hover: var(--row-hover);
   --shist-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   display: flex;

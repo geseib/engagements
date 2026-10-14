@@ -1,0 +1,52 @@
+{
+  "unit": "0b-4.SurveyResultsPanel",
+  "file": "components/SurveyResultsPanel.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "e7c32301",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 1,
+    "font": 0,
+    "primary": 4
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "26:21",
+      "line": 26,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".svrp-page",
+      "property": "--svrp-on-primary",
+      "literal": "#1B2942",
+      "why": "matches a judgement role: --on-accent",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "on-accent",
+      "choice": "on-accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:18:02.095Z",
+    "after": {
+      "colour": 0,
+      "font": 0,
+      "primary": 4
+    },
+    "decisionsByKind": {
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}

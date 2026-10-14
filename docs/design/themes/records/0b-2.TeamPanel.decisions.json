@@ -1,0 +1,128 @@
+{
+  "unit": "0b-2.TeamPanel",
+  "file": "components/TeamPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 16,
+    "font": 0,
+    "primary": 9
+  },
+  "auto": [
+    {
+      "id": "59:23",
+      "line": 59,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".team",
+      "property": "--team-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "61:15",
+      "line": 61,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".team",
+      "property": "--team-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "62:22",
+      "line": 62,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".team",
+      "property": "--team-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "63:20",
+      "line": 63,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".team",
+      "property": "--team-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "65:22",
+      "line": 65,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".team",
+      "property": "--team-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "66:18",
+      "line": 66,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".team",
+      "property": "--team-tint-ok",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "64:20",
+      "line": 64,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".team",
+      "property": "--team-tint-warn",
+      "literal": "rgba(246, 169, 76, .06)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.833Z",
+    "after": {
+      "colour": 9,
+      "font": 0,
+      "primary": 9
+    },
+    "decisionsByKind": {
+      "warn": 1
+    },
+    "classicDeltas": [],
+    "edits": 7
+  }
+}

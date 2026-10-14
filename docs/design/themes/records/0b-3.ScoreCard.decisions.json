@@ -1,0 +1,66 @@
+{
+  "unit": "0b-3.ScoreCard",
+  "file": "components/ScoreCard.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 8,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [
+    {
+      "id": "20:16",
+      "line": 20,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scard",
+      "property": "--scard-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "21:23",
+      "line": 21,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scard",
+      "property": "--scard-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "var(--rule-strong)",
+      "why": "exact --rule-strong in dark"
+    },
+    {
+      "id": "22:21",
+      "line": 22,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".scard",
+      "property": "--scard-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:46.919Z",
+    "after": {
+      "colour": 5,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 3
+  }
+}

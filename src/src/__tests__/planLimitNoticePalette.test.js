@@ -16,51 +16,71 @@ function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const over = (fg, a, bg) => fg.map((c, i) => Math.round(c * a + bg[i] * (1 - a)));
 
-/** The token block a selector declares, as { name: value }. */
+const H = require('../testing/skinHarness');
+const ROLES_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles', 'roles.css'), 'utf8');
+
+/** The --plim-* names a token block declares (the head as written in the CSS). */
 function block(selectorStart) {
   const i = stripped.indexOf(selectorStart);
   if (i < 0) throw new Error(`${selectorStart} not found`);
   const body = stripped.slice(stripped.indexOf('{', i) + 1, stripped.indexOf('}', i));
-  const out = {};
-  for (const m of body.matchAll(/(--plim-[a-z-]+):\s*([^;]+);/g)) out[m[1]] = m[2].trim();
-  return out;
+  return new Set([...body.matchAll(/(--plim-[a-z-]+):\s*([^;]+);/g)].map((m) => m[1]));
 }
-const rgba = (v) => {
-  const m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*(\.\d+|\d(?:\.\d+)?)\)/.exec(v);
-  if (!m) throw new Error(`not an rgba: ${v}`);
-  return { rgb: [+m[1], +m[2], +m[3]], a: +m[4] };
-};
+const DUSK_HEAD = '.plim {';
+const PAPER_HEAD = '.plim--paper,';
+const DUSK_NAMES = block(DUSK_HEAD);
+const PAPER_NAMES = block(PAPER_HEAD);
 
-const DUSK = block('.plim {');
-const PAPER = { ...DUSK, ...block('.plim--paper,') };
+/* Since skins 0b-2 the dusk block points at roles (--plim-accent: var(--warn),
+   --plim-tint: rgb(var(--warn-rgb) / .08)), so a value is resolved through the skin harness
+   for one skin x theme, never grepped as a literal. The paper block re-declares only some
+   names on the same element; the rest fall through to the dusk block, as they do in a
+   browser. --plim-text / --plim-muted stay literal on purpose: the notice lands under
+   data-theme="light" ancestors, where the --text role would be paper ink. */
+function value(name, surface, opts) {
+  const head = surface === 'paper' && PAPER_NAMES.has(name) ? PAPER_HEAD : DUSK_HEAD;
+  return H.parseColor(H.scopeVar(CSS, head, name, opts));
+}
+const rgb = (name, surface, opts) => value(name, surface, opts).rgb;
+const role = (name, opts) => H.parseColor(H.role(name, opts)).rgb;
+
+/* Dusk is measured under a dusk ancestor; paper (`.plim--paper`, `.qsets--onlight .plim`)
+   under a paper one, with the grounds it really lands on read as roles of that theme. */
 const SURFACES = [
-  ['dusk', DUSK, ['#0F1A2E', '#1B2942', '#25375A']],
-  ['paper', PAPER, ['#FFFFFF', '#FBF7F1', '#F1EDE4']],
+  ['dusk', 'dark', (o) => [role('--bg', o), role('--surface', o), role('--surface-2', o)]],
+  ['paper', 'light', (o) => [role('--surface', o), role('--bg', o), role('--surface-2', o)]],
 ];
+const SKINS = H.CASES.filter(([, t]) => t === 'dark').map(([skin]) => skin);
 
-describe('contrast, composited through the notice\'s own tint', () => {
-  for (const [name, t, grounds] of SURFACES) {
+describe.each(SKINS)('contrast, composited through the notice\'s own tint: %s', (skin) => {
+  for (const [name, theme, grounds] of SURFACES) {
     test(`${name}: text, muted copy and link ink clear AA on every ground it lands on`, () => {
-      const tint = rgba(t['--plim-tint']);
-      for (const g of grounds) {
-        const painted = over(tint.rgb, tint.a, hex(g));
+      const O = { skin, theme };
+      const tint = value('--plim-tint', name, O);
+      for (const g of grounds(O)) {
+        const painted = over(tint.rgb, tint.a, g);
         // rejects: a muted that passes on a flat card and fails under the tint
-        expect(ratio(hex(t['--plim-text']), painted)).toBeGreaterThanOrEqual(4.5);
-        expect(ratio(hex(t['--plim-muted']), painted)).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(rgb('--plim-text', name, O), painted)).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(rgb('--plim-muted', name, O), painted)).toBeGreaterThanOrEqual(4.5);
         // rejects: --primary amber carrying link text on paper (1.96:1 on white)
-        expect(ratio(hex(t['--plim-ink']), painted)).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(rgb('--plim-ink', name, O), painted)).toBeGreaterThanOrEqual(4.5);
       }
     });
   }
 
   test('the filled button carries navy on amber', () => {
-    expect(ratio(hex(DUSK['--plim-on-accent']), hex(DUSK['--plim-accent']))).toBeGreaterThanOrEqual(4.5);
+    const O = { skin, theme: 'dark' };
+    expect(ratio(rgb('--plim-on-accent', 'dusk', O), rgb('--plim-accent', 'dusk', O))).toBeGreaterThanOrEqual(4.5);
   });
 
   // rejects: a refusal drawn in the fault colour — a plan limit is "not yet", not an error
   test('amber, never the danger colour', () => {
     expect(stripped).not.toMatch(/--danger/);
-    expect(DUSK['--plim-accent'].toUpperCase()).toBe('#F6A94C');
+    expect(stripped).toMatch(/--plim-accent:\s*var\(--warn\)/);
+    if (skin === 'classic') {
+      const accent = value('--plim-accent', 'dusk', { skin, theme: 'dark' });
+      expect({ rgb: accent.rgb, a: accent.a }).toEqual({ rgb: hex('#F6A94C'), a: 1 });
+    }
   });
 });
 
@@ -94,8 +114,14 @@ describe('the contract', () => {
     expect(site).not.toMatch(/\.plim\b/);
   });
 
-  test('every var() it reads is declared in its own blocks', () => {
+  // Its own blocks, or a role styles/roles.css declares (the 0b-2 re-point reads
+  // --warn, --warn-rgb, --slate-rgb and --on-accent) — never a global token borrowed
+  // from a sheet that merely happens to be in the bundle.
+  test('every var() it reads is declared in its own blocks or is a role', () => {
+    const roles = new Set([...ROLES_CSS.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
     const used = new Set([...stripped.matchAll(/var\((--[a-z-]+)\)/g)].map((m) => m[1]));
-    used.forEach((name) => expect(DUSK[name]).toBeDefined());
+    expect(used.size).toBeGreaterThan(5);
+    used.forEach((name) => expect({ name, declared: DUSK_NAMES.has(name) || roles.has(name) })
+      .toEqual({ name, declared: true }));
   });
 });

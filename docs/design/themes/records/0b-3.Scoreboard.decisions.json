@@ -1,0 +1,424 @@
+{
+  "unit": "0b-3.Scoreboard",
+  "file": "components/stage/scoreboard/Scoreboard.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 28,
+    "font": 0,
+    "primary": 7
+  },
+  "auto": [
+    {
+      "id": "77:11",
+      "line": 77,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-tag",
+      "literal": "rgba(155,168,190,.14)",
+      "replacement": "rgb(var(--slate-rgb) / .14)",
+      "why": "channel --slate-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "70:11",
+      "line": 70,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-new",
+      "literal": "#A7C3EF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 40)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 52)"
+        },
+        {
+          "role": "--phase-vote",
+          "classic": "Classic differs (distance 52)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "71:14",
+      "line": 71,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bronze",
+      "literal": "#D39A6A",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-text",
+          "classic": "Classic differs (distance 42)"
+        },
+        {
+          "role": "--row-selected",
+          "classic": "Classic differs (distance 48)"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (distance 48)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "72:15",
+      "line": 72,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-housing",
+      "literal": "#0A1322",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 15)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 15)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 15)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the board housing ground #0A1322, a step below --bg (distance 15); moving it to a role is a Classic delta, so it is W3-d's decision (owner: the housing ground moves in that unit)"
+    },
+    {
+      "id": "75:14",
+      "line": 75,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-lane-a",
+      "literal": "rgba(27,41,66,.9)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "76:14",
+      "line": 76,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-lane-b",
+      "literal": "rgba(37,55,90,.5)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "78:18",
+      "line": 78,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-tote-board",
+      "literal": "#0A1120",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 12)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 17)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 17)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "79:16",
+      "line": 79,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-tote-row",
+      "literal": "#131E33",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 8)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 8)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 20)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "80:53",
+      "line": 80,
+      "col": 53,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bulb-amber",
+      "literal": "#FFE6BF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 39)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 73)"
+        },
+        {
+          "role": "--action-hover",
+          "classic": "Classic differs (distance 102)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "80:88",
+      "line": 80,
+      "col": 88,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bulb-amber",
+      "literal": "#D98A2E",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 49)"
+        },
+        {
+          "role": "--row-selected",
+          "classic": "Classic differs (distance 52)"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (distance 52)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "80:101",
+      "line": 80,
+      "col": 101,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bulb-amber",
+      "literal": "rgba(217,138,46,0)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 49)"
+        },
+        {
+          "role": "--row-selected",
+          "classic": "Classic differs (distance 52)"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (distance 52)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "80:68",
+      "line": 80,
+      "col": 68,
+      "type": "primary",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bulb-amber",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "gold"
+    },
+    {
+      "id": "81:53",
+      "line": 81,
+      "col": 53,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bulb-white",
+      "literal": "#FFFFFF",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "81:85",
+      "line": 81,
+      "col": 85,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bulb-white",
+      "literal": "#CFC6BA",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 27)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 60)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 60)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    },
+    {
+      "id": "81:98",
+      "line": 81,
+      "col": 98,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sb",
+      "property": "--sb-bulb-white",
+      "literal": "rgba(207,198,186,0)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 27)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 60)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 60)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a scoreboard board-palette value; owner decision (W3-d): the three looks keep their --sb-* board palettes, only accents and the housing ground move"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:47.190Z",
+    "after": {
+      "colour": 27,
+      "font": 0,
+      "primary": 6
+    },
+    "decisionsByKind": {
+      "keep": 13,
+      "gold": 1
+    },
+    "classicDeltas": [],
+    "edits": 2
+  }
+}

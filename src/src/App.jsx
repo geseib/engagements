@@ -1,3 +1,4 @@
+// skin-allowance: colour=3
 import React, { Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import AuthPage from './auth/AuthPage';
@@ -18,6 +19,7 @@ import PendingInvites, { NOT_APPROVAL_NOTE } from './components/PendingInvites';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
 import SharedReportPage from './components/SharedReportPage';
+import SkinProvider from './components/SkinProvider';
 
 // Marketing is lazy so that a player on /play and a host on the stage never
 // download a brochure. One chunk per page; AuthLoading is the fallback.
@@ -27,6 +29,11 @@ const UseCasesPage = lazy(() => import('./marketing/UseCasesPage'));
 const BuildRoomMarketingPage = lazy(() => import('./marketing/BuildRoomPage'));
 const ReportsPage = lazy(() => import('./marketing/ReportsPage'));
 const HelpPage = lazy(() => import('./marketing/HelpPage'));
+// The Presentation (/present): public, read-only, its own chunk so a player's
+// phone never downloads it (two-surface PLAN 2.9).
+const PresentPage = lazy(() => import('./PresentPage'));
+// The skin gallery (/skins): dev only, staff only, its own chunk.
+const SkinGallery = lazy(() => import('./components/SkinGallery'));
 
 // The one spinner. RootGate has to decide before ProtectedRoute runs (that is
 // the whole point of it), so both need this and neither should own it.
@@ -253,6 +260,13 @@ function AppRouter() {
   // Simple routing based on URL path
   const path = window.location.pathname;
 
+  // THE PRESENTATION (two-surface PLAN 2.9): what the room sees, following the
+  // session. Public on purpose: it shows only what anyone holding the code can
+  // already read, so it never bounces to a sign-in (D3).
+  if (path === '/present') {
+    return <MarketingRoute page={PresentPage} />;
+  }
+
   // Player routes (no authentication required)
   if (path.startsWith('/play')) {
     // AN EVENT'S CODE (events M2): the attendee's page, which joins once by
@@ -263,6 +277,21 @@ function AppRouter() {
       return <EventAttendeePage code={eventCode.trim()} />;
     }
     return <PlayerPage />;
+  }
+
+  // THE SKIN GALLERY (docs/design/themes TOOLING-BRIEF §5.3): sample-data
+  // mounts of signed-in surfaces for scripts/skins/shoot.js. DEV ONLY — on any
+  // other tier the path falls through as an unknown one — and STAFF ONLY. One
+  // path segment on purpose: its fixtures will render questions, and a nested
+  // route breaks their relative image keys (setMediaStorage.test.js).
+  if (path === '/skins' && window.ENV === 'development') {
+    return (
+      <ProtectedRoute requireAdmin>
+        <Suspense fallback={<AuthLoading />}>
+          <SkinGallery />
+        </Suspense>
+      </ProtectedRoute>
+    );
   }
 
   // Test routes (no authentication required for development)
@@ -460,12 +489,15 @@ function AppRouter() {
   );
 }
 
-// Main App component with AuthProvider
+// Main App component. SkinProvider sits OUTSIDE AuthProvider: the skin is
+// for every visitor, signed in or not (docs/design/themes SPEC §5.3).
 function App() {
   return (
-    <AuthProvider>
-      <AppRouter />
-    </AuthProvider>
+    <SkinProvider>
+      <AuthProvider>
+        <AppRouter />
+      </AuthProvider>
+    </SkinProvider>
   );
 }
 

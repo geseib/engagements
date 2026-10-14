@@ -632,6 +632,29 @@ export default function TeamPanel({
     }
   };
 
+  /* A TEAM APPROVES HOSTING for somebody who joined through its invitation
+     (owner, 2026-10-11; admin/orgs/approve-member.js). The server checks the
+     invitation stamp, the account and the role; this only offers the button
+     where it will be accepted. */
+  const approveHosting = async (member) => {
+    markBusy(`member:${member.userId}`, true);
+    setNotice(null);
+    try {
+      const response = await authFetch(
+        orgPath(`members/${encodeURIComponent(member.userId)}/approve`),
+        { method: 'POST' }
+      );
+      await readOrThrow(response, 'Could not approve them to host');
+      setNotice(`${member.displayName || member.email} can host now.`);
+      setError(null);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      markBusy(`member:${member.userId}`, false);
+    }
+  };
+
   const members = roster?.members || [];
   const invites = roster?.invites || [];
   const yourRole = String(roster?.yourRole || '').toLowerCase();
@@ -911,6 +934,7 @@ export default function TeamPanel({
                           <span className="team-nm" title={name}>{name}</span>
                           <span className="team-sub" title={member.email}>
                             {member.email || member.userId}
+                            {member.awaitingHostApproval ? ' · cannot host yet' : ''}
                           </span>
                         </span>
                       </div>
@@ -935,6 +959,16 @@ export default function TeamPanel({
                                 gate a host saw "Make admin" on themselves — a
                                 button the server refuses, offering exactly the
                                 promotion they are not allowed to give. */}
+                            {canAdminister && roster?.canApproveHosting !== false && !member.you && member.awaitingHostApproval && member.joinedByInvite && (
+                              <button
+                                type="button"
+                                className="team-btn team-btn--sm"
+                                disabled={busy}
+                                onClick={() => approveHosting(member)}
+                              >
+                                {busy ? 'Working…' : 'Approve hosting'}
+                              </button>
+                            )}
                             {canAdminister && member.canDemote !== false && member.role === 'member' && (
                               <button
                                 type="button"
@@ -989,8 +1023,9 @@ export default function TeamPanel({
           <p className="team-notebox">
             <b>Roles here are not the same thing as an Engage account.</b> Someone can be an
             admin of {orgName || 'this organisation'} and a member of another team with the
-            same sign-in. Approving somebody to use Engage at all is a separate decision,
-            made by Engage staff, on a screen these people never see.
+            same sign-in. Approving somebody to host is a separate decision, made by Engage
+            staff, except for people who joined through this team’s invitation: an owner or
+            admin can approve those here, and Engage can still refuse.
           </p>
         </>
       )}

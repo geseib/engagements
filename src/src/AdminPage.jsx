@@ -13,6 +13,7 @@ import HelpButton from './components/HelpButton';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import ObservabilityPanel from './components/ObservabilityPanel';
 import ClaudeModelsPanel from './components/ClaudeModelsPanel';
+import SiteSkinPanel from './components/SiteSkinPanel';
 import UsageStatsPanel from './components/UsageStatsPanel';
 import PlanRequestsPanel from './components/PlanRequestsPanel';
 import DiscountCodesPanel from './components/DiscountCodesPanel';
@@ -37,7 +38,9 @@ import NewSetDialog from './components/NewSetDialog';
 import { parseUpgradeRequired } from './utils/upgradeRequired';
 import { wantsPlanRequest, withoutPlanRequest } from './utils/planLimitCopy';
 import AdminShell from './components/AdminShell';
-import OrgSwitcher from './components/OrgSwitcher';
+import ScopeTabs from './components/ScopeTabs';
+import OverviewPanel from './components/OverviewPanel';
+import { accountsBox, auditSeenKey } from './config/overviewAlerts';
 import TeamPanel from './components/TeamPanel';
 import BillingPanel from './components/BillingPanel';
 import PrivacyPanel from './components/PrivacyPanel';
@@ -168,7 +171,10 @@ const ADMIN_SECTION_IDS = [...new Set([
   ...Object.keys(ADMIN_SECTION_BY_ID),
   ...ALL_SECTION_IDS,
 ])];
-const DEFAULT_ADMIN_SECTION = 'questionsets';
+/* Overview is the landing section in every scope (owner, 2026-10-11). Until
+   GET /orgs answers, a bare /admin shows it too rather than flashing Question
+   sets first. */
+const DEFAULT_ADMIN_SECTION = 'overview';
 
 /** True when the address bar names a section this console recognises. */
 function urlNamesKnownSection() {
@@ -183,7 +189,7 @@ function urlNamesKnownSection() {
    a banner to the shape of the nav. Deliberately not counted in this sentence:
    it said "the four" while the array held five, which is the reliable fate of
    a number written beside a list that grows. */
-const PLATFORM_SECTION_IDS = ['orgs', 'observability', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings'];
+const PLATFORM_SECTION_IDS = ['overview', 'orgs', 'observability', 'publiclibrary', 'moderation', 'users', 'archive', 'engagesettings'];
 
 function AdminPage() {
   console.log('🔧 AdminPage component loading with AI builders...');
@@ -297,6 +303,13 @@ function AdminPage() {
   /* WHICH SWITCHED FEATURES THIS TIER HAS ON — GET /orgs `features`
      (admin/orgs/list-my-orgs.js). Only `events` exists (roadmap D6). */
   const [features, setFeatures] = useState({});
+  /* An account that joined through a team invitation has no personal space
+     until it asks for one (admin/orgs/shared/personal-org.js). */
+  const [canCreatePersonal, setCanCreatePersonal] = useState(false);
+  /* GET /me/attention: how many things wait in each scope, for the tabs.
+     The open scope's own Overview total replaces its number once it loads. */
+  const [attention, setAttention] = useState(null);
+  const [overviewTotal, setOverviewTotal] = useState(null);
   /* EVENTS: the event open in the builder place, `{code, title}`, or null
      for the list; and whether the new-event dialog is open. */
   const [eventPlace, setEventPlace] = useState(null);
@@ -314,6 +327,7 @@ function AdminPage() {
         const list = Array.isArray(data.orgs) ? data.orgs : [];
         setOrgs(list);
         setFeatures(data.features && typeof data.features === 'object' ? data.features : {});
+        setCanCreatePersonal(data.canCreatePersonal === true);
         /*
           Reconcile the remembered choice against what the server says. An id
           in localStorage the account is no longer a member of must NOT be sent
@@ -511,6 +525,10 @@ function AdminPage() {
      stale count beside a nav item is a convenience gone quiet, not a reason
      to interrupt anyone who can still open the queue directly. */
   const [moderationCount, setModerationCount] = useState(0);
+  /* Accounts waiting in `pending`: the nav badge staff never had (SPEC §2,
+     "Somebody has to move them"). Read with the other two on entering
+     platform mode. */
+  const [accountsCount, setAccountsCount] = useState(0);
   useEffect(() => {
     if (!onPlatform) return undefined;
     let cancelled = false;
@@ -523,8 +541,48 @@ function AdminPage() {
         // convenience badge only — see comment above
       }
     })();
+    /* THE PLAN REQUESTS BADGE WAS EMPTY until somebody opened Plan requests:
+       only that panel set it (onCountChange). Read here too, on entering
+       platform mode, so the badge is right from the first screen. */
+    (async () => {
+      try {
+        const res = await authFetch(adminApiUrl('platform/plan-requests?status=requested'));
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setPlanRequestCount((body.requests || []).length);
+      } catch {
+        // convenience badge only
+      }
+    })();
+    (async () => {
+      try {
+        const res = await authFetch(adminApiUrl('admin/users/list'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setAccountsCount((accountsBox(body.users || []) || { count: 0 }).count);
+      } catch {
+        // convenience badge only
+      }
+    })();
     return () => { cancelled = true; };
   }, [onPlatform]);
+
+  /* The tab counts. Read once the organisations are known; a failure leaves
+     the tabs without numbers, never without tabs. */
+  useEffect(() => {
+    if (!orgsLoaded) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(adminApiUrl('me/attention'));
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setAttention(body);
+      } catch {
+        // counts are a courtesy
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [orgsLoaded]);
 
   /**
    * Take this organisation's own copy of a set Engage or another org publishes.
@@ -637,6 +695,35 @@ function AdminPage() {
       feature. Reloading is cheap and unambiguous.
     */
     window.location.reload();
+  };
+
+  /*
+    A SCOPE TAB. Choosing another scope sets it exactly as handleSwitchOrg
+    does and reloads to that scope's Overview (SPEC §4.2): the reload is the
+    tenancy guarantee. The tab you are already on just opens its Overview.
+  */
+  const handleScopeSelect = (key) => {
+    if (key === activeOrgId) { handleNavigate('overview'); return; }
+    setActiveOrgId(key);
+    window.location.assign('/admin');
+  };
+  const handleCreatePersonal = async () => {
+    try {
+      const res = await authFetch(adminApiUrl('orgs'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ personal: true }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.orgId) throw new Error(body.error || `The server answered ${res.status}.`);
+      setActiveOrgId(body.orgId);
+      window.location.assign('/admin');
+    } catch (err) {
+      setNotice({ tone: 'error', text: err.message || 'Your personal space could not be made.' });
+    }
+  };
+  /* "Since you last looked" for the Overview's "Engage staff opened your
+     content" box: opening Data & privacy is reading the log (ruling 5). */
+  const markAuditSeen = (orgId) => {
+    try { window.localStorage.setItem(auditSeenKey(orgId), new Date().toISOString()); } catch { /* per-browser courtesy */ }
   };
 
   // The set being edited. Every field of the editor itself now lives in
@@ -1395,6 +1482,12 @@ function AdminPage() {
   })();
   resolvedRef.current = resolvedTab;
 
+  /* Opening Data & privacy is reading the log: the Overview's "Engage staff
+     opened your content" box clears from then on (owner, ruling 5). */
+  useEffect(() => {
+    if (resolvedTab === 'privacy' && activeOrg && activeOrg.orgId) markAuditSeen(activeOrg.orgId);
+  }, [resolvedTab, activeOrg && activeOrg.orgId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /*
     "REQUEST THE TEAM PLAN" LANDS ON THE REQUEST. A plan-limit refusal's button
     (utils/planLimitCopy.js REQUEST_HREF) is Plan & usage with `request=team`:
@@ -1460,6 +1553,21 @@ function AdminPage() {
     every test green except the one that reads the h1.
   */
   const NEW_SECTION_HEADS = {
+    /* One sentence per scope, from the mockups (F1, F2, F4, F5). */
+    overview: {
+      id: 'overview',
+      title: 'Overview',
+      subtitle: onPlatform
+        ? 'Engage. Every queue that waits on staff, and the platform in numbers.'
+        : activeOrg && activeOrg.type === 'personal'
+          ? 'Your own space. What is waiting on you, and this month in numbers.'
+          : activeOrg && !['owner', 'admin'].includes(String(orgRole).toLowerCase())
+            ? `${activeOrg.name}. You are a member here.`
+            : activeOrg
+              ? `${activeOrg.name}. What is waiting on you, and this month in numbers.`
+              : 'What is waiting on you, and this month in numbers.',
+      contentTheme: 'dark',
+    },
     events: {
       id: 'events',
       title: 'Events',
@@ -1552,33 +1660,33 @@ function AdminPage() {
             if (item.id === 'planrequests') {
               return { ...item, badge: planRequestCount || undefined };
             }
+            // People waiting to be let in: a badge, like plan requests.
+            if (item.id === 'users' && onPlatform) {
+              return { ...item, badge: accountsCount || undefined };
+            }
             return item;
           }),
         }))}
         footNavItems={FOOT_SECTIONS.length ? FOOT_SECTIONS : ADMIN_FOOT_SECTIONS}
-        orgSwitcher={
+        /* THE SCOPE ROW REPLACES THE ORGANISATION CHIP (docs/design/
+           admin-landing): Personal, each team A to Z, Engage for staff, each
+           with what waits there. Still the only switcher. The host screen
+           keeps its chip (ActiveOrgSwitcher, owner's ruling 9). */
+        scopeBar={
           orgsLoaded ? (
-            /* PROP NAMES MATTER MORE THAN THEY LOOK. This passed `orgs` and
-               `onSwitch`; the component's props are `organisations` and
-               `onSelect`, so it received an empty list, took its "nothing to
-               name" branch and rendered NOTHING — on dev there was no switcher
-               on the page at all, and therefore no way to change organisation
-               or reach the platform console. React says nothing about a prop
-               that is simply not there, which is why adminOrgWiring.test.jsx
-               now mounts this and looks. */
-            <OrgSwitcher
-              organisations={orgs}
-              activeOrgId={activeOrgId}
-              platform={isStaff}
-              onSelect={handleSwitchOrg}
-              /* WAS: window.location.href = '/admin?section=members' — a link
-                 to the members of the org you are already in, and in platform
-                 mode to a section that does not exist. `POST /orgs` had been
-                 wired and authorized the whole time with nothing calling it. */
-              onCreate={() => setCreatingOrg(true)}
+            <ScopeTabs
+              orgs={orgs}
+              activeKey={activeOrgId}
+              staff={isStaff}
+              attention={attention}
+              activeTotal={resolvedTab === 'overview' ? overviewTotal : null}
+              onSelect={handleScopeSelect}
+              onCreateTeam={() => setCreatingOrg(true)}
+              onCreatePersonal={canCreatePersonal && !orgs.some((o) => o.type === 'personal') ? handleCreatePersonal : undefined}
             />
           ) : null
         }
+        narrowOk={resolvedTab === 'overview'}
         activeId={resolvedTab}
         onNavigate={handleNavigate}
         environment={environment}
@@ -1962,9 +2070,29 @@ function AdminPage() {
             />
           ))}
 
+          {/* OVERVIEW — the landing page of every scope (docs/design/
+              admin-landing). Waits for the organisations: until then there is
+              no scope to read for. */}
+          {resolvedTab === 'overview' && orgsLoaded && (onPlatform || activeOrg) && (
+            <OverviewPanel
+              key={onPlatform ? 'platform' : activeOrg.orgId}
+              scope={onPlatform ? 'platform' : (activeOrg.type === 'personal' ? 'personal' : 'team')}
+              org={onPlatform ? null : activeOrg}
+              role={String(orgRole || '').toLowerCase()}
+              sets={visibleSets}
+              /* Invitations are personal; with no personal space (an account
+                 that joined through a team invitation) every team shows them. */
+              showInvites={!onPlatform && (activeOrg.type === 'personal' || !orgs.some((o) => o.type === 'personal'))}
+              onNavigate={handleNavigate}
+              onOpenSet={(set) => { handleNavigate('questionsets'); handleEditQuestionSet(set); }}
+              onRequestPlan={!onPlatform && activeOrg && (orgRole === 'owner' || activeOrg.type === 'personal')
+                ? () => setShowPlanRequest(true) : undefined}
+              onTotalChange={setOverviewTotal}
+            />
+          )}
           {resolvedTab === 'orgs' && onPlatform && <PlatformOrgsPanel />}
           {resolvedTab === 'observability' && onPlatform && <ObservabilityPanel />}
-          {resolvedTab === 'engagesettings' && onPlatform && <ClaudeModelsPanel />}
+          {resolvedTab === 'engagesettings' && onPlatform && <><ClaudeModelsPanel /><SiteSkinPanel /></>}
           {resolvedTab === 'activity' && activeOrg && !onPlatform && (
             <UsageStatsPanel
               key={activeOrgId}

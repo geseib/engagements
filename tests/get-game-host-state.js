@@ -347,6 +347,39 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
     });
   }
 
+  say('\n6. the stage facts on the host door (two-surface PLAN 1.11): notes, focus, profile, presenting');
+  const host = await call(HOST_ROUTE, VOTE_GAME, { authorizer: hostOf(ORG) });
+  await check('stageNotes, defaulted', () =>
+    assert.deepStrictEqual(host.body.stageNotes, { page: 0, pages: null, plan: null, planKey: null, rev: 0 }));
+  await check('stageFocus, defaulted, with part, phase and rev', () =>
+    assert.deepStrictEqual(host.body.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 0 }));
+  await check('stageProfile, null until chosen', () => assert.strictEqual(host.body.stageProfile, null));
+  await check('presenting is 0 with no Presentation open (tests/viewer-connections.js counts them)', () => assert.strictEqual(host.body.presenting, 0));
+  const pub = await call(PUBLIC_ROUTE, VOTE_GAME);
+  await check('the public door carries the same three stage facts, and no presenting', () => {
+    assert.deepStrictEqual(pub.body.stageNotes, host.body.stageNotes);
+    assert.deepStrictEqual(pub.body.stageFocus, host.body.stageFocus);
+    assert.strictEqual(pub.body.stageProfile, host.body.stageProfile);
+    assert.ok(!('presenting' in pub.body), 'presenting reached the public door');
+  });
+
+  // A VOTE-stamped focus, read once the round has moved on to RESULTS: it must
+  // read as none, so voting position 3 never becomes tally rank 3 (D5).
+  put({ PK: `GAME#${VOTE_GAME}`, SK: 'ROUND#001', StageFocus: 'answer', StageFocusIndex: 2, StageFocusPhase: 'VOTE', StageFocusRev: 4,
+    StageNotesPage: 1, StageNotesPages: 3, StageNotesRev: 2 });
+  put({ PK: `GAME#${VOTE_GAME}`, SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, StageProfile: 'tv' });
+  const inVote = await call(HOST_ROUTE, VOTE_GAME, { authorizer: hostOf(ORG) });
+  await check('during VOTE the VOTE focus is handed back', () =>
+    assert.deepStrictEqual(inVote.body.stageFocus, { focus: 'answer', index: 2, part: 0, parts: 1, phase: 'VOTE', rev: 4 }));
+  await check('the page and profile are read back', () => {
+    assert.deepStrictEqual([inVote.body.stageNotes.page, inVote.body.stageNotes.pages, inVote.body.stageNotes.rev], [1, 3, 2]);
+    assert.strictEqual(inVote.body.stageProfile, 'tv');
+  });
+  put({ PK: `GAME#${VOTE_GAME}`, SK: 'STATE', State: 'RESULTS#001', LessonNumber: 1, StageProfile: 'tv' });
+  const atResults = await call(HOST_ROUTE, VOTE_GAME, { authorizer: hostOf(ORG) });
+  await check('on RESULTS the VOTE-stamped focus reads none', () =>
+    assert.deepStrictEqual(atResults.body.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 4 }));
+
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

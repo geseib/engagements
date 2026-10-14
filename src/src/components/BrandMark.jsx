@@ -1,3 +1,4 @@
+// skin-allowance: colour=1
 import React from 'react';
 
 /**

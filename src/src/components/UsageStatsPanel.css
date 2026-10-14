@@ -1,3 +1,4 @@
+/* skin-allowance: colour=1 font=0 primary=5 */
 /* ============================================================================
    USAGE STATS — components/UsageStatsPanel.jsx (the team's Activity page) and
    components/StaffStatsDrill.jsx (staff: one team, account or set).
@@ -35,11 +36,11 @@
   --ust-t-numeral: 30px;
   --ust-row-h: 36px;
 
-  --ust-rule: rgba(155, 168, 190, .20);
-  --ust-rule-strong: rgba(155, 168, 190, .40);
-  --ust-tint-blue: rgba(124, 167, 230, .12);
-  --ust-tint-blue-edge: rgba(124, 167, 230, .45);
-  --ust-tint-danger: rgba(229, 100, 94, .09);
+  --ust-rule: rgb(var(--slate-rgb) / .20);
+  --ust-rule-strong: rgb(var(--slate-rgb) / .40);
+  --ust-tint-blue: rgb(var(--info-rgb) / .12);
+  --ust-tint-blue-edge: rgb(var(--info-rgb) / .45);
+  --ust-tint-danger: rgb(var(--danger-rgb) / .09);
 
   container-type: inline-size;
   max-width: 1120px;

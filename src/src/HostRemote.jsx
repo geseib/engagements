@@ -2,20 +2,29 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import { twoSurfacesHere, presentHref } from './config/surfaces';
 import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
 import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
+import { navigateTo } from './auth/navigate';
+import RW from './config/roundWords';
 import { useOptionalAuth } from './auth/AuthContext';
 import { categoryRows, questionKey } from './config/setupPanel';
 import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
-import { fetchComments } from './utils/commentsClient';
+import { fetchComments, postRoomNote } from './utils/commentsClient';
+import RoomNote from './components/RoomNote';
+import useRoundAsks from './hooks/useRoundAsks';
+import AskPreview from './components/AskPreview';
+import AskIcons from './components/AskIcons';
+import FW from './config/followUpWords';
+import { placeAsks } from './config/askAnchors';
+import { sendAsk, closeAsk, cancelAsk } from './utils/followUpsClient';
 import { postQueueOp } from './utils/questionQueueClient';
 import {
-  primaryAction,
-  skipAction,
+  remoteStep,
   requestFor,
   askNowRequest,
   askNowNeedsConfirm,
@@ -181,6 +190,12 @@ function HostRemote() {
     nothing.
   */
   const [focusAnswers, setFocusAnswers] = useState([]);
+  /*
+    THE ROUND'S TALLY, at RESULTS: get-results' `voteTallies`, so the focus
+    list runs in tally order — the order the host page's spotlight and the
+    wall read the index against (config/navigatorOrder.js, two-surface D5).
+  */
+  const [voteTallies, setVoteTallies] = useState(null);
   const [focusOpen, setFocusOpen] = useState(false);
   const [focusBusy, setFocusBusy] = useState(false);
   const [scoreboardBusy, setScoreboardBusy] = useState(false);
@@ -478,11 +493,13 @@ function HostRemote() {
     the room" for a response the room is already reading.
   */
   const stageFocus = snapshot?.stageFocus || NO_FOCUS;
-  const action = useMemo(
-    () => primaryAction(snapshot?.state, gameType, stageBeat),
-    [snapshot, gameType, stageBeat]
-  );
-  const skip = useMemo(() => skipAction(snapshot?.state), [snapshot]);
+  /*
+    THE JOIN CODE, IN STEP WITH THE WALL (owner, 2026-10-13). Put up from any
+    surface (hover or J on the laptop, J on the Presentation, Display on screen
+    here), it opens this phone's Join code panel too; any tap on this phone,
+    other than the panel's own button, takes it down everywhere.
+  */
+  const joinOnWall = Boolean(stageFocus && stageFocus.focus === 'join');
   const round = snapshot?.currentQuestion || null;
   const title = snapshot?.gameMetadata?.title || '';
   const setId = snapshot?.gameMetadata?.questionSetId || '';
@@ -511,7 +528,9 @@ function HostRemote() {
     ? (roster.stats?.totalPlayers ?? roster.players?.length ?? null)
     : null;
 
-  const waiting = useMemo(() => waitingOn(roster, snapshot?.state), [roster, snapshot]);
+  // The snapshot, not just its state: who has acted comes from the same
+  // `/host-state` response as the count above the list (config/hostRemote.js).
+  const waiting = useMemo(() => waitingOn(roster, snapshot), [roster, snapshot]);
   const notes = useMemo(() => fieldNotesFrom(aiSummary), [aiSummary]);
 
   /** Is the room reading the AI's read-back right now? */
@@ -529,6 +548,70 @@ function HostRemote() {
    * render this one.
    */
   const onFeedback = summary.phase === 'RESULTS' && stageBeat === 'feedback';
+  /**
+   * Is a round's results up (any beat)? The responses are loaded then too, not
+   * only while the focus panel is open: roundStep's RESULTS secondary is "Show
+   * response 1 of N", and N is their count.
+   */
+  const onResults = summary.phase === 'RESULTS';
+
+  /*
+    ASK THE ROOM (docs/design/followup-icons): the round's asks, beside the
+    read as on the laptop, and the question once sent. This phone polls the
+    state, not the socket, so the asks are re-read on the same kind of clock
+    while the round is on its results.
+  */
+  const [askTick, setAskTick] = useState(0);
+  const [askPreview, setAskPreview] = useState(null);
+  const askActive = Boolean(onResults && /call/i.test(String(snapshot?.gameType || snapshot?.gameMetadata?.gameType || '')));
+  useEffect(() => {
+    if (!askActive) return undefined;
+    const t = setInterval(() => setAskTick((n) => n + 1), AI_POLL_MS);
+    return () => clearInterval(t);
+  }, [askActive]);
+  const roundAsks = useRoundAsks({
+    fetchFn: authFetch, apiBase: apiBase(), gameId, round, active: askActive, refreshKey: `${askTick}#${snapshot?.stageBeat || ''}`,
+  });
+  /*
+    The read here is Workie's topics and next steps, not its markdown, so an
+    ask finds its point by the words: the point's text and the topic's agree
+    once case and punctuation are set aside. An ask whose point is not listed
+    on this phone goes under "Ask the room", with where it came from.
+  */
+  const remoteAsks = (() => {
+    const md = aiSummary && aiSummary.markdownResponse;
+    const empty = { beside: () => null, rest: [] };
+    if (!roundAsks.enabled || !md || !roundAsks.unsent.length) return empty;
+    const unsent = new Set(roundAsks.unsent.map((u) => u.index));
+    const { byPoint, after } = placeAsks(md, roundAsks.suggestions);
+    const fold = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const placed = [...byPoint.entries()].map(([text, entries]) => ({ key: fold(text), entries: entries.filter((e) => unsent.has(e.index)) }));
+    const used = new Set();
+    const beside = (shown) => {
+      const k = fold(shown);
+      if (!k) return null;
+      const hit = placed.find((p) => p.entries.length && (p.key.includes(k.slice(0, 48)) || k.includes(p.key.slice(0, 48))));
+      if (!hit) return null;
+      hit.entries.forEach((e) => used.add(e.index));
+      return <AskIcons entries={hit.entries} onOpen={setAskPreview} />;
+    };
+    // Decide what is beside a topic first, so `rest` is what is left.
+    [...notes.topics, ...notes.nextSteps].forEach((t) => beside(t));
+    const rest = [
+      ...placed.flatMap((p) => p.entries).filter((e) => !used.has(e.index)),
+      ...after.filter((e) => unsent.has(e.index)),
+    ];
+    return { beside, rest };
+  })();
+
+  const sendRemoteAsk = async (body) => {
+    const r = await sendAsk({ fetchFn: authFetch, apiBase: apiBase(), gameId, round, ask: body });
+    if (r.ok) { roundAsks.reload(); pollState(gameId); }
+    return r;
+  };
+  // During voting the host may show the responses too (owner, 2026-10-13):
+  // the list loads, and roundStep offers Show response 1 of N.
+  const onVoting = summary.phase === 'VOTE';
 
   /* ------------------------------------------------------- the read-back */
 
@@ -595,13 +678,49 @@ function HostRemote() {
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, onFeedback, round]);
 
+  // SAID IN THE ROOM (owner, 2026-10-13): the host's own line, from the phone
+  // as from the laptop. The count follows straight away rather than at the poll.
+  const sendRoomNote = useCallback(async (text) => {
+    if (!gameId || !round) return { ok: false, error: 'No round is open.' };
+    const padded = String(round).padStart(3, '0');
+    const result = await postRoomNote({ fetchFn: authFetch, apiBase: apiBase(), gameId, questionNumber: padded, text });
+    if (result.ok) setFeedbackCommentCount((n) => (Number(n) || 0) + 1);
+    return result;
+  }, [gameId, round]);
+
   /* ----------------------------------------------------------- the focus */
 
   // A new round's responses are different rows. Dropping the old list is what
   // stops round 4's phone offering round 3's answers to put on the wall — and
   // the index it would send addresses round 4, so the room would get a
   // different response from the one the host tapped.
-  useEffect(() => { setFocusAnswers([]); }, [gameId, round]);
+  useEffect(() => { setFocusAnswers([]); setVoteTallies(null); }, [gameId, round]);
+
+  /*
+    The tally, once per round at RESULTS. POST /games/get-results is the PUBLIC
+    read route (players read a resolved round with it); on a RESULTS# round it
+    transitions nothing. The tallies are final once the round has closed, so
+    one read is enough.
+  */
+  useEffect(() => {
+    if (!gameId || !round || !onResults || voteTallies) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase()}games/get-results`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId, questionNumber: round }),
+        });
+        if (cancelled || !res.ok || activeGameRef.current !== gameId) return;
+        const payload = await res.json();
+        if (payload && payload.voteTallies && typeof payload.voteTallies === 'object') setVoteTallies(payload.voteTallies);
+      } catch {
+        /* the list keeps its own order until the tally arrives */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [gameId, round, onResults, voteTallies]);
 
   /*
     Only while the panel is open, and only once there is a round to have
@@ -610,7 +729,7 @@ function HostRemote() {
     nothing.
   */
   useEffect(() => {
-    if (!gameId || !focusOpen || !round) return undefined;
+    if (!gameId || !round || !(focusOpen || onResults || onVoting)) return undefined;
 
     let cancelled = false;
     const load = async () => {
@@ -633,7 +752,7 @@ function HostRemote() {
     load();
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [gameId, focusOpen, round]);
+  }, [gameId, focusOpen, onResults, onVoting, round]);
 
   /**
    * Put something on the room's screen — or take it off.
@@ -691,6 +810,32 @@ function HostRemote() {
       setFocusBusy(false);
     }
   }, [gameId, focusBusy, stageFocus, snapshot, pollState, email]);
+
+  // The join code went up somewhere: show it here too, in the Join code panel.
+  const joinOpenedBySyncRef = useRef(false);
+  useEffect(() => {
+    if (joinOnWall) {
+      setJoinOpen((open) => {
+        if (!open) joinOpenedBySyncRef.current = true;
+        return true;
+      });
+    } else if (joinOpenedBySyncRef.current) {
+      joinOpenedBySyncRef.current = false;
+      setJoinOpen(false);
+    }
+  }, [joinOnWall]);
+
+  // Any tap on this phone, other than the panel's own button, takes it down.
+  useEffect(() => {
+    if (!joinOnWall) return undefined;
+    const onTap = (e) => {
+      const t = e.target;
+      if (t && typeof t.closest === 'function' && t.closest('[data-join-toggle]')) return;
+      setStageFocus({ focus: 'none' });
+    };
+    document.addEventListener('click', onTap);
+    return () => document.removeEventListener('click', onTap);
+  }, [joinOnWall, setStageFocus]);
 
   /* ------------------------------------------------------------ scoreboard */
 
@@ -779,8 +924,35 @@ function HostRemote() {
     return () => { cancelled = true; };
   }, [setId, gameId]);
 
-  const confirmNeeded = needsConfirmation(action, progress);
+  /*
+    THE ONE NEXT STEP, from config/roundStep.js — the same function the host
+    page's dock reads (R1). The Remote holds nothing of its own about which
+    act comes next or what it is called.
+  */
+  const shownStatus = roundAsks.shown ? roundAsks.shown.status : null;
+  const shownAnswered = roundAsks.shown && roundAsks.shown.tally ? roundAsks.shown.tally.n || 0 : 0;
+  const askRoomAsk = useMemo(() => (shownStatus
+    ? { status: shownStatus, answered: shownAnswered, total: rosterCount || 0 }
+    : null), [shownStatus, shownAnswered, rosterCount]);
+  const askReady = roundAsks.enabled ? roundAsks.unsent.length : 0;
+  const step = useMemo(() => remoteStep(snapshot, {
+    playerCount: rosterCount,
+    answerCount: onResults || onVoting ? focusAnswers.length : undefined,
+    notesReady: notes.ready,
+    hasQuestionSet: Boolean(setId),
+    goalLine: goal.reached ? goal.line : '',
+    roomAsk: askRoomAsk,
+    asksReady: askReady,
+  }), [snapshot, rosterCount, onResults, onVoting, focusAnswers.length, notes.ready, setId, goal.reached, goal.line,
+    askRoomAsk, askReady]);
+  const action = step.primary;
+  /* Workie's page, as the server holds it (get-game-state `stageNotes`). */
+  const notesPages = Number.isInteger(snapshot?.stageNotes?.pages) ? snapshot.stageNotes.pages : 1;
+  const notesPage = Math.min(Math.max(0, Number(snapshot?.stageNotes?.page) || 0), notesPages - 1);
+  const secondary = step.secondary;
+  const confirmNeeded = needsConfirmation(action);
   const primaryArmed = armedAction === 'primary';
+  const secondaryArmed = armedAction === 'secondary';
   const blocked = !!busyAction || cooling || !snapshot;
 
   /* ------------------------------------------------------------ actions */
@@ -821,6 +993,21 @@ function HostRemote() {
       // this file. That is why tests/session-control-routes-authorization.js
       // checks both `request.path` dispatch sites by shape rather than by
       // grepping for the routes.
+      // A step that needs something to exist first (Request feedback builds
+      // the round report before the beat moves) sends that first, and stops
+      // if it fails rather than opening a beat the room cannot load.
+      if (request.before) {
+        const first = await authFetch(`${apiBase()}${request.before.path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request.before.body),
+        });
+        if (!first.ok) {
+          const firstPayload = await first.json().catch(() => ({}));
+          setError(sessionActionMessage({ status: first.status, payload: firstPayload, live: !!snapshot, email }));
+          return;
+        }
+      }
       const res = await authFetch(`${apiBase()}${request.path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -861,22 +1048,71 @@ function HostRemote() {
     }
   }, [gameId, round, snapshot, disarm, pollState, email]);
 
+  /**
+   * One of roundStep's controls, pressed. Most are a POST (requestFor); the
+   * rest act on the wall through /stage-focus, or leave this screen.
+   */
+  const runControl = useCallback(async (control) => {
+    disarm();
+    switch (control.id) {
+      case 'wait':
+      case 'show-read':
+        return;
+      case 'leave':
+        backToMenu();
+        return;
+      case 'report':
+        // The report is built and drawn by the host page; it opens it at once
+        // for an ended session (GameHostPage's `?open=report`).
+        navigateTo(`/host?gameId=${encodeURIComponent(gameId)}&open=report`);
+        return;
+      case 'show-response':
+      case 'next-response':
+      case 'next-part':
+        await setStageFocus({ focus: 'answer', index: control.index, part: control.part, parts: control.parts });
+        return;
+      case 'stop-showing':
+        await setStageFocus({ focus: 'none' });
+        return;
+      case 'close-ask':
+      case 'cancel-ask': {
+        // A question for the room: show its results, or take it back.
+        const live = roundAsks.live;
+        if (!live) return;
+        const fn = control.id === 'close-ask' ? closeAsk : cancelAsk;
+        const r = await fn({ fetchFn: authFetch, apiBase: apiBase(), gameId, round, askId: live.askId });
+        if (!r.ok) setError(r.error);
+        roundAsks.reload();
+        pollState(gameId);
+        return;
+      }
+      case 'field-notes':
+        // From a response on the wall, put it away before the read goes up.
+        if (step.moment === 'RESPONSES') await setStageFocus({ focus: 'none' });
+        fire(control.id);
+        return;
+      default:
+        fire(control.id);
+    }
+  }, [disarm, backToMenu, gameId, setStageFocus, fire, step.moment, roundAsks, round, pollState]);
+
   const onPrimary = useCallback(() => {
-    if (!action || blocked) return;
+    if (!action || blocked || action.disabled) return;
     // Arm-then-fire, applied EXACTLY where a mis-tap costs something: leaving
     // ASK or VOTE before the room has finished discards whoever is still
-    // typing or voting. When everyone is in — and on the RESULTS beat, which
-    // discards nothing — it is one tap, because a button that fights the host
-    // on the expected beat reads as broken in front of a room.
+    // typing or voting (roundStep's `arm`). When everyone is in — and on the
+    // RESULTS beat, which discards nothing — it is one tap, because a button
+    // that fights the host on the expected beat reads as broken in front of a
+    // room.
     if (confirmNeeded && !primaryArmed) { arm('primary'); return; }
-    fire(action.id);
-  }, [action, blocked, confirmNeeded, primaryArmed, arm, fire]);
+    runControl(action);
+  }, [action, blocked, confirmNeeded, primaryArmed, arm, runControl]);
 
-  const onSkip = useCallback(() => {
-    if (!skip || blocked) return;
-    if (armedAction !== 'skip') { arm('skip'); return; }
-    fire('skip');
-  }, [skip, blocked, armedAction, arm, fire]);
+  const onSecondary = useCallback(() => {
+    if (!secondary || blocked || secondary.disabled) return;
+    if (needsConfirmation(secondary) && !secondaryArmed) { arm('secondary'); return; }
+    runControl(secondary);
+  }, [secondary, blocked, secondaryArmed, arm, runControl]);
 
   /**
    * "Ask now" from the phone — the running order or the set browser.
@@ -1327,8 +1563,37 @@ function HostRemote() {
                 The eyebrow, the lead, the numbered points, and the line that says
                 where the rest of it lives. */}
             {onFieldNotes && (
-              <section className="hr-notes" aria-label="What we heard">
-                <p className="hr-notes-kicker">What we heard</p>
+              <section className="hr-notes" aria-label={RW.whatWeHeard}>
+                <p className="hr-notes-kicker">{RW.whatWeHeard}</p>
+                {/* WHERE THE ROOM IS IN THE READ (two-surface PLAN 1.15): the
+                    page is a server fact, so this phone and the wall say the
+                    same thing. Next page is the dock's primary (roundStep);
+                    the way back is here, in the body, not beside it. */}
+                {notesPages > 1 && (
+                  <div className="hr-notes-pager">
+                    <p className="hr-notes-pos">{RW.pageOf(notesPage + 1, notesPages)}</p>
+                    <span className="hr-notes-dots" data-testid="notes-dots" aria-hidden="true">
+                      {Array.from({ length: notesPages }, (_, i) => (
+                        <span
+                          key={i}
+                          className={`hr-notes-dot ${i === notesPage ? 'is-current' : ''}`}
+                          aria-current={i === notesPage ? 'true' : undefined}
+                        />
+                      ))}
+                    </span>
+                    {notesPage > 0 && (
+                      <button
+                        className="hr-btn hr-btn--ghost hr-btn--small"
+                        type="button"
+                        disabled={blocked}
+                        onClick={() => fire('notes-back')}
+                      >
+                        <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" />
+                        {RW.backPage}
+                      </button>
+                    )}
+                  </div>
+                )}
                 {!notes.ready ? (
                   <p className="hr-notes-waiting">Workie is reading the responses…</p>
                 ) : (
@@ -1337,12 +1602,25 @@ function HostRemote() {
                     {(notes.topics.length > 0 || notes.nextSteps.length > 0) && (
                       <ol className="hr-notes-list">
                         {notes.topics.map((topic, idx) => (
-                          <li key={`t${idx}`}><b>{idx + 1}</b><span>{topic}</span></li>
+                          <li key={`t${idx}`}><b>{idx + 1}</b><span>{topic}{remoteAsks.beside(topic)}</span></li>
                         ))}
                         {notes.nextSteps.map((step, idx) => (
-                          <li key={`n${idx}`}><b>→</b><span>{step}</span></li>
+                          <li key={`n${idx}`}><b>→</b><span>{step}{remoteAsks.beside(step)}</span></li>
                         ))}
                       </ol>
+                    )}
+                    {remoteAsks.rest.length > 0 && (
+                      <div className="hr-asks">
+                        <p className="hr-notes-kicker">{FW.askTheRoom}</p>
+                        <ul className="hr-asks-list">
+                          {remoteAsks.rest.map((e) => (
+                            <li key={e.index}>
+                              <span>{e.section ? FW.fromPoint(e.section, e.point) : FW.afterTheRead}</span>
+                              <AskIcons entries={[e]} onOpen={setAskPreview} />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                     <p className="hr-notes-foot">
                       Full notes, next steps and every response are in the session report.
@@ -1351,6 +1629,30 @@ function HostRemote() {
                   </>
                 )}
               </section>
+            )}
+
+            {/* A QUESTION FOR THE ROOM (docs/design/followup-icons): what was
+                sent and how many have answered; the dock holds Show results /
+                Cancel the question, then Next round / Ask another. */}
+            {summary.phase === 'RESULTS' && stageBeat === 'ask' && roundAsks.shown && (
+              <section className="hr-notes" aria-label={FW.questionForRoom}>
+                <p className="hr-notes-kicker">
+                  {roundAsks.shown.status === 'closed' ? FW.theRoomsAnswer : FW.questionForRoom}
+                </p>
+                <p className="hr-notes-lead">
+                  {roundAsks.shown.kind === 'rate' ? `\u201c${roundAsks.shown.statement}\u201d` : roundAsks.shown.question}
+                </p>
+                <p className="hr-notes-waiting">{FW.answered((roundAsks.shown.tally && roundAsks.shown.tally.n) || 0)}</p>
+              </section>
+            )}
+            {askPreview && (
+              <AskPreview
+                entry={askPreview}
+                onSend={sendRemoteAsk}
+                onClose={() => setAskPreview(null)}
+                blocked={Boolean(roundAsks.live)}
+                theme="dark"
+              />
             )}
 
             {/* THE ROOM IS COMMENTING — the remote's answer to what the stage
@@ -1377,6 +1679,7 @@ function HostRemote() {
                       : `${feedbackCommentCount} comments so far.`}
                   </p>
                 )}
+                <RoomNote compose={{ onSend: sendRoomNote }} className="hr-room-note" />
               </section>
             )}
 
@@ -1444,26 +1747,6 @@ function HostRemote() {
                   Show on the big screen
                 </button>
 
-                {/* Skip keeps its own confirmation. It is the only control here
-                    that can lose a round outright — and unlike an ordinary advance
-                    it is NOT idempotent server-side: `action: 'skip'` bypasses the
-                    "already asking a question" guard in next-question.js.
-
-                    Rendered only while there IS a round to abandon (ASK / VOTE);
-                    skipAction() returns null everywhere else, and a permanently
-                    greyed button on the results screen would be a control that
-                    never means anything. */}
-                {skip && (
-                  <button
-                    className={`hr-btn hr-btn--danger ${armedAction === 'skip' ? 'is-armed' : ''}`}
-                    type="button"
-                    disabled={blocked}
-                    onClick={onSkip}
-                  >
-                    <Icon name="SkipForward" weight="bold" size={18} color="currentColor" />
-                    {armedAction === 'skip' ? 'Tap again to skip' : 'Skip round'}
-                  </button>
-                )}
               </div>
 
               {focusOpen && (
@@ -1475,6 +1758,8 @@ function HostRemote() {
                       || snapshot?.currentQuestionData?.question || ''}
                     busy={focusBusy}
                     onFocus={setStageFocus}
+                    phase={summary.phase}
+                    voteTallies={voteTallies}
                     /*
                       THE ROOM CAN SEE THIS PHONE'S DECISION, so the phone must
                       not name someone the stage is deliberately not naming.
@@ -1610,15 +1895,32 @@ function HostRemote() {
                   Join code
                 </button>
 
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
-                  aria-expanded={screenOpen}
-                  onClick={() => setScreenOpen((open) => !open)}
-                >
-                  <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                  Big screen
-                </button>
+                {/* PRESENT replaces Big screen under the two-surface switch
+                    (PLAN 2.14): the room's screen is /present, which follows
+                    the server and needs no link back to this phone, so a
+                    reload on either end loses nothing. */}
+                {twoSurfacesHere(gameType) ? (
+                  <a
+                    className="hr-btn hr-btn--ghost"
+                    href={presentHref(gameId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open it on the computer wired to the projector and press F"
+                  >
+                    <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                    {Number(snapshot && snapshot.presenting) > 0 ? 'Presenting' : 'Present'}
+                  </a>
+                ) : (
+                  <button
+                    className="hr-btn hr-btn--ghost"
+                    type="button"
+                    aria-expanded={screenOpen}
+                    onClick={() => setScreenOpen((open) => !open)}
+                  >
+                    <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                    Big screen
+                  </button>
+                )}
 
                 <button
                   className="hr-btn hr-btn--ghost"
@@ -1670,6 +1972,22 @@ function HostRemote() {
                   >
                     <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
                   </button>
+                  {/* THE JOIN CODE ON THE ROOM'S SCREEN (owner, 2026-10-13): a
+                      `join` focus, so the Presentation and the host page show
+                      it too. Only while a round is on; the lobby already does. */}
+                  {round ? (
+                    <button
+                      className="hr-btn hr-btn--ghost"
+                      type="button"
+                      data-join-toggle=""
+                      aria-pressed={joinOnWall}
+                      disabled={focusBusy}
+                      onClick={() => setStageFocus(joinOnWall ? { focus: 'none' } : { focus: 'join' })}
+                    >
+                      <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
+                      {joinOnWall ? 'Take it off the screen' : 'Display on screen'}
+                    </button>
+                  ) : null}
                 </div>
               )}
 
@@ -1719,21 +2037,39 @@ function HostRemote() {
           account has not been cleared to drive the session. */}
       {access.status === ACCESS.OK && (
         <div className="hr-dock">
-          {action ? (
+          {action.id !== 'wait' ? (
             <>
-              {primaryArmed && (
+              {/* THE ONE SECONDARY (R3), directly above the primary and never
+                  amber. The same control the host page's dock shows beside
+                  its primary: roundStep gives both the same one. */}
+              {secondary && (
+                <button
+                  className={`hr-btn hr-btn--ghost hr-sec ${secondaryArmed ? 'is-armed' : ''}`}
+                  type="button"
+                  disabled={blocked || secondary.disabled}
+                  onClick={onSecondary}
+                  onBlur={() => { if (secondaryArmed) disarm(); }}
+                >
+                  <Icon name={secondaryArmed ? 'Warning' : secondary.icon} weight="bold" size={18} color="currentColor" />
+                  {secondaryArmed ? 'Tap again to confirm' : secondary.label}
+                </button>
+              )}
+              {(primaryArmed || secondaryArmed) && (
                 <p className="hr-dock-warn" role="status">
-                  {progress.applicable && !progress.allIn
-                    ? `${progress.total - progress.received} still ${progress.kind === 'votes' ? 'voting' : 'answering'}`
-                    : 'Confirm to continue'}
+                  {primaryArmed
+                    ? (action.arm ? action.arm.text : 'Confirm to continue')
+                    : (secondary && secondary.arm ? secondary.arm.text : 'Confirm to continue')}
                 </p>
+              )}
+              {action.disabled && action.hint && (
+                <p className="hr-dock-hint" role="status">{action.hint}</p>
               )}
               <button
                 className={`hr-primary ${primaryArmed ? 'is-armed' : ''}`}
                 type="button"
-                disabled={blocked}
+                disabled={blocked || action.disabled}
                 onClick={onPrimary}
-                onBlur={disarm}
+                onBlur={() => { if (primaryArmed) disarm(); }}
               >
                 <Icon
                   name={primaryArmed ? 'Warning' : action.icon}
@@ -1747,9 +2083,7 @@ function HostRemote() {
               </button>
             </>
           ) : (
-            <p className="hr-dock-idle">
-              {summary.phase === 'ENDED' ? 'Session complete' : 'Waiting for the session…'}
-            </p>
+            <p className="hr-dock-idle">{step.status.text}</p>
           )}
         </div>
       )}

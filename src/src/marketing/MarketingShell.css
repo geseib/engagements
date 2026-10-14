@@ -1,3 +1,4 @@
+/* skin-allowance: colour=21 font=0 primary=0 */
 /* ===========================================================================
    MarketingShell.css — the tokens and the primitives every marketing page
    shares: nav, brand, buttons, type ladder, sections, the big CTA band and
@@ -11,7 +12,10 @@
 
 /* ---------------------------------------------------------------------------
    THE TOKEN BLOCK. Copied verbatim from mk.css. Do not edit a value here
-   without editing it there.
+   without editing it there. Since site skins (0b-1) the values a role carries
+   exactly read the role (--action, --info, the --glow-rgb/--shade-rgb
+   channels), same pixels; the rest stay literal with their reasons in
+   docs/design/themes/records/0b-1.md.
    --------------------------------------------------------------------------- */
 .mk-root {
   --mk-bg: #0F1A2E;
@@ -19,9 +23,9 @@
   --mk-surface-2: #25375A;
   --mk-text: #F4EDE4;
   --mk-muted: #9BA8BE;
-  --mk-amber: #F6A94C;
+  --mk-amber: var(--action);
   --mk-amber-deep: #C77B4A;
-  --mk-blue: #7CA7E6;
+  --mk-blue: var(--info);
   --mk-ridge-front: #16233B;
   --mk-ridge-mid: #22344F;
   --mk-ridge-back: #2E4262;
@@ -30,7 +34,7 @@
   --mk-paper-text: #1B2942;
   --mk-paper-muted: #5E6167;
   --mk-amber-ink: #8a5300;
-  --mk-hair: rgba(244, 237, 228, 0.14);
+  --mk-hair: rgb(var(--glow-rgb) / 0.14);
 
   --mk-t-floor: 12px;
   --mk-t-label: 13px;
@@ -54,7 +58,7 @@
      hair of one: the screen still's gradient top and the sky gradient's top
      stop, the mobile page's surround, and every restatement of the background
      colour that had been written out by hand. See RATIONALE.md §9. */
-  --mk-amber-hi: #FFBB63;        /* the primary button under the pointer */
+  --mk-amber-hi: var(--action-hover);        /* the primary button under the pointer */
   --mk-sky-low: #2A3A57;         /* the sky gradient's lowest stop (art brief §3) */
   --mk-device-bezel: #0B1322;    /* the frame and foot around a device screen */
   --mk-paper-edge: #EFE7DA;      /* the second sheet showing under the report */
@@ -75,7 +79,7 @@
   --mk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --mk-rule: var(--mk-hair);
-  --mk-rule-strong: rgba(244, 237, 228, 0.26);
+  --mk-rule-strong: rgb(var(--glow-rgb) / 0.26);
   --mk-radius: 16px;
   --mk-radius-sm: 10px;
   --mk-tap: 48px;
@@ -85,9 +89,9 @@
   --mk-ridge-band: 88vh;
 
   /* The four translucent washes. A later suite pins these exact strings. */
-  --mk-wash-nav: rgba(15, 26, 46, 0.86);
+  --mk-wash-nav: rgb(var(--shade-rgb) / 0.86);
   --mk-wash-card: rgba(27, 41, 66, 0.82);
-  --mk-wash-a: rgba(15, 26, 46, 0.9);
+  --mk-wash-a: rgb(var(--shade-rgb) / 0.9);
   --mk-wash-b: rgba(27, 41, 66, 0.92);
 
   font-family: var(--mk-font-ui);

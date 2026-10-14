@@ -85,6 +85,11 @@ function serve({
     const href = String(url);
 
     if (init?.method === 'POST') {
+      // get-results is a READ (the public route players use); at RESULTS the
+      // Remote reads the tally with it (two-surface D5). It moves nothing.
+      if (href.includes('/get-results')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ voteTallies: {} }) });
+      }
       posts.push({ url: href, body: JSON.parse(init.body || '{}') });
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ state }) });
     }

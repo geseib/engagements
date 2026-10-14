@@ -1,3 +1,4 @@
+/* skin-allowance: colour=6 font=0 primary=3 */
 /* components/AppendModeSwitch.jsx — the add-to-a-set mode, inside a builder.
    The builders are mounted on paper (console) and on dusk (host), so this sheet
    pins its ink to the paper text (#1B2942, the console's --text) because the builders are white cards wherever they are mounted; the secondary

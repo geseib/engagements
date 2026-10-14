@@ -1,0 +1,1 @@
+.same { --same-rule: rgba(155,168,190,.20); border-bottom: 1px solid var(--same-rule); color: var(--text); }

@@ -19,9 +19,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const BUILDER_CSS = read('BuilderPage.css');
 const PAB_CSS = read('components', 'PollAIBuilder.css');
 const PAB_JSX = read('components', 'PollAIBuilder.jsx');
@@ -45,28 +46,37 @@ function block(css, selector) {
   return match[2];
 }
 
-function token(css, selector, name) {
-  const body = block(css, selector);
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${selector}`);
-  return m[1];
+/* The .pab block now writes one role (`--pab-on-accent: var(--on-accent)`) beside its
+   literals, so a token is RESOLVED through the skin harness rather than grepped as a hex.
+   The .pab block paints the white builder modal (paper), so it resolves in theme 'light';
+   the edit card declares data-theme="dark" on its own root, so its inks resolve in 'dark'. */
+const SKIN_IDS = [...new Set(H.CASES.map(([skin]) => skin))];
+const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+
+function token(css, selector, name, opts = { skin: 'classic', theme: 'light' }) {
+  return hexOf(H.scopeVar(css, `${selector} {`, name, opts));
 }
 
 const WHITE = '#FFFFFF';
-const T = {
-  text: token(PAB_CSS, '.pab', '--pab-text'),
-  muted: token(PAB_CSS, '.pab', '--pab-muted'),
-  edge: token(PAB_CSS, '.pab', '--pab-edge'),
-  quiet: token(PAB_CSS, '.pab', '--pab-quiet'),
-  field: token(PAB_CSS, '.pab', '--pab-field'),
-  onAccent: token(PAB_CSS, '.pab', '--pab-on-accent'),
-  primary: token(GLOBAL_CSS, ':root', '--primary'),
-  // The dusk card's inks and ground: `[data-theme="dark"]`, which the card
-  // declares on its own root.
-  duskSurface: token(GLOBAL_CSS, '[data-theme="dark"]', '--surface'),
-  duskText: token(GLOBAL_CSS, '[data-theme="dark"]', '--text'),
-  duskMuted: token(GLOBAL_CSS, '[data-theme="dark"]', '--muted'),
-};
+function palette(skin) {
+  const paper = { skin, theme: 'light' };
+  const dusk = { skin, theme: 'dark' };
+  return {
+    text: token(PAB_CSS, '.pab', '--pab-text', paper),
+    muted: token(PAB_CSS, '.pab', '--pab-muted', paper),
+    edge: token(PAB_CSS, '.pab', '--pab-edge', paper),
+    quiet: token(PAB_CSS, '.pab', '--pab-quiet', paper),
+    field: token(PAB_CSS, '.pab', '--pab-field', paper),
+    onAccent: token(PAB_CSS, '.pab', '--pab-on-accent', paper),
+    primary: hexOf(H.role('--primary', dusk)),
+    // The dusk card's inks and ground: `[data-theme="dark"]`, which the card
+    // declares on its own root.
+    duskSurface: hexOf(H.role('--surface', dusk)),
+    duskText: hexOf(H.role('--text', dusk)),
+    duskMuted: hexOf(H.role('--muted', dusk)),
+  };
+}
+const T = palette('classic');
 
 const AA = 4.5;
 const on = (fg, bg) => ratio(parseHex(fg), parseHex(bg));
@@ -88,38 +98,42 @@ describe('the grounds this is measured on', () => {
   });
 });
 
-describe('every pairing the builder paints clears AA', () => {
-  const pairs = [
-    ['the kinds label and toggle words on the modal', () => on(T.text, WHITE)],
-    ['the kinds help line on the modal', () => on(T.muted, WHITE)],
-    ['a hovered toggle word', () => on(T.text, T.quiet)],
-    ['a pressed toggle — its word on the amber fill', () => on(T.onAccent, T.primary)],
-    ['a note on the dusk card', () => on(T.duskText, T.duskSurface)],
-    ['the tags hint on the dusk card', () => on(T.duskMuted, T.duskSurface)],
-  ];
-  test.each(pairs)('%s', (_label, measure) => {
-    expect(measure()).toBeGreaterThanOrEqual(AA);
-  });
+describe.each(SKIN_IDS)('%s skin', (skin) => {
+  const P = palette(skin);
 
-  test('amber never carries text, on either ground', () => {
-    expect(on(T.primary, WHITE)).toBeLessThan(AA);
-    const offenders = stripComments(PAB_CSS).split('\n')
-      .filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--primary\)/.test(l));
-    expect(offenders).toEqual([]);
-  });
+  describe('every pairing the builder paints clears AA', () => {
+    const pairs = [
+      ['the kinds label and toggle words on the modal', () => on(P.text, WHITE)],
+      ['the kinds help line on the modal', () => on(P.muted, WHITE)],
+      ['a hovered toggle word', () => on(P.text, P.quiet)],
+      ['a pressed toggle — its word on the amber fill', () => on(P.onAccent, P.primary)],
+      ['a note on the dusk card', () => on(P.duskText, P.duskSurface)],
+      ['the tags hint on the dusk card', () => on(P.duskMuted, P.duskSurface)],
+    ];
+    test.each(pairs)('%s', (_label, measure) => {
+      expect(measure()).toBeGreaterThanOrEqual(AA);
+    });
 
-  test('a toggle is findable by its edge, not only its words (3:1 for a control boundary)', () => {
-    expect(on(T.edge, WHITE)).toBeGreaterThanOrEqual(3);
-    expect(block(PAB_CSS, '.pab-opt')).toMatch(/border:\s*1px solid var\(--pab-edge\)/);
-  });
+    test('amber never carries text, on either ground', () => {
+      expect(on(P.primary, WHITE)).toBeLessThan(AA);
+      const offenders = stripComments(PAB_CSS).split('\n')
+        .filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--primary\)/.test(l));
+      expect(offenders).toEqual([]);
+    });
 
-  test('a pressed toggle says so with a tick as well as the fill', () => {
-    expect(block(PAB_CSS, '.pab-tick')).toMatch(/display:\s*none/);
-    expect(block(PAB_CSS, '.pab-opt[aria-pressed="true"] .pab-tick')).toMatch(/display:\s*inline/);
-  });
+    test('a toggle is findable by its edge, not only its words (3:1 for a control boundary)', () => {
+      expect(on(P.edge, WHITE)).toBeGreaterThanOrEqual(3);
+      expect(block(PAB_CSS, '.pab-opt')).toMatch(/border:\s*1px solid var\(--pab-edge\)/);
+    });
 
-  test('a toggle is a 44px target', () => {
-    expect(block(PAB_CSS, '.pab-opt')).toMatch(/min-height:\s*44px/);
+    test('a pressed toggle says so with a tick as well as the fill', () => {
+      expect(block(PAB_CSS, '.pab-tick')).toMatch(/display:\s*none/);
+      expect(block(PAB_CSS, '.pab-opt[aria-pressed="true"] .pab-tick')).toMatch(/display:\s*inline/);
+    });
+
+    test('a toggle is a 44px target', () => {
+      expect(block(PAB_CSS, '.pab-opt')).toMatch(/min-height:\s*44px/);
+    });
   });
 });
 

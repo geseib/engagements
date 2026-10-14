@@ -31,10 +31,11 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
-const GLOBAL_CSS = strip(read('styles.css'));
+const GLOBAL_CSS = strip(require('../testing/classicGlobalCss')());
 const EDITOR_CSS = strip(read('components', 'QuestionSetEditor.css'));
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
@@ -71,46 +72,51 @@ function valueOf(css, selector, prop) {
 /** Classes, attributes and pseudo-classes: all the selectors compared here carry. */
 const specificity = (selector) => (selector.match(/\.[\w-]+|:(?!:)[\w-]+|\[[^\]]+\]/g) || []).length;
 
-/** The declaration block that opens with `head`. */
-function blockOf(css, head) {
-  const start = css.indexOf(head);
-  if (start < 0) throw new Error(`no "${head}" block`);
-  return css.slice(start, css.indexOf('}', start));
-}
-/* The editor's own token block first: it restates what the host shelf re-points. */
-const THEME = [blockOf(EDITOR_CSS, '.qs-editor {'), blockOf(GLOBAL_CSS, '[data-theme="dark"] {'), blockOf(GLOBAL_CSS, ':root {')];
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
 
-/** `var(--x)` → [r, g, b, a], from the first block that declares `--x`. */
-function resolve(value) {
+/* The editor's own token block first: it restates what the host shelf re-points
+   (`--primary: var(--action)`, `--danger: rgb(var(--danger-rgb))`, …), then the roles.
+   Since the scope block writes roles rather than literals, a name is RESOLVED through
+   the skin harness for one skin x theme instead of grepped as a hex or an rgba(). */
+const editorDeclares = (name) => new RegExp(`${name}\\s*:`).test(EDITOR_CSS.slice(EDITOR_CSS.indexOf('.qs-editor {'), EDITOR_CSS.indexOf('}', EDITOR_CSS.indexOf('.qs-editor {'))));
+
+/** `var(--x)` → [r, g, b, a], from the editor's block if it declares `--x`, else the role. */
+function resolve(value, opts = CLASSIC) {
   const name = (String(value || '').match(/^var\((--[\w-]+)\)$/) || [])[1];
   if (!name) throw new Error(`"${value}" is not a single token`);
-  for (const block of THEME) {
-    const hex = block.match(new RegExp(`${name}\\s*:\\s*#([0-9A-Fa-f]{6})`));
-    if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].substr(i, 2), 16)).concat(1);
-    const rgba = block.match(new RegExp(`${name}\\s*:\\s*rgba\\(([^)]+)\\)`));
-    if (rgba) return rgba[1].split(',').map(Number);
+  let raw;
+  try {
+    raw = editorDeclares(name) ? H.scopeVar(EDITOR_CSS, '.qs-editor {', name, opts) : H.role(name, opts);
+  } catch (e) {
+    throw new Error(`${name} is declared by no block the editor can see (${e.message})`);
   }
-  throw new Error(`${name} is declared by no block the editor can see`);
+  const { rgb, a } = H.parseColor(raw);
+  return rgb.concat(a);
 }
 /** Source-over, bottom layer first. The bottom layer is opaque. */
 const composite = (layers) => layers.reduce((under, [r, g, b, a]) =>
   [r, g, b].map((c, i) => c * a + under[i] * (1 - a)));
 
-const ground = (css, selector) => resolve(valueOf(css, selector, 'background'));
+const ground = (css, selector, opts) => resolve(valueOf(css, selector, 'background'), opts);
 
 /* Every ground a held control is drawn over. The held button paints none of its
    own, so each is the real stack beneath it, read from the rule that paints it.
    A changed or tombstoned row REPLACES the row's ground with its tint, so the
    tint lies over the panel, not over the row. */
-const PANEL = [ground(GLOBAL_CSS, '.qs-editor .qs-panel')];
-const GROUNDS = {
-  'the panel (Add, Pull, the foot\'s Discard)': PANEL,
-  'a question row (Edit, Remove, the arrows)': [...PANEL, ground(GLOBAL_CSS, '.qs-question-row')],
-  'a changed row': [...PANEL, ground(GLOBAL_CSS, '.qs-question-row.changed')],
-  'a tombstoned row (Restore)': [...PANEL, ground(GLOBAL_CSS, '.qs-question-row.removed')],
-  'the unsaved bar (Discard changes)': [...PANEL, ground(GLOBAL_CSS, '.qs-dirty-bar')],
-  'a dialog the tab opens': [ground(EDITOR_CSS, '.qs-editor .modal-content')],
-};
+function groundsFor(opts) {
+  const PANEL = [ground(GLOBAL_CSS, '.qs-editor .qs-panel', opts)];
+  return {
+    'the panel (Add, Pull, the foot\'s Discard)': PANEL,
+    'a question row (Edit, Remove, the arrows)': [...PANEL, ground(GLOBAL_CSS, '.qs-question-row', opts)],
+    'a changed row': [...PANEL, ground(GLOBAL_CSS, '.qs-question-row.changed', opts)],
+    'a tombstoned row (Restore)': [...PANEL, ground(GLOBAL_CSS, '.qs-question-row.removed', opts)],
+    'the unsaved bar (Discard changes)': [...PANEL, ground(GLOBAL_CSS, '.qs-dirty-bar', opts)],
+    'a dialog the tab opens': [ground(EDITOR_CSS, '.qs-editor .modal-content', opts)],
+  };
+}
+const GROUND_CASES = DUSK_CASES.flatMap(([skin, theme]) =>
+  Object.entries(groundsFor({ skin, theme })).map(([name, layers]) => [name, skin, theme, layers]));
 
 const HELD_SECONDARY = '.qs-editor .qs-questions .btn-secondary:disabled';
 const HELD_DANGER = '.qs-editor .qs-questions .btn-danger:disabled';
@@ -156,12 +162,12 @@ describe('a held control on the Questions tab is drawn held, not live', () => {
     expect(valueOf(EDITOR_CSS, HELD_DANGER, 'box-shadow')).toMatch(/inset/);
   });
 
-  test.each(Object.entries(GROUNDS))('the held ink clears AA on %s', (_name, layers) => {
+  test.each(GROUND_CASES)('the held ink clears AA on %s (%s / %s)', (_name, skin, theme, layers) => {
     // A held control's reason is on its title; its label still has to say
     // which control is held.
     for (const selector of [HELD_SECONDARY, HELD_DANGER]) {
       expect(valueOf(EDITOR_CSS, selector, 'background')).toBe('transparent');
-      const ink = resolve(valueOf(EDITOR_CSS, selector, 'color')).slice(0, 3);
+      const ink = resolve(valueOf(EDITOR_CSS, selector, 'color'), { skin, theme }).slice(0, 3);
       expect(ratio(ink, composite(layers))).toBeGreaterThanOrEqual(AA);
     }
   });

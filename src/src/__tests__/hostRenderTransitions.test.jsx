@@ -569,7 +569,7 @@ describe('the stage takes a set instruction from the question, not only the cata
     // the generic default — forever, because the lookup that would have
     // supplied "Lesson" was never called on this path.
     await waitFor(
-      () => expect(screen.getByText('Start First Lesson')).toBeInTheDocument(),
+      () => expect(screen.getByText('Start lesson 1')).toBeInTheDocument(),
       { timeout: 2000 }
     );
   });

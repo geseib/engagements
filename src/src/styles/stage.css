@@ -1,3 +1,4 @@
+/* skin-allowance: colour=40 font=1 primary=37 */
 /**
  * The host stage shell: display profiles, the stage grid, and the field
  * backdrop. Ported verbatim from the audited mockup
@@ -493,7 +494,7 @@ body, .stage-ladder-table{
   --svr-t-body:var(--t-secondary);
   --svr-t-head:var(--t-secondary);
   --svr-t-numeral:var(--t-hero);
-  --svr-on-accent:#1B2942;
+  --svr-on-accent:var(--on-accent);
 }
 
 /* ---------------------------------------------------------------------------
@@ -550,6 +551,10 @@ body, .stage-ladder-table{
   color:var(--muted);background:transparent;border:var(--hair) solid var(--rule);
   border-radius:10px;padding:.3em .7em;cursor:pointer;letter-spacing:.06em}
 .dock-more-lbl{font-size:calc(var(--t-meta) * .82);letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+/* PRESENT is a link shaped like the buttons beside it; PRESENTING says a
+   Presentation is connected, in the pressed blue (one orange per screen). */
+a.dock-more{text-decoration:none}
+.dock-present[data-presenting]{color:var(--text);border-color:var(--secondary);background:rgba(124,167,230,.16)}
 /* Room-facing copy, so it wraps rather than ellipsing — "Results are o…" is
    not a status. It is in the audit's CONTENT_SEL, which means A11 fails if it
    ever truncates, which in turn forces the copy to stay short. */
@@ -894,6 +899,19 @@ body, .stage-ladder-table{
   overflow-wrap:anywhere}
 .arr.older{opacity:.7}
 .arr.oldest{opacity:.45}
+
+/* SAID IN THE ROOM (RoomMeter.jsx RoomNote): the host types what was said
+   aloud; it lands with the room's comments. Tokens only. */
+.meter .room-note{display:flex;flex-direction:column;gap:calc(.5vh + 4px);margin-top:calc(1.4vh + 6px);min-width:0}
+.meter .room-note-label{font-size:var(--t-meta);color:var(--muted)}
+.meter .room-note textarea{font:inherit;font-size:var(--t-body);color:var(--text);background:var(--surface);
+  border:var(--hair) solid var(--rule);border-radius:var(--radius);padding:calc(.6vh + 4px) calc(.6vw + 6px);
+  resize:vertical;min-width:0;width:100%;box-sizing:border-box}
+.meter .room-note-add{align-self:flex-end;font:inherit;font-size:var(--t-meta);font-weight:600;cursor:pointer;
+  color:var(--text);background:var(--surface-2);border:var(--hair) solid var(--rule);border-radius:var(--radius);
+  padding:calc(.4vh + 4px) calc(.8vw + 10px)}
+.meter .room-note-add:disabled{opacity:.5;cursor:default}
+.meter .room-note-error{font-size:var(--t-meta);color:var(--danger-text);margin:0}
 
 /* THE FEEDBACK WALL (components/stage/FeedbackWall.jsx). Every word at a tier
    the room can read — the owner, 2026-09-24, on the shipped wall: "the small
@@ -1243,7 +1261,12 @@ body, .stage-ladder-table{
    codec, which is the whole reason that override exists.
    =========================================================================== */
 :root{
-  --rule:rgba(155,168,190,.22);
+  /* Channel form (skins 0b-3): the same .22 slate in both skins. This stays on
+     :root rather than leaving --rule to styles/roles.css because <html> is
+     data-theme="light", the stage carries no data-theme, and roles.css's paper
+     --rule (Present: navy .14) would otherwise reach every unthemed dusk scope.
+     var(--rule) here would be self-referential, i.e. invalid. */
+  --rule:rgb(var(--slate-rgb) / .22);
   --hair:1px;
   /* #4FB286 is a border/fill green; as small TEXT on the lifted dusk field it
      measures 4.03:1, under AA. The mockup lightens it for text only and keeps

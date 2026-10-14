@@ -29,96 +29,37 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const PLR_CSS = read('components', 'PlayerSurface.css');
 const PLR_JSX = read('PlayerPage.jsx');
 /* The shell — bar, stage, dock and the scope root — moved to its own file with
    the survey (SurveyRunner draws in it, and PlayerPage renders SurveyRunner). */
 const SHELL_JSX = read('components', 'PlayerShell.jsx');
 
-/* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
-}
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-/* Walk UP compositing every alpha layer. Reading only the element's own
-   background is how dark-on-dark passes an audit. */
-function bgOf(el, win) {
-  let node = el; const stack = [];
-  while (node && node.nodeType === 1) {
-    const c = win.getComputedStyle(node).backgroundColor;
-    const m = String(c).match(/[\d.]+/g);
-    if (m) {
-      const a = m.length > 3 ? parseFloat(m[3]) : 1;
-      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
-    }
-    node = node.parentElement;
-  }
-  if (!stack.length) return [15, 26, 46];          // the dusk field
-  let out = stack[stack.length - 1][0];
-  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
-  return out;
-}
-
-/* ---- tokens, READ rather than retyped: change a token and these numbers move ---- */
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-function tint(name) {                       // an rgba() layer from PLR_CSS
-  const m = PLR_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in PlayerSurface.css`);
-  return m[1];
-}
-
-const ROOT = ':root {';
 /* THE PLAYER SURFACE PAINTS DUSK UNDER A PAPER DOCUMENT. public/index.html puts
-   data-theme="light" on <html>, so these are read from styles.css's EXPLICIT
-   dusk block — the same one AdminShell, WelcomeScreen and AuthChrome rely on —
-   rather than from :root, because :root is not what applies here. */
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  shippedMuted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
-  success: token(GLOBAL_CSS, ROOT, '--success'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  muted: token(PLR_CSS, '.plr {', '--plr-muted'),
-  successText: token(PLR_CSS, '.plr {', '--plr-success-text'),
-};
-
-/** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf.
- *  First entry is the outermost layer; last is what the text sits on. */
-function composited(layers) {
-  document.body.innerHTML = '';
-  let host = document.body;
-  for (const background of layers) {
-    const el = document.createElement('div');
-    el.style.backgroundColor = background;
-    host.appendChild(el);
-    host = el;
-  }
-  return bgOf(host, window);
+   data-theme="light" on <html>, and the shell re-declares dusk on its own root
+   (`.plr data-theme="dark"`, asserted in §3). So every value below is resolved for the
+   DARK theme, per skin, through the harness (skins -> roles -> the .plr block): never
+   retyped, and never read from :root, because :root is not what applies here. */
+const plrVar = (name, skin) => H.scopeVar(PLR_CSS, '.plr {', name, { skin, theme: 'dark' });
+function palette(skin) {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  return {
+    bg: r('--bg'), surface: r('--surface'), surface2: r('--surface-2'), text: r('--text'),
+    shippedMuted: r('--muted'), primary: r('--primary'), secondary: r('--secondary'),
+    success: r('--success'), danger: r('--danger'),
+    muted: plrVar('--plr-muted', skin),
+    successText: plrVar('--plr-success-text', skin),
+  };
 }
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+const T = palette('classic');          // the skin-invariant checks in §4
+const on = (fg, layers) => H.on(fg, layers);
+const ratio = (a, b) => H.ratio(a, b);
 
-const AA = 4.5;
+const AA = H.AA;
 const FIELD = [T.bg];                 // the shell's own background
 const CARD = [T.bg, T.surface];       // a --surface card on that field
 const NESTED = [T.bg, T.surface2];    // .plr-row--mine, a pressed mode button
@@ -145,7 +86,11 @@ function block(css, selector) {
    direct-view emissive panel, so the measured number is the number
    (RATIONALE §4.1). */
 
-describe('the flat pairings the player surface paints', () => {
+describe.each(H.SKINS)('the flat pairings the player surface paints (%s)', (skin) => {
+  /* eslint-disable no-shadow */
+  const T = palette(skin);
+  const FIELD = [T.bg]; const CARD = [T.bg, T.surface]; const NESTED = [T.bg, T.surface2];
+  /* eslint-enable no-shadow */
   const pairs = [
     ['--text on the shell (questions, options, response text)', T.text, FIELD],
     ['--plr-muted on the shell (the bar, labels, help, the look-up cue)', T.muted, FIELD],
@@ -174,7 +119,12 @@ describe('the flat pairings the player surface paints', () => {
    purpose: `.plr-opt[aria-checked="true"]` sets `background` outright, so the
    tint replaces --surface rather than sitting on it. */
 
-describe('the tinted composites', () => {
+describe.each(H.SKINS)('the tinted composites (%s)', (skin) => {
+  /* eslint-disable no-shadow */
+  const T = palette(skin);
+  const FIELD = [T.bg]; const CARD = [T.bg, T.surface]; const NESTED = [T.bg, T.surface2];
+  /* eslint-enable no-shadow */
+  const tint = (name) => plrVar(name, skin);
   test('a selected trivia option — the one amber idea', () => {
     expect(on(T.text, [T.bg, tint('--plr-amber-tint')])).toBeGreaterThanOrEqual(AA);
     expect(on(T.muted, [T.bg, tint('--plr-amber-tint')])).toBeGreaterThanOrEqual(AA);
@@ -191,8 +141,8 @@ describe('the tinted composites', () => {
               gets the same allowance rather than sitting on the threshold. */
   const MARGIN = 5.5;
   test('the success tint has margin over AA, not just compliance', () => {
-    expect(ratio(parseHex(T.success), parseHex(T.surface2))).toBeLessThan(MARGIN);  // the premise
-    expect(ratio(parseHex(T.success), parseHex(T.surface2))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(T.success, T.surface2)).toBeLessThan(MARGIN);  // the premise
+    expect(ratio(T.success, T.surface2)).toBeGreaterThanOrEqual(AA);
     expect(on(T.successText, NESTED)).toBeGreaterThanOrEqual(MARGIN);
     expect(on(T.successText, CARD)).toBeGreaterThanOrEqual(MARGIN);
     expect(on(T.successText, FIELD)).toBeGreaterThanOrEqual(MARGIN);
@@ -252,8 +202,12 @@ describe('colour comes from tokens', () => {
     // --plr-success-text #6FD0A4 — styles.css has never declared a
     // --success-text, and --success is only 4.54:1 on --surface-2.
     const tokenBlock = CSS.match(/\.plr\s*\{[^}]*\}/)[0];
+    // Since skins 0b-3 --plr-success-text reads the role --success-text, which is
+    // #6FD0A4 on dusk in every skin; only the argued-for muted stays a literal.
     const literals = [...tokenBlock.matchAll(/(#[0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase());
-    expect([...new Set(literals)].sort()).toEqual(['#6FD0A4', '#B6C2D4']);
+    expect([...new Set(literals)].sort()).toEqual(['#B6C2D4']);
+    expect(tokenBlock).toMatch(/--plr-success-text:\s*var\(--success-text\)/);
+    for (const skin of H.SKINS) expect(H.parseColor(plrVar('--plr-success-text', skin))).toEqual(H.parseColor('#6FD0A4'));
   });
 
   test('the shipped --muted would also have passed, which is what makes it a choice', () => {
@@ -267,7 +221,7 @@ describe('colour comes from tokens', () => {
   test('--danger never carries text here', () => {
     // The premise, re-asserted so it cannot go vacuous: #E5645E is under AA on
     // --surface, which is why --danger-text and --danger-deep exist at all.
-    expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+    expect(ratio(T.danger, T.surface)).toBeLessThan(AA);
     const offenders = CSS.split('\n').filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l));
     expect(offenders).toEqual([]);
   });
@@ -653,7 +607,7 @@ describe('the spotlight is dressed by this surface, not by the monolith', () => 
     // outright. This is what the nav buttons inherit.
     const btn = GLOBAL_CSS.slice(GLOBAL_CSS.indexOf('.btn-secondary {'));
     expect(btn.slice(0, btn.indexOf('}'))).toMatch(/background:\s*white/);
-    expect(ratio(parseHex(T.primary), [255, 255, 255])).toBeLessThan(AA);
+    expect(ratio(T.primary, [255, 255, 255])).toBeLessThan(AA);
   });
 
   test('every one of them is restated in a token this surface measures', () => {

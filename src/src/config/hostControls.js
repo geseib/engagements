@@ -39,6 +39,7 @@
  */
 import { normalizeGameType } from './gameTypes';
 import { statusTone } from '../utils/statusTone';
+import { momentOf, roundStep } from './roundStep';
 
 /**
  * Host-facing phases.
@@ -57,6 +58,9 @@ import { statusTone } from '../utils/statusTone';
  */
 export const HOST_PHASES = [
   'LOBBY', 'ASK', 'VOTE', 'RESULTS', 'FIELD_NOTES', 'FEEDBACK',
+  // A QUESTION FOR THE ROOM, sent from Workie's read (the `ask` beat,
+  // docs/design/followup-icons): live, then its results.
+  'ASKING',
   // A SURVEY'S TWO PHASES. Not beats of a round and not a round of their own:
   // a survey collects at the room's own pace (COLLECTING) and is then frozen
   // (CLOSED). Listed here for the reason above — a phase missing from this
@@ -81,7 +85,7 @@ export const HOST_PHASES = [
  * comments have to land in the round report of the round being commented on,
  * and a state carrying its own ordinal would orphan them from it.
  */
-export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
+export const STAGE_BEATS = ['results', 'field-notes', 'ask', 'feedback'];
 
 /**
  * The host phase a round is in, given its round phase and its beat.
@@ -101,7 +105,7 @@ export const STAGE_BEATS = ['results', 'field-notes', 'feedback'];
  * An unrecognised beat leaves the phase alone rather than throwing — an older
  * or newer deploy's value should degrade to the tally, not white-screen a host.
  */
-const PHASE_FOR_BEAT = { 'field-notes': 'FIELD_NOTES', feedback: 'FEEDBACK' };
+const PHASE_FOR_BEAT = { 'field-notes': 'FIELD_NOTES', ask: 'ASKING', feedback: 'FEEDBACK' };
 
 /*
   A CLOSED SURVEY HAS THE SAME BEATS (27 Sep 2026, the owner: the Workie
@@ -323,6 +327,17 @@ export const HOST_INTENTS = {
   // POST /events/{code}/run start|resume, then the stage carries on here.
   // GameHostPage swaps it in as the primary; hostControlsFor never offers it.
   EVENT_GO_LIVE: 'event-go-live',
+  // THE RESPONSES ON THE WALL (two-surface Phase 1, roundStep's RESULTS and
+  // RESPONSES moments): open the first response in tally order, step to the
+  // next response or the next part of a long one, and stop showing.
+  SHOW_RESPONSE: 'show-response',
+  NEXT_RESPONSE: 'next-response',
+  NEXT_PART: 'next-part',
+  STOP_SHOWING: 'stop-showing',
+  CLOSE_ASK: 'close-ask',       // a question for the room: show its results
+  CANCEL_ASK: 'cancel-ask',     // ...or take it back, to the read
+  // A primary that cannot act yet (the read before Workie has written).
+  WAIT: 'wait',
 };
 
 /**
@@ -683,15 +698,122 @@ function statusTextFor(phase, {
 }
 
 /**
+ * The host page's phase, spelled as the server facts roundStep reads.
+ *
+ * The page holds a HOST phase (LOBBY, ASK, … FIELD_NOTES), derived from the
+ * game state and the stage beat. roundStep reads server facts, so this turns
+ * the one back into the other. The round number does not matter to a moment.
+ */
+const STATE_FOR_PHASE = {
+  LOBBY: 'CREATED', ASK: 'ASK#001', VOTE: 'VOTE#001', RESULTS: 'RESULTS#001',
+  FIELD_NOTES: 'RESULTS#001', ASKING: 'RESULTS#001', FEEDBACK: 'RESULTS#001', ENDED: 'ENDED',
+  COLLECTING: 'SURVEY#OPEN', CLOSED: 'SURVEY#CLOSED',
+};
+const BEAT_FOR_PHASE = { FIELD_NOTES: 'field-notes', ASKING: 'ask', FEEDBACK: 'feedback' };
+
+/**
+ * The host page's inputs as roundStep's normalised snapshot (two-surface
+ * PLAN 1.4). The Remote's twin is `snapshotFromHostState` in hostRemote.js;
+ * __tests__/roundStepParity.test.js feeds both the same round and asserts the
+ * same step.
+ *
+ * `spotlightIndex` is the response on the wall (tally order, see
+ * config/navigatorOrder.js); `notesReady` is whether Workie's read has
+ * arrived (undefined when the page cannot tell).
+ */
+export function snapshotFromHostPage({
+  gameType, phase, roundNoun = 'Question', playerCount = 0, answeredCount = 0, votedCount = 0,
+  answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
+  spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
+  roomAsk = null, asksReady = 0,
+} = {}) {
+  const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
+  const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
+  const total = Number(playerCount) || 0;
+  const received = Number(responded) || 0;
+  // A response on the wall: at RESULTS in tally order, during VOTE in voting
+  // order with names hidden (owner, 2026-10-13). The phase stamp is the one
+  // the server writes, so the dock and the Remote read the same moment.
+  const onWall = (resolvedPhase === 'RESULTS' || resolvedPhase === 'VOTE')
+    && Number.isInteger(spotlightIndex) && spotlightIndex >= 0;
+  return {
+    gameType,
+    state: STATE_FOR_PHASE[resolvedPhase],
+    stageBeat: BEAT_FOR_PHASE[resolvedPhase] || 'results',
+    focus: onWall
+      ? { focus: 'answer', index: spotlightIndex, part: responsePart, parts: responseParts, phase: resolvedPhase }
+      : { focus: 'none', index: null },
+    notes: { page: notesPage, pages: notesPages, ready: notesReady },
+    progress: { received, total, allIn: roomIsComplete({ phase: resolvedPhase, responded, playerCount }) },
+    playerCount,
+    answerCount,
+    roundNoun,
+    hasQuestionSet,
+    goalLine,
+    roomAsk,
+    asksReady,
+  };
+}
+
+/**
  * The complete control descriptor for the current moment.
  *
- * Always returns exactly one `primary`. `secondary` is at most one action and
- * only exists where abandoning the round is meaningful (mid-answer).
+ * Always returns exactly one `primary`. `secondary` is at most one action.
+ *
+ * FOR THE ROUND TYPES THIS IS A READER OF roundStep (two-surface PLAN 1.4,
+ * R1): the moment and the step are decided in config/roundStep.js, which the
+ * Remote reads too. Surveys keep the branch below, unchanged — a survey has
+ * no rounds and its moments are not round moments.
  *
  * @returns {{phase: string, primary: object, secondary: object|null,
- *            status: {text: string, tone: string}}}
+ *            tertiary: object|null, status: {text: string, tone: string},
+ *            step?: object}}
  */
-export function hostControlsFor({
+const SURVEY_PHASES = new Set(['COLLECTING', 'CLOSED']);
+
+/**
+ * Is Workie's read in, for roundStep's "the read never skips by accident"?
+ * True when it has arrived, when it failed, and when it will never be asked
+ * for: the host page requests a read only for a round with answers, or for
+ * trivia and polls, which get one without (GameHostPage's insights effect).
+ * A greyed primary waiting on a read nobody asked for would strand a clicker.
+ */
+export function notesReadyFor({ insights, failure, answerCount = 0, gameType } = {}) {
+  if (insights || failure) return true;
+  const answerless = ['trivia', 'poll'].includes(normalizeGameType(gameType));
+  return !(Number(answerCount) > 0 || answerless);
+}
+
+/** The host page's confirm for Skip (roundStep's `arm`; HostActionBar does not read arm until Phase 3). */
+const skipConfirm = (label) => ({
+  title: `${label}?`,
+  message: 'The room loses this round: answers and votes so far are not counted.',
+  confirmText: label,
+  irreversible: false,
+});
+
+export function hostControlsFor(input = {}) {
+  if (!isSurveyType(input.gameType) && !SURVEY_PHASES.has(input.phase)) {
+    const snapshot = snapshotFromHostPage(input);
+    const step = roundStep(momentOf(snapshot), snapshot);
+    return {
+      phase: HOST_PHASES.includes(input.phase) ? input.phase : 'LOBBY',
+      primary: step.primary,
+      // Skip throws a round away, and next-question's skip bypasses its own
+      // "already asking" guard: on the host page it asks first, as the
+      // Remote's arm does (review finding 5).
+      secondary: step.secondary && step.secondary.id === 'skip'
+        ? { ...step.secondary, confirm: skipConfirm(step.secondary.label) }
+        : step.secondary,
+      tertiary: null,
+      status: step.status,
+      step,
+    };
+  }
+  return surveyControlsFor(input);
+}
+
+function surveyControlsFor({
   gameType,
   phase,
   roundNoun = 'Question',

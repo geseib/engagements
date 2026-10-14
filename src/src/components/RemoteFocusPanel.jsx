@@ -2,6 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 import { sameFocus } from '../config/stageFocus';
 import { answerText } from '../config/stageAnswers';
+import { voteOrder, tallyOrder } from '../config/navigatorOrder';
 
 /**
  * MAKE THAT BIGGER — the phone's control over what the ROOM is looking at.
@@ -43,7 +44,20 @@ export default function RemoteFocusPanel({
   labelFor = (_answer, index) => `Response ${index + 1}`,
   busy = false,
   onFocus = () => {},
+  /*
+    WHICH ORDER "RESPONSE N" MEANS (two-surface D5): the round's phase, and at
+    RESULTS get-results' tallies. The index this list sends is read by the wall
+    against the same order (config/navigatorOrder.js), so row 2 here is the
+    response the room sees. During VOTE the rows are the voting order every
+    ballot shows and are never named, whatever the round's names setting.
+  */
+  phase = null,
+  voteTallies = null,
 }) {
+  const voting = phase === 'VOTE';
+  const tallied = phase === 'RESULTS' && voteTallies && Object.keys(voteTallies).length > 0;
+  const rows = voting ? voteOrder(answers) : tallied ? tallyOrder(voteTallies, answers) : answers;
+  const label = voting ? (_answer, index) => `Response ${index + 1}` : labelFor;
   const showingQuestion = sameFocus(focus, { focus: 'question' });
   const anythingShowing = !sameFocus(focus, { focus: 'none' });
 
@@ -73,7 +87,7 @@ export default function RemoteFocusPanel({
       {questionTitle && <p className="hr-focus__q">{questionTitle}</p>}
 
       <div className="hr-focus__list">
-        {answers.length === 0 ? (
+        {rows.length === 0 ? (
           /*
             "Nothing to enlarge yet" and not an empty box. Responses arrive
             during the round, so an empty list here is the NORMAL early state
@@ -84,7 +98,7 @@ export default function RemoteFocusPanel({
             No responses yet. They appear here as the room answers.
           </p>
         ) : (
-          answers.map((answer, index) => {
+          rows.map((answer, index) => {
             const showing = sameFocus(focus, { focus: 'answer', index });
             return (
               <div
@@ -92,7 +106,7 @@ export default function RemoteFocusPanel({
                 className={`hr-focus__row ${showing ? 'is-showing' : ''}`}
                 data-testid="focus-row"
               >
-                <span className="hr-focus__who">{labelFor(answer, index)}</span>
+                <span className="hr-focus__who">{label(answer, index)}</span>
                 {/*
                   The response text, CLAMPED rather than truncated with an
                   ellipsis this component controls: the host is choosing between

@@ -24,6 +24,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
@@ -31,78 +32,20 @@ const PLR_CSS = read('components', 'PlayerSurface.css');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const CSS = stripped(PLR_CSS);
 
-/* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
+/* Dusk under a paper document: `.plr` re-declares data-theme="dark" on its own root, so
+   every value is resolved for the DARK theme, per skin, through the harness (skins ->
+   roles -> the .plr block), never retyped and never read from :root. */
+const plrVar = (name, skin) => H.scopeVar(PLR_CSS, '.plr {', name, { skin, theme: 'dark' });
+function palette(skin) {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  return {
+    bg: r('--bg'), surface: r('--surface'), text: r('--text'), primary: r('--primary'),
+    success: r('--success'), muted: plrVar('--plr-muted', skin),
+  };
 }
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-/* Walk UP compositing every alpha layer. Reading only the element's own
-   background is how dark-on-dark passes an audit. */
-function bgOf(el, win) {
-  let node = el; const stack = [];
-  while (node && node.nodeType === 1) {
-    const c = win.getComputedStyle(node).backgroundColor;
-    const m = String(c).match(/[\d.]+/g);
-    if (m) {
-      const a = m.length > 3 ? parseFloat(m[3]) : 1;
-      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
-    }
-    node = node.parentElement;
-  }
-  if (!stack.length) return [15, 26, 46];          // the dusk field
-  let out = stack[stack.length - 1][0];
-  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
-  return out;
-}
-
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-function tint(name) {
-  const m = PLR_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in PlayerSurface.css`);
-  return m[1];
-}
-
-/* Dusk under a paper document: read from styles.css's EXPLICIT dusk block, the
-   one `.plr[data-theme="dark"]` resolves against, not from :root. */
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  success: token(GLOBAL_CSS, ROOT, '--success'),
-  muted: token(PLR_CSS, '.plr {', '--plr-muted'),
-};
-
-function composited(layers) {
-  document.body.innerHTML = '';
-  let host = document.body;
-  for (const background of layers) {
-    const el = document.createElement('div');
-    el.style.backgroundColor = background;
-    host.appendChild(el);
-    host = el;
-  }
-  return bgOf(host, window);
-}
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
-
-const AA = 4.5;
-const FIELD = [T.bg];
-const CARD = [T.bg, T.surface];
+const on = (fg, layers) => H.on(fg, layers);
+const ratio = (a, b) => H.ratio(a, b);
+const AA = H.AA;
 
 /** The declaration body for one exact selector; throws if it was renamed. */
 function block(selector) {
@@ -116,12 +59,17 @@ function block(selector) {
    1. MEASURED CONTRAST
    ========================================================================== */
 
-describe('the pairings a survey paints', () => {
-  // The headline figure the plan quotes: a chosen step, yes or no.
+describe.each(H.SKINS)('the pairings a survey paints (%s)', (skin) => {
+  const T = palette(skin);
+  const FIELD = [T.bg];
+  const CARD = [T.bg, T.surface];
+  const tint = (name) => plrVar(name, skin);
+  // The headline figure the plan quotes: a chosen step, yes or no. --bg and --primary
+  // (the filled step reads var(--primary) directly) are the same in every skin today.
   test('#0F1A2E on #F6A94C — a chosen step, yes or no, a placed rank — is 8.86:1', () => {
     expect(T.bg.toUpperCase()).toBe('#0F1A2E');
     expect(T.primary.toUpperCase()).toBe('#F6A94C');
-    expect(ratio(parseHex(T.bg), parseHex(T.primary))).toBeCloseTo(8.86, 1);
+    expect(ratio(T.bg, T.primary)).toBeCloseTo(8.86, 1);
     expect(block('.plr-step[aria-checked="true"]')).toMatch(/background:\s*var\(--primary\)/);
     expect(block('.plr-step[aria-checked="true"]')).toMatch(/color:\s*var\(--bg\)/);
     expect(block('.plr-rank-row--placed .plr-pl')).toMatch(/background:\s*var\(--primary\)/);

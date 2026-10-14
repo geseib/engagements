@@ -5,8 +5,15 @@
  * so a file matching it runs locally, passes, and never reaches CI. Do not
  * rename it back.
  *
- * THE HARNESS BELOW (`lin`, `lum`, `ratio`, `alphaOver`, `bgOf`, `parseHex`,
- * `composited`, `on`, `AA`) is copied verbatim from
+ * SITE SKINS (0b-1, 2026-10-13): colour now comes through testing/skinHarness.js. The
+ * --mk-* tokens that equal a role read it (--mk-amber: var(--action), --mk-blue:
+ * var(--info), --mk-amber-hi: var(--action-hover), the washes and hairlines in the
+ * --shade-rgb / --glow-rgb channels), so a token is resolved with H.scopeVar for every
+ * skin x theme (H.CASES) and every AA pairing below is asserted for each one. `on` is
+ * H.on, the same alphaOver arithmetic as the DOM bgOf it replaced (jsdom does not parse
+ * the `rgb(r g b / a)` the channel form resolves to).
+ *
+ * THE HARNESS BELOW (`lin`, `lum`, `ratio`, `parseHex`, `AA`) was copied verbatim from
  * `.claude/skills/engage-design/references/testing-a-surface.md` §1, which is
  * itself lifted from `docs/design/admin-redesign/audit.html`'s `<script>`
  * block. jest maps CSS to `identity-obj-proxy` and loads no stylesheet, and
@@ -27,6 +34,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const H = require('../testing/skinHarness');
+
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 
 /* ============================================================ §1 the harness
@@ -38,42 +47,11 @@ function ratio(a, b) {
   const h = Math.max(la, lb); const l = Math.min(la, lb);
   return (h + 0.05) / (l + 0.05);
 }
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-/* Walk UP compositing every alpha layer. Reading only the element's own
-   background is how dark-on-dark passes an audit. */
-function bgOf(el, win) {
-  let node = el; const stack = [];
-  while (node && node.nodeType === 1) {
-    const c = win.getComputedStyle(node).backgroundColor;
-    const m = String(c).match(/[\d.]+/g);
-    if (m) {
-      const a = m.length > 3 ? parseFloat(m[3]) : 1;
-      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
-    }
-    node = node.parentElement;
-  }
-  if (!stack.length) return [15, 26, 46]; // the dusk field
-  let out = stack[stack.length - 1][0];
-  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
-  return out;
-}
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
 
-/** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf.
- *  First entry is the outermost layer; last is what the text sits on. */
-function composited(layers) {
-  document.body.innerHTML = '';
-  let host = document.body;
-  for (const background of layers) {
-    const el = document.createElement('div');
-    el.style.backgroundColor = background;
-    host.appendChild(el);
-    host = el;
-  }
-  return bgOf(host, window);
-}
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
-const AA = 4.5;
+/** Ratio of a foreground over a paint stack, outermost first (H.composite). */
+const on = (fg, layers) => H.on(fg, layers);
+const AA = H.AA;
 
 /* ============================================================ the surface —
    built by READING THE DIRECTORY, not by listing files by hand, so a moved
@@ -93,7 +71,8 @@ const SHEETS = {};
 for (const f of topLevelSheets) SHEETS[f] = read('marketing', f);
 for (const f of componentSheets) SHEETS[f] = read('marketing', 'components', f);
 
-const GLOBAL_CSS = read('styles.css');
+/* The global sheets every page loads before these: the skin values, the roles, styles.css. */
+const GLOBAL_CSS = H.SOURCES.map((rel) => read(rel)).join('\n');
 const JCE = read('components', 'JoinCodeEntry.css');
 const ALL = Object.values(SHEETS).join('\n');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -225,44 +204,71 @@ test('the suite cannot silently check nothing: the marketing sheet list is non-e
 });
 
 /* ---------------------------------------------------------------- tokens -- */
-const mk = (name) => {
-  const m = SHEETS['MarketingShell.css'].match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in MarketingShell.css`);
-  return m[1];
-};
-const mkRgba = (name) => {
-  const m = SHEETS['MarketingShell.css'].match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in MarketingShell.css`);
-  return m[1];
-};
-
-const T = {
-  bg: mk('--mk-bg'), surface: mk('--mk-surface'), surface2: mk('--mk-surface-2'),
-  text: mk('--mk-text'), muted: mk('--mk-muted'), amber: mk('--mk-amber'), amberHi: mk('--mk-amber-hi'),
-  paper: mk('--mk-paper'), paperSurface: mk('--mk-paper-surface'),
-  paperText: mk('--mk-paper-text'), paperMuted: mk('--mk-paper-muted'), amberInk: mk('--mk-amber-ink'),
-  ridgeFront: mk('--mk-ridge-front'), ridgeMid: mk('--mk-ridge-mid'), ridgeBack: mk('--mk-ridge-back'),
-  skyLow: mk('--mk-sky-low'),
-};
-const WASH = {
-  nav: mkRgba('--mk-wash-nav'), card: mkRgba('--mk-wash-card'),
-  a: mkRgba('--mk-wash-a'), b: mkRgba('--mk-wash-b'),
+/* The two top-level `.mk-root {` token rules of MarketingShell.css, merged into one
+   block so H.scopeVar can resolve a token wherever it is declared. .mk-root carries no
+   data-theme, so the theme a case names is the one an ancestor would give it; the
+   roles these tokens read (--action, --info, --action-hover, the channels) are
+   theme-invariant, and the suites below assert that too. */
+const MK_ROOT = (() => {
+  const css = stripped(SHEETS['MarketingShell.css']);
+  const bodies = [];
+  const re = /(^|\})\s*\.mk-root\s*\{([^}]*)\}/g;
+  let m;
+  while ((m = re.exec(css)) !== null) { bodies.push(m[2]); re.lastIndex = m.index + m[0].length - 1; }
+  if (bodies.length < 2) throw new Error('expected the two .mk-root token rules in MarketingShell.css');
+  return `.mk-root {${bodies.join(';\n')}}`;
+})();
+/** A --mk-* token, resolved for one skin x theme: '#F6A94C', or 'rgb(15 26 46 / 0.86)'. */
+const mk = (name, ctx = {}) => H.scopeVar(MK_ROOT, '.mk-root {', name, ctx);
+/** The same, as #RRGGBB (every opaque token below is used as a hex). */
+const mkHex = (name, ctx) => {
+  const { rgb } = H.parseColor(mk(name, ctx));
+  return `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
 };
 
-describe('the marketing tokens are the Warm Summit tokens, not a second palette', () => {
-  const token = (block, name) => {
-    const start = GLOBAL_CSS.indexOf(block);
-    return GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('}', start)).match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`))[1];
-  };
+const tokens = (ctx = {}) => ({
+  T: {
+    bg: mkHex('--mk-bg', ctx), surface: mkHex('--mk-surface', ctx), surface2: mkHex('--mk-surface-2', ctx),
+    text: mkHex('--mk-text', ctx), muted: mkHex('--mk-muted', ctx), amber: mkHex('--mk-amber', ctx), amberHi: mkHex('--mk-amber-hi', ctx),
+    paper: mkHex('--mk-paper', ctx), paperSurface: mkHex('--mk-paper-surface', ctx),
+    paperText: mkHex('--mk-paper-text', ctx), paperMuted: mkHex('--mk-paper-muted', ctx), amberInk: mkHex('--mk-amber-ink', ctx),
+    ridgeFront: mkHex('--mk-ridge-front', ctx), ridgeMid: mkHex('--mk-ridge-mid', ctx), ridgeBack: mkHex('--mk-ridge-back', ctx),
+    skyLow: mkHex('--mk-sky-low', ctx),
+  },
+  WASH: {
+    nav: mk('--mk-wash-nav', ctx), card: mk('--mk-wash-card', ctx),
+    a: mk('--mk-wash-a', ctx), b: mk('--mk-wash-b', ctx),
+  },
+});
+/* Classic dusk: what the structural checks (fallbacks, the premise tests) compare against. */
+const { T, WASH } = tokens({ skin: 'classic', theme: 'dark' });
+
+describe.each(H.CASES)('%s / %s: the tokens that read a role resolve to the colour they always were', (skin, theme) => {
+  const here = tokens({ skin, theme });
+  test('every opaque token and every wash resolves the same as Classic dusk (no token here is a skin colour yet)', () => {
+    expect(here.T).toEqual(T);
+    expect(here.WASH).toEqual(WASH);
+  });
   test.each([
-    ['--mk-bg', T.bg, '[data-theme="dark"] {', '--bg'],
-    ['--mk-surface', T.surface, '[data-theme="dark"] {', '--surface'],
-    ['--mk-surface-2', T.surface2, '[data-theme="dark"] {', '--surface-2'],
-    ['--mk-text', T.text, '[data-theme="dark"] {', '--text'],
-    ['--mk-muted', T.muted, '[data-theme="dark"] {', '--muted'],
-    ['--mk-amber', T.amber, ':root {', '--primary'],
-  ])('%s matches the global token', (_n, value, block, name) => {
-    expect(value.toUpperCase()).toBe(token(block, name).toUpperCase());
+    ['--mk-amber', '--action'], ['--mk-amber-hi', '--action-hover'], ['--mk-blue', '--info'],
+  ])('%s is %s', (name, roleName) => {
+    expect(mkHex(name, { skin, theme })).toBe(H.role(roleName, { skin, theme }).toUpperCase());
+  });
+});
+
+describe.each(H.SKINS.filter((s) => H.CASES.some(([k]) => k === s)))('%s: the marketing tokens are the Warm Summit tokens, not a second palette', (skin) => {
+  /* The dusk literals equal the dusk roles in every skin (dark theme: the marketing
+     field is dusk); --mk-amber is the action role. */
+  test.each([
+    ['--mk-bg', T.bg, 'dark', '--bg'],
+    ['--mk-surface', T.surface, 'dark', '--surface'],
+    ['--mk-surface-2', T.surface2, 'dark', '--surface-2'],
+    ['--mk-text', T.text, 'dark', '--text'],
+    ['--mk-muted', T.muted, 'dark', '--muted'],
+    ['--mk-amber', T.amber, 'dark', '--action'],
+    ['--mk-amber', T.amber, 'light', '--action'],
+  ])('%s matches the global role (%s, %s)', (_n, value, theme, name) => {
+    expect(value.toUpperCase()).toBe(H.role(name, { skin, theme }).toUpperCase());
   });
 });
 
@@ -277,17 +283,17 @@ describe('the four translucent washes are exactly these tokens', () => {
     ['--mk-wash-a', WASH.a, [15, 26, 46], 0.9],
     ['--mk-wash-b', WASH.b, [27, 41, 66], 0.92],
   ])('%s is rgba(%s) at the pinned opacity', (name, value, rgb, alpha) => {
-    const m = value.match(/rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/);
-    expect(m).not.toBeNull();
-    expect([Number(m[1]), Number(m[2]), Number(m[3])]).toEqual(rgb);
-    expect(Number(m[4])).toBeCloseTo(alpha, 5);
+    const c = H.parseColor(value);
+    expect(c.rgb).toEqual(rgb);
+    expect(c.a).toBeCloseTo(alpha, 5);
   });
 });
 
 /* ------------------------------------------------------- flat pairings — AA
    Every pairing is named for the THING ON SCREEN, not the token, so a
    failure tells you which control went unreadable. */
-describe('every flat pairing these pages paint', () => {
+describe.each(H.CASES)('%s / %s: every flat pairing these pages paint', (skin, theme) => {
+  const { T, WASH } = tokens({ skin, theme });
   const FIELD = [T.bg];
   const SURF = [T.bg, T.surface];
   const SURF2 = [T.bg, T.surface2];
@@ -373,7 +379,8 @@ describe('every flat pairing these pages paint', () => {
    Half a token table cannot show a tint. Each stack is the real nesting: the
    fixed ridge scene behind, then the translucent wash a section or the nav
    paints over it, then the text. */
-describe('the tinted composites over the moving scene', () => {
+describe.each(H.CASES)('%s / %s: the tinted composites over the moving scene', (skin, theme) => {
+  const { T, WASH } = tokens({ skin, theme });
   const behind = (hex) => `rgb(${parseHex(hex).join(',')})`;
 
   test('nav copy over the sticky bar, over the back ridge (the tallest opaque thing usually behind it)', () => {
@@ -452,11 +459,8 @@ test('no hex literal survives outside a token-definition block', () => {
    AND equals the value that token actually holds today — so a token edit
    that forgets to update the matching fallback goes red here. */
 describe('JoinCodeEntry.css fallbacks agree with the tokens they fall back from', () => {
-  const DANGER_TEXT = (() => {
-    const start = GLOBAL_CSS.indexOf(':root {');
-    const body = GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('}', start));
-    return body.match(/--danger-text\s*:\s*(#[0-9A-Fa-f]{6})/)[1];
-  })();
+  /* The join field is dusk; Classic is what renders before a skin is chosen. */
+  const DANGER_TEXT = H.role('--danger-text', { skin: 'classic', theme: 'dark' });
   const TOKEN_VALUES = {
     '--mk-text': T.text,
     '--mk-amber': T.amber,
@@ -821,7 +825,8 @@ describe('the front page refresh (2026-09-22): motion, washes and the scaffold t
    * RATIONALE §4a measured the brightest 16x16 block of each crop; the
    * caption band composites --mk-wash-a over that and carries --mk-text.
    * Pinned here so a lighter wash, or --mk-muted in the band, goes red. */
-  describe('the photograph caption band', () => {
+  describe.each(H.CASES)('%s / %s: the photograph caption band', (skin, theme) => {
+    const { T, WASH } = tokens({ skin, theme });
     // Measured 2026-09-22 with a pure-Python PNG decode of the encoded
     // crops (brightest 16x16 block): the second sheet candidate is a white
     // printed page, #F3F5F7 — the case the .9 wash exists for.
@@ -854,6 +859,8 @@ describe('the front page refresh (2026-09-22): motion, washes and the scaffold t
 
   /* The hero still's chips (--mk-muted) sit on ClipStill's .mk-ss gradient,
    * ridge-front at the top to bg at the foot. Both ends, both AA. */
+  describe.each(H.CASES)('%s / %s', (skin, theme) => {
+  const { T } = tokens({ skin, theme });
   test.each([
     ['the still chips at the top of the gradient (ridge-front)', T.muted, [T.ridgeFront]],
     ['the still chips at the foot of the gradient (bg)', T.muted, [T.bg]],
@@ -862,5 +869,6 @@ describe('the front page refresh (2026-09-22): motion, washes and the scaffold t
     ['the correct row’s amber letter on bg', T.amber, [T.bg]],
   ])('%s clears AA', (_l, fg, layers) => {
     expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+  });
   });
 });

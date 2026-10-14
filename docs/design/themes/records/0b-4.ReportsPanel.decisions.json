@@ -1,0 +1,79 @@
+{
+  "unit": "0b-4.ReportsPanel",
+  "file": "components/ReportsPanel.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "e7c32301",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 7,
+    "font": 0,
+    "primary": 4
+  },
+  "auto": [
+    {
+      "id": "22:21",
+      "line": 22,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rp",
+      "property": "--rp-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark+light"
+    },
+    {
+      "id": "28:13",
+      "line": 28,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rp",
+      "property": "--rp-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "29:20",
+      "line": 29,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rp",
+      "property": "--rp-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "30:18",
+      "line": 30,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rp",
+      "property": "--rp-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark+light"
+    }
+  ],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:20:56.163Z",
+    "after": {
+      "colour": 3,
+      "font": 0,
+      "primary": 4
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 4
+  }
+}

@@ -53,7 +53,7 @@ describe('the wall while comments arrive', () => {
     expect(hero.textContent).toBe('What do you make of it?');
     expect(hero.classList.contains('fb-question')).toBe(false);
     const ask = container.querySelector('p.fb-ask');
-    expect(ask.textContent).toMatch(/on your phone/);
+    expect(ask.textContent).toBe('Provide feedback on the round from your phone, laptop or tablet.');
   });
 
   test('no kicker, no `.lede`, and no count (the meter carries it)', () => {

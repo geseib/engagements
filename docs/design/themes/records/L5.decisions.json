@@ -1,0 +1,19 @@
+{
+  "unit": "L5",
+  "file": "components/ui/Card.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": false,
+  "base": "713c4d3c",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 0,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": []
+}

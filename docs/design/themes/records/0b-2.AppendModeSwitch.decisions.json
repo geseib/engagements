@@ -1,0 +1,29 @@
+{
+  "unit": "0b-2.AppendModeSwitch",
+  "file": "components/AppendModeSwitch.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 6,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:16.435Z",
+    "after": {
+      "colour": 6,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 0
+  }
+}

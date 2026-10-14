@@ -1,3 +1,4 @@
+/* skin-allowance: colour=1 font=0 primary=4 */
 /* ============================================================================
    THE ORGANISATION SWITCHER — components/OrgSwitcher.jsx
 
@@ -51,10 +52,10 @@
 
   /* Rules and tints, matched to AdminShell's so the chip and the environment
      chip beside it are the same object at the same weight. */
-  --orgsw-rule: rgba(155, 168, 190, .20);
-  --orgsw-rule-strong: rgba(155, 168, 190, .34);
-  --orgsw-row-hover: rgba(155, 168, 190, .055);
-  --orgsw-row-sel: rgba(246, 169, 76, .10);
+  --orgsw-rule: rgb(var(--slate-rgb) / .20);
+  --orgsw-rule-strong: rgb(var(--slate-rgb) / .34);
+  --orgsw-row-hover: var(--row-hover);
+  --orgsw-row-sel: var(--row-selected);
   --orgsw-shadow: 0 18px 44px rgba(6, 11, 22, .55);
 
   /* 36px rows. The console's row height, because cards were rejected and a

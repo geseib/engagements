@@ -8,6 +8,7 @@ import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
 import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
+import RW from './config/roundWords';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -43,12 +44,15 @@ import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
 import useSessionPanelKey from './components/stage/useSessionPanelKey';
 import useFullscreenKey from './hooks/useFullscreenKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
+import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
-import { loadProfile, saveProfile, toggleBigScreen } from './config/displayProfile';
+import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
+import { twoSurfacesHere, presentHref } from './config/surfaces';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
-import { assignPlacements, placeLabel } from './config/podium';
+import { placeLabel } from './config/podium';
+import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
 import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import ConfirmDialog from './components/ConfirmDialog';
@@ -70,11 +74,11 @@ import {
 import { createGameBody, updateGameBody } from './config/createGame';
 import goalRules from '../../lambda-functions/websocket/session-goal';
 import { goalOnStage } from './config/goalStage';
-import { fetchComments, featureComment } from './utils/commentsClient';
+import { fetchComments, featureComment, postRoomNote } from './utils/commentsClient';
 import { DEFAULT_SCOPE } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
-  hostControlsFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
+  hostControlsFor, notesReadyFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
   resultsRoundOf, SURVEY_ROUND,
 } from './config/hostControls';
@@ -99,6 +103,15 @@ import {
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
+import useRoundAsks from './hooks/useRoundAsks';
+import AskPreview from './components/AskPreview';
+import AskIcons from './components/AskIcons';
+import AskStage from './components/stage/AskStage';
+import FW from './config/followUpWords';
+import { placeAsks, pointKey } from './config/askAnchors';
+import { sendAsk, closeAsk, cancelAsk, pickIdea } from './utils/followUpsClient';
+import { isSessionExpired, takeResumeFor } from './auth/sessionExpiry';
+import { classifyHostActionFailure, ENDED_AFTER_SIGN_IN } from './utils/hostActionFailure';
 import { getEvent, runEvent } from './utils/eventsApi';
 import { navigateTo } from './auth/navigate';
 import {
@@ -283,6 +296,20 @@ function GameHostPage() {
     on a later round.
   */
   const pendingFocusRef = useRef(null);
+  // The rev of the last focus this page applied (two-surface PLAN 1.13), so a
+  // late frame cannot put back a response the host has moved on from.
+  const focusRevRef = useRef(null);
+  /*
+    A RESPONSE ON THE WALL BELONGS TO ITS PHASE (two-surface D5, review
+    finding 1). VOTE numbers responses in voting order and RESULTS in tally
+    order, so an open spotlight never survives the move from one to the
+    other: response i of the vote is not rank i of the tally.
+  */
+  const spotlightPhaseRef = useRef(null);
+  // Workie's page in step with the server (hooks/useStageNotesSync.js). A ref
+  // so the socket handler, registered once, and the restore path reach the
+  // current render's hook.
+  const notesSyncRef = useRef(null);
   useEffect(() => {
     answersRef.current = answers;
 
@@ -427,6 +454,8 @@ function GameHostPage() {
    * lands on the last page that exists rather than on a blank stage.
    */
   const [stagePage, setStagePage] = useState(null);
+  /** The one writer of the stage's page index: the page's own turns and the server's (useStageNotesSync). */
+  const turnStagePage = (key, index) => setStagePage({ key, index });
   /**
    * The pending hidden-round participation refresh — see
    * `scheduleAnswererSync`, which is where the whole mechanism is explained.
@@ -443,6 +472,9 @@ function GameHostPage() {
   }, []);
 
   const [showReport, setShowReport] = useState(false);
+  // One plain line above the report when the host was brought to it rather
+  // than asking for it (back from an expired sign-in to an ended session).
+  const [reportNotice, setReportNotice] = useState('');
   const [reportData, setReportData] = useState(null);
   // 'idle' | 'loading' | 'ready' | 'error'. The report is BUILT on demand —
   // `POST games/{id}/report` re-derives it every time — so opening it is a
@@ -532,6 +564,13 @@ function GameHostPage() {
     is, because a function is not a hook.
   */
   const [spotlightIndex, setSpotlightIndex] = useState(null);
+  useEffect(() => {
+    // Only a move OUT OF a phase that can hold a response clears it: a reload
+    // (from the lobby's CREATED to RESULTS) keeps the focus it restores.
+    const previous = spotlightPhaseRef.current;
+    if (previous && previous !== gameState && /^(VOTE|RESULTS)#/.test(previous)) setSpotlightIndex(null);
+    spotlightPhaseRef.current = gameState;
+  }, [gameState]);
   const [regeneratingRounds, setRegeneratingRounds] = useState([]);
 
   const loadRounds = useCallback(async () => {
@@ -611,6 +650,8 @@ function GameHostPage() {
   // they exist. A ref rather than deps because those are derived per render,
   // hundreds of lines below the first early return, where no hook may live.
   const autoActRef = useRef(null);
+  // When the response Auto is cycling during voting went up (its round#index).
+  const autoShownRef = useRef(null);
 
   /*
     A SURVEY'S PER-GAME FACTS (surveys phase 2). `surveyNames` is the session's
@@ -630,6 +671,27 @@ function GameHostPage() {
   // kept separate rather than renamed onto it — this fires for every
   // non-survey type, not only a survey's own three acts.
   const [sessionActionError, setSessionActionError] = useState('');
+  /*
+    A REFUSED HOST BUTTON, SAID WITHOUT alert() (2026-10-12, the owner's
+    "Failed to get next question: Unauthorized (HTTP 401)" — read
+    utils/hostActionFailure.js). An expired sign-in says nothing here (the
+    sign-in form is taking over); a session that has ENDED — from the remote,
+    another tab, the pool running dry — puts this screen on its ENDED phase,
+    whose primary is the report; anything else is a line in the dock.
+
+    Behind a ref so the useCallback'd queue handlers can hold one stable
+    function: setGameState is rebuilt every render.
+  */
+  const hostActionFailedRef = useRef(null);
+  hostActionFailedRef.current = async (message) => {
+    const outcome = await classifyHostActionFailure({
+      message, fetchFn: authFetch, apiBase: API_BASE, gameId,
+    });
+    if (outcome.kind === 'expired') return;
+    if (outcome.kind === 'ended') setGameState('ENDED');
+    setSessionActionError(outcome.message);
+  };
+  const hostActionFailed = useCallback((message) => hostActionFailedRef.current(message), []);
   /*
     WHERE THE ROOM IS — hooks/useSurveyProgress.js: GET /survey/progress on
     arrival, the `surveyProgress` frame after. Declared up here, above every
@@ -895,10 +957,111 @@ function GameHostPage() {
    * `engage.displayProfile` in localStorage; Room and Table are inferred from
    * the viewport width.
    */
-  const [profile, setProfile] = useState(
+  const [localProfile, setLocalProfile] = useState(
     () => loadProfile(window.localStorage, window.innerWidth)
   );
-  useEffect(() => { saveProfile(window.localStorage, profile); }, [profile]);
+  useEffect(() => { saveProfile(window.localStorage, localProfile); }, [localProfile]);
+
+  /*
+    TWO SURFACES (docs/design/two-surface PLAN D2, D6, 2.13). With the switch
+    on, the room watches /present, and the display profile is a SESSION fact
+    (STATE.StageProfile) so this page and the wall size and page Workie's read
+    the same way: "Page 2 of 4" is the same page on both. Room until the host
+    chooses. A choice here is published through /stage-beat `{ profile }`;
+    another surface's choice arrives as `stageProfileChanged` or on a reload.
+    With the switch off, the profile stays this browser's own, as before.
+  */
+  const twoSurfaces = twoSurfacesHere(currentGameType);
+  const [sessionProfile, setSessionProfile] = useState(null);
+  const profile = twoSurfaces ? (sessionProfile || DEFAULT_PROFILE) : localProfile;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const setProfile = useCallback((next) => {
+    const value = typeof next === 'function' ? next(profileRef.current) : next;
+    if (!PROFILES.includes(value)) return;
+    setLocalProfile(value);
+    if (!twoSurfaces) return;
+    setSessionProfile(value);
+    if (!gameId) return;
+    authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: value }),
+    }).catch((err) => console.error('Display profile publish failed (continuing):', err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [twoSurfaces, gameId]);
+  // For handlers registered once (the remote's postMessage listener).
+  const setProfileRef = useRef(setProfile);
+  setProfileRef.current = setProfile;
+  /** How many Presentations are open on this session (the host door's `presenting`). */
+  const [presenting, setPresenting] = useState(0);
+  /*
+    Read every 10 s while the switch is on: a Presentation connecting sends no
+    frame, so the dock's PRESENTING and the session profile come from the host
+    door. The same authorised read the restore makes.
+  */
+  useEffect(() => {
+    if (!twoSurfaces || !gameId) return undefined;
+    let live = true;
+    const read = async () => {
+      try {
+        const res = await authFetch(`${API_BASE}games/${gameId}/host-state`);
+        if (!res.ok || !live) return;
+        const data = await res.json();
+        if (!live) return;
+        setPresenting(Number(data.presenting) || 0);
+        if (PROFILES.includes(data.stageProfile)) setSessionProfile(data.stageProfile);
+      } catch (e) {
+        /* the next read tries again */
+      }
+    };
+    read();
+    const timer = setInterval(read, 10000);
+    return () => { live = false; clearInterval(timer); };
+  }, [twoSurfaces, gameId]);
+
+  /*
+    THE JOIN CODE ON THE WALL (owner, 2026-10-13: "when presenting i still need
+    ability to show qr code"). With two surfaces, pinning the join code here
+    also puts it on /present — a `join` focus on /stage-focus, so the Remote
+    and every wall agree — and unpinning takes it down. A `join` arriving from
+    another surface pins it here.
+    `publishFocusRef` because publishFocus is defined below the early returns.
+
+    `joinOnServerRef` is whether the code is up on the server's screens, as far
+    as this page knows: set when this page publishes and by every focus frame.
+    The page publishes only when what it shows (qrMode pinned) differs from it,
+    so the echo of its own publish never stops the next one. (A one-shot "came
+    from the server" flag did: the echo arrived while the code was already
+    pinned, nothing re-rendered to clear it, and the click that took the code
+    down here was swallowed, leaving it on the Presentation. Owner, 2026-10-13.)
+  */
+  const publishFocusRef = useRef(null);
+  const joinOnServerRef = useRef(false);
+  useEffect(() => {
+    if (!twoSurfaces) return;
+    const pinned = qrMode === 'pinned';
+    if (pinned === joinOnServerRef.current) return;
+    joinOnServerRef.current = pinned;
+    if (publishFocusRef.current) publishFocusRef.current({ focus: pinned ? 'join' : 'none' });
+  }, [qrMode, twoSurfaces]);
+
+  // J PUTS THE JOIN CODE UP AND TAKES IT DOWN, on the laptop as on the
+  // Presentation (owner, 2026-10-13). Not in a field, not with a modifier.
+  useEffect(() => {
+    if (!twoSurfaces) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'j' && e.key !== 'J') return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented) return;
+      const t = e.target;
+      if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return;
+      if (t && typeof t.closest === 'function' && t.closest('.setup-panel')) return;
+      e.preventDefault();
+      setQrMode((mode) => (mode ? null : 'pinned'));
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [twoSurfaces]);
 
   /**
    * Which beat of RESULTS is on screen.
@@ -909,6 +1072,24 @@ function GameHostPage() {
    * so the next round's results open on the tally.
    */
   const [resultsBeat, setResultsBeat] = useState('results');
+  /*
+    ASK THE ROOM (docs/design/followup-icons). The round's checked asks and
+    every question sent this round, read on the results of a Call & Answer
+    round with two surfaces (the laptop is then the host's own screen; on one
+    screen it is the wall, and the wall never shows an icon). `askRefresh` is
+    bumped by followUpChanged, aiSummaryReady and stageBeatChanged.
+  */
+  const [askRefresh, setAskRefresh] = useState(0);
+  const [askPreview, setAskPreview] = useState(null);
+  const askRound = /^RESULTS#(\d+)$/.exec(String(gameState || ''));
+  const roundAsks = useRoundAsks({
+    fetchFn: authFetch,
+    apiBase: API_BASE,
+    gameId,
+    round: askRound ? askRound[1] : null,
+    active: Boolean(twoSurfaces && askRound && normalizeGameType(currentGameType) === 'call-and-answer'),
+    refreshKey: askRefresh,
+  });
   /*
     DEV'S AI MODEL PICKER, STAFF ONLY (components/stage/useModelPicker.js).
     The round whose read is on screen, and only on What We Heard. Whether the
@@ -1101,6 +1282,47 @@ function GameHostPage() {
   };
 
   /*
+    SAID IN THE ROOM (owner, 2026-10-13): the host's own line in a feedback
+    round. The socket's commentPosted refetch brings it into the list; a
+    direct reload as well, so the host sees it even if the frame is late.
+  */
+  /*
+    ASK THE ROOM: send from the preview, then Show results or Cancel the
+    question from the dock, and put an Ideas answer on the wall. Every write
+    is announced (followUpChanged / stageBeatChanged) and the frames refetch;
+    a direct reload too, so this page never waits on its own echo.
+  */
+  const askRoundNumber = () => parseInt(String(gameState).split('#')[1], 10);
+  const sendRoomAsk = async (body) => {
+    const r = await sendAsk({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), ask: body });
+    if (r.ok) {
+      setResultsBeat('ask');
+      roundAsks.reload();
+    }
+    return r;
+  };
+  const finishRoomAsk = async (how) => {
+    const live = roundAsks.live;
+    if (!live) return;
+    const fn = how === 'close' ? closeAsk : cancelAsk;
+    const r = await fn({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), askId: live.askId });
+    if (r.ok && how === 'cancel') setResultsBeat('field-notes');
+    roundAsks.reload();
+  };
+  const pickRoomIdea = async (askId, id, picked) => {
+    await pickIdea({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), askId, id, picked });
+    roundAsks.reload();
+  };
+
+  const handleRoomNote = async (text) => {
+    if (!gameId) return { ok: false, error: 'No session.' };
+    const round = String(parseInt(String(gameState).split('#')[1], 10)).padStart(3, '0');
+    const result = await postRoomNote({ fetchFn: authFetch, apiBase: API_BASE, gameId, questionNumber: round, text });
+    if (result.ok) loadRoundCommentsRef.current();
+    return result;
+  };
+
+  /*
     RESET ON ROUND CHANGE, RELOAD ON ENTERING RESULTS — FOR ANY BEAT.
 
     Fix round 1, item 4: `roundComments` used to sit exactly as
@@ -1176,7 +1398,7 @@ function GameHostPage() {
             // the boolean with four profiles and says so in its own header; this
             // handler was never updated, so the remote's big-screen button threw
             // instead of doing anything.
-            setProfile((prev) => toggleBigScreen(prev, window.innerWidth));
+            setProfileRef.current((prev) => toggleBigScreen(prev, window.innerWidth));
             break;
           case 'NEXT_QUESTION':
             remoteActionsRef.current.nextQuestion?.();
@@ -1834,7 +2056,7 @@ function GameHostPage() {
       // the fallback sentence in front of the host on every real failure,
       // discarding the specific one the classifier had worked out.
       const f = result.failure;
-      alert(f ? `${f.headline}\n\n${f.detail}`
+      hostActionFailed(f ? `${f.headline} ${f.detail}`
         : 'The summary could not be regenerated. Please try again.');
     }
   };
@@ -2304,6 +2526,11 @@ Focus on actionable business strategy insights.`;
       // closure is frozen at 'CREATED'.
       const beat = stageBeatFromFrame(data, gameStateRef.current);
       if (beat) setResultsBeat(beat);
+      // The ask beat opens and closes with a question for the room.
+      setAskRefresh((n) => n + 1);
+      // The read's page, turned from the Remote (or echoed from this page's
+      // own post, which the rev drops). Never published back.
+      if (beat && notesSyncRef.current) notesSyncRef.current.applyFrame(data);
     });
 
     /*
@@ -2336,14 +2563,31 @@ Focus on actionable business strategy insights.`;
       applyServerBoard(data);
     });
 
+    // THE SESSION'S DISPLAY PROFILE, chosen on another surface (two-surface D2).
+    webSocketClient.onMessage('stageProfileChanged', (data) => {
+      if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
+      if (data && PROFILES.includes(data.profile)) setSessionProfile(data.profile);
+    });
+
     webSocketClient.onMessage('stageFocusChanged', (data) => {
       console.log('🔌 Stage focus notification:', data);
-      const focus = focusFromFrame(data, gameStateRef.current);
+      // A frame no newer than the last applied is dropped (its `rev`).
+      const focus = focusFromFrame(data, gameStateRef.current, focusRevRef.current);
       if (!focus) return;
+      if (Number.isInteger(focus.rev)) focusRevRef.current = focus.rev;
 
       const next = focusToStage(focus, { answerCount: answersRef.current.length });
       setLessonExpanded(next.lessonExpanded);
       setSpotlightIndex(next.spotlightIndex);
+      // The join code, put up or taken down on any surface (this page's own
+      // echo included): record what the screens show, then match it here.
+      if (focus.focus === 'join') {
+        joinOnServerRef.current = true;
+        setQrMode('pinned');
+      } else if (joinOnServerRef.current) {
+        joinOnServerRef.current = false;
+        setQrMode((mode) => (mode === 'pinned' ? null : mode));
+      }
     });
 
     /*
@@ -2381,7 +2625,12 @@ Focus on actionable business strategy insights.`;
       loadRoundCommentsRef.current();
     });
 
+    // ASK THE ROOM: a question sent, answered, closed, cancelled or picked.
+    webSocketClient.onMessage('followUpChanged', () => setAskRefresh((n) => n + 1));
+
     webSocketClient.onMessage('aiSummaryReady', (data) => {
+      // The asks are made right after the read: look for them too.
+      setAskRefresh((n) => n + 1);
       console.log('🔌 AI Summary ready notification:', data);
       clearAITimers();
       setAiRetrying(false);
@@ -2541,11 +2790,13 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('stageFocusChanged');
       webSocketClient.offMessage('scoreboardChanged');
+      webSocketClient.offMessage('stageProfileChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('commentFeatured');
       webSocketClient.offMessage('aiSummaryReady');
+      webSocketClient.offMessage('followUpChanged');
       webSocketClient.offMessage('aiSummaryError');
       // `gameEnded` was registered above and never removed here — a handler
       // that outlived its session and fired with a stale closure. Found by the
@@ -2705,10 +2956,19 @@ Focus on actionable business strategy insights.`;
           this once the rows are in and the count is real.
         */
         pendingFocusRef.current = gameStateData.stageFocus || null;
+        focusRevRef.current = Number.isInteger(gameStateData.stageFocus?.rev) ? gameStateData.stageFocus.rev : null;
+        // A reload on What we heard comes back on the page the room was on.
+        if (hostPhaseForBeat(phaseOfGameState(gameStateData.state), gameStateData.stageBeat) === 'FIELD_NOTES'
+          && notesSyncRef.current) {
+          notesSyncRef.current.hydrate(gameStateData.stageNotes, gameStateData.currentQuestion);
+        }
 
         // THE SCOREBOARD, as the room last saw it: a reload over an open board
         // comes back up on it rather than dropping the room to the stage.
         applyServerBoard(gameStateData.scoreboard);
+        // The session's display profile and how many Presentations are open.
+        setSessionProfile(PROFILES.includes(gameStateData.stageProfile) ? gameStateData.stageProfile : null);
+        setPresenting(Number(gameStateData.presenting) || 0);
 
         // First, load question sets for the restored game
         console.log(`🔍 HOST: Loading question sets for restored game...`);
@@ -2741,6 +3001,20 @@ Focus on actionable business strategy insights.`;
         // Use server state directly instead of mapping to legacy format
         setGameState(currentState);
         console.log(`🎮 HOST: Set game state to ${currentState}`);
+
+        /*
+          BACK FROM SIGNING IN AGAIN, TO A SESSION THAT IS OVER (owner,
+          2026-10-12: "go to the report instead after login"). The marker is
+          the one sessionExpiry.js left when the sign-in ran out on this
+          session; it is consumed on the first restore either way, so a host
+          who comes back to a LIVE session is not sent to the report later
+          when they end it themselves. Opening a report changes nothing in
+          the room, so this is not a replayed action.
+        */
+        if (takeResumeFor(forGameId) && currentState === 'ENDED') {
+          setReportNotice(ENDED_AFTER_SIGN_IN);
+          generateReportForGame(forGameId, eventTitle);
+        }
 
         // The durable fact, read straight from the ROUND# record (get-game-state
         // .js now includes it) rather than inferred from the state string. An
@@ -3000,17 +3274,12 @@ Focus on actionable business strategy insights.`;
                   // PLACE in the round by total points, ties shared. The old
                   // inline derivation was "best rank any voter gave it", which
                   // badged every answer with one first-choice vote as 1.
+                  //
+                  // TALLY ORDER IS config/navigatorOrder.js's (two-surface D5):
+                  // the spotlight's index is read by the Remote against the
+                  // same order, so "response 2" is one response everywhere.
                   formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-                    ? assignPlacements(Object.values(resultsData.voteTallies).map((tally, index) => {
-                        console.log(`📊 HOST: Formatting tally ${index}:`, tally);
-                        return {
-                          player: tally.playerName,
-                          playerName: tally.playerName, // for displayLabelFor
-                          answer: tally.answerText,
-                          points: tally.totalScore,
-                          votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-                        };
-                      }))
+                    ? tallyOrder(resultsData.voteTallies).map((row) => ({ ...row, player: row.playerName }))
                     : [];
                 }
                 
@@ -3569,8 +3838,8 @@ Focus on actionable business strategy insights.`;
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to toggle category');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
       }
       
       const result = await response.json();
@@ -3582,7 +3851,7 @@ Focus on actionable business strategy insights.`;
       return result;
     } catch (error) {
       console.error('❌ Failed to toggle category:', error);
-      alert(`Failed to toggle category: ${error.message}`);
+      hostActionFailed(`That category could not be changed: ${error.message}`);
       throw error;
     } finally {
       setIsTogglingCategory(false);
@@ -3777,7 +4046,7 @@ Focus on actionable business strategy insights.`;
       // `duplicate` and `not-queued` are all visible in the list in front of
       // them; a full queue is not — see REFUSALS_WORTH_SAYING.
       if (local.refused === 'full') {
-        alert('The queue is full — 24 questions is the limit. Remove one from the running order first.');
+        setSessionActionError('The queue is full — 24 questions is the limit. Remove one from the running order first.');
       }
       return;
     }
@@ -3796,14 +4065,14 @@ Focus on actionable business strategy insights.`;
       // screen: the host would end the round expecting the question they
       // "moved" to the top and get the one that was actually there.
       setQuestionQueue(before);
-      alert(`Could not change the running order: ${result.error}`);
+      hostActionFailed(`Could not change the running order: ${result.error}`);
       return;
     }
 
     // The server refused something the local copy accepted — only possible when
     // the other host surface changed the list in between. Its list is the one
     // that lands below, so this is a message, not a rollback.
-    if (result.message) alert(result.message);
+    if (result.message) setSessionActionError(result.message);
 
     // `queue: null` is a landed write whose body we could not read — re-read
     // rather than guess. Otherwise take the server's list verbatim; it is
@@ -3817,7 +4086,7 @@ Focus on actionable business strategy insights.`;
     // Queueing something changes what follows it, so the tail is re-planned.
     loadUpNext();
     setQueueVersion(result.version);
-  }, [gameId, questionQueue, queueVersion, loadQueue]);
+  }, [gameId, questionQueue, queueVersion, loadQueue, hostActionFailed]);
 
   const handleQueueQuestion = useCallback(
     (question) => runQueueOp('add', question?.id, (q) => queueEnqueue(q, question?.id)),
@@ -3864,7 +4133,7 @@ Focus on actionable business strategy insights.`;
     const plan = materializePlanOps(questionQueue, autoKeys, key, direction);
     if (!plan.ops.length) {
       if (plan.refused === 'full') {
-        alert('The queue is full — 24 questions is the limit. Remove one from the running order first.');
+        setSessionActionError('The queue is full — 24 questions is the limit. Remove one from the running order first.');
       }
       return;
     }
@@ -3887,12 +4156,12 @@ Focus on actionable business strategy insights.`;
     }
 
     setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
-    if (failed) alert(`Could not rearrange the running order: ${failed}`);
+    if (failed) hostActionFailed(`Could not rearrange the running order: ${failed}`);
     // Authoritative state after a multi-write burst is the server's, not any
     // single response — re-read both halves of the panel.
     loadQueue();
     loadUpNext();
-  }, [gameId, questionQueue, queueVersion, upNext, loadQueue, loadUpNext]);
+  }, [gameId, questionQueue, queueVersion, upNext, loadQueue, loadUpNext, hostActionFailed]);
 
   /**
    * DISABLE — the third of the owner's four queue verbs: this question is not
@@ -3922,10 +4191,10 @@ Focus on actionable business strategy insights.`;
     }
 
     setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
-    if (failed) alert(`Could not disable that question: ${failed}`);
+    if (failed) hostActionFailed(`Could not disable that question: ${failed}`);
     loadQueue();
     loadUpNext();
-  }, [gameId, queueVersion, loadQueue, loadUpNext]);
+  }, [gameId, queueVersion, loadQueue, loadUpNext, hostActionFailed]);
 
   /** The way back from Disable — the veto lifts and the walk picks it up. */
   const handleRestoreQuestion = useCallback(async (rawKey) => {
@@ -3934,10 +4203,10 @@ Focus on actionable business strategy insights.`;
     const result = await postExclusionOp({
       apiBase: API_BASE, gameId, op: 'remove', questionKey: key,
     });
-    if (!result.ok) alert(`Could not restore that question: ${result.error}`);
+    if (!result.ok) hostActionFailed(`Could not restore that question: ${result.error}`);
     loadQueue();
     loadUpNext();
-  }, [gameId, loadQueue, loadUpNext]);
+  }, [gameId, loadQueue, loadUpNext, hostActionFailed]);
 
   // "Ask now": put one named question on the room's screen straight away.
   // "Ask next" is handleQueueFirst above — the top of the running order.
@@ -3961,6 +4230,7 @@ Focus on actionable business strategy insights.`;
         if (!proceed) return;
       }
       
+      setSessionActionError('');
       // Show loading overlay (same as handleNextQuestion)
       setIsLoadingData(true);
       setLoadingMessage('Loading Selected Question...');
@@ -3984,9 +4254,9 @@ Focus on actionable business strategy insights.`;
       });
       
       if (!nextQuestionRes.ok) {
-        const errorData = await nextQuestionRes.json();
+        const errorData = await nextQuestionRes.json().catch(() => ({}));
         console.error('Failed to select specific question:', errorData);
-        alert(`Failed to select question: ${errorData.error || 'Unknown error'}`);
+        hostActionFailed(`That question could not be asked: ${errorData.message || errorData.error || `HTTP ${nextQuestionRes.status}`}`);
         return;
       }
       
@@ -4034,7 +4304,7 @@ Focus on actionable business strategy insights.`;
       
     } catch (error) {
       console.error('Error selecting question:', error);
-      alert(`Error selecting question: ${error.message}`);
+      hostActionFailed(`That question could not be asked: ${error.message}`);
     } finally {
       setIsLoadingData(false);
     }
@@ -4132,6 +4402,7 @@ Focus on actionable business strategy insights.`;
       if (!proceed) return;
     }
 
+    setSessionActionError('');
     // Show loading overlay
     setIsLoadingData(true);
     setLoadingMessage('Loading Next Question...');
@@ -4177,7 +4448,9 @@ Focus on actionable business strategy insights.`;
 
       if (!attempt.advanced) {
         console.error('Failed to get next question:', attempt.error);
-        alert(`Failed to get next question: ${attempt.error}`);
+        // Never alert(): an expired sign-in is the sign-in form's to say, an
+        // ended session moves this screen to ENDED, the rest is a dock line.
+        hostActionFailed(`The next round did not start: ${attempt.error}`);
         return;
       }
       if (attempt.error) {
@@ -4269,7 +4542,7 @@ Focus on actionable business strategy insights.`;
         let the WebSocket finish repairing the panel, which it does on its own.
       */
       console.error('Next question advanced, but the host panel could not refresh', e);
-      alert('The round moved on, but this screen could not refresh. It should catch up on its own — do not press Next again.');
+      setSessionActionError('The round moved on, but this screen could not refresh. It should catch up on its own — do not press Next again.');
     } finally {
       // Hide loading overlay
       setIsLoadingData(false);
@@ -4408,6 +4681,7 @@ Focus on actionable business strategy insights.`;
     if (openingVoteRef.current) return;
     openingVoteRef.current = true;
     setManualStateChange(true);
+    setSessionActionError('');
 
     // Get answers and update state to voting using new API
     try {
@@ -4436,8 +4710,10 @@ Focus on actionable business strategy insights.`;
         setGameState(voteState);
       } else {
         console.error(`❌ HOST: Failed to start vote:`, startVoteRes.status);
-        const errorData = await startVoteRes.json();
+        const errorData = await startVoteRes.json().catch(() => ({}));
         console.error(`❌ HOST: Vote start error:`, errorData);
+        // It used to fail in the console only, leaving a button that did nothing.
+        hostActionFailed(`Voting did not open: ${errorData.message || errorData.error || `HTTP ${startVoteRes.status}`}`);
       }
     } catch (e) {
       console.error('Failed to start vote', e);
@@ -4458,6 +4734,7 @@ Focus on actionable business strategy insights.`;
       if (!proceed) return;
     }
 
+    setSessionActionError('');
     // Show loading overlay
     setIsLoadingData(true);
     setLoadingMessage('Calculating Results...');
@@ -4483,6 +4760,8 @@ Focus on actionable business strategy insights.`;
       
       if (!resultsRes.ok) {
         console.error('Failed to get results:', resultsRes.status);
+        const errorData = await resultsRes.json().catch(() => ({}));
+        hostActionFailed(`The results did not open: ${errorData.message || errorData.error || `HTTP ${resultsRes.status}`}`);
         return;
       }
       
@@ -4542,14 +4821,10 @@ Focus on actionable business strategy insights.`;
         // Same placement rule as the restore path above — one definition, in
         // config/podium.js, so the two sites cannot disagree about what a
         // place is.
+        // Tally order through config/navigatorOrder.js (two-surface D5), the
+        // order the Remote's list and the wall read the focus index against.
         formattedAnswers = resultsData.voteTallies && Object.keys(resultsData.voteTallies).length > 0
-          ? assignPlacements(Object.values(resultsData.voteTallies).map(tally => ({
-              player: tally.playerName,
-              playerName: tally.playerName, // for displayLabelFor
-              answer: tally.answerText,
-              points: tally.totalScore,
-              votes: tally.firstPlace + tally.secondPlace + tally.thirdPlace
-            })))
+          ? tallyOrder(resultsData.voteTallies).map((row) => ({ ...row, player: row.playerName }))
           : []; // Empty array if no votes
       }
       
@@ -5262,7 +5537,10 @@ Focus on actionable business strategy insights.`;
       if (res.status === 401 || res.status === 403) {
         console.warn('GET /games refused — session expired or not a host/admin');
         setGamesList([]);
-        alert('Your session has expired. Please sign in again to see your sessions.');
+        // A 401 is an expired sign-in, and authFetch has already put the
+        // sign-in form up (auth/sessionExpiry.js) — no alert on top of it.
+        if (res.status === 401 || isSessionExpired()) return;
+        alert('This account cannot see sessions yet. Ask an admin to approve it for hosting.');
         return;
       }
       const data = await res.json();
@@ -5533,6 +5811,23 @@ Focus on actionable business strategy insights.`;
     }
   };
 
+  /*
+    OPENED FROM THE REMOTE'S "Open session report" (two-surface Phase 1). The
+    report is built and drawn by this page, so the Remote's ENDED primary
+    links here with `?open=report`. Once, and only for an ended session: a
+    stale link must not pull a live room off its stage.
+  */
+  const openReportFromLinkRef = useRef(false);
+  useEffect(() => {
+    if (openReportFromLinkRef.current || !gameId || gameState !== 'ENDED') return;
+    if (new URLSearchParams(window.location.search).get('open') !== 'report') return;
+    openReportFromLinkRef.current = true;
+    generateReportForGame(gameId, eventTitle);
+    // generateReportForGame is a plain function redeclared each render; the
+    // ref keeps this to one build however often the page renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, gameState, eventTitle]);
+
   // An event's item is joined through the EVENT (events M4): its QR opens the
   // attendee's page, which joins the day once and follows it into this item.
   const playUrl = eventCode
@@ -5649,15 +5944,25 @@ Focus on actionable business strategy insights.`;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
       lessonExpanded, isLoadingData, qrMode,
-      spotlightOpen: spotlightIndex !== null,
+      // With two surfaces a response on the wall is a step Auto walks, not a
+      // pause: the laptop's spotlight is the host's view of the wall.
+      spotlightOpen: !twoSurfaces && spotlightIndex !== null,
       pastRoundOpen: pastRoundIndex !== null,
       scoreboardOpen: scoreboard.open,
     })) return undefined;
 
     const roundPhase = phaseOfGameState(gameState);
-    const phase = gameState === 'ENDED'
+    const beatPhase = gameState === 'ENDED'
       ? 'ENDED'
       : hostPhaseForBeat(roundPhase, resultsBeat);
+    // AUTO WALKS THE RESPONSES (owner, 2026-10-13): at RESULTS with a response
+    // on the wall, the step is that response's dwell, then the dock's primary.
+    const onResponse = twoSurfaces && beatPhase === 'RESULTS' && spotlightIndex !== null;
+    const phase = onResponse ? 'RESPONSES' : beatPhase;
+    // During voting the wall always shows a response: Response 1 until a step.
+    const votingIndex = twoSurfaces && beatPhase === 'VOTE' ? (spotlightIndex === null ? 0 : spotlightIndex) : null;
+    const shownIndex = onResponse ? spotlightIndex : votingIndex;
+    const shownAnswer = shownIndex !== null ? answers[shownIndex] : null;
 
     // The stage's own page arithmetic, re-derived the way the render derives
     // it: the shared index keyed by phase#round, cut by the same slicers.
@@ -5689,14 +5994,35 @@ Focus on actionable business strategy insights.`;
       answeredCount,
       votedCount: playersWhoVoted.length,
       page, pages, pageText, notesReady,
+      walkResponses: twoSurfaces,
+      responseCount: answers.length,
+      responseText: shownAnswer ? answerText(shownAnswer.answer) : '',
     });
     if (!decision) return undefined;
+
+    // A vote landing re-runs this effect; the response on the wall keeps its
+    // own clock, so a busy room does not hold Auto on one response forever.
+    let delayMs = decision.delayMs;
+    if (votingIndex !== null && decision.kind === 'secondary') {
+      const key = `${lessonNumber}#${votingIndex}`;
+      if (!autoShownRef.current || autoShownRef.current.key !== key) autoShownRef.current = { key, at: Date.now() };
+      delayMs = Math.max(500, decision.delayMs - (Date.now() - autoShownRef.current.at));
+    }
 
     const timer = setTimeout(() => {
       const hands = autoActRef.current;
       if (!hands) return;
       if (decision.kind === 'page') {
         hands.turnTo(page + 1);
+        return;
+      }
+      // Show response 1 of N at RESULTS; during voting Next response (and Next
+      // part) — the dock's own secondary, through its runner.
+      if (decision.kind === 'secondary') {
+        const walkable = [HOST_INTENTS.SHOW_RESPONSE, HOST_INTENTS.NEXT_RESPONSE, HOST_INTENTS.NEXT_PART];
+        if (hands.secondary && !hands.secondary.disabled && walkable.includes(hands.secondary.intent)) {
+          hands.run(hands.secondary);
+        }
         return;
       }
       // The dock's own primary, through the dock's own runner — disabled means
@@ -5706,14 +6032,59 @@ Focus on actionable business strategy insights.`;
       if (!hands.primary || hands.primary.disabled) return;
       if (hands.primary.intent === HOST_INTENTS.END_SURVEY) return;
       hands.run(hands.primary);
-    }, decision.delayMs);
+    }, delayMs);
     return () => clearTimeout(timer);
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
-    spotlightIndex, pastRoundIndex, scoreboard.open]);
+    spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces]);
+
+  /*
+    WORKIE'S PAGE AS A SERVER FACT (two-surface PLAN 1.14). Every way this page
+    turns the read — the dock's Next page, → and ←, the pips, Auto — moves the
+    beat-keyed `stagePage`; this re-derives the page and count the way the
+    render does and hands them to useStageNotesSync, which posts the absolute
+    page when it changes here and follows the Remote's turns from frames.
+    Not for a survey's read, which the Remote does not drive.
+  */
+  const notesSyncPhase = gameState === 'ENDED' ? 'ENDED' : hostPhaseForBeat(phaseOfGameState(gameState), resultsBeat);
+  const notesSyncRaw = stagePage && stagePage.key === `FIELD_NOTES#${lessonNumber}` ? stagePage.index : 0;
+  let notesSyncPage = 0;
+  let notesSyncPages = 1;
+  if (currentAIInsights && currentAIInsights.markdownResponse) {
+    const slice = prosePageSlice(currentAIInsights.markdownResponse, notesSyncRaw, proseBudgetFor(profile));
+    notesSyncPage = slice.page;
+    notesSyncPages = slice.pages;
+  } else if (currentAIInsights) {
+    const points = (currentAIInsights.discussionTopics || []).length + (currentAIInsights.nextSteps || []).length;
+    notesSyncPages = pageCount(points, pageSizeFor(profile));
+    notesSyncPage = clampPage(notesSyncRaw, notesSyncPages);
+  }
+  const publishNotesPage = async (body) => {
+    try {
+      const res = await authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  const notesSync = useStageNotesSync({
+    gameId,
+    round: lessonNumber,
+    onRead: notesSyncPhase === 'FIELD_NOTES' && !isSurveyType(currentGameType),
+    ready: Boolean(currentAIInsights) && !loadingAIInsights,
+    page: notesSyncPage,
+    pages: notesSyncPages,
+    turnTo: (index, round) => turnStagePage(`FIELD_NOTES#${round ?? lessonNumber}`, index),
+    post: publishNotesPage,
+  });
+  notesSyncRef.current = notesSync;
 
   /*
     THE SCOREBOARD — opening, closing and the look, from every surface that can.
@@ -5874,7 +6245,8 @@ Focus on actionable business strategy insights.`;
         reportData={reportData}
         status={reportStatus}
         error={reportError}
-        onClose={() => { setShowReport(false); setReportStatus('idle'); }}
+        notice={reportNotice}
+        onClose={() => { setShowReport(false); setReportStatus('idle'); setReportNotice(''); }}
         onRetry={reportTarget
           ? () => generateReportForGame(reportTarget.gameId, reportTarget.eventTitle)
           : null}
@@ -6184,6 +6556,22 @@ Focus on actionable business strategy insights.`;
     goalLine: stageGoal.notice,
     notesPage,
     notesPages,
+    // THE READ NEVER SKIPS BY ACCIDENT (two-surface Phase 1, roundStep): until
+    // Workie's read is here the primary is a greyed "Show the read", so Space
+    // and a clicker cannot carry the room past it. A failed read counts as
+    // here — there is nothing left to wait for.
+    notesReady: notesReadyFor({
+      insights: currentAIInsights, failure: aiSummaryFailure, answerCount: answers.length, gameType: currentGameType,
+    }),
+    // The response on the wall, in tally order: RESULTS becomes RESPONSES and
+    // the primary walks the responses (Next response, then What we heard).
+    spotlightIndex,
+    // ASK THE ROOM: the question on screen (live, then its results) and how
+    // many asks wait beside the read.
+    roomAsk: roundAsks.shown
+      ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
+      : null,
+    asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
   });
   /*
     AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
@@ -6263,7 +6651,8 @@ Focus on actionable business strategy insights.`;
     `index !== null` and nothing else.
   */
   const anyOverlayOpen = shortcutsSuppressed({
-    showConfirmModal, showExpandedQR,
+    // The ask preview is a dialog: Space and the arrows are its own.
+    showConfirmModal: showConfirmModal || Boolean(askPreview), showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
     spotlightOpen: spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
@@ -6333,7 +6722,8 @@ Focus on actionable business strategy insights.`;
   const endSessionNow = async () => {
     const result = await requestEndSession({ fetchFn: authFetch, apiBase: API_BASE, gameId });
     if (!result.ended) {
-      setSessionActionError(`The session did not end: ${result.error}`);
+      // Already ended elsewhere → the ENDED phase; expired → the sign-in form.
+      hostActionFailed(`The session did not end: ${result.error}`);
       return;
     }
     setSessionActionError('');
@@ -6389,7 +6779,31 @@ Focus on actionable business strategy insights.`;
       case HOST_INTENTS.REVEAL:
         handleShowResults();
         break;
+      case HOST_INTENTS.SHOW_RESPONSE:
+      case HOST_INTENTS.NEXT_RESPONSE:
+        // roundStep names the response by its tally position; the stage's
+        // `answers` at RESULTS are in that order (config/navigatorOrder.js).
+        openSpotlight(Number.isInteger(action.index) ? action.index : 0);
+        break;
+      case HOST_INTENTS.NEXT_PART:
+        // A long response split into parts (Phase 2 measures them). The part
+        // is a server fact on /stage-focus, so the wall and the Remote agree.
+        publishFocus({ focus: 'answer', index: action.index, part: action.part, parts: action.parts });
+        break;
+      case HOST_INTENTS.STOP_SHOWING:
+        closeSpotlight();
+        break;
+      case HOST_INTENTS.CLOSE_ASK:
+      case HOST_INTENTS.CANCEL_ASK:
+        finishRoomAsk(action.intent === HOST_INTENTS.CLOSE_ASK ? 'close' : 'cancel');
+        break;
+      case HOST_INTENTS.WAIT:
+        // A primary that cannot act yet (the read before Workie has written).
+        break;
       case HOST_INTENTS.FIELD_NOTES:
+        // From a response on the wall, put it away first: What we heard is
+        // the next thing the room reads, not a response with the read behind it.
+        if (spotlightIndex !== null) closeSpotlight();
         // The round does not move; the stage does. Local first so the stage
         // does not wait on a round trip, then published to /stage-beat so the
         // phone follows — that is what makes the two devices one control.
@@ -6596,6 +7010,31 @@ Focus on actionable business strategy insights.`;
     || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
     ? scopedRoundComments.filter((c) => c.featured).sort((a, b) => String(b.featuredAt || '').localeCompare(String(a.featuredAt || '')))[0] || null
     : null;
+  /*
+    ASK THE ROOM ICONS (option A): each unsent suggestion beside the point of
+    the read it came from, and the ones whose point the read does not hold
+    after it. Two surfaces only: on one screen this page is the wall.
+  */
+  const askPlacement = twoSurfaces && roundAsks.enabled && currentAIInsights && currentAIInsights.markdownResponse
+    ? placeAsks(currentAIInsights.markdownResponse, roundAsks.suggestions)
+    : null;
+  const unsentAsks = new Set(roundAsks.unsent.map((u) => u.index));
+  const askAddon = askPlacement
+    ? (text) => {
+      const entries = (askPlacement.byPoint.get(pointKey(text)) || []).filter((e) => unsentAsks.has(e.index));
+      return entries.length ? <AskIcons entries={entries} onOpen={setAskPreview} /> : null;
+    }
+    : null;
+  const askAfterEntries = askPlacement ? askPlacement.after.filter((e) => unsentAsks.has(e.index)) : [];
+  const askAfter = askAfterEntries.length ? (
+    <p className="askicons-after">
+      <span>{FW.afterTheRead}</span>
+      <AskIcons entries={askAfterEntries} onOpen={setAskPreview} />
+    </p>
+  ) : null;
+
+  // The host's "said in the room" line, while the room is giving feedback.
+  const meterCompose = hostPhase === 'FEEDBACK' ? { onSend: handleRoomNote } : null;
   const meterArrivals = (hostPhase === 'FEEDBACK'
     || ((hostPhase === 'RESULTS' || hostPhase === 'FIELD_NOTES') && scopedRoundComments.length > 0))
     && wallComments !== false
@@ -6747,7 +7186,7 @@ Focus on actionable business strategy insights.`;
      never re-runs on a notes page turn, and page 2 is drawn at the scale chosen
      for page 1. */
   const stagePageIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
-  const setStagePageIndex = (index) => setStagePage({ key: pageKey, index });
+  const setStagePageIndex = (index) => turnStagePage(pageKey, index);
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
 
   // AUTO-MODE'S HANDS — see the effect above the early returns. Assigned by
@@ -6756,6 +7195,7 @@ Focus on actionable business strategy insights.`;
   // turns the same shared page index the arrow keys turn.
   autoActRef.current = {
     primary: hostControls.primary,
+    secondary: hostControls.secondary,
     run: runHostAction,
     turnTo: setStagePageIndex,
   };
@@ -6831,6 +7271,8 @@ Focus on actionable business strategy insights.`;
    * same order. `closeSpotlight` immediately above carries the same note for
    * the same reason. It runs from a click and memoising it buys nothing.
    */
+  // eslint-disable-next-line no-use-before-define
+  publishFocusRef.current = (focus) => publishFocus(focus);
   const publishFocus = (focus) => {
     const body = focusRequest({ ...focus, state: gameStateRef.current });
     // No round on screen — nothing can be focused, so there is nothing to say.
@@ -7012,8 +7454,11 @@ Focus on actionable business strategy insights.`;
                 : {
                     url: joinDisplayUrl,
                     code: eventCode || gameId,
-                    onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : 'preview')),
-                    onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' ? mode : null)),
+                    /* TWO SURFACES (owner, 2026-10-13): hovering the code puts it
+                       up on every screen and it stays until a click anywhere, or
+                       J, takes it down; the classic page keeps its hover preview. */
+                    onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : (twoSurfaces ? 'pinned' : 'preview'))),
+                    onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' || twoSurfaces ? mode : null)),
                     onPin: () => setQrMode('pinned'),
                   })
               : {}}
@@ -7025,6 +7470,7 @@ Focus on actionable business strategy insights.`;
               phase={hostPhase} heading={meter.heading} body={meter.body}
               complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
               rows={meter.rows}
+              compose={meterCompose}
             />
           )
           : null}
@@ -7036,6 +7482,7 @@ Focus on actionable business strategy insights.`;
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
             onAgenda={eventCode ? goToAgenda : undefined}
+            present={twoSurfaces && gameId ? { href: presentHref(gameId), presenting } : null}
             complete={everybodyIn}
             /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
                `heading` / `body`, handed to the dock so that the fitter taking
@@ -7294,21 +7741,55 @@ Focus on actionable business strategy insights.`;
                 {stageResponsesReady && answers.length === 0 && (
                   <p className="qdetail">No responses yet.</p>
                 )}
+                {/* OPENABLE DURING VOTING TOO (owner, 2026-10-13): a card puts
+                    that response on the wall exactly as results do, in the
+                    voting order every ballot shows (`answers` here is
+                    /answers/host, already in that order), and ALWAYS as
+                    "Response N" — never a name during voting, whatever the
+                    round's names setting, so a shared laptop cannot leak one. */}
                 <div className="cards">
                   {stageResponsesReady && answerPage.items.map((answer, i) => {
                     const idx = answerPage.offset + i;
+                    const label = navigatorLabel(answer, idx, { phase: 'VOTE' });
+                    // With two surfaces the wall walks the responses from the
+                    // start of voting; this card marks the one it shows.
+                    const showing = twoSurfaces && idx === (spotlightIndex === null ? 0 : spotlightIndex);
                     return (
-                      <div key={idx} className="card">
+                      <div
+                        key={idx}
+                        className={`card is-openable${showing ? ' is-showing' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-current={showing ? 'true' : undefined}
+                        aria-label={`Show ${label} on the screen`}
+                        onClick={() => openSpotlight(idx)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openSpotlight(idx);
+                          }
+                        }}
+                      >
                         <div className="body">
                           <div className="ans">{`“${answerText(answer.answer)}”`}</div>
-                          <span className={`who ${authorsRevealed ? 'revealed' : 'anon'}`}>
-                            {displayLabelFor(answer, idx)}
-                          </span>
+                          <span className="who anon">{label}</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                {/* One screen: the response opens here. Two surfaces: it is on
+                    the wall, and the card above is marked instead. */}
+                <AnswerSpotlight
+                  surfaceClassName="stage-spot"
+                  answers={answers}
+                  index={twoSurfaces ? null : spotlightIndex}
+                  onIndex={openSpotlight}
+                  onClose={closeSpotlight}
+                  showPoints={false}
+                  labelFor={(answer, idx) => navigatorLabel(answer, idx, { phase: 'VOTE' })}
+                  title={`Round ${lessonNumber} response`}
+                />
                 {stageResponsesReady && (
                   <Pager
                     total={answers.length}
@@ -7607,10 +8088,13 @@ Focus on actionable business strategy insights.`;
                   index={spotlightIndex}
                   onIndex={openSpotlight}
                   onClose={closeSpotlight}
-                  showPoints={standingsVisible({
+                  /* DURING VOTE: no name, no points, whatever the round's
+                     names setting (the owner's ruling, two-surface D5). */
+                  showPoints={phaseOfGameState(gameState) !== 'VOTE' && standingsVisible({
                     gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                   })}
-                  labelFor={(answer, idx) => stageLabelFor(answer, idx, {
+                  labelFor={(answer, idx) => navigatorLabel(answer, idx, {
+                    phase: phaseOfGameState(gameState),
                     authorsHidden: authorsHiddenNow({
                       gameType: currentGameType, anonymousUntilReveal, authorsRevealed,
                     }),
@@ -7622,7 +8106,7 @@ Focus on actionable business strategy insights.`;
 
             {hostPhase === 'FIELD_NOTES' && (
               <>
-                <div className="kicker">What we heard</div>
+                <div className="kicker">{RW.whatWeHeard}</div>
                 {/* Four states, one component (components/AISummaryStatus.jsx):
                     writing, written, FAILED, and nothing yet. The fourth used
                     to stand in for the third — a trigger that never reached the
@@ -7644,6 +8128,8 @@ Focus on actionable business strategy insights.`;
                   retrying={aiRetrying}
                   onRetry={handleRetryAISummary}
                   onRedo={handleRegenerateAISummary}
+                  listItemAddon={askAddon}
+                  afterRead={askAfter}
                   profile={profile}
                   page={stagePageIndex}
                   onPage={setStagePageIndex}
@@ -7726,6 +8212,21 @@ Focus on actionable business strategy insights.`;
               // and the comment the host put up as a pull quote (FeedbackWall.jsx).
               // The count is the meter's; the arrivals are the meter's list.
               <FeedbackWall featured={featuredComment} onTakeDown={handleFeatureComment} />
+            )}
+
+            {/* A QUESTION FOR THE ROOM (the `ask` beat): live, then its
+                results; for Ideas, the host picks what reaches the wall. */}
+            {hostPhase === 'ASKING' && (
+              <AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} />
+            )}
+            {askPreview && (
+              <AskPreview
+                entry={askPreview}
+                onSend={sendRoomAsk}
+                onClose={() => setAskPreview(null)}
+                blocked={Boolean(roundAsks.live)}
+                theme="dark"
+              />
             )}
 
             {/* ENDED LEADS WITH THE CONCLUSION, NOT THE TITLE — 10-ended.
@@ -7997,7 +8498,19 @@ Focus on actionable business strategy insights.`;
           className={qrOverlayClassName(qrMode)}
           onClick={() => { setShowExpandedQR(false); setQrMode(null); }}
         >
-          <div className="expanded-qr-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="expanded-qr-content"
+            /* With two surfaces a click anywhere, the code included, takes it
+               down everywhere; only the copy link keeps it up. */
+            onClick={(e) => {
+              if (twoSurfaces && !(e.target && e.target.closest && e.target.closest('.clickable-url'))) {
+                setShowExpandedQR(false);
+                setQrMode(null);
+                return;
+              }
+              e.stopPropagation();
+            }}
+          >
             <div className="expanded-qr-header">
               <h2>{eventTitle || 'Engagements Session'}</h2>
             </div>

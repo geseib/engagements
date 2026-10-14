@@ -21,23 +21,17 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
+const ROLES_CSS = read('styles', 'roles.css');
 const BUILDER_CSS = read('BuilderPage.css');
 const SAB_CSS = read('components', 'SurveyAIBuilder.css');
 const GIT_CSS = read('components', 'GeneratedItemsTable.css');
 
-/* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
-}
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-
+/* ---- colour: the audit's lin/lum/ratio (docs/design/admin-redesign/audit.html) live
+        verbatim in testing/skinHarness.js; H.ratio is that ratio. ---- */
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 function block(css, selector) {
@@ -47,30 +41,40 @@ function block(css, selector) {
   return match[2];
 }
 
-function token(css, selector, name) {
-  const body = block(css, selector);
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${selector}`);
-  return m[1];
+/** A `.sab`/`.git` token, every var() it reads resolved for one skin x theme. This
+ *  sheet is a paper-era light sheet on the white modal, so its default is
+ *  Classic / light; its literals are its own and resolve the same in every skin. */
+const CLASSIC_PAPER = { skin: 'classic', theme: 'light' };
+function token(css, selector, name, opts = CLASSIC_PAPER) {
+  block(css, selector);                       // the rule exists — renamed?
+  return H.scopeVar(stripComments(css), `${selector} {`, name, opts);
 }
-
-const WHITE = '#FFFFFF';
-const T = {
-  text: token(SAB_CSS, '.sab', '--sab-text'),
-  muted: token(SAB_CSS, '.sab', '--sab-muted'),
-  edge: token(SAB_CSS, '.sab', '--sab-edge'),
-  quiet: token(SAB_CSS, '.sab', '--sab-quiet'),
-  field: token(SAB_CSS, '.sab', '--sab-field'),
-  onAccent: token(SAB_CSS, '.sab', '--sab-on-accent'),
-  chipBg: token(SAB_CSS, '.sab', '--sab-chip-bg'),
-  chipFg: token(SAB_CSS, '.sab', '--sab-chip-fg'),
-  primary: token(GLOBAL_CSS, ':root', '--primary'),
-  gitChipBg: token(GIT_CSS, '.git', '--git-chip-bg'),
-  gitChipFg: token(GIT_CSS, '.git', '--git-chip-fg'),
+/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
+const norm = (c) => {
+  const p = H.parseColor(c);
+  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
 };
 
-const AA = 4.5;
-const on = (fg, bg) => ratio(parseHex(fg), parseHex(bg));
+const WHITE = '#FFFFFF';
+const palette = (opts) => ({
+  text: token(SAB_CSS, '.sab', '--sab-text', opts),
+  muted: token(SAB_CSS, '.sab', '--sab-muted', opts),
+  edge: token(SAB_CSS, '.sab', '--sab-edge', opts),
+  quiet: token(SAB_CSS, '.sab', '--sab-quiet', opts),
+  field: token(SAB_CSS, '.sab', '--sab-field', opts),
+  onAccent: token(SAB_CSS, '.sab', '--sab-on-accent', opts),
+  chipBg: token(SAB_CSS, '.sab', '--sab-chip-bg', opts),
+  chipFg: token(SAB_CSS, '.sab', '--sab-chip-fg', opts),
+  primary: H.role('--primary', opts),
+  gitChipBg: token(GIT_CSS, '.git', '--git-chip-bg', opts),
+  gitChipFg: token(GIT_CSS, '.git', '--git-chip-fg', opts),
+});
+const T = palette(CLASSIC_PAPER);
+// The modal is white paper, so every skin is measured on its light theme.
+const PAPER_CASES = H.CASES.filter(([, t]) => t === 'light');
+
+const AA = H.AA;
+const on = (fg, bg) => H.ratio(fg, bg);
 
 describe('the ground this is measured on', () => {
   test('the survey builder modal is white, as every number below assumes', () => {
@@ -83,20 +87,37 @@ describe('the ground this is measured on', () => {
   });
 });
 
-describe('every pairing the generator paints clears AA', () => {
+describe('Classic stays pinned', () => {
+  test('--sab-on-accent in Classic resolves to the #1b2942 it used to spell out', () => {
+    expect(norm(T.onAccent)).toEqual(norm('#1b2942'));
+  });
+});
+
+describe.each(PAPER_CASES)('every pairing the generator paints clears AA — %s / %s', (skin, theme) => {
+  const P = palette({ skin, theme });
   const pairs = [
-    ['labels, answers and toggle words on the modal', () => on(T.text, WHITE)],
-    ['help lines, the minutes and "Mix:" on the modal', () => on(T.muted, WHITE)],
-    ['a hovered toggle word', () => on(T.text, T.quiet)],
-    ['the details summary, hovered', () => on(T.muted, T.quiet)],
-    ['a pressed toggle — its word on the amber fill', () => on(T.onAccent, T.primary)],
-    ['a kind chip in the mix line', () => on(T.chipFg, T.chipBg)],
-    ['a kind chip in the review table', () => on(T.gitChipFg, T.gitChipBg)],
+    ['labels, answers and toggle words on the modal', () => on(P.text, WHITE)],
+    ['help lines, the minutes and "Mix:" on the modal', () => on(P.muted, WHITE)],
+    ['a hovered toggle word', () => on(P.text, P.quiet)],
+    ['the details summary, hovered', () => on(P.muted, P.quiet)],
+    ['a pressed toggle — its word on the amber fill', () => on(P.onAccent, P.primary)],
+    ['a kind chip in the mix line', () => on(P.chipFg, P.chipBg)],
+    ['a kind chip in the review table', () => on(P.gitChipFg, P.gitChipBg)],
   ];
   test.each(pairs)('%s', (_label, measure) => {
     expect(measure()).toBeGreaterThanOrEqual(AA);
   });
 
+  test('the premise: --primary on the white modal is under AA', () => {
+    expect(on(P.primary, WHITE)).toBeLessThan(AA);
+  });
+
+  test('a toggle\'s edge clears 3:1 on the modal', () => {
+    expect(on(P.edge, WHITE)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('every pairing the generator paints clears AA', () => {
   test('amber never carries text on the white modal', () => {
     // The premise: #F6A94C on white is under 2:1. So it may FILL a pressed
     // toggle (dark words on it), and nothing here may use it as a text colour.
@@ -130,9 +151,9 @@ describe('the stylesheet keeps to its own tokens and its own scope', () => {
     expect(offenders).toEqual([]);
   });
 
-  test('every custom property it uses is declared somewhere', () => {
+  test('every custom property it uses is declared somewhere (styles.css, the roles, or here)', () => {
     const declared = new Set();
-    for (const css of [GLOBAL_CSS, SAB_CSS]) {
+    for (const css of [GLOBAL_CSS, ROLES_CSS, SAB_CSS]) {
       for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) declared.add(m[1]);
     }
     const used = [...SAB_CSS.matchAll(/var\((--[a-z0-9-]+)/gi)].map((m) => m[1]);

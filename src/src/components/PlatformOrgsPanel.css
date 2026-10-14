@@ -1,3 +1,4 @@
+/* skin-allowance: colour=3 font=0 primary=3 */
 /* ============================================================================
    THE PLATFORM'S ORGANISATION LIST — components/PlatformOrgsPanel.jsx
 
@@ -47,14 +48,14 @@
      undefined custom property invalidates the WHOLE declaration and a colour
      borrowed from a stylesheet that merely happens to be in the bundle
      disappears the day that import moves. */
-  --porgs-success-text: #6FD0A4;
+  --porgs-success-text: var(--success-text);
 
-  --porgs-rule: rgba(155, 168, 190, .20);
-  --porgs-rule-strong: rgba(155, 168, 190, .34);
-  --porgs-row-hover: rgba(155, 168, 190, .055);
-  --porgs-tint-warn: rgba(246, 169, 76, .06);
-  --porgs-tint-danger: rgba(229, 100, 94, .09);
-  --porgs-tint-ok: rgba(79, 178, 134, .10);
+  --porgs-rule: rgb(var(--slate-rgb) / .20);
+  --porgs-rule-strong: rgb(var(--slate-rgb) / .34);
+  --porgs-row-hover: var(--row-hover);
+  --porgs-tint-warn: rgb(var(--warn-rgb) / .06);
+  --porgs-tint-danger: rgb(var(--danger-rgb) / .09);
+  --porgs-tint-ok: rgb(var(--success-rgb) / .10);
 
   color: var(--text);
   font: 400 var(--porgs-t-body)/1.45 var(--font-ui);

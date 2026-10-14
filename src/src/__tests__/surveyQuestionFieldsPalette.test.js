@@ -31,41 +31,18 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const EDITOR_CSS = read('components', 'QuestionSetEditor.css');
 const SQF_CSS = read('components', 'SurveyQuestionFields.css');
 
-/* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
-}
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-/* Walk UP compositing every alpha layer. Reading only the element's own
-   background is how dark-on-dark passes an audit. */
-function bgOf(el, win) {
-  let node = el; const stack = [];
-  while (node && node.nodeType === 1) {
-    const c = win.getComputedStyle(node).backgroundColor;
-    const m = String(c).match(/[\d.]+/g);
-    if (m) {
-      const a = m.length > 3 ? parseFloat(m[3]) : 1;
-      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
-    }
-    node = node.parentElement;
-  }
-  if (!stack.length) return [15, 26, 46];
-  let out = stack[stack.length - 1][0];
-  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
-  return out;
-}
+const H = require('../testing/skinHarness');
+
+/* ---- colour: the audit's lin/lum/ratio/alphaOver/bgOf (docs/design/admin-redesign/
+        audit.html) live verbatim in testing/skinHarness.js; H.on / H.composite are its
+        bgOf as arithmetic, so a role value written `rgb(r g b / a)` composites without
+        jsdom having to parse it. ---- */
 
 /* ---- values, READ rather than retyped ------------------------------------ */
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-
 function blockOf(css, head) {
   const text = strip(css);
   const start = text.indexOf(head);
@@ -79,65 +56,61 @@ function ruleBody(css, selector) {
   return m[2];
 }
 
-const DUSK = blockOf(GLOBAL_CSS, '[data-theme="dark"] {');
-const ROOT = blockOf(GLOBAL_CSS, ':root {');
 const EDITOR = blockOf(EDITOR_CSS, '.qs-editor {');
 const SCOPE = blockOf(SQF_CSS, '.sqf {');
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+const declares = (block, name) => new RegExp(`(^|[^\\w-])${name}\\s*:`).test(block);
 
-/** A token as the survey fields see it: their own scope, then the editor's, then dusk, then :root. */
-function resolve(name) {
-  for (const block of [SCOPE, EDITOR, DUSK, ROOT]) {
-    const hex = block.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-    if (hex) return hex[1].toUpperCase();
-    const rgba = block.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-    if (rgba) return rgba[1];
+/** A token as the survey fields see it: their own scope, then the editor's, then the
+ *  roles (styles/roles.css + the skin) — every var() resolved for one skin x theme. */
+function resolve(name, opts = CLASSIC_DUSK) {
+  if (declares(SCOPE, name)) return H.scopeVar(strip(SQF_CSS), '.sqf {', name, opts);
+  if (declares(EDITOR, name)) return H.scopeVar(strip(EDITOR_CSS), '.qs-editor {', name, opts);
+  try { return H.role(name, opts); } catch (e) {
+    throw new Error(`${name} is declared by no block the survey fields can see`);
   }
-  throw new Error(`${name} is declared by no block the survey fields can see`);
 }
 
 /** The ground a rule paints, or null when it paints none and what is beneath shows. */
-function groundOf(css, selector) {
+function groundOf(css, selector, opts = CLASSIC_DUSK) {
   const bg = ruleBody(css, selector).match(/background(?:-color)?:\s*var\((--[\w-]+)\)/);
-  return bg ? resolve(bg[1]) : null;
+  return bg ? resolve(bg[1], opts) : null;
 }
 /** The ink a rule draws its text in. */
-function inkOf(css, selector) {
+function inkOf(css, selector, opts = CLASSIC_DUSK) {
   const fg = ruleBody(css, selector).match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
   if (!fg) throw new Error(`"${selector}" draws no ink of its own`);
-  return resolve(fg[1]);
+  return resolve(fg[1], opts);
 }
 
-function composited(layers) {
-  document.body.innerHTML = '';
-  let host = document.body;
-  for (const background of layers.filter(Boolean)) {
-    const el = document.createElement('div');
-    el.style.backgroundColor = background;
-    host.appendChild(el);
-    host = el;
-  }
-  return bgOf(host, window);
-}
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
-const AA = 4.5;
-
-const T = {
-  bg: resolve('--bg'),
-  text: resolve('--text'),
-  muted: resolve('--muted'),
-  primary: resolve('--primary'),
-};
+const on = (fg, layers) => H.on(fg, layers.filter(Boolean));
+const AA = H.AA;
 
 /* The real paint stack, as questionSetEditorPalette.test.js reads it: the
    console's dusk field, the editor's card, the Questions panel cut into it as
    a well, a question row raised back out of it — and the dialog on the card. */
-const CARD = [T.bg, groundOf(EDITOR_CSS, '.admin-section.qs-editor')];
-const PANEL = [...CARD, groundOf(GLOBAL_CSS, '.qs-editor .qs-panel')];
-const ROW = [...PANEL, groundOf(GLOBAL_CSS, '.qs-question-row')];
-const CHANGED = [...ROW, resolve('--qs-tint-warn')];
-const REMOVED = [...ROW, resolve('--qs-tint-danger')];
-const DIALOG = [...CARD, groundOf(EDITOR_CSS, '.qs-editor .modal-content')];
-const MENU = [...PANEL, groundOf(SQF_CSS, '.sqf-menu')];
+function stacks(opts) {
+  const CARD = [resolve('--bg', opts), groundOf(EDITOR_CSS, '.admin-section.qs-editor', opts)];
+  const PANEL = [...CARD, groundOf(GLOBAL_CSS, '.qs-editor .qs-panel', opts)];
+  const ROW = [...PANEL, groundOf(GLOBAL_CSS, '.qs-question-row', opts)];
+  return {
+    CARD,
+    PANEL,
+    ROW,
+    CHANGED: [...ROW, resolve('--qs-tint-warn', opts)],
+    REMOVED: [...ROW, resolve('--qs-tint-danger', opts)],
+    DIALOG: [...CARD, groundOf(EDITOR_CSS, '.qs-editor .modal-content', opts)],
+    MENU: [...PANEL, groundOf(SQF_CSS, '.sqf-menu', opts)],
+  };
+}
+
+/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
+const norm = (c) => {
+  const p = H.parseColor(c);
+  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
+};
+
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
 
 describe('the sheet sits on the editor\'s dusk ground', () => {
   test('the editor root declares the dark theme, which every measurement below assumes', () => {
@@ -157,68 +130,82 @@ describe('the sheet sits on the editor\'s dusk ground', () => {
     expect(mounts).toEqual(['components/QuestionsPanel.jsx']);
   });
 
-  test('the menu and the number fields paint opaque grounds, so nothing behind them reaches the text', () => {
-    expect(groundOf(SQF_CSS, '.sqf-menu')).toMatch(/^#[0-9A-F]{6}$/);
-    expect(groundOf(SQF_CSS, '.sqf-num')).toMatch(/^#[0-9A-F]{6}$/);
+  test.each(DUSK_CASES)('the menu and the number fields paint opaque grounds, so nothing behind them reaches the text — %s / %s', (skin, theme) => {
+    expect(H.parseColor(groundOf(SQF_CSS, '.sqf-menu', { skin, theme })).a).toBe(1);
+    expect(H.parseColor(groundOf(SQF_CSS, '.sqf-num', { skin, theme })).a).toBe(1);
+  });
+
+  test.each([
+    ['--sqf-rule', 'rgba(155, 168, 190, .20)'],
+    ['--sqf-rule-strong', 'rgba(155, 168, 190, .34)'],
+    ['--sqf-row-hover', 'rgba(155, 168, 190, .08)'],
+    ['--sqf-row-sel', 'rgba(246, 169, 76, .10)'],
+  ])('Classic stays pinned: %s in Classic / dark is %s', (name, literal) => {
+    expect(norm(resolve(name))).toEqual(norm(literal));
   });
 });
 
-describe('a survey question\'s row in the Questions panel', () => {
-  test.each([
-    ['the Kind chip\'s word', () => inkOf(SQF_CSS, '.sqf-kind'), ROW],
-    ['the Kind chip on a changed row', () => inkOf(SQF_CSS, '.sqf-kind'), CHANGED],
-    ['the Kind chip on a removed row', () => inkOf(SQF_CSS, '.sqf-kind'), REMOVED],
-    ['the answer preview under the title', () => inkOf(SQF_CSS, '.sqf-prev'), ROW],
-    ['the answer preview on a changed row', () => inkOf(SQF_CSS, '.sqf-prev'), CHANGED],
-    ['the answer preview on a removed row', () => inkOf(SQF_CSS, '.sqf-prev'), REMOVED],
-    ['the preview\'s leading figure ("1–5", "4 options")', () => inkOf(SQF_CSS, '.sqf-prev b'), ROW],
-    ['Optional', () => inkOf(SQF_CSS, '.sqf-req'), ROW],
-    ['Optional on a changed row', () => inkOf(SQF_CSS, '.sqf-req'), CHANGED],
-    ['Required', () => inkOf(SQF_CSS, '.sqf-req.on'), ROW],
-    ['Required on a removed row', () => inkOf(SQF_CSS, '.sqf-req.on'), REMOVED],
-  ])('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg(), layers)).toBeGreaterThanOrEqual(AA);
-  });
-});
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const opts = { skin, theme };
+  const { ROW, CHANGED, REMOVED, DIALOG, MENU } = stacks(opts);
 
-describe('the Add question menu', () => {
-  test.each([
-    ['a kind\'s name', () => inkOf(SQF_CSS, '.sqf-menu-item b'), () => MENU],
-    ['its one sentence', () => inkOf(SQF_CSS, '.sqf-menu-item span'), () => MENU],
-    ['a kind\'s name under the pointer or the keyboard',
-      () => inkOf(SQF_CSS, '.sqf-menu-item b'), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:hover')]],
-    ['its sentence, highlighted',
-      () => inkOf(SQF_CSS, '.sqf-menu-item span'), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:hover')]],
-    ['a kind\'s name with keyboard focus',
-      () => inkOf(SQF_CSS, '.sqf-menu-item b'), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:focus-visible')]],
-    ['its sentence with keyboard focus',
-      () => inkOf(SQF_CSS, '.sqf-menu-item span'), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:focus-visible')]],
-  ])('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg(), layers())).toBeGreaterThanOrEqual(AA);
+  describe('a survey question\'s row in the Questions panel', () => {
+    test.each([
+      ['the Kind chip\'s word', () => inkOf(SQF_CSS, '.sqf-kind', opts), ROW],
+      ['the Kind chip on a changed row', () => inkOf(SQF_CSS, '.sqf-kind', opts), CHANGED],
+      ['the Kind chip on a removed row', () => inkOf(SQF_CSS, '.sqf-kind', opts), REMOVED],
+      ['the answer preview under the title', () => inkOf(SQF_CSS, '.sqf-prev', opts), ROW],
+      ['the answer preview on a changed row', () => inkOf(SQF_CSS, '.sqf-prev', opts), CHANGED],
+      ['the answer preview on a removed row', () => inkOf(SQF_CSS, '.sqf-prev', opts), REMOVED],
+      ['the preview\'s leading figure ("1–5", "4 options")', () => inkOf(SQF_CSS, '.sqf-prev b', opts), ROW],
+      ['Optional', () => inkOf(SQF_CSS, '.sqf-req', opts), ROW],
+      ['Optional on a changed row', () => inkOf(SQF_CSS, '.sqf-req', opts), CHANGED],
+      ['Required', () => inkOf(SQF_CSS, '.sqf-req.on', opts), ROW],
+      ['Required on a removed row', () => inkOf(SQF_CSS, '.sqf-req.on', opts), REMOVED],
+    ])('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg(), layers)).toBeGreaterThanOrEqual(AA);
+    });
   });
-});
 
-describe('the question dialog: the kind bar and each kind\'s fields', () => {
-  const pressed = '.sqf-opt[aria-pressed="true"]';
-  const segOn = '.sqf-seg button[aria-pressed="true"]';
-  test.each([
-    ['a kind in the kind bar', () => inkOf(SQF_CSS, '.sqf-opt'), () => DIALOG],
-    ['a kind under the pointer', () => inkOf(SQF_CSS, '.sqf-opt'), () => [...DIALOG, groundOf(SQF_CSS, '.sqf-opt:hover')]],
-    ['the chosen kind, on the amber', () => inkOf(SQF_CSS, pressed), () => [groundOf(SQF_CSS, pressed)]],
-    ['a field label ("Scale", "People can pick")', () => inkOf(SQF_CSS, '.sqf-lab'), () => DIALOG],
-    ['the help line under a field', () => inkOf(SQF_CSS, '.sqf-help'), () => DIALOG],
-    ['a dimmed aside ("— 2 to 8")', () => inkOf(SQF_CSS, '.sqf-dim'), () => DIALOG],
-    ['an option\'s letter', () => inkOf(SQF_CSS, '.sqf-k'), () => DIALOG],
-    ['a segment not chosen ("1–10")', () => inkOf(SQF_CSS, '.sqf-seg button'), () => DIALOG],
-    ['the chosen segment ("1–5")', () => inkOf(SQF_CSS, segOn), () => [...DIALOG, groundOf(SQF_CSS, segOn)]],
-    ['a number in its box ("up to 2")', () => inkOf(SQF_CSS, '.sqf-num'), () => [...DIALOG, groundOf(SQF_CSS, '.sqf-num')]],
-    ['a held number box, while its choice is off',
-      () => inkOf(SQF_CSS, '.sqf-num:disabled'), () => [...DIALOG, groundOf(SQF_CSS, '.sqf-num:disabled')]],
-    ['a switch\'s label ("Needs an answer")', () => inkOf(SQF_CSS, '.sqf-switch'), () => DIALOG],
-    ['a switch\'s explanation', () => inkOf(SQF_CSS, '.sqf-switch small'), () => DIALOG],
-    ['the remove-an-option control', () => inkOf(SQF_CSS, '.sqf-x'), () => DIALOG],
-  ])('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg(), layers())).toBeGreaterThanOrEqual(AA);
+  describe('the Add question menu', () => {
+    test.each([
+      ['a kind\'s name', () => inkOf(SQF_CSS, '.sqf-menu-item b', opts), () => MENU],
+      ['its one sentence', () => inkOf(SQF_CSS, '.sqf-menu-item span', opts), () => MENU],
+      ['a kind\'s name under the pointer or the keyboard',
+        () => inkOf(SQF_CSS, '.sqf-menu-item b', opts), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:hover', opts)]],
+      ['its sentence, highlighted',
+        () => inkOf(SQF_CSS, '.sqf-menu-item span', opts), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:hover', opts)]],
+      ['a kind\'s name with keyboard focus',
+        () => inkOf(SQF_CSS, '.sqf-menu-item b', opts), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:focus-visible', opts)]],
+      ['its sentence with keyboard focus',
+        () => inkOf(SQF_CSS, '.sqf-menu-item span', opts), () => [...MENU, groundOf(SQF_CSS, '.sqf-menu-item:focus-visible', opts)]],
+    ])('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg(), layers())).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  describe('the question dialog: the kind bar and each kind\'s fields', () => {
+    const pressed = '.sqf-opt[aria-pressed="true"]';
+    const segOn = '.sqf-seg button[aria-pressed="true"]';
+    test.each([
+      ['a kind in the kind bar', () => inkOf(SQF_CSS, '.sqf-opt', opts), () => DIALOG],
+      ['a kind under the pointer', () => inkOf(SQF_CSS, '.sqf-opt', opts), () => [...DIALOG, groundOf(SQF_CSS, '.sqf-opt:hover', opts)]],
+      ['the chosen kind, on the amber', () => inkOf(SQF_CSS, pressed, opts), () => [groundOf(SQF_CSS, pressed, opts)]],
+      ['a field label ("Scale", "People can pick")', () => inkOf(SQF_CSS, '.sqf-lab', opts), () => DIALOG],
+      ['the help line under a field', () => inkOf(SQF_CSS, '.sqf-help', opts), () => DIALOG],
+      ['a dimmed aside ("— 2 to 8")', () => inkOf(SQF_CSS, '.sqf-dim', opts), () => DIALOG],
+      ['an option\'s letter', () => inkOf(SQF_CSS, '.sqf-k', opts), () => DIALOG],
+      ['a segment not chosen ("1–10")', () => inkOf(SQF_CSS, '.sqf-seg button', opts), () => DIALOG],
+      ['the chosen segment ("1–5")', () => inkOf(SQF_CSS, segOn, opts), () => [...DIALOG, groundOf(SQF_CSS, segOn, opts)]],
+      ['a number in its box ("up to 2")', () => inkOf(SQF_CSS, '.sqf-num', opts), () => [...DIALOG, groundOf(SQF_CSS, '.sqf-num', opts)]],
+      ['a held number box, while its choice is off',
+        () => inkOf(SQF_CSS, '.sqf-num:disabled', opts), () => [...DIALOG, groundOf(SQF_CSS, '.sqf-num:disabled', opts)]],
+      ['a switch\'s label ("Needs an answer")', () => inkOf(SQF_CSS, '.sqf-switch', opts), () => DIALOG],
+      ['a switch\'s explanation', () => inkOf(SQF_CSS, '.sqf-switch small', opts), () => DIALOG],
+      ['the remove-an-option control', () => inkOf(SQF_CSS, '.sqf-x', opts), () => DIALOG],
+    ])('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg(), layers())).toBeGreaterThanOrEqual(AA);
+    });
   });
 });
 
@@ -234,8 +221,9 @@ describe('the sheet keeps to the design system', () => {
     expect(offenders).toEqual([]);
   });
 
-  test('every custom property the sheet uses is declared by styles.css or the sheet itself', () => {
-    // Not by QuestionSetEditor.css: an undefined custom property invalidates
+  test('every custom property the sheet uses is declared by styles.css, the roles, or the sheet itself', () => {
+    // GLOBAL_CSS carries styles/roles.css (testing/classicGlobalCss.js), so a role
+    // such as --slate-rgb or --row-selected counts. Not by QuestionSetEditor.css: an undefined custom property invalidates
     // the whole declaration, so a token borrowed from a sheet that merely
     // happens to be an ancestor today is one import away from vanishing.
     const declared = new Set();

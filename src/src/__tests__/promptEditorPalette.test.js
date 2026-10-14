@@ -17,10 +17,11 @@
  * Neither half may land alone, so both halves are asserted here.
  *
  * THE TOKENS ARE ALIASES NOW, WHICH CHANGED HOW THEY ARE READ.
- * `--pc-ink: var(--text)`, not a hex. So `token()` resolves one hop into
- * `styles.css`'s DUSK `:root` block — which also means this file fails if
- * somebody re-points a `--pc-*` at a token that does not exist, or at a paper
- * value.
+ * `--pc-ink: var(--text)`, `--pc-tint-go: rgb(var(--success-rgb) / .10)`, not a
+ * hex. So `token()` resolves the alias through the skin harness (styles/roles.css
+ * and the skin values) for one skin x theme — the DUSK theme — which also means
+ * this file fails if somebody re-points a `--pc-*` at a token that does not exist,
+ * or at a paper value. Every pairing is measured for every skin.
  *
  * THE CHECKS ARE LIFTED, NOT REWRITTEN. `lin`, `lum`, `ratio`, `alphaOver` and
  * `bgOf` are copied out of the `<script>` block in
@@ -32,10 +33,11 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('components', 'AIPromptManager.css');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
@@ -67,75 +69,70 @@ function bgOf(el, win) {
 
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
 
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+const rgbaOf = (c) => { const { rgb, a } = H.parseColor(c); return `rgba(${rgb.join(', ')}, ${a})`; };
+
 /**
- * `styles.css`'s DUSK values, read out of `:root` — NOT out of
- * `[data-theme="light"]`, which declares the same five names as paper. The
- * slice is what makes the difference legible: matching `--text:` against the
- * whole file finds whichever copy comes first and would silently measure the
- * wrong theme.
+ * A global role's DUSK value for one skin, resolved through the skin harness —
+ * NOT the `[data-theme="light"]` copy, which declares the same names as paper.
  */
-const DUSK_ROOT = (() => {
-  // The opening brace is part of both needles on purpose: styles.css's HEADER
-  // COMMENT names `:root` and `[data-theme="light"]` in prose four lines above
-  // the rules, so matching the bare names finds the comment, ends the slice
-  // before it starts, and every token below reads as "not declared".
-  const start = GLOBAL_CSS.indexOf(':root {');
-  const end = GLOBAL_CSS.indexOf('[data-theme="light"] {');
-  if (start < 0 || end <= start) throw new Error('styles.css no longer opens with :root then the paper theme');
-  return GLOBAL_CSS.slice(start, end);
-})();
-function globalToken(name) {
-  const m = DUSK_ROOT.match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} is not declared in styles.css's dusk :root`);
-  return m[1];
+function globalToken(name, opts = CLASSIC) {
+  return hexOf(H.role(name, opts));
 }
 
 /** The `.padm, .pmgr, .pgen, .plib` rule — the ONE place `--pc-*` is declared. */
+const STRIPPED_CSS = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+const TOKEN_HEAD = '.padm,\n.pmgr,\n.pgen,\n.plib {';
 function tokenRuleBody() {
-  const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
-  const rules = [...stripped.matchAll(/(^|\})\s*([^{}@]+?)\s*\{([^}]*--pc-ink\s*:[^}]*)\}/gm)];
+  const rules = [...STRIPPED_CSS.matchAll(/(^|\})\s*([^{}@]+?)\s*\{([^}]*--pc-ink\s*:[^}]*)\}/gm)];
   expect(rules).toHaveLength(1);
+  expect(STRIPPED_CSS.indexOf(TOKEN_HEAD)).toBeGreaterThanOrEqual(0);
   return rules[0][3];
 }
 const TOKEN_BLOCK = tokenRuleBody();
 
 /**
- * Read a `--pc-*` out of the stylesheet and resolve it. A hex is taken as-is;
- * `var(--x)` is followed one hop into styles.css's dusk root. One hop is all
- * the mapping uses, and refusing a second is deliberate: a chain is a place for
- * a paper value to hide.
+ * Read a `--pc-*` out of the stylesheet and resolve it for one skin x theme. The
+ * declaration must be a single `var(--role)` or `rgb(var(--role-rgb) / a)`: an
+ * alias of one role, never a chain through another `--pc-*` (a chain is a place
+ * for a paper value to hide). The role itself is resolved by the skin harness.
  */
-function token(name) {
+function rawToken(name, opts) {
   const m = TOKEN_BLOCK.match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
   if (!m) throw new Error(`${name} is not declared in AIPromptManager.css's token block`);
   const value = m[1].trim();
-  if (/^#[0-9A-Fa-f]{6}$/.test(value)) return value;
-  const alias = value.match(/^var\((--[a-z0-9-]+)\)$/i);
-  if (!alias) throw new Error(`${name} is neither a hex nor a single var(): ${value}`);
-  return globalToken(alias[1]);
+  const shape = /^#[0-9A-Fa-f]{6}$/.test(value)
+    || /^var\(--(?!pc-)[a-z0-9-]+\)$/i.test(value)
+    || /^rgb\(var\(--(?!pc-)[a-z0-9-]+-rgb\)\s*\/\s*[\d.]+\)$/i.test(value);
+  if (!shape) throw new Error(`${name} is neither a hex nor a single role alias: ${value}`);
+  return H.scopeVar(STRIPPED_CSS, TOKEN_HEAD, name, opts);
 }
-function tint(name) {
-  const m = TOKEN_BLOCK.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} is not declared in AIPromptManager.css's token block`);
-  return m[1];
-}
+function token(name, opts = CLASSIC) { return hexOf(rawToken(name, opts)); }
+function tint(name, opts = CLASSIC) { return rgbaOf(rawToken(name, opts)); }
 
-const T = {
-  ink: token('--pc-ink'),
-  muted: token('--pc-muted'),
-  stop: token('--pc-stop'),
-  silent: token('--pc-silent'),
-  link: token('--pc-link'),
-  go: token('--pc-go'),
-  card: token('--pc-card'),
-  field: token('--pc-field'),
-};
-const BG = globalToken('--bg');
+function palette(skin, theme) {
+  const o = { skin, theme };
+  return {
+    ink: token('--pc-ink', o),
+    muted: token('--pc-muted', o),
+    stop: token('--pc-stop', o),
+    silent: token('--pc-silent', o),
+    link: token('--pc-link', o),
+    go: token('--pc-go', o),
+    card: token('--pc-card', o),
+    field: token('--pc-field', o),
+    bg: globalToken('--bg', o),
+  };
+}
+const T = palette('classic', 'dark');
+const BG = T.bg;
 
 /** Build the real paint stack and hand it to the audit's own bgOf. */
-function composited(layers) {
+function composited(layers, bg = BG) {
   document.body.innerHTML = '';
-  document.body.style.backgroundColor = BG;
+  document.body.style.backgroundColor = bg;
   let host = document.body;
   for (const background of layers) {
     const el = document.createElement('div');
@@ -146,41 +143,39 @@ function composited(layers) {
   return bgOf(host, window);
 }
 
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+const onBed = (fgHex, layers, bg) => ratio(parseHex(fgHex), composited(layers, bg));
 
 const AA = 4.5;
 /** The work field. `AdminShell.css:394` paints `.adm-work-body` `var(--bg)`. */
 const FIELD = [];
-/** A dialog, and the blocks inside one that used to be `background: white`. */
-const CARD = [T.card];
-/** A recessed panel: the variable rail, the wells, the empty states, hover. */
-const PAPER_ON_FIELD = [tint('--pc-paper')];
-const PAPER_ON_CARD = [T.card, tint('--pc-paper')];
 
 describe('the token block maps onto the shipped dusk palette, not a private one', () => {
-  test('every --pc-* colour is an alias of a styles.css token, or the one named exception', () => {
+  test('every --pc-* colour is an alias of a global role, with no literal exception left', () => {
     /*
       rejects: AUDIT item 12 being done by eye — re-typing #F4EDE4 into this
       file instead of pointing at `--text`. A copied hex does not follow the
       palette when the palette moves, and there is no test anywhere that
       compares two stylesheets' literals.
 
-      `--pc-go` is the exception and it is allowed BY NAME: styles.css has never
-      declared a success TEXT token (RATIONALE §5 lists one that does not
-      exist), so every dusk screen declares its own. A second exception has to
-      be argued here.
+      `--pc-go` WAS the exception, allowed BY NAME, while styles.css declared no
+      success TEXT token. styles/roles.css now does (`--success-text`), and
+      `--pc-go` points at it, so there is no exception left. One has to be
+      argued here.
     */
     const colours = [...TOKEN_BLOCK.matchAll(/(--pc-[a-z0-9-]+):\s*(#[0-9A-Fa-f]{3,8})/g)];
-    expect(colours.map((m) => m[1])).toEqual(['--pc-go']);
+    expect(colours.map((m) => m[1])).toEqual([]);
   });
 
   test('and --pc-go is the exact green the sets screen already uses', () => {
     // rejects: a second green for one meaning. `.qsets-success-text` is the
     // token this surface's Active chip has to agree with, because the two
     // screens sit one nav item apart.
+    // Both are resolved, for every skin, rather than compared as spellings.
     const qsets = read('components', 'QuestionSetsPanel.css');
-    const theirs = qsets.match(/--qsets-success-text:\s*(#[0-9A-Fa-f]{6})/)[1];
-    expect(T.go.toLowerCase()).toBe(theirs.toLowerCase());
+    for (const [skin, theme] of H.CASES) {
+      const theirs = hexOf(H.scopeVar(qsets, '.qsets {', '--qsets-success-text', { skin, theme }));
+      expect(token('--pc-go', { skin, theme })).toBe(theirs);
+    }
   });
 
   test('the aliases resolve to the DUSK values, not the paper ones', () => {
@@ -188,7 +183,8 @@ describe('the token block maps onto the shipped dusk palette, not a private one'
       rejects: the whole conversion being a no-op. `--text` is #1B2942 under
       `[data-theme="light"]` and #F4EDE4 under `:root`; if this test were
       reading the wrong block every ratio below would still pass, measured
-      against the wrong theme entirely.
+      against the wrong theme entirely. Pinned in Classic, resolved through the
+      skin harness.
     */
     expect(T.ink.toLowerCase()).toBe('#f4ede4');
     expect(T.card.toLowerCase()).toBe('#1b2942');
@@ -196,130 +192,143 @@ describe('the token block maps onto the shipped dusk palette, not a private one'
   });
 });
 
-describe('the flat pairings this surface paints', () => {
-  const pairs = [
-    ['--pc-ink on the work field (the library, row values)', T.ink, FIELD],
-    ['--pc-muted on the work field (counts, ledes, descriptions)', T.muted, FIELD],
-    ['--pc-link on the work field (variable tokens, links)', T.link, FIELD],
-    ['--pc-stop on the work field (Retire, the blocking tier)', T.stop, FIELD],
-    ['--pc-silent on the work field (the silent tier, Default)', T.silent, FIELD],
-    ['--pc-go on the work field (Active)', T.go, FIELD],
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const o = { skin, theme };
+  const T = palette(skin, theme);
+  const on = (fgHex, layers) => onBed(fgHex, layers, T.bg);
+  /** A dialog, and the blocks inside one that used to be `background: white`. */
+  const CARD = [T.card];
+  /** A recessed panel: the variable rail, the wells, the empty states, hover. */
+  const PAPER_ON_FIELD = [tint('--pc-paper', o)];
+  const PAPER_ON_CARD = [T.card, tint('--pc-paper', o)];
 
-    ['--pc-ink in a dialog (findings, samples, preview text)', T.ink, CARD],
-    ['--pc-muted in a dialog (notes, labels, ledes)', T.muted, CARD],
-    ['--pc-link in a dialog (variable tokens, the room control)', T.link, CARD],
-    ['--pc-stop in a dialog (the blocked-save note)', T.stop, CARD],
-    ['--pc-silent in a dialog (the silent tier, the duplication figure)', T.silent, CARD],
+  describe('the flat pairings this surface paints', () => {
+    const pairs = [
+      ['--pc-ink on the work field (the library, row values)', T.ink, FIELD],
+      ['--pc-muted on the work field (counts, ledes, descriptions)', T.muted, FIELD],
+      ['--pc-link on the work field (variable tokens, links)', T.link, FIELD],
+      ['--pc-stop on the work field (Retire, the blocking tier)', T.stop, FIELD],
+      ['--pc-silent on the work field (the silent tier, Default)', T.silent, FIELD],
+      ['--pc-go on the work field (Active)', T.go, FIELD],
 
-    ['--pc-muted on the recessed rail, over the field', T.muted, PAPER_ON_FIELD],
-    ['--pc-muted on the recessed rail, over a dialog', T.muted, PAPER_ON_CARD],
-    ['--pc-ink on the recessed rail, over a dialog', T.ink, PAPER_ON_CARD],
-    ['--pc-silent on the recessed rail, over a dialog (the unsafe count)', T.silent, PAPER_ON_CARD],
-    ['--pc-link on the recessed rail, over a dialog', T.link, PAPER_ON_CARD],
-  ];
+      ['--pc-ink in a dialog (findings, samples, preview text)', T.ink, CARD],
+      ['--pc-muted in a dialog (notes, labels, ledes)', T.muted, CARD],
+      ['--pc-link in a dialog (variable tokens, the room control)', T.link, CARD],
+      ['--pc-stop in a dialog (the blocked-save note)', T.stop, CARD],
+      ['--pc-silent in a dialog (the silent tier, the duplication figure)', T.silent, CARD],
 
-  test.each(pairs)('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+      ['--pc-muted on the recessed rail, over the field', T.muted, PAPER_ON_FIELD],
+      ['--pc-muted on the recessed rail, over a dialog', T.muted, PAPER_ON_CARD],
+      ['--pc-ink on the recessed rail, over a dialog', T.ink, PAPER_ON_CARD],
+      ['--pc-silent on the recessed rail, over a dialog (the unsafe count)', T.silent, PAPER_ON_CARD],
+      ['--pc-link on the recessed rail, over a dialog', T.link, PAPER_ON_CARD],
+    ];
+
+    test.each(pairs)('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('the workbench\'s "where it gets fixed" line is painted only with pairings measured above', () => {
+      // rejects: the one new colour on the workbench (2026-09-25) reaching for a
+      // token this table has not measured in a dialog — the line sits on
+      // --pc-card inside the editor, so link and silent on CARD are its pairs.
+      const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+      const colourOf = (selector) => {
+        const rule = new RegExp(`${selector.replace(/[.-]/g, (c) => `\\${c}`)}\\s*\\{([^}]*)\\}`).exec(stripped);
+        return rule && /(?:^|;|\s)color:\s*([^;]+);/.exec(rule[1])[1].trim();
+      };
+      expect(colourOf('.pmgr .pmgr-wb-where--improve')).toBe('var(--pc-link)');
+      expect(colourOf('.pmgr .pmgr-wb-where--editor')).toBe('var(--pc-silent)');
+      expect(colourOf('.pmgr .pmgr-wb-where')).toBe('var(--pc-muted)');
+      expect(on(T.link, CARD)).toBeGreaterThanOrEqual(AA);
+      expect(on(T.silent, CARD)).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('a form control is legible in its own hole', () => {
+      // rejects: `--pc-field` drifting off `--bg`. An input is one step DOWN from
+      // its card here, and the text in it is --pc-ink; a field lightened towards
+      // the card would take the placeholder (--pc-muted) with it.
+      expect(on(T.ink, [T.card, T.field])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.card, T.field])).toBeGreaterThanOrEqual(AA);
+    });
   });
 
-  test('the workbench\'s "where it gets fixed" line is painted only with pairings measured above', () => {
-    // rejects: the one new colour on the workbench (2026-09-25) reaching for a
-    // token this table has not measured in a dialog — the line sits on
-    // --pc-card inside the editor, so link and silent on CARD are its pairs.
-    const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
-    const colourOf = (selector) => {
-      const rule = new RegExp(`${selector.replace(/[.-]/g, (c) => `\\${c}`)}\\s*\\{([^}]*)\\}`).exec(stripped);
-      return rule && /(?:^|;|\s)color:\s*([^;]+);/.exec(rule[1])[1].trim();
-    };
-    expect(colourOf('.pmgr .pmgr-wb-where--improve')).toBe('var(--pc-link)');
-    expect(colourOf('.pmgr .pmgr-wb-where--editor')).toBe('var(--pc-silent)');
-    expect(colourOf('.pmgr .pmgr-wb-where')).toBe('var(--pc-muted)');
-    expect(on(T.link, CARD)).toBeGreaterThanOrEqual(AA);
-    expect(on(T.silent, CARD)).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('a form control is legible in its own hole', () => {
-    // rejects: `--pc-field` drifting off `--bg`. An input is one step DOWN from
-    // its card here, and the text in it is --pc-ink; a field lightened towards
-    // the card would take the placeholder (--pc-muted) with it.
-    expect(on(T.ink, [T.card, T.field])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.card, T.field])).toBeGreaterThanOrEqual(AA);
-  });
-});
-
-describe('the tinted composites, where a pairing quietly drops under AA', () => {
-  /*
-    A tint is invisible in a token table. Each stack below is the real nesting:
-    the bed, then the tier's tint, then the text.
-  */
-  test('the blocking tier, in a dialog and on the field', () => {
-    // rejects: deepening --pc-tint-stop until the red on it falls under AA —
-    // the tier a person must read carefully is exactly the wrong one to tint
-    // by eye.
-    for (const bed of [CARD, FIELD]) {
-      expect(on(T.stop, [...bed, tint('--pc-tint-stop')])).toBeGreaterThanOrEqual(AA);
-      expect(on(T.ink, [...bed, tint('--pc-tint-stop')])).toBeGreaterThanOrEqual(AA);
-      expect(on(T.muted, [...bed, tint('--pc-tint-stop')])).toBeGreaterThanOrEqual(AA);
-    }
-  });
-
-  test('the silent tier, which is the loud one and therefore the most tinted', () => {
-    for (const bed of [CARD, FIELD]) {
-      expect(on(T.silent, [...bed, tint('--pc-tint-silent')])).toBeGreaterThanOrEqual(AA);
-      expect(on(T.ink, [...bed, tint('--pc-tint-silent')])).toBeGreaterThanOrEqual(AA);
-      expect(on(T.muted, [...bed, tint('--pc-tint-silent')])).toBeGreaterThanOrEqual(AA);
-    }
-  });
-
-  test('an unsafe variable row, which is the silent tint on the recessed rail', () => {
-    // rejects: measuring the tint against the field when it sits on the rail,
-    // which sits on a dialog. Three composites of one tint, and only one of
-    // them is on screen here.
-    expect(on(T.silent, [...PAPER_ON_CARD, tint('--pc-tint-silent')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.ink, [...PAPER_ON_CARD, tint('--pc-tint-silent')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [...PAPER_ON_CARD, tint('--pc-tint-silent')])).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('the Active chip and the type chip, which are two tints on two beds', () => {
-    // rejects: the green tint being deepened until the green on it stops
-    // clearing AA. Read as tokens because these two tints appear on both beds.
-    expect(on(T.go, [...FIELD, tint('--pc-tint-go')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.go, [...CARD, tint('--pc-tint-go')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.link, [...CARD, tint('--pc-tint-link')])).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('Active is the success hue, and the TYPE chip is not the same colour', () => {
+  describe('the tinted composites, where a pairing quietly drops under AA', () => {
     /*
-      rejects: `.plib-chip--on` going back to `--pc-link`, which is what it
-      shipped as — the same blue as `.plib-chip--type`, two cells to its left in
-      every row. Two facts of different kinds painted identically is what the
-      sets screen fixed by making Active the ONE green thing on the row
-      (`.qsets-chip--on`).
-
-      Read out of the SELECTORS, not the tokens: the ratios above pass whichever
-      token the chip points at, so a hue swap is invisible to a contrast test.
+      A tint is invisible in a token table. Each stack below is the real nesting:
+      the bed, then the tier's tint, then the text.
     */
-    const rule = (sel) => {
-      const escaped = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const m = CSS.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
-      if (!m) throw new Error(`no rule for ${sel} — renamed?`);
-      return m[1];
-    };
-    expect(rule('.plib-chip--on')).toMatch(/color:\s*var\(--pc-go\)/);
-    expect(rule('.plib-chip--on')).not.toMatch(/color:\s*var\(--pc-link\)/);
-    expect(rule('.plib-chip--type')).not.toMatch(/var\(--pc-go\)/);
-    // Archived is muted-on-muted, so it needs a second signal or it reads as a
-    // chip that failed to load — the sets screen dashes its border for this.
-    expect(rule('.plib-chip--off')).toMatch(/border-style:\s*dashed/);
-  });
+    test('the blocking tier, in a dialog and on the field', () => {
+      // rejects: deepening --pc-tint-stop until the red on it falls under AA —
+      // the tier a person must read carefully is exactly the wrong one to tint
+      // by eye.
+      for (const bed of [CARD, FIELD]) {
+        expect(on(T.stop, [...bed, tint('--pc-tint-stop', o)])).toBeGreaterThanOrEqual(AA);
+        expect(on(T.ink, [...bed, tint('--pc-tint-stop', o)])).toBeGreaterThanOrEqual(AA);
+        expect(on(T.muted, [...bed, tint('--pc-tint-stop', o)])).toBeGreaterThanOrEqual(AA);
+      }
+    });
 
-  test('a hovered row still carries every colour a resting one does', () => {
-    // rejects: --pc-hover being deepened to make the hover more obvious. The
-    // row's chips and its Retire action are the two things most likely to be
-    // read WHILE the pointer is on the row.
-    for (const fg of [T.ink, T.muted, T.stop, T.silent, T.go]) {
-      expect(on(fg, [...FIELD, tint('--pc-hover')])).toBeGreaterThanOrEqual(AA);
-    }
+    test('the silent tier, which is the loud one and therefore the most tinted', () => {
+      for (const bed of [CARD, FIELD]) {
+        expect(on(T.silent, [...bed, tint('--pc-tint-silent', o)])).toBeGreaterThanOrEqual(AA);
+        expect(on(T.ink, [...bed, tint('--pc-tint-silent', o)])).toBeGreaterThanOrEqual(AA);
+        expect(on(T.muted, [...bed, tint('--pc-tint-silent', o)])).toBeGreaterThanOrEqual(AA);
+      }
+    });
+
+    test('an unsafe variable row, which is the silent tint on the recessed rail', () => {
+      // rejects: measuring the tint against the field when it sits on the rail,
+      // which sits on a dialog. Three composites of one tint, and only one of
+      // them is on screen here.
+      // --pc-silent is var(--warn): a status tier, amber in every skin (it was
+      // var(--accent) for one draft and measured 4.44 under Present's blue).
+      expect(on(T.silent, [...PAPER_ON_CARD, tint('--pc-tint-silent', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.ink, [...PAPER_ON_CARD, tint('--pc-tint-silent', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [...PAPER_ON_CARD, tint('--pc-tint-silent', o)])).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('the Active chip and the type chip, which are two tints on two beds', () => {
+      // rejects: the green tint being deepened until the green on it stops
+      // clearing AA. Read as tokens because these two tints appear on both beds.
+      expect(on(T.go, [...FIELD, tint('--pc-tint-go', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.go, [...CARD, tint('--pc-tint-go', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.link, [...CARD, tint('--pc-tint-link', o)])).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('Active is the success hue, and the TYPE chip is not the same colour', () => {
+      /*
+        rejects: `.plib-chip--on` going back to `--pc-link`, which is what it
+        shipped as — the same blue as `.plib-chip--type`, two cells to its left in
+        every row. Two facts of different kinds painted identically is what the
+        sets screen fixed by making Active the ONE green thing on the row
+        (`.qsets-chip--on`).
+
+        Read out of the SELECTORS, not the tokens: the ratios above pass whichever
+        token the chip points at, so a hue swap is invisible to a contrast test.
+      */
+      const rule = (sel) => {
+        const escaped = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const m = CSS.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
+        if (!m) throw new Error(`no rule for ${sel} — renamed?`);
+        return m[1];
+      };
+      expect(rule('.plib-chip--on')).toMatch(/color:\s*var\(--pc-go\)/);
+      expect(rule('.plib-chip--on')).not.toMatch(/color:\s*var\(--pc-link\)/);
+      expect(rule('.plib-chip--type')).not.toMatch(/var\(--pc-go\)/);
+      // Archived is muted-on-muted, so it needs a second signal or it reads as a
+      // chip that failed to load — the sets screen dashes its border for this.
+      expect(rule('.plib-chip--off')).toMatch(/border-style:\s*dashed/);
+    });
+
+    test('a hovered row still carries every colour a resting one does', () => {
+      // rejects: --pc-hover being deepened to make the hover more obvious. The
+      // row's chips and its Retire action are the two things most likely to be
+      // read WHILE the pointer is on the row.
+      for (const fg of [T.ink, T.muted, T.stop, T.silent, T.go]) {
+        expect(on(fg, [...FIELD, tint('--pc-hover', o)])).toBeGreaterThanOrEqual(AA);
+      }
+    });
   });
 });
 

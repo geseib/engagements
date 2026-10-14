@@ -11,9 +11,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const MY_CSS = read('components', 'AuditLog.css');
 const SHELL_CSS = read('components', 'AdminShell.css');
 
@@ -24,38 +25,36 @@ function ratio(a, b) {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 const alphaOver = (fg, bg, a) => fg.map((c, i) => c * a + bg[i] * (1 - a));
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-const parseRgba = (s) => { const m = s.match(/[\d.]+/g).map(Number); return { rgb: m.slice(0, 3), a: m[3] }; };
+const parseHex = (c) => H.parseColor(c).rgb;     // any colour a role resolves to
+const parseRgba = (c) => H.parseColor(c);
+const CLASSIC = { skin: 'classic', theme: 'dark' };
 
-function token(css, blockHead, name) {
-  const start = css.indexOf(blockHead);
-  if (start < 0) throw new Error(`no ${blockHead} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${blockHead}`);
-  return parseHex(m[1]);
+/** A scope-local custom property, every var() it reads resolved for one skin x theme. */
+function token(css, blockHead, name, opts = CLASSIC) {
+  return parseHex(H.scopeVar(css, blockHead, name, opts));
 }
-function tint(name) {
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in AuditLog.css`);
-  return parseRgba(m[1]);
+function tint(name, opts = CLASSIC) {               // a translucent layer from the .alog block
+  return parseRgba(H.scopeVar(MY_CSS, '.alog {', name, opts));
 }
 
-const DUSK = '[data-theme="dark"] {';
+/* The log renders on dusk: every dusk case of every skin. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
 const ROOT = ':root {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-};
+const tokensFor = (opts) => ({
+  bg: parseHex(H.role('--bg', opts)),
+  surface: parseHex(H.role('--surface', opts)),
+  text: parseHex(H.role('--text', opts)),
+  muted: parseHex(H.role('--muted', opts)),
+  danger: parseHex(H.role('--danger', opts)),
+  dangerText: parseHex(H.role('--danger-text', opts)),
+});
+const T = tokensFor(CLASSIC);                       // the premise below is Classic's
 const AA = 4.5;
-const GROUNDS = [['the console field (--bg)', T.bg], ['the staff dialog (--surface)', T.surface]];
 
-describe('every text pairing, on both grounds it is drawn on', () => {
-  const inks = [['--text (names, actions, targets)', T.text], ['--muted (roles, reasons, dates)', T.muted], ['--danger-text ("Did not go through")', T.dangerText]];
+describe.each(DUSK)('every text pairing, on both grounds it is drawn on — %s / %s', (skin, theme) => {
+  const K = tokensFor({ skin, theme });
+  const GROUNDS = [['the console field (--bg)', K.bg], ['the staff dialog (--surface)', K.surface]];
+  const inks = [['--text (names, actions, targets)', K.text], ['--muted (roles, reasons, dates)', K.muted], ['--danger-text ("Did not go through")', K.dangerText]];
   for (const [g, ground] of GROUNDS) {
     test.each(inks)(`%s on ${g} clears AA`, (_l, ink) => {
       expect(ratio(ink, ground)).toBeGreaterThanOrEqual(AA);
@@ -63,10 +62,10 @@ describe('every text pairing, on both grounds it is drawn on', () => {
     // rejects: a hovered row swallowing its own text — a tint is invisible in
     //          a token table.
     test(`a hovered row on ${g}`, () => {
-      const h = tint('--alog-row-hover');
+      const h = tint('--alog-row-hover', { skin, theme });
       const painted = alphaOver(h.rgb, ground, h.a);
-      expect(ratio(T.text, painted)).toBeGreaterThanOrEqual(AA);
-      expect(ratio(T.muted, painted)).toBeGreaterThanOrEqual(AA);
+      expect(ratio(K.text, painted)).toBeGreaterThanOrEqual(AA);
+      expect(ratio(K.muted, painted)).toBeGreaterThanOrEqual(AA);
     });
   }
 });

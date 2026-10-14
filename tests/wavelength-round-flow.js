@@ -474,7 +474,10 @@ const runWorker = (gameId) => handler({
     // The Timeout belonging to one function: from its FunctionName line to the
     // next resource at the same indent.
     const timeoutOf = (fnName) => {
-      const at = template.indexOf(`\${StackName}-${fnName}'`);
+      // Anchored on `FunctionName:` — get-results now names get-ai-summary in
+      // its own environment and policy, so the bare `${StackName}-<fn>'`
+      // first appears inside the WRONG function's block.
+      const at = template.indexOf(`FunctionName: !Sub '\${StackName}-${fnName}'`);
       if (at === -1) return null;
       const rest = template.slice(at, at + 4000);
       const stop = rest.search(/\n  [A-Z]\w+:\n/);

@@ -1,0 +1,79 @@
+/* FIXTURE, not product. SPEC.md §4 as values, for skinHarness's self-test
+   (node scripts/skins/harness.js --selftest). Phase 0a writes the real file at
+   src/src/styles/skins/classic.css; it may start from this one.
+   RULE THIS FIXTURE PROVES: a --sk-* value may read other --sk-* values, never a
+   role. It is resolved on <html>, whose data-theme is "light", so var(--muted)
+   here would give dusk the PAPER muted. */
+:root, :root[data-skin="classic"] {
+  --sk-font-display: "Archivo", system-ui, sans-serif;
+  --sk-font-ui: "Inter", system-ui, sans-serif;
+  --sk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sk-display-weight: 800;
+  --sk-display-tracking: -.01em;
+  --sk-eyebrow-weight: 700;
+  --sk-eyebrow-tracking: .15em;
+  --sk-action: #F6A94C;
+  --sk-action-hover: #FFBB63;
+  --sk-on-action: #0F1A2E;
+  --sk-wall-action: #F6A94C;
+  --sk-wall-on-action: #0F1A2E;
+  --sk-accent: #F6A94C;
+  --sk-accent-rgb: 246 169 76;
+  --sk-accent-hover: #FFBB63;
+  --sk-info: #7CA7E6;
+  --sk-info-rgb: 124 167 230;
+  --sk-slate-rgb: 155 168 190;
+  --sk-success-rgb: 79 178 134;
+  --sk-danger-rgb: 229 100 94;
+  --sk-warn-rgb: 246 169 76;
+  /* PROPOSED for Phase 0a, not in SPEC §4: channels for the 32 dusk scrims and 8 warm-text tints */
+  --sk-shade-rgb: 15 26 46;
+  --sk-glow-rgb: 244 237 228;
+  --sk-phase-ask: #F6A94C;
+  --sk-phase-vote: #7CA7E6;
+  --sk-phase-results: #4FB286;
+  --sk-success: #4FB286;
+  --sk-danger: #E5645E;
+  --sk-danger-deep: #B03A34;
+  --sk-gold: #F6A94C;
+  --sk-silver: #C0C6D0;
+  --sk-bronze: #B4794A;
+  --sk-warn: #F6A94C;
+  --sk-radius: 16px;
+  --sk-radius-sm: 8px;
+  --sk-radius-lg: 16px;
+  --sk-select-mark: none;
+  --sk-badge-radius: 999px;
+
+  --sk-dark-bg: #0F1A2E;
+  --sk-dark-surface: #1B2942;
+  --sk-dark-surface-2: #25375A;
+  --sk-dark-text: #F4EDE4;
+  --sk-dark-muted: #9BA8BE;
+  --sk-dark-accent-text: #F6A94C;
+  --sk-dark-eyebrow-color: var(--sk-dark-muted);
+  --sk-dark-success-text: #6FD0A4;
+  --sk-dark-danger-text: #EF8C86;
+  --sk-dark-rule: rgba(155,168,190,.20);
+  --sk-dark-rule-strong: rgba(155,168,190,.34);
+  --sk-dark-row-hover: rgba(155,168,190,.055);
+  --sk-dark-row-selected: rgb(var(--sk-accent-rgb) / .10);
+  --sk-dark-scrim: rgba(6,11,22,.72);
+  --sk-dark-on-accent: #1B2942;
+  --sk-dark-field: var(--sk-dark-bg);
+  --sk-dark-wall-canvas: linear-gradient(180deg,#0C1526 0%,#12203A 46%,#1B2C4A 78%,#2A3A57 100%);
+  --sk-dark-wall-quote: #F4EDE4;
+
+  --sk-light-bg: #FBF7F1;
+  --sk-light-surface: #FFFFFF;
+  --sk-light-surface-2: #F1EDE4;
+  --sk-light-text: #1B2942;
+  --sk-light-muted: #5E6167;
+  --sk-light-accent-text: #9A5B18;
+  --sk-light-eyebrow-color: var(--sk-light-muted);
+  --sk-light-success-text: #1C7350;
+  --sk-light-danger-text: #B03A34;
+  --sk-light-rule: rgba(27,41,66,.14);
+  --sk-light-rule-strong: rgba(27,41,66,.28);
+  --sk-light-field: var(--sk-light-bg);
+}

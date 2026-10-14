@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Host Remote parity · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* HOST REMOTE PARITY (owner, 2026-10-12, driving a Call & Answer session
+   from the Remote on a phone). Two gaps: the name controls, and paging
+   Workie's read-back. Drawn in the Remote's own idiom (src/src/HostRemote.css,
+   components/RemoteSessionPanel.css): .hr-* surfaces, 48px buttons, a 64px
+   primary, three equal tabs. Phone first. One orange per phone: the primary,
+   when there is one. Everything else is neutral, blue or the red of Remove. */
+html,body{overflow-x:hidden}
+.frame-h{max-width:1100px;margin:34px auto 10px;padding:0 16px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:80ch}
+.frame-h p b{color:var(--text)}
+.frame-h .rec{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--m-success-text);border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green)}
+.sec{max-width:1100px;margin:56px auto 0;padding:0 16px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 24px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:80ch}
+.sec p b{color:var(--text)}
+.pg-nav,.pg-title{padding-left:16px;padding-right:16px}
+
+/* ---- the row of phones ------------------------------------------------- */
+.row-wrap{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;padding:10px 16px 6px;align-items:flex-start}
+.cell{width:min(375px,100%);min-width:0}
+.ph{width:100%;background:var(--bg);border:1px solid rgba(155,168,190,.35);border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.ph--tab{width:min(660px,100%)}
+.cell--tab{width:min(660px,100%)}
+.ph-cap{text-align:left;font-size:13px;color:var(--muted);margin:12px 4px 0;line-height:1.45}
+.ph-cap b{color:var(--text)}
+.ph-cap .n{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--surface-2);color:var(--text);font:800 12px/1 var(--font-ui);margin-right:6px}
+
+/* ---- the Remote, as shipped ------------------------------------------- */
+.hr-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--m-rule);min-width:0}
+.hr-back{flex:none;width:36px;height:36px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--m-rule);color:var(--muted);font-weight:800}
+.hr-id{display:flex;flex-direction:column;min-width:0;flex:1}
+.hr-id b{font:800 17px/1.1 var(--font-display)}
+.hr-id span{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hr-live{flex:none;display:inline-flex;align-items:center;gap:6px;font:700 12px/1 var(--font-ui);color:var(--m-success-text)}
+.hr-live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success)}
+.hr-body{display:flex;flex-direction:column;gap:12px;padding:14px 16px 16px;min-width:0}
+.hr-status{background:var(--surface);border:1px solid var(--m-rule);border-radius:16px;padding:18px 16px;text-align:center}
+.hr-k{margin:0;font:600 12px/1.3 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hr-h{margin:6px 0 0;font:700 24px/1.15 var(--font-display);overflow-wrap:anywhere}
+.hr-sub{margin:8px 0 0;font-size:14px;color:var(--muted)}
+.hr-meter{margin:12px auto 0;height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;max-width:260px}
+.hr-meter i{display:block;height:100%;background:var(--success)}
+.hr-btn{min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:8px;border:1px solid rgba(155,168,190,.35);background:var(--surface);color:var(--text);font:600 15px/1.2 var(--font-ui);text-align:center}
+.hr-btn--solid{background:var(--secondary);border-color:var(--secondary);color:var(--bg)}
+.hr-btn--remove{background:transparent;border-color:rgba(229,100,94,.5);color:var(--danger-text)}
+.hr-btn--sm{min-height:44px;font-size:14px;padding:8px 12px}
+.hr-primary{min-height:64px;display:flex;align-items:center;justify-content:center;border-radius:16px;background:var(--primary);color:#1B2942;font:700 19px/1.2 var(--font-ui)}
+.hr-dock{display:flex;flex-direction:column;gap:8px;padding:12px 16px 16px;border-top:1px solid var(--m-rule);background:linear-gradient(180deg,rgba(15,26,46,.6),var(--bg))}
+.hr-dock .hr-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hr-flash{display:flex;gap:8px;align-items:flex-start;margin:0;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.4;border:1px solid rgba(124,167,230,.45);background:var(--m-tint-blue)}
+.hr-flash--err{border-color:rgba(229,100,94,.45);background:var(--m-tint-red)}
+.hr-flash b{color:var(--text)}
+.hr-flash .u{margin-left:auto;flex:none;color:var(--secondary);font-weight:700}
+.hr-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* ---- the request strip (Build Room's HandoverStrip, on a phone) -------- */
+.hstrip{display:flex;flex-direction:column;gap:10px;border:1px solid rgba(124,167,230,.55);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface);border-radius:14px;padding:12px 14px}
+.hstrip .t{display:flex;gap:10px;align-items:flex-start}
+.hstrip .i{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--secondary);color:var(--bg);font:800 15px/1 var(--font-ui)}
+.hstrip p{margin:0;font-size:15px;line-height:1.35}
+.hstrip p small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.hstrip .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hstrip .see{font-size:13px;color:var(--secondary);font-weight:700;text-align:center}
+
+/* ---- the Players tab ---------------------------------------------------- */
+.hrs-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:4px;background:var(--surface);border:1px solid var(--m-rule);border-radius:16px}
+.hrs-tab{min-height:44px;display:grid;place-items:center;border-radius:8px;color:var(--muted);font:600 15px/1 var(--font-ui);border:1px solid transparent;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrs-tab.is-on{background:var(--surface-2);border-color:rgba(124,167,230,.55);color:var(--text);font-weight:700}
+.hrs-h{margin:4px 0 0;font:700 12px/1.3 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.hrs-note{margin:-2px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
+.hrs-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.hrs-row{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--m-rule);border-radius:8px;min-width:0}
+.hrs-row .top{display:flex;align-items:center;gap:10px;min-height:48px;padding:6px 12px;min-width:0}
+.hrs-row .rk{flex:none;width:22px;color:var(--muted);font:700 13px/1 var(--font-ui);text-align:right}
+.hrs-row .nm{flex:1;min-width:0;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hrs-row .pts{flex:none;font-size:14px;color:var(--muted)}
+.hrs-row .ck{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--muted)}
+.hrs-row .ck.is-done{border-color:var(--success);background:var(--success)}
+.hrs-row .more{flex:none;width:36px;height:36px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--m-rule);color:var(--muted);font:800 15px/1 var(--font-ui)}
+.hrs-row .more.is-open{border-color:var(--secondary);color:var(--text);background:var(--m-tint-blue)}
+.hrs-row .flag{margin:0 12px 0 44px;padding:0 0 8px;font-size:13px;font-weight:700;color:var(--secondary)}
+.hrs-row .acts{display:flex;flex-wrap:wrap;gap:8px;padding:0 12px 12px 44px}
+.hrs-row .acts .hr-btn{flex:1 1 auto}
+.hrs-row .acts .hr-btn--remove{flex:0 1 auto;margin-left:auto}
+.hrs-row .why{flex-basis:100%;margin:0;font-size:13px;color:var(--muted);line-height:1.4}
+.hrs-row--asking{border-color:rgba(124,167,230,.55)}
+.hrs-row--gone .nm{color:var(--muted);font-weight:500}
+
+/* ---- Workie paging ------------------------------------------------------ */
+.notes{background:var(--surface);border:1px solid var(--m-rule);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.notes .pos{display:flex;align-items:center;gap:10px}
+.notes .pos b{font:800 15px/1 var(--font-ui)}
+.dots{display:flex;gap:8px;margin-left:auto}
+.dots i{width:12px;height:12px;border-radius:50%;border:2px solid var(--muted)}
+.dots i.on{background:var(--secondary);border-color:var(--secondary)}
+.notes .wall{margin:0;padding:12px;border-radius:10px;background:var(--bg);border:1px solid var(--m-rule);font-size:15px;line-height:1.5}
+.notes .wall h4{margin:0 0 6px;font:700 15px/1.3 var(--font-ui)}
+.notes .wall p{margin:0}
+.notes .wall ol{margin:6px 0 0;padding-left:20px}
+.notes .cap{margin:0;font-size:13px;color:var(--muted)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.skip{text-align:center;font-size:14px;color:var(--secondary);font-weight:700;padding:6px 0}
+
+/* ---- tables ------------------------------------------------------------- */
+.tw{max-width:100%;overflow-x:auto}
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 10px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 10px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45;overflow-wrap:anywhere}
+.vt td:first-child{font-weight:700}
+.vt code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px}
+.yes{color:var(--m-success-text);font-weight:700}
+.no{color:var(--danger-text);font-weight:700}
+.part{color:var(--secondary);font-weight:700}
+.qs{max-width:1100px;margin:40px auto 80px;padding:0 16px}
+.qs h2{font:800 24px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:86ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+@media (max-width:700px){
+  .vt{font-size:13px}.vt th,.vt td{padding:8px 5px}
+  .vt th{letter-spacing:.04em}
+  .pg-title h1{font-size:21px}
+}
+
+/* ---- C: the question, folded ------------------------------------------- */
+.fold-q{background:var(--surface);border:1px solid var(--m-rule);border-radius:14px;min-width:0}
+.fold-q .hd{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 14px;min-width:0}
+.fold-q .hd b{flex:none;font:700 12px/1.3 var(--font-ui);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.fold-q .hd span{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fold-q .hd i{flex:none;font-style:normal;color:var(--secondary);font-weight:700;font-size:14px}
+.fold-q .bd{display:flex;flex-direction:column;gap:12px;padding:0 14px 14px;border-top:1px solid var(--m-rule)}
+.fold-q .bd h3{margin:12px 0 0;font:700 19px/1.3 var(--font-ui)}
+.fold-q .bd p{margin:0;font-size:15px;line-height:1.5}
+.fold-q .lbl{display:block;margin:0 0 4px;font:700 12px/1.3 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.fold-q .priv{border-left:2px solid var(--secondary);padding-left:10px}
+.fold-q .priv small{display:block;margin-top:4px;color:var(--muted);font-size:13px}
+.fold-q .opts{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.fold-q .opts li{display:flex;gap:10px;align-items:baseline;padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--m-rule);font-size:15px}
+.fold-q .opts li b{flex:none;color:var(--muted)}
+.fold-q .opts li.ok{border-color:rgba(79,178,134,.55)}
+.fold-q .opts li.ok::after{content:"Answer";margin-left:auto;font:700 12px/1 var(--font-ui);color:var(--m-success-text)}
+
+/* ---- D: host note ------------------------------------------------------ */
+.sheet-ph{display:flex;flex-direction:column;gap:12px;padding:14px 16px 16px;border-top:2px solid var(--secondary);background:var(--m-drawer);border-radius:16px 16px 0 0;margin-top:auto}
+.sheet-ph .top{display:flex;align-items:center;gap:10px}
+.sheet-ph h3{margin:0;font:800 19px/1.2 var(--font-ui)}
+.sheet-ph .x{margin-left:auto;flex:none;width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted);font-weight:800}
+.sheet-ph .say{margin:0;font-size:13px;color:var(--muted);line-height:1.45}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg span{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;border-radius:999px;border:1px solid var(--m-rule);font:600 14px/1 var(--font-ui);color:var(--text)}
+.seg span.on{border-color:var(--secondary);background:var(--m-tint-blue)}
+.seg span.off{color:var(--muted);opacity:.6}
+.sel{display:flex;align-items:center;min-height:44px;padding:0 12px;border-radius:8px;border:1px solid var(--m-rule);background:var(--bg);font-size:15px}
+.sel::after{content:"v";margin-left:auto;color:var(--muted);font-weight:800}
+.ta-ph{min-height:110px;padding:10px 12px;border-radius:8px;border:1px solid var(--m-rule);background:var(--bg);font-size:15px;line-height:1.45}
+.sw{display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:1.4}
+.sw i{flex:none;margin-top:2px;width:38px;height:22px;border-radius:11px;background:var(--success);position:relative}
+.sw i::after{content:"";position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+.sw small{display:block;color:var(--muted);font-size:13px}
+.sheet-ph .foot{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.post{min-height:52px;display:flex;align-items:center;justify-content:center;border-radius:12px;background:var(--primary);color:#1B2942;font:700 17px/1.2 var(--font-ui)}
+.dim{opacity:.35;pointer-events:none}
+.rep{background:#FBF7F1;color:#1B2942;border-radius:12px;padding:14px;font-size:14px;line-height:1.5}
+.rep h4{margin:0 0 8px;font:700 13px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:#5E6167}
+.rep .rc{border-left:3px solid #C9C2B4;padding:4px 0 4px 10px;margin:0 0 10px}
+.rep .rc.is-host{border-left-color:#1B2942}
+.rep .rc q{display:block;quotes:none;font-style:normal}
+.rep .rc small{display:block;color:#5E6167;font-size:12px;margin-top:2px}
+.rep .rc small b{color:#1B2942}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Host Remote parity</b>
+<a href="#a1">A1 Request arrives</a><a href="#a2">A2 Players tab</a><a href="#a3">A3 After Remove</a><a href="#b1">B1 Paging</a><a href="#b2">B2 Last page</a><a href="#c1">C The question</a><a href="#d1">D Host note</a><a href="#e1">E Follow-up asks</a><a href="#tab">Tablet</a><a href="#parity">Parity</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="NOTES.md">NOTES.md</a></nav>
+<div class="pg-title"><h1>The Remote does what the host screen does: names, and Workie's pages</h1>
+<p>Owner, 2026-10-12, running a Call &amp; Answer session from the Remote on a phone. Two gaps. The Remote lists players but cannot act on them, and never shows a request to take a name. And the projector pages Workie's read-back, but the phone cannot turn those pages; its big button skips them.</p></div>
+
+<!-- ===================================================================== A -->
+<div class="sec"><h2>A · Names: Unlock, Let them take it, Not now, Lock again, Remove, Bring back</h2>
+<p>Every route already exists and already lets the session's host call it from any device. The Remote polls <code>GET /players</code> every 6 seconds, and that reply already carries each name's handover state and the removed list. The Remote throws both away (<code>config/hostRemote.js:722-743</code>). The fix is screens, not servers.</p></div>
+
+<div class="frame-h" id="a1"><h2>A1 · A request arrives while a round runs</h2><p>Someone on another device asks to take <b>Priya</b>. The strip sits above the round, under the bar, and stays until somebody answers it, here or on the host screen. Both answer buttons are plain; <b>Close answers</b> keeps the one orange. Space never answers it, because there is no Space here, and a stray thumb on the primary must not either: the strip is above the status card, the primary is at the foot.</p></div>
+<div class="row-wrap">
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hstrip" role="region" aria-label="Someone is asking to take a name">
+<div class="t"><span class="i" aria-hidden="true">!</span><p><b>Another device wants the name Priya</b><small>Priya is away · joined 7:02</small></p></div>
+<div class="acts"><span class="hr-btn hr-btn--sm">Not now</span><span class="hr-btn hr-btn--sm hr-btn--solid">Let them take it</span></div>
+<span class="see">See in Players</span>
+</section>
+<section class="hr-status"><p class="hr-k">Round 3 of 5</p><h1 class="hr-h">Collecting answers</h1><div class="hr-meter"><i style="width:71%"></i></div><p class="hr-sub">10 of 14 answered</p></section>
+<div class="hr-grid"><span class="hr-btn">Players &amp; rounds</span><span class="hr-btn">Join code</span></div>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div>
+<p class="ph-cap"><span class="n">1</span><b>One request.</b> Name, here or away, and when they joined: the three things the host needs to judge "is this really Priya on a new phone?". The asker is never named; the server does not know who they are.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hstrip" role="region" aria-label="People are asking to take names">
+<div class="t"><span class="i" aria-hidden="true">!</span><p><b>2 people are asking to take a name</b><small>Answer each one in Players.</small></p></div>
+<div class="acts" style="grid-template-columns:1fr"><span class="hr-btn hr-btn--sm hr-btn--solid">Open Players</span></div>
+</section>
+<section class="hr-status"><p class="hr-k">Round 3 of 5</p><h1 class="hr-h">Collecting answers</h1><div class="hr-meter"><i style="width:71%"></i></div><p class="hr-sub">10 of 14 answered</p></section>
+<div class="hr-grid"><span class="hr-btn">Players &amp; rounds</span><span class="hr-btn">Join code</span></div>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div>
+<p class="ph-cap"><span class="n">2</span><b>Two or more.</b> The strip only counts and opens the Players tab, the same as the Build Room's strip (<code>BuildSessionPanel.jsx:112-139</code>). Two names on a phone strip would be two decisions in a space for one.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<p class="hr-flash hr-flash--err"><span><b>Already answered.</b> That request has already changed. Look again.</span></p>
+<section class="hr-status"><p class="hr-k">Round 3 of 5</p><h1 class="hr-h">Collecting answers</h1><div class="hr-meter"><i style="width:71%"></i></div><p class="hr-sub">10 of 14 answered</p></section>
+<div class="hr-grid"><span class="hr-btn">Players &amp; rounds</span><span class="hr-btn">Join code</span></div>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div>
+<p class="ph-cap"><span class="n">3</span><b>The host screen answered first.</b> The phone learns of it at its next roster poll (up to 6 s). A tap in that gap reaches the server, which refuses it (409) and says why. The phone shows the server's words and drops the strip at once.</p></div>
+</div>
+
+<div class="frame-h" id="a2"><h2>A2 · The Players tab, with the host's verbs <span class="rec">Recommended</span></h2><p>The list stays what it is: rank, name, points, the tick. Each row gains a <b>More</b> button that opens the row's own actions in place, one row at a time. Fourteen rows of three buttons each would be a wall on a phone. People asking to take a name come first, open, under their own heading, as <code>PlayersList askingFirst</code> does on the host screen. Removed people sit below the room, with <b>Bring back</b>.</p></div>
+<div class="row-wrap">
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<div class="hrs-tabs" role="tablist"><span class="hrs-tab is-on">Players</span><span class="hrs-tab">Rounds</span><span class="hrs-tab">Questions</span></div>
+<h2 class="hrs-h">Asking to take a name</h2>
+<ul class="hrs-list">
+<li class="hrs-row hrs-row--asking"><div class="top"><span class="rk">6</span><span class="nm">Priya</span><span class="pts">40 pts</span><span class="more is-open" aria-label="Actions for Priya">...</span></div>
+<p class="flag">Someone is asking to take this name</p>
+<div class="acts"><span class="hr-btn hr-btn--sm">Not now</span><span class="hr-btn hr-btn--sm hr-btn--solid">Let them take it</span><span class="hr-btn hr-btn--sm hr-btn--remove">Remove</span></div></li>
+</ul>
+<h2 class="hrs-h">Everyone · 14</h2>
+<ul class="hrs-list">
+<li class="hrs-row"><div class="top"><span class="rk">1</span><span class="nm">Marcus</span><span class="pts">90 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">2</span><span class="nm">Dana</span><span class="pts">80 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">3</span><span class="nm">Sam</span><span class="pts">70 pts</span><span class="ck"></span><span class="more is-open">...</span></div>
+<div class="acts"><span class="hr-btn hr-btn--sm">Unlock name</span><span class="hr-btn hr-btn--sm hr-btn--remove">Remove</span><p class="why">Unlock lets one other device take "Sam", once. Use it when they ask you out loud.</p></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">4</span><span class="nm">Ade</span><span class="pts">60 pts</span><span class="ck"></span><span class="more">...</span></div>
+<p class="flag">Unlocked for one handover</p></li>
+<li class="hrs-row"><div class="top"><span class="rk">5</span><span class="nm">Lee</span><span class="pts">50 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+</ul>
+<h2 class="hrs-h">1 removed from the room</h2>
+<p class="hrs-note">Out of the live counts. Their answers and points stay in the report.</p>
+<ul class="hrs-list"><li class="hrs-row hrs-row--gone"><div class="top"><span class="rk"></span><span class="nm">Jo</span><span class="pts">30 pts</span><span class="hr-btn hr-btn--sm" style="min-height:36px">Bring back</span></div></li></ul>
+</div>
+</div>
+<p class="ph-cap"><span class="n">4</span><b>No orange on this screen.</b> Let them take it is solid blue, Remove is red text, the rest are plain. Ade's row is unlocked: its More opens <b>Lock again</b> and Remove (next frame). The tick column stays exactly as shipped.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<div class="hrs-tabs" role="tablist"><span class="hrs-tab is-on">Players</span><span class="hrs-tab">Rounds</span><span class="hrs-tab">Questions</span></div>
+<h2 class="hrs-h">Everyone · 14</h2>
+<ul class="hrs-list">
+<li class="hrs-row"><div class="top"><span class="rk">1</span><span class="nm">Marcus</span><span class="pts">90 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">4</span><span class="nm">Ade</span><span class="pts">60 pts</span><span class="ck"></span><span class="more is-open">...</span></div>
+<p class="flag">Unlocked for one handover</p>
+<div class="acts"><span class="hr-btn hr-btn--sm">Lock again</span><span class="hr-btn hr-btn--sm hr-btn--remove">Remove</span><p class="why">The next device to join as "Ade" takes the name and its points. Lock again closes it before anyone does.</p></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">5</span><span class="nm">Lee</span><span class="pts">50 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">7</span><span class="nm" title="Charlotte-Anne Whitfield-Morgan">Charlotte-Anne Whitfield-Morgan</span><span class="pts">40 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+</ul>
+</div>
+</div>
+<p class="ph-cap"><span class="n">5</span><b>One state, its own verbs.</b> Unlocked shows Lock again and never Unlock name. A long name is cut with an ellipsis and keeps the full name in <code>title</code>; the points and More stay reachable.</p></div>
+</div>
+
+<div class="frame-h" id="a3"><h2>A3 · After Remove: no confirm, an undo in the same place</h2><p>Remove is soft: it sets one attribute and deletes nothing (<code>remove-player.js</code>). A confirm dialog on a phone would be a second tap on a decision that is already reversible. The row moves to the removed list; a notice at the top says so and carries <b>Bring back</b> for as long as the notice is up.</p></div>
+<div class="row-wrap">
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<p class="hr-flash"><span><b>Sam is out of the live counts.</b> Their answers stay in the report.</span><span class="u">Bring back</span></p>
+<div class="hrs-tabs" role="tablist"><span class="hrs-tab is-on">Players</span><span class="hrs-tab">Rounds</span><span class="hrs-tab">Questions</span></div>
+<h2 class="hrs-h">Everyone · 13</h2>
+<ul class="hrs-list">
+<li class="hrs-row"><div class="top"><span class="rk">1</span><span class="nm">Marcus</span><span class="pts">90 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">2</span><span class="nm">Dana</span><span class="pts">80 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">3</span><span class="nm">Ade</span><span class="pts">60 pts</span><span class="ck"></span><span class="more">...</span></div></li>
+</ul>
+<h2 class="hrs-h">2 removed from the room</h2>
+<ul class="hrs-list">
+<li class="hrs-row hrs-row--gone"><div class="top"><span class="rk"></span><span class="nm">Sam</span><span class="pts">70 pts</span><span class="hr-btn hr-btn--sm" style="min-height:36px">Bring back</span></div></li>
+<li class="hrs-row hrs-row--gone"><div class="top"><span class="rk"></span><span class="nm">Jo</span><span class="pts">30 pts</span><span class="hr-btn hr-btn--sm" style="min-height:36px">Bring back</span></div></li>
+</ul>
+</div>
+</div>
+<p class="ph-cap"><span class="n">6</span><b>The round's count follows.</b> The status card's "10 of 13" changes at the next state poll; the projector changes at once, because the server tells host sockets (<code>playerRemoved</code>).</p></div>
+</div>
+
+<!-- ===================================================================== B -->
+<div class="sec"><h2>B · Workie's pages, turned from the phone</h2>
+<p>On the host screen, What we heard is cut into pages that fit the wall, and → turns the page before it starts the next round. The page number lives only in that browser tab (<code>GameHostPage.jsx:429</code>), so nothing else can see it or turn it. The proposal makes the page a fact on the round's record, the way the beat and the spotlight already are, and lets the phone send <b>next</b> or <b>back</b>. The projector does the arithmetic, because only it knows how much text fits on its wall.</p></div>
+
+<div class="frame-h" id="b1"><h2>B1 · Page 2 of 4 on the wall <span class="rec">Recommended</span></h2><p>The phone's primary does what the dock's does: <b>Next page</b> while pages remain. Back sits beside a plain <b>Skip to next round</b> link, aimed separately, as the dock's own secondary is. The dots show where the wall is, not where the phone was. The box shows the text that is on the wall now, so the host can read along.</p></div>
+<div class="row-wrap">
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Results</p><h1 class="hr-h">What we heard</h1><p class="hr-sub">On the wall: page 2 of 4</p></section>
+<section class="notes" aria-label="What we heard, page 2 of 4">
+<div class="pos"><b>Page 2 of 4</b><span class="dots" aria-hidden="true"><i></i><i class="on"></i><i></i><i></i></span></div>
+<div class="wall"><h4>Where the room split</h4><p>Half the room wants the pilot in one region first. The other half says one region teaches nothing about the rest.</p><ol><li>Start where the team already is.</li><li>Pick the hardest region on purpose.</li></ol></div>
+<p class="cap">This is what the room sees now.</p>
+</section>
+<div class="pager"><span class="hr-btn">Back a page</span><span class="skip" style="align-self:center">Skip to next round</span></div>
+</div>
+<div class="hr-dock"><span class="hr-primary">Next page</span></div>
+</div>
+<p class="ph-cap"><span class="n">7</span><b>Next page is the one orange.</b> Two hosts paging at once: each press is a step, so two presses turn two pages. The phone shows the wall's page from the next poll (up to 2 s), never a guess.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Results</p><h1 class="hr-h">What we heard</h1><p class="hr-sub">On the wall: page 4 of 4</p></section>
+<section class="notes" aria-label="What we heard, page 4 of 4">
+<div class="pos"><b>Page 4 of 4</b><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i class="on"></i></span></div>
+<div class="wall"><h4>Next steps</h4><ol><li>Name one owner for the pilot by Friday.</li><li>Ask finance what one region costs.</li></ol></div>
+<p class="cap">This is what the room sees now.</p>
+</section>
+<div class="pager" style="grid-template-columns:1fr"><span class="hr-btn">Back a page</span></div>
+</div>
+<div class="hr-dock"><span class="hr-primary">Next round</span></div>
+</div>
+<p class="ph-cap" id="b2"><span class="n">8</span><b>B2 · Last page.</b> The primary becomes Next round again and the skip link goes, as on the dock. Back a page from page 1 returns the wall to the scores, as ← does on the host screen.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Results</p><h1 class="hr-h">What we heard</h1><p class="hr-sub">Workie is reading the responses...</p></section>
+<section class="notes"><p class="cap" style="font-size:15px">The pages appear here when Workie has finished and the wall has drawn them.</p></section>
+</div>
+<div class="hr-dock"><span class="hr-primary">Next round</span></div>
+</div>
+<p class="ph-cap"><span class="n">9</span><b>Before the wall has counted.</b> No page count yet (Workie still writing, or no host screen open): no pager, and the primary is Next round, exactly as today. A phone driving a session with no projector open never sees dots it cannot move.</p></div>
+</div>
+
+<!-- ===================================================================== C -->
+<div class="sec"><h2>C · The question, folded away until asked for</h2>
+<p>Today the Remote prints the question's title only inside <b>Enlarge on the wall</b> (<code>RemoteFocusPanel.jsx:73</code>). Yet the phone already holds the whole question: <code>GET /host-state</code>, polled every 2 seconds, carries <code>currentQuestionData</code> with the title, the detail and the task (<code>get-game-state.js:302-312</code>). So the section needs no new read for those three. Only the Background is not sent, and that is a decision, not a gap (open question 10).</p></div>
+
+<div class="frame-h" id="c1"><h2>C1 · Folded, the default <span class="rec">Recommended</span></h2><p>One row under the status card: the word <b>Question</b> and the title, cut to one line. Tap to open. The phone remembers open or folded for the rest of the session, not per round: a host who wants it open wants it open every round.</p></div>
+<div class="row-wrap">
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Collecting responses</p><h1 class="hr-h">Round 3</h1><div class="hr-meter"><i style="width:43%"></i></div><p class="hr-sub">6 of 14 answered</p></section>
+<section class="fold-q"><div class="hd" role="button" aria-expanded="false"><b>Question</b><span title="Where should the pilot run first, and why there?">Where should the pilot run first, and why there?</span><i>Show</i></div></section>
+<div class="hr-grid"><span class="hr-btn">Players &amp; rounds</span><span class="hr-btn">Add a note</span></div>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div>
+<p class="ph-cap"><span class="n">10</span><b>Folded costs one line.</b> The status card keeps its place at the top; the round's progress is still the first thing the host reads.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Collecting responses</p><h1 class="hr-h">Round 3</h1><div class="hr-meter"><i style="width:43%"></i></div><p class="hr-sub">6 of 14 answered</p></section>
+<section class="fold-q"><div class="hd" role="button" aria-expanded="true"><b>Question</b><span></span><i>Hide</i></div>
+<div class="bd">
+<h3>Where should the pilot run first, and why there?</h3>
+<p>We have budget for one region this quarter. Each region has a team that wants it.</p>
+<div><span class="lbl">What we asked them to do</span><p>Name one region and give one reason it will teach us about the rest.</p></div>
+<div class="priv"><span class="lbl">Background</span><p>Last year's rollout started in the north and stalled at the handover to sales.</p><small>For you and Workie. Never on the wall or the phones.</small></div>
+</div></section>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div>
+<p class="ph-cap"><span class="n">11</span><b>Open: Call &amp; Answer.</b> Title, detail, the task, then Background, marked as private. A part with no words is left out, never shown empty.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Friday quiz</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Collecting responses</p><h1 class="hr-h">Round 5</h1><div class="hr-meter"><i style="width:79%"></i></div><p class="hr-sub">11 of 14 answered</p></section>
+<section class="fold-q"><div class="hd" role="button" aria-expanded="true"><b>Question</b><span></span><i>Hide</i></div>
+<div class="bd">
+<h3>Which river flows through Budapest?</h3>
+<ul class="opts"><li><b>A</b>Vistula</li><li class="ok"><b>B</b>Danube</li><li><b>C</b>Elbe</li><li><b>D</b>Rhine</li></ul>
+</div></section>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div>
+<p class="ph-cap"><span class="n">12</span><b>Open: Trivia.</b> The options, and the answer marked, during the round. That needs <code>/host-state</code> to send the answer to the host before results (open question 11). Until it does, the mark appears at Results, as on the wall.</p></div>
+</div>
+
+<!-- ===================================================================== D -->
+<div class="sec"><h2>D · A host note, at any time</h2>
+<p>Players comment through <code>POST /games/{id}/comments</code> (<code>comments.js:332</code>): only a joined name, only while the room is on that round's results, about the summary, the results or one response. The rows land per round in both reports under <b>Comments</b> (<code>create-report.js:250-273</code>, <code>GameReport.jsx:375</code>) and in the room's feedback panel. A host note is the same row, written by the host's own door: signed in, any phase, any round the session has played, and marked as the host's.</p></div>
+
+<div class="frame-h" id="d1"><h2>D1 · Writing one, mid-round <span class="rec">Recommended</span></h2><p><b>Add a note</b> sits beside Players on the round view, in every phase. It opens a sheet over the lower part of the phone. The round is the one on the wall unless the host picks another. During a round's answers there are no results yet, so the note is about the question; after, it can be about the results, Workie's read or one response, as a player's is. Post note is the one orange; the dock's primary is covered while the sheet is up, so it cannot be pressed by mistake.</p></div>
+<div class="row-wrap">
+<div class="cell"><div class="ph" style="min-height:700px">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body dim">
+<section class="hr-status"><p class="hr-k">Collecting responses</p><h1 class="hr-h">Round 3</h1><p class="hr-sub">6 of 14 answered</p></section>
+</div>
+<section class="sheet-ph" role="dialog" aria-label="Add a note">
+<div class="top"><h3>Add a note</h3><span class="x" aria-label="Close">X</span></div>
+<span class="sel">Round 3, on the wall now</span>
+<div><span class="hrs-h" style="display:block;margin-bottom:6px">About</span><div class="seg"><span class="on">The question</span><span class="off">The results</span><span class="off">Workie's read</span><span class="off">A response</span></div></div>
+<div class="ta-ph" style="color:var(--muted)">Several tables said "north" before I asked. Worth asking why at the break.</div>
+<div class="sw"><i aria-hidden="true"></i><span>Show it in the room's feedback too<small>Off: the note goes in the reports only.</small></span></div>
+<p class="say">The reports print it as a <b style="color:var(--text)">Host note</b>, with no name.</p>
+<div class="foot"><span class="hr-btn">Cancel</span><span class="post">Post note</span></div>
+</section>
+</div>
+<p class="ph-cap"><span class="n">13</span><b>Greyed, with a reason on tap.</b> The results, Workie's read and a response exist only once the round has results. An X and a Cancel, both through one close that asks first when there is text.</p></div>
+
+<div class="cell"><div class="ph" style="min-height:700px">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body dim">
+<section class="hr-status"><p class="hr-k">Round 4 · Collecting responses</p><h1 class="hr-h">Round 4</h1></section>
+</div>
+<section class="sheet-ph" role="dialog" aria-label="Add a note">
+<div class="top"><h3>Add a note</h3><span class="x" aria-label="Close">X</span></div>
+<span class="sel">Round 3, played at 7:18</span>
+<div><span class="hrs-h" style="display:block;margin-bottom:6px">About</span><div class="seg"><span>The question</span><span>The results</span><span>Workie's read</span><span class="on">A response</span></div></div>
+<span class="sel">Response 2, Dana</span>
+<div class="ta-ph">Dana's point about the sales handover is the one to take to the leadership meeting.</div>
+<div class="sw"><i aria-hidden="true" style="background:var(--surface-2)"></i><span>Show it in the room's feedback too<small>That round's feedback is over. The note goes in the reports.</small></span></div>
+<div class="foot"><span class="hr-btn">Cancel</span><span class="post">Post note</span></div>
+</section>
+</div>
+<p class="ph-cap"><span class="n">14</span><b>An earlier round.</b> The room has moved on, so the note goes to the reports only and the switch says why. The response list is the one the Rounds tab already loads; a hidden-names round lists "Response 2" with no name.</p></div>
+
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<p class="hr-flash"><span><b>Note posted to round 3.</b> It is in the reports.</span></p>
+<span class="hrs-h">How the session report prints it</span>
+<div class="rep"><h4>Comments</h4>
+<div class="rc is-host"><small><b>Host note</b> · on the question</small><q>Several tables said "north" before I asked. Worth asking why at the break.</q></div>
+<div class="rc"><small>On Response 2, Dana</small><q>Agree, the handover is where it stalled.</q><small><b>Lee</b></small></div>
+</div>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div>
+<p class="ph-cap"><span class="n">15</span><b>The report.</b> Host notes print first in the round's Comments, labelled Host note, never with the account's name or email. No Undo in this version: there is no delete route for comments today (open question 14).</p></div>
+</div>
+
+<!-- ===================================================================== E -->
+<div class="sec"><h2>E · Where follow-up asks will sit (not to build now)</h2>
+<p>Follow-up asks (<code>docs/design/ca-followup-asks</code>) have their routes on dev behind <code>FOLLOWUP_ASKS_ENABLED</code> and no screens. The spec already says the Remote gets them as a sheet (SPEC §4.3 F2) and, in the smallest version, only Show results, Cancel the question and Next round for a live ask (SPEC §12). This frame only marks the place, so the later build puts it here.</p></div>
+<div class="frame-h" id="e1"><h2>E1 · The last page of What we heard, with asks ready</h2><p>The phone mirrors the dock: Next round stays the primary; <b>Ask the room</b> with its ready count is the plain button above it, where the dock's second button is. It opens the same list as the host screen's drawer, as a sheet.</p></div>
+<div class="row-wrap">
+<div class="cell"><div class="ph">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hr-status"><p class="hr-k">Round 3 of 5 · Results</p><h1 class="hr-h">What we heard</h1><p class="hr-sub">On the wall: page 4 of 4</p></section>
+<section class="notes"><div class="pos"><b>Page 4 of 4</b><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i class="on"></i></span></div></section>
+<div class="pager" style="grid-template-columns:1fr"><span class="hr-btn">Back a page</span></div>
+</div>
+<div class="hr-dock"><span class="hr-btn">Ask the room · 3 ready</span><span class="hr-primary">Next round</span></div>
+</div>
+<p class="ph-cap"><span class="n">16</span><b>Shared, not copied.</b> The list and the editor should be one component used by the drawer and the sheet, and the dock's second button should come from <code>hostControls.js</code>, which the Remote's <code>primaryAction</code> already mirrors. NOTES.md lists the pieces.</p></div>
+</div>
+
+<!-- ===================================================================== tablet -->
+<div class="frame-h" id="tab"><h2>Tablet, about 660 px</h2><p>The same column, wider. Rows keep their actions on one line; nothing reflows into two columns, because the Remote is one column on purpose (<code>RemoteSessionPanel.jsx:35-48</code>).</p></div>
+<div class="row-wrap">
+<div class="cell cell--tab"><div class="ph ph--tab">
+<header class="hr-bar"><span class="hr-back">&lt;</span><div class="hr-id"><b>4821</b><span>Monday strategy</span></div><span class="hr-live">Live</span></header>
+<div class="hr-body">
+<section class="hstrip" role="region" aria-label="Someone is asking to take a name">
+<div class="t"><span class="i" aria-hidden="true">!</span><p><b>Another device wants the name Priya</b><small>Priya is away · joined 7:02</small></p></div>
+<div class="acts"><span class="hr-btn hr-btn--sm">Not now</span><span class="hr-btn hr-btn--sm hr-btn--solid">Let them take it</span></div>
+</section>
+<div class="hrs-tabs" role="tablist"><span class="hrs-tab is-on">Players</span><span class="hrs-tab">Rounds</span><span class="hrs-tab">Questions</span></div>
+<h2 class="hrs-h">Everyone · 14</h2>
+<ul class="hrs-list">
+<li class="hrs-row"><div class="top"><span class="rk">1</span><span class="nm">Marcus</span><span class="pts">90 pts</span><span class="ck is-done"></span><span class="more">...</span></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">3</span><span class="nm">Sam</span><span class="pts">70 pts</span><span class="ck"></span><span class="more is-open">...</span></div>
+<div class="acts"><span class="hr-btn hr-btn--sm">Unlock name</span><span class="hr-btn hr-btn--sm hr-btn--remove">Remove</span><p class="why">Unlock lets one other device take "Sam", once.</p></div></li>
+<li class="hrs-row"><div class="top"><span class="rk">4</span><span class="nm">Ade</span><span class="pts">60 pts</span><span class="ck"></span><span class="more">...</span></div><p class="flag">Unlocked for one handover</p></li>
+</ul>
+</div>
+<div class="hr-dock"><span class="hr-primary">Close answers</span></div>
+</div></div>
+</div>
+
+<!-- ===================================================================== parity -->
+<div class="sec" id="parity"><h2>Parity today</h2>
+<p>What the host screen offers in a Call &amp; Answer session, against the Remote, on <code>working/build-room-host-redesign</code> at 3845646e. File and line in NOTES.md.</p>
+<div class="tw"><table class="vt">
+<colgroup><col style="width:30%"><col style="width:22%"><col style="width:18%"><col style="width:30%"></colgroup>
+<thead><tr><th>Control</th><th>Host screen</th><th>Remote</th><th>Route</th></tr></thead>
+<tbody>
+<tr><td>List players, points, tick</td><td class="yes">Yes</td><td class="yes">Yes</td><td><code>GET /players</code></td></tr>
+<tr><td>Remove</td><td class="yes">Yes</td><td class="no">No</td><td><code>POST /players/{n}/remove</code></td></tr>
+<tr><td>Bring back</td><td class="yes">Yes</td><td class="no">No (list not shown)</td><td>same, <code>removed:false</code></td></tr>
+<tr><td>Unlock name</td><td class="yes">Yes</td><td class="no">No</td><td><code>POST /players/{n}/handover</code></td></tr>
+<tr><td>Let them take it</td><td class="yes">Yes</td><td class="no">No</td><td>same, <code>bindToRequester</code></td></tr>
+<tr><td>Not now</td><td class="part">Build Room only</td><td class="no">No</td><td>same, <code>refuse:true</code></td></tr>
+<tr><td>Lock again</td><td class="part">Build Room only</td><td class="no">No</td><td>same, <code>lock:true</code></td></tr>
+<tr><td>"Asking to take this name" flag</td><td class="part">In the Players tab only</td><td class="no">No</td><td><code>handover.requested</code></td></tr>
+<tr><td>Request strip</td><td class="part">Build Room only</td><td class="no">No</td><td>socket <code>handoverRequested</code>; poll</td></tr>
+<tr><td>Turn Workie's page</td><td class="yes">→ ← and dock</td><td class="no">No</td><td>none: local state</td></tr>
+<tr><td>See which page is up</td><td class="yes">Dock status</td><td class="no">No</td><td>none</td></tr>
+<tr><td>Next on unread pages</td><td class="yes">Turns the page</td><td class="no">Skips to next round</td><td><code>primaryAction</code></td></tr>
+<tr><td>Read the whole question</td><td class="yes">On the wall</td><td class="part">Title only, inside Enlarge</td><td><code>/host-state</code> already carries it</td></tr>
+<tr><td>Read the Background</td><td class="no">No (by decision)</td><td class="no">No</td><td>not sent anywhere but Workie</td></tr>
+<tr><td>Write a comment / host note</td><td class="no">No</td><td class="no">No</td><td>players only: <code>POST /comments</code></td></tr>
+<tr><td>Follow-up asks</td><td class="no">Not built</td><td class="no">Not built</td><td><code>/followups/*</code> on dev</td></tr>
+</tbody></table></div></div>
+
+<!-- ===================================================================== questions -->
+<div class="qs" id="qs"><h2>Open questions</h2>
+<ol>
+<li><b>Should the host screen gain Not now and Lock again too?</b> Today they are wired only in the Build Room. Recommend yes: two props on <code>PlayersList</code> in <code>SessionSetupPanel</code>, same route, and it stops the phone offering a verb the projector does not have.</li>
+<li><b>Should the host screen show the request strip outside the Build Room?</b> In Call &amp; Answer a request is visible only if the Players tab happens to be open. Recommend yes, a one-line strip above the dock, never on the stage the room reads, since it names a person.</li>
+<li><b>Who wins when both screens answer one request?</b> The server, first write. A late Let them take it after Not now gets 409 "Nobody has asked"; a late Not now after a grant gets 409 "already changed". Recommend the Remote show that sentence and re-read the roster at once. No locking.</li>
+<li><b>Roster poll on the phone: keep 6 s?</b> A request can sit unseen on the phone for up to 6 s. Recommend keep 6 s; the asker waits on a person anyway. Re-read at once after any action.</li>
+<li><b>Remove: confirm or undo?</b> Recommend undo (A3). Removal is reversible and keeps everything; the host screen does not confirm either.</li>
+<li><b>Paging: a new route, or the beat's route?</b> Recommend extending <code>POST /stage-beat</code> with <code>step</code> and the stage's <code>notesPage</code>/<code>notesPages</code>, stored on the same ROUND# record. No new function (the stack is near its 500-resource ceiling), no template change.</li>
+<li><b>Who counts the pages?</b> Recommend the stage: pages depend on the wall's display profile, which only the host page knows. The phone sends steps, never page numbers.</li>
+<li><b>Show the page's text on the phone, or only "Page 2 of 4"?</b> Recommend the text (B1): the host can read along without turning round. Needs the stage to publish its profile so the phone cuts the same page.</li>
+<li><b>Should the scores' answer pages (RESULTS) be pageable from the phone too?</b> They share the index on the host page. Recommend not now: same mechanism later, keyed by phase, once Workie's pages have been used in a room.</li>
+<li><b>Show the question's Background on the Remote?</b> The 2026-09-25 decision kept Background for Workie and admins, and put only the "Workie had" hint on the Remote. Recommend yes for the session's own host, on the Remote only, marked private: it is the person who will be asked to "tell them more". Needs <code>/host-state</code> to add it; the public <code>/state</code> must never carry it.</li>
+<li><b>Show a trivia answer on the Remote before Results?</b> <code>/host-state</code> is host-gated but shares a body with the public <code>/state</code>, which hides the answer until Results. Recommend yes, added only on the host branch, with a test that the public body never gains it.</li>
+<li><b>Host note: a new route or the player route?</b> The player route is public and checks a joined name and the round's state; the host's note needs neither and must be signed in. Recommend one new Cognito event on the existing comments function, <code>POST /games/{id}/comments/host</code>, checked with <code>callerMayDriveSession</code>. No new function; about two stack resources.</li>
+<li><b>Does a host note reach the room?</b> The owner said it goes into "feedback discussion segments". Recommend: a switch, on by default while that round's results are up, so the note shows in the room's feedback panel labelled Host; off, reports only. Never on the wall by itself: the host can Feature it like any comment, and it shows as "Host" on the wall.</li>
+<li><b>Can a host note be deleted?</b> There is no delete for any comment today. Recommend not in the first version; add a host-only delete with the audit write the delete rule requires (owner, 2026-10-04) if hosts ask for it.</li>
+<li><b>A new anchor for "the question"?</b> Players comment on the summary, the results or a response. A note during answers has none of those. Recommend adding <code>question</code> to the closed set, in every copy at once, and the host route the only writer of it.</li>
+</ol></div>
+</body>
+</html>

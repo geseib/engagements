@@ -154,10 +154,19 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
           forward act; opening a read-only results screen advances nothing.
         */
         if (controls.secondary) {
+          /*
+            THREE MORE (two-surface Phase 1, roundStep): RESULTS offers Show
+            response 1 of N (SHOW_RESPONSE), a response on the wall offers
+            Stop showing (STOP_SHOWING), and mid-read the way past the rest of
+            Workie is the plain Next round (NEXT) while the primary turns the
+            page — never the same intent as the primary.
+          */
           expect([
             HOST_INTENTS.SKIP, HOST_INTENTS.LEAVE,
             HOST_INTENTS.FEEDBACK, HOST_INTENTS.FIELD_NOTES,
             HOST_INTENTS.WARN_SURVEY, HOST_INTENTS.SURVEY_RESULTS,
+            HOST_INTENTS.SHOW_RESPONSE, HOST_INTENTS.STOP_SHOWING, HOST_INTENTS.NEXT,
+            HOST_INTENTS.NEXT_RESPONSE, HOST_INTENTS.CANCEL_ASK,
           ]).toContain(controls.secondary.intent);
           expect(controls.secondary.intent).not.toBe(controls.primary.intent);
         }
@@ -186,35 +195,44 @@ describe('every (gameType, phase) pair yields exactly one primary action', () =>
 describe('the primary action per phase', () => {
   it('opens voting for vote types and reveals for the rest', () => {
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ASK', ...READY }).primary.label)
-      .toBe('Start Voting');
+      .toBe('Start voting');
     // A typed poll is counted live: its ASK closes straight to results.
     expect(hostControlsFor({ gameType: 'poll', phase: 'ASK', ...READY }).primary.label)
-      .toBe('Show Results');
+      .toBe('Show results');
     // A survey never reaches ASK (it has no rounds); if bad state puts it
     // there, it is a no-vote type like trivia and gets a way out, not a vote.
     expect(hostControlsFor({ gameType: 'survey', phase: 'ASK', ...READY }).primary.label)
       .toBe('Show Results');
     expect(hostControlsFor({ gameType: 'trivia', phase: 'ASK', ...READY }).primary.label)
-      .toBe('Show Results');
+      .toBe('Show results');
     expect(hostControlsFor({ gameType: 'wavelength', phase: 'ASK', ...READY }).primary.label)
-      .toBe('Show Results');
+      .toBe('Show results');
   });
 
   it('names the round the way the question set names it', () => {
     // "Next <round>" moved from RESULTS to FIELD_NOTES when RESULTS became two
     // beats — the noun still has to follow it there.
     const trivia = hostControlsFor({ gameType: 'trivia', phase: 'FIELD_NOTES', roundNoun: 'Lesson', ...READY });
-    expect(trivia.primary.label).toBe('Next Lesson');
+    expect(trivia.primary.label).toBe('Next lesson');
 
     const lobby = hostControlsFor({ gameType: 'trivia', phase: 'LOBBY', roundNoun: 'Lesson', ...READY });
-    expect(lobby.primary.label).toBe('Start First Lesson');
+    expect(lobby.primary.label).toBe('Start lesson 1');
 
     const ask = hostControlsFor({ gameType: 'trivia', phase: 'ASK', roundNoun: 'Lesson', ...READY });
-    expect(ask.secondary.label).toBe('Skip Lesson');
+    expect(ask.secondary.label).toBe('Skip this lesson');
   });
 
-  it('offers the skip escape hatch only while answering', () => {
+  it('offers the skip escape hatch only while the room is answering or voting', () => {
     expect(hostControlsFor({ gameType: 'poll', phase: 'ASK', ...READY }).secondary).toBeTruthy();
+    // Two-surface Phase 1: the Remote has always offered Skip during VOTE too,
+    // and roundStep gives both surfaces one answer (R1). Skip moves behind
+    // Session in Phase 3 (R7).
+    // During VOTE with responses, the secondary shows them (owner, 2026-10-13);
+    // Skip is the secondary only while there is nothing to show.
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'VOTE', ...READY }).secondary)
+      .toMatchObject({ intent: 'next-response' });
+    expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'VOTE', ...READY, answerCount: 0 }).secondary)
+      .toMatchObject({ intent: 'skip' });
     /*
       LOBBY left this list when it grew its own secondary — Back to Menu, the
       owner's "easy way to go back out" — so the phases with NO second button
@@ -222,10 +240,9 @@ describe('the primary action per phase', () => {
       control is one more thing to aim at.
     */
     expect(hostControlsFor({ gameType: 'poll', phase: 'LOBBY', ...READY }).secondary)
-      .toMatchObject({ intent: 'leave', label: 'Back to Menu' });
-    ['VOTE', 'RESULTS'].forEach((phase) => {
-      expect(hostControlsFor({ gameType: 'poll', phase, ...READY }).secondary).toBeNull();
-    });
+      .toMatchObject({ intent: 'leave', label: 'Back to menu' });
+    // RESULTS with no responses has nothing to show and no second button.
+    expect(hostControlsFor({ gameType: 'poll', phase: 'RESULTS', ...READY, answerCount: 0 }).secondary).toBeNull();
   });
 });
 
@@ -272,13 +289,13 @@ describe('status line', () => {
     const ask = hostControlsFor({
       gameType: 'poll', phase: 'ASK', ...READY, answeredCount: 2, playerCount: 8,
     });
-    expect(ask.status.text).toBe('2 of 8 answered…');
+    expect(ask.status.text).toBe('2 of 8 answered');
     expect(ask.status.tone).toBe('pending');
 
     const vote = hostControlsFor({
-      gameType: 'poll', phase: 'VOTE', ...READY, votedCount: 3, playerCount: 8,
+      gameType: 'poll', phase: 'VOTE', ...READY, votedCount: 3, playerCount: 8, answerCount: 0,
     });
-    expect(vote.status.text).toBe('3 of 8 voted…');
+    expect(vote.status.text).toBe('3 of 8 voted');
     expect(vote.status.tone).toBe('pending');
   });
 
@@ -324,7 +341,7 @@ describe('the two additions the stage needs', () => {
   // finished session renders the lobby.
   test('ENDED offers a way forward', () => {
     expect(hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).primary)
-      .toEqual(expect.objectContaining({ id: 'report', label: 'Open Session Report' }));
+      .toEqual(expect.objectContaining({ id: 'report', label: 'Open session report' }));
   });
 
   // Every primary has to name an intent the page can actually run, or the
@@ -395,7 +412,10 @@ describe('the two additions the stage needs', () => {
     const midDoc = hostControlsFor({
       gameType: 'call-and-answer', phase: 'FIELD_NOTES', notesPage: 0, notesPages: 3,
     });
-    expect(midDoc.secondary.id).toBe('skip-notes');
+    // Two-surface Phase 1: the way past the rest of the read is the plain
+    // Next round (roundStep), aimed separately from the page turn.
+    expect(midDoc.secondary.id).toBe('next');
+    expect(midDoc.secondary.label).toBe('Next question');
     expect(midDoc.secondary.intent).not.toBe(HOST_INTENTS.FEEDBACK);
   });
 
@@ -410,7 +430,7 @@ describe('the two additions the stage needs', () => {
     const ended = hostControlsFor({ gameType: 'call-and-answer', phase: 'ENDED' }).secondary;
     expect(ended).not.toBeNull();
     expect(ended.intent).toBe(HOST_INTENTS.LEAVE);
-    expect(ended.label).toBe('Back to Menu');
+    expect(ended.label).toBe('Back to menu');
   });
 
   // statusTextFor is keyed on phase and falls through to the lobby's copy for
@@ -633,10 +653,10 @@ describe('FIELD_NOTES pages before it advances', () => {
       gameType: 'call-and-answer', phase: 'FIELD_NOTES', notesPage: 0, notesPages: 3,
     });
     expect(controls.primary.intent).toBe(HOST_INTENTS.PAGE);
-    expect(controls.primary.label).toBe('Next Page');
+    expect(controls.primary.label).toBe('Next page');
     expect(controls.secondary).not.toBeNull();
     expect(controls.secondary.intent).toBe(HOST_INTENTS.NEXT);
-    expect(controls.secondary.label).toContain('Skip to Next');
+    expect(controls.secondary.label).toBe('Next question');
     // The dock's own answer to "am I about to skip something unread?"
     expect(controls.status.text).toBe('Reading page 1 of 3');
   });
@@ -680,7 +700,7 @@ describe('FIELD_NOTES pages before it advances', () => {
     // hostControlsFor the notesPage/notesPages pair derived from the shared
     // beat-keyed index.
     const code = fs.readFileSync(HOST_PAGE_SRC, 'utf8');
-    expect(code).toMatch(/notesPage,\s*notesPages,\s*\}\)/);
+    expect(code).toMatch(/notesPage,\s*notesPages,/);
     expect(code).toContain('prosePageSlice(');
   });
 });
@@ -807,7 +827,9 @@ describe('a survey: the four phases, each with exactly one primary', () => {
         const { primary, secondary } = hostControlsFor({ gameType: type, phase, ...READY });
         if (primary.intent === HOST_INTENTS.CLOSE_SURVEY) expect(primary.confirm).toMatchObject({ irreversible: true });
         else expect(primary.confirm).toBeFalsy();
-        if (secondary) expect(secondary.confirm).toBeFalsy();
+        // Skip is the one secondary that asks first: it throws a round away
+        // (two-surface Phase 1 review, finding 5).
+        if (secondary && secondary.intent !== HOST_INTENTS.SKIP) expect(secondary.confirm).toBeFalsy();
       }
     }
   });
@@ -1079,5 +1101,27 @@ describe('a closed survey: What We Heard, then feedback, then the end', () => {
     expect(stageBeatFromFrame(frame('field-notes', '001'), 'SURVEY#CLOSED')).toBeNull();
     expect(stageBeatFromFrame(frame('field-notes', '000'), 'SURVEY#OPEN')).toBeNull();
     expect(stageBeatFromFrame(frame('field-notes', '000'), 'RESULTS#001')).toBeNull();
+  });
+});
+
+describe('review findings: skip asks first on the host page; a read that will never come does not grey the round', () => {
+  // eslint-disable-next-line global-require
+  const { notesReadyFor } = require('../config/hostControls');
+
+  test('Skip, during ASK and VOTE, carries a confirm the host page honours', () => {
+    for (const phase of ['ASK', 'VOTE']) {
+      const skip = hostControlsFor({ gameType: 'call-and-answer', phase, ...READY, ...(phase === 'VOTE' ? { answerCount: 0 } : {}) }).secondary;
+      expect(skip.intent).toBe(HOST_INTENTS.SKIP);
+      expect(skip.confirm).toEqual(expect.objectContaining({ title: expect.any(String), confirmText: expect.any(String) }));
+      expect(skip.confirm.title).not.toMatch(/!/);
+    }
+  });
+
+  test('notesReadyFor: ready when the read is here, failed, or will never be asked for', () => {
+    expect(notesReadyFor({ insights: null, failure: null, answerCount: 3, gameType: 'call-and-answer' })).toBe(false);
+    expect(notesReadyFor({ insights: { x: 1 }, failure: null, answerCount: 3, gameType: 'call-and-answer' })).toBe(true);
+    expect(notesReadyFor({ insights: null, failure: 'boom', answerCount: 3, gameType: 'call-and-answer' })).toBe(true);
+    expect(notesReadyFor({ insights: null, failure: null, answerCount: 0, gameType: 'call-and-answer' })).toBe(true);
+    expect(notesReadyFor({ insights: null, failure: null, answerCount: 0, gameType: 'trivia' })).toBe(false);
   });
 });

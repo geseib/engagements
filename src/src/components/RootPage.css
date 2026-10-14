@@ -1,3 +1,4 @@
+/* skin-allowance: colour=10 font=0 primary=0 */
 /* ============================================================
    ROOT PAGE — the signed-out door at `/`
    Built from docs/design/entry-redesign/01-root.html and
@@ -16,7 +17,7 @@
   --entry-bg: #0F1A2E;
   --entry-surface: #1B2942;
   --entry-text: #F4EDE4;
-  --entry-primary: #F6A94C;
+  --entry-primary: var(--action);
   /* Lighter than styles.css's --muted #9BA8BE. Not a contrast necessity here
      (#9BA8BE measures 7.2:1 unlifted) -- adopted so a component lifted from
      this page onto the projector stage does not need a fresh audit. */

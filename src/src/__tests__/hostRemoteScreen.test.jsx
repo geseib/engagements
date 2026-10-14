@@ -41,8 +41,11 @@ jest.mock('../auth/authFetch', () => ({
 }));
 // qrcode.react draws to a canvas jsdom does not implement.
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => null }));
+// The report opens on the host page; jsdom cannot navigate, so watch the call.
+jest.mock('../auth/navigate', () => ({ navigateTo: jest.fn() }));
 
 const { authFetch } = require('../auth/authFetch');
+const { navigateTo } = require('../auth/navigate');
 
 /** Only the calls that DISPATCH something — the GETs this surface makes on
  *  mount (organisations, categories) share the same transport. */
@@ -291,6 +294,28 @@ describe('the AI read-back on the phone', () => {
     await connect();
     expect(await screen.findByText(/reading the responses/i)).toBeInTheDocument();
   });
+
+  it('shows the read when it lands mid-beat, having started nothing itself', async () => {
+    // Owner, 2026-10-12: the read only finished once the stage was opened.
+    // The server now starts it at close (get-results.js startRoundRead,
+    // tests/ai-summary-starts-at-close.js); the phone's part is to keep asking
+    // the PUBLIC read until it is written — never to generate. A 404 first,
+    // then the row: the next poll must pick it up without a reload.
+    serve({ state: 'RESULTS#003', stageBeat: 'field-notes', aiSummary: null });
+    await connect();
+    expect(await screen.findByText(/reading the responses/i)).toBeInTheDocument();
+
+    const notReady = global.fetch.getMockImplementation();
+    global.fetch.mockImplementation((url, init) => (String(url).includes('/ai-summary')
+      ? Promise.resolve({ ok: true, status: 200, json: async () => summary })
+      : notReady(url, init)));
+
+    expect(await screen.findByText(/nobody proposed telling a customer why/i, {}, { timeout: 6000 }))
+      .toBeInTheDocument();
+    const summaryCalls = global.fetch.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('ai-summary'));
+    expect(summaryCalls.length).toBeGreaterThan(1);
+    expect(summaryCalls.some((u) => /generateNew|\/ai-summary\/host/.test(u))).toBe(false);
+  }, 10000);
 });
 
 /**
@@ -347,5 +372,59 @@ describe('the feedback round on the phone', () => {
     await connect();
     await screen.findByRole('button', { name: /what we heard/i });
     expect(global.fetch.mock.calls.some(([u]) => String(u).includes('/comments'))).toBe(false);
+  });
+});
+
+/*
+  TWO-SURFACE PHASE 1: the Remote draws roundStep's primary AND its one
+  secondary (`hr-sec`, directly above the primary), the same pair the host
+  page's dock draws (R1, R3).
+*/
+describe('the dock draws roundStep: one primary, one secondary', () => {
+  it('ENDED offers Open session report, with Back to menu above it', async () => {
+    serve({ state: 'ENDED' });
+    await connect();
+    const primary = await screen.findByRole('button', { name: 'Open session report' });
+    expect(primary).toHaveClass('hr-primary');
+    expect(primary).toBeEnabled();
+    const secondary = screen.getByRole('button', { name: 'Back to menu' });
+    expect(secondary).toHaveClass('hr-sec');
+    expect(screen.queryByText('Session complete')).not.toBeInTheDocument();
+  });
+
+  it('Open session report sends the host to the report on the host page', async () => {
+    serve({ state: 'ENDED' });
+    await connect();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open session report' }));
+    expect(navigateTo).toHaveBeenCalledWith('/host?gameId=4821&open=report');
+  });
+
+  it('the read is never skipped by accident: Show the read is greyed while Workie writes', async () => {
+    serve({ state: 'RESULTS#003', stageBeat: 'field-notes' });
+    await connect();
+    const primary = await screen.findByRole('button', { name: 'Show the read' });
+    expect(primary).toBeDisabled();
+    expect(screen.getByText('Workie is writing', { selector: '.hr-dock-hint' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next round' })).toHaveClass('hr-sec');
+  });
+
+  it('Skip is the secondary while answering, and asks twice before it fires', async () => {
+    serve({ state: 'ASK#003', players: [person('Ada')], progress: { answerProgress: { answersReceived: 1, totalPlayers: 1 } } });
+    await connect();
+    const skip = await screen.findByRole('button', { name: 'Skip this round' });
+    expect(skip).toHaveClass('hr-sec');
+    fireEvent.click(skip);
+    expect(postsTo(authFetch)).toHaveLength(0);
+    expect(screen.getByRole('status', { name: '' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Tap again to confirm' }));
+    await waitFor(() => expect(postsTo(authFetch)).toHaveLength(1));
+    expect(JSON.parse(postsTo(authFetch)[0][1].body)).toEqual({ action: 'skip' });
+  });
+
+  it('nothing it cannot read looks like a lobby: an unknown state waits', async () => {
+    serve({ state: 'MYSTERY' });
+    await connect();
+    await waitFor(() => expect(screen.getByText('Waiting for the session', { selector: '.hr-dock-idle' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /start \w+ 1/i })).not.toBeInTheDocument();
   });
 });

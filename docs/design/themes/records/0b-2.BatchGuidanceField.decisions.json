@@ -1,0 +1,59 @@
+{
+  "unit": "0b-2.BatchGuidanceField",
+  "file": "components/BatchGuidanceField.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 1,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "32:15",
+      "line": 32,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".bgf",
+      "property": "--bgf-muted",
+      "literal": "#5b6b7c",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 109)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 110)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 110)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #5b6b7c (its rule wave converts the surface)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.597Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 1
+    },
+    "classicDeltas": [],
+    "edits": 0
+  }
+}

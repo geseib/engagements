@@ -1,0 +1,272 @@
+{
+  "unit": "0b-2.SurveyAIBuilder",
+  "file": "components/SurveyAIBuilder.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 9,
+    "font": 0,
+    "primary": 2
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "30:14",
+      "line": 30,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-text",
+      "literal": "#2c3e50",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 181)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #2c3e50 (its rule wave converts the surface)"
+    },
+    {
+      "id": "31:15",
+      "line": 31,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-muted",
+      "literal": "#5b6b7c",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 109)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 110)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 110)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #5b6b7c (its rule wave converts the surface)"
+    },
+    {
+      "id": "32:14",
+      "line": 32,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-edge",
+      "literal": "#7a8898",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 60)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 60)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 60)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #7a8898 (its rule wave converts the surface)"
+    },
+    {
+      "id": "33:14",
+      "line": 33,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-rule",
+      "literal": "#e3e8ee",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 108)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 108)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #e3e8ee (its rule wave converts the surface)"
+    },
+    {
+      "id": "34:15",
+      "line": 34,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-quiet",
+      "literal": "#f8f9fa",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 25)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 87)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 137)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #f8f9fa (its rule wave converts the surface)"
+    },
+    {
+      "id": "35:15",
+      "line": 35,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-field",
+      "literal": "#ffffff",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 160)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #ffffff (its rule wave converts the surface)"
+    },
+    {
+      "id": "36:19",
+      "line": 36,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-on-accent",
+      "literal": "#1b2942",
+      "why": "matches several roles: --surface, --on-accent",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "surface",
+      "choice": "on-accent"
+    },
+    {
+      "id": "37:17",
+      "line": 37,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-chip-bg",
+      "literal": "#eef2f7",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 75)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 125)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 138)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #eef2f7 (its rule wave converts the surface)"
+    },
+    {
+      "id": "38:17",
+      "line": 38,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".sab",
+      "property": "--sab-chip-fg",
+      "literal": "#35506b",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 62)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 90)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 152)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #35506b (its rule wave converts the surface)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:18.716Z",
+    "after": {
+      "colour": 8,
+      "font": 0,
+      "primary": 2
+    },
+    "decisionsByKind": {
+      "keep": 8,
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}

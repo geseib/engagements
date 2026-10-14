@@ -1,0 +1,29 @@
+{
+  "unit": "0b-2.BuilderPage",
+  "file": "BuilderPage.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 185,
+    "font": 1,
+    "primary": 1
+  },
+  "auto": [],
+  "decide": [],
+  "applied": {
+    "at": "2026-10-13T14:15:16.081Z",
+    "after": {
+      "colour": 185,
+      "font": 1,
+      "primary": 1
+    },
+    "decisionsByKind": {},
+    "classicDeltas": [],
+    "edits": 0
+  }
+}

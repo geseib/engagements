@@ -13,25 +13,16 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('buildroom', 'BuildWheel.css');
-const GLOBAL = read('styles.css');
+const H = require('../testing/skinHarness');
 
-const hex = (block, name) => {
-  const start = GLOBAL.indexOf(block);
-  const body = GLOBAL.slice(start, GLOBAL.indexOf('}', start));
-  return body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`))[1];
-};
-const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-const lum = (h) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16)); return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); };
-const ratio = (a, b) => { const x = lum(a); const y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-
-const D = '[data-theme="dark"] {';
-const ROOT = ':root {';
-const T = {
-  bg: hex(D, '--bg'), text: hex(D, '--text'), surface2: hex(D, '--surface-2'),
-  primary: hex(ROOT, '--primary'), secondary: hex(ROOT, '--secondary'), success: hex(ROOT, '--success'),
-};
-
-describe('every ink on every slice clears AA', () => {
+/* Resolved per skin through the harness; the wheel draws inside the Build Room's dusk
+   root (`.brm data-theme="dark"`). */
+describe.each(H.SKINS)('every ink on every slice clears AA (%s)', (skin) => {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  const T = {
+    bg: r('--bg'), text: r('--text'), surface2: r('--surface-2'),
+    primary: r('--primary'), secondary: r('--secondary'), success: r('--success'),
+  };
   test.each([
     ['a letter on the amber slice', T.bg, T.primary],
     ['a letter on the blue slice', T.bg, T.secondary],
@@ -40,7 +31,7 @@ describe('every ink on every slice clears AA', () => {
     ['the hub letter', T.primary, T.bg],
     ['the caption', T.text, T.bg],
     ['the Spin button', T.bg, T.primary],
-  ])('%s', (_l, fg, bg) => expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5));
+  ])('%s', (_l, fg, bg) => expect(H.ratio(fg, bg)).toBeGreaterThanOrEqual(H.AA));
 });
 
 describe('the sheet', () => {

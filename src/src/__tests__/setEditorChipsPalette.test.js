@@ -12,101 +12,120 @@
  *
  * THE ORIGINAL DEFECT IS STILL PINNED, in the form it takes here: the ink each
  * chip declines is measured too, so "it declares its own token" cannot become
- * decorative. The helpers below are copied from srevPalette.test.js. */
+ * decorative. Every value is resolved through testing/skinHarness.js and the
+ * pairings are measured for every skin on dusk. */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) { const la = lum(a); const lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
-const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) {
-  const start = css.indexOf(block); const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not in ${block}`);
-  return m[1];
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
+const ratio = (a, b) => H.ratio(a, b);
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+/** A scope-local token READ out of its block, every var() resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC_DUSK) {
+  return H.scopeVar(css, block, name, opts);
 }
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const AA = 4.5;
+const AA = H.AA;
 
-/* The scope's token block — where the editor's raw values live now. */
+/* The scope's token block — where the editor's raw values live now (as roles). */
 const EDITOR_CSS = read('components', 'QuestionSetEditor.css');
 const SCOPE = '.qs-editor {';
 
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-function tint(css, block, name) {
-  const start = css.indexOf(block); const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*rgba\\(([^)]*)\\)`));
-  if (!m) throw new Error(`${name} is not an rgba in ${block}`);
-  const parts = m[1].split(',').map((n) => Number(n.trim()));
-  return { rgb: parts.slice(0, 3), a: parts[3] };
+function tint(css, block, name, opts = CLASSIC_DUSK) {
+  const c = H.parseColor(token(css, block, name, opts));
+  if (!(c.a < 1)) throw new Error(`${name} is not a translucent tint in ${block}`);
+  return c;
 }
+
+/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
+const norm = (c) => {
+  const p = H.parseColor(c);
+  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
+};
 
 /* A version row is `background: var(--surface)`, read from the rule rather than
    named here; the active one carries the ok tint on top of it. */
 const rowToken = GLOBAL_CSS
   .slice(GLOBAL_CSS.indexOf('.qs-version-row {'))
   .match(/background:\s*var\((--[\w-]+)\)/)[1];
-const row = hex(token(GLOBAL_CSS, DUSK, rowToken));
-const ok = tint(EDITOR_CSS, SCOPE, '--qs-tint-ok');
-const activeRow = alphaOver(ok.rgb, row, ok.a);
 
-const dangerText = hex(token(GLOBAL_CSS, ROOT, '--danger-text'));
-const dangerDeep = hex(token(GLOBAL_CSS, ROOT, '--danger-deep'));
-const success = hex(token(GLOBAL_CSS, ROOT, '--success'));
-const secondary = hex(token(GLOBAL_CSS, ROOT, '--secondary'));
-const publicInkHex = token(EDITOR_CSS, SCOPE, '--qs-chip-public-ink');
-const publicInk = hex(publicInkHex);
-const waitingInkHex = token(EDITOR_CSS, SCOPE, '--qs-chip-waiting-ink');
-const waitingInk = hex(waitingInkHex);
+function palette(opts) {
+  const row = H.parseColor(H.role(rowToken, opts)).rgb;
+  const ok = tint(EDITOR_CSS, SCOPE, '--qs-tint-ok', opts);
+  return {
+    row,
+    activeRow: H.alphaOver(ok.rgb, row, ok.a),
+    dangerText: H.role('--danger-text', opts),
+    dangerDeep: H.role('--danger-deep', opts),
+    success: H.role('--success', opts),
+    secondary: H.role('--secondary', opts),
+    publicInk: token(EDITOR_CSS, SCOPE, '--qs-chip-public-ink', opts),
+    waitingInk: token(EDITOR_CSS, SCOPE, '--qs-chip-waiting-ink', opts),
+  };
+}
 
-describe.each([
-  ['a version row', row],
-  ['the active version row', activeRow],
-])('the version chip ink on %s', (_name, bg) => {
-  test('the public chip ink clears AA', () => {
-    expect(ratio(publicInk, bg)).toBeGreaterThanOrEqual(AA);
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const opts = { skin, theme };
+  const P = palette(opts);
+
+  describe.each([
+    ['a version row', P.row],
+    ['the active version row', P.activeRow],
+  ])('the version chip ink on %s', (_name, bg) => {
+    test('the public chip ink clears AA', () => {
+      expect(ratio(P.publicInk, bg)).toBeGreaterThanOrEqual(AA);
+    });
+    test('the flagged/unfinished chip ink (--danger-text) clears AA', () => {
+      expect(ratio(P.dangerText, bg)).toBeGreaterThanOrEqual(AA);
+    });
+    test('the waiting-for-Engage chip ink clears AA', () => {
+      expect(ratio(P.waitingInk, bg)).toBeGreaterThanOrEqual(AA);
+    });
   });
-  test('the flagged/unfinished chip ink (--danger-text) clears AA', () => {
-    expect(ratio(dangerText, bg)).toBeGreaterThanOrEqual(AA);
-  });
-  test('the waiting-for-Engage chip ink clears AA', () => {
-    expect(ratio(waitingInk, bg)).toBeGreaterThanOrEqual(AA);
-  });
-});
 
-test('the public chip ink is the one the SET LIST uses for the same state', () => {
-  // The reason for a scoped token has changed and this says so rather than
-  // keeping a premise that has stopped being true: on paper, --success
-  // (#4FB286) was 2.6:1 and the token existed because the global was
-  // unreadable. On dusk --success is 5.6:1 on this row and would pass — so the
-  // token now earns its place a different way. A version that reached the
-  // public library shows a chip in `.qsets` (the list this editor opens from)
-  // and a chip here, and they are the same fact about the same set; the ink is
-  // read out of QuestionSetsPanel.css so the two cannot drift apart.
-  expect(ratio(success, row)).toBeGreaterThanOrEqual(AA);
-  const list = read('components', 'QuestionSetsPanel.css');
-  expect(publicInkHex.toUpperCase()).toBe(token(list, '.qsets {', '--qsets-success-text').toUpperCase());
-});
+  test('the public chip ink is the one the SET LIST uses for the same state', () => {
+    // The reason for a scoped token has changed and this says so rather than
+    // keeping a premise that has stopped being true: on paper, --success
+    // (#4FB286) was 2.6:1 and the token existed because the global was
+    // unreadable. On dusk --success is 5.6:1 on this row and would pass — so the
+    // token now earns its place a different way. A version that reached the
+    // public library shows a chip in `.qsets` (the list this editor opens from)
+    // and a chip here, and they are the same fact about the same set; the ink is
+    // read out of QuestionSetsPanel.css so the two cannot drift apart.
+    expect(ratio(P.success, P.row)).toBeGreaterThanOrEqual(AA);
+    const list = read('components', 'QuestionSetsPanel.css');
+    expect(norm(P.publicInk)).toEqual(norm(token(list, '.qsets {', '--qsets-success-text', opts)));
+  });
 
-test('the flagged chip takes --danger-text, not the deep red under a white label', () => {
-  // --danger-deep (#B03A34) is the FILL a --text label sits on; as ink on the
-  // row it is 2.4:1. rejects: carrying the paper choice across unexamined.
-  expect(ratio(dangerDeep, row)).toBeLessThan(AA);
-  const rule = GLOBAL_CSS.match(/\.qs-version-chip--flagged[^{]*\{([^}]*)\}/);
-  expect(rule).not.toBeNull();
-  expect(rule[1]).toMatch(/color:\s*var\(--danger-text\)/);
+  test('the flagged chip takes --danger-text, not the deep red under a white label', () => {
+    // --danger-deep (Classic #B03A34) is the FILL a --text label sits on; as ink on
+    // the row it is 2.4:1. rejects: carrying the paper choice across unexamined.
+    expect(ratio(P.dangerDeep, P.row)).toBeLessThan(AA);
+    const rule = GLOBAL_CSS.match(/\.qs-version-chip--flagged[^{]*\{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule[1]).toMatch(/color:\s*var\(--danger-text\)/);
+  });
+
+  test('--secondary would also be text-safe on the row', () => {
+    // --secondary (Classic #7CA7E6) IS text-safe on the row (5.9:1), so the
+    // waiting chip's token is scoped for consistency with its sibling rather
+    // than out of need.
+    expect(ratio(P.secondary, P.row)).toBeGreaterThanOrEqual(AA);
+  });
 });
 
 test('the waiting chip declares its own scoped token rather than reusing --secondary', () => {
-  // --secondary (#7CA7E6) IS text-safe on the row (5.9:1), so this one is a
-  // scoped token for consistency with its sibling rather than out of need —
-  // and the token being its own is what lets the pair move together the next
-  // time the surface does.
-  expect(waitingInkHex.toUpperCase()).toBe('#7CA7E6');
-  expect(ratio(secondary, row)).toBeGreaterThanOrEqual(AA);
+  // The token being its own is what lets the pair move together the next time
+  // the surface does. Classic stays pinned at the value it always had.
+  expect(norm(token(EDITOR_CSS, SCOPE, '--qs-chip-waiting-ink'))).toEqual(norm('#7CA7E6'));
+  expect(EDITOR_CSS.slice(EDITOR_CSS.indexOf(SCOPE))).toMatch(/--qs-chip-waiting-ink\s*:/);
+});
+
+test('Classic stays pinned: the public chip ink and the ok tint resolve to their old literals', () => {
+  expect(norm(token(EDITOR_CSS, SCOPE, '--qs-chip-public-ink'))).toEqual(norm('#6FD0A4'));
+  expect(norm(token(EDITOR_CSS, SCOPE, '--qs-tint-ok'))).toEqual(norm('rgba(79, 178, 134, .10)'));
 });
 
 /* ── THE WORKIE GROUP: THE SAME DEFECT, DECLINED RATHER THAN MEASURED ────────

@@ -1,3 +1,4 @@
+/* skin-allowance: colour=6 font=0 primary=0 */
 /* ============================================================================
    DEV'S AI MODEL PICKER — "Redo with…", its menu, and the Compare dialog
    (components/stage/ModelCompare.jsx). Staff only, dev only.
@@ -66,7 +67,7 @@
   --mcmp-t-label: 13px;
   --mcmp-t-body: 15px;
   --mcmp-t-head: 19px;
-  --mcmp-rule: rgba(155, 168, 190, 0.20);
+  --mcmp-rule: rgb(var(--slate-rgb) / 0.20);
 
   margin: auto;
   width: min(1200px, 100%);

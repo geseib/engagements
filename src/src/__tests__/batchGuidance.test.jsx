@@ -246,7 +246,7 @@ describe('the two stylesheets, measured on the white builder modal', () => {
     // the hint at var(--muted), and --muted is measured on --surface for each.
     const css = read('BatchGuidanceField.css');
     expect(css).toMatch(/^\.bgf\.bgf--console \{[^}]*--bgf-muted: var\(--muted\)/m);
-    const styles = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+    const styles = require('../testing/classicGlobalCss')();
     const block = (selector) => styles.slice(styles.indexOf(`${selector} {`), styles.indexOf('}', styles.indexOf(`${selector} {`)));
     for (const selector of [':root', '[data-theme="light"]', '[data-theme="dark"]']) {
       const tokens = block(selector);

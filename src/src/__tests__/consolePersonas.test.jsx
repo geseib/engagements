@@ -213,10 +213,13 @@ describe('somebody in two organisations', () => {
     mockActiveOrg = NORTHWIND.orgId;
     serve([HOME, NORTHWIND, MERIDIAN]);
     render(<AdminPage />);
-    fireEvent.click(await screen.findByTestId('orgsw-chip'));
-    for (const name of ['Amara Reyes', 'Northwind Learning', 'Meridian Delivery']) {
-      expect(screen.getByRole('menuitem', { name: new RegExp(name) })).toBeInTheDocument();
-    }
+    // The scope row names every place on screen (docs/design/admin-landing):
+    // Personal, then the teams A to Z. No menu to open.
+    const row = await screen.findByRole('navigation', { name: 'Where you work' });
+    const tabs = within(row).getAllByRole('link').map((a) => a.textContent);
+    expect(tabs[0]).toMatch(/^AR?Personal/);
+    expect(tabs.slice(1).map((t) => t.replace(/^[A-Z]{2}/, '').replace(/(Owner|Admin|Member)?\d*$/, ''))).toEqual(['Meridian Delivery', 'Northwind Learning']);
+    expect(within(row).getByRole('link', { name: /Personal/ })).toHaveAttribute('title', expect.stringMatching(/Amara Reyes/));
   });
 
   // rejects: the nav being computed from the wrong organisation. The role
@@ -225,7 +228,8 @@ describe('somebody in two organisations', () => {
     mockActiveOrg = MERIDIAN.orgId;
     serve([HOME, NORTHWIND, MERIDIAN]);
     render(<AdminPage />);
-    expect(await screen.findByTestId('orgsw-chip')).toHaveTextContent('Meridian Delivery');
+    const row = await screen.findByRole('navigation', { name: 'Where you work' });
+    await waitFor(() => expect(row.querySelector('[aria-current="page"]')).toHaveTextContent('Meridian Delivery'));
   });
 });
 

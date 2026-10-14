@@ -8,8 +8,22 @@ const db = DynamoDBDocumentClient.from(dynamoClient);
 exports.handler = async (event) => {
   const connectionId = event.requestContext.connectionId;
   const gameId = event.queryStringParameters?.gameId;
-  const playerName = event.queryStringParameters?.playerName;
-  const askedForHost = event.queryStringParameters?.isHost === 'true';
+  /*
+    A PRESENTATION IS A VIEWER (two-surface PLAN 2.1, D4). `/present` connects
+    with no name. Every name-less socket used to be stored PlayerName: null, so
+    the dedup below retired a second Presentation's peer — the first wall went
+    silent while still showing "connected". A viewer is identified by its own
+    per-tab `viewerId` instead, and is never HOST and never named: it shows only
+    what the room sees. A viewerId that is not a short id falls back to the
+    connection id, which dedups against nothing.
+  */
+  const isViewer = event.queryStringParameters?.viewer === 'present';
+  const rawViewerId = String(event.queryStringParameters?.viewerId || '');
+  const viewerId = isViewer
+    ? (/^[A-Za-z0-9_-]{8,64}$/.test(rawViewerId) ? rawViewerId : connectionId)
+    : null;
+  const playerName = isViewer ? null : event.queryStringParameters?.playerName;
+  const askedForHost = !isViewer && event.queryStringParameters?.isHost === 'true';
 
   try {
     // `isHost=true` is a REQUEST, never a fact. This route has no authorizer,
@@ -54,6 +68,7 @@ exports.handler = async (event) => {
         ConnectionType: isHost ? 'HOST' : 'PLAYER',
         GameId: gameId || null,
         PlayerName: playerName || null,
+        ...(isViewer ? { Viewer: 'present', ViewerId: viewerId } : {}),
         ConnectedAt: connectedAt,
         ttl
       }
@@ -73,12 +88,18 @@ exports.handler = async (event) => {
         const existing = await db.send(new QueryCommand({
           TableName: process.env.TABLE_NAME,
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          // A viewer dedups by its own tab id; an ordinary player by name, never
+          // against a viewer row (both are PLAYER, both may be name-less).
           FilterExpression: isHost
             ? 'ConnectionType = :ct'
-            : 'ConnectionType = :ct AND PlayerName = :pn',
+            : isViewer
+              ? 'ConnectionType = :ct AND ViewerId = :vid'
+              : 'ConnectionType = :ct AND PlayerName = :pn AND attribute_not_exists(ViewerId)',
           ExpressionAttributeValues: isHost
             ? { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':ct': 'HOST' }
-            : { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':ct': 'PLAYER', ':pn': playerName || null },
+            : isViewer
+              ? { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':ct': 'PLAYER', ':vid': viewerId }
+              : { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':ct': 'PLAYER', ':pn': playerName || null },
         }));
         await Promise.all((existing.Items || [])
           .filter(i => i.ConnectionId !== connectionId)

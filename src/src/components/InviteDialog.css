@@ -1,3 +1,4 @@
+/* skin-allowance: colour=4 font=0 primary=5 */
 /* ============================================================================
    THE INVITE DIALOG — components/InviteDialog.jsx
 
@@ -29,8 +30,8 @@
   /* Declared here, not borrowed: an undefined custom property invalidates the
      whole declaration, so reaching for a token that lives in another sheet is a
      rule that silently does nothing. */
-  --inv-rule: rgba(155, 168, 190, .20);
-  --inv-rule-strong: rgba(155, 168, 190, .34);
+  --inv-rule: rgb(var(--slate-rgb) / .20);
+  --inv-rule-strong: rgb(var(--slate-rgb) / .34);
   --inv-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   width: min(620px, 100%);

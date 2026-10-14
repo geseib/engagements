@@ -1,0 +1,4 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+.sw { --sw-rule: var(--rule); border: 1px solid var(--sw-rule); outline-color: rgb(var(--slate-rgb) / .28); }
+.sw-go { background: var(--action); color: var(--on-action); }
+.sw a { color: var(--info); }

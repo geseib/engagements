@@ -1,0 +1,715 @@
+{
+  "unit": "0c",
+  "file": "present/present.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": false,
+  "base": "d198a29f",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 10,
+    "font": 0,
+    "primary": 20
+  },
+  "auto": [
+    {
+      "id": "40:18",
+      "line": 40,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-line",
+      "literal": "rgba(155, 168, 190, 0.22)",
+      "replacement": "var(--rule)",
+      "why": "exact --rule in dark"
+    },
+    {
+      "id": "41:25",
+      "line": 41,
+      "col": 25,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-line-strong",
+      "literal": "rgba(155, 168, 190, 0.4)",
+      "replacement": "rgb(var(--slate-rgb) / 0.4)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "46:26",
+      "line": 46,
+      "col": 26,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "34:14",
+      "line": 34,
+      "col": 14,
+      "type": "colour",
+      "kind": "rule",
+      "selector": "html.present-locked, html.present-locked body",
+      "property": "background",
+      "literal": "#0A1324",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 17)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 41)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the html lock paints the letterbox before .present mounts; same #0A1324 as --present-canvas, which a custom property cannot reach on <html>"
+    },
+    {
+      "id": "38:20",
+      "line": 38,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-canvas",
+      "literal": "#0A1324",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 17)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the letterbox ground outside the scaled canvas; no role holds #0A1324 (--wall-canvas is a gradient and its Classic value is the stage field, a Classic delta)"
+    },
+    {
+      "id": "39:18",
+      "line": 39,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-glow",
+      "literal": "#1E3050",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 14)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 16)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 16)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the canvas glow stop; no role holds #1E3050 alone, and presentPalette.test.js (not 0c) reads it from the .present block as a literal"
+    },
+    {
+      "id": "42:18",
+      "line": 42,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-mini",
+      "literal": "rgba(27, 41, 66, 0.6)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the flank mini-card fill rgba(27,41,66,.6); no --surface channel exists, and presentPalette.test.js (not 0c) reads it as a literal"
+    },
+    {
+      "id": "43:18",
+      "line": 43,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-seen",
+      "literal": "rgba(124, 167, 230, 0.45)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, 0.45) -> rgba(246,169,76,0.45))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "44:19",
+      "line": 44,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-quote",
+      "literal": "#D9E5F7",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 56)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 104)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the read quote ink #D9E5F7; --wall-quote is #F4EDE4 in Classic (a Classic delta), and presentPalette.test.js (not 0c) reads it as a literal"
+    },
+    {
+      "id": "45:19",
+      "line": 45,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".present",
+      "property": "--present-plate",
+      "literal": "rgba(11, 18, 32, 0.93)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 13)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 17)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 17)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the strip and wipe plate rgba(11,18,32,.93); no role or channel holds it"
+    },
+    {
+      "id": "147:9",
+      "line": 147,
+      "col": 9,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-eyebrow",
+      "property": "color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "178:46",
+      "line": 178,
+      "col": 46,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-meter i.is-on",
+      "property": "background",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "230:103",
+      "line": 230,
+      "col": 103,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-trow .present-bar",
+      "property": "background",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "284:20",
+      "line": 284,
+      "col": 20,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-card",
+      "property": "border",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "299:14",
+      "line": 299,
+      "col": 14,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-badge",
+      "property": "background",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "320:70",
+      "line": 320,
+      "col": 70,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-part",
+      "property": "color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "323:46",
+      "line": 323,
+      "col": 46,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-track i.is-on",
+      "property": "background",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "331:14",
+      "line": 331,
+      "col": 14,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-track.is-bar em",
+      "property": "background",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "348:43",
+      "line": 348,
+      "col": 43,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-read li::marker",
+      "property": "color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "363:61",
+      "line": 363,
+      "col": 61,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-read .markdown-content li::marker",
+      "property": "color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "368:46",
+      "line": 368,
+      "col": 46,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-pages i.is-on",
+      "property": "background",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "424:65",
+      "line": 424,
+      "col": 65,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-strip-btn[aria-pressed=\"true\"]",
+      "property": "border-color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "425:48",
+      "line": 425,
+      "col": 48,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-strip-btn.is-go",
+      "property": "background",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "425:80",
+      "line": 425,
+      "col": 80,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-strip-btn.is-go",
+      "property": "border-color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "427:63",
+      "line": 427,
+      "col": 63,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-strip-btn:focus-visible",
+      "property": "outline",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "442:20",
+      "line": 442,
+      "col": 20,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-confirm",
+      "property": "border",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "450:116",
+      "line": 450,
+      "col": 116,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-confirm-ey",
+      "property": "color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "466:24",
+      "line": 466,
+      "col": 24,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-wipe",
+      "property": "border-top",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "467:27",
+      "line": 467,
+      "col": 27,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-wipe",
+      "property": "border-bottom",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    },
+    {
+      "id": "474:9",
+      "line": 474,
+      "col": 9,
+      "type": "secondary",
+      "kind": "rule",
+      "selector": ".present .present-wipe",
+      "property": "color",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:17:13.099Z",
+    "after": {
+      "colour": 6,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 6,
+      "info": 21
+    },
+    "classicDeltas": [],
+    "edits": 24
+  }
+}

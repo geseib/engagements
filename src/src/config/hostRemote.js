@@ -25,21 +25,8 @@ import { gameTypeMeta, normalizeGameType } from './gameTypes';
 import { rosterRows } from './setupPanel';
 import { normaliseScoreboard, scoreboardAvailability } from './scoreboard';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
-
-/**
- * The beats from which the only way on is the next round.
- *
- * A SET rather than an equality test, and named rather than inlined, because
- * the question the RESULTS control asks is "has the room passed the read-back
- * yet" — not "is the beat this one string". Spelling it as the latter is what
- * made the phone offer to walk the room backwards out of a feedback round the
- * moment `feedback` joined `STAGE_BEATS`.
- *
- * Deliberately not derived from `STAGE_BEATS` by slicing off the head: the two
- * lists answer different questions, and a new beat should have to be placed
- * here on purpose rather than inherit a position from an array's order.
- */
-const BEATS_PAST_THE_READ_BACK = new Set(['field-notes', 'feedback']);
+import { stepFor } from './roundStep';
+import { resolveRoundNoun } from './instructions';
 
 /* ------------------------------------------------------------------ phases */
 
@@ -107,144 +94,90 @@ export function runsVotePhase(gameType) {
 
 /* ----------------------------------------------------------------- actions */
 
-/**
- * The three transitions the remote can drive, in the vocabulary of the
- * endpoints that perform them.
- *
- * `confirmWhenIncomplete` marks the actions that throw away in-flight input if
- * fired early: leaving ASK abandons whoever is still typing, leaving VOTE
- * abandons whoever is still voting. Moving on from RESULTS discards nothing, so
- * it does not earn the extra tap — friction everywhere is friction nowhere.
- */
-export const ACTIONS = {
-  next: {
-    id: 'next',
-    label: 'Next Round',
-    icon: 'ArrowRight',
-    confirmWhenIncomplete: false,
-  },
-  vote: {
-    id: 'vote',
-    label: 'Start Voting',
-    icon: 'ListChecks',
-    confirmWhenIncomplete: true,
-  },
-  results: {
-    id: 'results',
-    label: 'Show Results',
-    icon: 'ChartLineUp',
-    confirmWhenIncomplete: true,
-  },
-  /**
-   * RESULTS' second beat: the AI's read-back of the round.
-   *
-   * Same id, label and icon as the stage's own control
-   * (config/hostControls.js:190-198) — deliberately, because they are one
-   * button on two devices. The remote used to skip this beat entirely and
-   * offer "Next Round" from RESULTS, so the phone and the projector disagreed
-   * about how many beats a round's results have.
-   *
-   * Discards nothing, so it never earns the second tap.
-   */
-  fieldNotes: {
-    id: 'field-notes',
-    label: 'What We Heard',
-    icon: 'Sparkle',
-    confirmWhenIncomplete: false,
-  },
-};
-
-// The beat vocabulary itself lives in config/hostControls.js (STAGE_BEATS),
-// which owns the stage's phases and the FIELD_NOTES intent. Deliberately NOT
-// redeclared here: this module's own history is a cautionary tale about
-// carrying a second answer to a question another module already answers — see
-// TYPES_WITH_NO_VOTE_AT_RUNTIME above, which drifted from the config table and
-// had to be demoted to documentation.
+/*
+  THE REMOTE READS roundStep (two-surface PLAN 1.5, R1). This file used to
+  carry its own `primaryAction` and an ACTIONS table of labels, and they
+  restated the host page's dock and drifted three ways (simplify-round
+  AUDIT §2): it skipped Workie's unread pages, never offered feedback, and
+  named the round with the game type's noun where the host page used the
+  set's. Now the payload becomes roundStep's snapshot and the step comes back
+  from config/roundStep.js — the same function the dock reads.
+  __tests__/roundStepParity.test.js holds the two readers equal.
+*/
 
 /**
- * The one button that should be big and at the bottom of the screen.
+ * The `/host-state` payload as roundStep's normalised snapshot.
  *
- * @param stageBeat which beat of RESULTS the SERVER says is showing, from
- *        `get-game-state`'s `stageBeat`. Only consulted inside RESULTS; a beat
- *        left over from a previous round must never rewrite the ASK or VOTE
- *        control, so the check lives inside the phase, not above the switch.
- *
- * @returns an ACTIONS entry with a phase-specific `label`, or null when there
- *          is nothing to advance to (the game has ended, or the state is not
- *          one we recognise — in which case we would rather show nothing than
- *          guess and fire the wrong transition).
+ * @param json   GET /games/{id}/host-state
+ * @param extras what this surface knows beyond the payload: `playerCount`
+ *               (the roster), `answerCount` (the round's responses, loaded at
+ *               RESULTS), `notesReady` (Workie's read has arrived),
+ *               `hasQuestionSet`, `roundNoun` (an override), `goalLine`.
  */
-export function primaryAction(state, gameType, stageBeat) {
-  const { phase } = parseGamePhase(state);
+export function snapshotFromHostState(json, extras = {}) {
+  const payload = json && typeof json === 'object' ? json : {};
+  const gameType = payload.gameType || payload.gameMetadata?.gameType || '';
+  const rawState = typeof payload.state === 'string' ? payload.state.trim() : '';
+  // A SURVEY IS NOT A ROUND, and the Remote cannot open, warn or close one
+  // yet: next-question refuses a survey (409). Read every survey state as a
+  // moment with nothing to press rather than offering a button that fails in
+  // front of the room (IMPLEMENTATION-phase-2.md §5 risk 10).
+  const state = normalizeGameType(gameType) === 'survey' && rawState && !rawState.startsWith('SURVEY#')
+    ? `SURVEY#${rawState}` : rawState;
 
-  switch (phase) {
-    // No round has been dealt yet. `next-question` accepts CREATED and STARTED,
-    // so the same endpoint that advances also opens.
-    //
-    // NOT FOR A SURVEY, which has no first round: next-question refuses one
-    // (409, surveys phase 2), and the remote cannot open, warn or close a
-    // survey yet — its own states parse as UNKNOWN below. No button beats a
-    // button that fails in front of the room (IMPLEMENTATION-phase-2.md §5
-    // risk 10).
-    case 'CREATED':
-    case 'STARTED':
-      if (normalizeGameType(gameType) === 'survey') return null;
-      return { ...ACTIONS.next, label: 'Start First Round' };
+  const progress = roundProgress(payload);
+  const { phase } = parseGamePhase(rawState);
+  const question = payload.currentQuestionData || null;
+  const notes = payload.stageNotes && typeof payload.stageNotes === 'object' ? payload.stageNotes : {};
+  const focus = payload.stageFocus && typeof payload.stageFocus === 'object' ? payload.stageFocus : {};
 
-    case 'ASK':
-      return runsVotePhase(gameType) ? { ...ACTIONS.vote } : { ...ACTIONS.results };
-
-    case 'VOTE':
-      return { ...ACTIONS.results };
-
-    // Three beats, in order: the tally, the read-back, then a feedback round.
-    //
-    // Compared against a KNOWN SET rather than tested for truthiness: the
-    // server sends an explicit 'results' for a round nobody has moved, and a
-    // truthy check would read that as "already past the read-back" and skip the
-    // beat — which is the defect this whole path exists to fix.
-    //
-    // AT OR PAST THE READ-BACK, not "is it field-notes". This was an equality
-    // test against the single value, and when `feedback` joined the set it fell
-    // into the else: the phone offered "What We Heard" — the beat BEFORE the
-    // one the room was on — and tapping it pulled the whole room back out of
-    // the feedback round the host had just opened.
-    case 'RESULTS':
-      return BEATS_PAST_THE_READ_BACK.has(stageBeat)
-        ? { ...ACTIONS.next, label: `Next ${roundNounFor(gameType)}` }
-        : { ...ACTIONS.fieldNotes };
-
-    case 'ENDED':
-    case 'UNKNOWN':
-    default:
-      return null;
+  let answerCount = extras.answerCount;
+  if ((answerCount === undefined || answerCount === null) && phase === 'ASK' && progress.kind === 'answers') {
+    answerCount = progress.received;
   }
+
+  return {
+    gameType,
+    state,
+    stageBeat: payload.stageBeat,
+    focus: {
+      focus: focus.focus, index: focus.index, part: focus.part, parts: focus.parts, phase: focus.phase,
+    },
+    notes: { page: notes.page, pages: notes.pages, ready: extras.notesReady },
+    progress: progress.applicable
+      ? { received: progress.received, total: progress.total, allIn: progress.allIn }
+      : null,
+    playerCount: extras.playerCount === undefined ? null : extras.playerCount,
+    answerCount: answerCount === undefined ? null : answerCount,
+    roundNoun: resolveRoundNoun(question, gameType, extras.roundNoun || question?.setRoundNoun),
+    hasQuestionSet: extras.hasQuestionSet !== false,
+    goalLine: extras.goalLine || '',
+    roomAsk: extras.roomAsk || null,
+    asksReady: extras.asksReady || 0,
+  };
 }
 
-/** "Next Round" / "Next Question" / "Next Subject" — the game type's own noun. */
+/** "Round" / "Question" / "Subject" — the game type's own noun. */
 function roundNounFor(gameType) {
   return gameTypeMeta(gameType).roundNoun || 'Round';
 }
 
+/** The step for this payload: `{ moment, primary, secondary, status, next, more }`. */
+export function remoteStep(json, extras = {}) {
+  return stepFor(snapshotFromHostState(json, extras));
+}
+
 /**
- * Abandoning the current round without resolving it.
+ * Does pressing this control take two taps?
  *
- * Kept OFF the primary control on purpose. It is the only action here that can
- * lose a round outright, and — unlike the ordinary advance — it is not
- * idempotent server-side: `action: 'skip'` bypasses next-question.js's
- * "already asking a question" guard, so two skips in flight really do consume
- * two questions and show one.
+ * The first press of an early advance arms it (roundStep's `arm`: leaving ASK
+ * or VOTE before everyone is in discards whoever is still typing or voting).
+ * Skip always asks twice: `action: 'skip'` bypasses next-question.js's
+ * "already asking a question" guard, so two skips in flight consume two
+ * questions and show one.
  */
-export function skipAction(state) {
-  const { phase } = parseGamePhase(state);
-  if (phase !== 'ASK' && phase !== 'VOTE') return null;
-  return {
-    id: 'skip',
-    label: 'Skip This Round',
-    icon: 'SkipForward',
-    destructive: true,
-    confirmAlways: true,
-  };
+export function needsConfirmation(action) {
+  return Boolean(action && action.arm);
 }
 
 /**
@@ -260,12 +193,16 @@ export function requestFor(actionId, { gameId, round } = {}) {
   if (!gameId) return null;
 
   switch (actionId) {
+    // `start` is round 1 (roundStep's LOBBY primary); next-question accepts
+    // CREATED and STARTED, so the endpoint that advances also opens.
+    case 'start':
     case 'next':
       return { path: `games/${gameId}/next-question`, body: {} };
 
     case 'skip':
       return { path: `games/${gameId}/next-question`, body: { action: 'skip' } };
 
+    case 'open-vote':
     case 'vote':
       if (!round) return null;
       return { path: `games/${gameId}/start-vote`, body: { questionNumber: round } };
@@ -276,6 +213,8 @@ export function requestFor(actionId, { gameId, round } = {}) {
     // scoring, the broadcast — lives behind the Cognito authorizer on
     // /close-round. Matches GameHostPage.handleShowResults, and the remote is
     // behind ProtectedRoute so the host already holds a token.
+    case 'reveal-from-ask':
+    case 'reveal':
     case 'results':
       if (!round) return null;
       return { path: `games/${gameId}/close-round`, body: { questionNumber: round } };
@@ -286,11 +225,40 @@ export function requestFor(actionId, { gameId, round } = {}) {
     // taken and the projector would never move.
     //
     // Behind the Cognito authorizer (template-clean.yaml), like close-round.
+    // FEEDBACK's way back to the read is the same beat.
     case 'field-notes':
+    case 'close-feedback':
+    // Ask the room's results: back to the read, where the other asks sit.
+    case 'ask-another':
       if (!round) return null;
       return {
         path: `games/${gameId}/stage-beat`,
         body: { beat: 'field-notes', questionNumber: round },
+      };
+
+    // A FEEDBACK ROUND, from the read's last page. The room's devices fetch
+    // the round report the moment the beat moves, so it has to exist first:
+    // `before` is built and must succeed before the beat is posted — the
+    // same order as GameHostPage's requestFeedbackRound.
+    case 'request-feedback':
+      if (!round) return null;
+      return {
+        before: { path: `games/${gameId}/report`, body: {} },
+        path: `games/${gameId}/stage-beat`,
+        body: { beat: 'feedback', questionNumber: round },
+      };
+
+    // WORKIE'S PAGE, a server fact since two-surface Phase 1. RELATIVE to the
+    // stored page, never an absolute this phone guessed two seconds ago: two
+    // surfaces stepping at once then move the room two pages, not fight over
+    // one (remote-parity §2). The server answers 409 when it does not yet
+    // know how many pages there are.
+    case 'notes-page':
+    case 'notes-back':
+      if (!round) return null;
+      return {
+        path: `games/${gameId}/stage-beat`,
+        body: { step: actionId === 'notes-page' ? 'next' : 'prev', questionNumber: round },
       };
 
     default:
@@ -573,13 +541,6 @@ function countOf(value) {
  * When the room is done, one tap — the host is standing in front of people and
  * an extra tap on the expected beat reads as a broken button.
  */
-export function needsConfirmation(action, progress) {
-  if (!action) return false;
-  if (action.confirmAlways) return true;
-  if (!action.confirmWhenIncomplete) return false;
-  if (!progress || !progress.applicable) return false;
-  return !progress.allIn;
-}
 
 /* ---------------------------------------------------------- waiting list */
 
@@ -607,7 +568,11 @@ export function needsConfirmation(action, progress) {
  *          `hasVoted: false` for the whole room, which would otherwise render
  *          as "the entire room is holding us up" on the results screen.
  */
-export function waitingOn(rosterResponse, state) {
+export function waitingOn(rosterResponse, stateOrSnapshot) {
+  // A bare state string is the old call shape and still accepted; the remote
+  // now passes the whole `/host-state` snapshot.
+  const snapshot = stateOrSnapshot && typeof stateOrSnapshot === 'object' ? stateOrSnapshot : null;
+  const state = snapshot ? snapshot.state : stateOrSnapshot;
   const { phase } = parseGamePhase(state);
 
   const field = phase === 'ASK' ? 'hasAnswered' : phase === 'VOTE' ? 'hasVoted' : null;
@@ -615,15 +580,35 @@ export function waitingOn(rosterResponse, state) {
     return { applicable: false, heading: '', verb: '', names: [] };
   }
 
+  /*
+    WHO HAS ACTED COMES FROM THE SAME RESPONSE AS THE COUNT ABOVE IT.
+
+    Owner, 2026-10-12: *"the users left to answer or vote does not update when
+    the box above shows there has been progress"*. The count (`roundProgress`)
+    reads `/host-state`, polled every two seconds; this list read each
+    roster row's `readiness` from `/players`, polled every six — so the list
+    trailed every answer, and through a vote it never moved at all, because
+    get-players read the voter off a field no ballot carries (fixed in
+    get-players.js; tests/roster-readiness.js §5). `/host-state` carries the
+    names it counted (`answererIds` / `votersIds`), so those decide who has
+    acted and the roster only says who is in the room. The roster's own
+    readiness is the fallback for a snapshot without the list.
+  */
+  const progress = snapshot && (phase === 'ASK' ? snapshot.answerProgress : snapshot.votingProgress);
+  const actedIds = progress && (phase === 'ASK' ? progress.answererIds : progress.votersIds);
+  const acted = Array.isArray(actedIds) ? new Set(actedIds.filter(Boolean)) : null;
+
   const payload = rosterResponse && typeof rosterResponse === 'object' ? rosterResponse : {};
   const players = Array.isArray(payload.players) ? payload.players : [];
 
   const names = players
+    .filter((player) => player && typeof player === 'object')
+    .map((player) => ({ player, name: player.playerName || player.PlayerName || '' }))
     // A row with no readiness block has not been seen to act, so it stays in
     // the list. Dropping it would quietly under-report who the room is waiting
     // for, which is the one thing this list must not do.
-    .filter((player) => player && typeof player === 'object' && !player.readiness?.[field])
-    .map((player) => player.playerName || player.PlayerName || '')
+    .filter(({ player, name }) => (acted ? !acted.has(name) : !player.readiness?.[field]))
+    .map(({ name }) => name)
     // A row with no name cannot be called out, so it is not a chip.
     .filter(Boolean);
 

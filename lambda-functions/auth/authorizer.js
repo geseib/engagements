@@ -540,9 +540,14 @@ function requiredGroupsForRoute(method, path) {
   if (path === 'platform/stats') {
     return ['admins'];
   }
-  // The Engage-wide Claude models switch (orgs/platform-settings.js). Engage's
-  // alone; the handler re-asks isPlatformAdmin and audits a change first.
-  if (path === 'platform/settings/claude-models') {
+  // The Engage-wide settings, `platform/settings/{name}` (orgs/platform-settings.js):
+  // the Claude models switch and the site skin, and every setting after them.
+  // Engage's alone; the handler re-asks isPlatformAdmin and audits a change
+  // first. Anchored, never a prefix (tests/org-route-authorization.js): it
+  // matches the route template (`{name}`, what `routeKey` gives) and one
+  // concrete name segment (the `rawPath` fallback), nothing deeper. The public
+  // read of the skin is GET /site, which has no authorizer at all.
+  if (/^platform\/settings\/(\{name\}|[a-z0-9-]+)$/.test(path)) {
     return ['admins'];
   }
 
@@ -671,6 +676,19 @@ function requiredGroupsForRoute(method, path) {
   // reaches this function's group check — see agentKeyContext.) The phones
   // use the separate, unauthorized `/build-play/` routes.
   if (path === 'games/{gameId}/build/{proxy+}') {
+    return ['hosts', 'admins'];
+  }
+  // ── CALL & ANSWER FOLLOW-UP ASKS, THE HOST'S FAMILY ──────────────────────
+  //
+  // `GET /games/{gameId}/followups/{proxy+}` returns the round's suggestions
+  // with the host-only `why` and every ask with its live count; the POSTs send,
+  // close and cancel. Named here for the reason the build routes are: the
+  // generic "GET + games is public" rule below would otherwise admit any pool
+  // account. The phones use the separate, unauthorized `/followup-play/`
+  // routes. game/followups.js additionally asks callerMayDriveSession.
+  // The template AND a concrete path, since the handler falls back to
+  // `rawPath` (a real id and a real proxy tail) when `routeKey` is absent.
+  if (path === 'games/{gameId}/followups/{proxy+}' || /^games\/[^/]+\/followups\/.+$/.test(path)) {
     return ['hosts', 'admins'];
   }
   // ── A SURVEY'S HOST READS ────────────────────────────────────────────────

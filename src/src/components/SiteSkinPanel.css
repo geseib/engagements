@@ -1,0 +1,176 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   ENGAGE SETTINGS: THE SITE LOOK — components/SiteSkinPanel.jsx
+
+   The second panel in Engage settings, under the Claude models switch, and
+   built in its idiom (ClaudeModelsPanel.css): one bordered --surface panel,
+   the laptop ladder 12/13/15/19, rows 36px, nothing under 12px. Scoped under
+   `.sks` (free: no other sheet names it) because styles.css owns the bare
+   `.btn`, `.chip` and `.panel`. Mounted with contentTheme="dark"; the root
+   declares data-theme itself.
+
+   BORN ON ROLES (docs/design/themes/SPEC.md §3): no literal colour, no font
+   name, no --primary/--secondary. So it is already skinned: the selected row
+   is --accent (orange in Classic, blue in Present), links and the focus ring
+   are --info, tints are channel forms of the roles. The Save button is quiet,
+   not --action: the Claude models switch above holds the screen's one orange.
+
+   MEASURED (composited, Classic / Present; siteSkinPanelPalette.test.js):
+     --text  on --surface                           12.53 / 12.53  names, values
+     --muted on --surface                            6.06 /  6.06  descriptions, foot
+     --text  on --row-selected over --surface       10.42 /  9.38  the chosen row
+     --muted on --row-selected over --surface        5.04 /  4.53  its description
+     --accent-text on --row-selected/--surface       6.17 /  5.73  "In use"
+     --info on --surface                             5.91 /  5.91  "End preview"
+     --text on info tint/--surface                   9.75 /  9.75  the preview note
+     --success-text on success tint/--surface        6.17 /  6.17  "Saved."
+     --danger-text on danger tint/--bg               6.35 /  6.35  a refused change
+   `--danger` is never text.
+   ========================================================================== */
+
+.sks {
+  --sks-t-floor: 12px;
+  --sks-t-label: 13px;
+  --sks-t-body: 15px;
+  --sks-t-head: 19px;
+  --sks-row-h: 36px;
+
+  --sks-tint-success: rgb(var(--success-rgb) / .14);
+  --sks-tint-info: rgb(var(--info-rgb) / .14);
+  --sks-tint-danger: rgb(var(--danger-rgb) / .12);
+
+  max-width: 720px;
+  margin-top: 20px;
+  color: var(--text);
+  font: 400 var(--sks-t-body)/1.45 var(--font-ui);
+}
+
+.sks *,
+.sks *::before,
+.sks *::after { box-sizing: border-box; }
+
+.sks :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 6px; }
+
+.sks .sks-muted { margin: 0; color: var(--muted); }
+
+.sks .sks-alert {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border: 1px solid rgb(var(--danger-rgb) / .5);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--sks-tint-danger);
+  color: var(--danger-text);
+  font-size: var(--sks-t-label);
+}
+
+.sks .sks-set {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.sks .sks-h { margin: 0; font: 700 var(--sks-t-head)/1.25 var(--font-ui); color: var(--text); }
+.sks .sks-now { margin: 4px 0 0; }
+.sks .sks-now b { font-weight: 700; }
+
+.sks .sks-options { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.sks .sks-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: var(--sks-row-h);
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sks .sks-option:hover { background: var(--row-hover); }
+.sks .sks-option.is-selected {
+  border-color: var(--accent);
+  background: var(--row-selected);
+  box-shadow: var(--select-mark);
+}
+.sks .sks-option input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.sks .sks-option-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sks .sks-option-name { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
+.sks .sks-option-desc { color: var(--muted); font-size: var(--sks-t-label); line-height: 1.45; }
+.sks .sks-inuse {
+  color: var(--accent-text);
+  font: 700 var(--sks-t-floor)/1 var(--font-ui);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sks .sks-field { display: flex; flex-direction: column; gap: 4px; }
+.sks .sks-label { color: var(--muted); font-size: var(--sks-t-label); font-weight: 600; }
+.sks .sks-input {
+  min-height: var(--sks-row-h);
+  padding: 6px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--sks-t-body)/1.3 var(--font-ui);
+}
+.sks .sks-input::placeholder { color: var(--muted); }
+
+.sks .sks-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.sks .sks-btn {
+  min-height: var(--sks-row-h);
+  padding: 6px 14px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 var(--sks-t-label)/1.2 var(--font-ui);
+  cursor: pointer;
+}
+.sks .sks-btn:disabled { cursor: not-allowed; opacity: .55; }
+.sks .sks-btn--quiet { background: none; }
+
+.sks .sks-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--info);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sks .sks-note {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid rgb(var(--info-rgb) / .55);
+  border-radius: 8px;
+  background: var(--sks-tint-info);
+  color: var(--text);
+  font-size: var(--sks-t-label);
+}
+.sks .sks-note--saved {
+  border-color: rgb(var(--success-rgb) / .5);
+  background: var(--sks-tint-success);
+  color: var(--success-text);
+}
+
+.sks .sks-foot { margin: 0; color: var(--muted); font-size: var(--sks-t-label); line-height: 1.5; }
+
+.sks .sks-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .sks .sks-set { padding: 14px 16px; }
+}

@@ -34,9 +34,11 @@
 const fs = require('fs');
 const path = require('path');
 
+const H = require('../testing/skinHarness');
+
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').trim();
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const STAGE_CSS = read('styles', 'stage.css');
 const HOST_CSS = read('HostRemote.css');
 const HRQ_CSS = read('components', 'RemoteQuestionBrowser.css');
@@ -95,11 +97,6 @@ function hexIn(block, name) {
   if (!m) throw new Error(`${name} is not a hex in that block`);
   return m[1].toUpperCase();
 }
-function rgbaIn(block, name) {
-  const m = block.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} is not an rgba in that block`);
-  return m[1];
-}
 /** The body of the rule whose selector list is exactly `selector`. */
 function ruleBody(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -119,12 +116,17 @@ function colourOf(selector) {
   return m[2];
 }
 
+/** --hrq-pressed for one skin, as an rgba() jsdom's style parser reads. */
+function pressedIn(skin) {
+  const { rgb, a } = H.parseColor(H.scopeVar(HRQ_CSS, '.hrq--preview {', '--hrq-pressed', { skin, theme: 'dark' }));
+  return `rgba(${rgb.join(', ')}, ${a})`;
+}
+
 const ROOT = blockOf(GLOBAL_CSS, ':root {');
 const DUSK = blockOf(GLOBAL_CSS, '[data-theme="dark"] {');
 const STAGE = blockDeclaring(STAGE_CSS, '.stage{', '--muted');
 const STAGE_ROOT = blockDeclaring(STAGE_CSS, ':root{', '--success-text');
 const SCREEN = blockOf(HRQ_CSS, '.hrqp-screen {');
-const PREVIEW = blockOf(HRQ_CSS, '.hrq--preview {');
 
 const S = {
   bg: hexIn(DUSK, '--bg'),
@@ -137,7 +139,9 @@ const S = {
   // The token destructive COPY is for. `--danger` is not, on either ground.
   dangerText: hexIn(ROOT, '--danger-text'),
   danger: hexIn(ROOT, '--danger'),
-  pressed: rgbaIn(PREVIEW, '--hrq-pressed'),
+  // A channel form since skins 0b-3 (rgb(var(--accent-rgb) / .16)): resolved through the
+  // harness, Classic here; the per-skin block below measures it in every skin.
+  pressed: pressedIn('classic'),
 };
 
 /** A stage.css rule's `background`, by exact selector. */
@@ -251,6 +255,34 @@ describe('the chrome around the card', () => {
     expect(ratio(composited([...CONTROL, S.pressed]), composited(CONTROL)))
       .toBeGreaterThan(1.03);
   });
+});
+
+/* EVERY SKIN. The remote is dusk in every skin (`.hr data-theme="dark"`); roles and the
+   pressed tint are resolved per skin through the harness (skins -> roles -> the .hrq--preview
+   block). The stage's own literals (the screen's lifted --muted, the .opt layers) are the
+   same in every skin until their wave. */
+describe.each(H.SKINS)('the remote\'s dusk pairings and the pressed segment (%s)', (skin) => {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  const remote = [r(ruleBody(HOST_CSS, '.hr').match(/background:\s*var\((--[\w-]+)\)/)[1])];
+  const seg = ruleBody(HRQ_CSS, '.hrqp-seg').match(/background:\s*var\((--[\w-]+)\)/)[1];
+  const control = [...remote, r(seg)];
+  const pressed = pressedIn(skin);
+  test.each([
+    ['the position, muted on the remote\'s field', () => H.on(r('--muted'), remote)],
+    ['a segment at rest', () => H.on(r('--text'), control)],
+    ['the accent on the pressed segment', () => H.on(r('--primary'), [...control, pressed])],
+    ['the words on the pressed segment', () => H.on(r('--text'), [...control, pressed])],
+    ['the reveal note', () => H.on(r('--text'), remote)],
+  ])('%s clears AA', (_label, measure) => {
+    expect(measure()).toBeGreaterThanOrEqual(H.AA);
+  });
+  test('the pressed segment is visibly different from its group', () => {
+    expect(H.ratio(H.composite([...control, pressed]), H.composite(control))).toBeGreaterThan(1.03);
+  });
+});
+
+test('Classic is unchanged: --hrq-pressed resolves to its pre-skin literal', () => {
+  expect(H.parseColor(pressedIn('classic'))).toEqual(H.parseColor('rgba(246, 169, 76, .16)'));
 });
 
 /* Every rule in the sheet, head and body. */

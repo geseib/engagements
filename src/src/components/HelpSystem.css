@@ -1,3 +1,4 @@
+/* skin-allowance: colour=64 font=0 primary=2 */
 /* Help System Modal Styles */
 .help-system-modal {
   position: fixed;
@@ -305,22 +306,6 @@
 
 .help-section-card:hover .help-section-arrow {
   color: #3b82f6;
-}
-
-/* Content Loading */
-.help-content-loading {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.help-content-loading h2 {
-  color: #1f2937;
-  margin-bottom: 12px;
-}
-
-.help-content-loading p {
-  color: #6b7280;
-  margin-bottom: 8px;
 }
 
 /* Footer */

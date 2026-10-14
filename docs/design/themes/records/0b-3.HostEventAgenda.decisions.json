@@ -1,0 +1,80 @@
+{
+  "unit": "0b-3.HostEventAgenda",
+  "file": "components/event/HostEventAgenda.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 3,
+    "font": 0,
+    "primary": 4
+  },
+  "auto": [
+    {
+      "id": "26:14",
+      "line": 26,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".hea",
+      "property": "--hea-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "27:21",
+      "line": 27,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".hea",
+      "property": "--hea-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "var(--rule-strong)",
+      "why": "exact --rule-strong in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "25:19",
+      "line": 25,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".hea",
+      "property": "--hea-on-accent",
+      "literal": "#0F1A2E",
+      "why": "matches several roles: --bg, --on-action",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "bg",
+      "choice": "on-action"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:47.042Z",
+    "after": {
+      "colour": 0,
+      "font": 0,
+      "primary": 4
+    },
+    "decisionsByKind": {
+      "on-action": 1
+    },
+    "classicDeltas": [],
+    "edits": 3
+  }
+}

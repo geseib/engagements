@@ -1,0 +1,104 @@
+{
+  "unit": "0b-2.OrgBillingDrawer",
+  "file": "components/OrgBillingDrawer.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 9,
+    "font": 0,
+    "primary": 8
+  },
+  "auto": [
+    {
+      "id": "12:16",
+      "line": 12,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".obill",
+      "property": "--obill-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "13:23",
+      "line": 13,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".obill",
+      "property": "--obill-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "14:21",
+      "line": 14,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".obill",
+      "property": "--obill-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "15:20",
+      "line": 15,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".obill",
+      "property": "--obill-tint-bad",
+      "literal": "rgba(229, 100, 94, .10)",
+      "replacement": "rgb(var(--danger-rgb) / .10)",
+      "why": "channel --danger-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "16:21",
+      "line": 16,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".obill",
+      "property": "--obill-on-accent",
+      "literal": "#1B2942",
+      "why": "matches several roles: --surface, --on-accent",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--on-accent",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "surface",
+      "choice": "on-accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.542Z",
+    "after": {
+      "colour": 4,
+      "font": 0,
+      "primary": 8
+    },
+    "decisionsByKind": {
+      "on-accent": 1
+    },
+    "classicDeltas": [],
+    "edits": 5
+  }
+}

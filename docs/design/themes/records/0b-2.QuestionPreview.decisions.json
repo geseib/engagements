@@ -1,0 +1,221 @@
+{
+  "unit": "0b-2.QuestionPreview",
+  "file": "components/QuestionPreview.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 8,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "46:18",
+      "line": 46,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-accent",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent-text, --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: accent)"
+    },
+    {
+      "id": "50:19",
+      "line": 50,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-row-sel",
+      "literal": "rgba(246, 169, 76, .10)",
+      "why": "matches a judgement role: --row-selected",
+      "candidates": [
+        {
+          "role": "--row-selected",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: raw:var(--row-selected))"
+    },
+    {
+      "id": "67:11",
+      "line": 67,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev .qprev-screen",
+      "property": "--muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant #B6C2D4 with no exact role (SPEC §4.2: merging it is a Classic delta)"
+    },
+    {
+      "id": "68:13",
+      "line": 68,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev .qprev-screen",
+      "property": "--primary",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent-text, --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: action)"
+    },
+    {
+      "id": "69:13",
+      "line": 69,
+      "col": 13,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev .qprev-screen",
+      "property": "--success",
+      "literal": "#4FB286",
+      "why": "matches several roles: --success, --phase-results",
+      "candidates": [
+        {
+          "role": "--success",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "success",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands (would be: success-rgb)"
+    },
+    {
+      "id": "47:16",
+      "line": 47,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "why": "auto (channel --slate-rgb, Classic-identical), held: rgb(var(--slate-rgb) / .20)",
+      "candidates": [],
+      "proposal": "rgb(var(--slate-rgb) / .20)",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands"
+    },
+    {
+      "id": "48:23",
+      "line": 48,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "why": "auto (channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)), held: rgb(var(--slate-rgb) / .34)",
+      "candidates": [],
+      "proposal": "rgb(var(--slate-rgb) / .34)",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands"
+    },
+    {
+      "id": "49:21",
+      "line": 49,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".qprev, .qprev-switch",
+      "property": "--qprev-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "why": "auto (exact --row-hover in dark), held: var(--row-hover)",
+      "candidates": [],
+      "proposal": "var(--row-hover)",
+      "choice": "keep:QuestionPreviewPalette.test.js (not this unit's) reads this declaration as a literal hex/rgba; foreign assertion handed over in records/0b-2.md, re-point when it lands"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:18:57.799Z",
+    "after": {
+      "colour": 8,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 8
+    },
+    "classicDeltas": [],
+    "edits": 0
+  }
+}

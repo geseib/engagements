@@ -16,9 +16,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const MY_CSS = read('components', 'EventsPanel.css');
 const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -45,26 +46,22 @@ function bgOf(el, win) {
   for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
   return out;
 }
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+const parseHex = (c) => H.parseColor(c).rgb;     // any colour a role resolves to
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+/** A scope-local custom property, every var() it reads resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC) {
+  return H.scopeVar(css, block, name, opts);
 }
-function tint(name) {
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in EventsPanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC) {               // a translucent layer from the .evts block
+  return token(MY_CSS, '.evts {', name, opts);
 }
 function composited(layers) {
   document.body.innerHTML = '';
   let host = document.body;
   for (const background of layers) {
     const el = document.createElement('div');
-    el.style.backgroundColor = background;
+    const { rgb, a } = H.parseColor(background);   // jsdom reads only the comma form
+    el.style.backgroundColor = `rgba(${rgb.join(', ')}, ${a})`;
     host.appendChild(el);
     host = el;
   }
@@ -73,22 +70,24 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-  onAccent: token(MY_CSS, '.evts {', '--evts-on-accent'),
-};
+/* The Events place renders dusk: every dusk case of every skin. */
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokensFor = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  danger: H.role('--danger', opts),
+  dangerText: H.role('--danger-text', opts),
+  onAccent: token(MY_CSS, '.evts {', '--evts-on-accent', opts),
+});
 const AA = 4.5;
-const FIELD = [T.bg];
-const PANEL = [T.bg, T.surface];
 
-describe('the flat pairings this place paints', () => {
+describe.each(DUSK)('the flat pairings this place paints — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
+  const FIELD = [T.bg];
+  const PANEL = [T.bg, T.surface];
   test.each([
     ['names, dates and codes on the work field', T.text, FIELD],
     ['places, column heads and counts on the work field', T.muted, FIELD],
@@ -101,7 +100,9 @@ describe('the flat pairings this place paints', () => {
   });
 });
 
-describe('the tinted composites', () => {
+describe.each(DUSK)('the tinted composites — %s / %s', (skin, theme) => {
+  const T = tokensFor({ skin, theme });
+  const tint = (name) => token(MY_CSS, '.evts {', name, { skin, theme });
   test('a selected option in the dialog (amber tint on the surface, over --bg)', () => {
     // .evts-opt paints --bg itself, so the walk stops there: [bg, surface, bg, tint].
     expect(on(T.text, [T.bg, T.surface, T.bg, tint('--evts-row-sel')])).toBeGreaterThanOrEqual(AA);

@@ -15,9 +15,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const SHELL_CSS = read('components', 'AdminShell.css');
 const MY_CSS = read('components', 'OrgSwitcher.css');
 
@@ -49,7 +50,7 @@ function bgOf(el, win) {
   return out;
 }
 
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const parseHex = (h) => H.parseColor(h).rgb;
 
 function token(css, block, name) {
   const start = css.indexOf(block);
@@ -59,24 +60,27 @@ function token(css, block, name) {
   if (!m) throw new Error(`${name} not declared in ${block}`);
   return m[1];
 }
-function tint(name) {
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in OrgSwitcher.css`);
-  return m[1];
+/* A translucent layer from MY_CSS's `.orgsw {` block. Since skins 0b-2 the block points at
+   roles (rgb(var(--slate-rgb) / .20), var(--row-hover)), so it is resolved through the skin
+   harness for one skin x theme and handed back as an rgba() jsdom can paint. */
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+const asRgba = (v) => { const c = H.parseColor(v); return `rgba(${c.rgb.join(', ')}, ${c.a})`; };
+function tint(name, opts = CLASSIC_DUSK) {
+  return asRgba(H.scopeVar(MY_CSS, '.orgsw {', name, opts));
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  secondary: token(GLOBAL_CSS, ROOT, '--secondary'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-};
+const DUSK = H.CASES.filter(([, t]) => t === 'dark');
+const tokens = (skin, theme) => ({
+  bg: H.role('--bg', { skin, theme }),
+  surface: H.role('--surface', { skin, theme }),
+  surface2: H.role('--surface-2', { skin, theme }),
+  text: H.role('--text', { skin, theme }),
+  muted: H.role('--muted', { skin, theme }),
+  primary: H.role('--primary', { skin, theme }),
+  secondary: H.role('--secondary', { skin, theme }),
+  danger: H.role('--danger', { skin, theme }),
+});
+const T = tokens('classic', 'dark');   // the premises below that are Classic facts, not AA pairings
 
 function composited(layers) {
   document.body.innerHTML = '';
@@ -89,15 +93,17 @@ function composited(layers) {
   }
   return bgOf(host, window);
 }
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+const on = (fg, layers) => ratio(parseHex(fg), composited(layers.map(asRgba)));
 
 const AA = 4.5;
-/* The real ancestor stack: AdminShell paints --bg, the topbar and the menu both
-   paint --surface on top of it. */
-const FIELD = [T.bg];
-const CHIP = [T.bg, T.surface];
+/* The real ancestor stack (built per skin below): AdminShell paints --bg, the topbar
+   and the menu both paint --surface on top of it. */
 
-describe('the flat pairings the switcher paints', () => {
+describe.each(DUSK)('the flat pairings the switcher paints: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
+  const FIELD = [T.bg];
+  const CHIP = [T.bg, T.surface];
   // rejects: repointing --orgsw-* at a token that does not clear AA on --surface
   const pairs = [
     ['the org name on the chip and the menu rows (--text on --surface)', T.text, CHIP],
@@ -112,25 +118,27 @@ describe('the flat pairings the switcher paints', () => {
   });
 });
 
-describe('the tinted composites — the half a token table cannot show', () => {
+describe.each(DUSK)('the tinted composites — the half a token table cannot show: %s / %s', (skin, theme) => {
+  const O = { skin, theme };
+  const T = tokens(skin, theme);
   // rejects: deepening --orgsw-row-hover far enough to swallow the muted role text
   test('a hovered menu row', () => {
-    const stack = [T.bg, T.surface, tint('--orgsw-row-hover')];
+    const stack = [T.bg, T.surface, tint('--orgsw-row-hover', O)];
     expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
     expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
   });
   // rejects: raising --orgsw-row-sel's amber alpha until the current row's role goes under AA
   test('the current organisation row', () => {
-    const stack = [T.bg, T.surface, tint('--orgsw-row-sel')];
+    const stack = [T.bg, T.surface, tint('--orgsw-row-sel', O)];
     expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
     expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
     expect(on(T.primary, stack)).toBeGreaterThanOrEqual(AA);
   });
   // rejects: the tile losing its own --surface-2 ground inside a tinted row
   test('the initials tile inside a tinted row', () => {
-    expect(on(T.primary, [T.bg, T.surface, tint('--orgsw-row-sel'), T.surface2]))
+    expect(on(T.primary, [T.bg, T.surface, tint('--orgsw-row-sel', O), T.surface2]))
       .toBeGreaterThanOrEqual(AA);
-    expect(on(T.primary, [T.bg, T.surface, tint('--orgsw-row-hover'), T.surface2]))
+    expect(on(T.primary, [T.bg, T.surface, tint('--orgsw-row-hover', O), T.surface2]))
       .toBeGreaterThanOrEqual(AA);
   });
 });

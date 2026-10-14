@@ -1,0 +1,62 @@
+{
+  "state": {
+    "gameId": "fixture",
+    "gameType": "call-and-answer",
+    "gameMetadata": {
+      "title": "Q4 Wrap up"
+    },
+    "state": "VOTE#005",
+    "currentQuestion": 5,
+    "currentQuestionData": {
+      "title": "What should we stop doing",
+      "detail": "Name one habit that costs the team more than it gives back.",
+      "category": "Retro",
+      "setRoundNoun": null
+    },
+    "joinCode": "4821",
+    "stageBeat": "results",
+    "stageFocus": {
+      "focus": "none",
+      "index": null,
+      "part": 0,
+      "parts": 1,
+      "phase": null,
+      "rev": 0
+    },
+    "stageNotes": {
+      "page": 0,
+      "pages": null,
+      "plan": null,
+      "planKey": null,
+      "rev": 0
+    },
+    "stageProfile": null,
+    "scoreboard": {
+      "open": false
+    },
+    "authorsRevealed": true,
+    "roomCounts": {
+      "joined": 12,
+      "answered": 11,
+      "voted": 6
+    }
+  },
+  "answers": [
+    {
+      "answer": "Status meetings that could be a two-line note. Write the note, cancel the meeting.",
+      "playerName": "Maya"
+    },
+    {
+      "answer": "Reviewing every pull request twice. One careful review beats two quick ones.",
+      "playerName": "Sam"
+    },
+    {
+      "answer": "Saying yes to every request in the sprint. Protect the plan we agreed.",
+      "playerName": "Priya"
+    },
+    {
+      "answer": "Rebuilding the dashboard every quarter.",
+      "playerName": "Jon"
+    }
+  ]
+}

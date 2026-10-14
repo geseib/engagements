@@ -67,6 +67,18 @@ Parameters:
     Default: 'false'
     Description: Staff-only AI summary model picker (dev only)
 
+  # CALL & ANSWER FOLLOW-UP ASKS (docs/design/ca-followup-asks). Only
+  # buildspec-dev.yml passes 'on'; test and prod take this default, and with it
+  # no suggestion call is made, the follow-up routes answer 404 and
+  # next-question.js reads nothing extra. Read as FOLLOWUP_ASKS_ENABLED by the
+  # get-ai-summary, comments and next-question functions.
+  # tests/followup-switch.js holds that.
+  FollowUpAsks:
+    Type: String
+    AllowedValues: ['on', 'off']
+    Default: 'off'
+    Description: Call and Answer follow-up asks after the read (dev only)
+
   # The Anthropic API, through Workload Identity Federation: each model-calling
   # function's role signs in with an AWS STS web identity token, never a stored
   # key (anthropic-messages.js). Four ids from the owner's Claude Console
@@ -716,6 +728,18 @@ Resources:
             Path: /join/{code}
             Method: get
             # PUBLIC: the join box asks it before anybody has an identity.
+        # THE SITE SKIN (docs/design/themes/SPEC.md §5.2): which look every
+        # page wears, read once per page load by SkinProvider. PUBLIC on
+        # purpose — marketing, /play and /present are signed out — and it
+        # answers { skin, updatedAt } only, with a 60s public cache. One GetItem
+        # on PLATFORM#SETTINGS / SITE_SKIN; this function writes nothing. One
+        # route, one Permission: the cheapest public read the stack can add.
+        SiteSkin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /site
+            Method: get
       Policies:
         # Opens an event's title for the join screen.
         - Version: '2012-10-17'
@@ -1390,7 +1414,15 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # GET /me/attention counts accounts waiting in `pending` for staff
+          # (orgs/my-attention.js). Counts only; no attribute is returned.
+          USER_POOL_ID: !Ref UserPoolV2
       Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ cognito-idp:ListUsersInGroup ]
+              Resource: !GetAtt UserPoolV2.Arn
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
@@ -1407,6 +1439,16 @@ Resources:
           Properties:
             ApiId: !Ref RestApi
             Path: /orgs
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # How many things wait in each place the caller works: the console's
+        # scope tabs (docs/design/admin-landing). Counts only.
+        MyAttention:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /me/attention
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
@@ -1728,23 +1770,27 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
-        # The Engage-wide Claude models switch (orgs/platform-settings.js):
-        # Anthropic 5.5 (default) or Bedrock 4.x. Staff only — authorizer.js
-        # names it ['admins'], the handler re-asks isPlatformAdmin, and a
-        # change is written to the audit log first.
-        GetClaudeModelsSetting:
+        # The Engage-wide settings (orgs/platform-settings.js dispatches on
+        # {name}): claude-models — Anthropic 5.5 (default) or Bedrock 4.x — and
+        # site-skin — Classic (default) or Present (docs/design/themes SPEC
+        # §5.2). These two events REPLACED the claude-models pair at no
+        # resource cost, so the next setting is free. Staff only —
+        # authorizer.js names `platform/settings/` ['admins'], the handler
+        # re-asks isPlatformAdmin, and a change is written to the audit log
+        # first. The public read of the skin is GET /site (ResolveJoinCode).
+        GetPlatformSetting:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
-            Path: /platform/settings/claude-models
+            Path: /platform/settings/{name}
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
-        SetClaudeModelsSetting:
+        SetPlatformSetting:
           Type: HttpApi
           Properties:
             ApiId: !Ref RestApi
-            Path: /platform/settings/claude-models
+            Path: /platform/settings/{name}
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
@@ -2852,7 +2898,20 @@ Resources:
       Handler: next-question.handler
       Runtime: nodejs22.x
       Timeout: 30
+      Environment:
+        Variables:
+          # 'on' on dev only (FollowUpAsks): advancing closes a live follow-up
+          # with its count first. Off, nothing extra is read.
+          FOLLOWUP_ASKS_ENABLED: !Ref FollowUpAsks
       Policies:
+        # Closing a live follow-up counts its answers and seals the count
+        # (ENCRYPTED_FIELDS.followup), so this function unwraps the session's
+        # org data key — ONLY with an orgId encryption context.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
         - Statement:
@@ -3185,6 +3244,11 @@ Resources:
           ANTHROPIC_ORGANIZATION_ID: !Ref AnthropicOrganizationId
           ANTHROPIC_SERVICE_ACCOUNT_ID: !Ref AnthropicServiceAccountId
           ANTHROPIC_WORKSPACE_ID: !Ref AnthropicWorkspaceId
+          # Closing a round starts Workie's read of it (get-results.js
+          # startRoundRead), so a host on the Host Remote with the stage closed
+          # still gets one. A name, not a !GetAtt, so the two functions do not
+          # depend on each other.
+          AI_SUMMARY_FUNCTION_NAME: !Sub '${StackName}-get-ai-summary'
       Policies:
         # THE CLAUDE MODELS SWITCH (claude-route.js): a web identity token for
         # the Anthropic API, Workload Identity Federation. Allow only where the
@@ -3207,6 +3271,14 @@ Resources:
               Resource: !GetAtt TenantKey.Arn
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # The read at close (AI_SUMMARY_FUNCTION_NAME above): an Event invoke of
+        # the get-ai-summary worker. Without it the close still succeeds and the
+        # read waits for the stage to ask, as it did before.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-get-ai-summary'
         # get-results moves the game into RESULTS# and now announces it over the
         # WebSocket, the way next-question and start-vote already announce their
         # transitions. Without this the announcement is a silent AccessDenied and
@@ -3449,6 +3521,9 @@ Resources:
           AI_PROMPTS_BUCKET: !Ref AIPromptsBucket
           # 'true' on dev only (AiModelPicker); read by summary-models.js.
           AI_MODEL_PICKER: !Ref AiModelPicker
+          # 'on' on dev only (FollowUpAsks): the worker makes the follow-up
+          # suggestions after the read (followup-worker.js).
+          FOLLOWUP_ASKS_ENABLED: !Ref FollowUpAsks
           # Workload Identity Federation ids for the Anthropic API (not
           # secrets): the picker and the Claude models switch. Empty unless
           # the tier's buildspec passes all four.
@@ -4068,6 +4143,9 @@ Resources:
         Variables:
           TABLE_NAME: !Ref GameTable
           WEBSOCKET_API_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+          # 'on' on dev only (FollowUpAsks): the follow-up routes below answer;
+          # off, every one of them is a 404 (followups.js).
+          FOLLOWUP_ASKS_ENABLED: !Ref FollowUpAsks
       Policies:
         # A comment is customer-authored prose about a named person's response —
         # Text, AnchorExcerpt and AnchorLabel are all ciphertext at rest
@@ -4112,6 +4190,16 @@ Resources:
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
+        # The host types what was said in the room (owner, 2026-10-13). Not
+        # public either: Cognito here, callerMayDriveSession in the handler.
+        HostCommentEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/comments/host
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
         # The one round a participant is being asked to comment on: the round
         # actually on the `feedback` beat, its report slice and its comments,
         # and nothing else. Public, and deliberately NOT `GET /report?role=host`
@@ -4124,6 +4212,42 @@ Resources:
             ApiId: !Ref RestApi
             Path: /games/{gameId}/feedback-round
             Method: GET
+        # CALL & ANSWER FOLLOW-UP ASKS (game/followups.js), on this function
+        # because they replace "Request feedback" with the comments kept
+        # inside, and because the stack is near its resource limit: four route
+        # events, no new function. The HOST's family carries Cognito, and
+        # followups.js asks callerMayDriveSession; authorizer.js names it for
+        # hosts|admins. The PHONES' family is public, as /comments is, and
+        # gated in the handler as writeComment is: the round on RESULTS, the
+        # ask live, a PLAYER# row and its ClientId.
+        FollowUpsHostGetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followups/{proxy+}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        FollowUpsHostPostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followups/{proxy+}
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        FollowUpsPlayGetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followup-play/{proxy+}
+            Method: GET
+        FollowUpsPlayPostEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/followup-play/{proxy+}
+            Method: POST
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -7002,6 +7126,17 @@ Resources:
             ApiId: !Ref RestApi
             Path: /admin/users/{username}/state
             Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
+        # A team owner or admin approving hosting for somebody who joined
+        # through that team's invitation (orgs/approve-member.js). Routed in
+        # manage-users.js BEFORE the staff gate, with its own org check.
+        ApproveTeamMember:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /orgs/{orgId}/members/{sub}/approve
+            Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
       Tags:

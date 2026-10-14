@@ -1,0 +1,6 @@
+{
+  "_": "What shoot.js can render without signing in. 'public' expands to every path in public; 'present' to every moment in present (at 375/660/1280, plus 1920x1080 in each display profile). A unit adds its own fixture here (and in present/ or play/) as part of its work. API calls go to /__api/ (the stub config.js points API_BASE there) and are answered from these fixtures; anything unmatched gets a 404 JSON and is listed in the run log.",
+  "public": ["/", "/home", "/how-it-works", "/use-cases", "/build-room", "/reports", "/help", "/join", "/auth", "/privacy", "/terms", "/shared-report?r=fixture"],
+  "present": ["lobby", "answering", "voting", "tally", "navigator", "read"],
+  "play": []
+}

@@ -1,3 +1,4 @@
+// skin-allowance: colour=1
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';

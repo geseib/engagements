@@ -1,0 +1,83 @@
+{
+  "unit": "0b-3.RemoteQuestionBrowser",
+  "file": "components/RemoteQuestionBrowser.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 3,
+    "font": 0,
+    "primary": 6
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "234:17",
+      "line": 234,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".hrq--preview",
+      "property": "--hrq-pressed",
+      "literal": "rgba(246, 169, 76, .16)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "321:11",
+      "line": 321,
+      "col": 11,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".hrqp-screen",
+      "property": "--muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the preview mirrors the stage, whose .stage block lifts --muted to #B6C2D4; no role carries it (SPEC §4.2)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.851Z",
+    "after": {
+      "colour": 2,
+      "font": 0,
+      "primary": 6
+    },
+    "decisionsByKind": {
+      "accent": 1,
+      "keep": 1
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}

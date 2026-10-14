@@ -1,3 +1,4 @@
+/* skin-allowance: colour=3 font=0 primary=5 */
 /* components/InvoicePanel.jsx — Billing history and the simulated invoice.
    Scope `.inv`. Locals restated; measured on --bg #0F1A2E / --surface #1B2942
    (invoicePanelPalette in adjustmentsLedgerPalette.test.js): --text 14.97 /
@@ -10,14 +11,14 @@
   --inv-t-title: 24px;
   --inv-t-numeral: 30px;
   --inv-row-h: 36px;
-  --inv-rule: rgba(155, 168, 190, .20);
-  --inv-rule-strong: rgba(155, 168, 190, .34);
-  --inv-row-hover: rgba(155, 168, 190, .055);
-  --inv-tint-note: rgba(155, 168, 190, .06);
-  --inv-tint-warn: rgba(246, 169, 76, .08);
-  --inv-tint-bad: rgba(229, 100, 94, .10);
-  --inv-success-text: #6FD0A4;
-  --inv-on-accent: #1B2942;
+  --inv-rule: rgb(var(--slate-rgb) / .20);
+  --inv-rule-strong: rgb(var(--slate-rgb) / .34);
+  --inv-row-hover: var(--row-hover);
+  --inv-tint-note: rgb(var(--slate-rgb) / .06);
+  --inv-tint-warn: rgb(var(--warn-rgb) / .08);
+  --inv-tint-bad: rgb(var(--danger-rgb) / .10);
+  --inv-success-text: var(--success-text);
+  --inv-on-accent: var(--on-accent);
   --inv-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   color: var(--text);
   font: 400 var(--inv-t-body)/1.45 var(--font-ui);

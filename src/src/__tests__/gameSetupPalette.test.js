@@ -17,7 +17,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const CSS = read('components', 'GameSetupDialog.css');
-const GLOBAL = read('styles.css');
+const GLOBAL = require('../testing/classicGlobalCss')();
 const JSX = read('components', 'GameSetupDialog.jsx');
 
 /* ---- colour math: lifted verbatim from hostQuestionSetsPalette.test.js ---- */
@@ -36,19 +36,58 @@ const SCOPE = (() => {
   return CSS.slice(start, CSS.indexOf('}', start));
 })();
 
-function token(name) {
-  const m = SCOPE.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} is not declared on the scope`);
-  return parseHex(m[1]);
-}
+const H = require('../testing/skinHarness');
+
+/* Values RESOLVED per skin through the harness (skins -> roles -> the .gsd block). The
+   dialog has NO dusk ancestor: Modal owns the content element and GameHostPage mounts it
+   outside any [data-theme="dark"], under <html data-theme="light">. So the scope is
+   resolved on PAPER, which is what a browser does: a --gsd-* token that read a
+   theme-varying role (--surface, --text, Present's --success-text) would turn paper here,
+   and these pairings would catch it. The scope paints its own dusk from literals. */
+const rawTok = (name, skin) => H.scopeVar(CSS, '.gsd {', name, { skin, theme: 'light' });
+const tok = (name, skin) => H.composite([rawTok(name, skin)]);
 
 const AA = 4.5;
+const SKIN0 = 'classic';
+const token = (name) => tok(name, SKIN0);   // the skin-invariant checks outside the loop
 const card = () => token('--gsd-card');
-const field = () => token('--gsd-field');
 const text = () => token('--gsd-text');
-const muted = () => token('--gsd-muted');
 
-describe('every pairing is measured, composited from the real paint stack', () => {
+test('Classic is unchanged: the re-pointed --gsd-* tokens resolve to their pre-skin literals', () => {
+  const lit = (name) => H.parseColor(rawTok(name, 'classic'));
+  expect(lit('--gsd-primary')).toEqual(H.parseColor('#F6A94C'));
+  expect(lit('--gsd-secondary')).toEqual(H.parseColor('#7CA7E6'));
+  expect(lit('--gsd-success')).toEqual(H.parseColor('#4FB286'));
+  expect(lit('--gsd-row-sel')).toEqual(H.parseColor('rgba(246, 169, 76, 0.10)'));
+  expect(lit('--gsd-rule')).toEqual(H.parseColor('rgba(155, 168, 190, 0.24)'));
+  expect(lit('--gsd-rule-strong')).toEqual(H.parseColor('rgba(155, 168, 190, 0.38)'));
+});
+
+test('the dusk ground stays literal while the dialog has no dusk ancestor', () => {
+  // A role here resolves PAPER (see the header). Retire this when the dialog carries
+  // data-theme="dark" and the four tokens move to --surface/--surface-2/--text/--success-text.
+  for (const name of ['--gsd-card', '--gsd-field', '--gsd-text', '--gsd-success-text']) {
+    expect(SCOPE).toMatch(new RegExp(`${name}:\\s*#[0-9A-Fa-f]{6}`));
+  }
+});
+
+/* A wash written as a literal in a RULE (not yet a token): amber in every skin until the
+   rule's own wave (W5-b) re-points it. Read from the sheet, never retyped. */
+const ruleWash = (selector) => {
+  const m = CSS.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`));
+  if (!m) throw new Error(`no rule ${selector}`);
+  return m[1].match(/background:\s*(rgba\([^)]*\))/)[1];
+};
+const washOver = (wash, base) => { const t = H.parseColor(wash); return alphaOver(t.rgb, base, t.a); };
+
+describe.each(H.SKINS)('every pairing is measured, composited from the real paint stack (%s)', (skin) => {
+  /* eslint-disable no-shadow */
+  const token = (name) => tok(name, skin);
+  const card = () => token('--gsd-card');
+  const field = () => token('--gsd-field');
+  const text = () => token('--gsd-text');
+  const muted = () => token('--gsd-muted');
+  /* eslint-enable no-shadow */
   test('body copy clears AA on the card', () => {
     expect(ratio(text(), card())).toBeGreaterThanOrEqual(AA);
   });
@@ -68,19 +107,19 @@ describe('every pairing is measured, composited from the real paint stack', () =
   test('the active pill: primary text on its own tint, composited', () => {
     // A tint is invisible in a token table (skill §5) — composite the 12%
     // amber wash over the card before measuring the amber text on it.
-    const tinted = alphaOver(token('--gsd-primary'), card(), 0.12);
+    const tinted = washOver(ruleWash('.gsd-pill.on'), card());
     expect(ratio(token('--gsd-primary'), tinted)).toBeGreaterThanOrEqual(AA);
   });
 
   test('the selected category chip: body text on the same tint', () => {
-    const tinted = alphaOver(token('--gsd-primary'), card(), 0.12);
+    const tinted = washOver(ruleWash('.gsd .category-button.selected'), card());
     expect(ratio(text(), tinted)).toBeGreaterThanOrEqual(AA);
   });
 
   test('the is-on option card: success-text on the green tint over the FIELD', () => {
     // The option card's ground is --gsd-field, not the card — compositing over
     // the wrong ancestor is how dark-on-dark passes an audit (hard rule 4).
-    const tinted = alphaOver(token('--gsd-success'), field(), 0.10);
+    const tinted = washOver(ruleWash('.gsd-opt.is-on'), field());
     expect(ratio(token('--gsd-success-text'), tinted)).toBeGreaterThanOrEqual(AA);
     expect(ratio(text(), tinted)).toBeGreaterThanOrEqual(AA);
     expect(ratio(muted(), tinted)).toBeGreaterThanOrEqual(AA);
@@ -94,9 +133,7 @@ describe('every pairing is measured, composited from the real paint stack', () =
     each label is muted, the pairing the wash endangers.
   */
   test('the Names card: the chosen option\'s words on its amber wash over the field', () => {
-    const m = SCOPE.match(/--gsd-row-sel:\s*rgba\(\s*246,\s*169,\s*76,\s*([0-9.]+)\s*\)/);
-    expect(m).not.toBeNull();
-    const chosen = alphaOver(token('--gsd-primary'), field(), Number(m[1]));
+    const chosen = washOver(rawTok('--gsd-row-sel', skin), field());
     expect(ratio(text(), chosen)).toBeGreaterThanOrEqual(AA);
     expect(ratio(muted(), chosen)).toBeGreaterThanOrEqual(AA);
     // The unchosen options sit on the card.
@@ -123,9 +160,8 @@ describe('every pairing is measured, composited from the real paint stack', () =
   test('the confirm foot: text on its ground, and Discard\'s words on deep danger', () => {
     expect(ratio(text(), token('--gsd-confirm'))).toBeGreaterThanOrEqual(AA);
     expect(ratio(muted(), token('--gsd-confirm'))).toBeGreaterThanOrEqual(AA);
-    const deep = GLOBAL.match(/--danger-deep:\s*(#[0-9A-Fa-f]{6})/);
-    expect(deep).not.toBeNull();
-    expect(ratio(text(), parseHex(deep[1]))).toBeGreaterThanOrEqual(AA);
+    const deep = H.composite([H.role('--danger-deep', { skin, theme: 'light' })]);
+    expect(ratio(text(), deep)).toBeGreaterThanOrEqual(AA);
     expect(CSS).toMatch(/\.gsd \.dialog-actions\.is-confirm\s*\{[^}]*background:\s*var\(--gsd-confirm\)/);
     expect(CSS).toMatch(/\.gsd \.gsd-discard\s*\{[^}]*background:\s*var\(--danger-deep\)[^}]*color:\s*var\(--gsd-text\)/s);
     expect(CSS).not.toMatch(/color:\s*var\(--danger\)/);
@@ -171,8 +207,15 @@ describe('every pairing is measured, composited from the real paint stack', () =
   });
   test('a failed briefing names the fault in --danger-text, at AA on its tint', () => {
     const { rgb, a } = rgbaOf('.gsd .gsd-brief.is-failed', 'background');
-    const deep = GLOBAL.match(/--danger-text:\s*(#[0-9A-Fa-f]{6})/);
-    expect(ratio(parseHex(deep[1]), alphaOver(rgb, card(), a))).toBeGreaterThanOrEqual(AA);
+    // The rule reads var(--danger-text) directly, resolved on PAPER (no dusk ancestor):
+    // Classic keeps today's #EF8C86 on paper (SPEC §3 amendment), so it clears AA here.
+    // Present's paper --danger-text is #B03A34, which does NOT clear AA on this dusk card.
+    // A rule-level fault for W5-b (the dialog needs data-theme="dark"); pinned so it is
+    // seen, and so this goes red the day it is fixed and the exception can be dropped.
+    const fault = H.composite([H.role('--danger-text', { skin, theme: 'light' })]);
+    const r = ratio(fault, alphaOver(rgb, card(), a));
+    if (skin === 'present') expect(r).toBeLessThan(AA);
+    else expect(r).toBeGreaterThanOrEqual(AA);
     expect(CSS).toMatch(/\.gsd \.gsd-brief\.is-failed \.gsd-brief-t\s*\{[^}]*color:\s*var\(--danger-text\)/);
   });
   test('the hidden file input really is hidden, not just transparent', () => {

@@ -25,7 +25,7 @@ const fs = require('fs');
 const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const STAGE_CSS = read('styles', 'stage.css');
 const PLAYER_CSS = read('components', 'PlayerSurface.css');
 const AG_CSS = read('components', 'event', 'EventStage.css');

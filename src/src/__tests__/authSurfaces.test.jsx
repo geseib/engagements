@@ -364,3 +364,28 @@ function read(relative) {
 function stripComments(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
+
+/*
+ * SITE SKINS (0b-1). --au-success-text reads the --success-text role. .au-page
+ * declares data-theme="dark" (AuthChrome.jsx), so it is measured on dusk for every
+ * skin; the lifted --au-muted and the 182 194 212 hairlines stay literal (records/0b-1.md).
+ */
+describe('the au- tokens, for every skin', () => {
+  const H = require('../testing/skinHarness');
+  const CSS = H.css('auth/auth.css');
+  it('the page root declares dusk, which is why the cases below are dark only', () => {
+    expect(read('../auth/AuthChrome.jsx')).toMatch(/className="au-page" data-theme="dark"/);
+  });
+  describe.each(H.SKINS.filter((s) => H.CASES.some(([k]) => k === s)))('%s, dusk', (skin) => {
+    const ctx = { skin, theme: 'dark' };
+    const v = (name) => H.scopeVar(CSS, '.au-page {', name, ctx);
+    const role = (n) => H.role(n, ctx);
+    it('--au-success-text is the success-text role, the same #6FD0A4 as before', () => {
+      expect(v('--au-success-text').toUpperCase()).toBe('#6FD0A4');
+    });
+    it.each(['--bg', '--surface'])('the success copy and --au-muted on %s clear AA', (ground) => {
+      expect(H.on(v('--au-success-text'), [role('--bg'), role(ground)])).toBeGreaterThanOrEqual(H.AA);
+      expect(H.on(v('--au-muted'), [role('--bg'), role(ground)])).toBeGreaterThanOrEqual(H.AA);
+    });
+  });
+});

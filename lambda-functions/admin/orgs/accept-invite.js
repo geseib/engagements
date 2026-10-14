@@ -44,6 +44,22 @@ const { TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 
 const tenant = require('../shared/tenant');
 const G = require('./shared/org-guards');
+const { GetCommand } = require('@aws-sdk/lib-dynamodb');
+
+/* Read here rather than imported from shared/personal-org.js: that module
+   mints data keys, and requiring it would put tenant-crypto (and a KMS grant
+   this function does not hold) on this function's path
+   (tests/kms-grants-match-code.js). Same groups as personal-org.js
+   APPROVED_GROUPS. */
+const APPROVED = ['hosts', 'admins'];
+const isApproved = (event) => tenant.callerGroups(event).some((g) => APPROVED.includes(g));
+async function readProfile(sub) {
+  const res = await G.db.send(new GetCommand({
+    TableName: G.tableName(),
+    Key: { PK: tenant.userPk(sub), SK: 'PROFILE' },
+  }));
+  return (res && res.Item) || null;
+}
 
 /** 200 with the membership the caller already had. */
 function alreadyIn(orgId, membership) {
@@ -134,6 +150,24 @@ async function acceptInvite(event) {
     return alreadyIn(orgId, existing);
   }
 
+  /*
+    JOINING BEFORE APPROVAL (owner, 2026-10-11). Somebody who is still
+    `pending` accepts: the team that invited them may approve their hosting
+    (approve-member.js), so the membership says so — `joinedByInvite` is the
+    proof that THIS team brought them in, `awaitingHostApproval` is the queue.
+    And if they have no personal space yet, they never get one unasked: the
+    team is their home (personal-org.js `invite-only`). An approved account
+    joining a team is unchanged.
+  */
+  const pendingJoin = !isApproved(event);
+  let profile = null;
+  if (pendingJoin) {
+    try { profile = await readProfile(sub); } catch (error) {
+      console.warn('accept-invite: could not read the profile:', error.message);
+    }
+  }
+  const inviteOnly = pendingJoin && !G.clean(profile && profile.personalOrgId);
+
   const now = new Date().toISOString();
   const member = {
     PK: tenant.orgPk(orgId),
@@ -144,6 +178,7 @@ async function acceptInvite(event) {
     email,
     displayName: G.callerName(event),
     joinedAt: now,
+    ...(pendingJoin ? { joinedByInvite: true, awaitingHostApproval: true } : {}),
   };
   const reverse = {
     PK: tenant.userPk(sub),
@@ -249,6 +284,7 @@ async function acceptInvite(event) {
             UpdateExpression:
               'SET defaultOrgId = if_not_exists(defaultOrgId, :orgId), '
               + 'userId = if_not_exists(userId, :sub), '
+              + (inviteOnly ? 'joinedByInvite = if_not_exists(joinedByInvite, :orgId), ' : '')
               + 'updatedAt = :now',
             ExpressionAttributeValues: { ':orgId': orgId, ':sub': sub, ':now': now },
           },

@@ -104,6 +104,21 @@ export const PLATFORM_MODE = '~platform';
 export const EVENTS_SUBTITLE = 'One join code for a whole agenda: engagements and breaks, in the order you run them.';
 
 const SECTION = {
+  /*
+    OVERVIEW — the landing page of every scope (owner, 2026-10-11;
+    docs/design/admin-landing). First in personal, team and platform, so
+    `defaultSectionIdFor` lands there with no other change. What waits on you
+    here, then this month in numbers (components/OverviewPanel.jsx). The
+    subtitle differs per scope and is written in AdminPage.jsx.
+  */
+  overview: {
+    id: 'overview',
+    label: 'Overview',
+    icon: 'House',
+    title: 'Overview',
+    subtitle: 'What is waiting on you, and this month in numbers.',
+    contentTheme: 'dark',
+  },
   questionsets: {
     id: 'questionsets',
     label: 'Question sets',
@@ -304,17 +319,19 @@ const SECTION = {
     contentTheme: 'dark',
   },
   /*
-    ENGAGE SETTINGS — the platform-wide switches (owner, 2026-10-11), today one:
+    ENGAGE SETTINGS — the platform-wide switches (owner, 2026-10-11), two:
     which Claude models Engage calls (ClaudeModelsPanel.jsx,
-    docs/design/claude-55-switch). Not the foot's Settings, which is three
-    browser-local switches; this changes Engage for everyone and is audited.
+    docs/design/claude-55-switch) and which look every page wears
+    (SiteSkinPanel.jsx, docs/design/themes SPEC §5.4). Not the foot's Settings,
+    which is three browser-local switches; this changes Engage for everyone and
+    is audited. The icon is neutral now it holds two (`Gear` is the foot's).
   */
   engagesettings: {
     id: 'engagesettings',
     label: 'Engage settings',
-    icon: 'Brain',
+    icon: 'SlidersHorizontal',
     title: 'Engage settings',
-    subtitle: 'Settings for all of Engage. Every change is written to the audit log.',
+    subtitle: 'Settings for all of Engage: the Claude models and the site look. Every change is written to the audit log.',
     contentTheme: 'dark',
   },
   settings: {
@@ -373,9 +390,11 @@ export function sectionsFor({
   */
   if (mode === PLATFORM_MODE) {
     if (!isStaff) return [];
-    /* Organisations stays FIRST because it is the landing section (mockup 10)
-       and `defaultSectionIdFor` takes the first item of the first group. */
+    /* OVERVIEW is FIRST because it is the landing section (owner,
+       2026-10-11) and `defaultSectionIdFor` takes the first item of the first
+       group. Organisations, the landing section before it, is second. */
     return [group('platform', 'Engage', [
+      SECTION.overview,
       SECTION.orgs,
       SECTION.observability,
       SECTION.planrequests,
@@ -412,6 +431,7 @@ export function sectionsFor({
     */
     return [
       group('space', 'Your space', [
+        SECTION.overview,
         SECTION.questionsets,
         SECTION.games,
         ...events,
@@ -432,6 +452,7 @@ export function sectionsFor({
     still choose a Workie in session setup, which reads the same library.
   */
   const content = group('org', orgName || 'Your organisation', [
+    SECTION.overview,
     SECTION.questionsets,
     SECTION.games,
     ...events,

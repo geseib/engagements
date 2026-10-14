@@ -29,7 +29,7 @@ const path = require('path');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const STAGE_CSS = read('styles', 'stage.css');
 const QPREV_CSS = read('components', 'QuestionPreview.css');
 

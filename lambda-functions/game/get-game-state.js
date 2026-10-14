@@ -1,13 +1,13 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { resolveSetPartition } = require('./set-version');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
 const { normalizeNames } = require('./survey-names');
 
-const { isPresent } = require('./player-presence');
-const { BEATS } = require('./stage-beats');
+const { roomCounts, presentPlayers, presentingCount, queryAll } = require('./room-counts');
+const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 
 /**
@@ -182,7 +182,25 @@ exports.handler = async (event) => {
      * facts on the wire, and a client inventing its own default is how the two
      * surfaces come to disagree.
      */
-    let stageFocus = { focus: 'none', index: null };
+    /*
+      THE FOCUS, with its part, its stamped phase and its rev (two-surface
+      PLAN 1.10-1.11). `focus` and `index` keep their old meaning for old
+      clients. An answer focus is handed back ONLY in the phase it was stamped
+      for (a legacy row with no stamp reads as RESULTS): during VOTE its index
+      is a voting-order position, at RESULTS a tally position, and a VOTE
+      focus surviving into RESULTS would put a different, named response on
+      the wall (D5).
+    */
+    const NO_FOCUS_HERE = { focus: 'none', index: null, part: 0, parts: 1, phase: null };
+    let stageFocus = { ...NO_FOCUS_HERE, rev: 0 };
+    const phaseNow = (/^(VOTE|RESULTS)#/.exec(String(currentState)) || [])[1] || null;
+    /*
+      WORKIE'S PAGE (two-surface PLAN 1.9/1.11): stored on ROUND# by
+      /stage-beat while the room is on the read. Integers, a list of integers
+      and one validated key; never text. A round never paged reads as page 0
+      with the count unknown, and `rev` 0, so a client's first frame is newer.
+    */
+    let stageNotes = { page: 0, pages: null, plan: null, planKey: null, rev: 0 };
     // A CLOSED SURVEY has no LessonNumber but does have beats: its Workie
     // read-back and its feedback round sit on ROUND#000 (stage-beat.js takes
     // 0 like any round), and a reload or the phone remote has to see them.
@@ -225,11 +243,33 @@ exports.handler = async (event) => {
           response and the most likely one a host enlarges, and `|| null` would
           erase exactly that case.
         */
-        const storedFocus = roundRecord.Item && roundRecord.Item.StageFocus;
-        if (storedFocus === 'question') {
-          stageFocus = { focus: 'question', index: null };
-        } else if (storedFocus === 'answer' && Number.isInteger(roundRecord.Item.StageFocusIndex)) {
-          stageFocus = { focus: 'answer', index: roundRecord.Item.StageFocusIndex };
+        const notesRow = roundRecord.Item || {};
+        const intOrNull = (v) => (Number.isInteger(v) ? v : null);
+        stageNotes = {
+          page: Number.isInteger(notesRow.StageNotesPage) && notesRow.StageNotesPage >= 0 ? notesRow.StageNotesPage : 0,
+          pages: intOrNull(notesRow.StageNotesPages),
+          plan: Array.isArray(notesRow.StageNotesPlan) && notesRow.StageNotesPlan.every(Number.isInteger)
+            ? notesRow.StageNotesPlan : null,
+          planKey: typeof notesRow.StageNotesKey === 'string' ? notesRow.StageNotesKey : null,
+          rev: Number.isInteger(notesRow.StageNotesRev) ? notesRow.StageNotesRev : 0,
+        };
+        const storedFocus = notesRow.StageFocus;
+        const focusRev = Number.isInteger(notesRow.StageFocusRev) ? notesRow.StageFocusRev : 0;
+        stageFocus = { ...NO_FOCUS_HERE, rev: focusRev };
+        if (storedFocus === 'question' || storedFocus === 'join') {
+          // The question enlarged, or the join code and QR on the wall.
+          stageFocus = { ...NO_FOCUS_HERE, focus: storedFocus, rev: focusRev };
+        } else if (storedFocus === 'answer' && Number.isInteger(notesRow.StageFocusIndex)) {
+          const stamped = notesRow.StageFocusPhase || 'RESULTS';
+          if (FOCUS_PHASES.includes(stamped) && stamped === phaseNow) {
+            const parts = Number.isInteger(notesRow.StageFocusParts) && notesRow.StageFocusParts >= 1
+              ? notesRow.StageFocusParts : 1;
+            const part = Number.isInteger(notesRow.StageFocusPart) && notesRow.StageFocusPart >= 0
+              && notesRow.StageFocusPart < parts ? notesRow.StageFocusPart : 0;
+            stageFocus = {
+              focus: 'answer', index: notesRow.StageFocusIndex, part, parts, phase: stamped, rev: focusRev,
+            };
+          }
         }
       } catch (error) {
         console.error(`❌ Error fetching round record for question ${beatRoundNumber}:`, error);
@@ -311,6 +351,11 @@ exports.handler = async (event) => {
               image: questionItem.Image || '', // Optional artwork URL ("Art Title" rounds)
               customInstructions: questionItem.CustomInstructions || '',
               setId: questionSetId,
+              // The set's own round noun ("Lesson"), so the Remote names the
+              // round as the host page does (R6). Plaintext set metadata the
+              // public get-question.js already serves; read with the row
+              // resolveSetPartition fetched above, at no extra cost.
+              setRoundNoun: (resolvedSet.metadata && resolvedSet.metadata.roundNoun) || null,
               startedAt: questionRef.Item.StartedAt,
               // For trivia questions (check both cases)
               optionA: questionItem.optionA || questionItem.OptionA || '',
@@ -375,6 +420,13 @@ exports.handler = async (event) => {
       authorsRevealed: authorsRevealed,
       stageBeat: stageBeat,
       stageFocus: stageFocus,
+      stageNotes: stageNotes,
+      /*
+        THE SESSION'S DISPLAY PROFILE (two-surface PLAN D2), set from the
+        host's surfaces through /stage-beat `{ profile }`. null until one is
+        chosen; a value outside the closed set reads as null.
+      */
+      stageProfile: STAGE_PROFILES.includes(stateItem && stateItem.StageProfile) ? stateItem.StageProfile : null,
       /*
         THE SCOREBOARD — a session fact on STATE (scoreboard.js). Here for the
         same two readers stageFocus has: a reloading host page reopens the board
@@ -503,7 +555,33 @@ exports.handler = async (event) => {
     // The host block, on the host's door ONLY (see the top of this file). The
     // public route used to assemble it for `?includeHostData=true` and for any
     // read with no player id — a claim anyone could make.
+    /*
+      THE ROOM VIEW (two-surface PLAN 1.11, D3): `?view=room` on the PUBLIC
+      door adds counts — how many joined, answered, voted — for the
+      Presentation's "4 of 5 answered". Integers only (room-counts.js); the
+      host door's answerer and voter lists are never copied here. Computed
+      only when asked, so the ordinary public read costs what it did.
+    */
+    const query = event.queryStringParameters || {};
+    if (!onHostDoor && !playerId && query.view === 'room') {
+      const onRound = /^(ASK|VOTE|RESULTS)#/.test(String(frontendState)) ? currentQuestionNumber : null;
+      response.roomCounts = await roomCounts(db, process.env.TABLE_NAME, gameId, onRound);
+    }
+
     if (onHostDoor) {
+      /*
+        HOW MANY PRESENTATIONS ARE OPEN (two-surface D4): the viewer rows
+        websocket/connect.js stores for /present. Drives "Presenting on
+        screen 2" and the lobby's "Present first". A failed count reads as 0,
+        never as a lost state payload.
+      */
+      try {
+        response.presenting = await presentingCount(db, process.env.TABLE_NAME, gameId);
+      } catch (presentingError) {
+        console.error('presenting count failed (reporting 0):', presentingError);
+        response.presenting = 0;
+      }
+
       /*
         THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.
 
@@ -582,60 +660,19 @@ exports.handler = async (event) => {
       if (frontendState.startsWith('VOTE#') && currentQuestionNumber) {
         const questionNumberStr = currentQuestionNumber.toString().padStart(3, '0');
         
-        // Get all votes for current question
-        const votesResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': `QUESTION#${questionNumberStr}#VOTE#`
-          }
-        }));
-
-        // Get all players to calculate voting progress
-        const playersResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': 'PLAYER#'
-          }
-        }));
-
-        // Deduplicate players by name, keeping the most recent record (same logic as get-players.js)
-        let players = (playersResult.Items || []).filter(player => {
-          const playerName = player.PlayerName || player.playerName;
-          if (!playerName) {
-            console.log(`⚠️ Filtering out player record with no name:`, player);
-            return false;
-          }
-          return true;
-        });
-
-        const playerMap = new Map();
-        players.forEach(player => {
-          const playerName = player.PlayerName || player.playerName;
-          const existing = playerMap.get(playerName);
-          
-          if (!existing || (player.JoinedAt && (!existing.JoinedAt || player.JoinedAt > existing.JoinedAt))) {
-            playerMap.set(playerName, player);
-          }
-        });
-        
-        // WHO IS STILL IN THE ROOM — the denominator of "3 of 4 have voted".
-        //
-        // A player the host removed because they left must not be voted for by
-        // nobody forever: the round would never read as complete and the host
-        // would sit waiting on an empty chair. `player-presence.js` records
-        // which counts drop them and which (the report, the AI summary) must
-        // not — this is a live number, so it drops them.
-        const uniquePlayers = Array.from(playerMap.values()).filter(isPresent);
+        // Every ballot and everyone still in the room, page after page
+        // (room-counts.js): a one-page read would undercount a big room.
+        const votesResult = { Items: (await queryAll(db, process.env.TABLE_NAME, gameId, `QUESTION#${questionNumberStr}#VOTE#`)).items };
+        const uniquePlayers = await presentPlayers(db, process.env.TABLE_NAME, gameId);
         console.log(`✅ Game state voting progress: ${uniquePlayers.length} unique players still in the room after deduplication`);
 
         response.votingProgress = {
           votesReceived: votesResult.Items?.length || 0,
           totalPlayers: uniquePlayers.length,
-          votersIds: (votesResult.Items || []).map(vote => vote.PlayerName)
+          // `VoterName` is the field submit-vote.js writes; `PlayerName` is
+          // never on a real ballot, so this list was all `undefined` — the
+          // same mistake get-players.js made (tests/roster-readiness.js §5).
+          votersIds: (votesResult.Items || []).map(vote => vote.VoterName || vote.PlayerName)
         };
       }
 
@@ -643,49 +680,10 @@ exports.handler = async (event) => {
       if (frontendState.startsWith('ASK#') && currentQuestionNumber) {
         const questionNumberStr = currentQuestionNumber.toString().padStart(3, '0');
         
-        // Get all answers for current question
-        const answersResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': `QUESTION#${questionNumberStr}#ANSWER#`
-          }
-        }));
-
-        // Get all players to calculate answer progress
-        const playersResult = await db.send(new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-          ExpressionAttributeValues: {
-            ':pk': `GAME#${gameId}`,
-            ':sk': 'PLAYER#'
-          }
-        }));
-
-        // Deduplicate players by name, keeping the most recent record (same logic as get-players.js)
-        let players = (playersResult.Items || []).filter(player => {
-          const playerName = player.PlayerName || player.playerName;
-          if (!playerName) {
-            console.log(`⚠️ Filtering out player record with no name:`, player);
-            return false;
-          }
-          return true;
-        });
-
-        const playerMap = new Map();
-        players.forEach(player => {
-          const playerName = player.PlayerName || player.playerName;
-          const existing = playerMap.get(playerName);
-          
-          if (!existing || (player.JoinedAt && (!existing.JoinedAt || player.JoinedAt > existing.JoinedAt))) {
-            playerMap.set(playerName, player);
-          }
-        });
-        
-        // Removed players drop out here too, for the same reason as the voting
-        // denominator twenty lines up. See player-presence.js.
-        const uniquePlayers = Array.from(playerMap.values()).filter(isPresent);
+        // Every answer and everyone still in the room, page after page
+        // (room-counts.js). Removed players drop out, as for the vote count.
+        const answersResult = { Items: (await queryAll(db, process.env.TABLE_NAME, gameId, `QUESTION#${questionNumberStr}#ANSWER#`)).items };
+        const uniquePlayers = await presentPlayers(db, process.env.TABLE_NAME, gameId);
         console.log(`✅ Game state answer progress: ${uniquePlayers.length} unique players still in the room after deduplication`);
 
         response.answerProgress = {

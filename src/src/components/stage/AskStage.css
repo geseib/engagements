@@ -1,0 +1,47 @@
+/* ============================================================
+   .askstage — A QUESTION FOR THE ROOM ON THE HOST'S STAGE
+   (components/stage/AskStage.jsx). The stage's own type tiers (--t-*,
+   styles/stage.css) so it reads on every display profile. Tokens only.
+   ============================================================ */
+.askstage { display: flex; flex-direction: column; gap: calc(1vh + 6px); min-width: 0; }
+.askstage .askstage-kicker { display: flex; align-items: center; gap: .4em; }
+.askstage .askstage-q { margin: 0; overflow-wrap: anywhere; }
+.askstage .askstage-options,
+.askstage .askstage-bars,
+.askstage .askstage-ideas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(.6vh + 4px); }
+.askstage .askstage-options li {
+  display: flex; align-items: center; gap: .6em;
+  font-size: var(--t-body); color: var(--text);
+}
+.askstage .askstage-letter {
+  flex: none; display: inline-grid; place-items: center;
+  width: 1.6em; height: 1.6em; font-weight: 700;
+  border: var(--hair) solid var(--rule); border-radius: 50%;
+}
+.askstage .askstage-ends { display: flex; justify-content: space-between; max-width: 32em; font-size: var(--t-meta); color: var(--muted); }
+.askstage .askstage-count { margin: 0; font-size: var(--t-meta); color: var(--muted); }
+
+.askstage .askstage-bars li {
+  display: grid; grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  align-items: center; gap: .6em; font-size: var(--t-body); color: var(--text);
+}
+.askstage .askstage-spread li { grid-template-columns: minmax(0, 8em) minmax(0, 1fr) auto; }
+.askstage .askstage-bar-label { min-width: 0; overflow-wrap: anywhere; }
+.askstage .askstage-bar { height: calc(var(--t-meta) * .7); background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.askstage .askstage-bar i { display: block; height: 100%; background: var(--info); border-radius: inherit; }
+.askstage .askstage-bars li.is-top .askstage-bar i { background: var(--success); }
+.askstage .askstage-bar-n { font-variant-numeric: tabular-nums; min-width: 1.5em; text-align: right; }
+
+.askstage .askstage-mean { display: flex; align-items: baseline; gap: .4em; margin: 0; color: var(--muted); font-size: var(--t-meta); }
+.askstage .askstage-mean b { font-size: var(--t-secondary, var(--t-body)); color: var(--text); font-variant-numeric: tabular-nums; }
+
+.askstage .askstage-idea {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1em;
+  width: 100%; text-align: left; font: inherit; font-size: var(--t-body); color: var(--text);
+  background: var(--surface); border: var(--hair) solid var(--rule); border-radius: var(--radius);
+  padding: calc(.8vh + 6px) calc(.8vw + 10px); cursor: pointer;
+}
+.askstage .askstage-idea span { min-width: 0; overflow-wrap: anywhere; }
+.askstage .askstage-idea em { flex: none; font-style: normal; font-size: var(--t-meta); color: var(--info); }
+.askstage .askstage-idea.is-on { border-color: var(--info); }
+.askstage .askstage-idea:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }

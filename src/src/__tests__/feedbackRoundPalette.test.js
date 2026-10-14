@@ -21,6 +21,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const RAW_SHEET = fs.readFileSync(
   path.join(__dirname, '..', 'components', 'FeedbackRoundPanel.css'), 'utf8',
@@ -38,7 +39,7 @@ const RAW_SHEET = fs.readFileSync(
  */
 const stripCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const SHEET = stripCss(RAW_SHEET);
-const GLOBAL_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 
 /* ------------------------------------------------------------------ colour */
 const lin = (c) => {
@@ -57,27 +58,27 @@ const hex = (rgb) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '
 /** Composite `over` (white at `alpha`) onto `base`. The real paint stack. */
 const wash = (base, alpha) => hex(parseHex(base).map((c) => c + (255 - c) * alpha));
 
-/** Read a token's hex out of a `:root`-style block. */
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-
-const SURFACE = token(GLOBAL_CSS, ':root {', '--surface');
-const TEXT = token(GLOBAL_CSS, ':root {', '--text');
-const MUTED = token(GLOBAL_CSS, ':root {', '--muted');
-const PRIMARY = token(GLOBAL_CSS, ':root {', '--primary');
-
-/** What `.fbr` actually paints on: --surface under a 6% white wash. */
-const COMPOSITE = wash(SURFACE, 0.06);
-
+/* Values RESOLVED per skin through the harness (skins -> roles -> the .fbr block), never
+   retyped. The panel draws inside the player shell (`.plr data-theme="dark"`): dusk in
+   every skin. */
+const fbrVar = (name, skin) => H.scopeVar(RAW_SHEET, '.fbr {', name, { skin, theme: 'dark' });
 const AA = 4.5;
 
-describe('every pairing clears AA on the surface it is really drawn on', () => {
+test('Classic is unchanged: --fbr-accent and --fbr-lift resolve to their pre-skin values', () => {
+  expect(H.parseColor(fbrVar('--fbr-accent', 'classic'))).toEqual(H.parseColor('#F6A94C'));
+  expect(H.parseColor(fbrVar('--fbr-lift', 'classic'))).toEqual(H.parseColor('rgba(15, 26, 46, 0.55)'));
+});
+
+describe.each(H.SKINS)('every pairing clears AA on the surface it is really drawn on (%s)', (skin) => {
+  const r = (name) => H.role(name, { skin, theme: 'dark' });
+  const SURFACE = r('--surface');
+  const TEXT = fbrVar('--fbr-text', skin);
+  const MUTED = fbrVar('--fbr-muted', skin);
+  const ACCENT = fbrVar('--fbr-accent', skin);
+  const INK = fbrVar('--fbr-ink', skin);
+  /** What `.fbr` actually paints on: --surface under a 6% white wash. */
+  const COMPOSITE = wash(SURFACE, 0.06);
+
   test('the comment text', () => {
     expect(ratio(TEXT, COMPOSITE)).toBeGreaterThanOrEqual(AA);
   });
@@ -88,10 +89,16 @@ describe('every pairing clears AA on the surface it is really drawn on', () => {
     expect(ratio(MUTED, COMPOSITE)).toBeGreaterThanOrEqual(AA);
   });
 
-  test('the Comment affordance and the Comments heading', () => {
-    expect(ratio(PRIMARY, COMPOSITE)).toBeGreaterThanOrEqual(AA);
+  test('the Comment affordance and the Comments heading (--fbr-accent)', () => {
+    expect(ratio(ACCENT, COMPOSITE)).toBeGreaterThanOrEqual(AA);
   });
 
+  test('the Post button: its ink on the filled accent', () => {
+    expect(ratio(INK, ACCENT)).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+describe('the wash', () => {
   test('and the wash the sheet declares is the one measured here', () => {
     /*
       Guards the arithmetic above against the sheet drifting away from it. If

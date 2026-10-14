@@ -7,6 +7,7 @@ import {
 } from 'amazon-cognito-identity-js';
 import { hostedLogoutUrl, isGoogleUsername } from './googleSignIn';
 import { navigateTo } from './navigate';
+import { onSessionExpired, clearSessionExpired } from './sessionExpiry';
 
 // Configure Cognito User Pool - Lazy load to ensure config.js has loaded  
 const getUserPool = () => {
@@ -50,6 +51,9 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [newPasswordRequired, setNewPasswordRequired] = useState(null);
   const [tempUser, setTempUser] = useState(null);
+  // True once authFetch has found the sign-in gone mid-session (sessionExpiry.js).
+  // AuthPage says so in one line, so the form does not read as a sign-out.
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // Get current user from session
   const getCurrentUser = async () => {
@@ -213,6 +217,8 @@ export const AuthProvider = ({ children }) => {
           onSuccess: async (session) => {
             try {
               const user = await getCurrentUser();
+              clearSessionExpired();
+              setSessionExpired(false);
               setCurrentUser(user);
               resolve(user);
             } catch (error) {
@@ -527,10 +533,23 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, []);
 
+  /*
+    THE SIGN-IN RAN OUT WHILE A PAGE WAS OPEN (sessionExpiry.js). Dropping the
+    user is all it takes: every signed-in surface sits behind ProtectedRoute,
+    which renders the sign-in form IN PLACE, so the URL — the host's session id
+    included — is still the one the page reloads to after an email sign-in, and
+    the return path the Google button records. No redirect, no alert.
+  */
+  useEffect(() => onSessionExpired(() => {
+    setSessionExpired(true);
+    setCurrentUser(null);
+  }), []);
+
   const value = {
     currentUser,
     loading,
     error,
+    sessionExpired,
     newPasswordRequired,
     signUp,
     confirmSignUp,

@@ -93,7 +93,7 @@ describe('the Google Fonts request in public/index.html', () => {
 
 describe('the stylesheets name the family that is loaded', () => {
   it.each([
-    ['styles.css', '--font-display'],
+    [path.join('styles', 'skins', 'classic.css'), '--sk-font-display'],
     [path.join('marketing', 'MarketingShell.css'), '--mk-font-display'],
   ])('%s declares %s with Archivo first', (file, name) => {
     const value = tokenValue(file, name);

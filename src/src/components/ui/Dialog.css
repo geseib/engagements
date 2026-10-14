@@ -1,0 +1,160 @@
+/* ============================================================
+   .ui-scrim / .ui-dialog — THE MODAL LOOK
+   (docs/design/themes/SPEC.md §6 "Modal styling", PLAN Phase 1 unit L13)
+
+   The shell's LOOK only. Behaviour (Escape, Tab trap, scroll lock, focus
+   restore, ARIA) stays in components/Modal.jsx, which renders its overlay and
+   content class names verbatim — so a dialog adopts this look by passing
+   overlayClassName="ui-scrim" contentClassName="ui-dialog …":
+
+     <Modal overlayClassName="ui-scrim" contentClassName="ui-dialog ui-dialog--small"
+            onClose={requestClose} labelledBy="x-title">
+       <header className="ui-dialog-head">
+         <div className="ui-dialog-titles">
+           <h2 id="x-title" className="ui-dialog-title">Delete this set?</h2>
+           <p className="ui-dialog-sub">Two saved reports use it.</p>
+         </div>
+         <button className="ui-dialog-x" aria-label="Close" onClick={requestClose}>×</button>
+       </header>
+       <div className="ui-dialog-body">…</div>
+       <footer className="ui-dialog-foot">…Cancel…Delete…</footer>
+     </Modal>
+
+   Variants (admin-container-rule.md): default = make or edit one thing (560px);
+   --small = confirm or destroy (440px); --wide = a table and a form (760px);
+   --full = long multi-step work: full height, the BODY scrolls, head and foot
+   stay put.
+
+   THEME. Put data-theme on the dialog (or the scrim). A portaled or top-level
+   dialog with none inherits <html data-theme="light"> (public/index.html:2),
+   i.e. paper — docs/design/themes/README.md "Lessons from Phase 0".
+
+   HARD RULE 10 (references/hard-rules.md §6, the bug that recurred four
+   times): the scrim scrolls and does NOT centre with the flex container —
+   align-items: flex-start + overflow-y: auto + padding on the scrim, and
+   margin: auto on the card so a dialog that fits is still centred. A centred
+   flex child taller than the scrim overflows top AND bottom, and only one end
+   is reachable. --full adds the other half: min-height: 0 on the scrolling
+   body (a flex item's min-height: auto is its content height, so the overflow
+   never exists), and max-height in dvh after vh (iOS vh is the LARGE viewport).
+
+   Layout passthroughs, so an adopting surface keeps its own geometry with zero
+   Classic delta: --ui-scrim-z (60; 10001 over the host's new-game overlay),
+   --ui-dialog-radius (--radius; today's console modals are 12px),
+   --ui-dialog-shadow, and the laptop ladder --ui-dialog-t-head/-body/-label
+   (19/15/13, the console's head/body/label, never below the 12px floor).
+
+   Roles read: --scrim, --surface, --text, --muted, --rule, --rule-strong,
+   --row-hover, --radius, --radius-sm, --font-ui, --font-display,
+   --display-weight, --display-tracking, --shade-rgb. No literal colour: the
+   default shadow is the dusk shade channel (today's modals cast rgba(0,0,0,.5);
+   an adopter that must stay identical sets --ui-dialog-shadow from its own
+   scope).
+
+   Contrast (uiDialogPalette.test.js, every skin x theme): --text, --muted and
+   --accent-text on --surface; --text on the X's hover (--surface + --row-hover).
+   ============================================================ */
+
+.ui-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ui-scrim-z, 60);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--scrim);
+}
+
+.ui-dialog {
+  margin: auto;
+  box-sizing: border-box;
+  width: min(560px, 100%);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--ui-dialog-radius, var(--radius));
+  box-shadow: var(--ui-dialog-shadow, 0 24px 64px rgb(var(--shade-rgb) / .5));
+  font-family: var(--font-ui);
+  font-size: var(--ui-dialog-t-body, 15px);
+  line-height: 1.45;
+  /* a 98-character set title is a real value; nothing may push the card wider */
+  overflow-wrap: anywhere;
+}
+.ui-dialog--small { width: min(440px, 100%); }
+.ui-dialog--wide { width: min(760px, 100%); }
+.ui-dialog--full {
+  width: min(920px, 100%);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+}
+.ui-dialog--full > .ui-dialog-head,
+.ui-dialog--full > .ui-dialog-foot { flex: none; }
+.ui-dialog--full > .ui-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ui-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 18px 10px;
+}
+.ui-dialog-titles { flex: 1 1 auto; min-width: 0; }
+.ui-dialog-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: var(--ui-dialog-t-head, 19px);
+  line-height: 1.2;
+  color: var(--text);
+}
+.ui-dialog-sub {
+  margin: 4px 0 0;
+  font-size: var(--ui-dialog-t-label, 13px);
+  color: var(--muted);
+}
+
+/* The X. Every dialog has one AND a bottom exit, both through one
+   requestClose() (hard rule 2); render it only when that handler exists. */
+.ui-dialog-x {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ui-dialog-x:hover:not(:disabled) { color: var(--text); background: var(--row-hover); }
+.ui-dialog-x:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.ui-dialog-x:disabled { cursor: default; opacity: .5; }
+
+.ui-dialog-body { padding: 0 18px 4px; }
+
+/* The bottom exit. Right-aligned by margin-left: auto on the first child, not
+   justify-content: flex-end, so a foot too narrow for its buttons wraps rather
+   than overflowing toward the start (hard rule 9). */
+.ui-dialog-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  padding: 14px 18px 16px;
+  margin-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+.ui-dialog-foot > :first-child { margin-left: auto; }

@@ -152,7 +152,13 @@ exports.handler = async (event) => {
 
       // Build readiness map
       const answeredPlayers = new Set((answersResult.Items || []).map(item => item.PlayerName));
-      const votedPlayers = new Set((votesResult.Items || []).map(item => item.PlayerName));
+      // THE VOTER IS `VoterName`. submit-vote.js stamps the ballot with
+      // `VoterName` and no `PlayerName`, so reading `PlayerName` here left
+      // `hasVoted` false for everybody through every vote (dev session 5479,
+      // 2026-10-12): the remote's "Still to vote" never shrank while the count
+      // above it moved. `PlayerName` stays as a fallback for older rows, the
+      // order get-votes.js already reads them in. See tests/roster-readiness.js §5.
+      const votedPlayers = new Set((votesResult.Items || []).map(item => item.VoterName || item.PlayerName));
 
       players.forEach(player => {
         const playerName = player.PlayerName || player.playerName;

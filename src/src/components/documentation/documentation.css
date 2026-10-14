@@ -1,3 +1,4 @@
+/* skin-allowance: colour=43 font=3 primary=0 */
 /* Documentation Content Styles */
 .help-content-doc {
   max-width: 800px;
@@ -176,33 +177,6 @@
   font-size: 0.9rem;
 }
 
-/* Best Practices */
-.help-best-practices {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-  margin: 20px 0;
-}
-
-.help-practice-item {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.help-practice-item h4 {
-  margin: 0 0 8px 0;
-  color: #1e293b;
-  font-size: 1rem;
-}
-
-.help-practice-item p {
-  margin: 0;
-  color: #475569;
-  font-size: 0.9rem;
-}
-
 /* FAQ / Definition List */
 .help-faq {
   margin: 20px 0;
@@ -297,10 +271,6 @@
   }
   
   .help-variables-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .help-best-practices {
     grid-template-columns: 1fr;
   }
   

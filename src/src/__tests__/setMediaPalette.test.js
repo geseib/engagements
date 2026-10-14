@@ -26,103 +26,41 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const SMED_CSS = read('components', 'SetMediaPanel.css');
 const QIMG_CSS = read('components', 'QuestionImageField.css');
 
-/* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
+/* ---- colour: the audit's lin/lum/ratio/alphaOver/bgOf (docs/design/admin-redesign/
+        audit.html) live verbatim in testing/skinHarness.js. H.on / H.composite are its
+        bgOf as arithmetic, so a role value written `rgb(r g b / a)` composites without
+        jsdom having to parse it. ---- */
+
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+
+/** A scope-local token READ out of a declaration block, never retyped, with every
+ *  var() it reads resolved (scope-local names first, then roles) for one skin x
+ *  theme: change it and these numbers move with it. */
+function token(css, block, name, opts = CLASSIC_DUSK) {
+  return H.scopeVar(css, block, name, opts);
 }
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-function bgOf(el, win) {
-  let node = el; const stack = [];
-  while (node && node.nodeType === 1) {
-    const c = win.getComputedStyle(node).backgroundColor;
-    const m = String(c).match(/[\d.]+/g);
-    if (m) {
-      const a = m.length > 3 ? parseFloat(m[3]) : 1;
-      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
-    }
-    node = node.parentElement;
-  }
-  if (!stack.length) return [15, 26, 46];
-  let out = stack[stack.length - 1][0];
-  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
-  return out;
+function tint(css, name, opts = CLASSIC_DUSK) {
+  const v = token(css, SMED, name, opts);
+  if (!(H.parseColor(v).a < 1)) throw new Error(`${name} is not a translucent tint: ${v}`);
+  return v;
 }
 
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-
-/** A token READ out of a declaration block, never retyped: change it and these
- *  numbers move with it. */
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
-}
-function tint(css, name) {
-  const m = css.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared`);
-  return m[1];
-}
-
-const DUSK = '[data-theme="dark"] {';
-const ROOT = ':root {';
 const SMED = '.smed {';
 const QIMG = '.qimg {';
 
 const HOST_CSS = read('components', 'QuestionSetsPanel.css');
 const ONLIGHT = '.qsets.qsets--onlight,';
 
-const T = {
-  // The panel declares data-theme="dark" on its root, so these are the tokens
-  // it actually gets — read from styles.css's dusk block, not assumed.
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  // What the HOST SHELF pushes onto this panel's ancestors, and what the three
-  // re-points below exist to hold off.
-  hostPrimary: token(HOST_CSS, ONLIGHT, '--primary'),
-  hostDangerText: token(HOST_CSS, ONLIGHT, '--danger-text'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  // .smed's own re-points and locals.
-  primary: token(SMED_CSS, SMED, '--primary'),
-  dangerText: token(SMED_CSS, SMED, '--danger-text'),
-  successText: token(SMED_CSS, SMED, '--smed-success-text'),
-  // .qimg's three, which inherit the surrounding form rather than a theme.
-  qimgMuted: token(QIMG_CSS, QIMG, '--qimg-muted'),
-  qimgOk: token(QIMG_CSS, QIMG, '--qimg-ok'),
-  qimgBad: token(QIMG_CSS, QIMG, '--qimg-bad'),
-};
+const on = (fg, layers) => H.on(fg, layers);
+const AA = H.AA;
 
-/** Build the real paint stack in the DOM and hand it to the audit's bgOf.
- *  First entry outermost, last is what the text sits on. */
-function composited(layers) {
-  document.body.innerHTML = '';
-  let host = document.body;
-  for (const background of layers) {
-    const el = document.createElement('div');
-    el.style.backgroundColor = background;
-    host.appendChild(el);
-    host = el;
-  }
-  return bgOf(host, window);
-}
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
-
-const AA = 4.5;
 /* The panel is mounted inside `.qs-editor .qs-panel`. The ground that rule
    paints is READ rather than named: it moved from --surface-2 to --bg when the
    editor converted, and a retyped token would have gone on passing against a
@@ -130,31 +68,159 @@ const AA = 4.5;
 const PANEL_TOKEN = GLOBAL_CSS
   .slice(GLOBAL_CSS.indexOf('.qs-editor .qs-panel {'))
   .match(/background:\s*var\((--[\w-]+)\)/)[1];
-const PANEL = [T.surface, token(GLOBAL_CSS, DUSK, PANEL_TOKEN)];
-// Its own inner cards and rows paint --surface on top of that.
-const CARD = [...PANEL, T.surface];
 
-describe('the premise: the host shelf\'s paper inks are unusable here', () => {
-  // If either of these ever clears AA on the panel, .smed's re-points are dead
-  // weight and this file should be re-read rather than trusted.
-  test('the host shelf\'s #9A5B18 amber cannot carry text on this panel', () => {
-    expect(on(T.hostPrimary, PANEL)).toBeLessThan(AA);
-  });
-  test('the host shelf\'s #A32B25 red cannot carry text on this panel', () => {
-    expect(on(T.hostDangerText, PANEL)).toBeLessThan(AA);
-  });
-});
-
-/** The ink a `.smed-btn--*` rule draws its label in, resolved in this scope. */
-function btnInk(selector) {
+/** The token a `.smed-btn--*` rule draws its label in. */
+function btnInkToken(selector) {
   const rule = SMED_CSS
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .match(new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`));
   if (!rule) throw new Error(`no rule for "${selector}" — renamed?`);
   const ink = rule[1].match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
   if (!ink) throw new Error(`"${selector}" draws its label in no token`);
-  return token(GLOBAL_CSS, DUSK, ink[1]);
+  return ink[1];
 }
+
+/** Everything the panel paints, for one skin x theme. */
+function palette(opts) {
+  const T = {
+    // The panel declares data-theme="dark" on its root, so these are the roles
+    // it actually gets — resolved through styles/roles.css and the skin, not assumed.
+    surface: H.role('--surface', opts),
+    text: H.role('--text', opts),
+    muted: H.role('--muted', opts),
+    // What the HOST SHELF pushes onto this panel's ancestors, and what the three
+    // re-points below exist to hold off.
+    hostPrimary: token(HOST_CSS, ONLIGHT, '--primary', opts),
+    hostDangerText: token(HOST_CSS, ONLIGHT, '--danger-text', opts),
+    danger: H.role('--danger', opts),
+    // .smed's own re-points and locals.
+    primary: token(SMED_CSS, SMED, '--primary', opts),
+    dangerText: token(SMED_CSS, SMED, '--danger-text', opts),
+    successText: token(SMED_CSS, SMED, '--smed-success-text', opts),
+    // .qimg's three, which inherit the surrounding form rather than a theme.
+    qimgMuted: token(QIMG_CSS, QIMG, '--qimg-muted', opts),
+    qimgOk: token(QIMG_CSS, QIMG, '--qimg-ok', opts),
+    qimgBad: token(QIMG_CSS, QIMG, '--qimg-bad', opts),
+    // The ink the filled button carries, READ from the rule that draws it —
+    // it was a bare #FFFFFF on the paper amber and is --bg on the dusk one.
+    btnInk: H.role(btnInkToken('.smed-btn--primary'), opts),
+  };
+  const PANEL = [T.surface, H.role(PANEL_TOKEN, opts)];
+  // Its own inner cards and rows paint --surface on top of that.
+  const CARD = [...PANEL, T.surface];
+  const TINTS = {
+    danger: tint(SMED_CSS, '--smed-tint-danger', opts),
+    warn: tint(SMED_CSS, '--smed-tint-warn', opts),
+    ok: tint(SMED_CSS, '--smed-tint-ok', opts),
+    hover: tint(SMED_CSS, '--smed-row-hover', opts),
+  };
+  return { T, PANEL, CARD, TINTS };
+}
+
+/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
+const norm = (c) => {
+  const p = H.parseColor(c);
+  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
+};
+
+describe('Classic stays pinned: the values resolve to what the sheet used to spell out', () => {
+  test.each([
+    ['--primary', '#F6A94C', SMED_CSS, SMED],
+    ['--danger-text', '#EF8C86', SMED_CSS, SMED],
+    ['--smed-success-text', '#6FD0A4', SMED_CSS, SMED],
+    ['--smed-rule', 'rgba(155, 168, 190, .20)', SMED_CSS, SMED],
+    ['--smed-rule-strong', 'rgba(155, 168, 190, .34)', SMED_CSS, SMED],
+    ['--smed-row-hover', 'rgba(155, 168, 190, .055)', SMED_CSS, SMED],
+    ['--smed-tint-danger', 'rgba(229, 100, 94, .09)', SMED_CSS, SMED],
+    ['--smed-tint-warn', 'rgba(246, 169, 76, .09)', SMED_CSS, SMED],
+    ['--smed-tint-ok', 'rgba(79, 178, 134, .10)', SMED_CSS, SMED],
+    ['--qimg-muted', '#9BA8BE', QIMG_CSS, QIMG],
+    ['--qimg-ok', '#6FD0A4', QIMG_CSS, QIMG],
+    ['--qimg-bad', '#EF8C86', QIMG_CSS, QIMG],
+  ])('%s in Classic / dark is %s', (name, literal, css, block) => {
+    expect(norm(token(css, block, name))).toEqual(norm(literal));
+  });
+});
+
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const { T, PANEL, CARD, TINTS } = palette({ skin, theme });
+
+  describe('the premise: the host shelf\'s paper inks are unusable here', () => {
+    // If either of these ever clears AA on the panel, .smed's re-points are dead
+    // weight and this file should be re-read rather than trusted.
+    test('the host shelf\'s paper amber cannot carry text on this panel', () => {
+      expect(on(T.hostPrimary, PANEL)).toBeLessThan(AA);
+    });
+    test('the host shelf\'s paper red cannot carry text on this panel', () => {
+      expect(on(T.hostDangerText, PANEL)).toBeLessThan(AA);
+    });
+  });
+
+  describe('every flat pairing the Images panel paints', () => {
+    const pairs = [
+      ['--text on the panel ground (headings, values)', T.text, PANEL],
+      ['--muted on the panel ground (notes, counts)', T.muted, PANEL],
+      ['--text on an inner card (report copy, file names)', T.text, CARD],
+      ['--muted on an inner card (the "where it went" column)', T.muted, CARD],
+      ['--primary on the panel ground (the file-count link colour)', T.primary, PANEL],
+      ['--primary on an inner card (the Sending state)', T.primary, CARD],
+      ['--danger-text on the panel ground (missing images)', T.dangerText, PANEL],
+      ['--danger-text on an inner card (Refused)', T.dangerText, CARD],
+      ['--smed-success-text on the panel ground (Uploaded)', T.successText, PANEL],
+      ['--smed-success-text on an inner card', T.successText, CARD],
+      ['the label on the filled primary button', T.btnInk, [T.primary]],
+    ];
+    test.each(pairs)('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  describe('every tinted composite clears AA — the half a token table cannot show', () => {
+    test('the missing-images report, tinted red over the card', () => {
+      const stack = [...CARD, TINTS.danger];
+      expect(on(T.dangerText, stack)).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('the all-clear report, tinted green', () => {
+      const stack = [...CARD, TINTS.ok];
+      expect(on(T.successText, stack)).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('the warn chip, tinted amber', () => {
+      const stack = [...CARD, TINTS.warn];
+      expect(on(T.primary, stack)).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
+    });
+
+    test('a hovered row of the upload table', () => {
+      const stack = [...CARD, TINTS.hover];
+      expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  describe('the per-question field clears AA on the form it inherits', () => {
+    // It sits inside .qs-question-form on the .qs-panel ground, so its three
+    // colours are measured against that and not against white.
+    test.each([
+      ['the explainer under the input', T.qimgMuted],
+      ['an upload that succeeded', T.qimgOk],
+      ['an upload that failed', T.qimgBad],
+    ])('%s clears AA on the panel ground', (_label, fg) => {
+      expect(on(fg, PANEL)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  test('the premise of "--danger never carries text": --danger is under AA on the surfaces here', () => {
+    expect(on(T.danger, [T.surface])).toBeLessThan(AA);
+  });
+});
 
 test('the panel re-points no GLOBAL token it does not read', () => {
   // --danger-deep was re-pointed here while the panel was paper, copied out of
@@ -172,73 +238,7 @@ test('the panel re-points no GLOBAL token it does not read', () => {
   expect(repointed.filter((name) => !new RegExp(`var\\(${name}[,)]`).test(body))).toEqual([]);
 });
 
-describe('every flat pairing the Images panel paints', () => {
-  const pairs = [
-    ['--text on the panel ground (headings, values)', () => T.text, PANEL],
-    ['--muted on the panel ground (notes, counts)', () => T.muted, PANEL],
-    ['--text on an inner card (report copy, file names)', () => T.text, CARD],
-    ['--muted on an inner card (the "where it went" column)', () => T.muted, CARD],
-    ['--primary on the panel ground (the file-count link colour)', () => T.primary, PANEL],
-    ['--primary on an inner card (the Sending state)', () => T.primary, CARD],
-    ['--danger-text on the panel ground (missing images)', () => T.dangerText, PANEL],
-    ['--danger-text on an inner card (Refused)', () => T.dangerText, CARD],
-    ['--smed-success-text on the panel ground (Uploaded)', () => T.successText, PANEL],
-    ['--smed-success-text on an inner card', () => T.successText, CARD],
-    // The ink each filled button carries, READ from the rule that draws it —
-    // it was a bare #FFFFFF on the paper amber and is --bg on the dusk one.
-    ['the label on the filled primary button', () => btnInk('.smed-btn--primary'), [T.primary]],
-  ];
-  test.each(pairs)('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg(), layers)).toBeGreaterThanOrEqual(AA);
-  });
-});
-
-describe('every tinted composite clears AA — the half a token table cannot show', () => {
-  const TINTS = {
-    danger: () => tint(SMED_CSS, '--smed-tint-danger'),
-    warn: () => tint(SMED_CSS, '--smed-tint-warn'),
-    ok: () => tint(SMED_CSS, '--smed-tint-ok'),
-    hover: () => tint(SMED_CSS, '--smed-row-hover'),
-  };
-
-  test('the missing-images report, tinted red over the white card', () => {
-    const stack = [...CARD, TINTS.danger()];
-    expect(on(T.dangerText, stack)).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('the all-clear report, tinted green', () => {
-    const stack = [...CARD, TINTS.ok()];
-    expect(on(T.successText, stack)).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('the warn chip, tinted amber', () => {
-    const stack = [...CARD, TINTS.warn()];
-    expect(on(T.primary, stack)).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('a hovered row of the upload table', () => {
-    const stack = [...CARD, TINTS.hover()];
-    expect(on(T.text, stack)).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, stack)).toBeGreaterThanOrEqual(AA);
-  });
-});
-
 describe('the per-question field, which inherits the form rather than a theme', () => {
-  // It sits inside .qs-question-form on the .qs-panel ground, so its three
-  // colours are measured against that and not against white.
-  test.each([
-    ['the explainer under the input', () => T.qimgMuted],
-    ['an upload that succeeded', () => T.qimgOk],
-    ['an upload that failed', () => T.qimgBad],
-  ])('%s clears AA on the panel ground', (_label, fg) => {
-    expect(on(fg(), PANEL)).toBeGreaterThanOrEqual(AA);
-  });
-
   test('it declares no theme, because the controls around it come from styles.css', () => {
     const jsx = read('components', 'QuestionImageField.jsx');
     expect(jsx).not.toMatch(/data-theme/);
@@ -253,9 +253,7 @@ describe('the per-question field, which inherits the form rather than a theme', 
 });
 
 describe('--danger never carries text', () => {
-  test('the premise: #E5645E is under AA on the surfaces here', () => {
-    expect(on(T.danger, [T.surface])).toBeLessThan(AA);
-  });
+  // The premise (--danger under AA on the surfaces here) is asserted per skin above.
   test.each([['SetMediaPanel.css', SMED_CSS], ['QuestionImageField.css', QIMG_CSS]])(
     '%s never sets color: var(--danger)',
     (_name, css) => {

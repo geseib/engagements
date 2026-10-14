@@ -780,10 +780,10 @@ describe('results shows the personal half and points at the room for the rest', 
               branch that is broken in front of a room the first time a host
               runs that game type. */
   test.each([
-    ['call-and-answer', /Yours was/i],
+    ['call-and-answer', /You didn’t send a response this round/i],
     ['trivia', /You answered/i],
     ['wavelength', /Your words/i],
-    ['poll', /Yours was/i],
+    ['poll', /You didn’t send a response this round/i],
   ])('%s results renders and carries the look-up cue', async (gameType, heading) => {
     const server = makeServer({ state: 'CREATED', gameType });
     installFetch(server);
@@ -851,5 +851,13 @@ describe('the states that did not exist', () => {
     expect(banner).toHaveTextContent(/Offline/i);
     expect(banner).not.toHaveTextContent(/safe on this phone/i);
     expect(banner).not.toHaveTextContent(/will send as soon as/i);
+  });
+});
+
+describe('the results heading (owner, 2026-10-13)', () => {
+  test('a participant who answered reads which response was theirs, by its ballot number', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'PlayerPage.jsx'), 'utf8');
+    expect(src).toMatch(/`You wrote response \$\{ownAnswerIdx \+ 1\}`/);
+    expect(src).not.toMatch(/>Yours was</);
   });
 });

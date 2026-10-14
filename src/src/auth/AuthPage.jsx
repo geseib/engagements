@@ -74,7 +74,7 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
   // in and says so. No password was ever typed on that path to sign in with.
   const [confirmedEmail, setConfirmedEmail] = useState('');
   const [urlError] = useState(errorParam);
-  const { currentUser, loading, newPasswordRequired, signIn, setError } = useAuth();
+  const { currentUser, loading, newPasswordRequired, signIn, setError, sessionExpired } = useAuth();
 
   // Clear the error parameter once it has been handed to the form.
   useEffect(() => {
@@ -186,7 +186,8 @@ const AuthPage = ({ onAuthSuccess, onCancel }) => {
           onNeedsConfirmation={handleNeedsConfirmation}
           initialError={urlError}
           initialEmail={confirmedEmail}
-          notice={confirmedEmail ? 'Email confirmed. Sign in to finish.' : ''}
+          notice={confirmedEmail ? 'Email confirmed. Sign in to finish.'
+            : sessionExpired ? 'Your sign-in ran out. Sign in again to carry on where you were.' : ''}
         />
       )}
 

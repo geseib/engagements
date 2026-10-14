@@ -1,0 +1,152 @@
+{
+  "unit": "0b-2.ArchivePanel",
+  "file": "components/ArchivePanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 20,
+    "font": 0,
+    "primary": 10
+  },
+  "auto": [
+    {
+      "id": "48:23",
+      "line": 48,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "50:15",
+      "line": 50,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-rule",
+      "literal": "rgba(155, 168, 190, .20)",
+      "replacement": "rgb(var(--slate-rgb) / .20)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "51:22",
+      "line": 51,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-rule-strong",
+      "literal": "rgba(155, 168, 190, .34)",
+      "replacement": "rgb(var(--slate-rgb) / .34)",
+      "why": "channel --slate-rgb, Classic-identical in both themes (var(--rule-strong) is paper navy under data-theme=light)"
+    },
+    {
+      "id": "52:20",
+      "line": 52,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-row-hover",
+      "literal": "rgba(155, 168, 190, .055)",
+      "replacement": "var(--row-hover)",
+      "why": "exact --row-hover in dark"
+    },
+    {
+      "id": "53:22",
+      "line": 53,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-tint-danger",
+      "literal": "rgba(229, 100, 94, .09)",
+      "replacement": "rgb(var(--danger-rgb) / .09)",
+      "why": "channel --danger-rgb, Classic-identical"
+    },
+    {
+      "id": "55:18",
+      "line": 55,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-tint-ok",
+      "literal": "rgba(79, 178, 134, .10)",
+      "replacement": "rgb(var(--success-rgb) / .10)",
+      "why": "channel --success-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "54:20",
+      "line": 54,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-tint-warn",
+      "literal": "rgba(246, 169, 76, .09)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "56:20",
+      "line": 56,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".arch",
+      "property": "--arch-tint-info",
+      "literal": "rgba(124, 167, 230, .10)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .10) -> rgba(246,169,76,0.1))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.497Z",
+    "after": {
+      "colour": 12,
+      "font": 0,
+      "primary": 10
+    },
+    "decisionsByKind": {
+      "warn": 1,
+      "info": 1
+    },
+    "classicDeltas": [],
+    "edits": 8
+  }
+}

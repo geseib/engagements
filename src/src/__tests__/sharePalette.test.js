@@ -3,31 +3,50 @@
    Same harness as questionSetsPalette.test.js. */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 const GLOBAL_CSS = read('styles.css');
 const CSS = read('components', 'ShareSetDialog.css');
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) { const la = lum(a); const lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
-const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(css, block, name) {
-  const start = css.indexOf(block); const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not in ${block}`);
-  return m[1];
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+/** A scope-local token READ out of its block, every var() resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC_DUSK) {
+  return H.scopeVar(css, block, name, opts);
 }
-const DUSK = '[data-theme="dark"] {'; const ROOT = ':root {';
-const T = { bg: token(GLOBAL_CSS, DUSK, '--bg'), surface: token(GLOBAL_CSS, DUSK, '--surface'), text: token(GLOBAL_CSS, DUSK, '--text'), muted: token(GLOBAL_CSS, DUSK, '--muted'), primary: token(GLOBAL_CSS, ROOT, '--primary'), dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'), success: token(CSS, '.pubshare {', '--pubshare-success-text') };
-const AA = 4.5;
+/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
+const norm = (c) => {
+  const p = H.parseColor(c);
+  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
+};
+const palette = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  dangerText: H.role('--danger-text', opts),
+  success: token(CSS, '.pubshare {', '--pubshare-success-text', opts),
+});
+const AA = H.AA;
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
 describe('ShareSetDialog palette', () => {
+  describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+    const T = palette({ skin, theme });
+    test.each([
+      ['--text on --surface', T.text, T.surface],
+      ['--muted on --surface', T.muted, T.surface],
+      ['--primary on --surface', T.primary, T.surface],
+      ['--danger-text on --surface', T.dangerText, T.surface],
+      ['--pubshare-success-text on --surface', T.success, T.surface],
+      ['--bg on --primary (the filled Submit)', T.bg, T.primary],
+    ])('%s clears AA', (_l, fg, bg) => expect(H.ratio(fg, bg)).toBeGreaterThanOrEqual(AA));
+  });
   test.each([
-    ['--text on --surface', T.text, T.surface],
-    ['--muted on --surface', T.muted, T.surface],
-    ['--primary on --surface', T.primary, T.surface],
-    ['--danger-text on --surface', T.dangerText, T.surface],
-    ['--pubshare-success-text on --surface', T.success, T.surface],
-    ['--bg on --primary (the filled Submit)', T.bg, T.primary],
-  ])('%s clears AA', (_l, fg, bg) => expect(ratio(hex(fg), hex(bg))).toBeGreaterThanOrEqual(AA));
+    ['--pubshare-success-text', '#6FD0A4'],
+    ['--pubshare-rule', 'rgba(155, 168, 190, .20)'],
+    ['--pubshare-tint', 'rgba(246, 169, 76, .09)'],
+  ])('Classic stays pinned: %s in Classic / dark is %s', (name, literal) => {
+    expect(norm(token(CSS, '.pubshare {', name))).toEqual(norm(literal));
+  });
   test('every selector is rooted at .pubshare, no hex outside the token block, no --danger as text, nothing under 12px', () => {
     const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
     const tokenBlock = stripped.slice(stripped.indexOf('.pubshare {'), stripped.indexOf('}', stripped.indexOf('.pubshare {')));

@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { namesMode } from '../config/surveyNames';
 import { fetchSurveyPeople, fetchSurveyProgress } from '../utils/surveyHostClient';
+import { deviceWords } from '../config/roundWords';
 
 const count = (v) => Math.max(0, Math.round(Number(v) || 0));
 
@@ -135,8 +136,8 @@ export function surveyWallSubtitle({ questionCount, names } = {}) {
   if (n === 0) return promise;
   const word = NUMBER_WORDS[n] || String(n);
   const length = n === 1
-    ? `${word} quick question on your phone.`
-    : `${word} quick questions on your phone.`;
+    ? `${word} quick question on your ${deviceWords}.`
+    : `${word} quick questions on your ${deviceWords}.`;
   return `${length} ${promise}`;
 }
 

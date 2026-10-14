@@ -1,0 +1,14 @@
+/* skin-allowance: colour=5 font=1 primary=3 */
+/* fixture for codemod.js --selftest: one of everything the codemod meets */
+.chip {
+  --chip-rule: rgba(155,168,190,.20);
+  border: 1px solid var(--chip-rule);
+  outline-color: rgba(155,168,190,.28);
+  font-family: Menlo, monospace;
+}
+.chip-go { background: var(--primary); color: var(--bg); }
+.chip.is-on { color: var(--primary); }
+.chip a { color: var(--secondary); }
+.chip--high { border-color: rgba(229,100,94,.55); }
+.chip--medium { border-color: rgba(246,169,76,.5); }
+.chip--low { border-color: rgba(124,167,230,.5); }

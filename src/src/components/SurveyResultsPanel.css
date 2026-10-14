@@ -1,3 +1,4 @@
+/* skin-allowance: colour=0 font=0 primary=4 */
 /* ==========================================================================
    SURVEY RESULTS — the console page (30-results.html) and its open-answers
    detail (31-open-text.html), both under the `.svrp-` scope.
@@ -22,7 +23,7 @@
      as SurveyResults.css's --svr-on-accent (#1B2942), matching the app's
      existing --cnt-on-accent / --sab-on-accent pattern. Measured 7.42:1 on
      --primary. */
-  --svrp-on-primary: #1B2942;
+  --svrp-on-primary: var(--on-accent);
 
   background: var(--bg);
   color: var(--text);

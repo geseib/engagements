@@ -1,0 +1,231 @@
+{
+  "unit": "0b-1.RootPage",
+  "file": "components/RootPage.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "6a0c00c1",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 11,
+    "font": 0,
+    "primary": 0
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "17:14",
+      "line": 17,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".entry-page",
+      "property": "--entry-bg",
+      "literal": "#0F1A2E",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 28)"
+        },
+        {
+          "role": "--scrim",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #0F1A2E, but .entry-page carries no data-theme (it inherits <html data-theme=\"light\">), so var(--bg) would resolve to paper #FBF7F1; re-pointing needs data-theme=\"dark\" on the root, a markup change for the wave"
+    },
+    {
+      "id": "18:19",
+      "line": 18,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".entry-page",
+      "property": "--entry-surface",
+      "literal": "#1B2942",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--surface",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--bg",
+          "classic": "Classic differs (distance 28)"
+        },
+        {
+          "role": "--surface-2",
+          "classic": "Classic differs (distance 30)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #1B2942; .entry-page carries no data-theme, so var(--surface) would resolve to paper #FFFFFF (needs data-theme=\"dark\" first)"
+    },
+    {
+      "id": "19:16",
+      "line": 19,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".entry-page",
+      "property": "--entry-text",
+      "literal": "#F4EDE4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 119)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 119)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:dusk #F4EDE4; .entry-page carries no data-theme, so var(--text) would resolve to paper #1B2942 (needs data-theme=\"dark\" first)"
+    },
+    {
+      "id": "20:19",
+      "line": 20,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".entry-page",
+      "property": "--entry-primary",
+      "literal": "#F6A94C",
+      "why": "matches several roles: --accent, --action, --warn, --gold, --phase-ask",
+      "candidates": [
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--warn",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--gold",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--phase-ask",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "action"
+    },
+    {
+      "id": "24:17",
+      "line": 24,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".entry-page",
+      "property": "--entry-muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the entry set's lifted muted #B6C2D4 is a near-variant of --muted #9BA8BE (and the page carries no data-theme); merging is a Classic change (SPEC §4.2)"
+    },
+    {
+      "id": "25:16",
+      "line": 25,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".entry-page",
+      "property": "--entry-rule",
+      "literal": "rgba(182, 194, 212, .20)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant hairline on 182 194 212; no channel role carries it (--slate-rgb is 155 168 190), merging would repaint Classic (SPEC §4.2)"
+    },
+    {
+      "id": "26:23",
+      "line": 26,
+      "col": 23,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".entry-page",
+      "property": "--entry-rule-strong",
+      "literal": "rgba(182, 194, 212, .34)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:near-variant strong hairline on 182 194 212; no channel role carries it, merging would repaint Classic (SPEC §4.2)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:17:48.930Z",
+    "after": {
+      "colour": 10,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "keep": 6,
+      "action": 1
+    },
+    "classicDeltas": [],
+    "edits": 1
+  }
+}

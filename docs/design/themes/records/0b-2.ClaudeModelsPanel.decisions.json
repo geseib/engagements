@@ -1,0 +1,116 @@
+{
+  "unit": "0b-2.ClaudeModelsPanel",
+  "file": "components/ClaudeModelsPanel.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 10,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [
+    {
+      "id": "32:14",
+      "line": 32,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cms",
+      "property": "--cms-rule",
+      "literal": "rgba(155, 168, 190, .22)",
+      "replacement": "var(--rule)",
+      "why": "exact --rule in dark"
+    },
+    {
+      "id": "33:21",
+      "line": 33,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cms",
+      "property": "--cms-rule-strong",
+      "literal": "rgba(155, 168, 190, .45)",
+      "replacement": "rgb(var(--slate-rgb) / .45)",
+      "why": "channel --slate-rgb, Classic-identical"
+    },
+    {
+      "id": "34:17",
+      "line": 34,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cms",
+      "property": "--cms-success",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    },
+    {
+      "id": "35:20",
+      "line": 35,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cms",
+      "property": "--cms-tint-green",
+      "literal": "rgba(79, 178, 134, .14)",
+      "replacement": "rgb(var(--success-rgb) / .14)",
+      "why": "channel --success-rgb, Classic-identical"
+    },
+    {
+      "id": "37:18",
+      "line": 37,
+      "col": 18,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cms",
+      "property": "--cms-tint-red",
+      "literal": "rgba(229, 100, 94, .12)",
+      "replacement": "rgb(var(--danger-rgb) / .12)",
+      "why": "channel --danger-rgb, Classic-identical"
+    }
+  ],
+  "decide": [
+    {
+      "id": "36:19",
+      "line": 36,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".cms",
+      "property": "--cms-tint-blue",
+      "literal": "rgba(124, 167, 230, .14)",
+      "why": "tint of info (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--info-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic differs (dark: rgba(124, 167, 230, .14) -> rgba(246,169,76,0.14))"
+        }
+      ],
+      "proposal": "info",
+      "choice": "info"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.755Z",
+    "after": {
+      "colour": 4,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {
+      "info": 1
+    },
+    "classicDeltas": [],
+    "edits": 6
+  }
+}

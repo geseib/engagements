@@ -18,9 +18,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const MY_CSS = read('components', 'UsageMeter.css');
 
 /* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
@@ -64,16 +65,17 @@ function token(css, block, name) {
 
 const ROOT = ':root {';
 const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  success: token(GLOBAL_CSS, ROOT, '--success'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-};
+const palette = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  surface2: H.role('--surface-2', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  success: H.role('--success', opts),
+  danger: H.role('--danger', opts),
+});
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
 
 function composited(layers) {
   document.body.innerHTML = '';
@@ -89,26 +91,36 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const AA = 4.5;
-/* The two places this component is mounted: bare on the host's front door
-   (the dusk field), and inside a --surface panel on Plan & usage. */
-const FIELD = [T.bg];
-const PANEL = [T.bg, T.surface];
 
-// rejects: dropping --muted to a dimmer grey, or painting the value in
-// --danger, or mounting the meter on a tier where its text stops clearing AA.
-describe('every flat pairing the meter paints', () => {
-  const pairs = [
-    ['the row label, on the host front door', T.muted, FIELD],
-    ['the row label, inside a panel', T.muted, PANEL],
-    ['the value ("3 of 5"), on the host front door', T.text, FIELD],
-    ['the value, inside a panel', T.text, PANEL],
-    ['the over value ("20 · 15 over"), on the host front door', T.primary, FIELD],
-    ['the over value, inside a panel', T.primary, PANEL],
-    ['the notch label ("5 included"), on the host front door', T.muted, FIELD],
-    ['the notch label, inside a panel', T.muted, PANEL],
-  ];
-  test.each(pairs)('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const T = palette({ skin, theme });
+  /* The two places this component is mounted: bare on the host's front door
+     (the dusk field), and inside a --surface panel on Plan & usage. */
+  const FIELD = [T.bg];
+  const PANEL = [T.bg, T.surface];
+
+  // rejects: dropping --muted to a dimmer grey, or painting the value in
+  // --danger, or mounting the meter on a tier where its text stops clearing AA.
+  describe('every flat pairing the meter paints', () => {
+    const pairs = [
+      ['the row label, on the host front door', T.muted, FIELD],
+      ['the row label, inside a panel', T.muted, PANEL],
+      ['the value ("3 of 5"), on the host front door', T.text, FIELD],
+      ['the value, inside a panel', T.text, PANEL],
+      ['the over value ("20 · 15 over"), on the host front door', T.primary, FIELD],
+      ['the over value, inside a panel', T.primary, PANEL],
+      ['the notch label ("5 included"), on the host front door', T.muted, FIELD],
+      ['the notch label, inside a panel', T.muted, PANEL],
+    ];
+    test.each(pairs)('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  // The premise of "--danger never carries text" below: --danger is under AA on
+  // --surface (Classic 4.38:1), which is exactly why --danger-text exists.
+  test('--danger is under AA on --surface', () => {
+    expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
   });
 });
 
@@ -125,7 +137,7 @@ test('the fills are fills and carry no text', () => {
 // rejects: `color: var(--danger)` sneaking in as an over-limit colour. It is
 // 4.38:1 on --surface — under AA — which is exactly why --danger-text exists.
 test('--danger never carries text here', () => {
-  expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+  // The premise (--danger under AA on --surface) is asserted per skin above.
   const offenders = MY_CSS.split('\n')
     .filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l));
   expect(offenders).toEqual([]);

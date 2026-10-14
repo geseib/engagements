@@ -22,6 +22,7 @@ const { requireAdmin } = require('./shared/require-admin');
 const tenant = require('./shared/tenant');
 const G = require('./orgs/shared/org-guards');
 const { recordAudit, markAuditOutcome, actorFromEvent } = require('./shared/audit-log');
+const { approveMember, isApproveRoute, clearAwaitingEverywhere } = require('./orgs/approve-member');
 
 // Simple function to list all users
 async function listUsers(event) {
@@ -326,7 +327,15 @@ async function changeUserState(event) {
     }
 
     try {
-      return await applyUserState(username, newState);
+      const result = await applyUserState(username, newState);
+      /* Engage decided about this person, so no team's "Awaiting approval"
+         box may keep offering to (orgs/approve-member.js). Best effort. */
+      if (newState !== 'pending' && who.sub) {
+        try { await clearAwaitingEverywhere(who.sub); } catch (clearError) {
+          console.warn('Could not clear team approval flags:', clearError.message);
+        }
+      }
+      return result;
     } catch (applyError) {
       await markAuditOutcome(G.db, auditRef, 'failed');
       throw applyError;
@@ -464,6 +473,18 @@ exports.handler = async (event) => {
   // and must not 403) and BEFORE the route table, so a new route added below
   // cannot forget it.
   // ─────────────────────────────────────────────────────────────────────────
+  /*
+    THE ONE CUSTOMER ROUTE ON THIS FUNCTION: a team owner or admin approving
+    hosting for somebody who joined through their team's invitation (owner,
+    2026-10-11). It is routed BEFORE the staff gate because the caller is a
+    customer; it carries its own gate — authorizeOrg at admin, the MEMBER row's
+    invitation stamp, and a live Cognito read — in orgs/approve-member.js, and
+    matches one exact path shape, so nothing else can reach past the gate here.
+  */
+  if (method === 'POST' && isApproveRoute(event)) {
+    return approveMember(event, { cognito, userPoolId: USER_POOL_ID });
+  }
+
   const denied = requireAdmin(event);
   if (denied) return denied;
 

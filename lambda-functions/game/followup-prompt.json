@@ -1,0 +1,102 @@
+{
+  "about": "Call & Answer follow-up asks, the suggestion call (docs/design/followup-icons). Read by followup-asks.js. Three kinds as in Build Room (ideas, choice, rate), each tied to the point of the read it came from (option A, owner 2026-10-13). Ships in the function bundle, deliberately NOT installed with scripts/install-ai-prompt.js: that store is the Workie summary-prompt library, and this would appear there as a Call & Answer summary approach.",
+  "version": "2026-10-13.1",
+  "maxTokens": 1200,
+  "instructions": "You have just read back one round of a call-and-answer session to the room. Your read is printed below under \"The read the room just heard\". The room saw it on the screen at the front.\n\nNow do one more, smaller job.\n\nFOLLOW-UP ASKS. After the read, the host may send ONE short question to everyone's phone, laptop or tablet. Suggest at least one and at most three, each tied to the point of your read it grows out of. The host sees each as a small icon beside that point, picks one, may edit it, and sends it. The room answers in under a minute.\n\nThere are three types and only three:\n- \"ideas\": one open question the room answers in a sentence or two. Ask for something the answers did not yet say: a missing name, a first step, an example. At most 110 characters. Do not ask for an opinion on a person.\n- \"choice\": one question and 2 to 4 options. Each option is words copied from a DIFFERENT answer, in order, at most 8 words, cut but never reworded. Every option must answer the question as asked, and picking one must mean not picking the others. Give each option the number of the answer it comes from.\n- \"rate\": a statement the room rates from 1 (disagree) to 5 (agree). The screen adds the scale, so give only the statement. The statement is words copied from ONE answer, in order, at most 20 words, cut from the answer but never reworded. If those words sit inside a condition (\"if\", \"might\", \"could\", \"unless\", \"when\"), the condition comes with them.\n\nTHE ANCHOR. Every ask names the point of your read it came from: \"section\" is a heading of your read exactly as you printed it (without the ##), and \"point\" is the number of the list item under that heading, counting from 1. Prefer the points under \"Discussion topics\" and \"Suggested next steps\" (or however you headed them); any heading of the read with a list under it will do. Use each point at most once.\n\nASK RULES. Every one applies to every ask.\nA1. Ground it. Name the numbered answers each ask comes from, from the list \"Every answer, numbered\". Nothing in a choice option or a rate statement may come from anywhere else.\nA2. Do not lead. Never write \"don't you think\", \"shouldn't we\" or \"isn't it true\", and never add a claim of your own to a statement or a question. Never hint which option is right. Options are parallel: similar length, same grammar, none of them a straw man. List options in the order of their answer numbers.\nA3. If the read named a split (\"Not settled\"), one ask puts that split to the room unresolved: a \"choice\" between the two sides, or a \"rate\" on one side. If the read said \"No split\", do not invent one: test whether the top-voted idea holds for the people who did not vote for it.\nA4. A statement every person in the room would agree with is a wasted ask. Pick one that people could reasonably disagree with.\nA5. Name nobody. No person's name and no clue to who wrote an answer, anywhere in the ask.\nA6. Write for a phone held at arm's length: a question at most 110 characters, one sentence, plain words.\nA7. \"why\" is for the host only and never shown to the room: one sentence saying what the room's answer would settle. Begin with a verb: Shows, Settles, Tests, Finds.\nA8. Use the three types where they fit; do not force all three. If the count under \"How many people answered\" is 0, suggest none. If it is 1 or 2, suggest at most one.\nA9. Never ask for anything personal: no health, pay, performance, politics, or anyone's opinion of a colleague.\n\nWHAT YOU HAVE BEEN GIVEN, and it is all you have:\n\n- The session: {eventTitle}\n- The task the room was set: {task}\n- The story or topic the task was set against: {questionTitle}\n- How many people answered: {responseCount}\n- How many people voted: {voteCount}\n- Every answer, numbered, with the vote points it earned: {numberedAnswers}\n- The read the room just heard: {readBack}\n\nReply by calling the tool suggest_follow_up_asks exactly once. Write nothing else.",
+  "tool": {
+    "name": "suggest_follow_up_asks",
+    "description": "Suggest one to three follow-up asks the host can send to the room after the read, each tied to a point of the read.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "asks": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ideas",
+                  "choice",
+                  "rate"
+                ]
+              },
+              "question": {
+                "type": "string",
+                "description": "ideas and choice: the question the room sees, at most 110 characters. Leave out for rate."
+              },
+              "statement": {
+                "type": "string",
+                "description": "rate only: words copied in order from one answer, at most 20 words."
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 4,
+                "description": "choice only.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "description": "Words copied in order from the answer, at most 8 words."
+                    },
+                    "answer": {
+                      "type": "integer",
+                      "description": "The number of the answer the words come from."
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "answer"
+                  ]
+                }
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "description": "The numbers of the answers this ask comes from."
+              },
+              "why": {
+                "type": "string",
+                "description": "For the host only: one sentence on what the room's answer would settle. Begins with a verb."
+              },
+              "anchor": {
+                "type": "object",
+                "description": "The point of the read this ask came from.",
+                "properties": {
+                  "section": {
+                    "type": "string",
+                    "description": "A heading of the read, exactly as printed, without the ##."
+                  },
+                  "point": {
+                    "type": "integer",
+                    "description": "The number of the list item under that heading, from 1."
+                  }
+                },
+                "required": [
+                  "section",
+                  "point"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "answers",
+              "why",
+              "anchor"
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "asks"
+      ]
+    }
+  }
+}

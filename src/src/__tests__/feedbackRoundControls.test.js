@@ -112,7 +112,7 @@ describe('Request feedback sits on the last page of the read-back', () => {
     expect(midDoc.primary.intent).toBe(HOST_INTENTS.PAGE);
     // `skip-notes`, whose intent is NEXT — it advances the round, it just says
     // out loud that it is doing so rather than looking like a page turn.
-    expect(midDoc.secondary.id).toBe('skip-notes');
+    expect(midDoc.secondary.id).toBe('next');
   });
 });
 
@@ -126,7 +126,7 @@ describe('the host is never trapped in a feedback round', () => {
 
   test('the primary advances the session', () => {
     expect(inFeedback.primary.intent).toBe(HOST_INTENTS.NEXT);
-    expect(inFeedback.primary.label).toBe('Next Round');
+    expect(inFeedback.primary.label).toBe('Next round');
     expect(inFeedback.primary.disabled).toBe(false);
   });
 
@@ -146,12 +146,12 @@ describe('the host is never trapped in a feedback round', () => {
     // A feedback round must not be the one screen that calls a Lesson a
     // Question — the set-level override has to reach it like every other phase.
     expect(hostControlsFor({ gameType: 'trivia', phase: 'FEEDBACK', roundNoun: 'Lesson' })
-      .primary.label).toBe('Next Lesson');
+      .primary.label).toBe('Next lesson');
     expect(hostControlsFor({ gameType: 'wavelength', phase: 'FEEDBACK', roundNoun: 'Subject' })
-      .primary.label).toBe('Next Subject');
+      .primary.label).toBe('Next subject');
     // And the house default when the set names nothing.
     expect(hostControlsFor({ gameType: 'trivia', phase: 'FEEDBACK' }).primary.label)
-      .toBe('Next Question');
+      .toBe('Next question');
   });
 });
 

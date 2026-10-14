@@ -1,0 +1,35 @@
+/* ==========================================================================
+   GROUND — the page or canvas background (components/ui/Ground.jsx).
+   docs/design/themes/SPEC.md §6, PLAN §3 unit L9.
+
+   Replaces, when each surface adopts it: the .present-canvas background, the
+   stage .field gradient, the .plr / .hr page backgrounds.
+
+   ROLES ONLY, and the roles carry the whole look:
+     page  --field         Classic: flat --bg (dusk and paper).
+                           Present: the top-right glow over --bg, both themes.
+     wall  --wall-canvas   Classic: the stage's dusk gradient.
+                           Present: #0A1324 under the top-right blue glow.
+   The ink is --text, so whatever sits on the ground reads in its theme.
+
+   THE WALL IS DUSK. Ground.jsx puts data-theme="dark" on a wall ground, since
+   --wall-canvas is a dusk role and a paper --text on it would be navy on navy.
+
+   FLAT UNDER CALL, BOTH VARIANTS, EVERY SKIN. Wide low-frequency gradients
+   band under video compression and eat the bitrate the text needs
+   (styles/stage.css .field). styles/roles.css already flattens --field under
+   :root.d-call; --wall-canvas it does not touch, so this sheet flattens the
+   ground itself, for both variants, to --bg.
+
+   Not reproduced: the stage .field's amber horizon and ridge silhouette
+   (styles/stage.css .field, .field::after). No role holds them; a surface
+   that adopts Ground and wants them keeps its own ::after.
+   ========================================================================== */
+.ui-ground {
+  background: var(--field);
+  color: var(--text);
+}
+
+.ui-ground.ui-ground--wall { background: var(--wall-canvas); }
+
+:root.d-call .ui-ground { background: var(--bg); }

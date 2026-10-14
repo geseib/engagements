@@ -1,3 +1,4 @@
+/* skin-allowance: colour=0 font=0 primary=1 */
 /* Build Room report section (TalkingPointsReport.jsx). Paper colours come from GameReport.css. */
 .report-paper .tpr .tpr-lede { margin: 0 0 6px; color: var(--muted); }
 .report-paper .tpr .tpr-h {

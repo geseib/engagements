@@ -1,3 +1,4 @@
+/* skin-allowance: colour=3 font=0 primary=11 */
 /* ============================================================================
    THE QUESTION SET EDITOR, ON THE PRODUCT'S OWN GROUND — `.qs-editor`
 
@@ -65,32 +66,32 @@
      they are theme-invariant `:root` values rather than surface tokens. Without
      these four lines the mounted editor draws the host's #9A5B18 paper amber
      and its #A32B25 paper red on dusk. The values are `:root`'s own. */
-  --primary: #F6A94C;
-  --danger: #E5645E;
+  --primary: var(--action);
+  --danger: rgb(var(--danger-rgb));
   --danger-text: #EF8C86;
   --danger-deep: #B03A34;
   /* Not re-pointed by the host scope itself — but `.qsets--onlight .qs-editor`
      used to push it to the paper #1C7350 for the success banner's icon, and
      that rule is gone. utils/statusTone.js still paints the icon with it, so it
      is stated here where it can be measured on the banner this sheet draws. */
-  --success: #4FB286;
+  --success: rgb(var(--success-rgb));
 
   /* Locals, declared here rather than borrowed from a stylesheet that merely
      happens to be in the bundle: an undefined custom property invalidates the
      whole declaration, so a borrowed token disappears the day an import moves.
      The three inks are the dusk values the `.qsets` list already uses, so the
      list and the editor it opens read as one surface. */
-  --qs-success-text: #6FD0A4;
-  --qs-chip-public-ink: #6FD0A4;
-  --qs-chip-waiting-ink: #7CA7E6;
+  --qs-success-text: var(--success-text);
+  --qs-chip-public-ink: var(--success-text);
+  --qs-chip-waiting-ink: var(--info);
 
-  --qs-rule: rgba(155, 168, 190, .20);
-  --qs-rule-strong: rgba(155, 168, 190, .34);
-  --qs-row-hover: rgba(155, 168, 190, .055);
-  --qs-tint-neutral: rgba(155, 168, 190, .08);
-  --qs-tint-warn: rgba(246, 169, 76, .09);
-  --qs-tint-danger: rgba(229, 100, 94, .09);
-  --qs-tint-ok: rgba(79, 178, 134, .10);
+  --qs-rule: rgb(var(--slate-rgb) / .20);
+  --qs-rule-strong: rgb(var(--slate-rgb) / .34);
+  --qs-row-hover: var(--row-hover);
+  --qs-tint-neutral: rgb(var(--slate-rgb) / .08);
+  --qs-tint-warn: rgb(var(--warn-rgb) / .09);
+  --qs-tint-danger: rgb(var(--danger-rgb) / .09);
+  --qs-tint-ok: rgb(var(--success-rgb) / .10);
   --qs-shadow: rgba(4, 8, 16, .45);
 }
 
@@ -335,7 +336,7 @@
 .qs-editor .round-kind-picker {
   --rkp-text: var(--text);
   --rkp-muted: var(--muted);
-  --rkp-accent: var(--primary);
+  --rkp-accent: var(--accent);
   --rkp-card: var(--surface-2);
   --rkp-card-hover: var(--qs-row-hover);
   --rkp-card-selected: var(--qs-tint-warn);

@@ -53,9 +53,11 @@ function applyFilter(items, input) {
   if (expr === 'ConnectionType = :ct') {
     return items.filter((i) => i.ConnectionType === values[':ct']);
   }
-  if (expr === 'ConnectionType = :ct AND PlayerName = :pn') {
+  // Since viewer connections (tests/viewer-connections.js), an ordinary
+  // player's dedup never matches a Presentation's row.
+  if (expr === 'ConnectionType = :ct AND PlayerName = :pn AND attribute_not_exists(ViewerId)') {
     return items.filter(
-      (i) => i.ConnectionType === values[':ct'] && i.PlayerName === values[':pn']
+      (i) => i.ConnectionType === values[':ct'] && i.PlayerName === values[':pn'] && !('ViewerId' in i)
     );
   }
   throw new Error(`fake query: unsupported FilterExpression ${expr}`);

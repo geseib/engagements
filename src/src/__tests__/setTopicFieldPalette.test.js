@@ -22,27 +22,24 @@
 const fs = require('fs');
 const path = require('path');
 
+const H = require('../testing/skinHarness');
+
 const GLOBAL_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+/* Since the site skins (Phase 0a), styles.css carries the rules and the roles live in
+   styles/roles.css; a var() here may name either. */
+const ROLES_CSS = fs.readFileSync(path.join(__dirname, '..', 'styles', 'roles.css'), 'utf8');
 const JSX = fs.readFileSync(path.join(__dirname, '..', 'components', 'SetTopicField.jsx'), 'utf8');
 
 /* ── the helpers, copied from setEditorChipsPalette.test.js ─────────────── */
 function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
 function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
 function ratio(a, b) { const la = lum(a); const lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
-const hex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-function token(block, name) {
-  const start = GLOBAL_CSS.indexOf(block);
-  const body = GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not in ${block}`);
-  return hex(m[1]);
-}
+/** A role's resolved colour for one skin x theme, as [r, g, b] (testing/skinHarness.js). */
+const role = (name, skin, theme) => H.parseColor(H.role(name, { skin, theme })).rgb;
 /** One alpha layer over a ground, which is what a browser actually paints. */
 const over = (layer, alpha, ground) => ground.map((c, i) => Math.round(layer[i] * alpha + c * (1 - alpha)));
 
-const AA = 4.5;
-const PAPER = '[data-theme="light"] {';
-const ROOT = ':root {';
+const AA = H.AA;
 /** Every `.qs-topic…` rule body in the sheet, keyed by selector. */
 function blocks() {
   const found = [];
@@ -93,9 +90,9 @@ describe('it declines ink, so neither theme can be the wrong one', () => {
     }
   });
 
-  test.each(blocks())('%s uses only custom properties styles.css declares', (_selector, body) => {
+  test.each(blocks())('%s uses only custom properties styles.css or roles.css declares', (_selector, body) => {
     for (const m of body.matchAll(/var\((--[a-z0-9-]+)/g)) {
-      expect(GLOBAL_CSS).toMatch(new RegExp(`${m[1]}\\s*:`));
+      expect(`${GLOBAL_CSS}\n${ROLES_CSS}`).toMatch(new RegExp(`${m[1]}\\s*:`));
     }
   });
 });
@@ -134,11 +131,18 @@ describe('the ground the chips sit on carries the surface’s own ink', () => {
     expect(alphas.length).toBeGreaterThan(0);
   });
 
-  describe.each([
-    ['paper', token(PAPER, '--bg'), token(PAPER, '--text')],
-    ['paper, on a white card', [255, 255, 255], token(PAPER, '--text')],
-    ['dusk', token(ROOT, '--surface'), token(ROOT, '--text')],
-  ])('on %s', (_name, bg, text) => {
+  /* Every skin x theme the harness has values for (H.CASES): the chips are hueless,
+     so a skin cannot move these numbers, but a skin's ground or ink could. */
+  const grounds = H.CASES.flatMap(([skin, theme]) => (theme === 'light'
+    ? [
+      [`${skin} paper`, role('--bg', skin, theme), role('--text', skin, theme)],
+      [`${skin} paper, on a white card`, [255, 255, 255], role('--text', skin, theme)],
+    ]
+    : [[`${skin} dusk`, role('--surface', skin, theme), role('--text', skin, theme)]]));
+  it('measures both skins once Present exists', () => {
+    expect(H.CASES.map(([s]) => s)).toEqual(expect.arrayContaining(['classic', 'present']));
+  });
+  describe.each(grounds)('on %s', (_name, bg, text) => {
     it('the surface’s own --text clears AA on every tint this group paints', () => {
       for (const alpha of alphas) expect(ratio(text, over(grey, alpha, bg))).toBeGreaterThanOrEqual(AA);
     });

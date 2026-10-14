@@ -1060,3 +1060,12 @@ describe('the Rounds tab is wired to the page', () => {
     expect(handler).toMatch(/loadRounds\(\)/);
   });
 });
+
+test('a round keeps its questions for the room (docs/design/followup-icons)', () => {
+  const { roundsFrom } = require('../config/sessionHistory');
+  const fu = [{ kind: 'choice', question: 'Which first?', options: ['A', 'B'], status: 'closed', tally: { n: 2, counts: [1, 1] }, picked: [] }];
+  const rounds = roundsFrom({ report: { detailedQuestions: [{ questionNumber: '002', questionData: { title: 'T' }, followUps: fu }] } });
+  expect(rounds[0].followUps).toEqual(fu);
+  const none = roundsFrom({ report: { detailedQuestions: [{ questionNumber: '003', questionData: { title: 'T' } }] } });
+  expect(none[0].followUps).toEqual([]);
+});

@@ -1,3 +1,4 @@
+/* skin-allowance: colour=1 font=0 primary=5 */
 /* ============================================================================
    A SURVEY QUESTION IN THE SET EDITOR — `.sqf`
 
@@ -53,10 +54,10 @@
      question's named answer pairs. */
   --sqf-target: 44px;
 
-  --sqf-rule: rgba(155, 168, 190, .20);
-  --sqf-rule-strong: rgba(155, 168, 190, .34);
-  --sqf-row-hover: rgba(155, 168, 190, .08);
-  --sqf-row-sel: rgba(246, 169, 76, .10);
+  --sqf-rule: rgb(var(--slate-rgb) / .20);
+  --sqf-rule-strong: rgb(var(--slate-rgb) / .34);
+  --sqf-row-hover: rgb(var(--slate-rgb) / .08);
+  --sqf-row-sel: var(--row-selected);
   --sqf-shadow: rgba(4, 8, 16, .50);
 }
 

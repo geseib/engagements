@@ -14,6 +14,7 @@ const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { readPollQuestion, pollTally } = require('./poll-round');
 const { displayOrder } = require('./answer-order');
+const { claimSummaryJob } = require('./summary-job');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -293,6 +294,70 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
   }));
 
   await broadcastResultsReady(gameId, paddedQuestionId);
+
+  // Noted for the handler's last act (startRoundRead): this request closed
+  // this round, so once every branch has stored what the read is made of, the
+  // read starts.
+  closedRounds.set(event, { gameId, paddedQuestionId });
+};
+
+/**
+ * THE ROUNDS THIS REQUEST CLOSED, keyed by the request event. A WeakMap so the
+ * record dies with the invocation and no branch has to thread a return value.
+ */
+const closedRounds = new WeakMap();
+
+/**
+ * START WORKIE'S READ OF THE ROUND JUST CLOSED — on the server, whichever host
+ * surface closed it.
+ *
+ * Until 2026-10-12 the only thing that ever started a read was GameHostPage's
+ * RESULTS effect (`generateNew=true` on /ai-summary/host). A host driving from
+ * the Host Remote with the stage closed got no read and no follow-up
+ * suggestions: dev session 5479's round 2 closed at 12:59:25, the remote's
+ * public read 404'd every four seconds, and the worker ran at 13:00:07 — the
+ * second the stage was opened. Round 3 got nothing at all.
+ *
+ * Runs AFTER the branch has returned, not inside enterResultsState: the
+ * call-and-answer branch writes its QUESTION#nnn#RESULTS row after the
+ * transition, and the read is built from what is stored. Same moment the
+ * stage used to ask — after the close-round response.
+ *
+ * The claim (summary-job.js) is what keeps the stage's own request, a moment
+ * later, from starting a second read; `unlessWritten` keeps a re-close of a
+ * round that already has its read from throwing it away. Never throws — the
+ * round closed and scored; the read is not allowed to turn that into a 500.
+ */
+const startRoundRead = async (event, response) => {
+  const closed = closedRounds.get(event);
+  if (!closed || !response || response.statusCode !== 200) return;
+  const functionName = process.env.AI_SUMMARY_FUNCTION_NAME;
+  if (!functionName || !lambda) {
+    console.log('⚠️ AI SUMMARY: no get-ai-summary function to start — the stage will ask when it opens');
+    return;
+  }
+  const { gameId, paddedQuestionId } = closed;
+  try {
+    const jobId = await claimSummaryJob(db, { gameId, padded: paddedQuestionId, unlessWritten: true });
+    if (!jobId) {
+      console.log(`ℹ️ AI SUMMARY: ${gameId}:${paddedQuestionId} already has its read, or one is running`);
+      return;
+    }
+    await lambda.send(new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'Event',
+      Payload: Buffer.from(JSON.stringify({
+        __workerMode: true,
+        gameId,
+        questionId: paddedQuestionId,
+        paddedQuestionNumber: paddedQuestionId,
+        jobId,
+      })),
+    }));
+    console.log(`🚀 AI SUMMARY: read started at close for ${gameId}:${paddedQuestionId}`);
+  } catch (error) {
+    console.error(`❌ AI SUMMARY: could not start the read at close for ${gameId}:${paddedQuestionId}:`, error && error.message);
+  }
 };
 
 /**
@@ -348,6 +413,12 @@ const recordScoresCounted = async (event, gameId, paddedQuestionId) => {
 };
 
 exports.handler = async (event) => {
+  const response = await handle(event);
+  await startRoundRead(event, response);
+  return response;
+};
+
+const handle = async (event) => {
   // Wavelength clustering worker: the round-close path fires an
   // InvocationType:'Event' self-invoke (the get-ai-summary pattern) so the
   // Bedrock call runs off the API Gateway 30s ceiling. Delivery is over the

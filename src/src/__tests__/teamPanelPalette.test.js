@@ -17,89 +17,51 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const MY_CSS = read('components', 'TeamPanel.css');
 const MY_JSX = read('components', 'TeamPanel.jsx');
 
-/* ---- colour: lifted verbatim from docs/design/admin-redesign/audit.html ---- */
-function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-function lum(c) { return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
-function ratio(a, b) {
-  const la = lum(a); const lb = lum(b);
-  const h = Math.max(la, lb); const l = Math.min(la, lb);
-  return (h + 0.05) / (l + 0.05);
-}
-function alphaOver(fg, bg, a) { return fg.map((c, i) => c * a + bg[i] * (1 - a)); }
-/* Walk UP compositing every alpha layer. Reading only the element's own
-   background is how dark-on-dark passes an audit. */
-function bgOf(el, win) {
-  let node = el; const stack = [];
-  while (node && node.nodeType === 1) {
-    const c = win.getComputedStyle(node).backgroundColor;
-    const m = String(c).match(/[\d.]+/g);
-    if (m) {
-      const a = m.length > 3 ? parseFloat(m[3]) : 1;
-      if (a > 0) { stack.push([m.slice(0, 3).map(Number), a]); if (a >= 0.999) break; }
-    }
-    node = node.parentElement;
-  }
-  if (!stack.length) return [15, 26, 46];          // the dusk field
-  let out = stack[stack.length - 1][0];
-  for (let i = stack.length - 2; i >= 0; i -= 1) out = alphaOver(stack[i][0], out, stack[i][1]);
-  return out;
-}
+/* ---- colour: the audit's lin/lum/ratio/alphaOver/bgOf (docs/design/admin-redesign/
+        audit.html) live verbatim in testing/skinHarness.js; H.on / H.composite are its
+        bgOf as arithmetic, so a role value written `rgb(r g b / a)` composites without
+        jsdom having to parse it. ---- */
 
 /* ---- tokens, READ rather than retyped: change a token and these numbers move */
-const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
-
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+/** A scope-local token with every var() it reads resolved for one skin x theme. */
+function token(css, block, name, opts = CLASSIC_DUSK) {
+  return H.scopeVar(css, block, name, opts);
 }
-function tint(name) {                       // an rgba() layer from MY_CSS
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in TeamPanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC_DUSK) {   // a translucent layer from MY_CSS's .team block
+  const v = token(MY_CSS, '.team {', name, opts);
+  if (!(H.parseColor(v).a < 1)) throw new Error(`${name} in TeamPanel.css is not a translucent tint`);
+  return v;
 }
-
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  surface2: token(GLOBAL_CSS, DUSK, '--surface-2'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-  dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
-  successText: token(MY_CSS, '.team {', '--team-success-text'),
+/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
+const norm = (c) => {
+  const p = H.parseColor(c);
+  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
 };
 
-/** Build the REAL paint stack in the DOM and hand it to the audit's own bgOf. */
-function composited(layers) {
-  document.body.innerHTML = '';
-  let host = document.body;
-  for (const background of layers) {
-    const el = document.createElement('div');
-    el.style.backgroundColor = background;
-    host.appendChild(el);
-    host = el;
-  }
-  return bgOf(host, window);
-}
-const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
+const palette = (opts) => ({
+  bg: H.role('--bg', opts),
+  surface: H.role('--surface', opts),
+  surface2: H.role('--surface-2', opts),
+  text: H.role('--text', opts),
+  muted: H.role('--muted', opts),
+  primary: H.role('--primary', opts),
+  danger: H.role('--danger', opts),
+  dangerText: H.role('--danger-text', opts),
+  dangerDeep: H.role('--danger-deep', opts),
+  successText: token(MY_CSS, '.team {', '--team-success-text', opts),
+});
 
-const AA = 4.5;
-const FIELD = [T.bg];              // AdminShell's work body under a dark section
-const PANEL = [T.bg, T.surface];   // the invitations panel, and the dialogs
+const on = (fg, layers) => H.on(fg, layers);
+const AA = H.AA;
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
 
 function block(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -112,50 +74,76 @@ const stripped = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /* ========================================================================== */
 
-describe('the flat pairings this screen paints', () => {
-  // rejects: any token swap that makes a control unreadable on the surface it
-  // is actually painted on — the Question sets tab shipped at 1.4:1 this way.
-  const pairs = [
-    ['names and row values on the work field', T.text, FIELD],
-    ['emails, dates and column heads on the work field', T.muted, FIELD],
-    ['the expiry warning on the work field', T.primary, FIELD],
-    ['Revoke and Remove on the work field', T.dangerText, FIELD],
-    ['panel copy on the invitations panel', T.text, PANEL],
-    ['the panel note and the lock reason on the panel', T.muted, PANEL],
-    ['the Owner chip on the panel', T.primary, PANEL],
-    ['the "invitation sent" line on the panel', T.successText, PANEL],
-    ['Invite someone, filled', T.bg, [T.primary]],
-    ['the filled destructive button', T.text, [T.dangerDeep]],
-    ['avatar initials on --surface-2', T.text, [T.bg, T.surface2]],
-  ];
-  test.each(pairs)('%s clears AA', (_label, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+describe('Classic stays pinned: the .team block resolves to what it used to spell out', () => {
+  test.each([
+    ['--team-success-text', '#6FD0A4'],
+    ['--team-rule', 'rgba(155, 168, 190, .20)'],
+    ['--team-rule-strong', 'rgba(155, 168, 190, .34)'],
+    ['--team-row-hover', 'rgba(155, 168, 190, .055)'],
+    ['--team-tint-warn', 'rgba(246, 169, 76, .06)'],
+    ['--team-tint-danger', 'rgba(229, 100, 94, .09)'],
+    ['--team-tint-ok', 'rgba(79, 178, 134, .10)'],
+  ])('%s in Classic / dark is %s', (name, literal) => {
+    expect(norm(token(MY_CSS, '.team {', name))).toEqual(norm(literal));
   });
 });
 
-describe('the tinted composites — the half a token table cannot show', () => {
-  // rejects: deepening a tint until the text on it drops under AA. Every stack
-  // below is the real nesting the markup produces.
-  test('the live invitations panel header, tinted amber', () => {
-    expect(on(T.text, [T.bg, T.surface, tint('--team-tint-warn')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, T.surface, tint('--team-tint-warn')])).toBeGreaterThanOrEqual(AA);
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const opts = { skin, theme };
+  const T = palette(opts);
+  const FIELD = [T.bg];              // AdminShell's work body under a dark section
+  const PANEL = [T.bg, T.surface];   // the invitations panel, and the dialogs
+
+  describe('the flat pairings this screen paints', () => {
+    // rejects: any token swap that makes a control unreadable on the surface it
+    // is actually painted on — the Question sets tab shipped at 1.4:1 this way.
+    const pairs = [
+      ['names and row values on the work field', T.text, FIELD],
+      ['emails, dates and column heads on the work field', T.muted, FIELD],
+      ['the expiry warning on the work field', T.primary, FIELD],
+      ['Revoke and Remove on the work field', T.dangerText, FIELD],
+      ['panel copy on the invitations panel', T.text, PANEL],
+      ['the panel note and the lock reason on the panel', T.muted, PANEL],
+      ['the Owner chip on the panel', T.primary, PANEL],
+      ['the "invitation sent" line on the panel', T.successText, PANEL],
+      ['Invite someone, filled', T.bg, [T.primary]],
+      ['the filled destructive button', T.text, [T.dangerDeep]],
+      ['avatar initials on --surface-2', T.text, [T.bg, T.surface2]],
+    ];
+    test.each(pairs)('%s clears AA', (_label, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
   });
-  test('the error alert on the work field and inside a dialog', () => {
-    expect(on(T.dangerText, [T.bg, tint('--team-tint-danger')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.dangerText, [T.bg, T.surface, tint('--team-tint-danger')])).toBeGreaterThanOrEqual(AA);
+
+  describe('the tinted composites — the half a token table cannot show', () => {
+    // rejects: deepening a tint until the text on it drops under AA. Every stack
+    // below is the real nesting the markup produces.
+    const t = (name) => tint(name, opts);
+    test('the live invitations panel header, tinted amber', () => {
+      expect(on(T.text, [T.bg, T.surface, t('--team-tint-warn')])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, T.surface, t('--team-tint-warn')])).toBeGreaterThanOrEqual(AA);
+    });
+    test('the error alert on the work field and inside a dialog', () => {
+      expect(on(T.dangerText, [T.bg, t('--team-tint-danger')])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.dangerText, [T.bg, T.surface, t('--team-tint-danger')])).toBeGreaterThanOrEqual(AA);
+    });
+    test('the success alert on the work field and inside a dialog', () => {
+      expect(on(T.successText, [T.bg, t('--team-tint-ok')])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.successText, [T.bg, T.surface, t('--team-tint-ok')])).toBeGreaterThanOrEqual(AA);
+    });
+    test('a hovered row, on the field and inside the panel', () => {
+      expect(on(T.text, [T.bg, t('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, t('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, [T.bg, T.surface, t('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, T.surface, t('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
+    });
+    test('the standing note box, which is a row-hover tint carrying muted copy', () => {
+      expect(on(T.muted, [T.bg, t('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
+    });
   });
-  test('the success alert on the work field and inside a dialog', () => {
-    expect(on(T.successText, [T.bg, tint('--team-tint-ok')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.successText, [T.bg, T.surface, tint('--team-tint-ok')])).toBeGreaterThanOrEqual(AA);
-  });
-  test('a hovered row, on the field and inside the panel', () => {
-    expect(on(T.text, [T.bg, tint('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, [T.bg, T.surface, tint('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, T.surface, tint('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
-  });
-  test('the standing note box, which is a row-hover tint carrying muted copy', () => {
-    expect(on(T.muted, [T.bg, tint('--team-row-hover')])).toBeGreaterThanOrEqual(AA);
+
+  test('the premise of "--danger never carries text": --danger is under AA on --surface', () => {
+    expect(H.ratio(T.danger, T.surface)).toBeLessThan(AA);
   });
 });
 
@@ -163,7 +151,7 @@ describe('the rules that are about what must NOT be there', () => {
   // rejects: `color: var(--danger)` creeping in. It is 4.38:1 on --surface —
   // under AA — which is the whole reason --danger-text exists.
   test('--danger never carries text here', () => {
-    expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);   // the premise
+    // The premise (--danger under AA on --surface) is asserted per skin above.
     const offenders = MY_CSS.split('\n')
       .filter((line) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(line));
     expect(offenders).toEqual([]);
@@ -174,9 +162,9 @@ describe('the rules that are about what must NOT be there', () => {
   test('no hex literal survives outside the token block', () => {
     const declarations = stripped(MY_CSS);
     const literals = [...declarations.matchAll(/(?:^|[\s:])(#[0-9A-Fa-f]{3,8})\b/g)].map((m) => m[1]);
-    // #6FD0A4 is this scope's own --success-text (styles.css declares none) and
-    // #FFBB66 is the hover lift of --primary. Both are named, both have a
-    // comment in the stylesheet saying why they are literals.
+    // #6FD0A4 was this scope's own --success-text before the roles existed (it
+    // is var(--success-text) now) and #FFBB66 is the hover lift of --primary.
+    // Both are named, both have a comment in the stylesheet saying why.
     const allowed = ['#6FD0A4', '#FFBB66'];
     expect(literals.filter((h) => !allowed.includes(h.toUpperCase()))).toEqual([]);
   });

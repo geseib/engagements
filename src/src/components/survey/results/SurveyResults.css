@@ -1,3 +1,4 @@
+/* skin-allowance: colour=0 font=0 primary=9 */
 /**
  * SURVEY RESULTS — the KindResult family (rating, choice, yes/no, rank, text).
  *
@@ -35,7 +36,7 @@
      text"), so the negative segment uses --danger-deep + --text (5.16)
      instead — the same substitution the skill prescribes for a filled
      destructive button. */
-  --svr-on-accent: #1B2942;
+  --svr-on-accent: var(--on-accent);
 
   background: var(--surface);
   border: 1px solid var(--surface-2);

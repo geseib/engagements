@@ -16,9 +16,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const H = require('../testing/skinHarness');
 
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
-const GLOBAL_CSS = read('styles.css');
+const GLOBAL_CSS = require('../testing/classicGlobalCss')();
 const MY_CSS = read('components', 'PrivacyPanel.css');
 const SHELL_CSS = read('components', 'AdminShell.css');
 
@@ -50,36 +51,36 @@ function bgOf(el, win) {
   return out;
 }
 
-/* ---- tokens, READ rather than retyped ---- */
+/* ---- tokens, READ rather than retyped. The scope block now writes roles
+   (`var(--success-text)`, `rgb(var(--slate-rgb) / .06)`), not literals, so every value
+   is RESOLVED through the skin harness for one skin x theme. ---- */
 const parseHex = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const CLASSIC = { skin: 'classic', theme: 'dark' };
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
+const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+const rgbaOf = (c) => { const { rgb, a } = H.parseColor(c); return `rgba(${rgb.join(', ')}, ${a})`; };
 
-function token(css, block, name) {
-  const start = css.indexOf(block);
-  if (start < 0) throw new Error(`no ${block} block`);
-  const body = css.slice(start, css.indexOf('}', start));
-  const m = body.match(new RegExp(`${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`));
-  if (!m) throw new Error(`${name} not declared in ${block}`);
-  return m[1];
+function token(css, block, name, opts = CLASSIC) {   // an opaque colour, as #RRGGBB
+  return hexOf(H.scopeVar(css, block, name, opts));
 }
-function tint(name) {
-  const m = MY_CSS.match(new RegExp(`${name}\\s*:\\s*(rgba\\([^)]*\\))`));
-  if (!m) throw new Error(`${name} not declared in PrivacyPanel.css`);
-  return m[1];
+function tint(name, opts = CLASSIC) {               // an alpha layer from MY_CSS, as rgba()
+  return rgbaOf(H.scopeVar(MY_CSS, '.priv {', name, opts));
 }
 
-const ROOT = ':root {';
-const DUSK = '[data-theme="dark"] {';
-const T = {
-  bg: token(GLOBAL_CSS, DUSK, '--bg'),
-  surface: token(GLOBAL_CSS, DUSK, '--surface'),
-  text: token(GLOBAL_CSS, DUSK, '--text'),
-  muted: token(GLOBAL_CSS, DUSK, '--muted'),
-  primary: token(GLOBAL_CSS, ROOT, '--primary'),
-  danger: token(GLOBAL_CSS, ROOT, '--danger'),
-  dangerText: token(GLOBAL_CSS, ROOT, '--danger-text'),
-  dangerDeep: token(GLOBAL_CSS, ROOT, '--danger-deep'),
-  successText: token(MY_CSS, '.priv {', '--priv-success-text'),
-};
+function palette(skin, theme) {
+  const o = { skin, theme };
+  return {
+    bg: hexOf(H.role('--bg', o)),
+    surface: hexOf(H.role('--surface', o)),
+    text: hexOf(H.role('--text', o)),
+    muted: hexOf(H.role('--muted', o)),
+    primary: hexOf(H.role('--primary', o)),
+    danger: hexOf(H.role('--danger', o)),
+    dangerText: hexOf(H.role('--danger-text', o)),
+    dangerDeep: hexOf(H.role('--danger-deep', o)),
+    successText: token(MY_CSS, '.priv {', '--priv-success-text', o),
+  };
+}
 
 function composited(layers) {
   document.body.innerHTML = '';
@@ -95,59 +96,64 @@ function composited(layers) {
 const on = (fgHex, layers) => ratio(parseHex(fgHex), composited(layers));
 
 const AA = 4.5;
-const FIELD = [T.bg];                 // the work body AdminShell paints
-const PANEL = [T.bg, T.surface];      // a --surface panel on that field
 
-describe('the flat pairings this screen paints', () => {
-  // rejects: any token pairing on this screen dropping under AA — the failure
-  //          mode that shipped #333 body copy onto #0F1A2E at 1.4:1 elsewhere.
-  const pairs = [
-    ['--text on the work field (log values)', T.text, FIELD],
-    ['--muted on the work field (column heads, dates, affiliations)', T.muted, FIELD],
-    ['--text on --surface (panel and dialog copy)', T.text, PANEL],
-    ['--muted on --surface (the two Leaving notes)', T.muted, PANEL],
-    ['--danger-text on --surface (Delete, and the consequence copy)', T.dangerText, PANEL],
-    ['--bg on --primary (the filled Export everything)', T.bg, [T.primary]],
-    ['--text on --danger-deep (the filled Delete for ever)', T.text, [T.dangerDeep]],
-  ];
-  test.each(pairs)('%s clears AA', (_l, fg, layers) => {
-    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
-  });
-});
+describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
+  const o = { skin, theme };
+  const T = palette(skin, theme);
+  const FIELD = [T.bg];                 // the work body AdminShell paints
+  const PANEL = [T.bg, T.surface];      // a --surface panel on that field
 
-describe('the tinted composites, which a token table cannot show', () => {
-  // rejects: the honest-limit paragraph going unreadable. It is the single most
-  //          important sentence on the page and it sits on a tint inside a panel.
-  test('the note-box carrying "we cannot do it quietly"', () => {
-    expect(on(T.muted, [T.bg, T.surface, tint('--priv-tint-note')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.text, [T.bg, T.surface, tint('--priv-tint-note')])).toBeGreaterThanOrEqual(AA);
+  describe('the flat pairings this screen paints', () => {
+    // rejects: any token pairing on this screen dropping under AA — the failure
+    //          mode that shipped #333 body copy onto #0F1A2E at 1.4:1 elsewhere.
+    const pairs = [
+      ['--text on the work field (log values)', T.text, FIELD],
+      ['--muted on the work field (column heads, dates, affiliations)', T.muted, FIELD],
+      ['--text on --surface (panel and dialog copy)', T.text, PANEL],
+      ['--muted on --surface (the two Leaving notes)', T.muted, PANEL],
+      ['--danger-text on --surface (Delete, and the consequence copy)', T.dangerText, PANEL],
+      ['--bg on --primary (the filled Export everything)', T.bg, [T.primary]],
+      ['--text on --danger-deep (the filled Delete for ever)', T.text, [T.dangerDeep]],
+    ];
+    test.each(pairs)('%s clears AA', (_l, fg, layers) => {
+      expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+    });
   });
 
-  // rejects: the EMPTY log — a good state — being painted illegibly. Nobody
-  //          would notice, because nobody looks at a screen with nothing on it.
-  test('the empty-log poster, on the field', () => {
-    expect(on(T.successText, [T.bg, tint('--priv-tint-ok')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--priv-tint-ok')])).toBeGreaterThanOrEqual(AA);
-  });
+  describe('the tinted composites, which a token table cannot show', () => {
+    // rejects: the honest-limit paragraph going unreadable. It is the single most
+    //          important sentence on the page and it sits on a tint inside a panel.
+    test('the note-box carrying "we cannot do it quietly"', () => {
+      expect(on(T.muted, [T.bg, T.surface, tint('--priv-tint-note', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.text, [T.bg, T.surface, tint('--priv-tint-note', o)])).toBeGreaterThanOrEqual(AA);
+    });
 
-  // rejects: the load-failure poster going unreadable, which would leave the
-  //          reader unable to tell it apart from the empty state.
-  test('the load-failure poster, on the field', () => {
-    expect(on(T.dangerText, [T.bg, tint('--priv-tint-danger')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--priv-tint-danger')])).toBeGreaterThanOrEqual(AA);
-  });
+    // rejects: the EMPTY log — a good state — being painted illegibly. Nobody
+    //          would notice, because nobody looks at a screen with nothing on it.
+    test('the empty-log poster, on the field', () => {
+      expect(on(T.successText, [T.bg, tint('--priv-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, tint('--priv-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+    });
 
-  // rejects: the reversible neighbour inside the delete dialog fading out. It
-  //          is nested one deeper — field, surface, tint — not two.
-  test('the export-first box inside the delete dialog', () => {
-    expect(on(T.muted, [T.bg, T.surface, tint('--priv-tint-ok')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.successText, [T.bg, T.surface, tint('--priv-tint-ok')])).toBeGreaterThanOrEqual(AA);
-  });
+    // rejects: the load-failure poster going unreadable, which would leave the
+    //          reader unable to tell it apart from the empty state.
+    test('the load-failure poster, on the field', () => {
+      expect(on(T.dangerText, [T.bg, tint('--priv-tint-danger', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, tint('--priv-tint-danger', o)])).toBeGreaterThanOrEqual(AA);
+    });
 
-  // rejects: a hovered log row swallowing its own text.
-  test('a hovered log row', () => {
-    expect(on(T.text, [T.bg, tint('--priv-row-hover')])).toBeGreaterThanOrEqual(AA);
-    expect(on(T.muted, [T.bg, tint('--priv-row-hover')])).toBeGreaterThanOrEqual(AA);
+    // rejects: the reversible neighbour inside the delete dialog fading out. It
+    //          is nested one deeper — field, surface, tint — not two.
+    test('the export-first box inside the delete dialog', () => {
+      expect(on(T.muted, [T.bg, T.surface, tint('--priv-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.successText, [T.bg, T.surface, tint('--priv-tint-ok', o)])).toBeGreaterThanOrEqual(AA);
+    });
+
+    // rejects: a hovered log row swallowing its own text.
+    test('a hovered log row', () => {
+      expect(on(T.text, [T.bg, tint('--priv-row-hover', o)])).toBeGreaterThanOrEqual(AA);
+      expect(on(T.muted, [T.bg, tint('--priv-row-hover', o)])).toBeGreaterThanOrEqual(AA);
+    });
   });
 });
 
@@ -155,7 +161,10 @@ describe('the rules the palette depends on', () => {
   // rejects: `color: var(--danger)` creeping in. The premise is asserted too,
   //          so the day --danger is lightened this test tells you why it can go.
   test('--danger never carries text here', () => {
-    expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+    for (const [skin, theme] of DUSK_CASES) {
+      const T = palette(skin, theme);
+      expect(ratio(parseHex(T.danger), parseHex(T.surface))).toBeLessThan(AA);
+    }
     const offenders = MY_CSS.split('\n')
       .filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--danger\)/.test(l));
     expect(offenders).toEqual([]);

@@ -45,6 +45,7 @@ const { TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const tenant = require('../shared/tenant');
 const { createOrgDataKey } = require('../shared/tenant-crypto');
 const G = require('./shared/org-guards');
+const { ensurePersonalOrg } = require('./shared/personal-org');
 const { fileRequest } = require('./plan-requests');
 
 // Plans a customer may put themselves on. `09-first-run.html` prices exactly
@@ -59,6 +60,22 @@ async function createOrg(event) {
 
   const body = G.parseBody(event);
   if (!body) return G.fail(400, 'That request body is not JSON.');
+
+  /*
+    "MAKE A PERSONAL SPACE" — for an account that joined through a team
+    invitation and so has none (owner, 2026-10-11; shared/personal-org.js).
+    Not a second way to make a team: it provisions the ONE home an account may
+    have, by the same idempotent transaction, so pressing it twice makes one.
+  */
+  if (body.personal === true) {
+    const home = await ensurePersonalOrg(event, { force: true });
+    if (!home.orgId) {
+      return G.fail(home.reason === 'not-approved' ? 403 : 503, home.reason === 'not-approved'
+        ? 'Your account has not been approved to host yet, so it cannot have a space of its own.'
+        : 'Your personal space could not be made just now. Try again.');
+    }
+    return G.json(home.created ? 201 : 200, { orgId: home.orgId, created: home.created });
+  }
 
   const named = G.validateName(body.name);
   if (named.error) return G.fail(400, named.error);

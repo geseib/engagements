@@ -26,6 +26,8 @@ import RatingInput from './components/survey/RatingInput';
 import ChoiceInput from './components/survey/ChoiceInput';
 import YesNoInput from './components/survey/YesNoInput';
 import TextInput from './components/survey/TextInput';
+import FollowUpCard from './components/FollowUpCard';
+import { fetchLiveAsk, answerAsk } from './utils/followUpsClient';
 import { isAnswered as pollIsAnswered, summaryFor as pollSummary } from './components/survey/surveyAnswers';
 import { namesMode } from './config/surveyNames';
 import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
@@ -298,6 +300,15 @@ function PlayerPage({ event = null } = {}) {
     `RESULTS#003` for all three beats and cannot tell them apart.
   */
   const [feedbackRound, setFeedbackRound] = useState(null);
+  /*
+    A QUESTION FOR THE ROOM (docs/design/followup-icons): the host sent one
+    from Workie's read. `followUp` is the public read ({ ask, yours });
+    `askBeatRef` is whether the round is on the `ask` beat, so a closed
+    question's results stay up only while the room is looking at them.
+  */
+  const [followUp, setFollowUp] = useState(null);
+  const askBeatRef = useRef(false);
+  const followUpLoadRef = useRef(() => {});
   /*
     THE ROUND NUMBER, MIRRORED INTO A REF.
 
@@ -964,7 +975,12 @@ function PlayerPage({ event = null } = {}) {
     webSocketClient.onMessage('stageBeatChanged', (data) => {
       console.log('🔌 PLAYER: stage beat changed:', data);
       loadFeedbackRound();
+      askBeatRef.current = Boolean(data && data.beat === 'ask');
+      followUpLoadRef.current();
     });
+
+    // A question for the room: sent, answered, closed, cancelled or picked.
+    webSocketClient.onMessage('followUpChanged', () => followUpLoadRef.current());
 
     /*
       SOMEBODY ELSE COMMENTED. Notify-then-refetch, the house pattern — the
@@ -1106,6 +1122,7 @@ function PlayerPage({ event = null } = {}) {
       // did exactly this.
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('commentPosted');
+      webSocketClient.offMessage('followUpChanged');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       webSocketClient.offMessage('hostMessage');
@@ -1427,6 +1444,24 @@ function PlayerPage({ event = null } = {}) {
     A genuine failure keeps whatever is already on screen. A participant halfway
     through reading a report should not lose it to one flaky GET.
   */
+  const loadFollowUp = async () => {
+    if (!gameId) return;
+    const r = await fetchLiveAsk({ apiBase: API_BASE, gameId, playerName, clientId: getClientId(gameId) });
+    if (!r.ok) return;
+    if (r.beat) askBeatRef.current = r.beat === 'ask';
+    setFollowUp(r.ask ? { ask: r.ask, yours: r.yours } : null);
+  };
+  followUpLoadRef.current = loadFollowUp;
+  const answerFollowUp = async (value) => {
+    const ask = followUp && followUp.ask;
+    if (!ask) return { ok: false, error: 'This question is no longer open' };
+    const r = await answerAsk({
+      apiBase: API_BASE, gameId, round: ask.round, askId: ask.askId, playerName, clientId: getClientId(gameId), value,
+    });
+    if (r.ok) setFollowUp((f) => (f ? { ...f, yours: value } : f));
+    return r;
+  };
+
   const loadFeedbackRound = async () => {
     const result = await fetchFeedbackRound({ apiBase: API_BASE, gameId });
     if (!result.ok) return;
@@ -1701,6 +1736,8 @@ function PlayerPage({ event = null } = {}) {
     // A closed survey's feedback round is round 000 (comments.js).
     if (!String(gameState || '').startsWith('RESULTS#') && gameState !== 'SURVEY#CLOSED') return;
     loadFeedbackRound();
+    if (String(gameState || '').startsWith('RESULTS#')) loadFollowUp();
+    else { askBeatRef.current = false; setFollowUp(null); }
     // `gameState` is in the deps so entering RESULTS re-asks; the endpoint is a
     // cheap read and answers 409 for the two beats that are not feedback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3987,6 +4024,17 @@ function PlayerPage({ event = null } = {}) {
     }
 
   /* -------------------------------------------------------------- RESULTS -- */
+  } else if (gameState.startsWith('RESULTS#') && followUp && followUp.ask
+    && (followUp.ask.status === 'live' || askBeatRef.current)) {
+    /*
+      A QUESTION FOR THE ROOM (docs/design/followup-icons): the host sent one
+      from Workie's read. Answer it here; the result follows once the host
+      shows it. Tested before the feedback round: one beat at a time.
+    */
+    volume = followUp.ask.status === 'live' ? 'act' : 'watch';
+    ctx = position ? `${position} · Question` : 'Question';
+    body = <FollowUpCard ask={followUp.ask} yours={followUp.yours} onSend={answerFollowUp} />;
+
   } else if (gameState.startsWith('RESULTS#') && feedbackRound) {
     /*
       A FEEDBACK ROUND — RESULTS' THIRD BEAT.
@@ -4214,12 +4262,20 @@ function PlayerPage({ event = null } = {}) {
         ? answers[ownAnswerIdx]
         : null;
 
+      /* THE HEADING SAYS WHAT HAPPENED (owner, 2026-10-13: "Yours was /
+         Response 1" read oddly, and "Yours was / Your Response" with no
+         response at all read worse). The number is the ballot's. */
+      // The ballot's number for it (its position), never the row's label: at
+      // RESULTS the rows carry names, and that label would be their own name.
+      const resultHeading = myRow
+        ? `You wrote response ${ownAnswerIdx + 1}`
+        : mySubmittedAnswer
+          ? 'Your response is in the results'
+          : 'You didn’t send a response this round';
       body = (
         <>
-          <p className="plr-lab">Yours was</p>
-          <h1 className="plr-h1">
-            {myRow ? displayLabelFor(myRow, ownAnswerIdx) : 'Your response'}
-          </h1>
+          <p className="plr-lab">Results</p>
+          <h1 className="plr-h1">{resultHeading}</h1>
           {(mySubmittedAnswer || myRow?.answer) && (
             <div className="plr-card">
               <p className="plr-quote">{mySubmittedAnswer || myRow.answer}</p>

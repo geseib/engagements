@@ -1,0 +1,111 @@
+{
+  "unit": "0b-4.RoundReport",
+  "file": "components/RoundReport.css",
+  "range": null,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "tokensOnly": true,
+  "base": "e7c32301",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 2,
+    "font": 0,
+    "primary": 1
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "56:17",
+      "line": 56,
+      "col": 17,
+      "type": "primary",
+      "kind": "token",
+      "selector": ".rr-c",
+      "property": "--rr-c-accent",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic differs (light: #F6A94C -> #9A5B18)"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "57:15",
+      "line": 57,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rr-c",
+      "property": "--rr-c-wash",
+      "literal": "rgba(255, 255, 255, 0.06)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 34)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 97)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 148)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:6% white wash; no white channel role exists (--glow-rgb is 244 237 228)"
+    },
+    {
+      "id": "58:15",
+      "line": 58,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".rr-c",
+      "property": "--rr-c-rule",
+      "literal": "rgba(246, 169, 76, 0.28)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:18:02.034Z",
+    "after": {
+      "colour": 1,
+      "font": 0,
+      "primary": 0
+    },
+    "decisionsByKind": {
+      "accent": 2,
+      "keep": 1
+    },
+    "classicDeltas": [],
+    "edits": 2
+  }
+}

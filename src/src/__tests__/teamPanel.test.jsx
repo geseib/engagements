@@ -531,3 +531,48 @@ describe('the screen as a whole', () => {
       .toBeInTheDocument();
   });
 });
+
+/* ------------------------------------------ approving an invitee to host --- */
+// docs/design/admin-landing, owner 2026-10-11: a team approves hosting for
+// people who joined through ITS invitation (admin/orgs/approve-member.js).
+describe('approving hosting for somebody the team invited', () => {
+  const waiting = (extra = {}) => {
+    const roster = clone(ROSTER);
+    Object.assign(roster.members[2], { awaitingHostApproval: true, joinedByInvite: true, canHost: false }, extra);
+    return roster;
+  };
+
+  test('the row says they cannot host yet, and an owner gets Approve hosting', async () => {
+    serve(waiting());
+    mount();
+    await screen.findByText('Priya Kaur');
+    const row = rowFor('Priya Kaur');
+    expect(row).toHaveTextContent('cannot host yet');
+    fireEvent.click(within(row).getByRole('button', { name: 'Approve hosting' }));
+    await screen.findByText('Priya Kaur can host now.');
+    expect(authFetch.mock.calls.some(([url, o = {}]) => o.method === 'POST' && /members\/sub-priya\/approve$/.test(String(url)))).toBe(true);
+  });
+
+  // rejects: offering the button for somebody the team did not invite
+  test('no button without the invitation stamp: that approval is Engage’s', async () => {
+    serve(waiting({ joinedByInvite: false }));
+    mount();
+    await screen.findByText('Priya Kaur');
+    expect(within(rowFor('Priya Kaur')).queryByRole('button', { name: 'Approve hosting' })).toBeNull();
+  });
+
+  test('a member of the team is never offered it', async () => {
+    serve({ ...waiting(), yourRole: 'member' });
+    mount();
+    await screen.findByText('Priya Kaur');
+    expect(screen.queryByRole('button', { name: 'Approve hosting' })).toBeNull();
+  });
+  // Owner, 2026-10-11: paid teams only. The server says so; the screen follows.
+  test('a Free team is never offered it: the server says canApproveHosting false', async () => {
+    serve({ ...waiting(), canApproveHosting: false });
+    mount();
+    await screen.findByText('Priya Kaur');
+    expect(rowFor('Priya Kaur')).toHaveTextContent('cannot host yet');
+    expect(screen.queryByRole('button', { name: 'Approve hosting' })).toBeNull();
+  });
+});

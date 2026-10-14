@@ -1,0 +1,275 @@
+{
+  "unit": "0b-3.PlayerSurface",
+  "file": "components/PlayerSurface.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 8,
+    "font": 2,
+    "primary": 33
+  },
+  "auto": [
+    {
+      "id": "87:22",
+      "line": 87,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-success-text",
+      "literal": "#6FD0A4",
+      "replacement": "var(--success-text)",
+      "why": "exact --success-text in dark"
+    }
+  ],
+  "decide": [
+    {
+      "id": "86:15",
+      "line": 86,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-muted",
+      "literal": "#B6C2D4",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--eyebrow-color",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 77)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the player/stage lifted muted #B6C2D4 (4.03:1 fix on the lifted field); a near-variant of --muted #9BA8BE, no role or channel carries it (SPEC §4.2)"
+    },
+    {
+      "id": "88:14",
+      "line": 88,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-rule",
+      "literal": "rgba(182, 194, 212, .20)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the player rule grey rgba(182,194,212,.20); no channel carries 182 194 212 (SPEC §4.2 near-variant)"
+    },
+    {
+      "id": "89:21",
+      "line": 89,
+      "col": 21,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-rule-strong",
+      "literal": "rgba(182, 194, 212, .34)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 11)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 43)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 43)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:the player strong rule rgba(182,194,212,.34); no channel carries 182 194 212"
+    },
+    {
+      "id": "90:20",
+      "line": 90,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-amber-tint",
+      "literal": "rgba(246, 169, 76, .11)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "91:20",
+      "line": 91,
+      "col": 20,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-amber-edge",
+      "literal": "rgba(246, 169, 76, .45)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "92:22",
+      "line": 92,
+      "col": 22,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-amber-banner",
+      "literal": "rgba(246, 169, 76, .13)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "accent"
+    },
+    {
+      "id": "93:19",
+      "line": 93,
+      "col": 19,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".plr",
+      "property": "--plr-good-edge",
+      "literal": "rgba(111, 208, 164, .45)",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 0)"
+        },
+        {
+          "role": "--success",
+          "classic": "Classic differs (distance 53)"
+        },
+        {
+          "role": "--phase-results",
+          "classic": "Classic differs (distance 53)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:a --success-text edge rgba(111,208,164,.45); no channel carries 111 208 164"
+    },
+    {
+      "id": "209:38",
+      "line": 209,
+      "col": 38,
+      "type": "primary",
+      "kind": "token",
+      "selector": ".plr[data-phase=\"ask\"]",
+      "property": "--plr-phase",
+      "literal": "var(--primary",
+      "why": "--primary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--action",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-text",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "phase-ask"
+    },
+    {
+      "id": "210:39",
+      "line": 210,
+      "col": 39,
+      "type": "secondary",
+      "kind": "token",
+      "selector": ".plr[data-phase=\"vote\"]",
+      "property": "--plr-phase",
+      "literal": "var(--secondary",
+      "why": "--secondary read (accent-vs-action decision, SPEC §4.4)",
+      "candidates": [
+        {
+          "role": "--info",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent",
+          "classic": "Classic differs (dark: #7CA7E6 -> #F6A94C)"
+        }
+      ],
+      "proposal": "info",
+      "choice": "phase-vote"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:46.792Z",
+    "after": {
+      "colour": 4,
+      "font": 2,
+      "primary": 31
+    },
+    "decisionsByKind": {
+      "keep": 4,
+      "accent": 3,
+      "phase-ask": 1,
+      "phase-vote": 1
+    },
+    "classicDeltas": [],
+    "edits": 6
+  }
+}

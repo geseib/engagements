@@ -1,3 +1,4 @@
+/* skin-allowance: colour=4 font=0 primary=3 */
 /* ============================================================================
    ENGAGE SETTINGS: THE CLAUDE MODELS SWITCH — components/ClaudeModelsPanel.jsx
 
@@ -28,12 +29,12 @@
   --cms-t-head: 19px;
   --cms-row-h: 36px;
 
-  --cms-rule: rgba(155, 168, 190, .22);
-  --cms-rule-strong: rgba(155, 168, 190, .45);
-  --cms-success: #6FD0A4;
-  --cms-tint-green: rgba(79, 178, 134, .14);
-  --cms-tint-blue: rgba(124, 167, 230, .14);
-  --cms-tint-red: rgba(229, 100, 94, .12);
+  --cms-rule: var(--rule);
+  --cms-rule-strong: rgb(var(--slate-rgb) / .45);
+  --cms-success: var(--success-text);
+  --cms-tint-green: rgb(var(--success-rgb) / .14);
+  --cms-tint-blue: rgb(var(--info-rgb) / .14);
+  --cms-tint-red: rgb(var(--danger-rgb) / .12);
 
   max-width: 720px;
   color: var(--text);

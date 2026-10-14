@@ -1,0 +1,78 @@
+{
+  "unit": "0b-2.ActingAsBanner",
+  "file": "components/ActingAsBanner.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 2,
+    "font": 0,
+    "primary": 3
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "25:16",
+      "line": 25,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pmode",
+      "property": "--pmode-rule",
+      "literal": "rgba(246, 169, 76, .38)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    },
+    {
+      "id": "26:16",
+      "line": 26,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".pmode",
+      "property": "--pmode-tint",
+      "literal": "rgba(246, 169, 76, .07)",
+      "why": "tint of warn / accent (SPEC §4.4: accent, warn or info?)",
+      "candidates": [
+        {
+          "role": "--warn-rgb",
+          "classic": "Classic same"
+        },
+        {
+          "role": "--accent-rgb",
+          "classic": "Classic same"
+        }
+      ],
+      "proposal": "accent",
+      "choice": "warn"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:16.277Z",
+    "after": {
+      "colour": 0,
+      "font": 0,
+      "primary": 3
+    },
+    "decisionsByKind": {
+      "warn": 2
+    },
+    "classicDeltas": [],
+    "edits": 2
+  }
+}

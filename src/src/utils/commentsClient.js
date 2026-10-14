@@ -189,3 +189,30 @@ export async function featureComment({
     return { ok: true, comment: null, error: null };
   }
 }
+
+/**
+ * THE HOST TYPES WHAT WAS SAID IN THE ROOM (owner, 2026-10-13). Behind the
+ * Cognito authorizer like featureComment, so the host page hands in authFetch.
+ * The server writes it as the room's ("Said in the room"), never a person's.
+ */
+export async function postRoomNote({
+  fetchFn = fetch, apiBase, gameId, questionNumber, text,
+}) {
+  let response;
+  try {
+    response = await fetchFn(`${apiBase}games/${encodeURIComponent(gameId)}/comments/host`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questionNumber, anchorKind: 'results', text }),
+    });
+  } catch (e) {
+    return { ok: false, comment: null, error: e?.message || 'That did not reach the server.' };
+  }
+  if (!response.ok) return { ok: false, comment: null, error: await describeFailure(response) };
+  try {
+    const body = await response.json();
+    return { ok: true, comment: body.comment || null, error: null };
+  } catch {
+    return { ok: true, comment: null, error: null };
+  }
+}

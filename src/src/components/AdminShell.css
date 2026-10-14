@@ -1,3 +1,4 @@
+/* skin-allowance: colour=8 font=0 primary=5 */
 /* ============================================================================
    THE ADMIN CONSOLE SHELL — components/AdminShell.jsx
 
@@ -60,10 +61,10 @@
   --adm-t-title: 24px;
   --adm-t-numeral: 30px;
 
-  --adm-rule: rgba(155, 168, 190, .20);
-  --adm-rule-strong: rgba(155, 168, 190, .34);
-  --adm-row-hover: rgba(155, 168, 190, .055);
-  --adm-row-sel: rgba(246, 169, 76, .10);
+  --adm-rule: rgb(var(--slate-rgb) / .20);
+  --adm-rule-strong: rgb(var(--slate-rgb) / .34);
+  --adm-row-hover: var(--row-hover);
+  --adm-row-sel: var(--row-selected);
 
   /* Density. 36px rows, 32px nav items: this surface is dense on purpose. */
   --adm-nav-w: 212px;
@@ -99,9 +100,10 @@
   border-radius: 3px;
 }
 
-/* A 1180px laptop is the narrowest supported width; below it the nav collapses
-   to icons. Nothing here is designed for a phone — an admin console on a phone
-   is a different product, and pretending otherwise produces a worse desktop. */
+/* Below 1180px the nav collapses to icons. Below 760px (a phone, or a tablet
+   held upright) the console with a scope row has its own layout, at the end
+   of this file: the Overview and the scope sheet are built for it (owner,
+   2026-10-11); every other section says it needs a laptop or tablet. */
 @media (max-width: 1180px) {
   .adm-shell { --adm-nav-w: 60px; }
   .adm-shell .adm-nav-label,
@@ -452,4 +454,87 @@
 @media (max-width:1180px){
   .adm-nav-sec{display:none}
   .adm-nav-group + .adm-nav-group{margin-top:10px;border-top:1px solid var(--adm-rule);padding-top:10px}
+}
+
+/* -- The scope row and the layout below 760px --------------------------------
+   docs/design/admin-landing. `.adm-shell--scoped` is the console with a scope
+   row (components/ScopeTabs.jsx) under the top bar, spanning both columns. */
+.adm-shell--scoped {
+  grid-template-rows: var(--adm-top-h) auto 1fr;
+  grid-template-areas:
+    "brand top"
+    "scope scope"
+    "nav   work";
+}
+.adm-scope { grid-area: scope; min-width: 0; }
+.adm-sections-btn { display: none; }
+.adm-narrow-note { display: none; }
+
+@media (max-width: 759px) {
+  .adm-shell--scoped {
+    --adm-nav-w: 0px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: var(--adm-top-h) auto 1fr;
+    grid-template-areas:
+      "brand top"
+      "scope scope"
+      "work  work";
+  }
+  .adm-shell--scoped .adm-brand { padding: 0 8px 0 16px; border-right: 0; }
+  .adm-shell--scoped .adm-word,
+  .adm-shell--scoped .adm-name,
+  .adm-shell--scoped .adm-avatar,
+  .adm-shell--scoped .adm-crumbs:empty { display: none; }
+  .adm-shell--scoped .adm-top { gap: 8px; padding: 0 16px 0 0; }
+  .adm-shell--scoped .adm-who { gap: 6px; }
+  .adm-shell--scoped .adm-sections-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    height: 32px;
+    padding: 0 11px;
+    border: 1px solid var(--adm-rule-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: 600 var(--adm-t-label)/1 var(--font-ui);
+    cursor: pointer;
+  }
+  /* The rail becomes a panel the Sections button opens, over the work area. */
+  .adm-shell--scoped .adm-nav {
+    display: none;
+    position: fixed;
+    z-index: 30;
+    top: var(--adm-top-h);
+    right: 0;
+    left: 0;
+    max-height: calc(100vh - var(--adm-top-h));
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--adm-rule-strong);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+  }
+  .adm-shell--scoped .adm-nav.is-open { display: flex; }
+  .adm-shell--scoped .adm-nav .adm-nav-label,
+  .adm-shell--scoped .adm-nav .adm-nav-count,
+  .adm-shell--scoped .adm-nav .adm-nav-sec { display: revert; }
+  .adm-shell--scoped .adm-nav .adm-nav-item { justify-content: flex-start; gap: 10px; padding: 0 10px; min-height: 40px; }
+  .adm-shell--scoped .adm-work-head { padding: 12px 16px 8px; }
+  .adm-shell--scoped .adm-head-actions { display: none; }
+  .adm-shell--scoped .adm-work-body[data-theme="dark"] { padding: 14px 16px 32px; }
+  .adm-work-body--wide > :not(.adm-narrow-note) { display: none !important; }
+  .adm-work-body--wide > .adm-narrow-note {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 16px;
+    border: 1px solid var(--adm-rule-strong);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: var(--adm-t-label);
+  }
+  .adm-narrow-note b { color: var(--text); font-size: var(--adm-t-body); }
 }

@@ -79,6 +79,17 @@ export default function AdminShell({
     environment chip because both answer "which world am I looking at?".
   */
   orgSwitcher = null,
+  /*
+    THE SCOPE ROW (docs/design/admin-landing): one row of tabs under the top
+    bar, spanning the nav and the work area — Personal, each team, Engage. In
+    the console it REPLACES `orgSwitcher`; a ReactNode for the same reason.
+    Passing it also turns on the layout below 760px: no rail, the sections
+    behind a "Sections" button in the top bar.
+  */
+  scopeBar = null,
+  /* Whether the open section works on a phone. Below 760px a section that
+     does not says so instead of drawing a laptop table at 375px. */
+  narrowOk = true,
   activeId,
   onNavigate,
   environment,
@@ -93,6 +104,7 @@ export default function AdminShell({
   contentTheme = 'light',
   children,
 }) {
+  const [sectionsOpen, setSectionsOpen] = React.useState(false);
   const renderNavItem = (item) => {
     const current = item.id === activeId;
     return (
@@ -108,7 +120,7 @@ export default function AdminShell({
         /* aria-current, not a bare `.active` class. The shipped tab strip told
            assistive tech nothing about which of six sections was open. */
         aria-current={current ? 'page' : undefined}
-        onClick={() => onNavigate && onNavigate(item.id)}
+        onClick={() => { setSectionsOpen(false); if (onNavigate) onNavigate(item.id); }}
       >
         {item.icon && <Icon name={item.icon} size={16} weight="bold" className="adm-nav-ico" />}
         <span className="adm-nav-label">{item.label}</span>
@@ -137,7 +149,7 @@ export default function AdminShell({
     /* data-theme is declared, not inherited: public/index.html carries
        data-theme="light" on <html>, so without this every --text and --surface
        in the chrome resolves to the paper set. Same move as WelcomeScreen. */
-    <div className="adm-shell" data-theme="dark">
+    <div className={`adm-shell${scopeBar ? ' adm-shell--scoped' : ''}`} data-theme="dark">
       <header className="adm-brand">
         {/* The mark is the way back to the marketing home. `/home`, because `/`
             is the host's main screen for anybody signed in — and the "Host"
@@ -160,6 +172,19 @@ export default function AdminShell({
         </nav>
 
         <span className="adm-spacer" />
+
+        {scopeBar && (
+          <button
+            type="button"
+            className="adm-sections-btn"
+            aria-expanded={sectionsOpen}
+            aria-controls="adm-nav"
+            onClick={() => setSectionsOpen((was) => !was)}
+          >
+            Sections
+            <Icon name="CaretDown" size={12} weight="bold" />
+          </button>
+        )}
 
         {/*
           BEFORE the environment chip, so the pair reads left to right as
@@ -205,7 +230,9 @@ export default function AdminShell({
         )}
       </div>
 
-      <nav className="adm-nav" aria-label="Sections">
+      {scopeBar && <div className="adm-scope">{scopeBar}</div>}
+
+      <nav className={`adm-nav${sectionsOpen ? ' is-open' : ''}`} id="adm-nav" aria-label="Sections">
         {navGroups
           ? navGroups.map((group) => (
             <div className="adm-nav-group" key={group.id}>
@@ -237,7 +264,16 @@ export default function AdminShell({
         {/* The ONE scrolling region. The shell itself never scrolls, which is
             what keeps the nav and the title on screen — the shipped console
             scrolled the whole document, so the tab bar left the viewport. */}
-        <div className="adm-work-body" data-theme={contentTheme}>
+        <div className={`adm-work-body${narrowOk ? '' : ' adm-work-body--wide'}`} data-theme={contentTheme}>
+          {!narrowOk && (
+            <div className="adm-narrow-note" role="note">
+              <b>This screen needs a laptop or tablet.</b>
+              <span>On a phone, the Overview and the switch between your spaces work; open this section on a wider screen to use it.</span>
+              {onNavigate && (
+                <button type="button" className="adm-linkbtn" onClick={() => onNavigate('overview')}>Back to the Overview</button>
+              )}
+            </div>
+          )}
           {children}
         </div>
       </main>

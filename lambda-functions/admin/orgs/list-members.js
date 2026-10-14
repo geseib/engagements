@@ -96,6 +96,9 @@ async function listOrgMembers(event) {
     memberCount: members.length,
     outstandingInvites: invites.filter((i) => !i.expired).length,
     yourRole: G.publicMember(auth.membership).role,
+    // Whether this team may approve its invitees to host (paid plans only).
+    // The screens show Approve only when true; approve-member.js re-checks.
+    canApproveHosting: G.canApproveHosting(auth.org || await G.getOrgMetadata(orgId)),
   });
 }
 

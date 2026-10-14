@@ -1,3 +1,4 @@
+/* skin-allowance: colour=1 font=0 primary=0 */
 /*
  * COMMENTS ON A ROUND'S REPORT — and only the comments.
  *
@@ -52,9 +53,9 @@
      happens to have put in the bundle. */
   --rr-c-text: var(--text);
   --rr-c-muted: var(--muted);
-  --rr-c-accent: var(--primary);
+  --rr-c-accent: var(--accent);
   --rr-c-wash: rgba(255, 255, 255, 0.06);
-  --rr-c-rule: rgba(246, 169, 76, 0.28);
+  --rr-c-rule: rgb(var(--accent-rgb) / 0.28);
 
   --rr-c-t-floor: 12px;
   --rr-c-t-label: 13px;

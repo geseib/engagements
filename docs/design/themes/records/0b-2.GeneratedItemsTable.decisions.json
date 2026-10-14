@@ -1,0 +1,275 @@
+{
+  "unit": "0b-2.GeneratedItemsTable",
+  "file": "components/GeneratedItemsTable.css",
+  "range": null,
+  "themes": [
+    "dark"
+  ],
+  "tokensOnly": true,
+  "base": "c5f914da",
+  "roleSource": "styles/roles.css",
+  "before": {
+    "colour": 17,
+    "font": 0,
+    "primary": 2
+  },
+  "auto": [],
+  "decide": [
+    {
+      "id": "22:14",
+      "line": 22,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-text",
+      "literal": "#2c3e50",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 181)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #2c3e50 (its rule wave converts the surface)"
+    },
+    {
+      "id": "23:15",
+      "line": 23,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-muted",
+      "literal": "#5b6b7c",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 109)"
+        },
+        {
+          "role": "--muted",
+          "classic": "Classic differs (distance 110)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 110)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #5b6b7c (its rule wave converts the surface)"
+    },
+    {
+      "id": "24:14",
+      "line": 24,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-warn",
+      "literal": "#8a5300",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 69)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 93)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 132)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #8a5300 (its rule wave converts the surface)"
+    },
+    {
+      "id": "25:17",
+      "line": 25,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-warn-bg",
+      "literal": "#fdf5e3",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 79)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 130)"
+        },
+        {
+          "role": "--action-hover",
+          "classic": "Classic differs (distance 141)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #fdf5e3 (its rule wave converts the surface)"
+    },
+    {
+      "id": "26:16",
+      "line": 26,
+      "col": 16,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-danger",
+      "literal": "#b3261e",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--danger-deep",
+          "classic": "Classic differs (distance 30)"
+        },
+        {
+          "role": "--bronze",
+          "classic": "Classic differs (distance 94)"
+        },
+        {
+          "role": "--danger",
+          "classic": "Classic differs (distance 102)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #b3261e (its rule wave converts the surface)"
+    },
+    {
+      "id": "27:14",
+      "line": 27,
+      "col": 14,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-rule",
+      "literal": "#e3e8ee",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 57)"
+        },
+        {
+          "role": "--rule",
+          "classic": "Classic differs (distance 108)"
+        },
+        {
+          "role": "--rule-strong",
+          "classic": "Classic differs (distance 108)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #e3e8ee (its rule wave converts the surface)"
+    },
+    {
+      "id": "28:15",
+      "line": 28,
+      "col": 15,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-quiet",
+      "literal": "#f8f9fa",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--text",
+          "classic": "Classic differs (distance 25)"
+        },
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 87)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 137)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #f8f9fa (its rule wave converts the surface)"
+    },
+    {
+      "id": "29:17",
+      "line": 29,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-chip-bg",
+      "literal": "#eef2f7",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--silver",
+          "classic": "Classic differs (distance 75)"
+        },
+        {
+          "role": "--row-hover",
+          "classic": "Classic differs (distance 125)"
+        },
+        {
+          "role": "--info",
+          "classic": "Classic differs (distance 138)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #eef2f7 (its rule wave converts the surface)"
+    },
+    {
+      "id": "30:17",
+      "line": 30,
+      "col": 17,
+      "type": "colour",
+      "kind": "token",
+      "selector": ".git",
+      "property": "--git-chip-fg",
+      "literal": "#35506b",
+      "why": "no role has this value",
+      "candidates": [
+        {
+          "role": "--on-accent",
+          "classic": "Classic differs (distance 62)"
+        },
+        {
+          "role": "--on-action",
+          "classic": "Classic differs (distance 90)"
+        },
+        {
+          "role": "--success-text",
+          "classic": "Classic differs (distance 152)"
+        }
+      ],
+      "proposal": "keep:<why> (or a scope-local alias, SPEC §4.2 \"near-variants\")",
+      "choice": "keep:paper-era palette of an unconverted light surface; no role carries #35506b (its rule wave converts the surface)"
+    }
+  ],
+  "applied": {
+    "at": "2026-10-13T14:15:17.158Z",
+    "after": {
+      "colour": 17,
+      "font": 0,
+      "primary": 2
+    },
+    "decisionsByKind": {
+      "keep": 9
+    },
+    "classicDeltas": [],
+    "edits": 0
+  }
+}
