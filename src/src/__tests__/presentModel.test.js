@@ -47,9 +47,18 @@ describe('presentModel: the moment', () => {
     const m = presentModel(base());
     expect(m.moment).toBe('ANSWERING');
     expect(m.title).toBe(Q.title);
-    expect(m.task).toBe(Q.detail);
+    // Session 7924 finding #4: the task is the instruction, not the story.
+    expect(m.task).toBe('How could you adapt this lesson to your work, project, or team?');
+    expect(m.story).toBe(Q.detail);
     expect(m.counts).toEqual({ done: 3, of: 5, line: '3 of 5 answered' });
     expect(m.roundLabel).toBe('Round 5');
+  });
+  it('the task is the question\'s own instruction, then the set\'s, on the wall while answering and voting', () => {
+    const own = { ...Q, customInstructions: 'Name one habit to drop.', setCustomInstruction: 'Set says this.' };
+    expect(presentModel(base({ currentQuestionData: own })).task).toBe('Name one habit to drop.');
+    const set = { ...Q, setCustomInstruction: 'Which structure must go, and who gains?' };
+    expect(presentModel(base({ currentQuestionData: set })).task).toBe('Which structure must go, and who gains?');
+    expect(presentModel(base({ state: 'VOTE#005', currentQuestionData: set })).task).toBe('Which structure must go, and who gains?');
   });
   it('the set\'s own round noun names the round', () => {
     expect(presentModel(base({ currentQuestionData: { ...Q, setRoundNoun: 'Lesson' } })).roundLabel).toBe('Lesson 5');

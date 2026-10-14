@@ -27,7 +27,8 @@ import ReportFollowUps from './ReportFollowUps';
 import { authFetch } from '../auth/authFetch';
 import ReportSavedDialog from './ReportSavedDialog';
 import { saveReportPdf } from '../utils/saveReport';
-import { resolveRoundNoun, pluralRoundNoun } from '../config/instructions';
+import { resolveRoundNoun, pluralRoundNoun, resolveInstruction } from '../config/instructions';
+import { plainOf } from '../config/comments';
 import { calculatePlayerRankings } from '../config/podium';
 import { namesMode } from '../config/surveyNames';
 import KindResult from './survey/results/KindResult';
@@ -406,7 +407,7 @@ function ReportComments({ comments }) {
             quote.
           */}
           {comment.anchorExcerpt && (
-            <div className="comment-excerpt">{comment.anchorExcerpt}</div>
+            <div className="comment-excerpt">{plainOf(comment.anchorExcerpt)}</div>
           )}
           <blockquote className="comment-text">{comment.text}</blockquote>
           <div className="comment-meta">
@@ -735,6 +736,21 @@ function ReportDocument({ reportData }) {
               {questionData.detail && (
                 <p className="report-lesson-detail">
                   {questionData.detail}
+                </p>
+              )}
+
+              {/* THE TEAM'S TASK, what the room answered (session 7924,
+                  finding #5): the round's own instruction, else the set's,
+                  else the game type's, resolved as the phone resolves it.
+                  Not for trivia, whose instruction is "Select the best answer". */}
+              {reportData.gameType !== 'trivia' && (
+                <p className="report-lesson-task">
+                  <span className="report-lesson-task-label">The task</span>
+                  {resolveInstruction(
+                    questionData,
+                    questionSetData && questionSetData.customInstruction,
+                    reportData.gameType,
+                  )}
                 </p>
               )}
 

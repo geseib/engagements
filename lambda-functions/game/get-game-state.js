@@ -338,6 +338,13 @@ exports.handler = async (event) => {
             ? await decryptItem(setOrgId, 'question', question.Item)
             : question.Item;
 
+          // The set's own instruction, for the wall's task line (session 7924,
+          // finding #4). Encrypted at rest on an org set, so it is unwrapped
+          // from the set's org exactly as get-question.js does.
+          const setMeta = resolvedSet.metadata && setOrgId
+            ? await decryptItem(setOrgId, 'set', resolvedSet.metadata)
+            : resolvedSet.metadata;
+
           if (question.Item) {
             currentQuestionData = {
               id: currentQuestionNumber,
@@ -356,6 +363,7 @@ exports.handler = async (event) => {
               // public get-question.js already serves; read with the row
               // resolveSetPartition fetched above, at no extra cost.
               setRoundNoun: (resolvedSet.metadata && resolvedSet.metadata.roundNoun) || null,
+              setCustomInstruction: (setMeta && setMeta.customInstruction) || null,
               startedAt: questionRef.Item.StartedAt,
               // For trivia questions (check both cases)
               optionA: questionItem.optionA || questionItem.OptionA || '',

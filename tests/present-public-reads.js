@@ -85,7 +85,7 @@ function seed(gameId, { state, round = 1, anonymous = true, revealed = false, an
   // The question the round is on, with a Background the room must not see on
   // this route and the set's own round noun, which it may.
   table.put({ PK, SK: `QUESTION#${padded}#REF`, SourceQuestionId: 'Q#1', SetId: SET, SetScope: 'platform' });
-  table.put({ PK: 'SETS', SK: `SET#${SET}`, name: 'Room view set', roundNoun: 'Lesson' });
+  table.put({ PK: 'SETS', SK: `SET#${SET}`, name: 'Room view set', roundNoun: 'Lesson', customInstruction: 'Name one structure to dismantle.' });
   table.put({ PK: `SET#${SET}`, SK: 'Q#1', Title: 'What should we stop doing', Detail: 'detail', Background: BACKGROUND });
 }
 
@@ -152,6 +152,10 @@ const HOST_ONLY = ['questionQueue', 'categoryCounts', 'categoryState', 'answerPr
   });
   await check('the set\'s own round noun travels with the question (the public get-question already gives it)', () =>
     assert.strictEqual(plain.body.currentQuestionData && plain.body.currentQuestionData.setRoundNoun, 'Lesson'));
+  // Session 7924 finding #4: the wall left out the team's task. The set's own
+  // instruction now rides with the question, as it does on get-question.
+  await check('the set\'s own instruction travels with the question, for the wall\'s task line', () =>
+    assert.strictEqual(plain.body.currentQuestionData && plain.body.currentQuestionData.setCustomInstruction, 'Name one structure to dismantle.'));
   await check('the stage facts are on the public read: notes, focus, profile', () => {
     assert.ok(plain.body.stageNotes && Number.isInteger(plain.body.stageNotes.page));
     assert.ok(plain.body.stageFocus && typeof plain.body.stageFocus.focus === 'string');

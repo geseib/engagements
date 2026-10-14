@@ -28,6 +28,17 @@ import { momentOf } from '../config/roundStep';
 import { tallyOrder } from '../config/navigatorOrder';
 import { authorsHiddenNow } from '../config/anonymity';
 import { PROFILES, DEFAULT_PROFILE } from '../config/displayProfile';
+import { resolveInstruction } from '../config/instructions';
+
+/*
+  THE TEAM'S TASK, the line the room is answering (session 7924, finding #4).
+  The wall used to show only `detail`, which is the round's background story,
+  and the instruction the room was asked to answer never reached it. `task` is
+  now the instruction, resolved as the phone resolves it; `story` is the
+  background, the line the stage may drop for space.
+*/
+const taskOf = (q, snapshot) => resolveInstruction(q, q.setCustomInstruction, snapshot.gameType);
+const storyOf = (q) => String(q.detail || q.questionDetail || '');
 import { prosePageSlice, proseBudgetFor } from '../config/stagePaging';
 import { partText } from './presentFit';
 import { wallCreditFor } from '../config/comments';
@@ -207,6 +218,7 @@ export function presentModel(snapshot, reads = {}) {
         moment: 'VOTE_RESPONSE',
         ...common,
         title: String(q.title || ''),
+        task: taskOf(q, snapshot),
         ...navigatorOf(rows, votingFocus, { vote: true }),
         counts: countsOf(snapshot, 'voted'),
       };
@@ -217,7 +229,7 @@ export function presentModel(snapshot, reads = {}) {
     return { moment: 'JOIN', ...common, ...joinFacts(snapshot, reads, common.gameId) };
   }
   if (focus.focus === 'question' && /^(ASK|VOTE|RESULTS)#/.test(state)) {
-    return { moment: 'QUESTION_FOCUS', ...common, category: q.category || '', title: String(q.title || ''), task: String(q.detail || q.questionDetail || '') };
+    return { moment: 'QUESTION_FOCUS', ...common, category: q.category || '', title: String(q.title || ''), task: taskOf(q, snapshot), story: storyOf(q) };
   }
 
   const liveAsk = reads.ask || null;
@@ -239,7 +251,8 @@ export function presentModel(snapshot, reads = {}) {
         ...common,
         category: q.category || '',
         title: String(q.title || ''),
-        task: String(q.detail || q.questionDetail || ''),
+        task: taskOf(q, snapshot),
+        story: storyOf(q),
         counts: countsOf(snapshot, 'answered'),
       };
     case 'VOTING': {
@@ -248,6 +261,7 @@ export function presentModel(snapshot, reads = {}) {
         moment,
         ...common,
         title: String(q.title || ''),
+        task: taskOf(q, snapshot),
         lead: RW.answersOnDevices(answered),
         counts: countsOf(snapshot, 'voted'),
       };

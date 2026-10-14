@@ -150,6 +150,19 @@ describe('excerptOf', () => {
     expect(excerptOf('one\n\n  two   three')).toBe('one two three');
   });
 
+  // Session 7924 finding #10: the report quoted "## What the room said -
+  // **Four answers…" because Workie's read is markdown.
+  test('reads markdown as its words, not its symbols', () => {
+    expect(excerptOf('## What the room said\n- **Four answers** named the *same* fear'))
+      .toBe('What the room said Four answers named the same fear');
+    expect(excerptOf('> a [link](https://x.y) and `code`\n1. first\n---')).toBe('a link and code first');
+  });
+
+  test('keeps the ordinary punctuation of prose', () => {
+    expect(excerptOf('Cost 3 * 4 = 12, snake_case_name, #1 priority, 5 - 2'))
+      .toBe('Cost 3 * 4 = 12, snake_case_name, #1 priority, 5 - 2');
+  });
+
   test('survives nothing at all', () => {
     expect(excerptOf(undefined)).toBe('');
     expect(excerptOf(null)).toBe('');

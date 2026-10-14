@@ -418,6 +418,25 @@
 
 /* The lead paragraph. Was a grey box with an amber bar; now it is simply
    set larger than body copy, which is how a document says "read this first". */
+/* the team's task (session 7924): what the room answered, above the answers */
+.report-paper .report-lesson-task {
+  margin: -16px 0 32px;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent);
+  font-size: 1.05rem;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text);
+}
+.report-paper .report-lesson-task-label {
+  display: block;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
 .report-paper .report-lesson-detail {
   background: none;
   border: 0;
@@ -1112,6 +1131,12 @@
 
   /* The lead paragraph MAY break — it can run long — but never badly. This is
      precisely the orphans/widows case. */
+  .report-paper .report-lesson-task {
+    font-size: 11pt;
+    margin: -10pt 0 14pt;
+    break-inside: avoid;
+  }
+  .report-paper .report-lesson-task-label { font-size: 8pt; }
   .report-paper .report-lesson-detail {
     font-size: 11pt;
     line-height: 1.5;
