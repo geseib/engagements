@@ -33,6 +33,8 @@ const RW = Object.freeze({
   nextPage: 'Next page',
   backPage: 'Back a page',
   nextRound: (noun) => `Next ${nounOf(noun)}`,
+  /** "Start round 3" (owner, 14 Oct: it names the round; matches the lobby's "Start round 1"). */
+  startRound: (noun, n) => `Start ${nounOf(noun)} ${n}`,
   skipRound: (noun) => `Skip this ${nounOf(noun)}`,
   /** RESULTS' secondary: the first response of N, in tally order. */
   showResponse: (i, n) => `Show response ${i} of ${n}`,
@@ -45,7 +47,7 @@ const RW = Object.freeze({
   requestFeedback: 'Request feedback',
   // ASK THE ROOM (docs/design/followup-icons).
   cancelQuestion: 'Cancel the question',
-  askAnother: 'Ask another',
+  askAnother: 'Ask another question',
   asksReady: (n) => `${n} ${n === 1 ? 'ask' : 'asks'} ready`,
   backToRead: 'Back to what we heard',
   openReport: 'Open session report',
@@ -95,6 +97,62 @@ const RW = Object.freeze({
     ENDED: 'The session report',
     UNKNOWN: 'Nothing yet',
   }),
+
+  // ── The workflow strip (session flow v3 §4.6) ─────────────────────────
+  // The host's screens only: never the wall, never a participant's device.
+  stepSetup: 'Setup',
+  stepAnswer: 'Answer',
+  stepVote: 'Vote',
+  stepAsk: 'Ask',
+  stepFinish: 'Finish',
+  stepResults: 'Results',
+  stepFeedback: 'Feedback',
+  stepLive: 'Live',
+  stepViewing: 'Viewing',
+  /** "Round 2 of 6"; the set's noun, capitalised as a heading. */
+  stripRound: (noun, n, of) => {
+    const word = nounOf(noun);
+    const head = `${word.charAt(0).toUpperCase()}${word.slice(1)} ${n}`;
+    return Number(of) > 0 ? `${head} of ${of}` : head;
+  },
+  readyCount: (n) => `${n} ready`,
+  /** The Remote's short form: "R2 of 6". */
+  stripRoundShort: (n, of) => (Number(of) > 0 ? `R${n} of ${of}` : `R${n}`),
+  yourPartLabel: 'Your part now',
+  showSteps: 'Show the steps',
+  /**
+   * "Your part now": one line per moment, ending with the main button's own
+   * label (passed in as `a`, so the line and the button can never disagree).
+   */
+  yourPart: Object.freeze({
+    LOBBY: (a) => `Choose where the room watches, then ${a} when people have joined.`,
+    ANSWERING: (a) => `Let the room answer, then ${a}.`,
+    VOTING: (a) => `Let the room vote, then ${a}.`,
+    VOTE_RESPONSES: (a) => `Let the room vote, then ${a}.`,
+    RESULTS: (a) => `The results are up. Talk them through, then ${a}.`,
+    RESPONSES: (a) => `Walk the room through the responses. ${a} moves on.`,
+    READ_WAIT: () => 'Workie is writing. The read appears when it is ready.',
+    READ_PAGE: (a) => `Read with the room. ${a} turns the page.`,
+    READ_LAST: (a) => `The read is done. Talk it through, then ${a}.`,
+    FEEDBACK: (a) => `The room is commenting. Then ${a}.`,
+    ROOM_QUESTION: (a) => `The room is answering. Then ${a}.`,
+    ROOM_RESULTS: (a) => `Pick the ideas to show. Then ${a}, or ask another question.`,
+    ENDED: (a) => `The session is over. ${a}.`,
+  }),
+  /** What each step is, for hover on the laptop and a long press on the Remote. */
+  stepExplain: Object.freeze({
+    setup: 'Where the room watches, who has joined, and the session settings.',
+    answer: 'Everyone answers the question on their phone, laptop or tablet.',
+    vote: 'Everyone ranks the responses. Names stay hidden while they vote.',
+    heard: 'The results, then the read Workie writes of what the room said, page by page.',
+    ask: 'Optional. Ask the room a question: ideas, a choice or a rating.',
+    finish: 'End the session and open its report.',
+  }),
+  /** The bar above a step the host is looking at; the room does not move. */
+  viewingBar: (step, where) => `Viewing ${step} · the room is still on ${where}`,
+  viewingWhere: (round, step) => `${round}, ${step}`,
+  backToRoom: 'Back to the room',
+  viewingNothingMoves: 'Nothing you do here moves the room.',
 
   // ── The room's devices and the wall ───────────────────────────────────
   answersOnDevices: (n) => `${n} ${plural(n, 'answer is', 'answers are')} on your ${deviceWords}.`,

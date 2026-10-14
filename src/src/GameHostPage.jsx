@@ -31,6 +31,8 @@ import AISummaryStatus from './components/AISummaryStatus';
 import useModelPicker from './components/stage/useModelPicker';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
+import WorkflowStrip from './components/stage/WorkflowStrip';
+import { workflowStrip } from './config/workflowStrip';
 import RoomMeter from './components/stage/RoomMeter';
 import FeedbackWall from './components/stage/FeedbackWall';
 import Podium from './components/stage/Podium';
@@ -6572,6 +6574,9 @@ Focus on actionable business strategy insights.`;
       ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
       : null,
     asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
+    // The round on screen, for "Start round 3" and the workflow strip.
+    roundNumber: hostPhase === 'LOBBY' || hostPhase === 'ENDED' ? null : lessonNumber,
+    totalRounds: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions,
   });
   /*
     AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
@@ -6624,6 +6629,15 @@ Focus on actionable business strategy insights.`;
       },
     }
     : eventControls;
+
+  // THE WORKFLOW STRIP (session flow v3 §4.6): where the round is and what is
+  // expected of the host, read from the same step and snapshot as the dock.
+  // The primary is the one the dock draws (an event relabels it), so "Your
+  // part now" names the button the host can see. None while an event item
+  // waits to go live: that is the agenda's moment, not the round's.
+  const workflow = !eventWaiting && hostControls.step && hostControls.snapshot
+    ? workflowStrip({ ...hostControls.step, primary: hostControls.primary }, hostControls.snapshot)
+    : null;
 
   // A keyboard shortcut must never fire underneath something the host is
   // reading or filling in.
@@ -7443,6 +7457,9 @@ Focus on actionable business strategy insights.`;
           loadingAIInsights, currentAIInsights ? 1 : 0,
           wavelengthFitKey, surveyFitKey,
         ].join('|')}
+        strip={workflow
+          ? <WorkflowStrip strip={workflow} mode={twoSurfaces ? 'full' : 'slim'} />
+          : null}
         rail={(
           <Rail
             phase={hostPhase}

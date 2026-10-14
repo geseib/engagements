@@ -25,6 +25,7 @@ import { sendAsk, closeAsk, cancelAsk } from './utils/followUpsClient';
 import { postQueueOp } from './utils/questionQueueClient';
 import {
   remoteStep,
+  snapshotFromHostState,
   requestFor,
   askNowRequest,
   askNowNeedsConfirm,
@@ -39,6 +40,8 @@ import {
   accessDeniedMessage,
   remoteGoal,
 } from './config/hostRemote';
+import { workflowStrip } from './config/workflowStrip';
+import RemoteStepDots from './components/RemoteStepDots';
 import { scoreboardRequest } from './config/scoreboard';
 import RemoteScoreboardPanel from './components/RemoteScoreboardPanel';
 
@@ -935,7 +938,7 @@ function HostRemote() {
     ? { status: shownStatus, answered: shownAnswered, total: rosterCount || 0 }
     : null), [shownStatus, shownAnswered, rosterCount]);
   const askReady = roundAsks.enabled ? roundAsks.unsent.length : 0;
-  const step = useMemo(() => remoteStep(snapshot, {
+  const stepExtras = useMemo(() => ({
     playerCount: rosterCount,
     answerCount: onResults || onVoting ? focusAnswers.length : undefined,
     notesReady: notes.ready,
@@ -943,8 +946,14 @@ function HostRemote() {
     goalLine: goal.reached ? goal.line : '',
     roomAsk: askRoomAsk,
     asksReady: askReady,
-  }), [snapshot, rosterCount, onResults, onVoting, focusAnswers.length, notes.ready, setId, goal.reached, goal.line,
+  }), [rosterCount, onResults, onVoting, focusAnswers.length, notes.ready, setId, goal.reached, goal.line,
     askRoomAsk, askReady]);
+  const step = useMemo(() => remoteStep(snapshot, stepExtras), [snapshot, stepExtras]);
+  /* The workflow strip as dots (session flow v3 §4.6), from the same step. */
+  const strip = useMemo(
+    () => (snapshot ? workflowStrip(step, snapshotFromHostState(snapshot, stepExtras)) : null),
+    [snapshot, step, stepExtras],
+  );
   const action = step.primary;
   /* Workie's page, as the server holds it (get-game-state `stageNotes`). */
   const notesPages = Number.isInteger(snapshot?.stageNotes?.pages) ? snapshot.stageNotes.pages : 1;
@@ -1394,6 +1403,7 @@ function HostRemote() {
           <span className="hr-live-word">{connected ? 'Live' : 'Offline'}</span>
         </span>
       </header>
+      {access.status === ACCESS.OK ? <RemoteStepDots strip={strip} /> : null}
 
       <main className="hr-body">
         {access.status !== ACCESS.OK ? (

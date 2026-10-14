@@ -141,8 +141,8 @@ body, .stage-ladder-table{
      the whole stage past the viewport. */
   grid-template-columns:minmax(0,1fr);
   display:grid;
-  grid-template-rows:auto auto minmax(0,1fr) auto;
-  grid-template-areas:"rail" "bar" "main" "dock";
+  grid-template-rows:auto auto auto minmax(0,1fr) auto;
+  grid-template-areas:"rail" "bar" "strip" "main" "dock";
 }
 
 /* Photo field. Flat in Call: wide low-frequency gradients band badly under

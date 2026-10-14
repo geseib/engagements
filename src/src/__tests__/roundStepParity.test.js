@@ -41,25 +41,25 @@ function cases(gameType) {
     },
     {
       name: 'ANSWERING, some in',
-      dock: { ...base, phase: 'ASK', playerCount: 5, answeredCount: 2, answerCount: 2 },
+      dock: { ...base, roundNumber: 3, phase: 'ASK', playerCount: 5, answeredCount: 2, answerCount: 2 },
       json: { state: 'ASK#003', gameType, answerProgress: { answersReceived: 2, totalPlayers: 5 } },
       extras: { ...remoteBase, playerCount: 5 },
     },
     {
       name: 'ANSWERING, nobody yet',
-      dock: { ...base, phase: 'ASK', playerCount: 5, answeredCount: 0, answerCount: 0 },
+      dock: { ...base, roundNumber: 3, phase: 'ASK', playerCount: 5, answeredCount: 0, answerCount: 0 },
       json: { state: 'ASK#003', gameType, answerProgress: { answersReceived: 0, totalPlayers: 5 } },
       extras: { ...remoteBase, playerCount: 5 },
     },
     {
       name: 'VOTING',
-      dock: { ...base, phase: 'VOTE', playerCount: 5, votedCount: 4, answerCount: 5 },
+      dock: { ...base, roundNumber: 3, phase: 'VOTE', playerCount: 5, votedCount: 4, answerCount: 5 },
       json: { state: 'VOTE#003', gameType, votingProgress: { votesReceived: 4, totalPlayers: 5 } },
       extras: { ...remoteBase, playerCount: 5, answerCount: 5 },
     },
     {
       name: 'VOTE_RESPONSES, the second of five',
-      dock: { ...base, phase: 'VOTE', playerCount: 5, votedCount: 4, answerCount: 5, spotlightIndex: 1 },
+      dock: { ...base, roundNumber: 3, phase: 'VOTE', playerCount: 5, votedCount: 4, answerCount: 5, spotlightIndex: 1 },
       json: {
         state: 'VOTE#003', gameType, votingProgress: { votesReceived: 4, totalPlayers: 5 },
         stageFocus: { focus: 'answer', index: 1, part: 0, parts: 1, phase: 'VOTE' },
@@ -68,7 +68,7 @@ function cases(gameType) {
     },
     {
       name: 'VOTE_RESPONSES, the last of five',
-      dock: { ...base, phase: 'VOTE', playerCount: 5, votedCount: 5, answerCount: 5, spotlightIndex: 4 },
+      dock: { ...base, roundNumber: 3, phase: 'VOTE', playerCount: 5, votedCount: 5, answerCount: 5, spotlightIndex: 4 },
       json: {
         state: 'VOTE#003', gameType, votingProgress: { votesReceived: 5, totalPlayers: 5 },
         stageFocus: { focus: 'answer', index: 4, part: 0, parts: 1, phase: 'VOTE' },
@@ -77,13 +77,13 @@ function cases(gameType) {
     },
     {
       name: 'RESULTS with responses',
-      dock: { ...base, phase: 'RESULTS', playerCount: 5, answerCount: 4 },
+      dock: { ...base, roundNumber: 3, phase: 'RESULTS', playerCount: 5, answerCount: 4 },
       json: { state: 'RESULTS#003', gameType, stageBeat: 'results', stageFocus: { focus: 'none', index: null } },
       extras: { ...remoteBase, playerCount: 5, answerCount: 4 },
     },
     {
       name: 'RESPONSES, the second of four',
-      dock: { ...base, phase: 'RESULTS', playerCount: 5, answerCount: 4, spotlightIndex: 1 },
+      dock: { ...base, roundNumber: 3, phase: 'RESULTS', playerCount: 5, answerCount: 4, spotlightIndex: 1 },
       json: {
         state: 'RESULTS#003', gameType, stageBeat: 'results',
         stageFocus: { focus: 'answer', index: 1, part: 0, parts: 1, phase: 'RESULTS' },
@@ -92,7 +92,7 @@ function cases(gameType) {
     },
     {
       name: 'RESPONSES, the last',
-      dock: { ...base, phase: 'RESULTS', playerCount: 5, answerCount: 4, spotlightIndex: 3 },
+      dock: { ...base, roundNumber: 3, phase: 'RESULTS', playerCount: 5, answerCount: 4, spotlightIndex: 3 },
       json: {
         state: 'RESULTS#003', gameType, stageBeat: 'results',
         stageFocus: { focus: 'answer', index: 3, part: 0, parts: 1, phase: 'RESULTS' },
@@ -101,25 +101,25 @@ function cases(gameType) {
     },
     {
       name: 'READ while Workie writes',
-      dock: { ...base, phase: 'FIELD_NOTES', notesPage: 0, notesPages: 1, notesReady: false },
+      dock: { ...base, roundNumber: 3, phase: 'FIELD_NOTES', notesPage: 0, notesPages: 1, notesReady: false },
       json: { state: 'RESULTS#003', gameType, stageBeat: 'field-notes', stageNotes: { page: 0, pages: 1 } },
       extras: { ...remoteBase, notesReady: false },
     },
     {
       name: 'READ, page 1 of 3',
-      dock: { ...base, phase: 'FIELD_NOTES', notesPage: 0, notesPages: 3, notesReady: true },
+      dock: { ...base, roundNumber: 3, phase: 'FIELD_NOTES', notesPage: 0, notesPages: 3, notesReady: true },
       json: { state: 'RESULTS#003', gameType, stageBeat: 'field-notes', stageNotes: { page: 0, pages: 3 } },
       extras: { ...remoteBase, notesReady: true },
     },
     {
       name: 'READ, the last page',
-      dock: { ...base, phase: 'FIELD_NOTES', notesPage: 2, notesPages: 3, notesReady: true },
+      dock: { ...base, roundNumber: 3, phase: 'FIELD_NOTES', notesPage: 2, notesPages: 3, notesReady: true },
       json: { state: 'RESULTS#003', gameType, stageBeat: 'field-notes', stageNotes: { page: 2, pages: 3 } },
       extras: { ...remoteBase, notesReady: true },
     },
     {
       name: 'FEEDBACK',
-      dock: { ...base, phase: 'FEEDBACK' },
+      dock: { ...base, roundNumber: 3, phase: 'FEEDBACK' },
       json: { state: 'RESULTS#003', gameType, stageBeat: 'feedback' },
       extras: { ...remoteBase },
     },

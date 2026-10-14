@@ -134,14 +134,14 @@ describe('the RESULTS two-step reaches the button', () => {
     await connect();
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /what we heard/i })).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /next round/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start round 4/i })).not.toBeInTheDocument();
   });
 
-  it('offers Next Round once the server says the beat has moved', async () => {
+  it('offers Start round 4 once the server says the beat has moved', async () => {
     serve({ state: 'RESULTS#003', stageBeat: 'field-notes' });
     await connect();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /next round/i })).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /start round 4/i })).toBeInTheDocument());
   });
 
   it('posts the beat to stage-beat, addressed to the round on screen', async () => {
@@ -405,7 +405,7 @@ describe('the dock draws roundStep: one primary, one secondary', () => {
     const primary = await screen.findByRole('button', { name: 'Show the read' });
     expect(primary).toBeDisabled();
     expect(screen.getByText('Workie is writing', { selector: '.hr-dock-hint' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next round' })).toHaveClass('hr-sec');
+    expect(screen.getByRole('button', { name: 'Start round 4' })).toHaveClass('hr-sec');
   });
 
   it('Skip is the secondary while answering, and asks twice before it fires', async () => {

@@ -45,7 +45,7 @@ import PhaseBar from './PhaseBar';
  * it, because `profile` and `phase` are unchanged.
  */
 export default function Stage({
-  profile, phase, rail = null, meter = null, dock = null, overlay = null, fitKey = '', children,
+  profile, phase, rail = null, strip = null, meter = null, dock = null, overlay = null, fitKey = '', children,
 }) {
   const stageRef = useRef(null);
 
@@ -99,6 +99,9 @@ export default function Stage({
       <div className="field" aria-hidden="true" />
       {rail || <div className="rail" />}
       <PhaseBar phase={phase} />
+      {/* The workflow strip (session flow v3 §4.6): host-only, in its own row
+          so the fitter's measure of `.main` already leaves room for it. */}
+      {strip}
       <div className={`main${meter ? '' : ' solo'}`}>
         {children}
         {meter}

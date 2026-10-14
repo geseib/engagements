@@ -88,7 +88,7 @@ describe('the Remote pages the read', () => {
     await connect();
     await screen.findByText('Page 1 of 3');
     await waitFor(() => expect(dock().getByRole('button', { name: 'Next page' })).toHaveClass('hr-primary'));
-    expect(dock().getByRole('button', { name: 'Next round' })).toHaveClass('hr-sec');
+    expect(dock().getByRole('button', { name: 'Start round 4' })).toHaveClass('hr-sec');
   });
 
   it('Next page posts a step, never an absolute page, and re-reads the state at once', async () => {
@@ -125,14 +125,14 @@ describe('the Remote pages the read', () => {
   it('on the last page the primary is Next round, with Request feedback beside it', async () => {
     serve({ page: 2, pages: 3 });
     await connect();
-    await waitFor(() => expect(dock().getByRole('button', { name: 'Next round' })).toHaveClass('hr-primary'));
+    await waitFor(() => expect(dock().getByRole('button', { name: 'Start round 4' })).toHaveClass('hr-primary'));
     expect(dock().getByRole('button', { name: 'Request feedback' })).toHaveClass('hr-sec');
   });
 
   it('a one-page read shows no position at all', async () => {
     serve({ page: 0, pages: 1 });
     await connect();
-    await waitFor(() => expect(dock().getByRole('button', { name: 'Next round' })).toHaveClass('hr-primary'));
+    await waitFor(() => expect(dock().getByRole('button', { name: 'Start round 4' })).toHaveClass('hr-primary'));
     expect(screen.queryByText(/^Page \d of \d$/)).not.toBeInTheDocument();
   });
 });

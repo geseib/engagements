@@ -112,7 +112,7 @@ afterEach(() => {
 async function reachNextRound() {
   const heard = await screen.findByRole('button', { name: /what we heard/i }, { timeout: 5000 });
   await act(async () => { fireEvent.click(heard); });
-  return screen.findByRole('button', { name: /next (round|question)/i }, { timeout: 5000 });
+  return screen.findByRole('button', { name: /^(next|start) (round|question)/i }, { timeout: 5000 });
 }
 
 const reportWasRequested = () => global.fetch.mock.calls.some(([url]) => /report/i.test(String(url)));
@@ -129,7 +129,7 @@ describe('an action on a session that has ended elsewhere', () => {
 
     expect(await screen.findByText(ENDED_ELSEWHERE)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /open session report/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /next (round|question)/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(next|start) (round|question)/i })).toBeNull();
     expect(window.alert).not.toHaveBeenCalled();
     expect(document.body.textContent).not.toMatch(/HTTP 400|HTTP 401/);
   });

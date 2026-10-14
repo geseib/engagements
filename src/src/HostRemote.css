@@ -885,3 +885,57 @@ a.hr-btn { text-decoration: none; color: inherit; }
 .hr-asks-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: .8125rem; color: var(--muted); }
 .hr-asks-list .askicons { font-size: 1.4rem; margin-left: 0; }
 .hr-notes-list .askicons { font-size: 1.4rem; }
+
+/* ------------------------------------------------------- workflow dots */
+/* Session flow v3 §4.6: the strip as dots under the bar. Same states as the
+   laptop's strip: done filled, live ringed, to come empty, Ask dashed. */
+.hr-steps {
+  padding: 0 var(--hr-gutter);
+  border-bottom: 1px solid rgb(var(--glow-rgb) / .1);
+}
+.hr-steps-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.hr-steps-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hr-steps-round { font-weight: 800; }
+.hr-steps-dots { display: inline-flex; gap: 5px; flex: none; }
+.hr-steps-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+.hr-steps-dot.is-done { background: var(--muted); }
+.hr-steps-dot.is-live { border-color: var(--info); box-shadow: 0 0 0 2px rgb(var(--info-rgb) / .35); background: var(--info); }
+.hr-steps-dot.is-optional:not(.is-live) { border-style: dashed; }
+.hr-steps-live {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.hr-steps-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.hr-steps-list li { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; color: var(--muted); }
+.hr-steps-list li.is-live, .hr-steps-list li.is-done { color: var(--text); }
+.hr-steps-now { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--info); }
+.hr-steps-explain { grid-column: 1 / -1; color: var(--muted); }
