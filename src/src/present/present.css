@@ -172,15 +172,18 @@ html.present-locked body {
   max-width: 40ch;
 }
 /* the team's task (session 7924): an accent rule, never dropped */
+/* The box carries the line's size, so its ch measure is the line's, not the
+   frame's (a 44ch box at the frame's size wrapped the task at ~20 characters). */
 .present .present-task {
+  font-size: calc(var(--L-secondary) * var(--fit));
   border-left: 6px solid var(--accent);
   padding: .15em 0 .15em .7em;
   margin: 0 0 .7em;
-  max-width: 44ch;
+  max-width: 40ch;
 }
 .present .present-task p {
   margin: 0;
-  font-size: calc(var(--L-secondary) * var(--fit));
+  font-size: inherit;
   line-height: 1.3;
   font-weight: 600;
 }
@@ -241,6 +244,14 @@ html.present-locked body {
 .present .present-main-nav .present-nav { flex: 1; height: auto; }
 /* Voting: the room votes on its devices while the wall walks the responses. */
 .present .present-vote-cue { margin: 0 0 18px; text-align: center; }
+/* the task under the vote cue: centred with it, one line, no rule */
+.present .present-main-nav .present-task.is-slim {
+  align-self: center;
+  text-align: center;
+  border-left: 0;
+  padding: 0;
+  margin: -10px auto 18px;
+}
 .present .present-foot-count { color: var(--text); font-weight: 600; }
 .present .present-nav {
   display: grid;
