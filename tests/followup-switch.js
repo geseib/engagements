@@ -3,7 +3,8 @@
  * buildspecs, auth/authorizer.js), read as text.
  *
  *   - `FollowUpAsks` is a parameter, 'on' | 'off', default 'off';
- *   - dev's buildspec passes FollowUpAsks=on; test and prod never mention it;
+ *   - dev's and test's buildspecs pass FollowUpAsks=on (test since 2026-10-13,
+ *     for the owner's reviewers); prod never mentions it;
  *   - exactly three functions read it as FOLLOWUP_ASKS_ENABLED: get-ai-summary
  *     (the suggestions), comments (the routes) and next-question (the close);
  *   - the routes are four events on the comments function — no new Lambda —
@@ -42,13 +43,15 @@ check("FollowUpAsks: 'on' | 'off', default 'off'", () => {
   assert.match(b[1], /AllowedValues: \['on', 'off'\]/);
   assert.match(b[1], /Default: 'off'/);
 });
-check('dev passes FollowUpAsks=on, before the deploy line', () => {
-  const s = spec('dev');
-  assert.match(s, /PARAM_OVERRIDES="\$PARAM_OVERRIDES FollowUpAsks=on"/);
-  assert.ok(s.indexOf('FollowUpAsks=on') < s.indexOf('Deploying to AWS...'));
+check('dev and test pass FollowUpAsks=on, before the deploy line', () => {
+  for (const tier of ['dev', 'test']) {
+    const s = spec(tier);
+    assert.match(s, /PARAM_OVERRIDES="\$PARAM_OVERRIDES FollowUpAsks=on"/, tier);
+    assert.ok(s.indexOf('FollowUpAsks=on') < s.indexOf('Deploying to AWS...'), tier);
+  }
 });
-check('test and prod never mention it, and so take off', () => {
-  for (const tier of ['test', 'prod']) assert.ok(!/FollowUpAsks|FOLLOWUP_ASKS/.test(spec(tier)), tier);
+check('prod never mentions it, and so takes off', () => {
+  assert.ok(!/FollowUpAsks|FOLLOWUP_ASKS/.test(spec('prod')), 'prod');
 });
 
 console.log('\n2. who reads it');
