@@ -63,7 +63,9 @@ function Step({ step, viewing, onView }) {
   );
 }
 
-export default function WorkflowStrip({ strip, mode = 'full', viewing = null, onView = null }) {
+export default function WorkflowStrip({
+  strip, mode = 'full', viewing = null, onView = null, viewingWhere = '', onBack = null, places = null,
+}) {
   if (!strip) return null;
   const slim = mode === 'slim';
   const press = slim ? null : onView;
@@ -75,6 +77,15 @@ export default function WorkflowStrip({ strip, mode = 'full', viewing = null, on
 
   return (
     <nav className={`wfs${slim ? ' wfs--slim' : ''}`} aria-label="Where the session is">
+      {/* Players, Questions, Rounds, Settings, always in reach (owner's
+          revised spec; §4.8). Each opens the Session panel at its tab. */}
+      {!slim && places && places.length ? (
+        <ul className="wfs-places" aria-label="Session">
+          {places.map((p) => (
+            <li key={p.id}><button type="button" className="wfs-place" onClick={p.onClick}>{p.label}</button></li>
+          ))}
+        </ul>
+      ) : null}
       <ol className="wfs-steps">
         {setup ? <Step step={setup} viewing={viewing === 'setup'} onView={press} /> : null}
         {sep}
@@ -87,7 +98,15 @@ export default function WorkflowStrip({ strip, mode = 'full', viewing = null, on
         {sep}
         {finish ? <Step step={finish} viewing={viewing === 'finish'} onView={press} /> : null}
       </ol>
-      {!slim && strip.part ? (
+      {!slim && viewing ? (
+        <p className="wfs-bar" role="status">
+          <span className="wfs-bar-text">
+            {RW.viewingBar(strip.steps.find((s) => s.id === viewing)?.label || '', viewingWhere)}
+          </span>
+          {onBack ? <button type="button" className="wfs-bar-back" onClick={onBack}>{RW.backToRoom}</button> : null}
+        </p>
+      ) : null}
+      {!slim && !viewing && strip.part ? (
         <p className="wfs-part">
           <span className="wfs-part-k">{RW.yourPartLabel}</span>
           {strip.part.before}

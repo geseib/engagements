@@ -16,6 +16,27 @@
   color: var(--muted);
   border-bottom: var(--hair, 1px) solid rgb(var(--glow-rgb) / .1);
 }
+.wfs-places {
+  list-style: none;
+  margin: 0 0 .3em;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: .2em 1em;
+}
+.wfs-place {
+  font: inherit;
+  font-size: calc(var(--t-meta) * .82);
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: .1em 0;
+  cursor: pointer;
+}
+.wfs-place:hover { text-decoration: underline; }
+.wfs-place:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wfs-steps,
 .wfs-loop {
   list-style: none;
@@ -106,6 +127,79 @@ button.wfs-step:focus-visible { outline: 2px solid var(--accent); outline-offset
   color: var(--muted);
 }
 .wfs-action { color: var(--accent-text); font-weight: 800; }
+
+/* Looking at another step (§4.8): the amber bar, and Back to the room. */
+.wfs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4em 1em;
+  margin: .3em 0 0;
+  padding: .2em .6em;
+  font-size: calc(var(--t-meta) * .85);
+  color: var(--text);
+  background: rgb(var(--accent-rgb) / .16);
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+}
+.wfs-bar-back {
+  margin-left: auto;
+  font: inherit;
+  font-weight: 700;
+  color: var(--accent-text);
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The viewed step's panel, over the stage's main area. */
+.wfs-view {
+  grid-area: main;
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: clamp(12px, 2vh, 28px) clamp(16px, 2.2vw, 40px);
+  background: var(--bg);
+}
+.wfs-view-card {
+  max-width: 60ch;
+  font-size: var(--t-body);
+  color: var(--text);
+}
+.wfs-view-h { margin: 0 0 .2em; font-size: var(--t-secondary); }
+.wfs-view-explain { margin: 0 0 .9em; color: var(--muted); }
+.wfs-view-row {
+  margin: 0 0 .6em;
+  padding: .4em .7em;
+  border: var(--hair, 1px) solid rgb(var(--glow-rgb) / .16);
+  border-radius: 8px;
+}
+.wfs-view-k {
+  margin: 0;
+  font-size: calc(var(--t-meta) * .8);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wfs-view-scope { font-weight: 600; letter-spacing: .04em; }
+.wfs-view-v, .wfs-view-p { margin: .15em 0 0; }
+.wfs-view-note { margin: .8em 0; color: var(--muted); font-size: calc(var(--t-body) * .9); }
+.wfs-view-btn {
+  font: inherit;
+  font-size: calc(var(--t-meta) * .9);
+  font-weight: 700;
+  padding: .3em .9em;
+  color: var(--text);
+  background: transparent;
+  border: var(--hair, 1px) solid rgb(var(--glow-rgb) / .4);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.wfs-view-btn:focus-visible, .wfs-bar-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* One screen: the room sees it, so it is quieter and says only where. */
 .wfs--slim { padding-block: .2em; }

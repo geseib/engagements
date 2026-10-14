@@ -45,7 +45,7 @@ import PhaseBar from './PhaseBar';
  * it, because `profile` and `phase` are unchanged.
  */
 export default function Stage({
-  profile, phase, rail = null, strip = null, meter = null, dock = null, overlay = null, fitKey = '', children,
+  profile, phase, rail = null, strip = null, view = null, meter = null, dock = null, overlay = null, fitKey = '', children,
 }) {
   const stageRef = useRef(null);
 
@@ -106,6 +106,9 @@ export default function Stage({
         {children}
         {meter}
       </div>
+      {/* A step the host is looking at (session flow v3 §4.8): over `.main`,
+          which stays mounted underneath and keeps its place. */}
+      {view}
       {dock || <div className="dock" />}
       {overlay}
     </main>

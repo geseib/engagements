@@ -301,6 +301,9 @@ export const HOST_INTENTS = {
   FEEDBACK: 'feedback',       // open a feedback round — RESULTS' third beat
   PAGE: 'notes-page',  // turn to the next page of the read-back, not a new round
   REPORT: 'report',    // open the session report
+  // Session flow v3 §4.8: the host was LOOKING at another step of the
+  // workflow strip; this returns the laptop to the live view. Nothing is sent.
+  BACK_TO_ROOM: 'back-to-room',
   LEAVE: 'leave',      // leave this session and go back to the host menu
   // The settings panel's own control, not the round dock's — a trivia, poll,
   // call-and-answer or wavelength session ends on the host's own say-so

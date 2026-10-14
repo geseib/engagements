@@ -153,6 +153,24 @@ const RW = Object.freeze({
   viewingWhere: (round, step) => `${round}, ${step}`,
   backToRoom: 'Back to the room',
   viewingNothingMoves: 'Nothing you do here moves the room.',
+  /** What a viewed step shows (owner, 14 Oct: looking only, never acting). */
+  view: Object.freeze({
+    sessionName: 'Session name',
+    roomScreen: 'Room screen',
+    questionSet: 'Question set',
+    joined: 'People joined',
+    fromNextRound: 'From the next round',
+    twoScreens: (presenting) => (presenting ? 'Two screens · the room\'s window is open' : 'Two screens · the room\'s window is not open yet'),
+    oneScreen: 'One screen · the room sees this laptop',
+    settingsScope: 'Settings apply from the next round. The live question, its answers and its ballots never change from the settings.',
+    allSettings: 'All settings',
+    answeredOf: (x, n) => `${x} of ${n} answered this round.`,
+    votedOf: (x, n) => `${x} of ${n} voted this round.`,
+    heardDone: 'The results and the read are done for this round.',
+    comesLater: 'This step has not happened yet in this round.',
+    roundsPlayed: (n) => `${n} ${n === 1 ? 'round' : 'rounds'} played so far.`,
+    reportFromSession: 'The report so far opens from the session panel. Finishing the session is its own step there.',
+  }),
 
   // ── The room's devices and the wall ───────────────────────────────────
   answersOnDevices: (n) => `${n} ${plural(n, 'answer is', 'answers are')} on your ${deviceWords}.`,

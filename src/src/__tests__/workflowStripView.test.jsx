@@ -10,6 +10,7 @@ import path from 'path';
 import { render, screen, fireEvent } from '@testing-library/react';
 import WorkflowStrip from '../components/stage/WorkflowStrip';
 import RemoteStepDots from '../components/RemoteStepDots';
+import StepView from '../components/stage/StepView';
 import { stripFor } from '../config/workflowStrip';
 
 const read = stripFor({
@@ -40,6 +41,44 @@ describe('the laptop strip, two screens', () => {
   test('the live step is marked as the current step', () => {
     render(<WorkflowStrip strip={read} mode="full" onView={() => {}} />);
     expect(screen.getByRole('button', { name: /^What we heard, page 2 of 6, live/ })).toHaveAttribute('aria-current', 'step');
+  });
+});
+
+describe('looking at another step (session flow v3 §4.8)', () => {
+  test('the amber bar says where the room is, and Back to the room returns', () => {
+    const onBack = jest.fn();
+    render(<WorkflowStrip strip={read} mode="full" onView={() => {}} viewing="setup" viewingWhere="round 2, What we heard, page 2 of 6" onBack={onBack} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Viewing Setup · the room is still on round 2, What we heard, page 2 of 6');
+    expect(screen.queryByText('Your part now')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the room' }));
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  test('Setup shows the settings with their scope (owner: everything from the next round) and opens All settings', () => {
+    const onAll = jest.fn();
+    const setup = read.steps.find((s) => s.id === 'setup');
+    render(<StepView step={setup} facts={{ title: 'Relay expansion', twoScreens: true, presenting: true, setName: 'Hard Books', playerCount: 4 }} onAllSettings={onAll} />);
+    expect(screen.getByText('Relay expansion')).toBeInTheDocument();
+    expect(screen.getAllByText(/From the next round/)).toHaveLength(3);
+    expect(screen.getByText(/never change from the settings/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'All settings' }));
+    expect(onAll).toHaveBeenCalled();
+  });
+
+  test('a done step says what happened; a later one says it has not happened yet', () => {
+    const answer = read.steps.find((s) => s.id === 'answer');
+    const { rerender } = render(<StepView step={answer} facts={{ playerCount: 4, answered: 3 }} />);
+    expect(screen.getByText('3 of 4 answered this round.')).toBeInTheDocument();
+    rerender(<StepView step={read.steps.find((s) => s.id === 'ask')} facts={{}} />);
+    expect(screen.getByText(/has not happened yet/)).toBeInTheDocument();
+  });
+
+  test('the host page swaps the main button for Back to the room and stops the arrows paging while looking', () => {
+    const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    expect(page).toMatch(/controls=\{dockControls\}/);
+    expect(page).toMatch(/intent: HOST_INTENTS\.BACK_TO_ROOM/);
+    expect(page).toMatch(/hostPhase !== 'FIELD_NOTES' \|\| viewing\) return false/);
+    expect(page).toMatch(/const viewing = twoSurfaces && workflow/);
   });
 });
 
