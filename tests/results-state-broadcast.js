@@ -259,12 +259,21 @@ async function run(gameId) {
   // Previously returned "No votes found" and left the game on VOTE#001 forever.
   // A round nobody voted on is still a resolved round.
   seedGame('1002', 'call-and-answer', 'VOTE#001', {
-    items: [answer('1002', 'Ada', 'unloved answer')],
+    items: [answer('1002', 'Ada', 'unloved answer'), answer('1002', 'Grace', 'another unloved one')],
   });
   const noVotes = await run('1002');
   assertResolved('1002', 'no votes');
   check('no votes: still reports the empty tally honestly', () =>
     assert.strictEqual(JSON.parse(noVotes.body).totalVotes, 0));
+  // Owner, 2026-10-14: a round nobody voted on still has its responses — the
+  // screens said "No responses came in" when the reply carried none.
+  check('no votes: every response is in the tally at 0 points, and nobody won', () => {
+    const body = JSON.parse(noVotes.body);
+    const rows = Object.values(body.voteTallies);
+    assert.deepStrictEqual(rows.map((r) => r.answerText).sort(), ['another unloved one', 'unloved answer']);
+    assert.ok(rows.every((r) => r.totalScore === 0));
+    assert.deepStrictEqual(body.winners, []);
+  });
 
   // ---------- 3. trivia ----------
   console.log('\n3. trivia');
