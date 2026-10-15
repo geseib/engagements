@@ -240,5 +240,7 @@
 .askc .askc-why { margin: 0 0 10px; }
 .askc .askc-privacy { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
 .askc .askc-note { margin: 0 0 14px; font-size: 15px; line-height: 1.45; color: var(--text); }
-/* The Remote: a full-height sheet. */
-.askp.askc.askc--sheet { width: 100%; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+/* The Remote: a full-height sheet, edge to edge. The scrim's own padding
+   pushed it 24px down and 24px off the bottom of a 390x844 phone (walk, 15 Oct). */
+.ui-scrim.askc-scrim--sheet { padding: 0; }
+.askp.askc.askc--sheet { width: 100%; max-height: 100dvh; height: 100dvh; margin: 0; border-radius: 0; }

@@ -117,3 +117,25 @@ describe('never on the wall or a participant\'s device', () => {
     expect(src(file)).not.toMatch(/WorkflowStrip|RemoteStepDots|workflowStrip/);
   });
 });
+
+describe('the external review of test (15 Oct)', () => {
+  const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+  test('pressing Ask in the strip opens the composer on the ready questions', () => {
+    expect(page).toMatch(/if \(id === 'ask' && workflow\.live !== 'ask'[\s\S]{0,300}setAskComposer\(/);
+  });
+  test('a live question shows one live mark, not "live · Live"', () => {
+    const live = stripFor({
+      gameType: 'call-and-answer', roundNoun: 'Round', state: 'RESULTS#002', stageBeat: 'ask', roomAsk: { status: 'open' },
+    });
+    expect(live.steps.find((x) => x.id === 'ask').sub).toBe('');
+  });
+  test('the voice note says "active this round" once the next round starts', () => {
+    expect(page).toMatch(/is active this round\./);
+  });
+  test('the phone says "Answer received." for a Call & Answer response', () => {
+    const player = fs.readFileSync(path.join(__dirname, '..', 'PlayerPage.jsx'), 'utf8');
+    expect(player).toMatch(/'Answer received\.'/);
+    expect(player).not.toMatch(/Application Submitted!/);
+  });
+});
+

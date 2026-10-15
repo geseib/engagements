@@ -982,6 +982,17 @@ function GameHostPage() {
   const [gamePersonas, setGamePersonas] = useState([]);   // live game
   const [gamePersonaId, setGamePersonaId] = useState('');       // the live game's voice
   const [personaSwitchStatus, setPersonaSwitchStatus] = useState('');
+  // Which round a voice change was made in, and its name, so the note can
+  // say "active this round" once the next round starts (external review of
+  // test, 15 Oct: it still said "from the next question" until a reload).
+  const [personaSwitchAt, setPersonaSwitchAt] = useState(null);
+  useEffect(() => {
+    if (!personaSwitchAt || lessonNumber <= personaSwitchAt.round) return;
+    setPersonaSwitchStatus(personaSwitchAt.name
+      ? `${personaSwitchAt.name} is active this round.`
+      : 'Workie adapts to the session this round.');
+    setPersonaSwitchAt(null);
+  }, [lessonNumber, personaSwitchAt]);
   // Workie's summary approach for the live game — the prompt template, where
   // the voice is only the register. '' means "what the set says, else the
   // format standard". Same next-round semantics as the voice.
@@ -1927,6 +1938,7 @@ function GameHostPage() {
           ? `${picked.name} takes over from the next question.`
           : 'Workie adapts to the session from the next question.'
       );
+      setPersonaSwitchAt({ round: lessonNumber, name: picked ? picked.name : null });
     } catch (error) {
       console.error('❌ HOST: failed to switch persona:', error);
       setGamePersonaId(previous); // don't leave the picker claiming a change that never landed
@@ -7598,6 +7610,16 @@ Focus on actionable business strategy insights.`;
                 // In the lobby, Setup is live: pressing it reopens the choice
                 // of room screen rather than a view of itself.
                 if (id === 'setup' && workflow.live === 'setup') { setRoomScreenOpen((open) => !open); return; }
+                // Ask opens the composer on Workie's ready questions (external
+                // review of test, 15 Oct: "Ask · 1 ready" led to a generic view
+                // and the host had to go back to page 4 of the read). Opening
+                // it sends nothing, so it stays within "looking only".
+                if (id === 'ask' && workflow.live !== 'ask' && hostControls.snapshot && hostControls.snapshot.asksEnabled
+                  && /^RESULTS#/.test(String(gameState || ''))) {
+                  setViewingStep(null);
+                  setAskComposer({ startIndex: roundAsks.unsent.length === 1 ? roundAsks.unsent[0].index : null });
+                  return;
+                }
                 setViewingStep(id === workflow.live ? null : id);
               }}
               places={twoSurfaces ? setupPanelTabs().map((t) => ({

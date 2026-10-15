@@ -47,7 +47,7 @@ describe('the steps', () => {
   test('a question for the room: Ask live; the set noun names the round', () => {
     const s = stripFor(snap({ state: 'RESULTS#003', stageBeat: 'ask', roomAsk: { status: 'open' }, roundNoun: 'Lesson' }));
     expect(stateOf(s)).toMatchObject({ heard: 'done', ask: 'live' });
-    expect(s.steps.find((x) => x.id === 'ask').sub).toBe('live');
+    expect(s.steps.find((x) => x.id === 'ask').sub).toBe('');
     expect(s.round.label).toBe('Lesson 3');
   });
 

@@ -73,7 +73,8 @@ function subFor(id, moment, ctx) {
     }
   }
   if (id === 'ask') {
-    if (moment === 'ROOM_QUESTION') return lower(RW.stepLive);
+    // ROOM_QUESTION: no sub-state; the step's own LIVE mark says it (external
+    // review, 15 Oct: "Ask · live · Live" said it twice).
     if (moment === 'ROOM_RESULTS') return lower(RW.stepResults);
   }
   return '';

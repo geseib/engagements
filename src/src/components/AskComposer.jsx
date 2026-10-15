@@ -165,7 +165,7 @@ export default function AskComposer({
 
   return (
     <Modal
-      overlayClassName="ui-scrim"
+      overlayClassName={`ui-scrim${sheet ? ' askc-scrim--sheet' : ''}`}
       contentClassName={`ui-dialog askp askc${sheet ? ' askc--sheet' : ''}`}
       onClose={requestClose}
       closeOnEscape={() => !busy}
