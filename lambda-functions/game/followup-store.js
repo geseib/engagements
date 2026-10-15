@@ -221,7 +221,7 @@ async function countAnswers(ask, answerRows, orgId) {
  *
  * @returns {Promise<{ok: true, ask: object} | {ok: false, code: 'LIVE'}>}
  */
-async function createAsk(db, { gameId, round, orgId, value, origin, anchor = null, now = new Date().toISOString(), askId = keys.newAskId() }) {
+async function createAsk(db, { gameId, round, orgId, value, origin, anchor = null, record = null, now = new Date().toISOString(), askId = keys.newAskId() }) {
   const sk = keys.askSk(round, askId);
   if (!sk) throw new Error('followup-store: bad round or ask id');
   const item = {
@@ -238,6 +238,12 @@ async function createAsk(db, { gameId, round, orgId, value, origin, anchor = nul
     FromAnswers: origin.fromAnswers || [],
     Origin: origin.origin,
     SuggestionIndex: value.suggestionIndex,
+    // Session flow v3 §4.2. Suggested is Workie's words (sealed); Edits names
+    // what changed; SentFrom and RoomSize are the host client's, checked.
+    ...(record && record.suggested ? { Suggested: record.suggested } : {}),
+    ...(record ? { Edits: record.edits || [] } : {}),
+    ...(record && record.sentFrom ? { SentFrom: record.sentFrom } : {}),
+    ...(record && Number.isInteger(record.roomSize) ? { RoomSize: record.roomSize } : {}),
     Status: 'live',
     SentAt: now,
     ttl: ttlFrom(now, ROUND_RECORD_DAYS),

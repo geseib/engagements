@@ -8,7 +8,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { placeAsks, pointKey } from '../config/askAnchors';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import AskIcons from '../components/AskIcons';
-import AskPreview, { askBody } from '../components/AskPreview';
+import AskComposer, { askBody, editedFrom } from '../components/AskComposer';
 import AskStage from '../components/stage/AskStage';
 
 const READ = [
@@ -53,32 +53,85 @@ describe('where the icons go', () => {
   });
 });
 
-describe('the preview', () => {
+describe('the composer (session flow v3 §4.1)', () => {
   const entry = (ask, index = 0) => ({ index, ask, section: 'Discussion topics', point: 1 });
+  const open = (props) => render(<AskComposer onSend={jest.fn()} onClose={jest.fn()} {...props} />);
 
-  test('shows what the phones will show and what it settles, then sends the suggestion as written', async () => {
+  test('from a Workie icon: that suggestion picked, its words ready, sent as written', async () => {
     const onSend = jest.fn().mockResolvedValue({ ok: true });
     const onClose = jest.fn();
-    render(<AskPreview entry={entry(RATE)} onSend={onSend} onClose={onClose} />);
-    expect(screen.getByText('Rate · from Discussion topics, point 1')).toBeInTheDocument();
-    expect(screen.getByText(/1 · Disagree/)).toBeInTheDocument();
+    open({ suggestions: [entry(RATE)], startIndex: 0, onSend, onClose });
+    expect(screen.getByRole('button', { name: /Rate.*from Discussion topics, point 1/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('textbox', { name: 'A statement from the room' })).toHaveValue(RATE.statement);
     expect(screen.getByText(/Tests the riskiest assumption\. From answer 1\./)).toBeInTheDocument();
+    expect(screen.getByText(/Answers are anonymous/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Send to the room' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(onSend).toHaveBeenCalledWith({ kind: 'rate', statement: RATE.statement, fromAnswers: [1], suggestionIndex: 0 });
   });
 
+  test('from the dock: blank, with Workie\'s suggestions to pick from; a blank question sends with no suggestion', async () => {
+    const onSend = jest.fn().mockResolvedValue({ ok: true });
+    open({ suggestions: [entry(IDEAS, 0), entry(RATE, 1)], startIndex: null, onSend });
+    expect(screen.getByRole('button', { name: 'Start from blank' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.change(screen.getByRole('textbox', { name: 'The question the room sees' }), { target: { value: 'What would you stop doing?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to the room' }));
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith({ kind: 'ideas', question: 'What would you stop doing?', fromAnswers: [], suggestionIndex: undefined }));
+  });
+
+  test('changing Workie\'s words shows Edited, and Back to Workie\'s words restores them', () => {
+    open({ suggestions: [entry(IDEAS)], startIndex: 0 });
+    const box = screen.getByRole('textbox', { name: 'The question the room sees' });
+    expect(screen.queryByText('Edited')).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'Something else?' } });
+    expect(screen.getByText('Edited')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: "Back to Workie's words" }));
+    expect(box).toHaveValue(IDEAS.question);
+    expect(editedFrom(entry(IDEAS), 'rate', { question: IDEAS.question, statement: '', options: [] })).toBe(true);
+  });
+
   test('switching kind keeps the words; a reworded option is marked', () => {
-    render(<AskPreview entry={entry(CHOICE, 2)} onSend={jest.fn()} onClose={jest.fn()} />);
+    open({ suggestions: [entry(CHOICE, 2)], startIndex: 2 });
     expect(screen.getByText('Reworded')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: /Rate/ }));
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Which test would you start first?');
+    expect(screen.getByRole('textbox', { name: 'A statement from the room' })).toHaveValue('Which test would you start first?');
   });
 
   test('a live question blocks Send and says why', () => {
-    render(<AskPreview entry={entry(IDEAS)} onSend={jest.fn()} onClose={jest.fn()} blocked />);
+    open({ suggestions: [entry(IDEAS)], startIndex: 0, blocked: true });
     expect(screen.getByRole('button', { name: 'Send to the room' })).toBeDisabled();
     expect(screen.getByRole('alert')).toHaveTextContent('Finish the open question first');
+  });
+
+  test('Comments opens the feedback round instead of sending an ask (Q7)', async () => {
+    const onComments = jest.fn().mockResolvedValue({ ok: true });
+    const onSend = jest.fn();
+    open({ suggestions: [], onComments, onSend });
+    fireEvent.click(screen.getByRole('radio', { name: /Comments/ }));
+    expect(screen.getByText(/Names are shown/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open comments' }));
+    await waitFor(() => expect(onComments).toHaveBeenCalled());
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  test('without onComments there is no Comments kind (the tier keeps Request feedback)', () => {
+    open({ suggestions: [] });
+    expect(screen.queryByRole('radio', { name: /Comments/ })).not.toBeInTheDocument();
+  });
+
+  test('one screen folds Workie\'s reason away (Q2)', () => {
+    open({ suggestions: [entry(RATE)], startIndex: 0, oneScreen: true });
+    expect(screen.getByText("Why Workie suggests this")).toBeInTheDocument();
+    expect(screen.queryByText('For you:')).not.toBeInTheDocument();
+  });
+
+  test('words from the read: a click fills the question, then adds options to a Choose (Q6)', () => {
+    open({ suggestions: [], readLines: ['Retire the paper sign-off sheet first.', 'Name the measure that triggers the next stage.'] });
+    fireEvent.click(screen.getByRole('button', { name: /Use these words: Retire the paper/ }));
+    expect(screen.getByRole('textbox', { name: 'The question the room sees' })).toHaveValue('Retire the paper sign-off sheet first.');
+    fireEvent.click(screen.getByRole('radio', { name: /Choose/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Use these words: Name the measure/ }));
+    expect(screen.getByRole('textbox', { name: 'Option A' })).toHaveValue('Name the measure that triggers the next stage.');
   });
 
   test('the body is refused until it is a question the room can answer', () => {
@@ -87,6 +140,7 @@ describe('the preview', () => {
     expect(askBody('ideas', { question: '  ', statement: '', options: [] }, e).error).toMatch(/Write the question/);
     expect(askBody('choice', { question: 'Q?', statement: '', options: [{ text: 'A', answer: 1 }, { text: 'b', answer: 2 }] }, e).body)
       .toMatchObject({ kind: 'choice', options: [{ text: 'A', answer: 1 }, { text: 'b', answer: 2 }], suggestionIndex: 0 });
+    expect(askBody('ideas', { question: 'Q?', statement: '', options: [] }, null).body).toEqual({ kind: 'ideas', question: 'Q?', fromAnswers: [], suggestionIndex: undefined });
   });
 });
 

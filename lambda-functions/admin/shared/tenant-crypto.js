@@ -557,8 +557,11 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *    FOLLOWUP#nnn#ASK#<id>#A#<name>    `Value` and `Text`, one person's answer.
    *  `Kind`, `Status`, `Origin`, `FromAnswers`, the counts of drops and marks,
    *  the times, `Model` and `PlayerName` (plaintext on every player row) are
-   *  structure and stay readable. */
-  followup: Object.freeze(['Asks', 'Statement', 'Question', 'Options', 'Tally', 'Value', 'Text', 'Picked', 'Anchor']),
+   *  structure and stay readable. `Suggested` (session flow v3) is Workie's
+   *  words at send time and its reason, so it is sealed with them; `Anchor`
+   *  now carries the point's own text too. `Edits`, `SentFrom`, `RoomSize`
+   *  are structure. */
+  followup: Object.freeze(['Asks', 'Statement', 'Question', 'Options', 'Tally', 'Value', 'Text', 'Picked', 'Anchor', 'Suggested']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────

@@ -154,6 +154,7 @@ export function snapshotFromHostState(json, extras = {}) {
     goalLine: extras.goalLine || '',
     roomAsk: extras.roomAsk || null,
     asksReady: extras.asksReady || 0,
+    asksEnabled: Boolean(extras.asksEnabled),
   };
 }
 

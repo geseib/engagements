@@ -110,7 +110,8 @@ import {
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 import useRoundAsks from './hooks/useRoundAsks';
-import AskPreview from './components/AskPreview';
+import AskComposer from './components/AskComposer';
+import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
 import FW from './config/followUpWords';
@@ -1166,14 +1167,19 @@ function GameHostPage() {
     bumped by followUpChanged, aiSummaryReady and stageBeatChanged.
   */
   const [askRefresh, setAskRefresh] = useState(0);
-  const [askPreview, setAskPreview] = useState(null);
+  // THE ASK THE ROOM COMPOSER (session flow v3 §4.1): null, or the
+  // suggestion it opens on ({ startIndex }, null for blank).
+  const [askComposer, setAskComposer] = useState(null);
   const askRound = /^RESULTS#(\d+)$/.exec(String(gameState || ''));
   const roundAsks = useRoundAsks({
     fetchFn: authFetch,
     apiBase: API_BASE,
     gameId,
     round: askRound ? askRound[1] : null,
-    active: Boolean(twoSurfaces && askRound && normalizeGameType(currentGameType) === 'call-and-answer'),
+    // Both modes since session flow v3 (owner, 15 Oct, Q2): on one screen the
+    // composer opens on the projected laptop, and the ASKING stage needs the
+    // data, or a question sent from the Remote left the laptop blank.
+    active: Boolean(askRound && normalizeGameType(currentGameType) === 'call-and-answer'),
     refreshKey: askRefresh,
   });
   /*
@@ -1317,16 +1323,17 @@ function GameHostPage() {
       });
       if (!built.ok) {
         console.error('Feedback round: the report could not be built; not opening the beat.');
-        return;
+        return { ok: false, error: 'The comments could not open. Try again.' };
       }
     } catch (err) {
       console.error('Feedback round: the report could not be built (continuing):', err);
-      return;
+      return { ok: false, error: 'The comments could not open. Try again.' };
     }
 
     setResultsBeat('feedback');
     publishStageBeat('feedback');
     loadRoundComments();
+    return { ok: true };
   };
 
   /*
@@ -1380,7 +1387,8 @@ function GameHostPage() {
   */
   const askRoundNumber = () => parseInt(String(gameState).split('#')[1], 10);
   const sendRoomAsk = async (body) => {
-    const r = await sendAsk({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), ask: body });
+    // Where it was sent from and how many could answer, for the report (§4.2).
+    const r = await sendAsk({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: askRoundNumber(), ask: { ...body, sentFrom: 'laptop', roomSize: players.length } });
     if (r.ok) {
       setResultsBeat('ask');
       roundAsks.reload();
@@ -6658,6 +6666,9 @@ Focus on actionable business strategy insights.`;
       ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
       : null,
     asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
+    // The composer exists for this session: "Ask the room" replaces Request
+    // feedback, and opens it (session flow v3 §4.3).
+    asksEnabled: roundAsks.enabled && normalizeGameType(currentGameType) === 'call-and-answer',
     // The round on screen, for "Start round 3" and the workflow strip.
     roundNumber: hostPhase === 'LOBBY' || hostPhase === 'ENDED' ? null : lessonNumber,
     totalRounds: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions,
@@ -6773,7 +6784,7 @@ Focus on actionable business strategy insights.`;
   */
   const anyOverlayOpen = shortcutsSuppressed({
     // The ask preview is a dialog: Space and the arrows are its own.
-    showConfirmModal: showConfirmModal || Boolean(askPreview), showExpandedQR,
+    showConfirmModal: showConfirmModal || Boolean(askComposer), showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
     spotlightOpen: spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
@@ -6855,6 +6866,12 @@ Focus on actionable business strategy insights.`;
     if (!action) return;
     if (action.intent === HOST_INTENTS.BACK_TO_ROOM) {
       setViewingStep(null);
+      return;
+    }
+    // Opens the composer; sends nothing (§4.3). Exactly one unsent suggestion
+    // starts picked, otherwise it opens blank with the list above.
+    if (action.intent === HOST_INTENTS.ASK_ROOM) {
+      setAskComposer({ startIndex: roundAsks.unsent.length === 1 ? roundAsks.unsent[0].index : null });
       return;
     }
     /*
@@ -7147,14 +7164,14 @@ Focus on actionable business strategy insights.`;
   const askAddon = askPlacement
     ? (text) => {
       const entries = (askPlacement.byPoint.get(pointKey(text)) || []).filter((e) => unsentAsks.has(e.index));
-      return entries.length ? <AskIcons entries={entries} onOpen={setAskPreview} /> : null;
+      return entries.length ? <AskIcons entries={entries} onOpen={(e) => setAskComposer({ startIndex: e.index })} /> : null;
     }
     : null;
   const askAfterEntries = askPlacement ? askPlacement.after.filter((e) => unsentAsks.has(e.index)) : [];
   const askAfter = askAfterEntries.length ? (
     <p className="askicons-after">
       <span>{FW.afterTheRead}</span>
-      <AskIcons entries={askAfterEntries} onOpen={setAskPreview} />
+      <AskIcons entries={askAfterEntries} onOpen={(e) => setAskComposer({ startIndex: e.index })} />
     </p>
   ) : null;
 
@@ -7575,7 +7592,8 @@ Focus on actionable business strategy insights.`;
             <WorkflowStrip
               strip={workflow}
               mode={twoSurfaces ? 'full' : 'slim'}
-              viewing={viewing}
+              // Drafting a question is looking at Ask: the room still sees the read.
+              viewing={viewing || (askComposer && workflow.live !== 'ask' ? 'ask' : null)}
               onView={(id) => {
                 // In the lobby, Setup is live: pressing it reopens the choice
                 // of room screen rather than a view of itself.
@@ -7588,7 +7606,7 @@ Focus on actionable business strategy insights.`;
                 onClick: () => openSetupAt(t.id),
               })) : null}
               viewingWhere={liveWhere(workflow)}
-              onBack={() => setViewingStep(null)}
+              onBack={() => { setViewingStep(null); setAskComposer(null); }}
             />
           )
           : null}
@@ -8397,12 +8415,22 @@ Focus on actionable business strategy insights.`;
             {hostPhase === 'ASKING' && (
               <AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} />
             )}
-            {askPreview && (
-              <AskPreview
-                entry={askPreview}
+            {askComposer && (
+              <AskComposer
+                suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
+                  index,
+                  ask,
+                  section: ask && ask.anchor ? ask.anchor.section : '',
+                  point: ask && ask.anchor ? ask.anchor.point : null,
+                  sent: !roundAsks.unsent.some((u) => u.index === index),
+                }))}
+                startIndex={askComposer.startIndex}
+                readLines={readLinesOf(currentAIInsights && currentAIInsights.markdownResponse)}
                 onSend={sendRoomAsk}
-                onClose={() => setAskPreview(null)}
+                onComments={roundAsks.enabled ? requestFeedbackRound : null}
+                onClose={() => setAskComposer(null)}
                 blocked={Boolean(roundAsks.live)}
+                oneScreen={!twoSurfaces}
                 theme="dark"
               />
             )}

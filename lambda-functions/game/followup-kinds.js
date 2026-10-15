@@ -202,6 +202,47 @@ function resolveOrigin(value, suggestion) {
 }
 
 /**
+ * WORKIE'S WORDS AT SEND TIME, and what the host changed (session flow v3
+ * §4.1-4.2). The suggestion row is replaced whenever the read is redone, so
+ * copying the words onto the ask is the only way the report can say "Workie
+ * suggested: …". Null for a question the host wrote from blank.
+ */
+function suggestedOf(suggestion) {
+  if (!suggestion) return null;
+  const w = wordsOf(suggestion);
+  return {
+    kind: w.kind,
+    ...(w.statement !== undefined ? { statement: w.statement } : {}),
+    ...(w.question !== undefined ? { question: w.question } : {}),
+    ...(w.options ? { options: w.options } : {}),
+    why: String(suggestion.why || '').replace(/\s+/g, ' ').trim().slice(0, 600),
+    answers: Array.isArray(suggestion.answers) ? suggestion.answers.filter(isAnswerNumber) : [],
+  };
+}
+
+/** Which parts the host changed: any of 'kind', 'question', 'options'. */
+function editsOf(value, suggestion) {
+  if (!suggestion) return [];
+  const sent = wordsOf(value);
+  const from = wordsOf(suggestion);
+  const out = [];
+  if (sent.kind !== from.kind) out.push('kind');
+  const words = (w) => (w.kind === 'rate' ? w.statement : w.question);
+  if (words(sent) !== words(from)) out.push('question');
+  if (sent.kind === 'choice' && JSON.stringify(sent.options || []) !== JSON.stringify(from.options || [])) out.push('options');
+  return out;
+}
+
+/** Where it was sent from, and how many could answer: what the host's client says, checked. */
+function sendContextOf(body) {
+  const b = body || {};
+  const sentFrom = b.sentFrom === 'laptop' || b.sentFrom === 'remote' ? b.sentFrom : null;
+  const n = Number(b.roomSize);
+  const roomSize = Number.isInteger(n) && n >= 0 && n <= 5000 ? n : null;
+  return { sentFrom, roomSize };
+}
+
+/**
  * A frozen tally in the report's shape, from the aggregate's result for the
  * ask's survey question (poll-round.js pollTally). Counts only, never a
  * percentage (the reads' rule), never a name.
@@ -236,4 +277,7 @@ module.exports = {
   wordsOf,
   resolveOrigin,
   tallyOf,
+  suggestedOf,
+  editsOf,
+  sendContextOf,
 };

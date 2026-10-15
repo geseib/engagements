@@ -84,6 +84,7 @@ function partKey(moment, step) {
   if (moment === 'READ') {
     if (step.primary.id === 'show-read') return 'READ_WAIT';
     if (step.primary.id === 'notes-page') return 'READ_PAGE';
+    if (step.primary.id === 'ask-room') return 'READ_ASK';
     return 'READ_LAST';
   }
   return moment;

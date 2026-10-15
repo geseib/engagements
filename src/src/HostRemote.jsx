@@ -17,7 +17,7 @@ import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
 import { fetchComments, postRoomNote } from './utils/commentsClient';
 import RoomNote from './components/RoomNote';
 import useRoundAsks from './hooks/useRoundAsks';
-import AskPreview from './components/AskPreview';
+import AskComposer from './components/AskComposer';
 import AskIcons from './components/AskIcons';
 import FW from './config/followUpWords';
 import { placeAsks } from './config/askAnchors';
@@ -565,7 +565,8 @@ function HostRemote() {
     while the round is on its results.
   */
   const [askTick, setAskTick] = useState(0);
-  const [askPreview, setAskPreview] = useState(null);
+  // The Ask the room composer (session flow v3 §4.1): null, or { startIndex }.
+  const [askComposer, setAskComposer] = useState(null);
   const askActive = Boolean(onResults && /call/i.test(String(snapshot?.gameType || snapshot?.gameMetadata?.gameType || '')));
   useEffect(() => {
     if (!askActive) return undefined;
@@ -596,7 +597,7 @@ function HostRemote() {
       const hit = placed.find((p) => p.entries.length && (p.key.includes(k.slice(0, 48)) || k.includes(p.key.slice(0, 48))));
       if (!hit) return null;
       hit.entries.forEach((e) => used.add(e.index));
-      return <AskIcons entries={hit.entries} onOpen={setAskPreview} />;
+      return <AskIcons entries={hit.entries} onOpen={(e) => setAskComposer({ startIndex: e.index })} />;
     };
     // Decide what is beside a topic first, so `rest` is what is left.
     [...notes.topics, ...notes.nextSteps].forEach((t) => beside(t));
@@ -608,7 +609,8 @@ function HostRemote() {
   })();
 
   const sendRemoteAsk = async (body) => {
-    const r = await sendAsk({ fetchFn: authFetch, apiBase: apiBase(), gameId, round, ask: body });
+    // Where it was sent from and how many could answer, for the report (§4.2).
+    const r = await sendAsk({ fetchFn: authFetch, apiBase: apiBase(), gameId, round, ask: { ...body, sentFrom: 'remote', ...(Number.isInteger(rosterCount) ? { roomSize: rosterCount } : {}) } });
     if (r.ok) { roundAsks.reload(); pollState(gameId); }
     return r;
   };
@@ -946,8 +948,9 @@ function HostRemote() {
     goalLine: goal.reached ? goal.line : '',
     roomAsk: askRoomAsk,
     asksReady: askReady,
+    asksEnabled: Boolean(roundAsks.enabled) && /call/i.test(String(snapshot?.gameType || '')),
   }), [rosterCount, onResults, onVoting, focusAnswers.length, notes.ready, setId, goal.reached, goal.line,
-    askRoomAsk, askReady]);
+    askRoomAsk, askReady, roundAsks.enabled, snapshot?.gameType]);
   const step = useMemo(() => remoteStep(snapshot, stepExtras), [snapshot, stepExtras]);
   /* The workflow strip as dots (session flow v3 §4.6), from the same step. */
   const strip = useMemo(
@@ -1063,6 +1066,11 @@ function HostRemote() {
    */
   const runControl = useCallback(async (control) => {
     disarm();
+    // Ask the room: opens the composer, sends nothing (session flow v3 §4.3).
+    if (control.intent === 'ask-room') {
+      setAskComposer({ startIndex: roundAsks.unsent.length === 1 ? roundAsks.unsent[0].index : null });
+      return;
+    }
     switch (control.id) {
       case 'wait':
       case 'show-read':
@@ -1626,7 +1634,7 @@ function HostRemote() {
                           {remoteAsks.rest.map((e) => (
                             <li key={e.index}>
                               <span>{e.section ? FW.fromPoint(e.section, e.point) : FW.afterTheRead}</span>
-                              <AskIcons entries={[e]} onOpen={setAskPreview} />
+                              <AskIcons entries={[e]} onOpen={(en) => setAskComposer({ startIndex: en.index })} />
                             </li>
                           ))}
                         </ul>
@@ -1655,12 +1663,22 @@ function HostRemote() {
                 <p className="hr-notes-waiting">{FW.answered((roundAsks.shown.tally && roundAsks.shown.tally.n) || 0)}</p>
               </section>
             )}
-            {askPreview && (
-              <AskPreview
-                entry={askPreview}
+            {askComposer && (
+              <AskComposer
+                suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
+                  index,
+                  ask,
+                  section: ask && ask.anchor ? ask.anchor.section : '',
+                  point: ask && ask.anchor ? ask.anchor.point : null,
+                  sent: !roundAsks.unsent.some((u) => u.index === index),
+                }))}
+                startIndex={askComposer.startIndex}
+                readLines={[notes.lead, ...notes.topics, ...notes.nextSteps].filter(Boolean)}
                 onSend={sendRemoteAsk}
-                onClose={() => setAskPreview(null)}
+                onComments={roundAsks.enabled ? async () => { await fire('request-feedback'); return { ok: true }; } : null}
+                onClose={() => setAskComposer(null)}
                 blocked={Boolean(roundAsks.live)}
+                sheet
                 theme="dark"
               />
             )}

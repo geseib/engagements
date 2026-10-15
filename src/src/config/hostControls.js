@@ -293,6 +293,7 @@ export function roomIsComplete({ phase, responded, playerCount } = {}) {
  */
 export const HOST_INTENTS = {
   START: 'start',      // handleNextQuestion(false) — first round of the game
+  ASK_ROOM: 'ask-room', // open the Ask the room composer (session flow v3 §4.3); sends nothing
   FINISH: 'finish',    // handleFinishQuestion()   — close answering
   REVEAL: 'reveal',    // handleShowResults()      — close voting
   NEXT: 'next',        // handleNextQuestion(false)
@@ -728,7 +729,7 @@ export function snapshotFromHostPage({
   gameType, phase, roundNoun = 'Question', playerCount = 0, answeredCount = 0, votedCount = 0,
   answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
   spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
-  roomAsk = null, asksReady = 0, roundNumber = null, totalRounds = null,
+  roomAsk = null, asksReady = 0, asksEnabled = false, roundNumber = null, totalRounds = null,
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
@@ -757,6 +758,9 @@ export function snapshotFromHostPage({
     goalLine,
     roomAsk,
     asksReady,
+    // Ask the room is offered for this session (the tier's switch and the
+    // game type): the composer exists, so it replaces Request feedback.
+    asksEnabled: Boolean(asksEnabled),
     // The round on screen, for "Start round 3" and the workflow strip. The
     // state above is a template (ASK#001), so the number travels on its own.
     roundNumber: Number(roundNumber) > 0 ? Number(roundNumber) : null,

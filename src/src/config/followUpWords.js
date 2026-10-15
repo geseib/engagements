@@ -18,6 +18,28 @@ export const KINDS = Object.freeze({
 
 export const RATE_ENDS = Object.freeze({ low: '1 · Disagree', high: '5 · Agree' });
 
+/*
+  THE COMPOSER'S KINDS (session flow v3 §4.1). The three asks plus Comments,
+  which opens the feedback round (it replaces "Request feedback"; owner, 15 Oct,
+  Q7). KIND_ORDER above stays the three the wall, the phones and the server
+  know; Comments never becomes an ask row.
+*/
+export const COMPOSER_KINDS = Object.freeze(['ideas', 'choice', 'rate', 'comments']);
+export const COMMENTS_KIND = Object.freeze({ label: 'Comments', icon: 'ChatCircleText' });
+/** One line each: what the kind is for, and who sees what. */
+export const KIND_LINES = Object.freeze({
+  ideas: 'Short written answers. Anonymous.',
+  choice: 'Pick one of 2 to 4 options. Anonymous.',
+  rate: 'Agree or disagree with a statement, 1 to 5. Anonymous.',
+  comments: 'Comment on what we heard, the results or a response. Names are shown.',
+});
+export const PRIVACY_LINES = Object.freeze({
+  ideas: 'Answers are anonymous. Only the ideas you put on the wall are shown to the room.',
+  choice: 'Answers are anonymous. The wall shows the count for each option.',
+  rate: 'Answers are anonymous. The wall shows how the room rated it.',
+  comments: 'Comments carry the writer\'s name. You choose which ones go on the wall.',
+});
+
 const list = (nums) => {
   const n = nums.map(String);
   if (n.length <= 1) return n.join('');
@@ -59,6 +81,25 @@ const FW = Object.freeze({
   sent: 'Sent. You can change it until the results are shown.',
   change: 'Change my answer',
   openIcon: (kindLabel, section, point) => `${kindLabel} ask from ${section}, point ${point}. Preview it.`,
+  // The composer (session flow v3 §4.1).
+  workieSuggests: 'Workie suggests',
+  startFromBlank: 'Start from blank',
+  kind: 'Kind',
+  question: 'Question',
+  statement: 'Statement',
+  options: 'Options',
+  edited: 'Edited',
+  backToWorkie: 'Back to Workie\'s words',
+  whatRoomSees: 'What the room sees',
+  whyWorkie: 'Why Workie suggests this',
+  sentAlready: 'Sent',
+  commentsSend: 'Open comments',
+  commentsBody: 'The room comments on what we heard, the results or any response, from their phone, laptop or tablet.',
+  fromTheRead: 'Words from the read',
+  fromTheReadHint: (choice) => (choice
+    ? 'Click a line to add it as the next option.'
+    : 'Click a line to use its words.'),
+  takeLineLabel: (text) => `Use these words: ${text}`,
 });
 
 export default FW;

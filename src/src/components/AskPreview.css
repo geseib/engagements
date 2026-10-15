@@ -155,3 +155,90 @@
 /* Edit sits on the left; Cancel and Send on the right (Dialog.css pushes the
    first child right; here the first child is Edit, so it takes the left). */
 .askp .ui-dialog-foot > .askp-edit { margin-left: 0; margin-right: auto; }
+
+/* ---------------------------------------------------------------- composer
+   AskComposer.jsx (session flow v3 §4.1): the same dialog, wider, with Workie's
+   suggestions, the four kinds, words editable from the start, the read's lines
+   to borrow, the privacy line and what the room sees. Laptop ladder
+   (12 / 13 / 15 / 19px); on the Remote it is a full-height sheet. */
+.askp.askc { width: min(640px, 100%); max-height: min(92vh, 900px); display: flex; flex-direction: column; }
+.askc .askp-root { display: flex; flex-direction: column; min-height: 0; }
+.askc .askc-body { overflow-y: auto; min-height: 0; }
+.askc .askc-sec { margin: 0 0 14px; }
+.askc .askc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; }
+.askc .askc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.askc .askc-card.is-on { border: 2px solid var(--info); background: var(--surface-2); }
+.askc .askc-card.is-sent { opacity: .75; }
+.askc .askc-card:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.askc .askc-card-k { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--info); }
+.askc .askc-card-q { font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.askc .askc-card-from { font-size: 12px; color: var(--muted); }
+.askc .askc-card--blank { justify-content: center; border-style: dashed; }
+.askc .askc-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); gap: 8px; }
+.askc .askc-kind {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.askc .askc-kind.is-on { border: 2px solid var(--info); background: var(--surface-2); }
+.askc .askc-kind:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.askc .askc-kind-k { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700; }
+.askc .askc-kind-line { font-size: 12px; line-height: 1.35; color: var(--muted); }
+.askc .askc-wordshead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.askc .askc-edited { display: inline-flex; align-items: center; gap: 8px; }
+.askc .askc-link, .askc .askc-read summary, .askc .askc-why summary {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--info);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.askc .askp-options { margin-top: 8px; }
+.askc .askc-read { margin: 0 0 14px; }
+.askc .askc-read-hint { margin: 6px 0; font-size: 12px; color: var(--muted); }
+.askc .askc-read-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 180px; overflow-y: auto; }
+.askc .askc-line {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: copy;
+}
+.askc .askc-line:hover { border-color: var(--info); }
+.askc .askc-line:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.askc .askc-why { margin: 0 0 10px; }
+.askc .askc-privacy { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.askc .askc-note { margin: 0 0 14px; font-size: 15px; line-height: 1.45; color: var(--text); }
+/* The Remote: a full-height sheet. */
+.askp.askc.askc--sheet { width: 100%; max-height: 100dvh; height: 100dvh; border-radius: 0; }

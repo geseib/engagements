@@ -154,7 +154,10 @@ console.log('\n2b. the anchor: a point of the read, or after it');
 const READ = '## Discussion topics\n1. Would on-call trust a bot at 3am?\n2. Who would push back first?\n\n## Next steps\n- Run the shadow invoice.';
 check('a real section and point is kept as written; case and a trailing colon do not matter', () => {
   const r = G.checkSuggestions([{ ...agree('Ship it to one percent', [2]), anchor: { section: 'discussion topics:', point: 2 } }], ANSWERS, [], { read: READ });
-  assert.deepStrictEqual(r.kept[0].anchor, { section: 'Discussion topics', point: 2 });
+  const { text, ...where } = r.kept[0].anchor;
+  assert.deepStrictEqual(where, { section: 'Discussion topics', point: 2 });
+  // The point's own words travel with it (session flow v3 §4.2, AnchorText).
+  assert.ok(typeof text === 'string' && text.length > 0, 'the anchor carries the point\'s text');
   assert.deepStrictEqual(r.kept[0].marks, []);
 });
 check('a heading the read never printed, a point past the list, or no anchor: kept, after the read, marked', () => {

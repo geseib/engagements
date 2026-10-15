@@ -100,7 +100,8 @@ describe('the host page can open a feedback round', () => {
     const start = host.indexOf('const requestFeedbackRound');
     const body = host.slice(start, host.indexOf('\n  };', start));
     // An early return between the build and the beat.
-    const guardAt = body.search(/if \(!built\.ok\)[\s\S]{0,200}?return;/);
+    // It returns a reason since session flow v3 (the composer shows it).
+    const guardAt = body.search(/if \(!built\.ok\)[\s\S]{0,200}?return[ ;]/);
     expect(guardAt).toBeGreaterThan(-1);
     expect(guardAt).toBeLessThan(body.indexOf('publishStageBeat'));
   });

@@ -48,6 +48,13 @@ const RW = Object.freeze({
   // ASK THE ROOM (docs/design/followup-icons).
   cancelQuestion: 'Cancel the question',
   askAnother: 'Ask another question',
+  /** Opens the composer (session flow v3 §4.3); sends nothing. */
+  askTheRoom: 'Ask the room',
+  lastPage: 'Last page',
+  /** The in-place second press past Workie's unsent questions (§4.3, Q8). */
+  armUnasked: (n) => `${n} ${Number(n) === 1 ? 'question' : 'questions'} not asked yet. Press again to move on.`,
+  /** The armed button's own label: "Start round 3 anyway". */
+  anyway: (label) => `${label} anyway`,
   asksReady: (n) => `${n} ${n === 1 ? 'ask' : 'asks'} ready`,
   backToRead: 'Back to what we heard',
   openReport: 'Open session report',
@@ -91,6 +98,7 @@ const RW = Object.freeze({
     READ_PAGE: 'The next page of the read',
     READ_WAIT: 'The read, when Workie has written it',
     READ_LAST: 'The next question',
+    READ_ASK: 'A question for the room, or the next round',
     FEEDBACK: 'The next question',
     ROOM_QUESTION: 'The room\'s answer',
     ROOM_RESULTS: 'The next question',
@@ -134,6 +142,7 @@ const RW = Object.freeze({
     READ_WAIT: () => 'Workie is writing. The read appears when it is ready.',
     READ_PAGE: (a) => `Read with the room. ${a} turns the page.`,
     READ_LAST: (a) => `The read is done. Talk it through, then ${a}.`,
+    READ_ASK: (a) => `The read is done. ${a}, or start the next round.`,
     FEEDBACK: (a) => `The room is commenting. Then ${a}.`,
     ROOM_QUESTION: (a) => `The room is answering. Then ${a}.`,
     ROOM_RESULTS: (a) => `Pick the ideas to show. Then ${a}, or ask another question.`,
@@ -190,6 +199,7 @@ export function allRoundLabels() {
     RW.startVoting, RW.showResults, RW.whatWeHeard, RW.nextPage, RW.backPage,
     RW.nextResponse, RW.nextPart, RW.stopShowing, RW.showTheRead, RW.workieWriting,
     RW.requestFeedback, RW.backToRead, RW.openReport, RW.cancelQuestion, RW.askAnother,
+    RW.askTheRoom,
   ];
 }
 

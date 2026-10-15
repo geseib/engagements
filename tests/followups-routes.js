@@ -200,7 +200,7 @@ const followUpRows = () => table.prefix(PK, 'FOLLOWUP#');
   });
   let rateId;
   await check('sent as suggested: 201, origin "suggested", cited answers kept, broadcast without words', async () => {
-    const r = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'Code can be rolled back; a bad backfill cannot.', suggestionIndex: 0 } });
+    const r = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'Code can be rolled back; a bad backfill cannot.', suggestionIndex: 0, sentFrom: 'laptop', roomSize: 4 } });
     assert.strictEqual(r.status, 201, JSON.stringify(r.body));
     rateId = r.body.ask.askId;
     assert.strictEqual(r.body.ask.origin, 'suggested');
@@ -214,6 +214,12 @@ const followUpRows = () => table.prefix(PK, 'FOLLOWUP#');
     const row = table.get(PK, `FOLLOWUP#003#ASK#${rateId}`);
     assert.ok(isEnvelope(row.Statement));
     assert.strictEqual(row.Status, 'live');
+    // Session flow v3 §4.2: Workie's words sealed beside what was sent, no
+    // edits, where it was sent from and how many could answer, in the clear.
+    assert.ok(isEnvelope(row.Suggested), 'Workie\'s words are sealed');
+    assert.deepStrictEqual(row.Edits, []);
+    assert.strictEqual(row.SentFrom, 'laptop');
+    assert.strictEqual(row.RoomSize, 4);
     assert.ok(Math.abs((row.ttl - Date.parse(row.SentAt) / 1000) / DAY - 30) < 0.01);
     const live = table.get(PK, 'FOLLOWUP#LIVE');
     assert.strictEqual(live.AskId, rateId);
