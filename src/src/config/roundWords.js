@@ -160,6 +160,8 @@ const RW = Object.freeze({
     questionSet: 'Question set',
     joined: 'People joined',
     fromNextRound: 'From the next round',
+    appliesNow: 'Applies now',
+    heldFor: (n) => `Waiting for round ${n}`,
     twoScreens: (presenting) => (presenting ? 'Two screens · the room\'s window is open' : 'Two screens · the room\'s window is not open yet'),
     oneScreen: 'One screen · the room sees this laptop',
     settingsScope: 'Settings apply from the next round. The live question, its answers and its ballots never change from the settings.',

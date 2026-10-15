@@ -676,6 +676,42 @@ function GameHostPage() {
   // arrivals) or only their count does. Per-game like the setting above it.
   const [wallComments, setWallComments] = useState(true);
 
+  /*
+    SETTINGS APPLY FROM THE NEXT ROUND (session flow v3; owner, 14 Oct, open
+    question 9). A change made in the Session panel while a round is live is
+    held here and applied when the next round starts, so the live question,
+    its answers and its ballots never change under the room. Pace (Auto) and
+    Display are the host's own controls and apply at once (owner, 14 Oct:
+    turning Auto off has to stop it now). Keys match SessionSetupPanel's.
+  */
+  const [pendingSettings, setPendingSettings] = useState({});
+  const pendingSettingsRef = useRef(pendingSettings);
+  pendingSettingsRef.current = pendingSettings;
+  const settingsRoundLive = /^(ASK|VOTE|RESULTS)#/.test(String(gameState || ''));
+  const settingAppliersRef = useRef({});
+  settingAppliersRef.current = {
+    anonymousUntilReveal: setAnonymousUntilReveal,
+    nameWaiting: setNameWaitingWhenAnonymous,
+    wallComments: setWallComments,
+    scoreboardStyle: (style) => publishScoreboard({ style }),
+  };
+  const deferSetting = (key) => (value) => {
+    if (settingsRoundLive) setPendingSettings((held) => ({ ...held, [key]: value }));
+    else settingAppliersRef.current[key](value);
+  };
+  const settingsRoundRef = useRef(lessonNumber);
+  useEffect(() => {
+    // The next round started, or the rounds stopped: what waited applies now.
+    if (settingsRoundRef.current === lessonNumber && settingsRoundLive) return;
+    settingsRoundRef.current = lessonNumber;
+    const held = pendingSettingsRef.current;
+    if (!Object.keys(held).length) return;
+    Object.entries(held).forEach(([key, value]) => {
+      if (settingAppliersRef.current[key]) settingAppliersRef.current[key](value);
+    });
+    setPendingSettings({});
+  }, [lessonNumber, settingsRoundLive]);
+
   // AUTO-MODE — the session advances itself when everyone has responded,
   // dwelling on each page of responses and Workie prose first. The decisions
   // are config/autoMode.js's; the one timer that acts on them lives in the
@@ -8459,7 +8495,7 @@ Focus on actionable business strategy insights.`;
           scoreboard={scoreboard}
           scoreboardAvailability={scoreboardAvail}
           onToggleScoreboard={(open) => publishScoreboard({ open })}
-          onScoreboardStyle={(style) => publishScoreboard({ style })}
+          onScoreboardStyle={deferSetting('scoreboardStyle')}
           gameState={gameState}
           playersWhoAnswered={playersWhoAnswered}
           playersWhoVoted={playersWhoVoted}
@@ -8521,11 +8557,14 @@ Focus on actionable business strategy insights.`;
              picker and must never reach either of these. */
           gameType={currentGameType}
           anonymousUntilReveal={anonymousUntilReveal}
-          onAnonymousUntilRevealChange={setAnonymousUntilReveal}
+          onAnonymousUntilRevealChange={deferSetting('anonymousUntilReveal')}
           nameWaitingWhenAnonymous={nameWaitingWhenAnonymous}
-          onNameWaitingChange={setNameWaitingWhenAnonymous}
+          onNameWaitingChange={deferSetting('nameWaiting')}
           wallComments={wallComments}
-          onWallCommentsChange={setWallComments}
+          onWallCommentsChange={deferSetting('wallComments')}
+          pendingSettings={pendingSettings}
+          settingsRoundLive={settingsRoundLive}
+          nextRoundNumber={lessonNumber + 1}
           autoMode={autoMode}
           onAutoModeChange={setAutoMode}
           answerCount={answers.length}

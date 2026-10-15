@@ -584,9 +584,12 @@ describe('GameHostPage wires the reveal through the gate', () => {
     // rejects a second flag beside anonymousUntilReveal — the setter here is
     // the SAME setter the create path and the restore path use.
     expect(el).toMatch(/anonymousUntilReveal=\{anonymousUntilReveal\}/);
-    expect(el).toMatch(/onAnonymousUntilRevealChange=\{setAnonymousUntilReveal\}/);
+    // Through deferSetting since 2026-10-14: held while a round is live, applied
+    // from the next round (session flow v3, owner's answer to open question 9).
+    expect(el).toMatch(/onAnonymousUntilRevealChange=\{deferSetting\('anonymousUntilReveal'\)\}/);
     expect(el).toMatch(/nameWaitingWhenAnonymous=\{nameWaitingWhenAnonymous\}/);
-    expect(el).toMatch(/onNameWaitingChange=\{setNameWaitingWhenAnonymous\}/);
+    expect(el).toMatch(/onNameWaitingChange=\{deferSetting\('nameWaiting'\)\}/);
+    expect(markup).toMatch(/nameWaiting: setNameWaitingWhenAnonymous,/);
     // The caution needs the live round to say anything specific.
     expect(el).toMatch(/answerCount=\{answers\.length\}/);
     expect(el).toMatch(/gameType=\{currentGameType\}/);

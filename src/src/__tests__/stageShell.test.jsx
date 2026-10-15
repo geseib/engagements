@@ -782,7 +782,10 @@ describe('what the host page must now render', () => {
     expect(stage).not.toMatch(/className="early-reveal"/);
     // ...and the setting that replaced them is genuinely wired to the panel,
     // or this test passes on a feature that was simply deleted.
-    expect(markup).toMatch(/onAnonymousUntilRevealChange=\{setAnonymousUntilReveal\}/);
+    // Through deferSetting since 2026-10-14: held while a round is live, applied
+    // from the next round (session flow v3, owner's answer to open question 9).
+    expect(markup).toMatch(/onAnonymousUntilRevealChange=\{deferSetting\('anonymousUntilReveal'\)\}/);
+    expect(markup).toMatch(/anonymousUntilReveal: setAnonymousUntilReveal,/);
   });
 
   test('the RESULTS rows take their labels AND their arithmetic from the reveal', () => {
