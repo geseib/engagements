@@ -22,6 +22,24 @@ Shipped and walked end to end on dev on 13-14 Oct:
 
 Memory notes: `engage2-ask-the-room.md`, `engage2-two-surface-handoff.md`, `engage2-site-skins.md`.
 
+## 1b. Built on 14 Oct (second session)
+
+| Phase | Commits (dev) | Walked on dev |
+|---|---|---|
+| 1. Trust fixes | `6b8a35b6`, `f5c91be2` | Yes: reload restores the own answer ("Your response is in the results"), excerpt without markdown, the task on the wall (answering and voting), the task in the report |
+| 2. Orientation | `42788579`, `9165d26b`, `c3c45321`, `0abc8647` | Yes: strip (60-66px at 1366x768, laptop ladder), slim one-screen strip, Remote dots at 390px, looking at Setup with Back to the room, the room-screen chooser and Help me pick, a held setting applied at round 2 |
+
+Owner's answers (14 Oct): **Q9** settings apply from the next round, except Pace (Auto) and
+Display, which apply at once; **Q10** one screen: the strip explains only, no looking;
+**strip steps** are clickable for looking only (confirmed). Test waited for Phase 2, then
+Phases 1-2 went to test together for the external reviewer (a `reviewable/...` tag; the
+reviewer writes to branch `review/oct14review`).
+
+Known limits: a held setting lives in the host page's memory, so a reload of the laptop
+drops it; the after-reload phone heading cannot name "response N" (the tallies are not keyed
+by ballot position), so it says "Your response is in the results"; the scoreboard's own
+style button still applies at once.
+
 ## 2. What the owner asked for (the decisions)
 
 From the external review of session 7924 on test, and the owner's own changes (13-14 Oct).
