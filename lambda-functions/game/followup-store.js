@@ -304,15 +304,19 @@ async function freezeTally(db, { gameId, round, ask, orgId }) {
   const prefix = keys.answersPrefix(round, ask.AskId);
   const rows = prefix ? await queryAll(db, gameId, prefix) : [];
   const tally = await countAnswers(ask, rows, orgId);
-  const sealed = await seal(orgId, { Tally: tally });
+  // EVERY IDEA, FROZEN ON CLOSE (session flow v3 §4.2; owner, 15 Oct, Q1):
+  // the report lists them all, shown or not, and the answer rows expire at
+  // seven days. Words, an id and when, never a name.
+  const ideas = ask.Kind === 'ideas' ? await ideasAt(rows, orgId) : null;
+  const sealed = await seal(orgId, ideas ? { Tally: tally, Ideas: ideas } : { Tally: tally });
   await db.send(new UpdateCommand({
     TableName: table(),
     Key: { PK: pkOf(gameId), SK: ask.SK },
-    UpdateExpression: 'SET #t = :t',
-    ExpressionAttributeNames: { '#t': 'Tally' },
-    ExpressionAttributeValues: { ':t': sealed.Tally },
+    UpdateExpression: ideas ? 'SET #t = :t, #i = :i' : 'SET #t = :t',
+    ExpressionAttributeNames: ideas ? { '#t': 'Tally', '#i': 'Ideas' } : { '#t': 'Tally' },
+    ExpressionAttributeValues: ideas ? { ':t': sealed.Tally, ':i': sealed.Ideas } : { ':t': sealed.Tally },
   }));
-  return { ...ask, Tally: tally };
+  return ideas ? { ...ask, Tally: tally, Ideas: ideas } : { ...ask, Tally: tally };
 }
 
 /** Delete the LIVE pointer if it still names this ask. */
@@ -373,6 +377,15 @@ async function ideasOf(answerRows, orgId) {
     .filter((r) => typeof r.Value === 'string' && r.Value.trim())
     .sort((a, b) => String(a.At || '').localeCompare(String(b.At || '')))
     .map((r) => ({ id: ideaId(r.SK), text: r.Value.trim() }));
+}
+
+/** The same, with when each arrived, for the frozen copy on the ask. */
+async function ideasAt(answerRows, orgId) {
+  const opened = await openAll(orgId, answerRows || []);
+  return opened
+    .filter((r) => typeof r.Value === 'string' && r.Value.trim())
+    .sort((a, b) => String(a.At || '').localeCompare(String(b.At || '')))
+    .map((r) => ({ id: ideaId(r.SK), text: r.Value.trim(), at: r.At || null }));
 }
 
 /**

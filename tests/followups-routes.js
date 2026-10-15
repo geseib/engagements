@@ -444,6 +444,12 @@ const followUpRows = () => table.prefix(PK, 'FOLLOWUP#');
     assert.deepStrictEqual(ask.ideas.map((i) => i.text), ['The two agencies on fixed budgets', 'Anyone from the discount push']);
     assert.ok(!JSON.stringify(ask.ideas).includes('Ada') && !JSON.stringify(ask.ideas).includes('Grace'));
     assert.deepStrictEqual(ask.tally, { n: 2 });
+    // Session flow v3 §4.2 (owner, 15 Oct, Q1): every idea is frozen onto the
+    // ask at close, sealed, words and when, never a name, so the report keeps
+    // them after the answer rows expire.
+    const frozen = table.get(PK, `FOLLOWUP#003#ASK#${ideasId}`);
+    assert.ok(C.isEnvelope(frozen.Ideas), 'Ideas is not sealed');
+    assert.ok(!JSON.stringify(frozen).includes('Grace'));
     const p = await phone('GET', 'live');
     assert.deepStrictEqual(p.body.ask.picked, []);
     assert.ok(!JSON.stringify(p.body).includes('agencies'));

@@ -560,8 +560,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  structure and stay readable. `Suggested` (session flow v3) is Workie's
    *  words at send time and its reason, so it is sealed with them; `Anchor`
    *  now carries the point's own text too. `Edits`, `SentFrom`, `RoomSize`
-   *  are structure. */
-  followup: Object.freeze(['Asks', 'Statement', 'Question', 'Options', 'Tally', 'Value', 'Text', 'Picked', 'Anchor', 'Suggested']),
+   *  are structure. `Ideas` is every idea's words, frozen on close. */
+  followup: Object.freeze(['Asks', 'Statement', 'Question', 'Options', 'Tally', 'Value', 'Text', 'Picked', 'Anchor', 'Suggested', 'Ideas']),
 });
 
 // ── Plumbing seams (tests, and callers that already hold the org row) ───────
