@@ -25,6 +25,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import webSocketClient from '../WebSocketClient';
+import { fullscreenElement } from '../utils/fullscreen';
+
+/** What the room's window tells the host console (host console spec 4.2). */
+export function presentStatusPayload({ fullscreen, hidden }) {
+  return { fullscreen: Boolean(fullscreen), visible: !hidden };
+}
 
 export const REFETCH_DEBOUNCE_MS = 400;
 export const POLL_LIVE_MS = 3000;
@@ -187,9 +193,26 @@ export default function usePresentation(gameId) {
     const viewerId = viewerIdForTab(storage);
     webSocketClient.connect(gameId, null, false, { viewerId });
     FOLLOW_FRAMES.forEach((type) => webSocketClient.onMessage(type, () => schedule(true)));
-    webSocketClient.onReconnected(() => schedule(true));
+    const report = () => {
+      webSocketClient.sendCleanMessage('PRESENT_STATUS', presentStatusPayload({
+        fullscreen: Boolean(fullscreenElement()),
+        hidden: typeof document !== 'undefined' && document.visibilityState === 'hidden',
+      }));
+    };
+    const onChange = () => report();
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    document.addEventListener('visibilitychange', onChange);
+    webSocketClient.onReconnected(() => { schedule(true); report(); });
+    const firstReport = setTimeout(report, 1000);
+    const tick = setInterval(report, 60 * 1000);
     return () => {
       clearTimeout(debounceRef.current);
+      clearTimeout(firstReport);
+      clearInterval(tick);
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+      document.removeEventListener('visibilitychange', onChange);
       FOLLOW_FRAMES.forEach((type) => webSocketClient.offMessage(type));
       webSocketClient.onReconnected(null);
       webSocketClient.disconnect();
