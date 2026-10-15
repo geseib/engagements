@@ -33,7 +33,8 @@ import FW, {
  *   onClose      () => void
  *   blocked      a question is already live: Send waits, and says why
  *   oneScreen    the laptop is the wall: Workie's reasons fold away
- *   sheet        the Remote's full-height sheet
+ *   sheet        the Remote's full-height sheet (dialog only)
+ *   theme        the dialog's theme (dialog only)
  */
 const LIMITS = { question: 200, statement: 300, option: 120 };
 const MAX_OPTIONS = 4;
@@ -88,16 +89,25 @@ export function editedFrom(entry, kind, words) {
 
 const kindMeta = (k) => (k === 'comments' ? COMMENTS_KIND : KINDS[k]);
 
-export default function AskComposer({
+/**
+ * The composer itself, without a dialog around it. The host console draws it
+ * inline beside Workie's read (`inline`, the default, wraps it in its own
+ * `askp askc askc--inline` box); `AskComposer` below draws it in a dialog and
+ * passes `inline={false}`, since the dialog's content box already carries
+ * those classes. It owns `busy`, and reports it through `onBusyChange` so the
+ * dialog can refuse Escape and the scrim while a send is in flight.
+ */
+export function AskComposerBody({
   suggestions = [], startIndex = null, readLines = [], onSend, onComments = null, onClose,
-  blocked = false, oneScreen = false, sheet = false, theme = 'dark',
+  blocked = false, oneScreen = false, inline = true, onBusyChange = null,
 }) {
   const byIndex = (i) => suggestions.find((s) => s.index === i) || null;
   const first = startIndex === null || startIndex === undefined ? null : byIndex(startIndex);
   const [entry, setEntry] = useState(first);
   const [kind, setKind] = useState(first ? kindOf(first.ask) : 'ideas');
   const [words, setWords] = useState(() => startingWords(first && first.ask));
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyState] = useState(false);
+  const setBusy = (b) => { setBusyState(b); if (onBusyChange) onBusyChange(b); };
   const [error, setError] = useState('');
 
   const kinds = onComments ? COMPOSER_KINDS : COMPOSER_KINDS.filter((k) => k !== 'comments');
@@ -163,15 +173,7 @@ export default function AskComposer({
   const sendDisabled = busy || (!comments && (blocked || !built.body));
   const lines = (readLines || []).map(flat).filter((l) => l.length > 3);
 
-  return (
-    <Modal
-      overlayClassName={`ui-scrim${sheet ? ' askc-scrim--sheet' : ''}`}
-      contentClassName={`ui-dialog askp askc${sheet ? ' askc--sheet' : ''}`}
-      onClose={requestClose}
-      closeOnEscape={() => !busy}
-      labelledBy={titleId}
-      theme={theme}
-    >
+  const root = (
       <div className="askp-root">
         <header className="ui-dialog-head">
           <div className="ui-dialog-titles">
@@ -366,6 +368,24 @@ export default function AskComposer({
           </button>
         </footer>
       </div>
+  );
+  return inline ? <div className="askp askc askc--inline">{root}</div> : root;
+}
+
+/** The composer in a dialog (one screen, and the Remote's full-height `sheet`). */
+export default function AskComposer({ sheet = false, theme = 'dark', onClose, ...rest }) {
+  const [busy, setBusy] = useState(false);
+  const requestClose = () => { if (!busy) onClose(); };
+  return (
+    <Modal
+      overlayClassName={`ui-scrim${sheet ? ' askc-scrim--sheet' : ''}`}
+      contentClassName={`ui-dialog askp askc${sheet ? ' askc--sheet' : ''}`}
+      onClose={requestClose}
+      closeOnEscape={() => !busy}
+      labelledBy="askc-title"
+      theme={theme}
+    >
+      <AskComposerBody {...rest} onClose={onClose} inline={false} onBusyChange={setBusy} />
     </Modal>
   );
 }

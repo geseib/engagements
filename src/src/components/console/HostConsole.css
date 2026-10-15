@@ -76,3 +76,9 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .hc-card-h { margin: 0 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .hc-muted { margin: 0; font-size: 13px; color: var(--muted); }
 .hc-strong { margin: 0 0 4px; font-weight: 700; }
+
+/* The read beside the inline composer; the lobby; the read's own type. */
+.hc-cols.is-read { grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); }
+.hc-code-big { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: .08em; color: var(--accent-text); }
+.hc-list--flat { padding: 0; }
+.hc-md { font-size: 15px; }

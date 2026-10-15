@@ -244,3 +244,5 @@
    pushed it 24px down and 24px off the bottom of a 390x844 phone (walk, 15 Oct). */
 .ui-scrim.askc-scrim--sheet { padding: 0; }
 .askp.askc.askc--sheet { width: 100%; max-height: 100dvh; height: 100dvh; margin: 0; border-radius: 0; }
+/* Inline (the host console): the same composer beside Workie's read, no dialog. */
+.askp.askc.askc--inline { width: 100%; max-height: none; border: 1px solid var(--rule-strong); border-radius: 12px; background: var(--surface); }
