@@ -100,6 +100,18 @@ const FW = Object.freeze({
     ? 'Click a line to add it as the next option.'
     : 'Click a line to use its words.'),
   takeLineLabel: (text) => `Use these words: ${text}`,
+  // The report's full record of each question (session flow v3 §4.2).
+  sentAsWritten: 'Sent as Workie wrote it',
+  writtenByHost: 'Written by the host',
+  workieSuggested: (words) => `Workie suggested: “${words}”`,
+  editedBy: (parts) => (parts && parts.length ? `Edited by the host (${parts.join(', ')})` : 'Edited by the host'),
+  workiesReason: (why) => `Workie’s reason: ${why}`,
+  drawnFrom: (nums) => (nums.length === 1 ? `Drawn from response ${nums[0]}` : `Drawn from responses ${list(nums)}`),
+  openFor: (from, to) => (to ? `Open ${from}–${to}` : `Sent ${from}`),
+  answeredOfRoom: (n, of) => (Number.isInteger(of) ? `${n} of ${of} in the room answered` : `${n} answered`),
+  shownToRoom: (n) => `Shown to the room (${n})`,
+  notShown: (n) => `Not shown (${n})`,
+  sentFromRemote: 'Sent from the Remote',
 });
 
 export default FW;

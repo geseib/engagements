@@ -304,6 +304,21 @@ exports.handler = async (event) => {
         sentAt: row.SentAt || null,
         tally: row.Status === 'closed' ? row.Tally || null : null,
         picked: (row.Picked || []).map((p) => p.text),
+        // THE FULL RECORD (session flow v3 §4.2): Workie's words as they
+        // were, what the host changed, the point's own words, where it was
+        // sent from, how many could answer, when it opened and closed, and
+        // every idea, shown or not (owner, 15 Oct, Q1). Older rows lack these;
+        // the report prints what there is.
+        suggested: row.Suggested || null,
+        edits: Array.isArray(row.Edits) ? row.Edits : null,
+        anchorText: row.Anchor && typeof row.Anchor.text === 'string' ? row.Anchor.text : null,
+        sentFrom: row.SentFrom || null,
+        roomSize: Number.isInteger(row.RoomSize) ? row.RoomSize : null,
+        closedAt: row.ClosedAt || null,
+        cancelledAt: row.CancelledAt || null,
+        ideas: Array.isArray(row.Ideas)
+          ? row.Ideas.map((i) => ({ text: i.text, shown: (row.Picked || []).some((p) => p.id === i.id) }))
+          : null,
       });
       followUpsByRound.set(row.QuestionNumber, list);
     }

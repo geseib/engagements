@@ -138,7 +138,11 @@ function seed() {
   put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#ASK#abc123def#A#Ada', GameId: GAME, QuestionNumber: '001', AskId: 'abc123def', PlayerName: 'Ada', Value: [0] });
   put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#ASK#def456abc', GameId: GAME, QuestionNumber: '001', AskId: 'def456abc',
     Kind: 'ideas', Question: 'Who pushes back first?', Origin: 'suggested', Status: 'closed', SentAt: '2026-08-27T10:09:00.000Z',
-    Tally: { n: 2 }, Picked: [{ id: 'x1', text: 'The two agencies' }] });
+    Tally: { n: 2 }, Picked: [{ id: 'x1', text: 'The two agencies' }],
+    // Session flow v3 §4.2: every idea frozen at close, and the record.
+    Ideas: [{ id: 'x1', text: 'The two agencies', at: '2026-08-27T10:10:00.000Z' }, { id: 'x2', text: 'Discount buyers', at: '2026-08-27T10:11:00.000Z' }],
+    Suggested: { kind: 'ideas', question: 'Who pushes back first?', why: 'Names the risk.', answers: [1] }, Edits: [],
+    SentFrom: 'laptop', RoomSize: 3, ClosedAt: '2026-08-27T10:12:00.000Z' });
   put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#SUGGESTED', GameId: GAME, QuestionNumber: '001', Asks: [] });
 }
 
@@ -196,6 +200,13 @@ const build = () => handler({
     assert.deepStrictEqual(fu[0].tally, { n: 3, counts: [2, 1] });
     assert.deepStrictEqual(fu[0].anchor, { section: 'Discussion topics', point: 2 });
     assert.deepStrictEqual(fu[1].picked, ['The two agencies']);
+    // Every idea, shown or not (owner, 15 Oct, Q1), and the full record.
+    assert.deepStrictEqual(fu[1].ideas, [{ text: 'The two agencies', shown: true }, { text: 'Discount buyers', shown: false }]);
+    assert.deepStrictEqual(fu[1].suggested.why, 'Names the risk.');
+    assert.strictEqual(fu[1].roomSize, 3);
+    assert.strictEqual(fu[1].sentFrom, 'laptop');
+    assert.strictEqual(fu[1].closedAt, '2026-08-27T10:12:00.000Z');
+    assert.strictEqual(fu[0].ideas, null, 'an older row has no frozen ideas');
     assert.ok(!JSON.stringify(fu).includes('Ada'), 'a name reached the report');
     assert.deepStrictEqual(roundOf('002').followUps, []);
   });

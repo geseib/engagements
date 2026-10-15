@@ -2,16 +2,40 @@ import React from 'react';
 import FW, { KINDS, RATE_ENDS } from '../config/followUpWords';
 
 /**
- * QUESTIONS FOR THE ROOM, IN THE REPORTS (docs/design/followup-icons, phase D).
+ * QUESTIONS FOR THE ROOM, IN THE REPORTS (docs/design/followup-icons, phase D;
+ * the full record since session flow v3 §4.2).
  *
- * What the host sent after a round's read and what the room answered: each
- * ask with the point of the read it came from, then its result in counts —
- * Choose per option, Rate as the average and each value's count, Ideas as
- * the words the host put on the wall. A cancelled one says so. No name
- * anywhere: create-report.js stores none for these.
+ * Each question the host sent after a round's read, as one block:
  *
- * Shared by the session report (GameReport) and the round report (RoundReport).
+ *   Ideas · from Discussion topics, point 3
+ *   "Maya Chen proposes a staged commitment …"          the point itself
+ *   What is one measurable gate …?                       what was sent
+ *   Workie suggested: "…" · Edited by the host (question) | Sent as Workie wrote it | Written by the host
+ *   Workie's reason: … · Drawn from responses 2 and 4
+ *   Open 01:12–01:14 · 4 of 4 in the room answered
+ *   then the result: Choose per option, Rate as the average and each count,
+ *   Ideas as every idea in two groups, "Shown to the room" and "Not shown"
+ *   (owner, 15 Oct, Q1).
+ *
+ * A row from before the full record prints what it has. No name anywhere:
+ * create-report.js stores none for these. Shared by the session report
+ * (GameReport) and the round report (RoundReport).
  */
+const clock = (iso) => {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return '';
+  return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+function originLine(f) {
+  if (f.origin === 'host') return FW.writtenByHost;
+  if (f.origin === 'suggested') return FW.sentAsWritten;
+  if (f.origin !== 'edited') return '';
+  const s = f.suggested;
+  const words = s ? (s.kind === 'rate' ? s.statement : s.question) : '';
+  return [words ? FW.workieSuggested(words) : '', FW.editedBy(f.edits || [])].filter(Boolean).join(' · ');
+}
+
 export default function ReportFollowUps({ followUps, className = 'report-followups' }) {
   if (!Array.isArray(followUps) || followUps.length === 0) return null;
   return (
@@ -22,10 +46,29 @@ export default function ReportFollowUps({ followUps, className = 'report-followu
         const words = f.kind === 'rate' ? `“${f.statement}”` : f.question;
         const where = f.anchor ? FW.fromPoint(f.anchor.section, f.anchor.point) : '';
         const t = f.tally;
+        const origin = originLine(f);
+        const s = f.suggested;
+        const reason = s && s.why ? FW.workiesReason(s.why) : '';
+        const drawn = s && Array.isArray(s.answers) && s.answers.length ? FW.drawnFrom(s.answers) : '';
+        const opened = clock(f.sentAt);
+        const closed = clock(f.closedAt || f.cancelledAt);
+        const timing = opened ? FW.openFor(opened, closed) : '';
+        const count = f.status === 'closed' && t ? FW.answeredOfRoom(t.n || 0, f.roomSize) : '';
+        const ideas = Array.isArray(f.ideas) ? f.ideas : null;
+        const shown = ideas ? ideas.filter((x) => x.shown) : [];
+        const notShown = ideas ? ideas.filter((x) => !x.shown) : [];
         return (
           <div key={i} className="report-followup report-keep">
             <div className="comment-on">{where ? `${kind.label} · ${where}` : kind.label}</div>
+            {f.anchorText ? <p className="report-followup-anchor"><i>{`“${f.anchorText}”`}</i></p> : null}
             <p className="report-followup-q"><b>{words}</b></p>
+            {origin ? <p className="report-followup-note">{origin}</p> : null}
+            {(reason || drawn) ? <p className="report-followup-note">{[reason, drawn].filter(Boolean).join(' · ')}</p> : null}
+            {(timing || count) ? (
+              <p className="report-followup-note">
+                {[timing, count, f.sentFrom === 'remote' ? FW.sentFromRemote : ''].filter(Boolean).join(' · ')}
+              </p>
+            ) : null}
             {f.status === 'cancelled' && <p className="report-followup-note">Cancelled before the results were shown.</p>}
             {f.status === 'closed' && t && f.kind === 'choice' && (
               <ul className="report-followup-list">
@@ -46,13 +89,19 @@ export default function ReportFollowUps({ followUps, className = 'report-followu
                 </ul>
               </>
             )}
-            {f.status === 'closed' && f.kind === 'ideas' && (f.picked || []).map((p, j) => (
+            {f.status === 'closed' && f.kind === 'ideas' && ideas ? (
+              <>
+                <p className="report-followup-note"><b>{FW.shownToRoom(shown.length)}</b></p>
+                {shown.map((p, j) => <blockquote key={`s${j}`} className="comment-text">{p.text}</blockquote>)}
+                <p className="report-followup-note"><b>{FW.notShown(notShown.length)}</b></p>
+                {notShown.map((p, j) => <blockquote key={`n${j}`} className="comment-text">{p.text}</blockquote>)}
+              </>
+            ) : null}
+            {f.status === 'closed' && f.kind === 'ideas' && !ideas && (f.picked || []).map((p, j) => (
               <blockquote key={j} className="comment-text">{p}</blockquote>
             ))}
-            {f.status === 'closed' && t && (
-              <p className="report-followup-note">
-                {f.kind === 'ideas' ? FW.ideasCount(t.n || 0, (f.picked || []).length) : FW.answered(t.n || 0)}
-              </p>
+            {f.status === 'closed' && t && f.kind === 'ideas' && !ideas && (
+              <p className="report-followup-note">{FW.ideasCount(t.n || 0, (f.picked || []).length)}</p>
             )}
           </div>
         );
