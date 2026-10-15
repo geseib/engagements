@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import RW from '../../config/roundWords';
 import HostActionBar from '../HostActionBar';
 
@@ -12,8 +12,27 @@ import HostActionBar from '../HostActionBar';
 const NO_STATUS = Object.freeze({ text: '', tone: '' });
 
 export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey }) {
+  /*
+    THE FOOTER IS THE CONSOLE'S DOCK. The Session panel and its scrim stop at
+    `--dock-measured` so they never cover the main button (useStageFit
+    publishes it from the stage's dock; the stage is not mounted here). The
+    same measurement, from this footer, and removed on the way out.
+  */
+  const ref = useRef(null);
+  useEffect(() => {
+    const publish = () => {
+      const h = ref.current ? Math.ceil(ref.current.getBoundingClientRect().height) : 0;
+      if (h > 0) document.documentElement.style.setProperty('--dock-measured', `${h}px`);
+    };
+    publish();
+    window.addEventListener('resize', publish);
+    return () => {
+      window.removeEventListener('resize', publish);
+      document.documentElement.style.removeProperty('--dock-measured');
+    };
+  }, [status, nextOnWall, part, controls]);
   return (
-    <footer className="hc-foot">
+    <footer className="hc-foot" ref={ref}>
       <div className="hc-status">
         <b>{status && status.text}</b>
         {/* What the wall shows next (spec §3.5, first draft): only when given. */}

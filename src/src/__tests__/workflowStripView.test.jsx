@@ -144,7 +144,8 @@ describe('the composer is a sibling of the stage (walk of dev, 15 Oct)', () => {
   test('it mounts after </Stage>, so the strip and the dock cannot paint over it', () => {
     const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
     const stageEnd = page.indexOf('</Stage>');
-    const composerAt = page.indexOf('<AskComposer');
+    // The dialog, not the console's inline <AskComposerBody> (built before the return).
+    const composerAt = page.search(/<AskComposer\s/);
     expect(stageEnd).toBeGreaterThan(-1);
     expect(composerAt).toBeGreaterThan(stageEnd);
   });
