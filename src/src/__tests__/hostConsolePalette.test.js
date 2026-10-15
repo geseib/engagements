@@ -11,11 +11,10 @@ test('every selector is scoped hc-', () => {
     for (const part of sel.split(',')) expect([part.trim(), /\.hc\b/.test(part)]).toEqual([part.trim(), true]);
   }
 });
-test('the laptop ladder only: no size below 12px, none above 24px', () => {
-  for (const m of css.matchAll(/font-size:\s*(\d+)px/g)) {
-    const n = Number(m[1]);
-    expect(n >= 12 && n <= 24).toBe(true);
-  }
+test('the laptop ladder only: 12 / 13 / 15 / 19 / 24px', () => {
+  const ladder = [12, 13, 15, 19, 24];
+  for (const m of css.matchAll(/font-size:\s*(\d+)px/g)) expect(ladder).toContain(Number(m[1]));
+  expect(css).not.toMatch(/font-size:\s*[\d.]+(rem|em)/);
   expect(css).not.toMatch(/var\(--(L|t)-/);
 });
 test('the main area scrolls; the footer is outside it (Review Focus 5)', () => {
@@ -24,4 +23,14 @@ test('the main area scrolls; the footer is outside it (Review Focus 5)', () => {
 });
 test('no colour literal', () => {
   expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d/);
+});
+test('the reused action bar is pinned to the ladder inside the console', () => {
+  for (const cls of ['__hint', '__armed', '__primary', '__secondary', '__tertiary', '__kbd', '__keyhint']) {
+    expect(css).toMatch(new RegExp(`\\.hc-acts \\.host-action-bar${cls}[^{]*\\{[^}]*font-size:\\s*\\d+px`));
+  }
+});
+test('keyboard focus is visible on the console\'s own controls', () => {
+  for (const sel of ['.hc-sec summary', '.hc-link', '.hc-code', '.hc-btn', '.hc-winstat']) {
+    expect(css).toMatch(new RegExp(`${sel.replace(/\./g, '\\.')}:focus-visible`));
+  }
 });

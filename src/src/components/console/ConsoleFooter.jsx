@@ -11,10 +11,14 @@ import HostActionBar from '../HostActionBar';
  */
 const NO_STATUS = Object.freeze({ text: '', tone: '' });
 
-export default function ConsoleFooter({ status, part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey }) {
+export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey }) {
   return (
     <footer className="hc-foot">
-      <div className="hc-status"><b>{status && status.text}</b></div>
+      <div className="hc-status">
+        <b>{status && status.text}</b>
+        {/* What the wall shows next (spec §3.5, first draft): only when given. */}
+        {nextOnWall ? <p className="hc-next">{nextOnWall}</p> : null}
+      </div>
       {part ? (
         <p className="hc-part">
           <span className="hc-part-k">{RW.yourPartLabel}</span>

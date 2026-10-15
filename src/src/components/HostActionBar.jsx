@@ -41,6 +41,24 @@ export function isTypingTarget(target) {
   return Boolean(target.isContentEditable);
 }
 
+/*
+  THE HOST CONSOLE'S OWN CONTROLS (host console spec §3). A host who TABS to a
+  rail section, a rail link or a top-line control and presses Space means that
+  control, not "advance the room", so a keyboard-focused target inside
+  `.hc-rail` or `.hc-top` keeps its Space (→ still advances: the clicker). A control focused by a mouse click does
+  not match :focus-visible and keeps Space = advance: hosts click a section,
+  then press Space or the clicker to move on.
+*/
+export function isConsoleKeyboardTarget(target) {
+  if (!target || typeof target.closest !== 'function') return false;
+  if (!target.closest('.hc-rail, .hc-top')) return false;
+  try {
+    return target.matches(':focus-visible');
+  } catch (e) {
+    return false;
+  }
+}
+
 export default function HostActionBar({
   controls,
   onAction,
@@ -147,6 +165,9 @@ export default function HostActionBar({
       // Mouse-driven use keeps its accelerator; the keyboard gets the button
       // it is pointing at.
       if (event.target?.closest?.('.setup-panel')) return;
+      // Space only: → and ← have no meaning on a focused button or summary,
+      // and the clicker sends them, so they keep driving the room.
+      if (event.key !== 'ArrowRight' && isConsoleKeyboardTarget(event.target)) return;
       // Also stops the browser page-scrolling on space, and stops a *focused*
       // primary button from firing its own click on top of this handler.
       event.preventDefault();

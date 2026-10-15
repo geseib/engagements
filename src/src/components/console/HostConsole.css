@@ -3,7 +3,7 @@
 .hc { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-columns: 260px minmax(0, 1fr); grid-template-areas: "top top" "loop loop" "rail main" "foot foot"; background: var(--bg); color: var(--text); font-size: 15px; }
 .hc-top { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
 .hc-brand { font-weight: 800; }
-.hc-name { color: var(--muted); font-size: 13px; }
+.hc-name { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hc-spacer { margin-left: auto; }
 .hc-code, .hc-btn { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 8px; padding: 5px 12px; cursor: pointer; text-decoration: none; }
 .hc-code b { color: var(--accent-text); letter-spacing: .06em; margin-left: 4px; }
@@ -35,6 +35,8 @@
 .hc-main { grid-area: main; overflow: auto; padding: 16px 20px; display: grid; gap: 14px; align-content: start; }
 .hc-foot { grid-area: foot; display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-top: 1px solid rgb(var(--glow-rgb) / .12); background: var(--surface); }
 .hc-status { font-size: 15px; }
+.hc-next { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.hc-bullet { color: var(--muted); }
 .hc-part { margin: 0; font-size: 13px; color: var(--muted); max-width: 52ch; }
 .hc-part-k { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin-right: .6em; }
 .hc-action { color: var(--accent-text); }
@@ -45,3 +47,12 @@
    .host-action-bar). In the console it sits in the footer, in flow. */
 .hc-acts .host-action-bar { position: static; background: none; backdrop-filter: none; border-top: 0; box-shadow: none; z-index: auto; }
 .hc-acts .host-action-bar__inner { max-width: none; min-height: 0; padding: 0; }
+
+/* The bar's own sizes are rem/em on the 16px root (0.7rem = 11px, under the
+   floor); inside the console they are pinned to the laptop ladder. */
+.hc-acts .host-action-bar__hint, .hc-acts .host-action-bar__armed { font-size: 13px; }
+.hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary { font-size: 15px; }
+.hc-acts .host-action-bar__kbd, .hc-acts .host-action-bar__keyhint { font-size: 12px; }
+
+/* Keyboard focus, as WorkflowStrip.css draws it. */
+.hc-sec summary:focus-visible, .hc-link:focus-visible, .hc-code:focus-visible, .hc-btn:focus-visible, .hc-winstat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

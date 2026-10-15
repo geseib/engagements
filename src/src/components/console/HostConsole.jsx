@@ -8,7 +8,8 @@ import './HostConsole.css';
 /**
  * THE HOST CONSOLE (docs/superpowers/specs/2026-10-15-host-console-design.md):
  * the laptop's private screen on two screens. Data and callbacks only; the
- * page owns the session. The panel for the moment is the child.
+ * page owns the session. The panel for the moment is the child. The moment
+ * itself travels on `rail.moment` (the rail opens its section from it).
  *
  * data-theme="dark" (dusk) on its own root, as HostRemote and PresentStage do:
  * public/index.html puts data-theme="light" on <html>.

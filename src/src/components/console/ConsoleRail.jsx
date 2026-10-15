@@ -58,7 +58,7 @@ export default function ConsoleRail({ moment, rounds = [], people = [], counts =
         {late.length ? (
           <ul className="hc-list">
             {late.map((l) => (
-              <li key={l.id}><span className="hc-tick">•</span><span>{l.label}<span className="hc-meta">{l.meta ? ` · ${l.meta}` : ''}</span></span></li>
+              <li key={l.id}><span className="hc-bullet">•</span><span>{l.label}<span className="hc-meta">{l.meta ? ` · ${l.meta}` : ''}</span></span></li>
             ))}
           </ul>
         ) : <p className="hc-empty">{CW.noLate}</p>}

@@ -11,7 +11,6 @@ const controls = {
   status: { text: '3 of 4 answered', tone: 'pending' },
 };
 const props = (over = {}) => ({
-  moment: 'ANSWERING',
   top: { title: 'Relay expansion', code: '7924', onJoin: jest.fn(), presentHref: '/present?gameId=7924', presentDetail: { open: true, fullscreen: true, visible: true, statusAt: new Date().toISOString() } },
   strip: { strip, mode: 'full', onView: jest.fn() },
   rail: {
@@ -48,7 +47,7 @@ test('the rail opens the moment\'s section; the host\'s choice holds until the m
   expect(open()).toEqual([]);
   rerender(<HostConsole {...props()}><div /></HostConsole>);
   expect(open()).toEqual([]);
-  rerender(<HostConsole {...props({ moment: 'READ', rail: { ...props().rail, moment: 'READ' } })}><div /></HostConsole>);
+  rerender(<HostConsole {...props({ rail: { ...props().rail, moment: 'READ' } })}><div /></HostConsole>);
   expect(open()).toEqual(['late']);
 });
 
@@ -63,4 +62,61 @@ test('People says the one count; a section\'s link opens the session menu at its
 test('the panel is drawn in the main area', () => {
   render(<HostConsole {...props()}><div data-testid="panel">panel</div></HostConsole>);
   expect(screen.getByTestId('panel').closest('.hc-main')).not.toBeNull();
+});
+
+/*
+  SPACE ON A CONSOLE CONTROL (review, 15 Oct). jsdom does not know
+  :focus-visible, so matches() is stubbed for that selector; jsdom also does
+  not turn Space into a click, so the browser's own activation is the
+  fireEvent.click that follows an unprevented keydown.
+*/
+describe('Space on the rail and the top line', () => {
+  const realMatches = Element.prototype.matches;
+  afterEach(() => { Element.prototype.matches = realMatches; });
+  const stubFocusVisible = (on) => {
+    Element.prototype.matches = function matches(sel) {
+      if (sel === ':focus-visible') return on;
+      return realMatches.call(this, sel);
+    };
+  };
+
+  test('a keyboard-focused summary keeps Space: the section toggles, the room does not advance', () => {
+    stubFocusVisible(true);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const summary = container.querySelector('.hc-rail details[data-section="queue"] summary');
+    summary.focus();
+    const notPrevented = fireEvent.keyDown(summary, { key: ' ' });
+    expect(notPrevented).toBe(true);
+    expect(p.footer.onAction).not.toHaveBeenCalled();
+    fireEvent.click(summary);
+    expect(container.querySelector('details[data-section="queue"]').open).toBe(true);
+  });
+
+  test('a mouse-focused summary: Space advances the room', () => {
+    stubFocusVisible(false);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const summary = container.querySelector('.hc-rail details[data-section="queue"] summary');
+    summary.focus();
+    fireEvent.keyDown(summary, { key: ' ' });
+    expect(p.footer.onAction).toHaveBeenCalledWith(controls.primary);
+  });
+
+  test('a keyboard-focused top control still lets the clicker (→) advance', () => {
+    stubFocusVisible(true);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    render(<HostConsole {...p}><div /></HostConsole>);
+    const join = screen.getByRole('button', { name: /Join 7924/ });
+    join.focus();
+    fireEvent.keyDown(join, { key: 'ArrowRight' });
+    expect(p.footer.onAction).toHaveBeenCalledWith(controls.primary);
+  });
+});
+
+test('the footer says what is next on the wall, only when given (spec §3.5)', () => {
+  const { container, rerender } = render(<HostConsole {...props()}><div /></HostConsole>);
+  expect(container.querySelector('.hc-next')).toBeNull();
+  rerender(<HostConsole {...props({ footer: { ...props().footer, nextOnWall: 'Next on the wall: the vote' } })}><div /></HostConsole>);
+  expect(container.querySelector('.hc-foot .hc-next').textContent).toBe('Next on the wall: the vote');
 });
