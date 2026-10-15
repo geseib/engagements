@@ -11,20 +11,29 @@
   grid-area: strip;
   position: relative;
   z-index: 3;
-  padding: .35em clamp(16px, 2.2vw, 40px) .4em;
+  /* One line for the steps with the four places at its end, one line below
+     for "Your part now" or the Viewing bar. The places come after the steps
+     in the markup's visual order and wrap under them on a narrow screen. */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .2em 1.2em;
+  padding: .25em clamp(16px, 2.2vw, 40px) .3em;
   font-size: var(--t-meta);
   color: var(--muted);
   border-bottom: var(--hair, 1px) solid rgb(var(--glow-rgb) / .1);
 }
 .wfs-places {
+  order: 2;
   list-style: none;
-  margin: 0 0 .3em;
+  margin: 0 0 0 auto;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-start;
   gap: .2em 1em;
 }
+.wfs-steps { order: 1; }
+.wfs-part, .wfs-bar { order: 3; flex-basis: 100%; }
 .wfs-place {
   font: inherit;
   font-size: calc(var(--t-meta) * .82);
@@ -48,7 +57,7 @@
   gap: .35em;
 }
 .wfs-loop {
-  padding: .15em .4em;
+  padding: .05em .35em;
   border: var(--hair, 1px) solid rgb(var(--glow-rgb) / .16);
   border-radius: 10px;
 }
@@ -63,7 +72,7 @@
   display: inline-flex;
   align-items: center;
   gap: .3em;
-  padding: .12em .55em;
+  padding: .05em .5em;
   font: inherit;
   font-size: calc(var(--t-meta) * .82);
   font-weight: 600;
@@ -113,7 +122,7 @@ button.wfs-step:focus-visible { outline: 2px solid var(--accent); outline-offset
 }
 
 .wfs-part {
-  margin: .3em 0 0;
+  margin: 0;
   font-size: calc(var(--t-meta) * .9);
   line-height: 1.35;
   color: var(--text);
@@ -134,8 +143,8 @@ button.wfs-step:focus-visible { outline: 2px solid var(--accent); outline-offset
   flex-wrap: wrap;
   align-items: center;
   gap: .4em 1em;
-  margin: .3em 0 0;
-  padding: .2em .6em;
+  margin: 0;
+  padding: .1em .6em;
   font-size: calc(var(--t-meta) * .85);
   color: var(--text);
   background: rgb(var(--accent-rgb) / .16);
@@ -201,7 +210,18 @@ button.wfs-step:focus-visible { outline: 2px solid var(--accent); outline-offset
 }
 .wfs-view-btn:focus-visible, .wfs-bar-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* One screen: the room sees it, so it is quieter and says only where. */
+/* TWO SCREENS: the strip is private laptop chrome, not something the room
+   reads, so it takes the laptop ladder (13 / 15px, engage-design §2) whatever
+   the stage's display profile. At the Room profile's 20px it wrapped to three
+   lines on a 1366px laptop and took a sixth of the screen (walk, 14 Oct). */
+.wfs:not(.wfs--slim) { font-size: 15px; }
+.wfs:not(.wfs--slim) .wfs-step,
+.wfs:not(.wfs--slim) .wfs-place { font-size: 13px; }
+.wfs:not(.wfs--slim) .wfs-part,
+.wfs:not(.wfs--slim) .wfs-bar { font-size: 15px; }
+
+/* One screen: the room sees it, so it keeps the stage ladder, quieter, and
+   says only where. */
 .wfs--slim { padding-block: .2em; }
 .wfs--slim .wfs-step { font-size: calc(var(--t-meta) * .72); }
 

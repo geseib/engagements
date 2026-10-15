@@ -2,9 +2,11 @@
    v3 mockup's "0 Setup"). Over the lobby in the stage's overlay slot (it
    carries .wfs-view for the slot's placement), dusk, the stage ladder,
    tokens only. The chosen card wears the info blue the live step wears. */
-.rsc { flex-direction: column; gap: .7em; font-size: var(--t-body); color: var(--text); }
+/* The meta step, not body: at body the two cards ran past a 1366x768
+   laptop's fold and "Help me pick" scrolled out of sight (walk, 14 Oct). */
+.rsc { flex-direction: column; gap: .6em; font-size: var(--t-meta); color: var(--text); }
 .rsc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4em 1.2em; }
-.rsc-h { margin: 0; font-size: var(--t-secondary); }
+.rsc-h { margin: 0; font-size: var(--t-body); }
 .rsc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22ch), 1fr)); gap: 1em; width: 100%; }
 .rsc-card {
   display: flex;
@@ -16,10 +18,10 @@
   background: var(--surface);
 }
 .rsc-card.is-chosen { border: 2px solid var(--info); background: rgb(var(--info-rgb) / .12); }
-.rsc-card-h { margin: 0; font-size: calc(var(--t-body) * 1.05); }
-.rsc-card-p { margin: 0; color: var(--muted); font-size: calc(var(--t-body) * .85); line-height: 1.4; }
+.rsc-card-h { margin: 0; font-size: var(--t-meta); }
+.rsc-card-p { margin: 0; color: var(--muted); font-size: calc(var(--t-meta) * .9); line-height: 1.4; }
 .rsc-card-acts, .rsc-rec-acts { display: flex; flex-wrap: wrap; gap: .5em; margin-top: auto; padding-top: .4em; }
-.rsc-art { width: 100%; max-width: 16em; height: auto; }
+.rsc-art { width: 100%; max-width: 11em; height: auto; }
 .rsc-art-laptop { fill: var(--surface-2); stroke: var(--muted); stroke-width: 1.5; }
 .rsc-art-wall { fill: var(--bg); stroke: var(--info); stroke-width: 2; }
 .rsc-art-t { fill: var(--muted); font-size: 9px; }

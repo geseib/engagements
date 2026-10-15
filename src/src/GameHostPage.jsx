@@ -695,9 +695,22 @@ function GameHostPage() {
     wallComments: setWallComments,
     scoreboardStyle: (style) => publishScoreboard({ style }),
   };
+  const currentSettings = {
+    anonymousUntilReveal,
+    nameWaiting: nameWaitingWhenAnonymous,
+    wallComments,
+    scoreboardStyle: scoreboard.style,
+  };
   const deferSetting = (key) => (value) => {
-    if (settingsRoundLive) setPendingSettings((held) => ({ ...held, [key]: value }));
-    else settingAppliersRef.current[key](value);
+    if (!settingsRoundLive) { settingAppliersRef.current[key](value); return; }
+    // Setting it back to what is live cancels the hold rather than waiting to
+    // apply a no-op.
+    setPendingSettings((held) => {
+      const next = { ...held };
+      if (value === currentSettings[key]) delete next[key];
+      else next[key] = value;
+      return next;
+    });
   };
   const settingsRoundRef = useRef(lessonNumber);
   useEffect(() => {

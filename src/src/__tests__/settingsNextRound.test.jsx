@@ -59,6 +59,9 @@ describe('the host page', () => {
     expect(page).toMatch(/onAutoModeChange=\{setAutoMode\}/);
     expect(page).toMatch(/onProfileChange=\{setProfile\}/);
   });
+  test('setting a held value back to the live one cancels the hold', () => {
+    expect(page).toMatch(/if \(value === currentSettings\[key\]\) delete next\[key\];/);
+  });
   test('held changes apply when the round number moves on', () => {
     expect(page).toMatch(/settingsRoundRef\.current === lessonNumber && settingsRoundLive\) return;/);
   });
