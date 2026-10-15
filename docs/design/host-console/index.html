@@ -68,7 +68,7 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
 .resp .r{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 12px;font-size:15px}
 .resp .r small{display:block;font-size:12px;color:var(--muted)}
 .resp .r.new{border-color:var(--success)}
-.resp .r.wall{border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
+.resp .r.onwall{border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
 .writing{color:var(--muted);font-size:13px}
 .note{font-size:13px;color:var(--muted)}
 .chip{display:inline-block;font-size:12px;font-weight:700;border:1px dashed var(--info);color:var(--info);border-radius:999px;padding:1px 8px;margin-left:6px;cursor:pointer}
@@ -205,7 +205,7 @@ body[data-v=lean] .cols.lean1{grid-template-columns:1fr}
           <div class="resp">
             <div class="r"><small>Response 1</small>Weekly status meetings: replace with a written update and one decision slot.</div>
             <div class="r"><small>Response 2</small>The paper sign-off sheet. Keep the approval, lose the paper.</div>
-            <div class="r wall"><small>Response 3 · on the wall now</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
+            <div class="r onwall"><small>Response 3 · on the wall now</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
             <div class="r"><small>Response 4</small>Duplicate expense approvals under fifty pounds.</div>
             <p class="tiny">Click a response to put it on the wall. Next response in the bar steps through them.</p>
           </div>
@@ -243,7 +243,7 @@ body[data-v=lean] .cols.lean1{grid-template-columns:1fr}
         <h2>Pick what goes on the wall, then start round 3</h2>
         <div class="cols lean1">
           <div class="resp">
-            <div class="r wall"><small>Idea · on the wall</small>A named supervisor signs in the system and gets a weekly digest of every approval.</div>
+            <div class="r onwall"><small>Idea · on the wall</small>A named supervisor signs in the system and gets a weekly digest of every approval.</div>
             <div class="r"><small>Idea</small>Two weeks of paper and system side by side, then compare.</div>
             <div class="r"><small>Idea · late, not reviewed</small>Ask the auditors what they need first.</div>
             <p class="tiny fullonly">4 of 4 answered · every idea goes in the report, shown or not.</p>
