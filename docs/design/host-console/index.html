@@ -29,6 +29,8 @@ body{margin:0;background:#0b1424;color:var(--text);font:15px/1.45 system-ui,-app
 .wall small{font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
 .wall p{margin:0;font-size:11px;font-weight:700;line-height:1.25}
 .wall .on{font-size:10px;color:var(--success-text)}
+.winstat{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:rgba(79,178,134,.14);border:1px solid var(--success);border-radius:999px;padding:4px 12px;display:inline-flex;align-items:center;gap:6px}
+.winstat .dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
 /* top line 2: the loop */
 .loop{grid-area:loop;display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--rule);font-size:13px;color:var(--muted)}
 .loop .round{font-weight:800;color:var(--text)}
@@ -138,11 +140,9 @@ body[data-v=lean] .cols.lean1{grid-template-columns:1fr}
       <button class="code" title="Show the join QR on the wall">Join <b>7924</b></button>
       <button class="btn">Room's window ↗</button>
       <button class="btn leanonly">Session</button>
-      <div class="wall" aria-label="On the wall now">
-        <small>On the wall</small>
-        <p data-wall></p>
-        <span class="on">● live</span>
-      </div>
+      <button class="winstat" title="The room's window is connected, visible and full screen">
+        <span class="dot"></span>Room's window: on, full screen
+      </button>
     </header>
 
     <nav class="loop" aria-label="Where the session is">
@@ -265,7 +265,7 @@ body[data-v=lean] .cols.lean1{grid-template-columns:1fr}
     <li><b>Lean:</b> every count appears once, in the footer beside the button. The rail has three sections that show only their names until opened (the one that matters opens itself); Session tools became a Session button in the top line. One column in the middle; the host's notes are a quiet line under the task. The footer says the status and your part, nothing else.</li>
   </ul>
   <ul class="notes fullonly">
-    <li><b>Top, two thin lines:</b> name, join code (click: the QR on the wall), the room's window, and a small live preview of the wall; then the loop alone.</li>
+    <li><b>Top, two thin lines:</b> name, join code (click: the QR on the wall), the room's window and its status (on, full screen / open, not full screen / hidden / not open; owner, 15 Oct: a status, not a picture, because the app cannot know a picture is really up); then the loop alone.</li>
     <li><b>Left rail:</b> four collapsible sections; the one that matters now opens on its own (People while answering and voting, Late during the read, Round queue between rounds). A header opens the full session menu at that section.</li>
     <li><b>Main:</b> the host's work for this step, never a copy of the wall: responses as they land, the ballot, Workie's read with Ask the room beside it (inline, not a pop-up), the ideas to pick.</li>
     <li><b>Footer:</b> live status, "Your part now", and the one main button with its second. Space and the clicker work as today; the Remote mirrors it.</li>
@@ -288,7 +288,6 @@ function show(m){
   document.querySelectorAll('[data-show]').forEach(s=>s.hidden = s.dataset.show!==m);
   document.querySelectorAll('.loop [data-s]').forEach(s=>{ s.classList.remove('done','live'); const st=d.steps[s.dataset.s]; if(st) s.classList.add(st); });
   document.querySelectorAll('.rail details').forEach(x=>x.open = x.dataset.r===d.rail);
-  document.querySelector('[data-wall]').textContent = d.wall;
   document.querySelector('[data-status]').textContent = d.status;
   document.querySelector('[data-next]').textContent = d.next;
   document.querySelector('[data-part]').innerHTML = '<span class="tiny" style="text-transform:uppercase;letter-spacing:.08em">Your part now </span>' + d.part;
