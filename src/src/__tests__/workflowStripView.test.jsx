@@ -149,3 +149,8 @@ describe('the composer is a sibling of the stage (walk of dev, 15 Oct)', () => {
     expect(composerAt).toBeGreaterThan(stageEnd);
   });
 });
+
+test('the console hides Your part now in the strip (it lives in the footer)', () => {
+  render(<WorkflowStrip strip={read} mode="full" onView={() => {}} hidePart />);
+  expect(screen.queryByText('Your part now')).not.toBeInTheDocument();
+});
