@@ -88,4 +88,24 @@ async function presentingCount(db, tableName, gameId) {
   return count;
 }
 
-module.exports = { roomCounts, presentPlayers, presentingCount, queryAll };
+/**
+ * The room's window as the host console reports it (host console spec §4.2):
+ * the most recently reporting Present viewer's Fullscreen/Visible/StatusAt.
+ */
+async function presentingDetail(db, tableName, gameId) {
+  const { items } = await queryAll(db, tableName, gameId, 'CONNECTION#', {
+    FilterExpression: 'Viewer = :viewer',
+    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':viewer': 'present' },
+  });
+  if (!items.length) return { open: false, fullscreen: null, visible: null, statusAt: null };
+  const stamp = (i) => String(i.StatusAt || i.ConnectedAt || '');
+  const latest = items.slice().sort((a, b) => stamp(b).localeCompare(stamp(a)))[0];
+  return {
+    open: true,
+    fullscreen: typeof latest.Fullscreen === 'boolean' ? latest.Fullscreen : null,
+    visible: typeof latest.Visible === 'boolean' ? latest.Visible : null,
+    statusAt: latest.StatusAt || null,
+  };
+}
+
+module.exports = { roomCounts, presentPlayers, presentingCount, presentingDetail, queryAll };

@@ -55,6 +55,14 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
+    // THE ROOM'S WINDOW REPORTS ITS STATE (host console spec §4.2). Only a
+    // Present viewer's own row is written, and only with real booleans; a
+    // player socket sending this changes nothing.
+    if (messageType === 'PRESENT_STATUS') {
+      await recordPresentStatus(gameId, connectionId, body);
+      return { statusCode: 200, body: 'ok' };
+    }
+
     // A HOST FRAME IS OBEYED ONLY FROM THAT ROOM'S OWN HOST SOCKET. Both the
     // messageType and the gameId are whatever the frame says, and $connect has
     // no authorizer, so without this any socket — one joined to no game, or to
@@ -691,6 +699,36 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     console.error(`❌ Error storing player answer:`, error);
     throw error;
   }
+}
+
+/**
+ * RECORD THE ROOM'S WINDOW STATE (host console spec §4.2): the sender's OWN
+ * connection row, and only when that row is a Present viewer's. The key is
+ * built from the connection id the gateway vouches for, never from the frame,
+ * so no socket can write another's row. Booleans only; anything else is
+ * ignored. The host is told so its console re-reads.
+ */
+async function recordPresentStatus(gameId, connectionId, body) {
+  const key = { PK: `GAME#${gameId}`, SK: `CONNECTION#${connectionId}` };
+  const row = await db.send(new GetCommand({ TableName: process.env.TABLE_NAME, Key: key, ProjectionExpression: 'Viewer' }));
+  if (!row.Item || row.Item.Viewer !== 'present') return;
+  const sets = []; const values = { ':at': new Date().toISOString() };
+  if (typeof body.fullscreen === 'boolean') { sets.push('Fullscreen = :fs'); values[':fs'] = body.fullscreen; }
+  if (typeof body.visible === 'boolean') { sets.push('Visible = :vi'); values[':vi'] = body.visible; }
+  sets.push('StatusAt = :at');
+  try {
+    await db.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME, Key: key,
+      UpdateExpression: `SET ${sets.join(', ')}`,
+      ConditionExpression: 'attribute_exists(SK)',
+      ExpressionAttributeValues: values,
+    }));
+  } catch (e) {
+    if (e && e.name === 'ConditionalCheckFailedException') return; // closed between read and write
+    throw e;
+  }
+  const hosts = await getHostConnections(gameId);
+  await Promise.all(hosts.map((c) => sendToConnection(c.ConnectionId, { type: 'presentChanged', gameId })));
 }
 
 /**

@@ -6,7 +6,7 @@ const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
 const { normalizeNames } = require('./survey-names');
 
-const { roomCounts, presentPlayers, presentingCount, queryAll } = require('./room-counts');
+const { roomCounts, presentPlayers, presentingCount, presentingDetail, queryAll } = require('./room-counts');
 const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 
@@ -127,6 +127,7 @@ exports.handler = async (event) => {
     const currentState = stateItem?.State || 'CREATED';
     const lessonNumber = stateItem?.LessonNumber || 0;
     let currentQuestionData = null;
+    let currentQuestionHostNotes = null;
     
     // Use the actual state directly (ASK#001, VOTE#001, etc.)
     const frontendState = currentState;
@@ -346,6 +347,7 @@ exports.handler = async (event) => {
             : resolvedSet.metadata;
 
           if (question.Item) {
+            currentQuestionHostNotes = questionItem.Background ? { background: String(questionItem.Background) } : null;
             currentQuestionData = {
               id: currentQuestionNumber,
               questionNumber: currentQuestionNumber,
@@ -589,6 +591,18 @@ exports.handler = async (event) => {
         console.error('presenting count failed (reporting 0):', presentingError);
         response.presenting = 0;
       }
+
+      try {
+        response.presentDetail = await presentingDetail(db, process.env.TABLE_NAME, gameId);
+      } catch (detailError) {
+        console.error('present detail failed (reporting none):', detailError);
+        response.presentDetail = null;
+      }
+
+      // The host's own notes for the question (host console spec §3.4): the
+      // set's Background, on the host door only. /state never carries it
+      // (tests/present-public-reads.js §2).
+      response.hostNotes = currentQuestionHostNotes || null;
 
       /*
         THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.
