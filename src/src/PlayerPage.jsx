@@ -3816,7 +3816,9 @@ function PlayerPage({ event = null } = {}) {
             {gameType === 'trivia' ? 'Answer Submitted!'
               : gameType === 'wavelength' ? 'Words Submitted!'
                 : gameType === 'poll' ? 'Answer In!'
-                  : currentQuestion?.image ? 'Title Submitted!' : 'Application Submitted!'}
+                  // Plain words (external review of test, 15 Oct: "Application
+                  // Submitted!" read as a form, not an answer).
+                  : currentQuestion?.image ? 'Title received.' : 'Answer received.'}
           </h1>
 
           {submittedWords ? (

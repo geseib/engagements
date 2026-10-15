@@ -53,6 +53,8 @@ const I = {
   SHOW_RESPONSE: 'show-response', NEXT_RESPONSE: 'next-response',
   NEXT_PART: 'next-part', STOP_SHOWING: 'stop-showing',
   CLOSE_ASK: 'close-ask', CANCEL_ASK: 'cancel-ask',
+  // Session flow v3 §4.3: opens the Ask the room composer. It sends nothing.
+  ASK_ROOM: 'ask-room',
 };
 
 const ROUND_STATE = /^(ASK|VOTE|RESULTS?)#(\d+)$/i;
@@ -194,6 +196,11 @@ function primaryFor(moment, ctx) {
         return control('show-read', RW.showTheRead, I.WAIT, 'Sparkle', { disabled: true, hint: RW.workieWriting });
       }
       if (pages > 1 && page < pages - 1) return control('notes-page', RW.nextPage, I.PAGE, 'ArrowRight');
+      // THE READ ENDS ON A REAL STOP (session flow v3 §4.3): with Workie's
+      // questions unsent, the last page's main step is Ask the room, which
+      // opens the composer and sends nothing, so a clicker or Space never
+      // carries the room past them.
+      if (ctx.asksEnabled && ctx.asksReady > 0) return control('ask-room', RW.askTheRoom, I.ASK_ROOM, 'ChatsCircle');
       return control('next', startNext(ctx), I.NEXT, 'ArrowRight');
     }
     case 'FEEDBACK':
@@ -249,18 +256,36 @@ function secondaryFor(moment, ctx, primary) {
         : null;
     case 'RESPONSES':
       return control('stop-showing', RW.stopShowing, I.STOP_SHOWING, 'X');
-    case 'READ':
-      // Mid-read (or before it is written) the way past the rest is the plain
-      // Next round; on the last page the slot holds Request feedback.
-      if (primary.id === 'next') return control('request-feedback', RW.requestFeedback, I.FEEDBACK, 'ChatCircleText');
-      return control('next', startNext(ctx), I.NEXT, 'SkipForward');
+    case 'READ': {
+      // The last page with nothing unsent: Ask the room is the second door
+      // (it replaces Request feedback, whose Comments live in the composer
+      // now). Where the feature is off for the tier, Request feedback stays.
+      if (primary.id === 'next') {
+        return ctx.asksEnabled
+          ? control('ask-room', RW.askTheRoom, I.ASK_ROOM, 'ChatsCircle')
+          : control('request-feedback', RW.requestFeedback, I.FEEDBACK, 'ChatCircleText');
+      }
+      // The last page with questions unsent: one press, the host has seen the stop.
+      if (primary.id === 'ask-room') return control('next', startNext(ctx), I.NEXT, 'SkipForward');
+      // Mid-read, or before it is written: leaving past Workie's unsent
+      // questions takes a second press, said in place on the button
+      // (owner, 15 Oct: "make sure it is obvious what is happening").
+      const next = control('next', startNext(ctx), I.NEXT, 'SkipForward');
+      if (ctx.asksEnabled && ctx.asksReady > 0) {
+        next.arm = { text: RW.armUnasked(ctx.asksReady), confirmLabel: RW.anyway(next.label), inPlace: true };
+      }
+      return next;
+    }
     case 'FEEDBACK':
       return control('close-feedback', RW.backToRead, I.FIELD_NOTES, 'ArrowLeft');
     case 'ROOM_QUESTION':
       return control('cancel-ask', RW.cancelQuestion, I.CANCEL_ASK, 'X');
     case 'ROOM_RESULTS':
-      // Back to the read, where the other asks sit beside their points.
-      return control('ask-another', RW.askAnother, I.FIELD_NOTES, 'ArrowLeft');
+      // Opens the composer again, with the suggestions still unsent (§4.3).
+      // Where the composer is not offered, back to the read as before.
+      return ctx.asksEnabled
+        ? control('ask-another', RW.askAnother, I.ASK_ROOM, 'ChatsCircle')
+        : control('ask-another', RW.askAnother, I.FIELD_NOTES, 'ArrowLeft');
     default:
       return null;
   }
@@ -316,6 +341,7 @@ function statusFor(moment, ctx) {
       if (ready === false) return { text: RW.workieWriting, tone: 'pending' };
       // "Reading page 3 of 4 · 3 asks ready" (the mockup's dock line).
       const asks = ctx.asksReady > 0 ? ` · ${RW.asksReady(ctx.asksReady)}` : '';
+      if (pages > 1 && page === pages - 1 && asks) return toned(`${RW.lastPage}${asks}`);
       if (pages > 1) return toned(`${RW.readingPage(page + 1, pages)}${asks}`);
       if (asks && !ctx.goalLine) return toned(`${RW.readOnScreen}${asks}`);
       return ctx.goalLine ? { text: ctx.goalLine, tone: 'notice' } : toned(RW.readOnScreen);
@@ -351,6 +377,7 @@ function nextFor(moment, ctx, primary) {
     case 'READ':
       if (primary.id === 'show-read') return L.READ_WAIT;
       if (primary.id === 'notes-page') return L.READ_PAGE;
+      if (primary.id === 'ask-room') return L.READ_ASK;
       return L.READ_LAST;
     case 'OTHER': return L.UNKNOWN;
     default: return L[moment] || L.UNKNOWN;

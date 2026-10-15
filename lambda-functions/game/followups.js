@@ -190,7 +190,14 @@ async function send(db, broadcast, { gameId, meta, state, body }) {
   const origin = kinds.resolveOrigin(value, suggestion);
   // Where it sits beside the read: the suggestion's checked anchor, or none.
   const anchor = suggestion && suggestion.anchor ? suggestion.anchor : null;
-  const created = await store.createAsk(db, { gameId, round, orgId, value, origin, anchor });
+  // The record the report needs (session flow v3 §4.2): Workie's words as
+  // they were, what the host changed, where it was sent from, the room size.
+  const record = {
+    suggested: kinds.suggestedOf(suggestion),
+    edits: kinds.editsOf(value, suggestion),
+    ...kinds.sendContextOf(body),
+  };
+  const created = await store.createAsk(db, { gameId, round, orgId, value, origin, anchor, record });
   if (!created.ok) return respond(409, { error: 'Finish the open question first', code: 'LIVE' });
 
   // Every screen moves to the question: the round's beat becomes `ask`.

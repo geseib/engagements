@@ -164,7 +164,9 @@ function checkSuggestions(asks, answers, rosterNames, { kinds = KINDS, read = ''
     // THE ANCHOR (option A): the section and point of the read this came
     // from, exactly as the read printed them. A miss is kept, after the read.
     const at = pointAt(read, a.anchor);
-    out.anchor = at ? { section: at.section, point: at.point } : null;
+    // The point's own words travel with the anchor (session flow v3 §4.2,
+    // AnchorText): a number means nothing once the read has changed.
+    out.anchor = at ? { section: at.section, point: at.point, text: String(at.text || '').slice(0, 400) } : null;
     if (!at) marks.push('unanchored');
 
     out.marks = marks;

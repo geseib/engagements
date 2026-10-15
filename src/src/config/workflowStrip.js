@@ -73,7 +73,8 @@ function subFor(id, moment, ctx) {
     }
   }
   if (id === 'ask') {
-    if (moment === 'ROOM_QUESTION') return lower(RW.stepLive);
+    // ROOM_QUESTION: no sub-state; the step's own LIVE mark says it (external
+    // review, 15 Oct: "Ask · live · Live" said it twice).
     if (moment === 'ROOM_RESULTS') return lower(RW.stepResults);
   }
   return '';
@@ -84,6 +85,7 @@ function partKey(moment, step) {
   if (moment === 'READ') {
     if (step.primary.id === 'show-read') return 'READ_WAIT';
     if (step.primary.id === 'notes-page') return 'READ_PAGE';
+    if (step.primary.id === 'ask-room') return 'READ_ASK';
     return 'READ_LAST';
   }
   return moment;

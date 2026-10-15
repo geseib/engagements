@@ -178,5 +178,26 @@ check('ask ids sort in the order they were sent', () => {
   assert.ok(a < b);
 });
 
+// Session flow v3 §4.2: the ask keeps Workie's words, what the host changed,
+// where it was sent from and how many could answer.
+check('Workie\'s words are copied as they were, with the reason and the answers', () => {
+  const sug = { type: 'choice', question: 'Which first?', options: [{ text: 'A', answer: 1 }, { text: 'B', answer: 2 }], why: 'Two camps.', answers: [1, 2] };
+  assert.deepStrictEqual(K.suggestedOf(sug), { kind: 'choice', question: 'Which first?', options: ['A', 'B'], why: 'Two camps.', answers: [1, 2] });
+  assert.strictEqual(K.suggestedOf(null), null);
+});
+check('the edits name what changed: kind, question, options; none when sent as written or from blank', () => {
+  const sug = { type: 'choice', question: 'Which first?', options: [{ text: 'A' }, { text: 'B' }] };
+  assert.deepStrictEqual(K.editsOf({ kind: 'choice', question: 'Which first?', options: [{ text: 'A' }, { text: 'B' }] }, sug), []);
+  assert.deepStrictEqual(K.editsOf({ kind: 'choice', question: 'Which one first?', options: [{ text: 'A' }, { text: 'C' }] }, sug), ['question', 'options']);
+  assert.deepStrictEqual(K.editsOf({ kind: 'ideas', question: 'Which first?' }, sug), ['kind']);
+  assert.deepStrictEqual(K.editsOf({ kind: 'ideas', question: 'Anything?' }, null), []);
+});
+check('the send context is checked: laptop or remote, a whole room size, nothing else', () => {
+  assert.deepStrictEqual(K.sendContextOf({ sentFrom: 'laptop', roomSize: 4 }), { sentFrom: 'laptop', roomSize: 4 });
+  assert.deepStrictEqual(K.sendContextOf({ sentFrom: 'tv', roomSize: -1 }), { sentFrom: null, roomSize: null });
+  assert.deepStrictEqual(K.sendContextOf({ roomSize: '4' }), { sentFrom: null, roomSize: 4 });
+  assert.deepStrictEqual(K.sendContextOf(undefined), { sentFrom: null, roomSize: null });
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

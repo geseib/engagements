@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import StatusMessage from './StatusMessage';
 
@@ -83,6 +83,42 @@ export default function HostActionBar({
   const primaryId = primary?.id;
   const primaryDisabled = Boolean(primary?.disabled);
 
+  /*
+    A SECOND PRESS, SAID IN PLACE (session flow v3 §4.3; owner, 15 Oct: "make
+    sure it is obvious what is happening"). A control carrying `arm.inPlace`
+    does not act on its first press: the button turns to its warning look and
+    its `confirmLabel` ("Start round 3 anyway"), the reason appears above the
+    buttons ("3 questions not asked yet. Press again to move on."), and the
+    next press acts. It lets go after ARM_MS, on any other button, or when the
+    moment changes, so an armed button is never left waiting to surprise.
+  */
+  const ARM_MS = 6000;
+  const [armedId, setArmedId] = useState(null);
+  const armTimer = useRef(null);
+  const disarm = () => {
+    if (armTimer.current) clearTimeout(armTimer.current);
+    armTimer.current = null;
+    setArmedId(null);
+  };
+  const controlIds = [primary?.id, secondary?.id, tertiary?.id].join('|');
+  useEffect(() => { disarm(); }, [controlIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (armTimer.current) clearTimeout(armTimer.current); }, []);
+  const press = (control) => {
+    if (!control) return;
+    if (control.arm && control.arm.inPlace && armedId !== control.id) {
+      if (armTimer.current) clearTimeout(armTimer.current);
+      setArmedId(control.id);
+      armTimer.current = setTimeout(() => setArmedId(null), ARM_MS);
+      return;
+    }
+    disarm();
+    onAction(control);
+  };
+  const armedControl = [primary, secondary, tertiary].find((c) => c && c.id === armedId) || null;
+  const labelOf = (control) => (armedId === control.id && control.arm && control.arm.confirmLabel
+    ? control.arm.confirmLabel : control.label);
+  const armClass = (control) => (armedId === control.id ? ' is-armed' : '');
+
   // Space / → advance, so a presenter's clicker drives the room.
   useEffect(() => {
     if (!shortcutsEnabled || !primary || primaryDisabled) return undefined;
@@ -117,12 +153,12 @@ export default function HostActionBar({
       // The page may take this press for itself — a Workie page turn instead
       // of a round advance. Only when it declines does the primary fire.
       if (typeof interceptAdvance === 'function' && interceptAdvance()) return;
-      onAction(primary);
+      press(primary);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [shortcutsEnabled, primaryId, primaryDisabled, onAction, primary, interceptAdvance]);
+  }, [shortcutsEnabled, primaryId, primaryDisabled, onAction, primary, interceptAdvance, armedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ← — the backwards key, with the exact guard set the advance keys carry.
   // Registered only while the caller has somewhere to go back TO; when
@@ -166,21 +202,24 @@ export default function HostActionBar({
           {primary.disabled && primary.hint && (
             <span className="host-action-bar__hint">{primary.hint}</span>
           )}
+          {armedControl && (
+            <span className="host-action-bar__armed" role="alert">{armedControl.arm.text}</span>
+          )}
           {secondary && (
             <button
               type="button"
-              className="btn-secondary host-action-bar__secondary"
-              onClick={() => onAction(secondary)}
+              className={`btn-secondary host-action-bar__secondary${armClass(secondary)}`}
+              onClick={() => press(secondary)}
             >
               <Icon name={secondary.icon} weight="bold" size={18} />
-              <span>{secondary.label}</span>
+              <span>{labelOf(secondary)}</span>
             </button>
           )}
           {tertiary && (
             <button
               type="button"
-              className="btn-secondary host-action-bar__tertiary"
-              onClick={() => onAction(tertiary)}
+              className={`btn-secondary host-action-bar__tertiary${armClass(tertiary)}`}
+              onClick={() => press(tertiary)}
             >
               <Icon name={tertiary.icon} weight="bold" size={18} />
               <span>{tertiary.label}</span>
@@ -188,13 +227,13 @@ export default function HostActionBar({
           )}
           <button
             type="button"
-            className="btn-primary host-action-bar__primary"
-            onClick={() => onAction(primary)}
+            className={`btn-primary host-action-bar__primary${armClass(primary)}`}
+            onClick={() => press(primary)}
             disabled={primary.disabled}
             title={primary.disabled ? primary.hint : 'Space or → also advances'}
           >
             <Icon name={primary.icon} weight="bold" size={20} />
-            <span>{primary.label}</span>
+            <span>{labelOf(primary)}</span>
           </button>
           {!primary.disabled && shortcutsEnabled && (
             <kbd className="host-action-bar__kbd" aria-hidden="true">Space</kbd>
