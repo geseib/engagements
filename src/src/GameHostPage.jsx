@@ -8437,25 +8437,7 @@ Focus on actionable business strategy insights.`;
             {hostPhase === 'ASKING' && (
               <AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} />
             )}
-            {askComposer && (
-              <AskComposer
-                suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
-                  index,
-                  ask,
-                  section: ask && ask.anchor ? ask.anchor.section : '',
-                  point: ask && ask.anchor ? ask.anchor.point : null,
-                  sent: !roundAsks.unsent.some((u) => u.index === index),
-                }))}
-                startIndex={askComposer.startIndex}
-                readLines={readLinesOf(currentAIInsights && currentAIInsights.markdownResponse)}
-                onSend={sendRoomAsk}
-                onComments={roundAsks.enabled ? requestFeedbackRound : null}
-                onClose={() => setAskComposer(null)}
-                blocked={Boolean(roundAsks.live)}
-                oneScreen={!twoSurfaces}
-                theme="dark"
-              />
-            )}
+
 
             {/* ENDED LEADS WITH THE CONCLUSION, NOT THE TITLE — 10-ended.
                 This printed <h1 class="q">{eventTitle}</h1> while the rail
@@ -8537,6 +8519,30 @@ Focus on actionable business strategy insights.`;
           would enter fitPolicy's world and drive the scale search to its
           floor. Its own geometry stops it at `--dock-measured`, because the
           dock is a no-overlay zone (audit A6). */}
+      {/* THE ASK THE ROOM COMPOSER, A SIBLING OF <Stage> (walk of dev, 15 Oct).
+          Mounted inside the stage it sat in `.main`'s stacking context (z 2),
+          so the workflow strip (z 3) and the dock (z 12) painted over its
+          header and its Send button. Out here its scrim covers everything. */}
+      {askComposer && (
+        <AskComposer
+          suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
+            index,
+            ask,
+            section: ask && ask.anchor ? ask.anchor.section : '',
+            point: ask && ask.anchor ? ask.anchor.point : null,
+            sent: !roundAsks.unsent.some((u) => u.index === index),
+          }))}
+          startIndex={askComposer.startIndex}
+          readLines={readLinesOf(currentAIInsights && currentAIInsights.markdownResponse)}
+          onSend={sendRoomAsk}
+          onComments={roundAsks.enabled ? requestFeedbackRound : null}
+          onClose={() => setAskComposer(null)}
+          blocked={Boolean(roundAsks.live)}
+          oneScreen={!twoSurfaces}
+          theme="dark"
+        />
+      )}
+
       {setupPanelOpen && (
         <SessionSetupPanel
           // A place asked for re-mounts the panel at its tab.
