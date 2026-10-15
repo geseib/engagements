@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Host console</title>
+<style>
+/* Host console mockup (two screens only), 15 Oct. Dusk palette and the laptop
+   ladder (12 / 13 / 15 / 19 / 24px) from styles.css; sample content invented. */
+:root{--bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;--rule:rgba(244,237,228,.12);--rule-2:rgba(244,237,228,.22);--primary:#F6A94C;--primary-text:#F6A94C;--info:#7CA7E6;--success:#4FB286;--success-text:#6FD0A4;--warn:#F6A94C}
+*{box-sizing:border-box}
+body{margin:0;background:#0b1424;color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.page{max-width:1440px;margin:0 auto;padding:16px}
+.intro{color:var(--muted);font-size:13px;margin:0 0 10px}
+.intro b{color:var(--text)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.tabs button{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:var(--surface);border:1px solid var(--rule-2);border-radius:999px;padding:6px 12px;cursor:pointer}
+.tabs button[aria-pressed=true]{border-color:var(--info);background:var(--surface-2)}
+.console{display:grid;grid-template-rows:auto auto 1fr auto;grid-template-columns:260px 1fr;grid-template-areas:"top top" "loop loop" "rail main" "foot foot";height:820px;background:var(--bg);border:1px solid var(--rule-2);border-radius:12px;overflow:hidden}
+/* top line 1 */
+.top{grid-area:top;display:flex;align-items:center;gap:14px;padding:8px 16px;border-bottom:1px solid var(--rule)}
+.brand{font-weight:800;font-size:15px}
+.name{color:var(--muted);font-size:13px}
+.spacer{margin-left:auto}
+.code{font-size:13px;font-weight:700;border:1px solid var(--rule-2);border-radius:8px;padding:4px 10px;background:transparent;color:var(--text)}
+.code b{color:var(--primary-text);letter-spacing:.06em;margin-left:4px}
+.btn{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:8px;padding:5px 12px;cursor:pointer}
+.wall{width:150px;aspect-ratio:16/9;border:1px solid var(--info);border-radius:6px;background:#0a1220;padding:6px 8px;display:flex;flex-direction:column;justify-content:space-between}
+.wall small{font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.wall p{margin:0;font-size:11px;font-weight:700;line-height:1.25}
+.wall .on{font-size:10px;color:var(--success-text)}
+/* top line 2: the loop */
+.loop{grid-area:loop;display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--rule);font-size:13px;color:var(--muted)}
+.loop .round{font-weight:800;color:var(--text)}
+.loop ol{display:flex;gap:6px;margin:0;padding:3px 6px;list-style:none;border:1px solid var(--rule-2);border-radius:10px}
+.step{padding:2px 10px;border-radius:7px;border:1px solid var(--rule-2);color:var(--muted)}
+.step.done{color:var(--text)} .step.done::before{content:"✓ ";color:var(--success-text);font-weight:800}
+.step.live{color:var(--text);background:rgba(124,167,230,.28);border-color:var(--info);font-weight:800}
+.step.live::after{content:" ● live";font-size:11px;color:var(--success-text)}
+.step.opt{border-style:dashed}
+.sep{opacity:.6}
+/* rail */
+.rail{grid-area:rail;border-right:1px solid var(--rule);overflow:auto;padding:8px 0}
+details{border-bottom:1px solid var(--rule)}
+summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:13px;font-weight:700}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸";color:var(--muted)} details[open] summary::before{content:"▾"}
+summary .count{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600}
+summary .count.alert{color:var(--primary-text)}
+.rail ul{list-style:none;margin:0;padding:0 14px 12px;display:grid;gap:6px;font-size:13px}
+.rail li{display:flex;gap:8px;align-items:baseline}
+.rail .n{width:20px;height:20px;border-radius:6px;background:var(--surface-2);display:inline-grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+.rail .live .n{background:var(--info);color:#0b1424}
+.rail .meta{color:var(--muted);font-size:12px}
+.rail .tick{color:var(--success-text);font-weight:800}
+.rail .wait{color:var(--muted)}
+.rail .open-all{font-size:12px;color:var(--info);padding:0 14px 10px;display:block}
+/* main */
+.main{grid-area:main;overflow:auto;padding:16px 20px;display:grid;gap:14px;align-content:start}
+.kicker{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+h2{margin:2px 0 0;font-size:24px;line-height:1.2}
+.task{border-left:3px solid var(--primary);padding:6px 10px;background:var(--surface);border-radius:0 8px 8px 0;font-size:15px}
+.task small{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.cols{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:10px 12px}
+.card h3{margin:0 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.resp{display:grid;gap:8px}
+.resp .r{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 12px;font-size:15px}
+.resp .r small{display:block;font-size:12px;color:var(--muted)}
+.resp .r.new{border-color:var(--success)}
+.resp .r.wall{border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
+.writing{color:var(--muted);font-size:13px}
+.note{font-size:13px;color:var(--muted)}
+.chip{display:inline-block;font-size:12px;font-weight:700;border:1px dashed var(--info);color:var(--info);border-radius:999px;padding:1px 8px;margin-left:6px;cursor:pointer}
+.read p{margin:0 0 8px}
+.read ul{margin:0;padding-left:18px}
+.read li{margin:0 0 6px}
+.composer{border:2px solid var(--info);border-radius:12px;padding:12px;background:var(--surface);display:grid;gap:10px}
+.kinds{display:flex;gap:6px;flex-wrap:wrap}
+.kinds span{font-size:13px;font-weight:700;border:1px solid var(--rule-2);border-radius:8px;padding:4px 10px}
+.kinds .on{border:2px solid var(--info);background:var(--surface-2)}
+.field{border:1px solid var(--rule-2);border-radius:8px;padding:8px 10px;font-size:15px;background:var(--bg)}
+.tiny{font-size:12px;color:var(--muted)}
+.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--info)}
+/* footer */
+.foot{grid-area:foot;display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--surface)}
+.foot .status{font-size:13px}
+.foot .status b{display:block;font-size:15px}
+.foot .part{font-size:13px;color:var(--muted);max-width:52ch}
+.foot .part em{font-style:normal;color:var(--primary-text);font-weight:700}
+.foot .acts{margin-left:auto;display:flex;gap:10px}
+.go{font:inherit;font-size:15px;font-weight:800;background:var(--primary);color:#2A1B08;border:0;border-radius:10px;padding:10px 20px}
+.alt{font:inherit;font-size:15px;font-weight:700;background:transparent;color:var(--text);border:1px solid var(--rule-2);border-radius:10px;padding:10px 16px}
+[hidden]{display:none!important}
+.notes{margin-top:18px;color:var(--muted);font-size:13px;max-width:900px}
+.notes li{margin:0 0 6px}
+@media (max-width:900px){.console{grid-template-columns:1fr;grid-template-areas:"top" "loop" "main" "foot";height:auto}.rail{display:none}.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="intro"><b>Host console, two screens only.</b> The laptop is private; the room watches the wall on the projector. One screen keeps today's stage. Pick a moment:</p>
+  <div class="tabs" role="group" aria-label="Moment">
+    <button data-m="answer" aria-pressed="true">1 · Answering</button>
+    <button data-m="vote" aria-pressed="false">2 · Voting</button>
+    <button data-m="read" aria-pressed="false">3 · What we heard, with Ask the room open</button>
+    <button data-m="between" aria-pressed="false">4 · Between rounds</button>
+  </div>
+
+  <div class="console">
+    <header class="top">
+      <span class="brand">Engagements</span>
+      <span class="name">Relay expansion</span>
+      <span class="spacer"></span>
+      <button class="code" title="Show the join QR on the wall">Join <b>7924</b></button>
+      <button class="btn">Room's window ↗</button>
+      <div class="wall" aria-label="On the wall now">
+        <small>On the wall</small>
+        <p data-wall></p>
+        <span class="on">● live</span>
+      </div>
+    </header>
+
+    <nav class="loop" aria-label="Where the session is">
+      <span class="step done">Setup</span><span class="sep">›</span>
+      <ol>
+        <li class="round" data-round>Round 2 of 6 ↻</li>
+        <li class="step" data-s="answer">Answer</li>
+        <li class="step" data-s="vote">Vote</li>
+        <li class="step" data-s="heard">What we heard</li>
+        <li class="step opt" data-s="ask">Ask</li>
+      </ol><span class="sep">›</span>
+      <span class="step">Finish</span>
+    </nav>
+
+    <aside class="rail" aria-label="Session">
+      <details data-r="queue"><summary>Round queue <span class="count">2 of 6</span></summary>
+        <ul>
+          <li><span class="n">1</span><span>Churchill <span class="meta">· done</span></span></li>
+          <li class="live"><span class="n">2</span><span>Meiji <span class="meta">· now</span></span></li>
+          <li><span class="n">3</span><span>Fleming <span class="meta">· next</span></span></li>
+          <li><span class="n">4</span><span>Boudicca</span></li>
+        </ul><a class="open-all">Rounds and questions…</a></details>
+      <details data-r="people"><summary>People <span class="count" data-peoplecount>3 of 4 answered</span></summary>
+        <ul data-people></ul><a class="open-all">All players…</a></details>
+      <details data-r="late"><summary>Late &amp; not reviewed <span class="count alert">2</span></summary>
+        <ul>
+          <li><span class="tick">•</span><span>Late answer · round 2 <span class="meta">· arrived during voting</span></span></li>
+          <li><span class="tick">•</span><span>Comment on Workie's read <span class="meta">· round 1</span></span></li>
+        </ul><a class="open-all">Review them…</a></details>
+      <details data-r="tools"><summary>Session tools <span class="count">● connected</span></summary>
+        <ul><li>Questions</li><li>Rounds</li><li>Settings</li><li class="meta">Remote: open on 1 phone</li></ul></details>
+    </aside>
+
+    <main class="main">
+      <!-- 1 ANSWERING -->
+      <section data-show="answer">
+        <p class="kicker">Round 2 · Answering</p>
+        <h2>The Meiji Restoration</h2>
+        <div class="task"><small>The task</small>Which long-standing process must be dismantled, who benefits, and how do we bring them with us?</div>
+        <div class="cols" style="margin-top:14px">
+          <div>
+            <p class="kicker" style="margin-bottom:8px">Responses as they land · names hidden</p>
+            <div class="resp">
+              <div class="r new"><small>Response 3 · just now</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
+              <div class="r"><small>Response 2</small>The paper sign-off sheet. Supervisors lose a control they trust, so keep the approval, lose the paper.</div>
+              <div class="r"><small>Response 1</small>Weekly status meetings: replace with a written update and one decision slot.</div>
+              <p class="writing">1 still writing · the wall shows the count, not the words</p>
+            </div>
+          </div>
+          <div class="card"><h3>For you · background</h3><p class="note">Japan dismantled the samurai class within a decade, buying out stipends rather than seizing them. Ask the room who the "samurai" are in their process.</p></div>
+        </div>
+      </section>
+
+      <!-- 2 VOTING -->
+      <section data-show="vote" hidden>
+        <p class="kicker">Round 2 · Voting · names hidden</p>
+        <h2>The ballot, in the order the room sees it</h2>
+        <div class="cols">
+          <div class="resp">
+            <div class="r"><small>Response 1</small>Weekly status meetings: replace with a written update and one decision slot.</div>
+            <div class="r"><small>Response 2</small>The paper sign-off sheet. Keep the approval, lose the paper.</div>
+            <div class="r wall"><small>Response 3 · on the wall now</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
+            <div class="r"><small>Response 4</small>Duplicate expense approvals under fifty pounds.</div>
+            <p class="tiny">Click a response to put it on the wall. Next response in the bar steps through them.</p>
+          </div>
+          <div class="card"><h3>Votes</h3><div class="bar"><i style="width:75%"></i></div><p class="note" style="margin-top:6px">3 of 4 voted. Results stay hidden from you too until you show them.</p></div>
+        </div>
+      </section>
+
+      <!-- 3 READ + ASK INLINE -->
+      <section data-show="read" hidden>
+        <p class="kicker">Round 2 · What we heard · page 3 of 4</p>
+        <div class="cols" style="grid-template-columns:1fr 420px">
+          <div class="card read">
+            <h3>Workie's read · the wall shows this page</h3>
+            <p><b>Discussion topics</b></p>
+            <ul>
+              <li>Two answers keep the control and drop the paper. What would make supervisors trust that? <span class="chip">Ideas</span></li>
+              <li>The phone round-up has no owner. Who would miss it if it stopped? <span class="chip">Choose</span></li>
+              <li>Nobody named who benefits from today's process.</li>
+            </ul>
+            <p class="tiny" style="margin-top:8px">A chip opens Ask the room beside the read with Workie's question filled in. Click any line to copy its words into the question.</p>
+          </div>
+          <div class="composer" aria-label="Ask the room">
+            <div style="display:flex;align-items:baseline"><b>Ask the room</b><span class="spacer"></span><span class="tiny">nothing is sent until you press Send</span></div>
+            <div class="kinds"><span class="on">Ideas</span><span>Choose</span><span>Rate</span><span>Comments</span></div>
+            <div><span class="tiny">Question · from Discussion topics, point 1 · Edited</span><div class="field">What would make supervisors trust a sign-off with no paper?</div></div>
+            <p class="tiny">For you: turns the two "keep the control" answers into something the room can act on. From answers 1 and 2.</p>
+            <p class="tiny">Answers are anonymous. Only the ideas you put on the wall are shown.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 BETWEEN ROUNDS -->
+      <section data-show="between" hidden>
+        <p class="kicker">Round 2 done · question for the room closed</p>
+        <h2>Pick what goes on the wall, then start round 3</h2>
+        <div class="cols">
+          <div class="resp">
+            <div class="r wall"><small>Idea · on the wall</small>A named supervisor signs in the system and gets a weekly digest of every approval.</div>
+            <div class="r"><small>Idea</small>Two weeks of paper and system side by side, then compare.</div>
+            <div class="r"><small>Idea · late, not reviewed</small>Ask the auditors what they need first.</div>
+            <p class="tiny">4 of 4 answered · every idea goes in the report, shown or not.</p>
+          </div>
+          <div class="card"><h3>Up next · round 3</h3><p style="margin:0 0 6px"><b>Fleming and penicillin</b></p><p class="note">Task: what accident in your work is worth a second look? 4 people joined.</p></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="status"><b data-status></b><span class="tiny" data-next></span></div>
+      <div class="part" data-part></div>
+      <div class="acts"><button class="alt" data-alt></button><button class="go" data-go></button></div>
+    </footer>
+  </div>
+
+  <ul class="notes">
+    <li><b>Top, two thin lines:</b> name, join code (click: the QR on the wall), the room's window, and a small live preview of the wall; then the loop alone.</li>
+    <li><b>Left rail:</b> four collapsible sections; the one that matters now opens on its own (People while answering and voting, Late during the read, Round queue between rounds). A header opens the full session menu at that section.</li>
+    <li><b>Main:</b> the host's work for this step, never a copy of the wall: responses as they land, the ballot, Workie's read with Ask the room beside it (inline, not a pop-up), the ideas to pick.</li>
+    <li><b>Footer:</b> live status, "Your part now", and the one main button with its second. Space and the clicker work as today; the Remote mirrors it.</li>
+  </ul>
+</div>
+<script>
+const M = {
+  answer: { steps:{answer:'live'}, rail:'people', wall:'Round 2 · Answering · 3 of 4', status:'3 of 4 answered', next:'Next on the wall: the answers, for voting', part:'Let the room answer, then <em>Start voting</em>.', alt:'Skip this round', go:'Start voting',
+    people:[['tick','Ada','answered'],['tick','Ben','answered'],['tick','Cleo','answered'],['wait','Omar','still writing']], pc:'3 of 4 answered' },
+  vote: { steps:{answer:'done',vote:'live'}, rail:'people', wall:'Round 2 · Voting · Response 3 of 4', status:'3 of 4 voted', next:'Next on the wall: the results', part:'Let the room vote, then <em>Show results</em>.', alt:'Next response', go:'Show results',
+    people:[['tick','Ada','voted'],['tick','Ben','voted'],['tick','Omar','voted'],['wait','Cleo','not yet']], pc:'3 of 4 voted' },
+  read: { steps:{answer:'done',vote:'done',heard:'live'}, rail:'late', wall:'Round 2 · What we heard · page 3 of 4', status:'Reading page 3 of 4 · 2 asks ready', next:'Drafting a question: the wall stays on the read', part:'Check the words, then <em>Send to the room</em>.', alt:'Cancel', go:'Send to the room',
+    people:[['tick','Ada',''],['tick','Ben',''],['tick','Cleo',''],['tick','Omar','']], pc:'4 here' },
+  between: { steps:{answer:'done',vote:'done',heard:'done',ask:'done'}, rail:'queue', wall:'Round 2 · Ideas · 1 picked', status:'Results are on the wall', next:'Next on the wall: round 3', part:'Pick the ideas to show, then <em>Start round 3</em>.', alt:'Ask another question', go:'Start round 3',
+    people:[['tick','Ada',''],['tick','Ben',''],['tick','Cleo',''],['tick','Omar','']], pc:'4 here' },
+};
+function show(m){
+  const d = M[m];
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.m===m)));
+  document.querySelectorAll('[data-show]').forEach(s=>s.hidden = s.dataset.show!==m);
+  document.querySelectorAll('.loop [data-s]').forEach(s=>{ s.classList.remove('done','live'); const st=d.steps[s.dataset.s]; if(st) s.classList.add(st); });
+  document.querySelectorAll('.rail details').forEach(x=>x.open = x.dataset.r===d.rail);
+  document.querySelector('[data-wall]').textContent = d.wall;
+  document.querySelector('[data-status]').textContent = d.status;
+  document.querySelector('[data-next]').textContent = d.next;
+  document.querySelector('[data-part]').innerHTML = '<span class="tiny" style="text-transform:uppercase;letter-spacing:.08em">Your part now </span>' + d.part;
+  document.querySelector('[data-alt]').textContent = d.alt;
+  document.querySelector('[data-go]').textContent = d.go;
+  document.querySelector('[data-peoplecount]').textContent = d.pc;
+  document.querySelector('[data-people]').innerHTML = d.people.map(([c,n,t])=>`<li><span class="${c}">${c==='tick'?'✓':'…'}</span><span>${n} <span class="meta">${t?'· '+t:''}</span></span></li>`).join('');
+}
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>show(b.dataset.m)));
+show('answer');
+</script>
+</body>
+</html>
