@@ -93,6 +93,20 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
 .go{font:inherit;font-size:15px;font-weight:800;background:var(--primary);color:#2A1B08;border:0;border-radius:10px;padding:10px 20px}
 .alt{font:inherit;font-size:15px;font-weight:700;background:transparent;color:var(--text);border:1px solid var(--rule-2);border-radius:10px;padding:10px 16px}
 [hidden]{display:none!important}
+/* FULL vs LEAN (owner, 15 Oct: "is it too cluttered?"). Lean: one fact once
+   (counts only in the footer), three rail sections that show only their names
+   until opened, one column, a Session button instead of a tools section, and
+   a footer that says the status and your part, nothing else. */
+.leanonly{display:none}
+body[data-v=lean] .leanonly{display:revert}
+body[data-v=lean] .fullonly{display:none!important}
+body[data-v=lean] .rail summary .count:not(.alert){display:none}
+body[data-v=lean] .cols.lean1{grid-template-columns:1fr}
+.lean-note{font-size:13px;color:var(--muted);margin:6px 0 0}
+.lean-note b{color:var(--text);font-weight:600}
+.versions{display:flex;gap:6px;margin:0 0 8px;align-items:center;font-size:13px;color:var(--muted)}
+.versions button{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:var(--surface);border:1px solid var(--rule-2);border-radius:8px;padding:5px 12px;cursor:pointer}
+.versions button[aria-pressed=true]{border-color:var(--primary);background:var(--surface-2)}
 .notes{margin-top:18px;color:var(--muted);font-size:13px;max-width:900px}
 .notes li{margin:0 0 6px}
 /* Always drawn at laptop size: on a phone or narrow window it scrolls sideways
@@ -104,6 +118,10 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
 <body>
 <div class="page">
   <p class="intro"><b>Host console, two screens only.</b> The laptop is private; the room watches the wall on the projector. One screen keeps today's stage. Pick a moment:</p>
+  <div class="versions" role="group" aria-label="Version">Version:
+    <button data-v="full" aria-pressed="true">Full (first draft)</button>
+    <button data-v="lean" aria-pressed="false">Lean (recommended)</button>
+  </div>
   <div class="tabs" role="group" aria-label="Moment">
     <button data-m="answer" aria-pressed="true">1 · Answering</button>
     <button data-m="vote" aria-pressed="false">2 · Voting</button>
@@ -119,6 +137,7 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
       <span class="spacer"></span>
       <button class="code" title="Show the join QR on the wall">Join <b>7924</b></button>
       <button class="btn">Room's window ↗</button>
+      <button class="btn leanonly">Session</button>
       <div class="wall" aria-label="On the wall now">
         <small>On the wall</small>
         <p data-wall></p>
@@ -153,7 +172,7 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
           <li><span class="tick">•</span><span>Late answer · round 2 <span class="meta">· arrived during voting</span></span></li>
           <li><span class="tick">•</span><span>Comment on Workie's read <span class="meta">· round 1</span></span></li>
         </ul><a class="open-all">Review them…</a></details>
-      <details data-r="tools"><summary>Session tools <span class="count">● connected</span></summary>
+      <details data-r="tools" class="fullonly"><summary>Session tools <span class="count">● connected</span></summary>
         <ul><li>Questions</li><li>Rounds</li><li>Settings</li><li class="meta">Remote: open on 1 phone</li></ul></details>
     </aside>
 
@@ -163,17 +182,18 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
         <p class="kicker">Round 2 · Answering</p>
         <h2>The Meiji Restoration</h2>
         <div class="task"><small>The task</small>Which long-standing process must be dismantled, who benefits, and how do we bring them with us?</div>
-        <div class="cols" style="margin-top:14px">
+        <p class="lean-note leanonly"><b>For you:</b> Japan bought out the samurai stipends rather than seizing them. Ask who the "samurai" are in their process.</p>
+        <div class="cols lean1" style="margin-top:14px">
           <div>
             <p class="kicker" style="margin-bottom:8px">Responses as they land · names hidden</p>
             <div class="resp">
               <div class="r new"><small>Response 3 · just now</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
               <div class="r"><small>Response 2</small>The paper sign-off sheet. Supervisors lose a control they trust, so keep the approval, lose the paper.</div>
               <div class="r"><small>Response 1</small>Weekly status meetings: replace with a written update and one decision slot.</div>
-              <p class="writing">1 still writing · the wall shows the count, not the words</p>
+              <p class="writing fullonly">1 still writing · the wall shows the count, not the words</p>
             </div>
           </div>
-          <div class="card"><h3>For you · background</h3><p class="note">Japan dismantled the samurai class within a decade, buying out stipends rather than seizing them. Ask the room who the "samurai" are in their process.</p></div>
+          <div class="card fullonly"><h3>For you · background</h3><p class="note">Japan dismantled the samurai class within a decade, buying out stipends rather than seizing them. Ask the room who the "samurai" are in their process.</p></div>
         </div>
       </section>
 
@@ -181,7 +201,7 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
       <section data-show="vote" hidden>
         <p class="kicker">Round 2 · Voting · names hidden</p>
         <h2>The ballot, in the order the room sees it</h2>
-        <div class="cols">
+        <div class="cols lean1">
           <div class="resp">
             <div class="r"><small>Response 1</small>Weekly status meetings: replace with a written update and one decision slot.</div>
             <div class="r"><small>Response 2</small>The paper sign-off sheet. Keep the approval, lose the paper.</div>
@@ -189,7 +209,7 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
             <div class="r"><small>Response 4</small>Duplicate expense approvals under fifty pounds.</div>
             <p class="tiny">Click a response to put it on the wall. Next response in the bar steps through them.</p>
           </div>
-          <div class="card"><h3>Votes</h3><div class="bar"><i style="width:75%"></i></div><p class="note" style="margin-top:6px">3 of 4 voted. Results stay hidden from you too until you show them.</p></div>
+          <div class="card fullonly"><h3>Votes</h3><div class="bar"><i style="width:75%"></i></div><p class="note" style="margin-top:6px">3 of 4 voted. Results stay hidden from you too until you show them.</p></div>
         </div>
       </section>
 
@@ -221,26 +241,30 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
       <section data-show="between" hidden>
         <p class="kicker">Round 2 done · question for the room closed</p>
         <h2>Pick what goes on the wall, then start round 3</h2>
-        <div class="cols">
+        <div class="cols lean1">
           <div class="resp">
             <div class="r wall"><small>Idea · on the wall</small>A named supervisor signs in the system and gets a weekly digest of every approval.</div>
             <div class="r"><small>Idea</small>Two weeks of paper and system side by side, then compare.</div>
             <div class="r"><small>Idea · late, not reviewed</small>Ask the auditors what they need first.</div>
-            <p class="tiny">4 of 4 answered · every idea goes in the report, shown or not.</p>
+            <p class="tiny fullonly">4 of 4 answered · every idea goes in the report, shown or not.</p>
+            <p class="lean-note leanonly"><b>Up next, round 3:</b> Fleming and penicillin. What accident in your work is worth a second look?</p>
           </div>
-          <div class="card"><h3>Up next · round 3</h3><p style="margin:0 0 6px"><b>Fleming and penicillin</b></p><p class="note">Task: what accident in your work is worth a second look? 4 people joined.</p></div>
+          <div class="card fullonly"><h3>Up next · round 3</h3><p style="margin:0 0 6px"><b>Fleming and penicillin</b></p><p class="note">Task: what accident in your work is worth a second look? 4 people joined.</p></div>
         </div>
       </section>
     </main>
 
     <footer class="foot">
-      <div class="status"><b data-status></b><span class="tiny" data-next></span></div>
+      <div class="status"><b data-status></b><span class="tiny fullonly" data-next></span></div>
       <div class="part" data-part></div>
       <div class="acts"><button class="alt" data-alt></button><button class="go" data-go></button></div>
     </footer>
   </div></div>
 
-  <ul class="notes">
+  <ul class="notes leanonly">
+    <li><b>Lean:</b> every count appears once, in the footer beside the button. The rail has three sections that show only their names until opened (the one that matters opens itself); Session tools became a Session button in the top line. One column in the middle; the host's notes are a quiet line under the task. The footer says the status and your part, nothing else.</li>
+  </ul>
+  <ul class="notes fullonly">
     <li><b>Top, two thin lines:</b> name, join code (click: the QR on the wall), the room's window, and a small live preview of the wall; then the loop alone.</li>
     <li><b>Left rail:</b> four collapsible sections; the one that matters now opens on its own (People while answering and voting, Late during the read, Round queue between rounds). A header opens the full session menu at that section.</li>
     <li><b>Main:</b> the host's work for this step, never a copy of the wall: responses as they land, the ballot, Workie's read with Ask the room beside it (inline, not a pop-up), the ideas to pick.</li>
@@ -249,7 +273,7 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
 </div>
 <script>
 const M = {
-  answer: { steps:{answer:'live'}, rail:'people', wall:'Round 2 · Answering · 3 of 4', status:'3 of 4 answered', next:'Next on the wall: the answers, for voting', part:'Let the room answer, then <em>Start voting</em>.', alt:'Skip this round', go:'Start voting',
+  answer: { steps:{answer:'live'}, rail:'people', wall:'Round 2 · Answering · the task', status:'3 of 4 answered', next:'Next on the wall: the answers, for voting', part:'Let the room answer, then <em>Start voting</em>.', alt:'Skip this round', go:'Start voting',
     people:[['tick','Ada','answered'],['tick','Ben','answered'],['tick','Cleo','answered'],['wait','Omar','still writing']], pc:'3 of 4 answered' },
   vote: { steps:{answer:'done',vote:'live'}, rail:'people', wall:'Round 2 · Voting · Response 3 of 4', status:'3 of 4 voted', next:'Next on the wall: the results', part:'Let the room vote, then <em>Show results</em>.', alt:'Next response', go:'Show results',
     people:[['tick','Ada','voted'],['tick','Ben','voted'],['tick','Omar','voted'],['wait','Cleo','not yet']], pc:'3 of 4 voted' },
@@ -274,6 +298,9 @@ function show(m){
   document.querySelector('[data-people]').innerHTML = d.people.map(([c,n,t])=>`<li><span class="${c}">${c==='tick'?'✓':'…'}</span><span>${n} <span class="meta">${t?'· '+t:''}</span></span></li>`).join('');
 }
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>show(b.dataset.m)));
+function version(v){ document.body.dataset.v = v; document.querySelectorAll('.versions button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.v===v))); }
+document.querySelectorAll('.versions button').forEach(b=>b.addEventListener('click',()=>version(b.dataset.v)));
+version('lean');
 show('answer');
 </script>
 </body>
