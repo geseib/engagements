@@ -1,6 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { decryptItem } = require('./tenant-crypto');
+const { readReport } = require('./report-store');
 const { callerMayDriveSession } = require('./tenant');
 
 const client = new DynamoDBClient({});
@@ -70,20 +70,10 @@ exports.handler = async (event) => {
     if (!metaRes.Item || !callerMayDriveSession(event, metaRes.Item)) return NOT_FOUND;
 
     // Get the report
-    const reportQuery = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: {
-        PK: `GAME#${gameId}`,
-        SK: 'REPORT'
-      }
-    }));
-
-    if (!reportQuery.Item) return NOT_FOUND;
-
+    // The head and its round rows, assembled (report-store.js).
     const reportOrgId = typeof metaRes.Item?.orgId === 'string' ? metaRes.Item.orgId.trim() : '';
-    const report = reportOrgId
-      ? await decryptItem(reportOrgId, 'report', reportQuery.Item)
-      : reportQuery.Item;
+    const report = await readReport(db, { table: process.env.TABLE_NAME, gameId, orgId: reportOrgId });
+    if (!report) return NOT_FOUND;
     console.log(`📊 Found report for game ${gameId}: ${report.gameStats?.totalQuestions || 0} questions`);
 
     // Role-specific information

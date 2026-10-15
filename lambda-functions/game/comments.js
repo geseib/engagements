@@ -173,6 +173,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
   DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand,
 } = require('@aws-sdk/lib-dynamodb');
+const { readReport, readReportHead, readReportRound } = require('./report-store');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const crypto = require('crypto');
 
@@ -712,20 +713,20 @@ async function readFeedbackRound(gameId) {
     return respond(409, { error: 'the host has not opened a feedback round' });
   }
 
-  const stored = await db.send(new GetCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { PK: `GAME#${gameId}`, SK: 'REPORT' },
-  }));
-  if (!stored.Item) {
+  // One round: one GetItem on its own row (report-store.js). A closed survey
+  // reads the head, where its results live.
+  const orgId = orgOf(meta);
+  const table = process.env.TABLE_NAME;
+  // The head names the round and the session (two small reads in all).
+  const report = surveyClosed
+    ? await readReport(db, { table, gameId, orgId })
+    : await readReportHead(db, { table, gameId, orgId });
+  if (!report) {
     return respond(409, { error: 'the round report is not ready yet' });
   }
-
-  const orgId = orgOf(meta);
-  const report = orgId ? await decryptItem(orgId, 'report', stored.Item) : stored.Item;
-
   const slice = surveyClosed
     ? surveyFeedbackRound(report)
-    : (report.detailedQuestions || []).find((q) => String(q.questionNumber) === padded);
+    : await readReportRound(db, { table, gameId, orgId, questionNumber: padded });
   if (!slice) {
     return respond(409, { error: 'the round report is not ready yet' });
   }

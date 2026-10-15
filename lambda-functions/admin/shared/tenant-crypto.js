@@ -334,6 +334,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'DebugInfo',
   ]),
 
+  /** SK=REPORT#R#nnn (report-store.js): one round of the stored report,
+   *  a detailedQuestions entry, quoted words and all, so all of it is sealed. */
+  reportRound: Object.freeze(['Round']),
+
   /** SK=REPORT. `gameStats` and `scoringConfig` stay plaintext (counts and
    *  configuration); everything that quotes a person does not. */
   report: Object.freeze([
