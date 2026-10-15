@@ -95,7 +95,10 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
 [hidden]{display:none!important}
 .notes{margin-top:18px;color:var(--muted);font-size:13px;max-width:900px}
 .notes li{margin:0 0 6px}
-@media (max-width:900px){.console{grid-template-columns:1fr;grid-template-areas:"top" "loop" "main" "foot";height:auto}.rail{display:none}.cols{grid-template-columns:1fr}}
+/* Always drawn at laptop size: on a phone or narrow window it scrolls sideways
+   (the rail used to be hidden below 900px, which hid half the design). */
+.frame{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.console{min-width:1240px}
 </style>
 </head>
 <body>
@@ -108,7 +111,8 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
     <button data-m="between" aria-pressed="false">4 · Between rounds</button>
   </div>
 
-  <div class="console">
+  <p class="intro">On a phone or a narrow window, scroll sideways to see the whole laptop screen.</p>
+  <div class="frame"><div class="console">
     <header class="top">
       <span class="brand">Engagements</span>
       <span class="name">Relay expansion</span>
@@ -234,7 +238,7 @@ h2{margin:2px 0 0;font-size:24px;line-height:1.2}
       <div class="part" data-part></div>
       <div class="acts"><button class="alt" data-alt></button><button class="go" data-go></button></div>
     </footer>
-  </div>
+  </div></div>
 
   <ul class="notes">
     <li><b>Top, two thin lines:</b> name, join code (click: the QR on the wall), the room's window, and a small live preview of the wall; then the loop alone.</li>
