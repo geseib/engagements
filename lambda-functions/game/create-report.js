@@ -1,5 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { readReport, writeReport } = require('./report-store');
 const { gameSetRef, refSetRef, resolveSetPartition, setMetadataKey } = require('./set-version');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
@@ -907,16 +908,12 @@ exports.handler = async (event) => {
     // report-merge.js has the rule and the reasoning, including why the answer
     // rows' 7-day TTL is deliberately NOT what changed here. Read below is the
     // only new I/O: one Get of a row this handler already writes.
-    const storedReportRow = (await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'REPORT' }
-    }))).Item;
-    // Decrypted BEFORE it is merged. For an org session this row is an
-    // envelope, and splicing `{v:1,iv:…}` into `answers` would be a failure
-    // that looks exactly like data.
-    const storedReport = storedReportRow && reportOrgId
-      ? await decryptItem(reportOrgId, 'report', storedReportRow)
-      : storedReportRow;
+    // Read through report-store.js: the head and one row per round, assembled
+    // and decrypted BEFORE it is merged (for an org session the rows are
+    // envelopes, and splicing `{v:1,iv:…}` into `answers` would be a failure
+    // that looks exactly like data). A report from before the round rows is
+    // one row, and reads the same.
+    const storedReport = await readReport(db, { table: process.env.TABLE_NAME, gameId, orgId: reportOrgId });
 
     const reconciled = reconcileReport(storedReport, {
       detailedQuestions, playerPerformance, gameStats
@@ -1143,10 +1140,10 @@ exports.handler = async (event) => {
     // NOTE the split: `reportRecord` is what goes into DynamoDB, `reportData`
     // is what goes back to the caller — and `encryptItem` never mutates, so the
     // response stays plaintext for the host who just asked for it.
-    await db.send(new PutCommand({
-      TableName: process.env.TABLE_NAME,
-      Item: reportOrgId ? await encryptItem(reportOrgId, 'report', reportRecord) : reportRecord
-    }));
+    // ONE ROW PER ROUND (report-store.js): a single item is capped at 400 KB
+    // and a 30-person session reached it at about nine rounds.
+    const { PK: _pk, SK: _sk, ttl: reportTtl, ...reportBody } = reportRecord;
+    await writeReport(db, { table: process.env.TABLE_NAME, gameId, orgId: reportOrgId, report: reportBody, ttl: reportTtl });
 
     console.log(`✅ Report created for game ${gameId}: ${gameStats.totalQuestions} questions, ${gameStats.totalPlayers} players`);
 

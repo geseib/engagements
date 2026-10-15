@@ -211,8 +211,13 @@ async function reportsTheWords(gameId, expected) {
     assertQuoted(served[0].questionData, expected, 'served'));
   await check('the stored snapshot is sealed at rest, and quotes the words once opened', () => {
     assert.ok(stored, 'no REPORT row was written');
-    assert.ok(isEnvelope(stored.detailedQuestions), 'the REPORT row stores detailedQuestions in the clear');
-    const [round] = kmsStubs.plainRow(ORG, stored).detailedQuestions;
+    // One row per round since 15 Oct (report-store.js): the round is sealed
+    // in its own REPORT#R#001 row, and the head carries no rounds.
+    assert.strictEqual(stored.ReportLayout, 'rounds-v1');
+    assert.strictEqual(stored.detailedQuestions, undefined, 'the head still carries the rounds');
+    const roundRow = get(stored.PK, 'REPORT#R#001');
+    assert.ok(roundRow && isEnvelope(roundRow.Round), 'the round row stores the round in the clear');
+    const round = kmsStubs.plainRow(ORG, roundRow).Round;
     assertQuoted(round.questionData, expected, 'stored');
   });
   await check('…and none of the words reaches the logs', () => {

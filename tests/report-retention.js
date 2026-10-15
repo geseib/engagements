@@ -126,6 +126,10 @@ const build = (gameId = GAME) => createReport({ pathParameters: { gameId } });
 const reportOf = async (gameId = GAME) => JSON.parse((await build(gameId)).body).report;
 const roundOf = (report, n) => (report.detailedQuestions || []).find((q) => q.questionNumber === n);
 const storedReport = (gameId = GAME) => store.get(k(`GAME#${gameId}`, 'REPORT'));
+// The stored rounds, one row each since 15 Oct (report-store.js REPORT#R#nnn).
+const storedRounds = (gameId = GAME) => [...store.values()]
+  .filter((i) => i.PK === `GAME#${gameId}` && String(i.SK).startsWith('REPORT#R#'))
+  .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
 
 /**
  * What DynamoDB's TTL sweeper does, in one line: the row is simply gone. No
@@ -269,7 +273,8 @@ function seedFinishedSession({ gameId = GAME, orgId = null } = {}) {
     assert.strictEqual(row.gameStats.totalAnswers, 3);
   });
   check('the stored REPORT row still holds both rounds', () => {
-    assert.strictEqual(storedReport().detailedQuestions.length, 2);
+    assert.strictEqual(storedRounds().length, 2);
+    assert.deepStrictEqual(storedReport().ReportRounds, ['001', '002']);
   });
 
   // ===========================================================================
@@ -387,12 +392,12 @@ function seedFinishedSession({ gameId = GAME, orgId = null } = {}) {
     assert.deepStrictEqual(texts, ['Standups ran long', 'We shipped the thing']);
   });
   check('the org snapshot is still stored encrypted', () => {
-    const row = storedReport(ORG_GAME);
-    assert.ok(row.detailedQuestions && row.detailedQuestions.v, 'detailedQuestions is not an envelope at rest');
+    const rows = storedRounds(ORG_GAME);
+    assert.ok(rows.length && rows.every((r) => r.Round && r.Round.v), 'a stored round is not an envelope at rest');
   });
   check('and it round-trips back to the same answers', () => {
-    const texts = plainRow('acme', storedReport(ORG_GAME))
-      .detailedQuestions.find((q) => q.questionNumber === '001')
+    const texts = storedRounds(ORG_GAME).map((r) => plainRow('acme', r).Round)
+      .find((q) => q.questionNumber === '001')
       .answers.map((a) => a.answerText).sort();
     assert.deepStrictEqual(texts, ['Standups ran long', 'We shipped the thing']);
   });
