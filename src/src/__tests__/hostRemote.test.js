@@ -142,13 +142,14 @@ describe('remoteStep — every game type x every phase, through roundStep', () =
   });
 
   it('advances from the read with the set noun, then the game type noun', () => {
+    // "Start round 2" (owner, 14 Oct): the label names the round it starts.
     const onNotes = (type, extras) => stepOf('RESULTS#001', type, 'field-notes', extras);
-    expect(onNotes('trivia').primary).toMatchObject({ id: 'next', label: 'Next question' });
-    expect(onNotes('call-and-answer').primary.label).toBe('Next round');
-    expect(onNotes('wavelength').primary.label).toBe('Next subject');
-    expect(onNotes('poll').primary.label).toBe('Next poll');
+    expect(onNotes('trivia').primary).toMatchObject({ id: 'next', label: 'Start question 2' });
+    expect(onNotes('call-and-answer').primary.label).toBe('Start round 2');
+    expect(onNotes('wavelength').primary.label).toBe('Start subject 2');
+    expect(onNotes('poll').primary.label).toBe('Start poll 2');
     // The set's own noun wins, as on the host page (R6).
-    expect(onNotes('call-and-answer', { roundNoun: 'Lesson' }).primary.label).toBe('Next lesson');
+    expect(onNotes('call-and-answer', { roundNoun: 'Lesson' }).primary.label).toBe('Start lesson 2');
   });
 
   it('treats every beat it does not know as the tally beat', () => {
@@ -159,7 +160,7 @@ describe('remoteStep — every game type x every phase, through roundStep', () =
 
   it('does not offer to go backwards during a feedback round', () => {
     const step = stepOf('RESULTS#001', 'call-and-answer', 'feedback');
-    expect(step.primary).toMatchObject({ id: 'next', label: 'Next round' });
+    expect(step.primary).toMatchObject({ id: 'next', label: 'Start round 2' });
     expect(step.secondary).toMatchObject({ id: 'close-feedback' });
   });
 
@@ -196,7 +197,7 @@ describe('remoteStep — every game type x every phase, through roundStep', () =
     const json = { stageNotes: { page: 0, pages: 3, plan: null, planKey: null, rev: 2 } };
     const paged = stepOf('RESULTS#001', 'call-and-answer', 'field-notes', { json, notesReady: true });
     expect(paged.primary).toMatchObject({ id: 'notes-page', label: 'Next page' });
-    expect(paged.secondary).toMatchObject({ id: 'next', label: 'Next round' });
+    expect(paged.secondary).toMatchObject({ id: 'next', label: 'Start round 2' });
     expect(paged.status.text).toBe('Reading page 1 of 3');
 
     const writing = stepOf('RESULTS#001', 'call-and-answer', 'field-notes', { json, notesReady: false });

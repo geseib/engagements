@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import RoundReport from './RoundReport';
-import { MAX_COMMENT } from '../config/comments';
+import { MAX_COMMENT, plainOf } from '../config/comments';
 import './FeedbackRoundPanel.css';
 
 /**
@@ -191,7 +191,7 @@ export default function FeedbackRoundPanel({
             <span className="fbr__on-label">Commenting on</span>
             <span className="fbr__on-anchor">{anchor.anchorLabel}</span>
             {anchor.anchorExcerpt && (
-              <span className="fbr__on-excerpt">{anchor.anchorExcerpt}</span>
+              <span className="fbr__on-excerpt">{plainOf(anchor.anchorExcerpt)}</span>
             )}
           </div>
 

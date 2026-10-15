@@ -1,0 +1,230 @@
+/* THE WORKFLOW STRIP (components/stage/WorkflowStrip.jsx; session flow v3
+   §4.6, the v3 mockup's "01 The workflow strip"). Host-only chrome inside the
+   stage's dusk, under the rail. Sized from the stage ladder (--t-meta), so it
+   follows the display profile like the dock does; tokens only.
+
+   Live is the info blue the mockup fills it with; a viewed step is the amber
+   dashed outline; Ask is dashed because it is optional; the action word in
+   "Your part now" is the main button's amber (--accent-text, the text-safe
+   amber on dusk). */
+.wfs {
+  grid-area: strip;
+  position: relative;
+  z-index: 3;
+  /* One line for the steps with the four places at its end, one line below
+     for "Your part now" or the Viewing bar. The places come after the steps
+     in the markup's visual order and wrap under them on a narrow screen. */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .2em 1.2em;
+  padding: .25em clamp(16px, 2.2vw, 40px) .3em;
+  font-size: var(--t-meta);
+  color: var(--muted);
+  border-bottom: var(--hair, 1px) solid rgb(var(--glow-rgb) / .1);
+}
+.wfs-places {
+  order: 2;
+  list-style: none;
+  margin: 0 0 0 auto;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .2em 1em;
+}
+.wfs-steps { order: 1; }
+.wfs-part, .wfs-bar { order: 3; flex-basis: 100%; }
+.wfs-place {
+  font: inherit;
+  font-size: calc(var(--t-meta) * .82);
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: .1em 0;
+  cursor: pointer;
+}
+.wfs-place:hover { text-decoration: underline; }
+.wfs-place:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wfs-steps,
+.wfs-loop {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35em;
+}
+.wfs-loop {
+  padding: .05em .35em;
+  border: var(--hair, 1px) solid rgb(var(--glow-rgb) / .16);
+  border-radius: 10px;
+}
+.wfs-round {
+  font-weight: 800;
+  color: var(--text);
+  padding: 0 .3em;
+}
+.wfs-sep { opacity: .7; }
+
+.wfs-step {
+  display: inline-flex;
+  align-items: center;
+  gap: .3em;
+  padding: .05em .5em;
+  font: inherit;
+  font-size: calc(var(--t-meta) * .82);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--muted);
+  background: transparent;
+  border: var(--hair, 1px) solid rgb(var(--glow-rgb) / .18);
+  border-radius: 8px;
+  cursor: default;
+}
+button.wfs-step { cursor: pointer; }
+button.wfs-step:hover { border-color: rgb(var(--glow-rgb) / .4); color: var(--text); }
+button.wfs-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wfs-step.is-done { color: var(--text); }
+.wfs-tick { color: var(--success-text); font-weight: 800; }
+.wfs-step.is-optional { border-style: dashed; }
+.wfs-step.is-live {
+  color: var(--text);
+  background: rgb(var(--info-rgb) / .28);
+  border-color: var(--info);
+  font-weight: 800;
+}
+.wfs-sub { font-weight: 600; opacity: .9; }
+.wfs-live {
+  display: inline-flex;
+  align-items: center;
+  gap: .25em;
+  font-size: .82em;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.wfs-dot {
+  width: .55em;
+  height: .55em;
+  border-radius: 50%;
+  background: var(--success);
+}
+.wfs-step.is-viewing {
+  border: 2px dashed var(--accent);
+  color: var(--text);
+}
+.wfs-viewing {
+  font-size: .78em;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+.wfs-part {
+  margin: 0;
+  font-size: calc(var(--t-meta) * .9);
+  line-height: 1.35;
+  color: var(--text);
+}
+.wfs-part-k {
+  margin-right: .7em;
+  font-size: .8em;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wfs-action { color: var(--accent-text); font-weight: 800; }
+
+/* Looking at another step (§4.8): the amber bar, and Back to the room. */
+.wfs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4em 1em;
+  margin: 0;
+  padding: .1em .6em;
+  font-size: calc(var(--t-meta) * .85);
+  color: var(--text);
+  background: rgb(var(--accent-rgb) / .16);
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+}
+.wfs-bar-back {
+  margin-left: auto;
+  font: inherit;
+  font-weight: 700;
+  color: var(--accent-text);
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The viewed step's panel, over the stage's main area. */
+.wfs-view {
+  grid-area: main;
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: clamp(12px, 2vh, 28px) clamp(16px, 2.2vw, 40px);
+  background: var(--bg);
+}
+.wfs-view-card {
+  max-width: 60ch;
+  font-size: var(--t-body);
+  color: var(--text);
+}
+.wfs-view-h { margin: 0 0 .2em; font-size: var(--t-secondary); }
+.wfs-view-explain { margin: 0 0 .9em; color: var(--muted); }
+.wfs-view-row {
+  margin: 0 0 .6em;
+  padding: .4em .7em;
+  border: var(--hair, 1px) solid rgb(var(--glow-rgb) / .16);
+  border-radius: 8px;
+}
+.wfs-view-k {
+  margin: 0;
+  font-size: calc(var(--t-meta) * .8);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wfs-view-scope { font-weight: 600; letter-spacing: .04em; }
+.wfs-view-v, .wfs-view-p { margin: .15em 0 0; }
+.wfs-view-note { margin: .8em 0; color: var(--muted); font-size: calc(var(--t-body) * .9); }
+.wfs-view-btn {
+  font: inherit;
+  font-size: calc(var(--t-meta) * .9);
+  font-weight: 700;
+  padding: .3em .9em;
+  color: var(--text);
+  background: transparent;
+  border: var(--hair, 1px) solid rgb(var(--glow-rgb) / .4);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.wfs-view-btn:focus-visible, .wfs-bar-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* TWO SCREENS: the strip is private laptop chrome, not something the room
+   reads, so it takes the laptop ladder (13 / 15px, engage-design §2) whatever
+   the stage's display profile. At the Room profile's 20px it wrapped to three
+   lines on a 1366px laptop and took a sixth of the screen (walk, 14 Oct). */
+.wfs:not(.wfs--slim) { font-size: 15px; }
+.wfs:not(.wfs--slim) .wfs-step,
+.wfs:not(.wfs--slim) .wfs-place { font-size: 13px; }
+.wfs:not(.wfs--slim) .wfs-part,
+.wfs:not(.wfs--slim) .wfs-bar { font-size: 15px; }
+
+/* One screen: the room sees it, so it keeps the stage ladder, quieter, and
+   says only where. */
+.wfs--slim { padding-block: .2em; }
+.wfs--slim .wfs-step { font-size: calc(var(--t-meta) * .72); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wfs * { transition: none; }
+}

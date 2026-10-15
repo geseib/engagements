@@ -92,6 +92,23 @@ export function PhaseWipe({ moment }) {
   );
 }
 
+/**
+ * The team's task: what the room is answering. Never dropped for space (the
+ * background story is the line that goes). Slim during voting, as one line
+ * under the title, so the ballot keeps the room.
+ */
+function TaskLine({ task, slim = false }) {
+  if (!task) return null;
+  return slim
+    ? <p className="present-task is-slim"><span className="present-task-ey">The task</span>{task}</p>
+    : (
+      <div className="present-task">
+        <span className="present-task-ey">The task</span>
+        <p>{task}</p>
+      </div>
+    );
+}
+
 /* ------------------------------------------------------------ the moments */
 
 export function PresentLobby({ model }) {
@@ -127,7 +144,8 @@ export function PresentAnswering({ model }) {
       <div className="present-main">
         {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
         <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
-        {model.task ? <p className="present-lead" data-drop="1">{model.task}</p> : null}
+        <TaskLine task={model.task} />
+        {model.story ? <p className="present-lead" data-drop="1">{model.story}</p> : null}
       </div>
       <CountsFoot counts={model.counts} />
     </div>
@@ -141,6 +159,7 @@ export function PresentVoting({ model }) {
       <div className="present-main">
         <Eyebrow className="present-eyebrow">Vote</Eyebrow>
         <Heading level={1} size="primary" balance className="present-h2">{model.title}</Heading>
+        <TaskLine task={model.task} slim />
         <p className="present-lead">{model.lead}</p>
       </div>
       <CountsFoot counts={model.counts} />
@@ -209,6 +228,7 @@ export function ResponseNavigator({ model, vote = false }) {
       <Top model={model} right={vote ? 'Voting' : 'Responses'} />
       <div className="present-main present-main-nav">
         {vote ? <Eyebrow className="present-eyebrow present-vote-cue">{`Vote on your ${deviceWords}`}</Eyebrow> : null}
+        {vote ? <TaskLine task={model.task} slim /> : null}
         <div className="present-nav">
           <div className="present-flank">{flank(win.left)}</div>
           <Card selected className="present-card">
@@ -259,7 +279,8 @@ export function PresentQuestionFocus({ model }) {
       <div className="present-main">
         {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
         <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
-        {model.task ? <p className="present-lead" data-drop="1">{model.task}</p> : null}
+        <TaskLine task={model.task} />
+        {model.story ? <p className="present-lead" data-drop="1">{model.story}</p> : null}
       </div>
       <div className="present-foot"><span>{model.roundLabel}</span></div>
     </div>

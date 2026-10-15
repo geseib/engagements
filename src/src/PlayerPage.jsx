@@ -7,7 +7,7 @@ import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
 import { feedbackRoundFrom } from './config/sessionHistory';
 import {
-  participationUrl, participationFrom, nextParticipation,
+  participationUrl, participationFrom, nextParticipation, fetchOwnAnswer,
 } from './utils/playerParticipation';
 import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
 import AnswerSpotlight from './components/AnswerSpotlight';
@@ -370,6 +370,18 @@ function PlayerPage({ event = null } = {}) {
   // the anonymous ballot can find this player's own row by content — the only
   // handle left once the author fields are redacted (see ownAnswerIndex).
   const [mySubmittedAnswer, setMySubmittedAnswer] = useState('');
+  const mySubmittedAnswerRef = useRef('');
+  mySubmittedAnswerRef.current = mySubmittedAnswer;
+  /*
+    WHAT THE SERVER SAYS THIS PLAYER WROTE, after a reload (session 7924,
+    14 Oct). 'checking' while the read is in flight, then 'answered' (the text
+    is restored into mySubmittedAnswer), 'withheld' (an answer exists but this
+    phone could not prove it wrote it), 'none', or 'unknown' when the read
+    failed. The results heading reads it so a reload never says "You didn't
+    send a response" while the check is still out.
+  */
+  const [ownAnswerStatus, setOwnAnswerStatus] = useState('unknown');
+  const ownAnswerRoundRef = useRef(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   /*
     AN ANSWER SUBMITTED WHILE THE SOCKET WAS DOWN, not yet delivered (QA drive
@@ -1743,6 +1755,37 @@ function PlayerPage({ event = null } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined, gameId, gameState]);
 
+  /*
+    Read this player's own answer back from the server when the screen does not
+    have it — the reload case. Runs beside the phase loads, never blocking them.
+    Only a reply about the round still on screen is applied, and only a real
+    text overwrites the local one (a later "none" never erases a receipt this
+    phone holds).
+  */
+  const restoreOwnAnswer = async (round, currentGameId, currentPlayerName, type) => {
+    const key = `${currentGameId}#${round}`;
+    if (ownAnswerRoundRef.current === key && mySubmittedAnswerRef.current) return;
+    if (ownAnswerRoundRef.current !== key) {
+      ownAnswerRoundRef.current = key;
+      if (!mySubmittedAnswerRef.current) setOwnAnswerStatus('checking');
+    }
+    const result = await fetchOwnAnswer({
+      apiBase: API_BASE,
+      gameId: currentGameId,
+      round,
+      playerName: currentPlayerName,
+      clientId: getClientId(currentGameId),
+    });
+    if (ownAnswerRoundRef.current !== key) return;
+    if (!result) { setOwnAnswerStatus('unknown'); return; }
+    setOwnAnswerStatus(result.status);
+    // Only Call & Answer stores the words the phone showed as its receipt;
+    // trivia, polls and word rounds store a letter, an index or a list.
+    if (result.status === 'answered' && type === 'call-and-answer' && !mySubmittedAnswerRef.current) {
+      setMySubmittedAnswer(result.text);
+    }
+  };
+
   const checkGameState = async (gameIdOverride = null, playerNameOverride = null) => {
     const currentGameId = gameIdOverride || gameId;
     const currentPlayerName = playerNameOverride || playerName;
@@ -1777,6 +1820,12 @@ function PlayerPage({ event = null } = {}) {
         console.log('⏮️ PLAYER: checkGameState result is stale — skipping follow-up loads');
         return;
       }
+
+      // After a reload the screen has no record of what this player wrote.
+      const phaseRound = /^(ASK|VOTE|RESULTS)#/.test(serverGameState)
+        ? serverGameState.split('#')[1]
+        : null;
+      if (phaseRound) restoreOwnAnswer(phaseRound, currentGameId, currentPlayerName, serverGameType);
 
       // Handle different game states
       if (serverGameState.startsWith('ASK#')) {
@@ -4267,11 +4316,15 @@ function PlayerPage({ event = null } = {}) {
          response at all read worse). The number is the ballot's. */
       // The ballot's number for it (its position), never the row's label: at
       // RESULTS the rows carry names, and that label would be their own name.
+      // After a reload the own answer is read back from the server; while that
+      // read is out the heading says so rather than "you didn't send one".
       const resultHeading = myRow
         ? `You wrote response ${ownAnswerIdx + 1}`
-        : mySubmittedAnswer
+        : (mySubmittedAnswer || hasAnswered || ownAnswerStatus === 'withheld')
           ? 'Your response is in the results'
-          : 'You didn’t send a response this round';
+          : ownAnswerStatus === 'checking'
+            ? 'Checking your answer…'
+            : 'You didn’t send a response this round';
       body = (
         <>
           <p className="plr-lab">Results</p>

@@ -7,7 +7,7 @@ import {
   hasSummary, snippetOf, podiumAnswers, roundIsAttributed,
 } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
-import { anchorLabelFor, excerptOf } from '../config/comments';
+import { anchorLabelFor, excerptOf, plainOf } from '../config/comments';
 import ReportFollowUps from './ReportFollowUps';
 import './RoundReport.css';
 
@@ -107,7 +107,7 @@ function CommentList({ comments, showAnchor = false }) {
               renders nothing for it rather than an empty quote.
             */}
             {comment.anchorExcerpt && (
-              <span className="rr-c__excerpt">{comment.anchorExcerpt}</span>
+              <span className="rr-c__excerpt">{plainOf(comment.anchorExcerpt)}</span>
             )}
             <span className="rr-c__text">{comment.text}</span>
             {/*

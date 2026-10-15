@@ -15,7 +15,7 @@
    names are global.
 
    WHERE IT SITS. Inside `.stage`, as a grid item across the rail, bar and main
-   rows (grid-row 1 / 4), so the dock stays live below it — the mockups' "host
+   rows (grid-row 1 / 5, with the workflow strip), so the dock stays live below it — the mockups' "host
    strip" stood in for the dock. It is NOT inside `.content`, so the stage's
    fitter never measures it; its density is the per-profile page size
    (config/scoreboard.js placesPerPage) and its own fit loops.
@@ -62,7 +62,7 @@
 
 .sb{
   /* one opening, one layer: above the rail, bar and main; the dock stays */
-  grid-column:1; grid-row:1 / 4;
+  grid-column:1; grid-row:1 / 5;
   position:relative; z-index:6; min-height:0; min-width:0; overflow:hidden;
   display:grid; grid-template-rows:auto minmax(0,1fr); grid-template-columns:minmax(0,1fr);
   background:var(--bg); color:var(--text);

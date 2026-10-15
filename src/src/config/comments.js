@@ -143,6 +143,28 @@ export function wallCreditFor(comment) {
 }
 
 /**
+ * Markdown read as the words it renders. Workie's read is markdown, and the
+ * session 7924 report quoted a comment's target as "## What the room said -
+ * **Four answers…" (finding #10). Headings, emphasis, list markers, quotes,
+ * code ticks and links lose their symbols and keep their words. Each line is
+ * cleaned before lines are joined, so a heading's '#' only goes at a line start.
+ */
+export function plainOf(text) {
+  return String(text ?? '')
+    .split(/\r?\n/)
+    .map((line) => line
+      .replace(/^\s{0,3}#{1,6}\s+/, '')        // # heading
+      .replace(/^\s{0,3}>\s?/, '')             // > quote
+      .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '') // - item, 1. item
+      .replace(/^\s*(?:[-*_]\s*){3,}$/, ''))   // --- rule
+    .join('\n')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')  // [words](url), ![alt](src)
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')          // **bold**
+    .replace(/(^|[^\w*])[*_]([^*_\n]+)[*_](?=[^\w*]|$)/g, '$1$2') // *em*
+    .replace(/`+([^`]*)`+/g, '$1');               // `code`
+}
+
+/**
  * The slice of the commented-on material that travels with the comment.
  *
  * Whitespace is collapsed first: the source is a participant's own prose, often
@@ -154,7 +176,7 @@ export function wallCreditFor(comment) {
  * only because it SAYS it cut, and the anchor says where to read the rest.
  */
 export function excerptOf(text, max = MAX_EXCERPT) {
-  const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const flat = plainOf(text).replace(/\s+/g, ' ').trim();
   if (flat.length <= max) return flat;
   return `${flat.slice(0, max)}…`;
 }

@@ -19,6 +19,7 @@ import WorkieSettings from './WorkieSettings';
 import { nextRoundPickersApply } from '../../config/workieOptions';
 import HelpButton from '../HelpButton';
 import BrandMark from '../BrandMark';
+import RW from '../../config/roundWords';
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -203,6 +204,14 @@ export default function SessionSetupPanel({
      everything else here. */
   autoMode = false,
   onAutoModeChange = () => {},
+  /* SETTINGS FROM THE NEXT ROUND (session flow v3; owner, 14 Oct). While a
+     round is live the page holds a change in `pendingSettings` (keys:
+     anonymousUntilReveal, nameWaiting, wallComments, scoreboardStyle) and
+     applies it when round `nextRoundNumber` starts. This panel shows the held
+     value and says it is waiting; Pace and Display apply now. */
+  pendingSettings = {},
+  settingsRoundLive = false,
+  nextRoundNumber = null,
   // The round's response count and reveal state — the caution's quantity, never
   // a threshold that decides anything. See config/anonymity.js's
   // MIN_ANONYMOUS_ANSWERS for what this used to gate.
@@ -249,6 +258,23 @@ export default function SessionSetupPanel({
      null draws nothing. */
   workie = null,
 }) {
+  const held = pendingSettings || {};
+  const heldOr = (key, value) => (Object.prototype.hasOwnProperty.call(held, key) ? held[key] : value);
+  const shownAnonymous = heldOr('anonymousUntilReveal', anonymousUntilReveal);
+  const shownNameWaiting = heldOr('nameWaiting', nameWaitingWhenAnonymous);
+  const shownWallComments = heldOr('wallComments', wallComments);
+  const shownBoardStyle = heldOr('scoreboardStyle', scoreboard.style);
+  /** A section's scope, and "waiting for round N" when a change is held. */
+  const scope = (keys) => {
+    if (!keys) return <span className="setup-scope">{` · ${RW.view.appliesNow}`}</span>;
+    const waiting = settingsRoundLive && keys.some((k) => Object.prototype.hasOwnProperty.call(held, k));
+    return (
+      <span className="setup-scope">
+        {` · ${RW.view.fromNextRound}`}
+        {waiting && nextRoundNumber ? <b className="setup-held">{` · ${RW.view.heldFor(nextRoundNumber)}`}</b> : null}
+      </span>
+    );
+  };
   const [tab, setTab] = useState(
     () => (setupPanelTabs().some((t) => t.id === initialTab) ? initialTab : 'players'),
   );
@@ -933,18 +959,19 @@ export default function SessionSetupPanel({
               id="setup-panel-settings"
               aria-labelledby="setup-tab-settings"
             >
+              {settingsRoundLive ? <p className="setup-note setup-scope-note">{RW.view.settingsScope}</p> : null}
               {/* NAMES FIRST, ahead of Display and the join links, because it
                   is the only thing in this tab that changes what the room can
                   learn about a colleague. The rest of the tab is plumbing. */}
               {anonymityApplies(gameType) && (
                 <>
-                  <h3 className="setup-h">Names</h3>
+                  <h3 className="setup-h">Names{scope(['anonymousUntilReveal', 'nameWaiting'])}</h3>
 
                   <label className="setup-toggle">
                     <input
                       type="checkbox"
                       data-testid="attribute-authors"
-                      checked={anonymousUntilReveal === false}
+                      checked={shownAnonymous === false}
                       onChange={(e) => onAnonymousUntilRevealChange(!e.target.checked)}
                     />
                     <span>Show who wrote each response from the start</span>
@@ -978,7 +1005,7 @@ export default function SessionSetupPanel({
                         <input
                           type="checkbox"
                           data-testid="name-waiting"
-                          checked={nameWaitingWhenAnonymous !== false}
+                          checked={shownNameWaiting !== false}
                           onChange={(e) => onNameWaitingChange(e.target.checked)}
                         />
                         <span>Name who is still waiting</span>
@@ -1009,12 +1036,12 @@ export default function SessionSetupPanel({
                 </>
               )}
 
-              <h3 className="setup-h">Feedback</h3>
+              <h3 className="setup-h">Feedback{scope(['wallComments'])}</h3>
               <label className="setup-toggle">
                 <input
                   type="checkbox"
                   data-testid="wall-comments"
-                  checked={wallComments !== false}
+                  checked={shownWallComments !== false}
                   onChange={(e) => onWallCommentsChange(e.target.checked)}
                 />
                 <span>Show comments on the wall as they arrive</span>
@@ -1039,7 +1066,7 @@ export default function SessionSetupPanel({
               {/* PACE, between Names and Display: it changes what the room
                   experiences, not what a colleague can be identified by, so it
                   ranks below Names — but it is not plumbing either. */}
-              <h3 className="setup-h">Pace</h3>
+              <h3 className="setup-h">Pace{scope(null)}</h3>
               <label className="setup-toggle">
                 <input
                   type="checkbox"
@@ -1062,11 +1089,11 @@ export default function SessionSetupPanel({
                   take it over. Applied live if the board is up. */}
               {scoreboardAvailability.show && (
                 <>
-                  <h3 className="setup-h">Scoreboard</h3>
+                  <h3 className="setup-h">Scoreboard{scope(['scoreboardStyle'])}</h3>
                   <label className="setup-field">
                     <span>Scoreboard style</span>
                     <select
-                      value={scoreboard.style || 'departure'}
+                      value={shownBoardStyle || 'departure'}
                       onChange={(e) => onScoreboardStyle(e.target.value)}
                     >
                       {SCOREBOARD_STYLES.map((style) => (
@@ -1081,7 +1108,7 @@ export default function SessionSetupPanel({
                 </>
               )}
 
-              <h3 className="setup-h">Display</h3>
+              <h3 className="setup-h">Display{scope(null)}</h3>
               <label className="setup-field">
                 <span>Display profile</span>
                 <select value={profile} onChange={(e) => onProfileChange(e.target.value)}>

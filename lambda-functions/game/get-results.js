@@ -710,30 +710,6 @@ const handle = async (event) => {
       : (votesQuery.Items || []);
     console.log(`📊 Found ${votes.length} votes for question ${paddedQuestionId}`);
 
-    if (votes.length === 0) {
-      // A round nobody voted on is still a resolved round. This used to return
-      // without touching the state, so the game sat on VOTE#nnn while the host
-      // screen (which sets RESULTS# locally regardless) showed results.
-      // It is also a COUNTED round — nobody scored in it — so the scoreboard
-      // moves on to it (recordScoresCounted).
-      await recordScoresCounted(event, gameId, paddedQuestionId);
-      await enterResultsState(event, gameId, paddedQuestionId);
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          gameId: gameId,
-          questionId: paddedQuestionId,
-          message: 'No votes found for this question',
-          totalVotes: 0,
-          winners: [],
-          voteTallies: {},
-          timestamp: new Date().toISOString()
-        }),
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      };
-    }
-
     // Get all answers for this question to map vote indices to answers
     const answersQuery = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
@@ -751,6 +727,36 @@ const handle = async (event) => {
       ? await decryptItems(cryptoOrgId, 'answer', answersQuery.Items || [])
       : (answersQuery.Items || []);
     console.log(`📋 Found ${answers.length} answers for question ${paddedQuestionId}`);
+
+    if (answers.length === 0) {
+      // Nothing was answered, so there is nothing to tally. Still a resolved
+      // and COUNTED round (nobody scored): the state moves to RESULTS and the
+      // scoreboard moves on to it (recordScoresCounted).
+      await recordScoresCounted(event, gameId, paddedQuestionId);
+      await enterResultsState(event, gameId, paddedQuestionId);
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          gameId: gameId,
+          questionId: paddedQuestionId,
+          message: 'No answers for this question',
+          totalVotes: votes.length,
+          winners: [],
+          voteTallies: {},
+          timestamp: new Date().toISOString()
+        }),
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      };
+    }
+
+    /*
+      A ROUND NOBODY VOTED ON STILL HAS ITS RESPONSES (owner, 2026-10-14: "when
+      votes didnt happen it is not reflected correctly"). This used to return
+      early with no tallies at all, so the host's laptop said "No responses
+      came in", What we heard said "Nothing to read back yet" and the wall's
+      results were blank, with three responses in the round. Now every
+      response is tallied at 0 points and nobody wins (below).
+    */
 
     // Calculate vote tallies
     const voteTallies = {};
@@ -813,8 +819,9 @@ const handle = async (event) => {
     const maxScore = Math.max(...Object.values(answerScores));
     const winners = [];
     
+    // With no points given, every response ties at 0 and none of them won.
     shownOrder.map((canonical) => [canonical, answerScores[canonical]]).forEach(([index, score]) => {
-      if (score === maxScore && voteTallies[index]) {
+      if (maxScore > 0 && score === maxScore && voteTallies[index]) {
         winners.push({
           playerName: voteTallies[index].playerName,
           answerText: voteTallies[index].answerText,

@@ -142,6 +142,9 @@ describe('GameHostPage hands the panel the board', () => {
     expect(el).toMatch(/scoreboard=\{scoreboard\}/);
     expect(el).toMatch(/scoreboardAvailability=\{scoreboardAvail\}/);
     expect(el).toMatch(/onToggleScoreboard=\{\(open\) => publishScoreboard\(\{ open \}\)\}/);
-    expect(el).toMatch(/onScoreboardStyle=\{\(style\) => publishScoreboard\(\{ style \}\)\}/);
+    // Through deferSetting since 2026-10-14: held while a round is live, applied
+    // from the next round (session flow v3, owner's answer to open question 9).
+    expect(el).toMatch(/onScoreboardStyle=\{deferSetting\('scoreboardStyle'\)\}/);
+    expect(PAGE).toMatch(/scoreboardStyle: \(style\) => publishScoreboard\(\{ style \}\),/);
   });
 });

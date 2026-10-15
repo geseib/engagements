@@ -120,3 +120,50 @@ export function nextParticipation({ current, server, isNewQuestion }) {
   if (isNewQuestion) return false;
   return current === true;
 }
+
+/**
+ * WHAT THIS PLAYER WROTE, read back from the server (session 7924, 14 Oct).
+ *
+ * After a reload the phone said "You didn't send a response this round" to a
+ * player whose answer had been scored. The heading reads `mySubmittedAnswer`,
+ * which is local state and empty after a reload. The server has always been
+ * able to return the text — get-answers.js `getOwnAnswer`, on `?player=` — but
+ * only to a caller that proves it is that player with the `clientId` join
+ * stamped on its PLAYER# row. Nothing in the client asked.
+ */
+export function ownAnswerUrl(apiBase, gameId, round, playerName, clientId) {
+  const q = new URLSearchParams({
+    question: String(round ?? '').padStart(3, '0'),
+    player: playerName,
+  });
+  if (clientId) q.set('clientId', clientId);
+  return `${apiBase}games/${encodeURIComponent(gameId)}/answers?${q.toString()}`;
+}
+
+/**
+ * The own-answer payload as one of four facts:
+ *   { status: 'answered', text }  — the server returned the player's own text
+ *   { status: 'withheld' }        — an answer exists, identity not proven
+ *   { status: 'none' }            — the round has no answer from this player
+ *   null                          — the payload did not say (never "none")
+ */
+export function ownAnswerFrom(payload) {
+  if (!payload || typeof payload.hasAnswer !== 'boolean') return null;
+  if (!payload.hasAnswer) return { status: 'none' };
+  if (typeof payload.answer === 'string' && payload.answer.trim()) {
+    return { status: 'answered', text: payload.answer };
+  }
+  return { status: 'withheld' };
+}
+
+/** Fetch and read it; any failure is `null`, "I could not find out". */
+export async function fetchOwnAnswer({ apiBase, gameId, round, playerName, clientId, fetchImpl = fetch }) {
+  if (!gameId || !playerName || !round) return null;
+  try {
+    const res = await fetchImpl(ownAnswerUrl(apiBase, gameId, round, playerName, clientId));
+    if (!res.ok) return null;
+    return ownAnswerFrom(await res.json());
+  } catch {
+    return null;
+  }
+}

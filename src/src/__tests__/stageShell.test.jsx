@@ -714,9 +714,11 @@ describe('what the host page must now render', () => {
     // markup inline would carry none of these components at any width.
     // 2600 -> 3200 on 2026-10-13, when the meter gained the host's "said in
     // the room" box (compose=) and pushed <Dock to 2,626.
+    // 3200 -> 6000 on 2026-10-14, when the workflow strip (strip=) and the
+    // viewed step / room-screen chooser (view=) slots landed ahead of <Rail.
     const windows = [];
     for (let i = source.indexOf('<Stage'); i !== -1; i = source.indexOf('<Stage', i + 1)) {
-      windows.push(source.slice(i, i + 3200));
+      windows.push(source.slice(i, i + 6000));
     }
     expect(windows.length).toBeGreaterThan(0);
 
@@ -780,7 +782,10 @@ describe('what the host page must now render', () => {
     expect(stage).not.toMatch(/className="early-reveal"/);
     // ...and the setting that replaced them is genuinely wired to the panel,
     // or this test passes on a feature that was simply deleted.
-    expect(markup).toMatch(/onAnonymousUntilRevealChange=\{setAnonymousUntilReveal\}/);
+    // Through deferSetting since 2026-10-14: held while a round is live, applied
+    // from the next round (session flow v3, owner's answer to open question 9).
+    expect(markup).toMatch(/onAnonymousUntilRevealChange=\{deferSetting\('anonymousUntilReveal'\)\}/);
+    expect(markup).toMatch(/anonymousUntilReveal: setAnonymousUntilReveal,/);
   });
 
   test('the RESULTS rows take their labels AND their arithmetic from the reveal', () => {

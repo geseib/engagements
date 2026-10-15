@@ -1,0 +1,91 @@
+/**
+ * WHERE WILL THE ROOM WATCH? (session flow v3 §4.7; owner, 14 Oct: "maybe this
+ * a help me pick button or such ... a great part of the setup when you first
+ * launch the session"). The lobby's first question for a Call & Answer
+ * session, and "Help me pick": three plain questions, one recommendation.
+ *
+ * The choice is the switch config/surfaces.js already reads (SURFACES_KEY:
+ * 'two' | 'classic'), stored per browser. Words follow the round words' rules:
+ * sentence case, plain, "phone, laptop or tablet".
+ */
+import { SURFACES_KEY } from './surfaces';
+
+export const ROOM_WORDS = Object.freeze({
+  heading: 'Where will the room watch?',
+  twoTitle: 'Two screens',
+  twoBody: 'The room watches a second window on the projector or TV. This laptop stays yours: Workie\'s notes, the icons beside points and late items stay private.',
+  oneTitle: 'One screen',
+  oneBody: 'The projector shows this laptop. Quick to set up, but the room sees everything on it. Your phone\'s Remote can hold the private notes.',
+  openPresent: 'Open the room\'s window',
+  useTwo: 'Use two screens',
+  useOne: 'Use one screen',
+  chosen: 'Chosen',
+  keepChoice: 'Keep this choice',
+  helpMePick: 'Help me pick',
+  remembers: 'This browser remembers your choice. Change it any time in Setup.',
+  backToChoices: 'Back to the two choices',
+  helpHeading: 'Help me pick',
+  q1: 'Is this laptop connected to the projector or TV?',
+  q1Yes: 'Yes, by cable or wirelessly',
+  q1No: 'Not yet',
+  q2: 'Does the projector show its own picture, or a copy of your laptop\'s screen?',
+  q2Own: 'Its own (extended)',
+  q2Copy: 'A copy (mirrored)',
+  q2Unsure: 'Not sure',
+  q3: 'Should Workie\'s notes and suggestions stay private to you?',
+  q3Yes: 'Yes',
+  q3No: 'It doesn\'t matter',
+  nothingChanges: 'Nothing changes until you choose.',
+  answeredOf: (n, of) => `${n} of ${of} answered`,
+});
+
+/**
+ * The recommendation for the answers so far, or null until there is enough
+ * to say. `{ choice: 'two' | 'classic', lead, detail }`.
+ *   connected: 'yes' | 'no'; picture: 'own' | 'copy' | 'unsure'; private: 'yes' | 'no'
+ * Question 3 only changes the wording (§4.7).
+ */
+export function recommendRoomScreen({ connected, picture, private: keepPrivate } = {}) {
+  if (connected === 'no') {
+    return { choice: 'classic', lead: 'One screen for now.', detail: 'Switch in Setup once the projector is plugged in.' };
+  }
+  if (connected !== 'yes' || !picture) return null;
+  if (picture === 'own') {
+    return {
+      choice: 'two',
+      lead: 'We recommend two screens.',
+      detail: 'Open the room\'s window, drag it onto the projector and make it full screen. When the room can see the join code, you are ready.',
+    };
+  }
+  if (picture === 'unsure') {
+    return {
+      choice: 'two',
+      lead: 'Try two screens.',
+      detail: 'Open the room\'s window. If it will not move onto the projector, choose one screen.',
+    };
+  }
+  return keepPrivate === 'no'
+    ? { choice: 'classic', lead: 'One screen is the simpler choice.', detail: 'The projector already shows this laptop.' }
+    : { choice: 'classic', lead: 'We recommend one screen.', detail: 'To keep Workie\'s notes private, open the Remote on your phone.' };
+}
+
+/** The stored choice: 'two', 'classic', or null when this browser has not chosen. */
+export function storedRoomScreen(storage) {
+  try {
+    const v = storage ? storage.getItem(SURFACES_KEY) : null;
+    return v === 'two' || v === 'classic' ? v : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Store the choice. Returns false when storage refused (private mode). */
+export function storeRoomScreen(storage, choice) {
+  if (choice !== 'two' && choice !== 'classic') return false;
+  try {
+    storage.setItem(SURFACES_KEY, choice);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}

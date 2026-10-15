@@ -636,6 +636,10 @@ body {
   font-weight: 700;
 }
 .setup-h:first-child { margin-top: 0; }
+/* A section's scope (session flow v3; owner, 14 Oct): "From the next round"
+   or "Applies now", and a held change's "Waiting for round N". */
+.setup-scope { font-weight: 600; letter-spacing: 0.06em; }
+.setup-held { color: var(--accent-text); font-weight: 800; }
 
 .setup-note,
 .setup-empty {

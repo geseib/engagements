@@ -301,6 +301,9 @@ export const HOST_INTENTS = {
   FEEDBACK: 'feedback',       // open a feedback round — RESULTS' third beat
   PAGE: 'notes-page',  // turn to the next page of the read-back, not a new round
   REPORT: 'report',    // open the session report
+  // Session flow v3 §4.8: the host was LOOKING at another step of the
+  // workflow strip; this returns the laptop to the live view. Nothing is sent.
+  BACK_TO_ROOM: 'back-to-room',
   LEAVE: 'leave',      // leave this session and go back to the host menu
   // The settings panel's own control, not the round dock's — a trivia, poll,
   // call-and-answer or wavelength session ends on the host's own say-so
@@ -725,7 +728,7 @@ export function snapshotFromHostPage({
   gameType, phase, roundNoun = 'Question', playerCount = 0, answeredCount = 0, votedCount = 0,
   answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
   spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
-  roomAsk = null, asksReady = 0,
+  roomAsk = null, asksReady = 0, roundNumber = null, totalRounds = null,
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
@@ -738,7 +741,9 @@ export function snapshotFromHostPage({
     && Number.isInteger(spotlightIndex) && spotlightIndex >= 0;
   return {
     gameType,
-    state: STATE_FOR_PHASE[resolvedPhase],
+    state: Number(roundNumber) > 0
+      ? String(STATE_FOR_PHASE[resolvedPhase]).replace(/#001$/, `#${String(Number(roundNumber)).padStart(3, '0')}`)
+      : STATE_FOR_PHASE[resolvedPhase],
     stageBeat: BEAT_FOR_PHASE[resolvedPhase] || 'results',
     focus: onWall
       ? { focus: 'answer', index: spotlightIndex, part: responsePart, parts: responseParts, phase: resolvedPhase }
@@ -752,6 +757,10 @@ export function snapshotFromHostPage({
     goalLine,
     roomAsk,
     asksReady,
+    // The round on screen, for "Start round 3" and the workflow strip. The
+    // state above is a template (ASK#001), so the number travels on its own.
+    roundNumber: Number(roundNumber) > 0 ? Number(roundNumber) : null,
+    totalRounds: Number(totalRounds) > 0 ? Number(totalRounds) : null,
   };
 }
 
@@ -808,6 +817,8 @@ export function hostControlsFor(input = {}) {
       tertiary: null,
       status: step.status,
       step,
+      // What the step was read from, so the workflow strip reads the same.
+      snapshot,
     };
   }
   return surveyControlsFor(input);

@@ -31,6 +31,12 @@ import AISummaryStatus from './components/AISummaryStatus';
 import useModelPicker from './components/stage/useModelPicker';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
+import WorkflowStrip from './components/stage/WorkflowStrip';
+import { workflowStrip, liveWhere } from './config/workflowStrip';
+import StepView from './components/stage/StepView';
+import RoomScreenChooser from './components/stage/RoomScreenChooser';
+import { storedRoomScreen, storeRoomScreen } from './config/roomScreen';
+import { setupPanelTabs } from './config/setupPanel';
 import RoomMeter from './components/stage/RoomMeter';
 import FeedbackWall from './components/stage/FeedbackWall';
 import Podium from './components/stage/Podium';
@@ -353,6 +359,9 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  // The workflow strip's step the host is LOOKING at (session flow v3 §4.8),
+  // or null for the live view. Private to this laptop; nothing is sent.
+  const [viewingStep, setViewingStep] = useState(null);
   /*
     WHERE THE PANEL LANDS when something asked for a place in it rather than
     the host pressing SESSION: 'running-order' opens it on Questions with the
@@ -363,6 +372,34 @@ function GameHostPage() {
   useEffect(() => {
     if (!setupPanelOpen) setSetupPanelLanding(null);
   }, [setupPanelOpen]);
+  /** The title bar's four places (session flow v3 §4.8): the panel, at one tab. */
+  const openSetupAt = useCallback((tab) => {
+    setSetupPanelLanding(tab);
+    setSetupPanelOpen(true);
+  }, []);
+  /*
+    "WHERE WILL THE ROOM WATCH?" (session flow v3 §4.7). The browser's stored
+    choice (config/surfaces.js SURFACES_KEY), or null until this browser has
+    chosen, which is when the lobby asks. `roomScreenOpen` reopens the choice.
+  */
+  const [roomScreenChoice, setRoomScreenChoice] = useState(() => {
+    try { return storedRoomScreen(window.localStorage); } catch (e) { return null; }
+  });
+  const [roomScreenOpen, setRoomScreenOpen] = useState(false);
+  const chooseRoomScreen = useCallback((choice) => {
+    try { storeRoomScreen(window.localStorage, choice); } catch (e) { /* private mode: this visit only */ }
+    // A ?surfaces= left in the address would override the choice on the next
+    // render (surfaces.js reads it first), so it goes.
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('surfaces')) {
+        url.searchParams.delete('surfaces');
+        window.history.replaceState(window.history.state, '', url.toString());
+      }
+    } catch (e) { /* no history API: the stored choice still stands */ }
+    setRoomScreenChoice(choice);
+    setRoomScreenOpen(false);
+  }, []);
   /** "Set the running order": the panel, on Questions, at the running order. */
   const openRunningOrder = useCallback(() => {
     setSetupPanelLanding('running-order');
@@ -638,6 +675,55 @@ function GameHostPage() {
   // Whether a FEEDBACK round's comments arrive on the wall (RoomMeter's
   // arrivals) or only their count does. Per-game like the setting above it.
   const [wallComments, setWallComments] = useState(true);
+
+  /*
+    SETTINGS APPLY FROM THE NEXT ROUND (session flow v3; owner, 14 Oct, open
+    question 9). A change made in the Session panel while a round is live is
+    held here and applied when the next round starts, so the live question,
+    its answers and its ballots never change under the room. Pace (Auto) and
+    Display are the host's own controls and apply at once (owner, 14 Oct:
+    turning Auto off has to stop it now). Keys match SessionSetupPanel's.
+  */
+  const [pendingSettings, setPendingSettings] = useState({});
+  const pendingSettingsRef = useRef(pendingSettings);
+  pendingSettingsRef.current = pendingSettings;
+  const settingsRoundLive = /^(ASK|VOTE|RESULTS)#/.test(String(gameState || ''));
+  const settingAppliersRef = useRef({});
+  settingAppliersRef.current = {
+    anonymousUntilReveal: setAnonymousUntilReveal,
+    nameWaiting: setNameWaitingWhenAnonymous,
+    wallComments: setWallComments,
+    scoreboardStyle: (style) => publishScoreboard({ style }),
+  };
+  const currentSettings = {
+    anonymousUntilReveal,
+    nameWaiting: nameWaitingWhenAnonymous,
+    wallComments,
+    scoreboardStyle: scoreboard.style,
+  };
+  const deferSetting = (key) => (value) => {
+    if (!settingsRoundLive) { settingAppliersRef.current[key](value); return; }
+    // Setting it back to what is live cancels the hold rather than waiting to
+    // apply a no-op.
+    setPendingSettings((held) => {
+      const next = { ...held };
+      if (value === currentSettings[key]) delete next[key];
+      else next[key] = value;
+      return next;
+    });
+  };
+  const settingsRoundRef = useRef(lessonNumber);
+  useEffect(() => {
+    // The next round started, or the rounds stopped: what waited applies now.
+    if (settingsRoundRef.current === lessonNumber && settingsRoundLive) return;
+    settingsRoundRef.current = lessonNumber;
+    const held = pendingSettingsRef.current;
+    if (!Object.keys(held).length) return;
+    Object.entries(held).forEach(([key, value]) => {
+      if (settingAppliersRef.current[key]) settingAppliersRef.current[key](value);
+    });
+    setPendingSettings({});
+  }, [lessonNumber, settingsRoundLive]);
 
   // AUTO-MODE — the session advances itself when everyone has responded,
   // dwelling on each page of responses and Workie prose first. The decisions
@@ -6572,6 +6658,9 @@ Focus on actionable business strategy insights.`;
       ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
       : null,
     asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
+    // The round on screen, for "Start round 3" and the workflow strip.
+    roundNumber: hostPhase === 'LOBBY' || hostPhase === 'ENDED' ? null : lessonNumber,
+    totalRounds: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions,
   });
   /*
     AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
@@ -6624,6 +6713,38 @@ Focus on actionable business strategy insights.`;
       },
     }
     : eventControls;
+
+  // THE WORKFLOW STRIP (session flow v3 §4.6): where the round is and what is
+  // expected of the host, read from the same step and snapshot as the dock.
+  // The primary is the one the dock draws (an event relabels it), so "Your
+  // part now" names the button the host can see. None while an event item
+  // waits to go live: that is the agenda's moment, not the round's.
+  const workflow = !eventWaiting && hostControls.step && hostControls.snapshot
+    ? workflowStrip({ ...hostControls.step, primary: hostControls.primary }, hostControls.snapshot)
+    : null;
+  // Looking happens only where the laptop is private: two screens (owner,
+  // 14 Oct, open question 10). Pressing the live step is the way back.
+  const viewing = twoSurfaces && workflow && viewingStep && viewingStep !== workflow.live ? viewingStep : null;
+  const viewStep = viewing ? workflow.steps.find((st) => st.id === viewing) : null;
+  // The lobby asks where the room will watch until this browser has chosen
+  // (Call & Answer: the type two screens cover), and again when reopened.
+  const showRoomScreen = hostPhase === 'LOBBY' && Boolean(gameId) && !eventCode
+    && normalizeGameType(currentGameType) === 'call-and-answer'
+    && (roomScreenChoice === null || roomScreenOpen);
+  /*
+    WHILE LOOKING, the one main button is "Back to the room" and nothing else
+    is offered: every act stays in this bar, and none of them may fire from a
+    private view by accident (Space, a clicker, auto-mode's timer all come
+    through runHostAction with this control).
+  */
+  const dockControls = viewing
+    ? {
+      ...hostControls,
+      primary: { id: 'back-to-room', label: RW.backToRoom, intent: HOST_INTENTS.BACK_TO_ROOM, icon: 'ArrowLeft', disabled: false, hint: '' },
+      secondary: null,
+      tertiary: null,
+    }
+    : hostControls;
 
   // A keyboard shortcut must never fire underneath something the host is
   // reading or filling in.
@@ -6732,6 +6853,10 @@ Focus on actionable business strategy insights.`;
 
   const runHostAction = async (action) => {
     if (!action) return;
+    if (action.intent === HOST_INTENTS.BACK_TO_ROOM) {
+      setViewingStep(null);
+      return;
+    }
     /*
       A CONTROL THAT ASKS FIRST. config/hostControls.js marks an act that
       cannot be undone with `confirm` — {title, message, confirmText,
@@ -7336,6 +7461,8 @@ Focus on actionable business strategy insights.`;
   }) || surveyAllIn;
   const dockStatus = dockHint
     ? ''
+    : viewing
+      ? RW.viewingNothingMoves
     : eventWaiting
       ? hostControls.status.text
     : (hostPhase === 'ASK' || hostPhase === 'VOTE') && players.length > 0
@@ -7443,6 +7570,55 @@ Focus on actionable business strategy insights.`;
           loadingAIInsights, currentAIInsights ? 1 : 0,
           wavelengthFitKey, surveyFitKey,
         ].join('|')}
+        strip={workflow
+          ? (
+            <WorkflowStrip
+              strip={workflow}
+              mode={twoSurfaces ? 'full' : 'slim'}
+              viewing={viewing}
+              onView={(id) => {
+                // In the lobby, Setup is live: pressing it reopens the choice
+                // of room screen rather than a view of itself.
+                if (id === 'setup' && workflow.live === 'setup') { setRoomScreenOpen((open) => !open); return; }
+                setViewingStep(id === workflow.live ? null : id);
+              }}
+              places={twoSurfaces ? setupPanelTabs().map((t) => ({
+                id: t.id,
+                label: t.id === 'players' ? `${t.label} ${players.length}` : t.label,
+                onClick: () => openSetupAt(t.id),
+              })) : null}
+              viewingWhere={liveWhere(workflow)}
+              onBack={() => setViewingStep(null)}
+            />
+          )
+          : null}
+        view={showRoomScreen
+          ? (
+            <RoomScreenChooser
+              current={roomScreenChoice}
+              presentHref={gameId ? presentHref(gameId) : ''}
+              onChoose={chooseRoomScreen}
+              onClose={roomScreenChoice ? () => setRoomScreenOpen(false) : null}
+            />
+          )
+          : viewStep
+          ? (
+            <StepView
+              step={viewStep}
+              facts={{
+                title: eventTitle,
+                twoScreens: twoSurfaces,
+                presenting,
+                setName: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.name,
+                playerCount: players.length,
+                answered: answeredCount,
+                voted: playersWhoVoted.length,
+                roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
+              }}
+              onAllSettings={() => setSetupPanelOpen(true)}
+            />
+          )
+          : null}
         rail={(
           <Rail
             phase={hostPhase}
@@ -7500,7 +7676,7 @@ Focus on actionable business strategy insights.`;
                 its positioning changes, and `bigScreen` is what makes it a
                 static element in a grid row rather than a fixed overlay. */}
             <HostActionBar
-              controls={hostControls}
+              controls={dockControls}
               onAction={runHostAction}
               bigScreen
               shortcutsEnabled={!anyOverlayOpen}
@@ -7517,7 +7693,7 @@ Focus on actionable business strategy insights.`;
                 // FIELD_NOTES ONLY. FEEDBACK has no read-back document to page
                 // through, so intercepting → there would swallow the advance
                 // key and leave the host pressing a dead one in front of a room.
-                if (hostPhase !== 'FIELD_NOTES') return false;
+                if (hostPhase !== 'FIELD_NOTES' || viewing) return false;
                 const md = currentAIInsights?.markdownResponse;
                 if (!md) return false;
                 const slice = prosePageSlice(md, stagePageIndex, proseBudgetFor(profile));
@@ -7534,6 +7710,8 @@ Focus on actionable business strategy insights.`;
                 follows the step back the same way it follows the step in.
               */
               onBackKey={() => {
+                // Looking at another step: ← goes back to the room, never a beat.
+                if (viewing) { setViewingStep(null); return; }
                 /*
                   ONE STEP BACK ALONG THE BEATS, not a jump to the start of
                   them. From FEEDBACK the previous beat is the read-back, not
@@ -8311,7 +8489,11 @@ Focus on actionable business strategy insights.`;
           dock is a no-overlay zone (audit A6). */}
       {setupPanelOpen && (
         <SessionSetupPanel
-          initialTab={setupPanelLanding === 'running-order' ? 'questions' : 'players'}
+          // A place asked for re-mounts the panel at its tab.
+          key={setupPanelLanding || 'session'}
+          initialTab={setupPanelLanding === 'running-order'
+            ? 'questions'
+            : (setupPanelTabs().some((t) => t.id === setupPanelLanding) ? setupPanelLanding : 'players')}
           focusRunningOrder={setupPanelLanding === 'running-order'}
           rounds={rounds}
           historyLoading={historyLoading}
@@ -8326,7 +8508,7 @@ Focus on actionable business strategy insights.`;
           scoreboard={scoreboard}
           scoreboardAvailability={scoreboardAvail}
           onToggleScoreboard={(open) => publishScoreboard({ open })}
-          onScoreboardStyle={(style) => publishScoreboard({ style })}
+          onScoreboardStyle={deferSetting('scoreboardStyle')}
           gameState={gameState}
           playersWhoAnswered={playersWhoAnswered}
           playersWhoVoted={playersWhoVoted}
@@ -8388,11 +8570,14 @@ Focus on actionable business strategy insights.`;
              picker and must never reach either of these. */
           gameType={currentGameType}
           anonymousUntilReveal={anonymousUntilReveal}
-          onAnonymousUntilRevealChange={setAnonymousUntilReveal}
+          onAnonymousUntilRevealChange={deferSetting('anonymousUntilReveal')}
           nameWaitingWhenAnonymous={nameWaitingWhenAnonymous}
-          onNameWaitingChange={setNameWaitingWhenAnonymous}
+          onNameWaitingChange={deferSetting('nameWaiting')}
           wallComments={wallComments}
-          onWallCommentsChange={setWallComments}
+          onWallCommentsChange={deferSetting('wallComments')}
+          pendingSettings={pendingSettings}
+          settingsRoundLive={settingsRoundLive}
+          nextRoundNumber={lessonNumber + 1}
           autoMode={autoMode}
           onAutoModeChange={setAutoMode}
           answerCount={answers.length}

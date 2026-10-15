@@ -1,0 +1,1264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Call and Answer, version 3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --canvas:#0A1324; --bg:#0F1A2E; --surface:#1B2942; --surface-2:#25375A;
+  --text:#F4EDE4; --muted:#9BA8BE; --accent:#7CA7E6; --accent-text:#9CBEF0;
+  --action:#F6A94C; --on-action:#0F1A2E; --success:#4FB286; --warn:#E7B45A;
+  --line:rgba(155,168,190,.22); --line-strong:rgba(155,168,190,.42); --tint:rgba(124,167,230,.15);
+  --s-lap:#7CA7E6; --s-rem:#B79CF0; --s-wall:#F6A94C; --s-dev:#4FB286; --s-rep:#D9CBB4;
+  --paper:#F7F3EC; --paper-ink:#1D2433; --paper-muted:#5D6575; --paper-line:#DDD5C8;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-ui:"Inter",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--canvas);color:var(--text)}
+body{font-family:var(--f-ui);font-size:15px;line-height:1.5;padding:28px 16px 72px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.wrap{max-width:1320px;margin:0 auto}
+h1,h2,h3,h4{font-family:var(--f-display);margin:0;line-height:1.15}
+h1{font-size:34px;font-weight:800;letter-spacing:-.3px}
+h2{font-size:25px;font-weight:800}
+h3{font-size:18px;font-weight:700}
+h4{font-size:14px;font-weight:700}
+p{margin:0}
+.mut{color:var(--muted)}
+.small{font-size:13px}
+.tiny{font-size:11px}
+.ey{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-text);font-weight:700}
+.badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--action);color:var(--action);border-radius:999px;padding:3px 10px}
+
+/* page sections */
+header.top{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;align-items:start;padding-bottom:26px;border-bottom:1px solid var(--line)}
+header.top .lede{color:var(--muted);margin-top:10px;max-width:68ch}
+.meta{font-size:13px;color:var(--muted);margin-top:14px}
+.part{margin-top:44px}
+.part-h{display:flex;gap:14px;align-items:baseline;margin-bottom:6px}
+.part-h .pn{font-family:var(--f-display);font-weight:800;color:var(--muted);font-size:14px}
+.part > .intro{color:var(--muted);max-width:90ch;margin-bottom:18px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h4{margin-bottom:4px}
+.card p{font-size:14px;color:var(--muted)}
+ul.changes{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px;font-size:14.5px}
+ul.changes b{color:var(--text)}
+ul.changes li{color:#D9DEE8}
+.verdicts{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+.verdicts th,.verdicts td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.verdicts th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.v{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap;border:1px solid}
+.v-keep{color:var(--success);border-color:var(--success)}
+.v-adapt{color:var(--accent-text);border-color:var(--accent)}
+.v-drop{color:#E98E7A;border-color:#E98E7A}
+.v-new{color:var(--action);border-color:var(--action)}
+.v-later{color:var(--muted);border-color:var(--line-strong)}
+
+/* legend */
+.legend{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.lg{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.lg p{font-size:12.5px;color:var(--muted);margin-top:4px}
+.sw{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:13px}
+.sw::before{content:"";width:12px;height:12px;border-radius:3px;background:var(--c)}
+.modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.mode{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--bg);display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;align-items:center}
+.mode svg{width:150px;height:auto}
+.mode p{font-size:13px;color:var(--muted)}
+
+/* moment blocks */
+.moment{margin-top:26px;padding-top:18px;border-top:1px solid var(--line)}
+.mh{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.mn{font-family:var(--f-display);font-weight:800;font-size:13px;color:var(--on-action);background:var(--accent);border-radius:999px;min-width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0 8px}
+.mh p{color:var(--muted);font-size:14px;flex-basis:100%}
+.next{margin:10px 0 14px;display:flex;gap:10px;align-items:center;border:1px solid var(--action);background:rgba(246,169,76,.08);border-radius:10px;padding:8px 12px;font-size:14px}
+.next b{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--action);white-space:nowrap}
+.k{display:inline-block;border:1px solid var(--line-strong);border-radius:6px;padding:0 6px;font-weight:600;font-size:13px;background:var(--surface)}
+.k.p{background:var(--action);color:var(--on-action);border-color:var(--action)}
+.frames{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start}
+.s2{grid-column:span 2}.s3{grid-column:span 3}.s4{grid-column:span 4}.s5{grid-column:span 5}.s6{grid-column:span 6}.s7{grid-column:span 7}.s8{grid-column:span 8}.s9{grid-column:span 9}.s12{grid-column:span 12}
+.cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.cap::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--c);flex:none}
+.cap b{color:var(--text)}
+.c-lap{--c:var(--s-lap)}.c-rem{--c:var(--s-rem)}.c-wall{--c:var(--s-wall)}.c-dev{--c:var(--s-dev)}.c-rep{--c:var(--s-rep)}
+.aside{font-size:13px;color:var(--muted);border-left:3px solid var(--line-strong);padding:4px 12px;margin-top:12px}
+.aside b{color:var(--text)}
+.one{border-left-color:var(--s-wall)}
+.flag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px;border:1px solid}
+
+/* generic screen frame */
+.fr{background:var(--bg);border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;font-size:12.5px;line-height:1.4;min-width:0}
+.fh{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11.5px}
+.fh b{color:var(--text)}
+.fb{padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+.fb .h{font-family:var(--f-display);font-weight:800;font-size:16px;line-height:1.15}
+.task{border-left:3px solid var(--accent);padding:4px 9px;background:var(--surface);border-radius:0 6px 6px 0}
+.task .ey{font-size:9.5px}
+.roster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;font-size:12px}
+.roster span{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:2px 0}
+.ok{color:var(--success);font-weight:600}
+.dock{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);background:var(--surface);padding:8px 10px;flex-wrap:wrap}
+.dock .st{flex:1;min-width:140px;font-size:11.5px;color:#D9DEE8}
+.dock .st .nx{display:block;color:var(--muted);font-size:10.5px}
+.dock .st a{color:var(--accent-text);text-decoration:underline}
+.btn{display:inline-block;border-radius:8px;border:1px solid var(--line-strong);background:transparent;color:var(--text);padding:6px 10px;font-weight:600;font-size:12px;white-space:nowrap}
+.btn.p{background:var(--action);border-color:var(--action);color:var(--on-action)}
+.btn.q{border-color:transparent;color:var(--muted);text-decoration:underline;padding-inline:4px}
+.btn.dis{opacity:.45}
+.btn.armed{border-color:var(--warn);color:var(--warn)}
+.armmsg{color:var(--warn)!important}
+.lnk{color:var(--accent-text);text-decoration:underline;font-size:11.5px}
+.chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--accent);background:var(--tint);color:var(--text);border-radius:999px;padding:0 8px 0 5px;font-size:11px;font-weight:600;white-space:nowrap;vertical-align:1px;margin-left:4px}
+.chip svg{width:12px;height:12px}
+.pts{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.pts li{line-height:1.4}
+.hl{background:var(--tint);outline:1px solid var(--accent);border-radius:4px}
+.lab{display:inline-block;font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 8px;border:1px solid;white-space:nowrap}
+.lab.nr{color:var(--warn);border-color:var(--warn);background:rgba(231,180,90,.1)}
+.lab.rd{color:var(--muted);border-color:var(--line-strong)}
+.lab.sh{color:var(--success);border-color:var(--success);background:rgba(79,178,134,.1)}
+.lab.late{color:var(--s-rem);border-color:var(--s-rem)}
+.box{border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;background:var(--surface)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.between{justify-content:space-between}
+.grow{flex:1}
+
+/* wall */
+.wall{aspect-ratio:16/9;display:flex;flex-direction:column;background:radial-gradient(120% 90% at 85% 0%,#1E3050 0%,var(--bg) 55%),var(--bg);border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;padding:4% 5% 3%}
+.wt{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:5px}
+.wt b{color:var(--text)}
+.wm{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;min-height:0}
+.wm .h{font-family:var(--f-display);font-weight:800;font-size:17px;line-height:1.15}
+.wm .big{font-family:var(--f-display);font-weight:800;font-size:15px;line-height:1.2}
+.wm .sub{font-size:10.5px;color:var(--muted)}
+.wf{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--muted);border-top:1px solid var(--line);padding-top:5px}
+.bars{display:flex;flex-direction:column;gap:4px;font-size:10.5px}
+.bars div{display:grid;grid-template-columns:minmax(0,1fr) 18px;gap:6px;align-items:center}
+.bars i{grid-column:1/3;height:5px;border-radius:3px;background:var(--accent);display:block}
+.qr{width:62px;height:62px;flex:none;border:5px solid #F4EDE4;border-radius:4px;background-color:#F4EDE4;background-image:linear-gradient(90deg,#0F1A2E 50%,transparent 50%),linear-gradient(#0F1A2E 50%,transparent 50%);background-size:13px 9px,9px 13px;background-blend-mode:multiply}
+
+/* device frames: participant + remote */
+.dev{border:7px solid #050A14;border-radius:24px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;font-size:12.5px;line-height:1.4;min-height:330px;max-width:330px}
+.dev.rem{border-color:#1D1630}
+.dt{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--muted);padding:9px 11px 7px;border-bottom:1px solid var(--line)}
+.dt b{color:var(--text)}
+.db{flex:1;padding:11px;display:flex;flex-direction:column;gap:8px;background:radial-gradient(120% 60% at 90% 0%,#1E3050 0%,var(--bg) 60%)}
+.db .h{font-family:var(--f-display);font-weight:800;font-size:15.5px;line-height:1.15}
+.df{padding:8px 11px 11px;border-top:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:6px}
+.df .btn{width:100%;text-align:center;padding:8px}
+.ta{border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);min-height:58px;padding:7px;color:var(--muted);font-size:12px}
+.ta.f{color:var(--text)}
+.receipt{border-radius:8px;padding:6px 9px;font-size:12px;background:rgba(79,178,134,.12);border:1px solid rgba(79,178,134,.5)}
+.warnbox{border-radius:8px;padding:6px 9px;font-size:12px;background:rgba(231,180,90,.1);border:1px solid rgba(231,180,90,.55)}
+.banner{border-radius:8px;padding:6px 9px;font-size:12px;background:var(--surface-2);display:flex;justify-content:space-between;gap:8px;align-items:center}
+.pick{border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--surface);font-size:12px}
+.pick.on{border-color:var(--accent);background:var(--tint)}
+.scale{display:flex;gap:4px}.scale span{flex:1;text-align:center;border:1px solid var(--line-strong);border-radius:6px;padding:3px 0;font-weight:700;font-size:11px}
+
+/* composer dialog */
+.scrim{background:rgba(5,10,20,.55);padding:14px;border-radius:10px}
+.dlg{background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;font-size:12.5px}
+.dlg .dh{display:flex;justify-content:space-between;align-items:center;padding:11px 14px 8px}
+.dlg .dh .h{font-family:var(--f-display);font-weight:800;font-size:17px}
+.x{border:1px solid var(--line-strong);border-radius:6px;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+.dlg .dbd{padding:2px 14px 12px;display:flex;flex-direction:column;gap:9px}
+.dlg .dft{display:flex;gap:8px;align-items:center;justify-content:flex-end;border-top:1px solid var(--line);padding:9px 14px;background:var(--bg)}
+.lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.sugg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.sg{border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;background:var(--bg);font-size:11.5px}
+.sg .kh{display:flex;gap:4px;align-items:center;font-weight:700;font-size:10.5px;color:var(--accent-text)}
+.sg .kh svg{width:12px;height:12px}
+.sg .from{color:var(--muted);font-size:10.5px}
+.sg.on{border-color:var(--accent);background:var(--tint);box-shadow:inset 0 0 0 1px var(--accent)}
+.sg.blank{display:flex;align-items:center;justify-content:center;color:var(--muted);border-style:dashed}
+.sg .sent{float:right;font-size:10px;color:var(--muted);border:1px solid var(--line-strong);border-radius:999px;padding:0 6px}
+.kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.kd{border:1px solid var(--line-strong);border-radius:8px;padding:5px 7px;font-size:10.5px;color:var(--muted);background:var(--bg)}
+.kd b{display:flex;gap:4px;align-items:center;color:var(--text);font-size:12px}
+.kd b svg{width:12px;height:12px}
+.kd.on{border-color:var(--accent);background:var(--tint)}
+.field{border:1px solid var(--line-strong);border-radius:8px;background:var(--bg);padding:6px 8px;font-size:12.5px}
+.field.edited{border-color:var(--action)}
+.ed{display:inline-block;font-size:10px;font-weight:700;color:var(--on-action);background:var(--action);border-radius:999px;padding:0 7px}
+.why{font-size:11.5px;color:var(--muted);border-top:1px dashed var(--line-strong);padding-top:6px}
+.privacy{font-size:11.5px;background:rgba(79,178,134,.1);border:1px solid rgba(79,178,134,.4);border-radius:8px;padding:5px 8px}
+.minip{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:10px;align-items:start}
+.miniphone{border:4px solid #050A14;border-radius:14px;padding:6px;background:var(--bg);font-size:10px}
+.miniphone .h{font-size:11.5px!important}
+
+/* flow diagram */
+.flow{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:8px;align-items:center}
+.flow .arrow{text-align:center;color:var(--muted);font-size:20px}
+.entry{border:1px solid var(--line-strong);border-radius:10px;padding:9px 11px;background:var(--bg);font-size:13px}
+.entry .ey{display:block;margin-bottom:2px}
+
+/* report (paper) */
+.paper{background:var(--paper);color:var(--paper-ink);border-radius:10px;border:1px solid var(--paper-line);padding:18px 22px;font-size:13px;line-height:1.5;color-scheme:light}
+.paper h3{font-family:var(--f-display);font-size:18px;color:var(--paper-ink)}
+.paper h4{font-size:13px;margin-top:12px;color:var(--paper-ink);letter-spacing:.02em}
+.paper .pm{color:var(--paper-muted)}
+.paper .rt{border-left:3px solid #8AA3CF;padding:3px 10px;background:#EFEAE0;margin:6px 0}
+.paper .q{border:1px solid var(--paper-line);border-radius:8px;padding:10px 12px;margin-top:8px;background:#FFFDF9}
+.paper .q > div{margin-top:3px}
+.paper .q .kh{font-weight:700}
+.paper .q .quote{font-style:italic;color:var(--paper-muted)}
+.paper .q .sent{font-weight:700}
+.paper .diff{color:#7A4B12}
+.paper ul{margin:3px 0 0;padding-left:18px}
+.paper .lab.nr{color:#8A5A0B;border-color:#C9962F;background:#FBF1DC}
+.paper .lab.rd{color:#5D6575;border-color:#B8B2A6}
+.paper .lab.sh{color:#1F6E4C;border-color:#4FB286;background:#E3F3EA}
+.paper .lab.late{color:#5B3FA0;border-color:#A58BE0}
+.anno{font-size:11.5px;color:var(--muted);margin-top:6px}
+
+/* table for late items */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tbl td q{color:#E8DCCB}
+
+/* open questions */
+.qs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.qq{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+.qq h4{font-size:15px;margin-bottom:6px}
+.qq .pend{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--action);border:1px dashed var(--action);border-radius:4px;padding:1px 6px;margin-bottom:6px}
+.qq p{font-size:13.5px;color:#D9DEE8}
+.qq p.mut{color:var(--muted);font-size:12.5px;margin-top:5px}
+footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+
+/* earlier rounds + comments (version 3) */
+.sec{border-top:1px solid var(--line);padding-top:6px;display:flex;flex-direction:column;gap:4px}
+.sec > .lbl{display:flex;justify-content:space-between}
+.resp{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:6px;align-items:start;font-size:11.5px;border:1px solid var(--line);border-radius:7px;padding:4px 6px;background:var(--surface)}
+.resp .rk{font-weight:800;color:var(--accent-text)}
+.resp.mine{border-color:var(--success)}
+.cmt{font-size:11.5px;border-left:2px solid var(--s-rem);padding:2px 0 2px 7px}
+.cmt .on{color:var(--muted);font-size:10.5px}
+.cmt.reply{margin-left:12px}
+.cl{color:var(--accent-text);font-size:10.5px;text-decoration:underline;white-space:nowrap}
+.target{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--s-rem);border-radius:999px;padding:0 8px;font-size:10.5px;color:var(--text);background:rgba(183,156,240,.12)}
+.chk{display:flex;gap:6px;align-items:flex-start;font-size:11.5px}
+.chk i{flex:none;width:12px;height:12px;border:1px solid var(--line-strong);border-radius:3px;margin-top:2px;background:var(--bg)}
+.chk i.y{background:var(--accent);border-color:var(--accent)}
+.tab2{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,.9fr);gap:10px}
+.tab2 .nav{display:flex;flex-direction:column;gap:3px;font-size:11px;border-right:1px solid var(--line);padding-right:8px}
+.tab2 .nav span{padding:3px 6px;border-radius:5px}
+.tab2 .nav span.on{background:var(--tint);color:var(--text)}
+.tgl{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;border-bottom:1px solid var(--line);padding:6px 0;font-size:12px}
+.tgl .sw2{flex:none;width:28px;height:15px;border-radius:999px;background:var(--line-strong);position:relative}
+.tgl .sw2::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--text)}
+.tgl .sw2.y{background:var(--success)}
+.tgl .sw2.y::after{left:15px}
+.paper .cr{margin-top:4px}
+.paper .cr b{font-weight:700}
+
+/* workflow strip: host laptop only (version 3) */
+.strip{border-bottom:1px solid var(--line);background:#0C1628;padding:6px 10px;display:flex;flex-direction:column;gap:4px}
+.srow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:10.5px}
+.ss{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line-strong);border-radius:6px;padding:1px 7px;color:var(--muted);white-space:nowrap;line-height:1.55}
+.ss.done{border-color:var(--line)}
+.ss.done::before{content:"✓";color:var(--success);font-weight:700}
+.ss.now{background:var(--accent);border-color:var(--accent);color:var(--on-action);font-weight:700}
+.ss small{font-size:9.5px;font-weight:600;opacity:.85}
+.ss .lv{display:inline-flex;align-items:center;gap:3px;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;margin-left:2px}
+.ss .lv::before{content:"";width:6px;height:6px;border-radius:50%;background:#167A4E;box-shadow:0 0 0 2px rgba(255,255,255,.6)}
+.ss.view{border:1.5px dashed var(--action);color:var(--text)}
+.ss.view::after{content:"viewing";font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--action)}
+.ss.opt{border-style:dashed}
+.loop{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);border-radius:8px;padding:2px 3px 2px 7px;background:var(--bg);flex-wrap:wrap}
+.loop .lr{font-weight:700;color:var(--text);margin-right:2px;white-space:nowrap}
+.sep{color:var(--muted)}
+.exp{font-size:11px;color:#D9DEE8}
+.exp b{color:var(--action)}
+.lbl2{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-right:6px}
+.strip.slim{padding:4px 10px}
+.strip.slim .srow{font-size:9.5px}
+.menu{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.menu b{color:#D9DEE8;font-weight:600}
+.viewbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(246,169,76,.1);border-bottom:1px solid rgba(246,169,76,.45);padding:5px 10px;font-size:11px}
+.viewbar b{color:var(--action)}
+.rs{display:flex;align-items:center;gap:6px;padding:5px 11px;border-bottom:1px solid var(--line);font-size:10.5px;color:var(--muted);background:#140F24;flex-wrap:wrap}
+.rs .dots{display:inline-flex;gap:3px}
+.rs .dots i{width:8px;height:8px;border-radius:50%;border:1px solid var(--line-strong);display:block}
+.rs .dots i.d{background:var(--muted);border-color:var(--muted)}
+.rs .dots i.n{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 2px rgba(124,167,230,.3)}
+.rs .dots i.o{border-style:dashed}
+.rs .dots i.v{border:1.5px dashed var(--action)}
+.rs b{color:var(--text)}
+.tipbox{background:var(--surface-2);border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;font-size:11.5px;max-width:330px}
+.tipbox b{color:var(--text)}
+.anat{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:10px}
+.anat div{font-size:12.5px;color:var(--muted);border-top:2px solid var(--action);padding-top:6px}
+.anat b{color:var(--text);display:block}
+.rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+.choose2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.opt2{border:1px solid var(--line-strong);border-radius:10px;padding:8px 9px;background:var(--surface);display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted)}
+.opt2 b{color:var(--text);font-size:12.5px}
+.opt2.on{border-color:var(--accent);background:var(--tint);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt2 svg{width:100%;height:58px}
+.qa{display:flex;flex-direction:column;gap:4px;font-size:12px}
+.qa .pick{font-size:11px;padding:3px 8px}
+.rec{border:1px solid var(--success);background:rgba(79,178,134,.1);border-radius:8px;padding:7px 9px;font-size:12px}
+.rec b{color:var(--success)}
+.changes3{grid-column:1/-1;border:1px solid var(--action);background:rgba(246,169,76,.07);border-radius:12px;padding:14px 18px}
+.changes3 ol{margin:6px 0 0;padding-left:20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 28px;font-size:14px;color:#D9DEE8}
+.changes3 b{color:var(--text)}
+.conflict{border-left:3px solid #E98E7A;padding:4px 12px;font-size:13px;color:var(--muted);margin-top:10px}
+.conflict b{color:var(--text)}
+
+@media screen and (max-width:1100px){
+  .legend{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media screen and (max-width:900px){
+  header.top,.cards,.modes,.qs{grid-template-columns:minmax(0,1fr)}
+  .legend{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .frames > *{grid-column:span 12}
+  .dev{max-width:360px}
+  .mode{grid-template-columns:minmax(0,1fr)}
+  .sugg{grid-template-columns:minmax(0,1fr)}
+  .kinds{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .minip{grid-template-columns:minmax(0,1fr)}
+  .flow{grid-template-columns:minmax(0,1fr)}
+  .flow .arrow{transform:rotate(90deg)}
+  .verdicts{font-size:12.5px}
+  .anat,.rules,.changes3 ol,.choose2,.tab2{grid-template-columns:minmax(0,1fr)}
+  .tab2 .nav{border-right:0;flex-direction:row;flex-wrap:wrap}
+  .verdicts th:nth-child(3),.verdicts td:nth-child(3){display:none}
+}
+
+@page{size:A4 landscape;margin:9mm 10mm}
+@media print{
+  html{zoom:.62}
+  body{padding:0;font-size:14px}
+  .wrap{max-width:none}
+  .part{margin-top:0;break-before:page}
+  .part.first{break-before:auto}
+  .moment,.frames,.flow{break-inside:avoid}
+  .moment{margin-top:14px;padding-top:12px}
+  .moment.brk{break-before:page;border-top:0;margin-top:0;padding-top:0}
+  .card,.qq,.lg,.mode,.fr,.dev,.wall,.paper .q,.dlg{break-inside:avoid}
+  header.top{break-after:page;border-bottom:0}
+  h2{font-size:22px}
+  .next{margin:8px 0 10px}
+  footer{break-before:avoid}
+  .brkp{break-before:page}
+  .brkp > h3{margin-top:0!important}
+  .verdicts th,.verdicts td{padding:4px 8px}
+  .verdicts{font-size:12px}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="d-two" viewBox="0 0 150 80"><rect x="4" y="22" width="56" height="36" rx="3" fill="#1B2942" stroke="#7CA7E6"/><rect x="0" y="58" width="64" height="5" rx="2" fill="#7CA7E6"/><text x="32" y="44" font-size="8" fill="#F4EDE4" text-anchor="middle">controls</text><rect x="80" y="6" width="66" height="44" rx="3" fill="#1B2942" stroke="#F6A94C"/><text x="113" y="31" font-size="8" fill="#F4EDE4" text-anchor="middle">the wall</text><path d="M64 40 L 78 30" stroke="#9BA8BE" stroke-dasharray="2 2"/></symbol>
+  <symbol id="d-one" viewBox="0 0 150 80"><rect x="40" y="6" width="70" height="46" rx="3" fill="#1B2942" stroke="#F6A94C"/><rect x="40" y="6" width="70" height="46" rx="3" fill="none" stroke="#7CA7E6" stroke-dasharray="3 3"/><rect x="34" y="52" width="82" height="5" rx="2" fill="#7CA7E6"/><text x="75" y="27" font-size="8" fill="#F4EDE4" text-anchor="middle">laptop = wall</text><text x="75" y="39" font-size="7" fill="#9BA8BE" text-anchor="middle">(projected)</text><rect x="124" y="30" width="16" height="28" rx="3" fill="#1B2942" stroke="#B79CF0"/></symbol>
+  <symbol id="i-ideas" viewBox="0 0 16 16"><path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.2V12h5.2V9.7A4.5 4.5 0 0 0 8 1.5zM6 13.5h4M6.7 15h2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-choose" viewBox="0 0 16 16"><circle cx="3" cy="4" r="1.6" fill="currentColor"/><circle cx="3" cy="8" r="1.6" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="3" cy="12" r="1.6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 4h7.5M6.5 8h7.5M6.5 12h7.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-rate" viewBox="0 0 16 16"><path d="M1.5 12.5h13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="2" y="9" width="2" height="3" rx=".5" fill="currentColor"/><rect x="5.5" y="7" width="2" height="5" rx=".5" fill="currentColor"/><rect x="9" y="5" width="2" height="7" rx=".5" fill="currentColor"/><rect x="12.5" y="3" width="2" height="9" rx=".5" fill="currentColor"/></symbol>
+  <symbol id="i-comments" viewBox="0 0 16 16"><path d="M2 3h12v8H7l-3 3v-3H2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="wrap">
+
+<!-- ============================== COVER / INTRO ============================== -->
+<header class="top">
+  <div>
+    <span class="badge">Proposed · not built</span>
+    <h1 style="margin-top:12px">Call and Answer: one round, moment by moment</h1>
+    <p class="lede">Version 3 of the proposed flow for a Call and Answer round in Engage. It answers the external review of session 7924 (the "Relay expansion" run, six rounds, four participants) and redraws the reviewers' concept with the team's decisions applied. Every screen below is a wireframe: it shows <b>what each surface shows, where things sit, and the one next step</b> at each moment. Colours and fonts are not the point. Version 3 adds the owner's decisions of 14 October: the round's workflow is always on the host's screens, and setup helps the host choose how the room will watch.</p>
+    <p class="meta">Prepared 14 October 2026 for the product owner, then the external reviewers. Sample content is from the review session; names are the reviewers' fictional participants.</p>
+  </div>
+  <div class="card" style="padding:16px 18px">
+    <p class="ey" style="margin-bottom:8px">What changed since the reviewers' version</p>
+    <ul class="changes">
+      <li><b>One "Ask the room" composer, two ways in.</b> Blank from the dock, or filled in by Workie from a small icon beside a point of the read. Same screen either way; the words are editable at once, then "Send to the room".</li>
+      <li><b>Your format cards are kept</b> as the composer's kind switch (Ideas, Choose, Rate, Comments). "Comments" replaces "Request feedback", so there is one door for asking the room anything.</li>
+      <li><b>The end of the read is a real stop.</b> On the last page the main button becomes "Ask the room". Mid-read, "Start round 3" (the next round, by number) needs a second press while questions are still unsent. Paging stays in the fixed button bar, because clickers and the Space key depend on it.</li>
+      <li><b>Your route strip is kept, redrawn.</b> One slim strip on the host's screens: Setup, the round's loop (Answer, Vote, What we heard, Ask), Finish. The current step is lit and a "Your part now" line names the main button. Labels stay short ("Start voting", "Show results").</li>
+      <li><b>The workflow can be looked at, not driven.</b> Pressing a step shows it privately; the room, the wall and the phones stay where they are, and "Back to the room" returns.</li>
+      <li><b>Nothing that arrives late is lost.</b> Late answers, ideas and comments are kept and marked "Not reviewed" until the host reviews them or reviews them with the room.</li>
+      <li><b>Anyone can go back to an earlier round, see all of it and comment</b>, on their phone, laptop or tablet, or from the host's Rounds menu. Each comment names its target. The wall shows nothing unless the host puts it up.</li>
+      <li><b>The report is a full record of each question for the room</b>: Workie's words against what was sent, where in the read it came from, timings, results and how many answered.</li>
+      <li><b>Kept from your version:</b> the real task on the wall, the room-screen choice before round 1 (now with "Help me pick"), settings that say when they apply, "Start round 3", "Preparing questions" then "3 asks ready", "Checking your answer…" after a reload, and a privacy line for each kind.</li>
+    </ul>
+  </div>
+  <div class="changes3">
+    <p class="ey" style="color:var(--action)">Changes since version 2</p>
+    <ol>
+      <li><b>The workflow is always on the host's screens.</b> A slim strip under the title bar on the laptop, a row of dots on the Remote, a slimmer strip on one screen. Never on the wall or the room's devices. (Version 2 had dropped it.)</li>
+      <li><b>"Your part now".</b> The strip names what is expected of the host, in the same words as the main button. It adds no buttons.</li>
+      <li><b>Look without moving the room.</b> Pressing a step opens a private view of it; an orange bar says where the room really is, and the main button becomes "Back to the room".</li>
+      <li><b>Setup helps you pick the room screen.</b> The two drawings of one and two screens, a plain line for each, and "Help me pick": three questions, one recommendation.</li>
+      <li><b>Players, Questions, Rounds, Settings</b> stay in reach on every host screen. Settings say when a change applies: now, from the next round, or not while the room is live.</li>
+      <li><b>"Next round" names the round</b> ("Start round 3"), and Finish can be previewed privately before the session ends.</li>
+      <li><b>Earlier rounds show the whole round</b> on phones, tablets and laptops: the question, your response, all responses by votes, Workie's read, questions for the room and all feedback. The host's Rounds menu shows the same.</li>
+      <li><b>Comments say what they are about</b> ("[Theo commented on Maya's response]"), carry one of three labels (Reviewed with the room, Reviewed by the host, Not reviewed), and can be sent anonymously. Two report settings decide what the report includes.</li>
+    </ol>
+  </div>
+</header>
+
+<section class="part first">
+  <div class="part-h"><span class="pn">00</span><h2>How to read this page</h2></div>
+  <p class="intro">Each moment shows the surfaces side by side. A coloured square in each caption says which surface it is. The <b>orange bar</b> above each row is the one next step for the host at that moment.</p>
+
+  <div class="legend">
+    <div class="lg"><span class="sw" style="--c:var(--s-lap)">Host laptop</span><p>The host's main controls. Under the title bar, the workflow strip: where the round is and what is expected next. At the bottom, a fixed button bar: a status line, a second (quiet) button and one main button.</p></div>
+    <div class="lg"><span class="sw" style="--c:var(--s-rem)">Host phone (Remote)</span><p>An optional remote control on the host's own phone. Same buttons, same rules as the laptop, and the same workflow as a row of dots. It also carries the host-only notes.</p></div>
+    <div class="lg"><span class="sw" style="--c:var(--s-wall)">The wall (Presentation window)</span><p>What the room sees on the projector or TV. Never shows host controls, names in anonymous moments, or anything not yet sent.</p></div>
+    <div class="lg"><span class="sw" style="--c:var(--s-dev)">Participant</span><p>Each person in the room, on their own phone, laptop or tablet. Drawn phone-sized; the same page fits a laptop or tablet.</p></div>
+    <div class="lg"><span class="sw" style="--c:var(--s-rep)">Report</span><p>The session report the host opens, saves and shares after the session.</p></div>
+  </div>
+
+  <div class="modes">
+    <div class="mode">
+      <svg viewBox="0 0 150 80" role="img" aria-label="Two screens"><use href="#d-two"/></svg>
+      <div><h4>Two screens (the main reference here)</h4><p>The laptop is the host's private dashboard. The room watches a separate Presentation window on a second screen, opened with "Open Present". Host-only things (Workie's reasons, the icons beside points, late items) stay on the laptop.</p></div>
+    </div>
+    <div class="mode">
+      <svg viewBox="0 0 150 80" role="img" aria-label="One screen"><use href="#d-one"/></svg>
+      <div><h4>One screen (marked <span class="flag" style="color:var(--s-wall);border-color:var(--s-wall)">One screen</span>)</h4><p>The laptop itself is projected, so the room sees whatever the laptop shows. The flow is the same, with less on the laptop: no icons beside points, Workie's reasons folded away, late items shown as a count until opened. The Remote, if open, carries the host-only detail.</p></div>
+    </div>
+  </div>
+  <p class="aside">These two drawings now also appear in setup, where the host chooses the room screen (moment 0 below).</p>
+
+  <h3 style="margin-top:26px">Your proposals, and what this version does with them</h3>
+  <table class="verdicts">
+    <thead><tr><th>Your proposal</th><th>Here</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Room-screen choice and "Open Present" before round 1</td><td><span class="v v-keep">Kept</span></td><td>Setup asks "Where will the room watch?" with the one- and two-screen drawings, a plain line for each, and "Help me pick" (three questions, one recommendation). No separate route-preview tutorial: the workflow strip shows the route.</td></tr>
+      <tr><td>The team's real task visible on the wall in answering and voting</td><td><span class="v v-keep">Kept</span></td><td>The task is the large line; the background story is the line that can be dropped for space.</td></tr>
+      <tr><td>"Preparing follow-up questions…" then "3 asks ready"</td><td><span class="v v-keep">Kept</span></td><td>In the status line, with no jump in layout.</td></tr>
+      <tr><td>"Checking your saved reply…" after a reconnect</td><td><span class="v v-keep">Kept</span></td><td>Shown only while the check is in flight; then the real answer.</td></tr>
+      <tr><td>Ask step with format cards, exact prompt, privacy line, and a skip</td><td><span class="v v-adapt">Merged</span></td><td>Becomes the one "Ask the room" composer. "Comments" folds in "Request feedback". The skip is the second button, "Start round 3".</td></tr>
+      <tr><td>Previous / Next pager inside the read card</td><td><span class="v v-adapt">Adapted</span></td><td>Paging stays in the button bar (clickers, Space key). The stop at the end of the read and the second press on "Next round" do the job you wanted.</td></tr>
+      <tr><td>Six-step route strip (Setup → … → Wrap up)</td><td><span class="v v-keep">Kept</span></td><td>Reversed from version 2 at the owner's request. Redrawn as one slim strip: Setup › Round 2 of 6 (Answer · Vote · What we heard · Ask) › Finish. Done steps ticked, the live step lit, "Your part now" names the main button. Laptop: full strip. Remote: a row of dots. One screen: a slimmer strip. Never on the wall or the room's devices.</td></tr>
+      <tr><td>Owner's update: the workflow is navigation; the room keeps its place (LIVE marker, "Return to live room")</td><td><span class="v v-keep">Kept</span></td><td>Steps can be pressed to look, never to act. Looking shows the step privately with an orange "Viewing …" bar, and the main button becomes "Back to the room". On one screen, look from the Remote instead (the laptop is the wall).</td></tr>
+      <tr><td>Owner's update: Players, Questions, Rounds and Settings always visible</td><td><span class="v v-keep">Kept</span></td><td>Drawn as one row in the laptop's title bar, so the read keeps its width. A left sidebar works as well on wide laptops.</td></tr>
+      <tr><td>Owner's update: settings that state their scope ("applies now", "future picks", "locked while live")</td><td><span class="v v-keep">Kept</span></td><td>Every setting says when it takes effect. The current question, its answers and its ballots are never reopened by a settings change.</td></tr>
+      <tr><td>Owner's update: "Start round 3" instead of "Next round"</td><td><span class="v v-keep">Kept</span></td><td>Still short, and it names the round. Matches "Start round 1" in the lobby.</td></tr>
+      <tr><td>Owner's update: "Show this view on Present / Restore live display"</td><td><span class="v v-keep">Kept</span></td><td>While looking at an earlier step, a quiet "Show this on the wall" puts it up again, labelled; "Back to the live screen" restores it. It never reopens answers or votes.</td></tr>
+      <tr><td>"Select for display &amp; report" on Ideas</td><td><span class="v v-adapt">Adapted</span></td><td>Button stays "Put this on the wall". Proposed: the report lists every idea, marked shown or not shown (open question 1).</td></tr>
+      <tr><td>Wrap-up screen with a report preview</td><td><span class="v v-keep">Kept</span></td><td>Changed from "Later" by the owner's update. Pressing Finish in the strip shows a private preview of the report so far; "Finish the session" is the separate act. The report itself still states what it includes and leaves out.</td></tr>
+      <tr><td>Long labels: "Close answers &amp; start voting", "Send Ideas to room"</td><td><span class="v v-drop">Not taken</span></td><td>Short labels, one label per action, the same on laptop and Remote. The status line names the effect.</td></tr>
+      <tr><td>"A preference, not a decision" standing panel</td><td><span class="v v-drop">Not taken</span></td><td>Engage cannot know what a decision is. The host's "Said in the room" note is the honest place for it; results stay as counts.</td></tr>
+      <tr><td>—</td><td><span class="v v-new">New</span></td><td>Late items kept and labelled; "Earlier rounds" for everyone; the report's full record of each question; "Help me pick" for the room screen.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================== PART 1: THE WORKFLOW STRIP (v3) ============================== -->
+<section class="part">
+  <div class="part-h"><span class="pn">01</span><h2>The workflow strip: where I am, and what is expected of me</h2></div>
+  <p class="intro">The owner, on the updated spec: the host should "know where i am and what is expected of me" at every moment. Version 3 puts the round's workflow on the host's screens at all times, in one slim strip. It works with the button bar, not beside it: the strip says where the round is and what the host is expected to do; the status line gives the live counts; the one main button does it.</p>
+
+  <div class="frames">
+    <div class="s8 c-lap"><div class="cap"><b>Host laptop</b> · the strip, under the title bar</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 2 of 6</small><span class="lv">live</span></span><span class="ss opt">Ask <small>3 ready</small></span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Read with the room. <b>Next page</b> turns the page; the questions wait for the end of the read.</div></div>
+        <div class="fb"><h4>Discussion topics</h4><p class="mut">(the read)</p></div>
+        <div class="dock"><div class="st">Reading page 2 of 6 · 3 asks ready<span class="nx">Next on the screen: page 3</span></div><span class="btn">Start round 3</span><span class="btn p">Next page</span></div>
+      </div>
+      <div class="anat">
+        <div><b>Setup and Finish</b>Once per session, outside the loop. Setup is ticked once round 1 starts.</div>
+        <div><b>The round's loop</b>"Round 2 of 6 ↻": Answer · Vote · What we heard · Ask. The same four steps every round.</div>
+        <div><b>Done, live, still to come</b>Done steps are ticked. The live step is filled, with a live dot and its page or count. Ask is dashed: it is optional.</div>
+        <div><b>Your part now</b>One line naming what is expected, in the main button's exact words (orange, like the button).</div>
+        <div><b>Host only</b>Never on the wall, never on a phone, laptop or tablet in the room.</div>
+      </div>
+    </div>
+    <div class="s4">
+      <h4 style="margin-bottom:8px">Pointing at a step explains it</h4>
+      <div class="tipbox"><b>Ask (optional)</b><br>Ask the room a question: Ideas, Choose, Rate or Comments. Workie has 3 ready. You reach it from the button bar at the end of the read, or from the small icons beside its points. Pressing here shows the step; it sends nothing.</div>
+      <p class="anno">Hover on the laptop, a long press on the Remote. The same words as the step's place in the button bar.</p>
+      <div class="tipbox" style="margin-top:10px"><b>Vote (done)</b><br>4 of 4 voted. Press to look at the ballots again. The room stays where it is.</div>
+    </div>
+  </div>
+
+  <div class="rules">
+    <div class="card"><h4>Can a step be pressed?</h4><p>Yes, but only to <b>look</b>. Pressing a step opens a private view of it: an earlier step shows what happened, Setup shows the session's settings, Finish shows a preview of the report, a later step explains what will happen. Nothing is sent, opened or closed. Every act that changes the room stays in the one button bar. This follows the owner's updated spec ("a viewed step is not a command to rewind participants").</p></div>
+    <div class="card"><h4>While looking</h4><p>An orange bar under the strip says "Viewing Setup · the room is still on round 2, What we heard, page 4". The step being looked at has an orange dashed outline; the live step keeps its live dot. The main button becomes <b>"Back to the room"</b>, which returns to the live view on the same page. The wall and every phone, laptop and tablet stay on the live step.</p></div>
+    <div class="card"><h4>How it fits the button bar</h4><p><b>Strip:</b> where the round is, and what is expected of the host (fixed words per step). <b>Status line:</b> the live counts and what the room will see next ("3 of 4 voted · Next on the screen: the results"). <b>Main button:</b> the one act. "Your part now" always ends with the main button's label, so the eye goes from the strip to the button.</p></div>
+  </div>
+
+  <div class="frames" style="margin-top:18px">
+    <div class="s5 c-lap"><div class="cap"><b>Host laptop</b> · two screens, full strip</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss now">Vote<span class="lv">live</span></span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Let the room vote, then <b>Show results</b>. <b>Next response</b> moves the wall through the answers.</div></div>
+        <div class="fb"><div class="lbl">Response 1 of 4</div><div class="box">Retire the paper sign-off sheet, but only after Relay records who approved each job…</div></div>
+        <div class="dock"><div class="st">3 of 4 voted<span class="nx">Next on the screen: The results</span></div><span class="btn">Next response</span><span class="btn p">Show results</span></div></div>
+    </div>
+    <div class="s3 c-rem"><div class="cap"><b>Host phone (Remote)</b> · the same, as dots</div>
+      <div class="dev rem" style="min-height:250px"><div class="dt"><b>Remote · Relay expansion</b><span>☰</span></div>
+        <div class="rs"><span>R2 of 6</span><span class="dots"><i class="d"></i><i class="n"></i><i class=""></i><i class="o"></i></span><b>Vote</b> · then Show results</div>
+        <div class="db"><div class="h" style="font-size:13px">3 of 4 voted</div><div class="tiny mut">One dot per step of the round: done (filled), live (ringed), to come (empty), optional (dashed). Tap the row to see the step names; a long press on a dot explains it. ☰ holds Players, Questions, Rounds, Settings.</div></div>
+        <div class="df"><div class="row" style="flex-wrap:nowrap"><span class="btn grow" style="text-align:center">Next response</span><span class="btn p grow" style="text-align:center">Show results</span></div></div></div>
+    </div>
+    <div class="s4 c-wall"><div class="cap"><b>One screen</b> · the projected laptop, slim strip</div>
+      <div class="fr"><div class="strip slim" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss now">Vote<span class="lv">live</span></span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div></div>
+        <div class="wall" style="border:0;border-radius:0"><div class="wt"><b>Round 2 · Voting</b><span>Response 1 of 4</span></div>
+          <div class="wm"><div class="big" style="font-weight:700">Retire the paper sign-off sheet, but only after Relay records who approved each job…</div><div class="sub">Vote on your phone, laptop or tablet</div></div>
+          <div class="wf"><span>3 of 4 voted</span></div></div>
+        <div class="dock"><div class="st">3 of 4 voted</div><span class="btn">Next response</span><span class="btn p">Show results</span></div></div>
+      <p class="anno">Recommended: keep it, slimmer. It reveals nothing private and helps the room follow too. No "Your part now" line (it would talk to the host in front of the room), and pressing a step only explains it. Looking at other steps happens on the Remote, which is private.</p>
+    </div>
+  </div>
+
+  <div class="brkp"><h3 style="margin-top:26px">Looking without moving the room</h3>
+  <p class="mut" style="margin-top:4px;max-width:90ch">The room is on round 2, What we heard, page 4. The host presses Setup in the strip to fix the session name and check the categories for later rounds.</p>
+  <div class="frames" style="margin-top:12px">
+    <div class="s5 c-lap"><div class="cap"><b>Host laptop</b> · viewing Setup</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss view">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 4 of 6</small><span class="lv">live</span></span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div></div><div class="viewbar"><b>Viewing Setup</b><span>· the room is still on round 2, What we heard, page 4</span><span class="lnk" style="margin-left:auto">Back to the room</span></div>
+        <div class="fb">
+          <div class="h">Setup</div>
+          <div class="box"><div class="row between"><span class="lbl">Session name · applies now</span><span class="btn">Apply</span></div><div class="field" style="margin-top:4px">Relay expansion</div></div>
+          <div class="box"><div class="row between"><span class="lbl">Room screen · applies now</span><span class="lnk">Change</span></div><div class="small" style="margin-top:3px">Two screens · Present is open</div></div>
+          <div class="box"><div class="row between"><span class="lbl">Categories · from the next round</span><span class="btn">Apply to later rounds</span></div><div class="small" style="margin-top:3px">☐ Negotiation. Questions you picked by hand stay, marked as exceptions.</div></div>
+          <div class="privacy">Not while the room is live: round 2's question, its answers and its ballots. Settings never reopen or erase them.</div>
+        </div>
+        <div class="dock"><div class="st">Viewing Setup · the room is on What we heard, page 4<span class="nx">Nothing you do here moves the room</span></div><span class="btn">All settings</span><span class="btn p">Back to the room</span></div></div>
+    </div>
+    <div class="s4 c-wall"><div class="cap"><b>The wall</b> · unchanged</div>
+      <div class="wall"><div class="wt"><b>Round 2 · What we heard</b><span>Discussion topics</span></div>
+        <div class="wm"><div class="big" style="font-size:13px">Which gate would justify adding technicians?</div></div>
+        <div class="wf"><span>Page 4 of 6</span></div></div>
+      <p class="anno">Looking is private. The wall changes only when the host presses a button in the bar, or "Show this on the wall".</p>
+    </div>
+    <div class="s3 c-dev"><div class="cap"><b>Participant</b> · unchanged</div>
+      <div class="dev" style="min-height:220px"><div class="dt"><b>Round 2</b><span class="lnk">Earlier rounds</span></div><div class="db"><p>What we heard is on the main screen.</p><span class="btn" style="align-self:flex-start">Add a comment</span></div></div>
+    </div>
+  </div>
+  <div class="frames" style="margin-top:14px">
+    <div class="s6 c-lap"><div class="cap"><b>Host laptop</b> · viewing an earlier step (Answer)</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss view">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 4 of 6</small><span class="lv">live</span></span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div></div><div class="viewbar"><b>Viewing Answer</b><span>· the room is still on What we heard, page 4</span><span class="lnk" style="margin-left:auto">Back to the room</span></div>
+        <div class="fb"><div class="task"><div class="ey">The task</div>Which long-standing process or structure must be dismantled, who benefits, and how do we bring them with us?</div>
+          <div class="roster"><span>Maya <i class="ok">✓ answered</i></span><span>Theo <i class="ok">✓ answered</i></span><span>Lena <i class="ok">✓ answered</i></span><span>Omar <i class="ok">✓ late, kept</i></span></div>
+          <div class="row"><span class="btn">Show this on the wall</span><span class="tiny mut">Puts the task back up, labelled "Shown again". It does not reopen answers.</span></div></div>
+        <div class="dock"><div class="st">Viewing Answer · the room is on What we heard, page 4<span class="nx">Nothing you do here moves the room</span></div><span class="btn">Show this on the wall</span><span class="btn p">Back to the room</span></div></div>
+      <p class="anno">After "Show this on the wall", the status line reads "The wall is showing round 2's task · <u>Back to the live screen</u>". The phones do not move.</p>
+    </div>
+    <div class="s6 c-lap"><div class="cap"><b>Host laptop</b> · viewing Finish (a preview)</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 4 of 6</small><span class="lv">live</span></span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss view">Finish</span></div></div><div class="viewbar"><b>Viewing Finish</b><span>· a preview: the session has not ended</span><span class="lnk" style="margin-left:auto">Back to the room</span></div>
+        <div class="fb"><div class="h">The report so far</div>
+          <div class="roster" style="grid-template-columns:minmax(0,1fr)"><span>Answers and ballots so far <b>8 / 8</b></span><span>Workie's reads so far <b>2</b></span><span>Questions for the room <b>2 · 4 ideas, 1 shown</b></span></div>
+          <div class="tiny mut">Includes every answer, ballot and question for the room, every idea (anonymous) and comments with their authors. Leaves out who chose what in Choose and Rate.</div></div>
+        <div class="dock"><div class="st">Viewing Finish · the room is on What we heard, page 4<span class="nx">Nothing you do here moves the room</span></div><span class="btn">Finish the session</span><span class="btn p">Back to the room</span></div></div>
+      <p class="anno">Looking at Finish never ends the session. "Finish the session" asks once ("End the session for everyone?") and then opens the report.</p>
+    </div>
+  </div>
+  <p class="conflict"><b>Where this departs from earlier advice.</b> Version 2 dropped the strip as clutter; the owner reversed that, and version 3 follows the owner. The brief for this version suggested steps should not navigate at all; the owner's updated spec makes them navigation. Version 3 follows the spec, limited to looking: every act stays in the one button bar, and "Back to the room" is always the main button while looking.</p>
+  </div>
+</section>
+
+<!-- ============================== PART 2: THE ROUND ============================== -->
+<section class="part">
+  <div class="part-h"><span class="pn">02</span><h2>The round, moment by moment</h2></div>
+  <p class="intro">Round 2 of 6 of the review session. Four people are in the room: Maya, Theo, Lena and Omar. Two screens, with the Remote open; one-screen differences are noted under each moment. The workflow strip sits under every laptop title bar.</p>
+
+  <!-- 0. Setup: room screen -->
+  <div class="moment">
+    <div class="mh"><span class="mn">0</span><h3>Setup: where will the room watch?</h3><p>The first thing the host sees on launching a session. The two drawings that explain the display types become the choice itself, with a plain line each and a "Help me pick" link.</p></div>
+    <div class="next"><b>The one next step</b><span>Pick a room screen (or press "Help me pick"). With two screens, <span class="k">Open Present</span> and drag it onto the projector.</span></div>
+    <div class="frames">
+      <div class="s6 c-lap"><div class="cap"><b>Host laptop</b> · the choice</div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss now">Setup<span class="lv">live</span></span><span class="sep">›</span><span class="loop"><span class="lr">Round 1 of 6 ↻</span><span class="ss">Answer</span><span class="ss">Vote</span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Choose where the room watches, then <b>Start round 1</b> when people have joined.</div></div>
+          <div class="fb">
+            <div class="h">Where will the room watch?</div>
+            <div class="choose2">
+              <div class="opt2 on"><svg viewBox="0 0 150 80" role="img" aria-label="Two screens"><use href="#d-two"/></svg><b>Two screens</b>The room watches a second window on the projector or TV. This laptop stays yours: Workie's notes, the icons beside points and late items stay private.<span class="btn p" style="align-self:flex-start;margin-top:3px">Open Present</span></div>
+              <div class="opt2"><svg viewBox="0 0 150 80" role="img" aria-label="One screen"><use href="#d-one"/></svg><b>One screen</b>The projector shows this laptop. Quick to set up, but the room sees everything on it. Your phone's Remote can hold the private notes.</div>
+            </div>
+            <div class="row"><span class="lnk">Help me pick</span><span class="tiny mut">This browser remembers your choice. Change it any time in Setup or Settings.</span></div>
+          </div>
+          <div class="dock"><div class="st">Two screens · Present not open yet<span class="nx">Next: open Present and move it onto the projector</span></div><span class="btn">Back to menu</span><span class="btn p">Start round 1</span></div>
+        </div>
+      </div>
+      <div class="s6 c-lap"><div class="cap"><b>Host laptop</b> · "Help me pick", answered</div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss now">Setup<span class="lv">live</span></span><span class="sep">›</span><span class="loop"><span class="lr">Round 1 of 6 ↻</span><span class="ss">Answer</span><span class="ss">Vote</span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Answer three questions; Engage recommends one. Then <b>Start round 1</b>.</div></div>
+          <div class="fb">
+            <div class="row between"><div class="h">Help me pick</div><span class="lnk">Back to the two choices</span></div>
+            <div class="qa"><b>1. Is this laptop connected to the projector or TV?</b><div class="ans"><span class="pick on">Yes, by cable or wirelessly</span><span class="pick">Not yet</span></div></div>
+            <div class="qa"><b>2. Does the projector show its own picture, or a copy of your laptop's screen?</b><div class="ans"><span class="pick on">Its own (extended)</span><span class="pick">A copy (mirrored)</span><span class="pick">Not sure</span></div></div>
+            <div class="qa"><b>3. Should Workie's notes and suggestions stay private to you?</b><div class="ans"><span class="pick on">Yes</span><span class="pick">It doesn't matter</span></div></div>
+            <div class="rec"><b>We recommend two screens.</b> Press Open Present, drag the new window onto the projector and make it full screen. When the room can see the join code, you are ready.<div class="row" style="margin-top:6px"><span class="btn p">Use two screens</span></div></div>
+          </div>
+          <div class="dock"><div class="st">Help me pick · 3 of 3 answered<span class="nx">Nothing changes until you choose</span></div><span class="btn">Back to menu</span><span class="btn p">Start round 1</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frames" style="margin-top:14px">
+      <div class="s5">
+        <h4 style="margin-bottom:8px">How "Help me pick" decides</h4>
+        <table class="tbl">
+          <tr><th>Answers</th><th>Recommendation</th></tr>
+          <tr><td>Connected, its own picture</td><td><b>Two screens.</b> Open Present and drag it across.</td></tr>
+          <tr><td>Connected, a copy</td><td><b>One screen.</b> If notes should stay private, open the Remote on your phone.</td></tr>
+          <tr><td>Connected, not sure</td><td><b>Try two screens.</b> Press Open Present. If the window will not move onto the projector, choose one screen.</td></tr>
+          <tr><td>Not connected yet</td><td><b>One screen for now.</b> Switch in Setup once the projector is plugged in.</td></tr>
+        </table>
+        <p class="anno">Question 3 changes only the wording: when privacy does not matter, one screen is presented as the simpler choice.</p>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b> · two screens, the new Present window</div>
+        <div class="wall"><div class="wt"><b>Relay expansion</b><span>Join at engage · code 7924</span></div>
+          <div class="wm" style="flex-direction:row;align-items:center;gap:14px"><div class="qr" aria-hidden="true"></div><div><div class="h">Join with code 7924</div><div class="sub">On your phone, laptop or tablet</div></div></div>
+          <div class="wf"><span>Drag this window onto the projector · F for full screen</span><span>0 people here</span></div></div>
+        <p class="anno">The hint in the foot disappears once the window is full screen.</p>
+      </div>
+      <div class="s3 c-wall"><div class="cap"><b>The wall</b> · one screen, the projected laptop</div>
+        <div class="fr"><div class="strip slim" aria-label="Where you are in the session"><div class="srow"><span class="ss now">Setup<span class="lv">live</span></span><span class="sep">›</span><span class="loop"><span class="lr">Round 1 of 6 ↻</span><span class="ss">Answer</span><span class="ss">Vote</span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div></div>
+          <div class="wall" style="border:0;border-radius:0;aspect-ratio:4/3"><div class="wm" style="align-items:center;text-align:center"><div class="qr" aria-hidden="true"></div><div class="h" style="font-size:14px">Join with code 7924</div><div class="sub">On your phone, laptop or tablet</div></div></div></div>
+        <p class="anno">The laptop shows the join code large; the slim strip stays at the top.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 0b. Lobby -->
+  <div class="moment">
+    <div class="mh"><span class="mn">0b</span><h3>Lobby: the room joins</h3><p>The room screen is chosen. People join; the host starts when the room is ready.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">Start round 1</span> when people have joined.</span></div>
+    <div class="frames">
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b></div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss now">Setup<span class="lv">live</span></span><span class="sep">›</span><span class="loop"><span class="lr">Round 1 of 6 ↻</span><span class="ss">Answer</span><span class="ss">Vote</span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Wait for people to join, then <b>Start round 1</b>.</div></div>
+          <div class="fb">
+            <div class="h">Relay expansion</div>
+            <div class="mut">Historic World Leaders · 6 rounds</div>
+            <div class="box">
+              <div class="row between"><span class="lbl">Room screen</span><span class="lnk">Change</span></div>
+              <div class="small" style="margin-top:3px">Two screens · Present is open on the projector</div>
+            </div>
+            <div class="roster"><span>Maya <i class="ok">here</i></span><span>Theo <i class="ok">here</i></span><span>Lena <i class="ok">here</i></span><span>Omar <i class="ok">here</i></span></div>
+          </div>
+          <div class="dock"><div class="st">4 players ready<span class="nx">Next on the screen: Round 1</span></div><span class="btn">Back to menu</span><span class="btn p">Start round 1</span></div>
+        </div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>Relay expansion</b><span>Join at engage · code 7924</span></div>
+          <div class="wm" style="flex-direction:row;align-items:center;gap:14px"><div class="qr" aria-hidden="true"></div><div><div class="h">Join with code 7924</div><div class="sub">On your phone, laptop or tablet</div></div></div>
+          <div class="wf"><span>4 people here</span><span>Waiting for the host</span></div></div>
+      </div>
+      <div class="s3 c-dev"><div class="cap"><b>Participant</b> · Maya</div>
+        <div class="dev"><div class="dt"><b>Relay expansion</b><span>Maya</span></div>
+          <div class="db"><div class="h">You're in.</div><p>The host will start the first round shortly.</p></div></div>
+      </div>
+    </div>
+    <p class="aside one"><b>One screen:</b> there is no "Open Present", and the laptop shows the join code and QR large, because it is the wall. The slim strip stays at the top.</p>
+  </div>
+
+  <!-- 1. Answering -->
+  <div class="moment">
+    <div class="mh"><span class="mn">1</span><h3>Answering</h3><p>Everyone sees the team's real task. The roster ticks people off; a phone's receipt waits for the server's yes.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">Start voting</span> when the room has answered. With someone still writing, it needs a second press.</span></div>
+    <div class="frames">
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b></div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss now">Answer<span class="lv">live</span></span><span class="ss">Vote</span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Let the room answer, then <b>Start voting</b>.</div></div>
+          <div class="fb">
+            <div class="h">The Meiji Restoration</div>
+            <div class="task"><div class="ey">The task</div>Which long-standing process or structure must be dismantled, who benefits, and how do we bring them with us?</div>
+            <div class="roster"><span>Maya <i class="ok">✓ answered</i></span><span>Theo <i class="ok">✓ answered</i></span><span>Lena <i class="ok">✓ answered</i></span><span>Omar <i class="mut">writing…</i></span></div>
+          </div>
+          <div class="dock"><div class="st">3 of 4 answered<span class="nx">Next on the screen: The answers, for voting</span></div><span class="btn">Skip this round</span><span class="btn p">Start voting</span></div>
+          <div class="dock" style="background:var(--bg)"><div class="st armmsg">After one press: "1 still answering. Press again to start voting."</div><span class="btn p">Start voting</span></div>
+        </div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>Round 2 · Answering</b><span>The Meiji Restoration</span></div>
+          <div class="wm"><div class="big">Which long-standing process or structure must be dismantled, who benefits, and how do we bring them with us?</div><div class="sub">In 1871 the new government abolished the domains its own samurai depended on… <i>(the story; dropped first when space is short)</i></div></div>
+          <div class="wf"><span>3 of 4 answered on their phone, laptop or tablet</span><span>Code 7924</span></div></div>
+      </div>
+      <div class="s3 c-dev"><div class="cap"><b>Participant</b> · Lena</div>
+        <div class="dev"><div class="dt"><b>Round 2</b><span><span class="lnk">Earlier rounds</span></span></div>
+          <div class="db"><div class="h">The Meiji Restoration</div><div class="task">Which long-standing process or structure must be dismantled, who benefits, and how do we bring them with us?</div><div class="ta f">The paper sign-off sheet. Supervisors lose a control they trust, so…</div><div class="receipt">Saved. You can change it until voting starts.</div><div class="tiny mut">Shown only after the server confirms it has the answer.</div></div></div>
+      </div>
+    </div>
+    <p class="aside one"><b>One screen:</b> the laptop shows the wall's layout (task large) with the roster as ticks only, and the same button bar.</p>
+  </div>
+
+  <!-- 2. Voting -->
+  <div class="moment">
+    <div class="mh"><span class="mn">2</span><h3>Voting, and a late answer arrives</h3><p>Ballots show the full text of each response. Omar's answer reaches the server after voting started: it is kept, not thrown away.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">Show results</span> once the room has voted. <span class="k">Next response</span> moves the wall through the answers.</span></div>
+    <div class="frames">
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b></div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss now">Vote<span class="lv">live</span></span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Let the room vote, then <b>Show results</b>. <b>Next response</b> moves the wall through the answers.</div></div>
+          <div class="fb">
+            <div class="lbl">Response 1 of 4</div>
+            <div class="box">Retire the paper sign-off sheet, but only after Relay records who approved each job. Supervisors keep the control; they lose the paperwork.</div>
+            <div class="roster"><span>Maya <i class="ok">✓ voted</i></span><span>Theo <i class="ok">✓ voted</i></span><span>Lena <i class="ok">✓ voted</i></span><span>Omar <i class="mut">voting…</i></span></div>
+          </div>
+          <div class="dock"><div class="st">3 of 4 voted · Showing response 1 of 4 · <a>1 late answer kept</a><span class="nx">Next on the screen: The results</span></div><span class="btn">Next response</span><span class="btn p">Show results</span></div>
+        </div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>Round 2 · Voting</b><span>Response 1 of 4</span></div>
+          <div class="wm"><div class="big" style="font-weight:700">Retire the paper sign-off sheet, but only after Relay records who approved each job. Supervisors keep the control; they lose the paperwork.</div><div class="sub">Vote on your phone, laptop or tablet</div></div>
+          <div class="wf"><span>Task: which process must be dismantled, who benefits, how do we bring them with us?</span></div></div>
+        <p class="anno">Nothing about the late answer appears on the wall.</p>
+      </div>
+      <div class="s3 c-dev"><div class="cap"><b>Participant</b> · Omar, late</div>
+        <div class="dev"><div class="dt"><b>Round 2</b><span class="lnk">Earlier rounds</span></div>
+          <div class="db"><div class="tiny mut">Task: which process must be dismantled…</div><div class="ta f">The Friday phone round-up. Nobody owns it, so…</div><div class="warnbox">Voting has started. Your answer is kept with this round, but it is not in the vote.</div><div class="h" style="font-size:13px">Now vote</div><div class="pick on">1 · Retire the paper sign-off sheet, but only after Relay records who approved each job. Supervisors keep the control; they lose the paperwork.</div><div class="tiny mut">Ballot rows show the full text; long rows open when tapped.</div></div></div>
+      </div>
+    </div>
+    <p class="aside one"><b>One screen:</b> "1 late answer kept" stays a plain count in the status line; the late item itself opens only when the host asks for it (see direction 4).</p>
+  </div>
+
+  <!-- 3. Results -->
+  <div class="moment">
+    <div class="mh"><span class="mn">3</span><h3>Results</h3><p>The tally, with names only if this round shows names. A reloaded phone checks the stored answer before saying anything.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">What we heard</span> opens Workie's read of the round.</span></div>
+    <div class="frames">
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b></div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>results</small><span class="lv">live</span></span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>The results are up. Talk them through, then open Workie's read with <b>What we heard</b>.</div></div>
+          <div class="fb"><div class="bars"><div><span>1 · Paper sign-off, after Relay records approval · Maya</span><b>7</b><i style="width:88%"></i></div><div><span>2 · Duplicate job log · Lena</span><b>5</b><i style="width:62%"></i></div><div><span>3 · Weekly depot meeting · Theo</span><b>3</b><i style="width:38%"></i></div><div><span>4 · Offline recovery by phone · Omar</span><b>1</b><i style="width:12%"></i></div></div></div>
+          <div class="dock"><div class="st">Results are on the screen · 1 late answer kept<span class="nx">Next on the screen: What we heard</span></div><span class="btn">Show response 1 of 4</span><span class="btn p">What we heard</span></div>
+        </div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>Round 2 · Results</b><span>The Meiji Restoration</span></div>
+          <div class="wm"><div class="bars"><div><span>Paper sign-off, after Relay records approval · Maya</span><b>7</b><i style="width:88%"></i></div><div><span>Duplicate job log · Lena</span><b>5</b><i style="width:62%"></i></div><div><span>Weekly depot meeting · Theo</span><b>3</b><i style="width:38%"></i></div><div><span>Offline recovery by phone · Omar</span><b>1</b><i style="width:12%"></i></div></div></div>
+          <div class="wf"><span>Names shown: this round shows names</span></div></div>
+      </div>
+      <div class="s3 c-dev"><div class="cap"><b>Participant</b> · Lena, after a reload</div>
+        <div class="dev"><div class="dt"><b>Round 2</b><span class="lnk">Earlier rounds</span></div>
+          <div class="db"><div class="mut tiny">For a moment: "Checking your answer…"</div><div class="h">You wrote response 2</div><div class="box">The duplicate job log. Office staff keep it because…</div><div class="tiny mut">Never "You didn't send a response" while the answer is stored.</div></div>
+          <div class="df"><span class="btn">Add a comment</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. What we heard, middle pages -->
+  <div class="moment">
+    <div class="mh"><span class="mn">4</span><h3>What we heard, pages 1 to 5</h3><p>Workie's read, page by page. Beside a point Workie turned into a question, a small chip names its kind. Workie's questions arrive while the host reads.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">Next page</span>. "Start round 3" is still there, but asks for a second press while questions are unsent.</span></div>
+    <div class="frames">
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b></div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 2 of 6</small><span class="lv">live</span></span><span class="ss opt">Ask <small>3 ready</small></span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Read with the room. <b>Next page</b> turns the page; the questions wait for the end of the read.</div></div>
+          <div class="fb"><h4>Discussion topics</h4>
+            <ol class="pts">
+              <li>Theo keeps the paper sign-off "until Relay proves it can carry the same protection". Which workaround would we miss first?</li>
+              <li>Several answers retire a workaround only once Relay covers what it protected. <span class="chip"><svg><use href="#i-rate"/></svg>Rate</span></li>
+              <li>Maya Chen proposes a staged commitment. Can we agree which gate would justify adding technicians? <span class="chip"><svg><use href="#i-ideas"/></svg>Ideas</span></li>
+            </ol></div>
+          <div class="dock"><div class="st">Reading page 2 of 6 · 3 asks ready<span class="nx">Earlier: "· Preparing questions"</span></div><span class="btn">Start round 3</span><span class="btn p">Next page</span></div>
+          <div class="dock" style="background:var(--bg)"><div class="st armmsg">After one press of Start round 3: "3 questions not asked yet. Press again to start round 3."</div><span class="btn armed">Start round 3</span></div>
+        </div>
+      </div>
+      <div class="s3 c-rem"><div class="cap"><b>Host phone (Remote)</b></div>
+        <div class="dev rem"><div class="dt"><b>Remote · Relay expansion</b><span>☰</span></div><div class="rs"><span>R2 of 6</span><span class="dots"><i class="d"></i><i class="d"></i><i class="n"></i><i class="o"></i></span><b>What we heard</b> · p. 2 of 6</div>
+          <div class="db"><div class="lbl">Topics</div><div class="pick">Which workaround would we miss first?</div><div class="pick">Retire a workaround only once Relay covers it <span class="chip"><svg><use href="#i-rate"/></svg>Rate</span></div><div class="pick">Which gate would justify adding technicians? <span class="chip"><svg><use href="#i-ideas"/></svg>Ideas</span></div></div>
+          <div class="df"><span class="tiny mut">Reading page 2 of 6 · 3 asks ready</span><div class="row" style="flex-wrap:nowrap"><span class="btn grow" style="text-align:center">Start round 3</span><span class="btn p grow" style="text-align:center">Next page</span></div></div></div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>Round 2 · What we heard</b><span>Discussion topics</span></div>
+          <div class="wm"><div class="big" style="font-size:13px">Which workaround would we miss first?</div><div class="big" style="font-size:13px">Retire a workaround only once Relay covers what it protected?</div><div class="big" style="font-size:13px">Which gate would justify adding technicians?</div></div>
+          <div class="wf"><span>Page 2 of 6</span><span>No chips: the room sees only the read</span></div></div>
+        <div class="dev" style="margin-top:12px;min-height:0"><div class="dt"><b>Participant</b><span class="lnk">Earlier rounds</span></div><div class="db"><p>What we heard is on the main screen.</p><span class="btn" style="align-self:flex-start">Add a comment</span></div></div>
+      </div>
+    </div>
+    <p class="aside one"><b>One screen:</b> no chips beside points (the laptop is the wall). The status line still says "3 asks ready", and the Remote, if open, shows the chips.</p>
+  </div>
+
+  <!-- 5. Last page -->
+  <div class="moment">
+    <div class="mh"><span class="mn">5</span><h3>What we heard, last page: the stop</h3><p>The read ends on a real stop. When Workie has questions ready, the main button becomes "Ask the room". It opens the composer; it sends nothing.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">Ask the room</span>, or <span class="k">Start round 3</span> in one press: the host has seen the stop.</span></div>
+    <div class="frames">
+      <div class="s6 c-lap"><div class="cap"><b>Host laptop</b> · questions ready</div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 6 of 6</small><span class="lv">live</span></span><span class="ss opt">Ask <small>3 ready</small></span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>The read is done. <b>Ask the room</b>, or start round 3.</div></div>
+          <div class="fb"><h4>Suggested next steps</h4><ol class="pts"><li>Retire one workaround first, and pick it together. <span class="chip"><svg><use href="#i-choose"/></svg>Choose</span></li><li>Name the measure that would trigger the next stage.</li></ol></div>
+          <div class="dock"><div class="st">Last page · 3 asks ready<span class="nx">Next on the screen: a question for the room, or round 3</span></div><span class="btn">Start round 3</span><span class="btn p">Ask the room</span></div>
+        </div>
+      </div>
+      <div class="s6 c-lap"><div class="cap"><b>Host laptop</b> · no questions, or all sent</div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 6 of 6</small><span class="lv">live</span></span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>The read is done. <b>Start round 3</b>, or ask the room something.</div></div>
+          <div class="fb"><h4>Suggested next steps</h4><ol class="pts"><li>Retire one workaround first, and pick it together.</li><li>Name the measure that would trigger the next stage.</li></ol></div>
+          <div class="dock"><div class="st">Discussion prompt on screen<span class="nx">Next on the screen: Round 3</span></div><span class="btn">Ask the room</span><span class="btn p">Start round 3</span></div>
+        </div>
+        <p class="anno">"Ask the room" replaces "Request feedback" as the second button. It opens the same composer, blank.</p>
+      </div>
+    </div>
+    <p class="aside">A clicker or the Space key on the last page opens the composer, never sends. Closing the composer without sending puts the bar back to "Ask the room / Start round 3". In the strip, Ask shows as "viewing" while the composer is open, because nothing has been sent. The wall stays on the last page throughout.</p>
+  </div>
+
+  <!-- 6. Composer -->
+  <div class="moment">
+    <div class="mh"><span class="mn">6</span><h3>The composer</h3><p>A dialog on the laptop, a full-height sheet on the Remote. Opened from the chip beside point 3, so Workie's Ideas question is already selected. Direction 1 below shows the blank way in and the edited state.</p></div>
+    <div class="next"><b>The one next step</b><span>Read it, edit lightly if needed, then <span class="k p">Send to the room</span>.</span></div>
+    <div class="frames">
+      <div class="s7 c-lap"><div class="cap"><b>Host laptop</b> · dialog over the read</div>
+        <div class="scrim"><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss now">What we heard <small>page 6 of 6</small><span class="lv">live</span></span><span class="ss view">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Drafting a question. The room still sees the read until you press <b>Send to the room</b>.</div></div><div style="height:8px"></div><div class="dlg">
+          <div class="dh"><span class="h">Ask the room</span><span class="x">✕</span></div>
+          <div class="dbd">
+            <div class="lbl">Workie suggests</div>
+            <div class="sugg">
+              <div class="sg on"><div class="kh"><svg><use href="#i-ideas"/></svg>Ideas</div>What is one measurable gate Relay should pass before more technicians are added?<div class="from">from Discussion topics, point 3</div></div>
+              <div class="sg"><div class="kh"><svg><use href="#i-choose"/></svg>Choose</div>Which should be retired first?<div class="from">from Suggested next steps, point 1</div></div>
+              <div class="sg"><div class="kh"><svg><use href="#i-rate"/></svg>Rate</div>Retire a workaround only when Relay reliably provides its protection.<div class="from">from Discussion topics, point 2</div></div>
+              <div class="sg blank">Start from blank</div>
+            </div>
+            <div class="lbl">Kind</div>
+            <div class="kinds">
+              <div class="kd on"><b><svg><use href="#i-ideas"/></svg>Ideas</b>Short written answers. Anonymous.</div>
+              <div class="kd"><b><svg><use href="#i-choose"/></svg>Choose</b>Pick one of 2 to 4 options. Anonymous.</div>
+              <div class="kd"><b><svg><use href="#i-rate"/></svg>Rate</b>Agree or disagree with a statement, 1 to 5. Anonymous.</div>
+              <div class="kd"><b><svg><use href="#i-comments"/></svg>Comments</b>Comment on what we heard, the results or a response. Names are shown.</div>
+            </div>
+            <div class="lbl">Question</div>
+            <div class="field">What is one measurable gate Relay should pass before more technicians are added?</div>
+            <div class="minip">
+              <div><div class="why"><b>For you:</b> turns Maya's staged commitment into something the room can test. From answers 1, 2 and 3.</div>
+                <div class="privacy" style="margin-top:7px">Answers are anonymous. Only the ideas you put on the wall are shown to the room.</div></div>
+              <div><div class="lbl" style="margin-bottom:3px">What the room sees</div><div class="miniphone"><div class="h">What is one measurable gate Relay should pass…?</div><div class="ta" style="min-height:22px;margin-top:4px;font-size:9px">Your idea…</div></div></div>
+            </div>
+          </div>
+          <div class="dft"><span class="btn q">Cancel</span><span class="btn p">Send to the room</span></div>
+        </div></div>
+      </div>
+      <div class="s2 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall" style="aspect-ratio:4/3"><div class="wt"><b>What we heard</b></div><div class="wm"><div class="sub">Still the last page of the read.</div></div><div class="wf"><span>Page 6 of 6</span></div></div>
+        <p class="anno">The room sees nothing until Send.</p>
+      </div>
+      <div class="s3 c-rem"><div class="cap"><b>Host phone (Remote)</b> · same content, full-height sheet</div>
+        <div class="dev rem"><div class="dt"><b>Ask the room</b><span>✕</span></div><div class="rs"><span>R2 of 6</span><span class="dots"><i class="d"></i><i class="d"></i><i class="n"></i><i class="v"></i></span><b>Drafting Ask</b> · room on the read</div>
+          <div class="db" style="gap:6px"><div class="lbl">Workie suggests</div><div class="sg on"><div class="kh"><svg><use href="#i-ideas"/></svg>Ideas</div>What is one measurable gate…?<div class="from">Discussion topics, point 3</div></div><div class="sg"><div class="kh"><svg><use href="#i-choose"/></svg>Choose</div>Which should be retired first?</div><div class="tiny mut">+1 more · Start from blank</div><div class="lbl">Question</div><div class="field">What is one measurable gate Relay should pass before more technicians are added?</div><div class="why">For you: turns Maya's staged commitment into something testable.</div></div>
+          <div class="df"><span class="btn p">Send to the room</span></div></div>
+      </div>
+    </div>
+    <p class="aside one"><b>One screen:</b> the composer opens on the projected laptop, so the room sees the dialog itself. Workie's "For you" reason is folded behind "Why Workie suggests this", and the suggestion cards show only the question.</p>
+  </div>
+
+  <!-- 7. Question live -->
+  <div class="moment">
+    <div class="mh"><span class="mn">7</span><h3>Question for the room, live</h3><p>The room answers on their phones, laptops and tablets. Answers are anonymous.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">Show results</span> (a second press while people are still answering), or <span class="k">Cancel the question</span>.</span></div>
+    <div class="frames">
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b></div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss done">What we heard</span><span class="ss now">Ask <small>Ideas</small><span class="lv">live</span></span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>The room is answering. Then <b>Show results</b>.</div></div>
+          <div class="fb"><div class="h">What is one measurable gate Relay should pass before more technicians are added?</div><div class="mut">2 of 4 answered on their phone, laptop or tablet</div></div>
+          <div class="dock"><div class="st">2 of 4 answered<span class="nx">Next on the screen: the ideas you pick</span></div><span class="btn">Cancel the question</span><span class="btn p">Show results</span></div>
+        </div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>Question for the room · Ideas</b><span>Round 2</span></div>
+          <div class="wm"><div class="h">What is one measurable gate Relay should pass before more technicians are added?</div></div>
+          <div class="wf"><span>2 of 4 answered on their phone, laptop or tablet</span></div></div>
+      </div>
+      <div class="s3 c-dev"><div class="cap"><b>Participant</b> · Theo</div>
+        <div class="dev"><div class="dt"><b>Question for the room</b><span class="lnk">Earlier rounds</span></div>
+          <div class="db"><div class="ey">Ideas · anonymous</div><div class="h">What is one measurable gate Relay should pass before more technicians are added?</div><div class="ta f">Two weeks with no missed handovers on the trial depot.</div><div class="receipt">Sent. You can change it until the results are shown.</div><div class="tiny mut">Someone who joins now sees the same card.</div></div>
+          <div class="df"><span class="btn p">Send</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. Question results -->
+  <div class="moment">
+    <div class="mh"><span class="mn">8</span><h3>Question results</h3><p>The host sees every idea and picks which go on the wall. The wall shows counts or picked ideas, never a name. A reply that comes in after the results went up is kept, marked late.</p></div>
+    <div class="next"><b>The one next step</b><span><span class="k p">Start round 3</span>, or <span class="k">Ask another question</span> (reopens the composer with the two questions still unsent).</span></div>
+    <div class="frames">
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b></div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 2 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss done">What we heard</span><span class="ss now">Ask <small>results</small><span class="lv">live</span></span></span><span class="sep">›</span><span class="ss">Finish</span></div><div class="exp"><span class="lbl2">Your part now</span>Pick the ideas to show. Then <b>Start round 3</b>, or ask another question.</div></div>
+          <div class="fb">
+            <div class="box row between"><span>In a limited next-stage trial, two weeks with no missed handovers.</span><span class="btn">Take it off the wall</span></div>
+            <div class="box row between"><span>Every technician can recover an offline job without calling the office.</span><span class="btn">Put this on the wall</span></div>
+            <div class="box row between"><span>An assignment owner named on every job before it starts.</span><span class="btn">Put this on the wall</span></div>
+            <div class="box row between"><span>Same-day fixes stay at today's rate or better.</span><span class="btn">Put this on the wall</span></div>
+            <div class="box row between" style="border-style:dashed"><span><span class="lab late">Late</span> A month of clean audits first.</span><span class="btn">Put this on the wall</span></div>
+            <div class="tiny mut">1 late answer · not in the count</div>
+          </div>
+          <div class="dock"><div class="st">Results are on screen<span class="nx">Next on the screen: Round 3</span></div><span class="btn">Ask another question</span><span class="btn p">Start round 3</span></div>
+        </div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>The room's answer · Ideas</b><span>Round 2</span></div>
+          <div class="wm"><div class="sub">What is one measurable gate Relay should pass before more technicians are added?</div><div class="box" style="font-size:12px">In a limited next-stage trial, two weeks with no missed handovers.</div></div>
+          <div class="wf"><span>4 ideas · 1 shown</span><span>No names</span></div></div>
+        <p class="anno">Choose shows bars and counts; Rate shows the average and the spread.</p>
+      </div>
+      <div class="s3 c-dev"><div class="cap"><b>Participant</b> · Omar, replied late</div>
+        <div class="dev"><div class="dt"><b>Question for the room</b><span class="lnk">Earlier rounds</span></div>
+          <div class="db"><div class="h" style="font-size:13px">What is one measurable gate…?</div><div class="ta f">A month of clean audits first.</div><div class="warnbox">The results are already up. Your answer is kept, but not in the count.</div><div class="lbl">The room's answer</div><div class="box">In a limited next-stage trial, two weeks with no missed handovers.</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. Next round + end -->
+  <div class="moment">
+    <div class="mh"><span class="mn">9</span><h3>Round 3, and the end of the session</h3><p>The same sequence starts again. Someone still writing a comment on an earlier round is told and keeps the draft. At the end, unreviewed items are counted but never block the report.</p></div>
+    <div class="next"><b>The one next step</b><span>Each round: the same steps. At the end: <span class="k p">Open session report</span>.</span></div>
+    <div class="frames">
+      <div class="s3 c-dev"><div class="cap"><b>Participant</b> · Maya, in an earlier round</div>
+        <div class="dev"><div class="dt"><b>Earlier rounds · Round 1</b><span>Maya</span></div>
+          <div class="db"><div class="banner"><span>The room is answering round 3</span><span class="btn p">Go to it</span></div><div class="lbl">Comment on what we heard</div><div class="ta f">The Churchill read says the decision was…</div><div class="tiny mut">Your draft is kept.</div></div></div>
+      </div>
+      <div class="s5 c-lap"><div class="cap"><b>Host laptop</b> · session ended</div>
+        <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 6 of 6 ↻</span><span class="ss done">Answer</span><span class="ss done">Vote</span><span class="ss done">What we heard</span><span class="ss done">Ask</span></span><span class="sep">›</span><span class="ss now">Finish<span class="lv">live</span></span></div><div class="exp"><span class="lbl2">Your part now</span>The session is over. <b>Open session report</b>.</div></div>
+          <div class="fb"><div class="h">Thank you for thinking together.</div><div class="mut">24 answers · 24 ballots · 5 questions for the room · 9 comments</div>
+            <div class="box"><div class="lbl">The report</div>
+              <div class="tgl"><span>Include items not reviewed <span class="tiny mut">· 2 items</span></span><span class="sw2 y"></span></div>
+              <div class="tgl" style="border-bottom:0"><span>Names on feedback <span class="tiny mut">· comments sent anonymously stay anonymous</span></span><span class="sw2 y"></span></div></div></div>
+          <div class="dock"><div class="st">2 items not reviewed · <a>Review</a><span class="nx">The report can be opened without reviewing them</span></div><span class="btn">Back to menu</span><span class="btn p">Open session report</span></div>
+        </div>
+      </div>
+      <div class="s4 c-wall"><div class="cap"><b>The wall</b></div>
+        <div class="wall"><div class="wt"><b>Relay expansion</b><span>Session complete</span></div>
+          <div class="wm"><div class="h">Thank you for thinking together.</div><div class="sub">6 rounds completed</div></div>
+          <div class="wf"><span>Comments stay open for 24 hours <i>(proposed)</i></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PART 2: DIRECTION 1 ============================== -->
+<section class="part">
+  <div class="part-h"><span class="pn">03</span><h2>Direction 1 · One "Ask the room" composer, two ways in</h2></div>
+  <p class="intro">Workie's suggested question is simply the normal ask, filled in. Both doors open the same screen. The words are editable at once (no separate Edit step), and the host sees what they changed before the room does.</p>
+
+  <div class="flow">
+    <div class="entry"><span class="ey">Way in A · from the host</span>"Ask the room" in the button bar (main button on the last page, second button otherwise, "Ask another question" after results). Opens with Workie's suggestions listed. If exactly one is unsent it is selected; otherwise nothing is selected and the form is blank.</div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="entry" style="border-color:var(--accent)"><span class="ey">The same composer</span>Workie suggests · Kind · the words (editable) · For you · What the room sees · privacy line · <b>Send to the room</b></div>
+    <div class="entry"><span class="ey">Way in B · from Workie</span>The small chip beside a point of the read ("Ideas", "Choose", "Rate"). Opens with that suggestion filled in and selected.</div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="entry mut">Same screen. The only difference is which card starts selected.</div>
+  </div>
+
+  <div class="frames" style="margin-top:16px">
+    <div class="s6 c-lap"><div class="cap"><b>A · Blank, from the button bar</b></div>
+      <div class="dlg">
+        <div class="dh"><span class="h">Ask the room</span><span class="x">✕</span></div>
+        <div class="dbd">
+          <div class="lbl">Workie suggests</div>
+          <div class="sugg">
+            <div class="sg"><span class="sent">Sent</span><div class="kh"><svg><use href="#i-ideas"/></svg>Ideas</div>What is one measurable gate…?<div class="from">from Discussion topics, point 3</div></div>
+            <div class="sg"><div class="kh"><svg><use href="#i-choose"/></svg>Choose</div>Which should be retired first?<div class="from">from Suggested next steps, point 1</div></div>
+            <div class="sg"><div class="kh"><svg><use href="#i-rate"/></svg>Rate</div>Retire a workaround only when Relay reliably provides its protection.<div class="from">from Discussion topics, point 2</div></div>
+            <div class="sg blank on">Start from blank</div>
+          </div>
+          <div class="lbl">Kind</div>
+          <div class="kinds"><div class="kd"><b><svg><use href="#i-ideas"/></svg>Ideas</b></div><div class="kd on"><b><svg><use href="#i-choose"/></svg>Choose</b></div><div class="kd"><b><svg><use href="#i-rate"/></svg>Rate</b></div><div class="kd"><b><svg><use href="#i-comments"/></svg>Comments</b></div></div>
+          <div class="lbl">Question</div><div class="field mut">Ask the room something…</div>
+          <div class="field mut">A · Option</div><div class="field mut">B · Option</div><span class="lnk">Add an option</span>
+          <div class="privacy">Choices are anonymous. The wall and the report show totals, never who chose what.</div>
+        </div>
+        <div class="dft"><span class="btn q">Cancel</span><span class="btn p dis">Send to the room</span></div>
+      </div>
+      <p class="anno">Two suggestions are unsent, so nothing is pre-selected. A card already sent this round says "Sent". If Workie made nothing, the composer opens blank with no "Workie suggests" heading.</p>
+    </div>
+    <div class="s6 c-lap"><div class="cap"><b>B · Filled in by Workie, then lightly edited</b></div>
+      <div class="dlg">
+        <div class="dh"><span class="h">Ask the room</span><span class="x">✕</span></div>
+        <div class="dbd">
+          <div class="lbl">Workie suggests</div>
+          <div class="sugg">
+            <div class="sg"><div class="kh"><svg><use href="#i-ideas"/></svg>Ideas</div>What is one measurable gate…?</div>
+            <div class="sg on"><div class="kh"><svg><use href="#i-choose"/></svg>Choose</div>Which should be retired first?<div class="from">from Suggested next steps, point 1</div></div>
+          </div>
+          <div class="row"><span class="lbl">Question</span><span class="ed">Edited</span><span class="lnk" style="margin-left:auto">Back to Workie's words</span></div>
+          <div class="field edited">Which workaround should we retire first?</div>
+          <div class="field">A · The paper sign-off sheet</div>
+          <div class="field edited">B · The Friday phone round-up, once Relay sends the daily summary</div>
+          <div class="field">C · The duplicate job log</div>
+          <span class="lnk">Add an option</span>
+          <div class="why"><b>For you:</b> the vote split between three workarounds; this finds which one the whole room would retire first. From answers 1, 2 and 3.</div>
+          <div class="minip"><div class="privacy">Choices are anonymous. The wall and the report show totals, never who chose what.</div><div class="miniphone"><div class="h">Which workaround should we retire first?</div><div style="margin-top:3px">A · Paper sign-off<br>B · Friday round-up…<br>C · Duplicate job log</div></div></div>
+        </div>
+        <div class="dft"><span class="btn q">Cancel</span><span class="btn p">Send to the room</span></div>
+      </div>
+      <p class="anno">Workie's option B was cut off mid-sentence in the review. Here the host completes it in place; the "Edited" chip and the report both record it.</p>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top:16px">
+    <div class="s4 c-lap"><div class="cap"><b>Comments kind</b> (replaces "Request feedback")</div>
+      <div class="dlg"><div class="dh"><span class="h">Ask the room</span><span class="x">✕</span></div>
+        <div class="dbd"><div class="kinds"><div class="kd"><b>Ideas</b></div><div class="kd"><b>Choose</b></div><div class="kd"><b>Rate</b></div><div class="kd on"><b><svg><use href="#i-comments"/></svg>Comments</b></div></div>
+          <div class="lbl">What to comment on (optional)</div><div class="field mut">e.g. "Is the read fair to the minority view?"</div>
+          <div class="privacy" style="background:rgba(231,180,90,.1);border-color:rgba(231,180,90,.5)">Names are shown with comments. You choose which comment goes on the wall.</div></div>
+        <div class="dft"><span class="btn q">Cancel</span><span class="btn p">Send to the room</span></div></div>
+    </div>
+    <div class="s4 c-lap"><div class="cap"><b>While a question is live</b></div>
+      <div class="dlg"><div class="dh"><span class="h">Ask the room</span><span class="x">✕</span></div>
+        <div class="dbd"><div class="field">Retire a workaround only when Relay reliably provides its protection.</div><div class="tiny mut">Rate · 1 Disagree to 5 Agree</div></div>
+        <div class="dft"><span class="btn q">Cancel</span><span class="btn p dis">Finish the open question first</span></div></div>
+      <p class="anno">If the laptop and the Remote both press Send, only one question goes live.</p>
+    </div>
+    <div class="s4 c-wall"><div class="cap"><b>One screen</b> · composer on the projected laptop</div>
+      <div class="dlg"><div class="dh"><span class="h">Ask the room</span><span class="x">✕</span></div>
+        <div class="dbd"><div class="sugg"><div class="sg on"><div class="kh">Ideas</div>What is one measurable gate…?</div><div class="sg"><div class="kh">Choose</div>Which should be retired first?</div></div><div class="field">What is one measurable gate Relay should pass before more technicians are added?</div><span class="lnk">Why Workie suggests this</span></div>
+        <div class="dft"><span class="btn q">Cancel</span><span class="btn p">Send to the room</span></div></div>
+      <p class="anno">The room can see this dialog, so the reason is folded away and there are no icons beside points. The Remote still shows both.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PART 3: DIRECTION 2 ============================== -->
+<section class="part">
+  <div class="part-h"><span class="pn">04</span><h2>Direction 2 · The report records each question in full</h2></div>
+  <p class="intro">A question for the room should be understandable months later, by someone who was not there. The report keeps Workie's original words beside what was actually sent, quotes the point of the read it came from (a point number means nothing once the read is redone), and says how many could answer.</p>
+  <div class="frames">
+    <div class="s8 c-rep"><div class="cap"><b>Report</b> · round 2, "Questions for the room"</div>
+      <div class="paper">
+        <h3>Round 2 · The Meiji Restoration</h3>
+        <div class="rt"><b>The task:</b> Which long-standing process or structure must be dismantled, who benefits, and how do we bring them with us?</div>
+        <p class="pm small">Answers 4 · Ballots 4 · Names shown this round</p>
+        <h4>Questions for the room</h4>
+        <div class="q">
+          <div class="kh">Ideas · from Discussion topics, point 3</div>
+          <div class="quote">"Maya Chen proposes a staged commitment … Can we agree which gate … would justify adding technicians?"</div>
+          <div class="sent">What is one measurable gate Relay should pass before more technicians are added?</div>
+          <div class="diff">Sent as Workie wrote it</div>
+          <div class="pm">Workie's reason: turns Maya's staged commitment into something the room can test · Drawn from answers 1, 2 and 3</div>
+          <div class="pm">Open 01:12–01:14 · 4 of 4 in the room answered · Sent from the laptop</div>
+          <div><b>Shown to the room (1):</b> "In a limited next-stage trial, two weeks with no missed handovers."</div>
+          <div><b>Not shown (3):</b><ul><li>"Every technician can recover an offline job without calling the office."</li><li>"An assignment owner named on every job before it starts."</li><li>"Same-day fixes stay at today's rate or better."</li></ul></div>
+          <div><b>Arrived late (1):</b> "A month of clean audits first." <span class="lab nr">Not reviewed</span></div>
+        </div>
+        <div class="q">
+          <div class="kh">Choose · from Suggested next steps, point 1</div>
+          <div class="quote">"Retire one workaround first, and pick it together."</div>
+          <div class="sent">Which workaround should we retire first?</div>
+          <div class="diff">Workie suggested: "Which should be retired first?", option B "The Friday phone round-up, once Relay" · Edited by the host (question, option B)</div>
+          <div class="pm">Open 01:15–01:16 · 4 of 4 in the room answered</div>
+          <div>A · The paper sign-off sheet <b>3</b> · B · The Friday phone round-up, once Relay sends the daily summary <b>0</b> · C · The duplicate job log <b>1</b></div>
+        </div>
+        <div class="q">
+          <div class="kh">Rate · written by the host</div>
+          <div class="sent">"Relay is ready for a second depot."</div>
+          <div class="pm">Open 01:17–01:17 · Cancelled by the host · 2 of 4 had answered</div>
+        </div>
+        <h4>Comments</h4>
+        <div class="cr small"><b>[Theo commented on Maya's response]:</b> "I like this: the supervisors keep the control and lose only the paperwork." <span class="lab sh">Reviewed with the room</span></div>
+        <div class="cr small"><b>[Lena Ortiz commented on What we heard]:</b> "The read leaves out that supervisors asked for the sign-off." <span class="lab late">Added later</span> <span class="lab rd">Reviewed by the host</span></div>
+        <div class="cr small"><b>[Maya commented on Lena's comment]:</b> "They did, in the March meeting." <span class="lab nr">Not reviewed</span></div>
+        <div class="cr small"><b>[Anonymous commented on the question]:</b> "The task assumes something must be dismantled." <span class="lab nr">Not reviewed</span></div>
+        <p class="pm tiny" style="margin-top:10px">Report settings: items not reviewed included (2) · names on feedback. This report includes every answer, ballot and question for the room, every idea (anonymous), and comments with their authors unless sent anonymously. It leaves out who chose what in Choose and Rate.</p>
+      </div>
+    </div>
+    <div class="s4">
+      <h4 style="margin-bottom:8px">What each question records</h4>
+      <table class="tbl">
+        <tr><th>Line</th><th>What it answers</th></tr>
+        <tr><td>Kind · where from</td><td>Which point of the read, by section and number, plus the point's own words quoted.</td></tr>
+        <tr><td>The sent question</td><td>Exactly what the room saw, options included.</td></tr>
+        <tr><td>Workie suggested</td><td>Shown only when it differs. Then "Edited by the host (question, option B)". Otherwise "Sent as Workie wrote it", or "Written by the host".</td></tr>
+        <tr><td>Workie's reason</td><td>Why it was suggested, and which responses it drew on. Names only where the round showed names.</td></tr>
+        <tr><td>Timings</td><td>Opened, closed or cancelled.</td></tr>
+        <tr><td>How many answered</td><td>"4 of 4 in the room answered": the room's size when it was sent.</td></tr>
+        <tr><td>Results</td><td>Counts, average and spread, or the ideas in two groups (proposed: open question 1).</td></tr>
+        <tr><td>Arrived late</td><td>Kept, with its review label.</td></tr>
+      </table>
+      <p class="aside">Workie's words are copied onto the question when it is sent. If the read is redone later, the report still has the original.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PART 5 (v3): DIRECTION 3 ============================== -->
+<section class="part">
+  <div class="part-h"><span class="pn">05</span><h2>Direction 3 · Earlier rounds: the whole round, for everyone</h2></div>
+  <p class="intro">The owner, 14 October: participants should be able to go back to any earlier round and "see all of the data": the question, their own response, all responses in the order the vote ranked them, Workie's read, any questions for the room with their results, and all feedback. They can comment on any of it, and every comment says what it is about. The host's Rounds menu shows the same round, feedback included. A quiet "Earlier rounds" link in the page header opens it; it is never a main button, and the wall shows nothing unless the host puts something up.</p>
+  <div class="frames">
+    <div class="s3 c-dev"><div class="cap"><b>Participant</b> · phone, 1. the list</div>
+      <div class="dev"><div class="dt"><b>Earlier rounds</b><span>✕</span></div>
+        <div class="db"><div class="pick">Round 1 · Churchill Bets Britain on an Unproven Ally<br><span class="tiny mut">4 responses · What we heard · 1 question · 5 comments</span></div><div class="pick">Round 2 · The Meiji Restoration<br><span class="tiny mut">4 responses · What we heard · 2 questions · 1 comment</span></div><div class="tiny mut">Only rounds the room has already seen.</div></div></div>
+    </div>
+    <div class="s3 c-dev"><div class="cap"><b>Participant</b> · phone, 2. the round (scrolls)</div>
+      <div class="dev"><div class="dt"><b>Round 1 · Churchill</b><span class="lnk">Back</span></div>
+        <div class="db" style="gap:6px">
+          <div class="sec" style="border-top:0;padding-top:0"><div class="lbl"><span>The question</span><span class="cl">Comment</span></div><div class="small">Whose support do we need that we cannot yet count on?</div></div>
+          <div class="sec"><div class="lbl"><span>Your response</span></div><div class="resp mine"><span class="rk">2</span><span>The office staff who keep the duplicate log…</span><span></span></div></div>
+          <div class="sec"><div class="lbl"><span>All responses · by votes</span></div>
+            <div class="resp"><span class="rk">1</span><span>Depot supervisors · <b>Maya</b> · 7</span><span class="cl">Comment</span></div>
+            <div class="resp mine"><span class="rk">2</span><span>Office staff · <b>you</b> · 5</span><span class="cl">Comment</span></div>
+            <div class="resp"><span class="rk">3</span><span>The union rep · <b>Theo</b> · 3</span><span class="cl">Comment</span></div>
+            <div class="tiny mut">+1 more · tap a row for the full text</div></div>
+          <div class="sec"><div class="lbl"><span>What we heard</span><span class="cl">Comment</span></div><div class="tiny mut">Workie's read · 5 pages</div></div>
+          <div class="sec"><div class="lbl"><span>Question for the room · Choose</span></div><div class="tiny">Who do we talk to first? · Supervisors 3 · Office 1</div></div>
+          <div class="sec"><div class="lbl"><span>Feedback · 5</span></div><div class="cmt"><span class="on">Theo on Maya's response</span><br>"I like this: the supervisors keep the control…" <span class="cl">Reply</span></div></div>
+        </div></div>
+    </div>
+    <div class="s3 c-dev"><div class="cap"><b>Participant</b> · phone, 3. commenting</div>
+      <div class="dev"><div class="dt"><b>Round 1 · Comment</b><span class="lnk">Back</span></div>
+        <div class="db"><div class="row"><span class="lbl">On</span><span class="target">Maya's response</span><span class="cl">Change</span></div>
+          <div class="tiny mut">"Depot supervisors: they lose a control they trust…"</div>
+          <div class="ta f">I like this: the supervisors keep the control and lose only the paperwork.</div>
+          <div class="chk"><i></i><span><b>Send anonymously</b><br><span class="tiny mut">Your name is hidden from everyone: the room, the wall, the host and the report. Not even the host can see it.</span></span></div>
+          <div class="tiny mut">Otherwise your name is shown with your comment.</div></div>
+        <div class="df"><span class="btn p">Send</span></div></div>
+    </div>
+    <div class="s3 c-dev"><div class="cap"><b>Participant</b> · the room moves on</div>
+      <div class="dev"><div class="dt"><b>Round 1 · Comment</b><span class="lnk">Back</span></div>
+        <div class="db"><div class="banner"><span>The room is answering round 4</span><span class="btn p">Go to it</span></div><div class="ta f">I like this: the supervisors keep…</div><div class="tiny mut">Your draft is kept.</div></div></div>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top:16px">
+    <div class="s8 c-dev"><div class="cap"><b>Participant</b> · tablet or laptop, the same round with room to read</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b> · Earlier rounds</span><span class="lnk">Back to the room</span></div>
+        <div class="fb"><div class="tab2">
+          <div class="nav"><span class="lbl" style="padding-left:0">Rounds</span><span class="on">1 · Churchill</span><span>2 · Meiji</span><span class="lbl" style="padding-left:0;margin-top:6px">In this round</span><span>The question</span><span>Responses</span><span>What we heard</span><span>Questions for the room</span><span>Feedback · 5</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div class="task"><div class="ey">The question</div>Whose support do we need that we cannot yet count on? <span class="cl">Comment</span></div>
+            <div class="lbl">All responses · in the order the vote ranked them</div>
+            <div class="resp"><span class="rk">1</span><span><b>Maya</b> · 7 votes<br>Depot supervisors: they lose a control they trust, so they need to see Relay record every approval first.</span><span class="cl">Comment</span></div>
+            <div class="resp mine"><span class="rk">2</span><span><b>You</b> · 5 votes<br>The office staff who keep the duplicate log, because it is their safety net.</span><span class="cl">Comment</span></div>
+            <div class="resp"><span class="rk">3</span><span><b>Theo</b> · 3 votes<br>The union rep, who has not been asked.</span><span class="cl">Comment</span></div>
+            <div class="resp"><span class="rk">4</span><span><b>Omar</b> · 1 vote<br>Customers who phone the depot.</span><span class="cl">Comment</span></div>
+            <div class="box"><div class="row between"><b>What we heard</b><span class="cl">Comment</span></div><div class="tiny mut">Workie's read, all pages, opens here. Questions for the room and their results follow it.</div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div class="lbl">Feedback · 5</div>
+            <div class="cmt"><span class="on">Theo · on Maya's response</span><br>"I like this: the supervisors keep the control and lose only the paperwork." <span class="cl">Reply</span></div>
+            <div class="cmt"><span class="on">Lena Ortiz · on What we heard · added later</span><br>"The read leaves out that supervisors asked for the sign-off." <span class="cl">Reply</span></div>
+            <div class="cmt reply"><span class="on">Maya · on Lena's comment</span><br>"They did, in the March meeting." <span class="cl">Reply</span></div>
+            <div class="cmt"><span class="on">Anonymous · on the question</span><br>"The task assumes something must be dismantled." <span class="cl">Reply</span></div>
+            <div class="field mut" style="margin-top:4px">Comment on… pick "Comment" beside any part</div>
+          </div>
+        </div></div></div>
+      <p class="anno">Phone: one column, sections in this order, each folded to a line until tapped. Tablet and laptop: the round's parts on the left, the content in the middle, its feedback beside it. Review labels are host-only and never shown here.</p>
+    </div>
+    <div class="s4">
+      <h4 style="margin-bottom:8px">What a comment can be about</h4>
+      <table class="tbl">
+        <tr><th>The commenter picks</th><th>The report says</th></tr>
+        <tr><td>The question (the task)</td><td>[Jake commented on the question]</td></tr>
+        <tr><td>A response</td><td>[Jake commented on Maria's response] · in a round that hides names: [Jake commented on Response 3]</td></tr>
+        <tr><td>Workie's read</td><td>[Jake commented on What we heard]</td></tr>
+        <tr><td>Another comment (a reply)</td><td>[Jake commented on Lena's comment] · or "on an anonymous comment"</td></tr>
+        <tr><td>A question for the room</td><td>[Jake commented on the question for the room "Who do we talk to first?"]</td></tr>
+      </table>
+      <p class="anno">The format is the owner's: [who commented on what]: "the words". "Comment" sits beside each part, so the target is set by where the person pressed; "Change" on the comment box lets them pick again.</p>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top:16px">
+    <div class="s6 c-lap"><div class="cap"><b>Host laptop</b> · Rounds › Round 1, with its feedback</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div>
+        <div class="viewbar"><b>Viewing Rounds › Round 1</b><span>· the room is answering round 3</span><span class="lnk" style="margin-left:auto">Back to the room</span></div>
+        <div class="fb">
+          <div class="tiny mut">The question · all responses by votes · What we heard · questions for the room · feedback: the same round the participants see.</div>
+          <div class="row"><b>Feedback · 5</b><span class="lab nr">2 not reviewed</span></div>
+          <div class="box"><div class="row between"><span><b>Lena Ortiz</b> · on What we heard · 01:31 <span class="lab late">Added later</span></span><span class="lab nr">Not reviewed</span></div><p style="margin-top:4px">"The read leaves out that supervisors asked for the sign-off."</p><div class="row" style="margin-top:5px"><span class="btn">Show on the wall</span><span class="btn q">Mark reviewed</span></div></div>
+          <div class="box"><div class="row between"><span><b>Theo</b> · on Maya's response</span><span class="lab sh">Reviewed with the room</span></div><p style="margin-top:4px">"I like this: the supervisors keep the control and lose only the paperwork."</p></div>
+          <div class="box"><div class="row between"><span><b>Anonymous</b> · on the question</span><span class="lab nr">Not reviewed</span></div><p style="margin-top:4px">"The task assumes something must be dismantled."</p><div class="row" style="margin-top:5px"><span class="btn">Show on the wall</span><span class="btn q">Mark reviewed</span></div></div>
+          <div class="lbl">Said in the room</div><div class="field mut">Note what the room agreed or left open about round 1…</div>
+        </div></div>
+      <p class="anno">"Show on the wall" makes it "Reviewed with the room"; "Mark reviewed" makes it "Reviewed by the host". The Remote shows the same list.</p>
+    </div>
+    <div class="s6 c-wall"><div class="cap"><b>The wall</b> · only after "Show on the wall"</div>
+      <div class="wall"><div class="wt"><b>A comment from the room</b><span>On round 1 · Added later</span></div>
+        <div class="wm"><div class="sub">On Maya's response · Churchill Bets Britain on an Unproven Ally</div><div class="h">"I like this: the supervisors keep the control and lose only the paperwork."</div><div class="sub">Theo</div></div>
+        <div class="wf"><span>Anonymous comments show no name, here or anywhere</span><span>Round 3 continues after</span></div></div>
+      <p class="aside">Rounds that hide names keep them hidden here too ("On Response 3"): the anonymity rule applies per round. In the report each comment sits in its round with its "[who on what]" line and its review label.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:22px">Report settings: what the report includes</h3>
+  <div class="frames" style="margin-top:10px">
+    <div class="s5 c-lap"><div class="cap"><b>Host laptop</b> · Settings › Report</div>
+      <div class="fr"><div class="fh"><span><b>Settings</b> · Report</span><span>applies to the report</span></div>
+        <div class="fb">
+          <div class="tgl"><span><b>Include items not reviewed</b><br><span class="tiny mut">On by default. When off, the report leaves out comments and late items marked "Not reviewed", and says how many it left out.</span></span><span class="sw2 y"></span></div>
+          <div class="tgl"><span><b>Names on feedback</b><br><span class="tiny mut">On by default: comments carry their writer's name. Off: all feedback in this session is anonymous, on the wall and in the report, and each comment box says so.</span></span><span class="sw2 y"></span></div>
+          <div class="tiny mut">Shown again beside "Open session report" at the end of the session.</div>
+        </div></div>
+    </div>
+    <div class="s4 c-rep"><div class="cap"><b>Report</b> · with "Include items not reviewed" off</div>
+      <div class="paper" style="padding:12px 14px;font-size:12px"><h4 style="margin-top:0">Comments</h4>
+        <div class="cr"><b>[Theo commented on Maya's response]:</b> "I like this…" <span class="lab sh">Reviewed with the room</span></div>
+        <div class="cr"><b>[Lena Ortiz commented on What we heard]:</b> "The read leaves out…" <span class="lab rd">Reviewed by the host</span></div>
+        <p class="pm" style="margin-top:6px">2 comments not reviewed are left out of this report, at the host's choice.</p></div>
+    </div>
+    <div class="s3">
+      <h4 style="margin-bottom:8px">Anonymous, two ways</h4>
+      <p class="small mut"><b style="color:var(--text)">The host</b> can make all feedback anonymous for the session. <b style="color:var(--text)">A participant</b> can tick "Send anonymously" on any one comment. Either way the name is hidden everywhere, the host's own screens included, and is not kept with the comment, so it cannot be shown later.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PART 5: DIRECTION 4 ============================== -->
+<section class="part">
+  <div class="part-h"><span class="pn">06</span><h2>Direction 4 · Late answers, ideas and comments are kept and labelled</h2></div>
+  <p class="intro">"Late" means anything that reaches the server after its moment has closed. Today these are dropped or refused, and in one case the phone still shows a receipt. In this version they are kept with their round, never counted, voted on or added to Workie's read, and carry one of three labels everywhere.</p>
+
+  <div class="frames">
+    <div class="s5">
+      <h4 style="margin-bottom:8px">The three labels (the owner's words; for comments and late items)</h4>
+      <table class="tbl">
+        <tr><td><span class="lab nr">Not reviewed</span></td><td>The default. Nobody has reviewed it during the session.</td></tr>
+        <tr><td><span class="lab rd">Reviewed by the host</span></td><td>The host opened it and pressed "Mark reviewed", but did not put it on the wall.</td></tr>
+        <tr><td><span class="lab sh">Reviewed with the room</span></td><td>The host put it on the wall. The only label that means the room saw it.</td></tr>
+      </table>
+      <p class="aside">On-time answers and ideas carry no label: they are already in the round. Every comment carries one. An on-time idea the host never picked is simply "Not shown", a different state.</p>
+    </div>
+    <div class="s7">
+      <h4 style="margin-bottom:8px">What the writer sees</h4>
+      <table class="tbl">
+        <tr><th>Item</th><th>Late when</th><th>Their phone, laptop or tablet says</th></tr>
+        <tr><td>Round answer</td><td>Voting has started</td><td><q>Voting has started. Your answer is kept with this round, but it is not in the vote.</q></td></tr>
+        <tr><td>Answer held while offline</td><td>Reconnects after the round moved on</td><td>The same line, with the round's name.</td></tr>
+        <tr><td>Answer to a question for the room</td><td>The results are up, or the round moved on</td><td><q>The results are already up. Your answer is kept, but not in the count.</q></td></tr>
+        <tr><td>Comment</td><td>The room has moved on</td><td><q>Saved. Your name is shown with your comment.</q> Kept as "Added later".</td></tr>
+      </table>
+      <p class="anno">A receipt appears only after the server says yes. The answer box stays open while someone is typing; Send still works after the moment closes.</p>
+    </div>
+  </div>
+
+  <div class="frames" style="margin-top:16px">
+    <div class="s4 c-lap"><div class="cap"><b>Host laptop</b> · the count in the status line</div>
+      <div class="fr"><div class="dock" style="border-top:0"><div class="st">3 of 4 voted · <a>1 late answer kept</a><span class="nx">The count opens the late list. No new button.</span></div><span class="btn">Next response</span><span class="btn p">Show results</span></div></div>
+      <div class="fr" style="margin-top:10px"><div class="dock" style="border-top:0"><div class="st">2 items not reviewed · <a>Review</a><span class="nx">At the end of the session</span></div><span class="btn p">Open session report</span></div></div>
+      <p class="aside one"><b>One screen:</b> the laptop shows only the count until the host opens the list, because the room is watching.</p>
+    </div>
+    <div class="s5 c-lap"><div class="cap"><b>Host laptop</b> · the late list, in History</div>
+      <div class="fr"><div class="fh"><span><b>Relay expansion</b></span><span class="menu"><b>Players</b> 4 · <b>Questions</b> · <b>Rounds</b> · <b>Settings</b></span></div><div class="strip" aria-label="Where you are in the session"><div class="srow"><span class="ss done">Setup</span><span class="sep">›</span><span class="loop"><span class="lr">Round 3 of 6 ↻</span><span class="ss now">Answer<span class="lv">live</span></span><span class="ss">Vote</span><span class="ss">What we heard</span><span class="ss opt">Ask</span></span><span class="sep">›</span><span class="ss">Finish</span></div></div><div class="viewbar"><b>Viewing Rounds › Arrived late</b><span>· 3 items · the room is answering round 3</span><span class="lnk" style="margin-left:auto">Back to the room</span></div>
+        <div class="fb">
+          <div class="lbl">Round 2 · The Meiji Restoration</div>
+          <div class="box"><div class="row between"><span><b>Answer</b> · during voting · 01:09</span><span class="lab nr">Not reviewed</span></div><p style="margin-top:3px">"The Friday phone round-up. Nobody owns it, so…" <span class="mut">· Omar</span></p><div class="row" style="margin-top:4px"><span class="btn">Show on the wall</span><span class="btn q">Mark reviewed</span></div></div>
+          <div class="box"><div class="row between"><span><b>Idea</b> · after results · 01:14</span><span class="lab sh">Reviewed with the room</span></div><p style="margin-top:3px">"A month of clean audits first."</p></div>
+          <div class="lbl">Round 1 · Churchill</div>
+          <div class="box"><div class="row between"><span><b>Comment</b> · added later · 01:31</span><span class="lab rd">Reviewed by the host</span></div><p style="margin-top:3px">"The read leaves out that supervisors asked for the sign-off." <span class="mut">· Lena Ortiz</span></p><div class="row" style="margin-top:4px"><span class="btn">Show on the wall</span></div></div>
+        </div></div>
+    </div>
+    <div class="s3 c-rep"><div class="cap"><b>Report</b> · per round</div>
+      <div class="paper" style="padding:12px 14px;font-size:12px">
+        <h4 style="margin-top:0">Arrived late</h4>
+        <div>Answer, during voting: "The Friday phone round-up…" · Omar <span class="lab nr">Not reviewed</span></div>
+        <div style="margin-top:5px">Idea, after results: "A month of clean audits first." <span class="lab sh">Reviewed with the room</span></div>
+        <h4>Added later</h4>
+        <div>Comment on round 1 · Lena Ortiz <span class="lab rd">Reviewed by the host</span></div>
+        <p class="pm tiny" style="margin-top:6px">Names follow each round's Names setting. Late items are never in the counts, votes or Workie's read.</p>
+      </div>
+      <div class="wall" style="margin-top:10px;aspect-ratio:16/8"><div class="wt"><b>The wall</b><span>Added later</span></div><div class="wm"><div class="sub">Only when the host presses "Show on the wall": a small "Added later" label, and the round's name if it is not the current one.</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PART 6: OPEN QUESTIONS ============================== -->
+<section class="part">
+  <div class="part-h"><span class="pn">07</span><h2>Open questions for the owner</h2></div>
+  <p class="intro">Each has a recommended answer, and the drawings above assume it. None is decided yet.</p>
+  <div class="qs">
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>1. Ideas in the report: all of them, or only the picked ones?</h4><p>List every idea, anonymous, in two groups: "Shown to the room" and "Not shown". Freeze them on the question when it closes so they outlast the short-lived answer rows. Keep the wall picked-only.</p><p class="mut">This differs from the reviewers' "selected only" reading. Today's product keeps only picked ideas.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>2. On one screen, should questions for the room appear on the projected laptop?</h4><p>Yes. Open the composer on the laptop and fold away Workie's "For you" reason. Also add the lobby's "Room screen" choice, so hosts find two screens without a hidden setting.</p></div>
+    <div class="qq"><span class="pend" style="color:var(--success);border-color:var(--success)">Decided by the owner, 14 October</span><h4>3. Review labels</h4><p>Three labels, for comments and late items: "Reviewed with the room" (shown on the wall), "Reviewed by the host", "Not reviewed". Not-reviewed items are in the report by default; the host can leave them out.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>4. How long after the session ends can people add comments or late answers?</h4><p>Comments until 24 hours after the end, with a host button "Close comments" to end it sooner. A late answer to a round is accepted only while the session is running.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>5. Should late answers ever reach Workie's read?</h4><p>Not by default. They are listed beside the read, not in it. A host who wants them in presses Redo; the redone read includes them and says so in a line.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>6. Offer "Ask the room" when Workie made no suggestions?</h4><p>Yes: offer the blank composer whenever questions for the room are switched on for that environment. The switch itself stays as it is.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>7. Replace "Request feedback" with the "Comments" kind inside Ask the room?</h4><p>Yes. One door for asking the room anything. The composer states the difference: comments carry names; Ideas, Choose and Rate are anonymous.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>8. Mid-read "Start round 3": a second press while questions are unsent, or move it into the session menu?</h4><p>The second press. It keeps today's tap count for a host who wants to move on, and stops the accidental skip the reviewer hit in rounds 3 and 6.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>9. Which settings may change while the room is live?</h4><p>Session name and room screen: at once. Categories, question picks and round count: from the next round. The live question, its answers and its ballots: never from Settings. A future "reopen" would be its own act that says what it does to answers already in.</p><p class="mut">Raised by the owner's updated spec.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>10. On one screen, may the host look at other steps on the projected laptop?</h4><p>No. On one screen the strip only explains a step, because a private view would be on the wall. Looking happens on the Remote. If the host has no Remote, Setup and Settings open as today, and the room sees them.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>11. Can the host ever see who sent an anonymous comment?</h4><p>No. The name is not stored with the comment, so the host, the wall and the report cannot show it. Membership is still checked when it is sent, so only people in the room can post.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>12. If the host turns on anonymous feedback partway through, what happens to comments already sent with names?</h4><p>They become anonymous on the wall and in the report from then on; the names stay with the comments, so turning it off again restores them. Comments the writer sent anonymously stay anonymous whatever the host does.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>13. In a round that hid names, do earlier-round views and comment lines hide them too?</h4><p>Yes. Responses read "Response 3", comment lines "[Jake commented on Response 3]". The commenter's own name still follows the feedback setting.</p></div>
+    <div class="qq"><span class="pend">Proposed, pending the owner</span><h4>14. Do participants see the review labels?</h4><p>No. Labels are the host's bookkeeping and the report's. Participants see the comments, never whether the host has reviewed them.</p></div>
+  </div>
+</section>
+
+<footer>Engage · Call and Answer flow, version 3 · Proposed, not built · 14 October 2026. Based on the external review of session 7924 and the team's recommendations. Sample content and names are from the review session's fictional participants.</footer>
+</div>
+</body>
+</html>

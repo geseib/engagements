@@ -682,6 +682,10 @@ exports.handler = async (event) => {
         questionData: {
           title: questionDetails?.Title || `Question ${questionNumber}`,
           detail: questionDetails?.Detail || questionDetails?.QuestionDetail || '',
+          // The round's own instruction, the task the room answered (session
+          // 7924, finding #5). The report resolves it as the phone does: this,
+          // else the set's customInstruction, else the game type's default.
+          customInstructions: questionDetails?.CustomInstructions || questionDetails?.customInstructions || '',
           category: questionDetails?.Category || 'General',
           sourceQuestionId: sourceQuestionId,
 

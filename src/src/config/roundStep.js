@@ -122,6 +122,22 @@ function stillToAct(progress) {
   return total - received;
 }
 
+/**
+ * "Start round 3" (owner, 14 Oct), when the round on screen is known; the
+ * plain "Next round" only when it is not. Read from the state alone, so the
+ * laptop and the Remote, which know different totals, always agree.
+ */
+function startNext(ctx) {
+  const n = ctx.roundNumber;
+  return n ? RW.startRound(ctx.roundNoun, n + 1) : RW.nextRound(ctx.roundNoun);
+}
+
+/** The round number in a round state ("ASK#003" -> 3), or null. */
+export function roundNumberOf(state) {
+  const m = ROUND_STATE.exec(typeof state === 'string' ? state.trim() : '');
+  return m ? Number(m[2]) : null;
+}
+
 function primaryFor(moment, ctx) {
   const noun = ctx.roundNoun;
   const runsVote = hostRunsVotePhase(ctx.gameType);
@@ -178,10 +194,10 @@ function primaryFor(moment, ctx) {
         return control('show-read', RW.showTheRead, I.WAIT, 'Sparkle', { disabled: true, hint: RW.workieWriting });
       }
       if (pages > 1 && page < pages - 1) return control('notes-page', RW.nextPage, I.PAGE, 'ArrowRight');
-      return control('next', RW.nextRound(noun), I.NEXT, 'ArrowRight');
+      return control('next', startNext(ctx), I.NEXT, 'ArrowRight');
     }
     case 'FEEDBACK':
-      return control('next', RW.nextRound(noun), I.NEXT, 'ArrowRight');
+      return control('next', startNext(ctx), I.NEXT, 'ArrowRight');
     case 'ROOM_QUESTION': {
       // The same two-press rule as a vote: the room is still answering.
       const ask = ctx.roomAsk || {};
@@ -191,7 +207,7 @@ function primaryFor(moment, ctx) {
       return show;
     }
     case 'ROOM_RESULTS':
-      return control('next', RW.nextRound(noun), I.NEXT, 'ArrowRight');
+      return control('next', startNext(ctx), I.NEXT, 'ArrowRight');
     case 'ENDED':
       return control('report', RW.openReport, I.REPORT, 'FileText');
     default:
@@ -237,7 +253,7 @@ function secondaryFor(moment, ctx, primary) {
       // Mid-read (or before it is written) the way past the rest is the plain
       // Next round; on the last page the slot holds Request feedback.
       if (primary.id === 'next') return control('request-feedback', RW.requestFeedback, I.FEEDBACK, 'ChatCircleText');
-      return control('next', RW.nextRound(noun), I.NEXT, 'SkipForward');
+      return control('next', startNext(ctx), I.NEXT, 'SkipForward');
     case 'FEEDBACK':
       return control('close-feedback', RW.backToRead, I.FIELD_NOTES, 'ArrowLeft');
     case 'ROOM_QUESTION':
@@ -342,7 +358,7 @@ function nextFor(moment, ctx, primary) {
 }
 
 /** Fill the defaults every reader relies on, so the rules never see undefined. */
-function normaliseContext(ctx = {}) {
+export function normaliseContext(ctx = {}) {
   const noun = String(ctx.roundNoun || 'Round').trim() || 'Round';
   const answerCount = Number.isFinite(Number(ctx.answerCount)) && ctx.answerCount !== null
     ? Math.max(0, Number(ctx.answerCount)) : null;
@@ -354,9 +370,17 @@ function normaliseContext(ctx = {}) {
   const focus = ctx.focus || {};
   const parts = Math.max(1, intOr(focus.parts, 1));
   const total = Math.max(1, answerCount || 0, intOr(focus.index, 0) + 1);
+  const totalRounds = Number(ctx.totalRounds) > 0 ? Number(ctx.totalRounds) : null;
   return {
     ...ctx,
     roundNoun: noun,
+    // A reader that carries `roundNumber` is believed, null included (the
+    // host page's state is a template, so it never implies round 1);
+    // otherwise the number comes from the state ("ASK#003").
+    roundNumber: Object.prototype.hasOwnProperty.call(ctx, 'roundNumber')
+      ? (Number(ctx.roundNumber) > 0 ? Number(ctx.roundNumber) : null)
+      : roundNumberOf(ctx.state),
+    totalRounds,
     answerCount,
     playerCount,
     hasQuestionSet: ctx.hasQuestionSet !== false,
