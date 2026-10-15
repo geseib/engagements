@@ -8,6 +8,7 @@ const { ORG } = require('./tenant');
 const { countAnsweredQuestion, COUNT_PROJECTION } = require('./session-count');
 const { isPollRound, pollQuestionOf, pollAnswerText } = require('./poll-question');
 const { checkAnswer } = require('./survey-answer');
+const { answerTiming, LATE_TTL_DAYS } = require('./late-answer');
 const {
   isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
 } = require('./trivia-answer');
@@ -80,7 +81,7 @@ exports.handler = async (event) => {
     if (hostFrame) {
       await handleHostMessage(gameId, messageType, body);
     } else if (isPlayerMessage(messageType)) {
-      await handlePlayerMessage(gameId, playerName, messageType, body);
+      await handlePlayerMessage(gameId, playerName, messageType, body, connectionId);
     } else {
       console.log(`⚠️ Unknown message type: ${messageType}`);
       return { statusCode: 400, body: 'Unknown message type' };
@@ -408,7 +409,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     // presence, and every other type keeps the old rule.
     if (answerType === 'poll' ? (answer === undefined || answer === null) : !answer) {
       console.log(`⚠️ No answer provided in message data`);
-      return;
+      return { status: 'refused', round: questionNumber };
     }
     
     // Get current game state to validate we're in the right question state
@@ -419,7 +420,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     
     if (!gameState.Item) {
       console.log(`❌ Game ${gameId} not found`);
-      return;
+      return { status: 'refused', round: questionNumber };
     }
     
     const currentState = gameState.Item.State;
@@ -434,8 +435,14 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     
     const isValidState = expectedStates.includes(currentState);
     if (!isValidState) {
+      // LATE, NOT LOST (session flow v3 §4.4). An answer that reaches the
+      // server after its round moved on used to be dropped while the phone
+      // showed a receipt. It is kept apart now, and the phone is told.
+      if (answerTiming(currentState, Number(questionNumber)) === 'late' && !gameState.Item.EventPaused) {
+        return await keepLateAnswer(gameId, playerName, questionNumber, answer, answerType, currentState);
+      }
       console.log(`⚠️ Invalid state for answer submission. Expected one of: ${expectedStates.join(', ')}, Got: ${currentState}`);
-      return;
+      return { status: 'refused', round: questionNumber };
     }
     // AN EVENT'S ITEM, PAUSED (events M3, websocket/events/run.js): the host
     // went back to the agenda part-way. The round keeps its phase, and no
@@ -443,7 +450,7 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     // round that is no longer on screen.
     if (gameState.Item.EventPaused) {
       console.log(`⏸️ Answer refused: game ${gameId} is paused by its event`);
-      return;
+      return { status: 'refused', round: questionNumber };
     }
     
     // Store the answer in DynamoDB (using question number format)
@@ -678,12 +685,58 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
     await countAnsweredQuestion(db, process.env.TABLE_NAME, gameId, questionNumber, sessionMeta.Item || {});
 
     console.log(`✅ Answer stored for ${playerName} on question ${questionNumber}`);
-    console.log(`🔥 WEBSOCKET DEBUG: Successfully stored answer record in DynamoDB`);
+    return { status: 'stored', round: questionNumber };
     
   } catch (error) {
     console.error(`❌ Error storing player answer:`, error);
     throw error;
   }
+}
+
+/**
+ * KEEP A LATE ANSWER (session flow v3 §4.4): `QUESTION#nnn#LATE#<player>`,
+ * encrypted as an answer, 30 days. Never a vote, a score, part of Workie's
+ * read, or the session meter. Someone who already answered on time keeps that
+ * one: a second is a change, refused as before. One late answer per person.
+ */
+async function keepLateAnswer(gameId, playerName, questionNumber, answer, answerType, arrivedDuring) {
+  const onTime = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}#ANSWER#${playerName}` },
+    ProjectionExpression: 'SK',
+  }));
+  if (onTime.Item) return { status: 'refused', round: questionNumber };
+  const now = new Date().toISOString();
+  const row = {
+    PK: `GAME#${gameId}`,
+    SK: `QUESTION#${questionNumber}#LATE#${playerName}`,
+    GameId: gameId,
+    QuestionNumber: questionNumber,
+    PlayerName: playerName,
+    Answer: typeof answer === 'string' ? answer : JSON.stringify(answer),
+    AnswerType: answerType,
+    ArrivedDuring: arrivedDuring,
+    SubmittedAt: now,
+    ttl: Math.floor(Date.now() / 1000) + LATE_TTL_DAYS * 24 * 60 * 60,
+  };
+  const meta = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+    ProjectionExpression: 'orgId',
+  }));
+  const orgId = typeof meta.Item?.orgId === 'string' ? meta.Item.orgId.trim() : '';
+  try {
+    await db.send(new PutCommand({
+      TableName: process.env.TABLE_NAME,
+      Item: orgId ? await encryptItem(orgId, 'answer', row) : row,
+      ConditionExpression: 'attribute_not_exists(SK)',
+    }));
+  } catch (e) {
+    if (e && e.name === 'ConditionalCheckFailedException') return { status: 'refused', round: questionNumber };
+    throw e;
+  }
+  console.log(`🕓 Late answer kept for ${playerName} on question ${questionNumber} (arrived during ${arrivedDuring})`);
+  return { status: 'late', round: questionNumber };
 }
 
 /*
@@ -708,13 +761,35 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
 /**
  * Handle player messages - process and send to host
  */
-async function handlePlayerMessage(gameId, playerName, messageType, messageData) {
+async function handlePlayerMessage(gameId, playerName, messageType, messageData, connectionId = null) {
   console.log(`👤 Player message ${messageType} from ${playerName} in game ${gameId}`);
   
   try {
     // Handle ANSWER# messages by storing the answer in DynamoDB
     if (messageType.startsWith('ANSWER#')) {
-      await handlePlayerAnswer(gameId, playerName, messageType, messageData);
+      const outcome = await handlePlayerAnswer(gameId, playerName, messageType, messageData);
+      // THE PHONE IS TOLD (session flow v3 §4.4): stored, kept late, or not
+      // taken. A late answer is not an answer to the round in progress, so the
+      // host's "answered" count never hears of it; the host is told only that
+      // one was kept, with no name and no words.
+      if (outcome && connectionId) {
+        await sendToConnection(connectionId, {
+          type: 'answerReceived',
+          gameId,
+          questionNumber: outcome.round,
+          kept: outcome.status !== 'refused',
+          late: outcome.status === 'late',
+        });
+      }
+      if (outcome && outcome.status !== 'stored') {
+        if (outcome.status === 'late') {
+          const hosts = await getHostConnections(gameId);
+          await Promise.all(hosts.map((c) => sendToConnection(c.ConnectionId || c.connectionId, {
+            type: 'lateAnswerKept', gameId, questionNumber: outcome.round, timestamp: new Date().toISOString(),
+          })));
+        }
+        return;
+      }
     }
 
     // Every host screen attached to this game
