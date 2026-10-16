@@ -83,6 +83,7 @@ const FW = Object.freeze({
   keptLate: 'The results are already up. Your answer is kept, but not in the count.',
   roomMovedOn: 'The room has moved on. Your answer is still here, and you can still send it.',
   leaveDraft: 'Leave it',
+  done: 'Done',
   change: 'Change my answer',
   openIcon: (kindLabel, section, point) => `${kindLabel} ask from ${section}, point ${point}. Preview it.`,
   // The composer (session flow v3 §4.1).

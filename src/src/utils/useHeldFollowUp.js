@@ -8,8 +8,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * While FollowUpCard holds something unsent, the ask it belongs to is kept
  * here, keyed by its askId and round, so the room moving on (the public read
  * goes null) does not unmount the card; Send then keeps the answer late.
- * After a late send the card stays up, with its line, until the session's
- * state next changes. Emptied, or sent on time, it is let go.
+ * After a late send the card stays up, with its line and a "Done", until the
+ * session's state next changes or LATE_HOLD_MS pass (ENDED never changes).
+ * Emptied, or sent on time, it is let go.
  *
  *   held          { ask, draft, late } or null
  *   onDraft(ask)  the card's onDraft for that ask: (value|null) => void
@@ -17,6 +18,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   release()     let it go (sent on time, or the player chose to leave it)
  *   heldFor(ask)  the held entry when it is this ask, else null
  */
+export const LATE_HOLD_MS = 8000;
+
 const same = (a, b) => Boolean(a && b && a.askId === b.askId && a.round === b.round);
 
 export default function useHeldFollowUp(gameState) {
@@ -27,6 +30,13 @@ export default function useHeldFollowUp(gameState) {
   useEffect(() => {
     setHeld((h) => (h && h.late && h.releaseOn !== gameState ? null : h));
   }, [gameState]);
+
+  const late = Boolean(held && held.late);
+  useEffect(() => {
+    if (!late) return undefined;
+    const t = setTimeout(() => setHeld((h) => (h && h.late ? null : h)), LATE_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [late]);
 
   const onDraft = useCallback((ask) => (value) => {
     if (value !== null && value !== undefined) {

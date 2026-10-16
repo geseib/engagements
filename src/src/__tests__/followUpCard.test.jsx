@@ -4,9 +4,9 @@
  * room's answer once the host shows it.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import FollowUpCard, { answered, surveyQuestionOf } from '../components/FollowUpCard';
-import useHeldFollowUp from '../utils/useHeldFollowUp';
+import useHeldFollowUp, { LATE_HOLD_MS } from '../utils/useHeldFollowUp';
 
 const CHOICE = { askId: 'a1', round: '003', kind: 'choice', status: 'live', question: 'Which test first?', options: ['On-call logs', 'Shadow invoices'] };
 const RATE = { askId: 'a2', round: '003', kind: 'rate', status: 'live', statement: 'People will trust a bot at 3am' };
@@ -119,6 +119,7 @@ function Room({ ask, gameState, onServer }) {
       keptLate={Boolean(h && h.late)}
       onDraft={onDraft(shown)}
       onSend={onSend}
+      onDone={release}
     />
   );
 }
@@ -149,4 +150,43 @@ test('a draft emptied after the room moved on lets the card go', () => {
   rerender(<Room ask={null} gameState="ASK#004" onServer={jest.fn()} />);
   fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
   expect(screen.getByText('Next round')).toBeInTheDocument();
+});
+
+test('already answered on time: an edit after close is not a draft, and the room\'s answer shows', () => {
+  const onDraft = jest.fn();
+  const { rerender, container } = render(<FollowUpCard ask={IDEAS} yours="On time" onSend={jest.fn()} onDraft={onDraft} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A change' } });
+  rerender(<FollowUpCard ask={{ ...IDEAS, status: 'closed', tally: { n: 1 }, picked: [] }} yours="On time" onSend={jest.fn()} onDraft={onDraft} />);
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(container.textContent).toMatch(/1 idea · 0 shown/);
+  expect(onDraft.mock.calls.every(([v]) => v === null)).toBe(true);
+});
+
+test('kept late on ENDED: Done lets the card go (ENDED never changes)', async () => {
+  const onServer = jest.fn().mockResolvedValue({ ok: true, body: { late: true } });
+  const { rerender } = render(<Room ask={IDEAS} gameState="RESULTS#003" onServer={onServer} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Last word' } });
+  rerender(<Room ask={null} gameState="ENDED" onServer={onServer} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await screen.findByRole('status');
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+  expect(screen.getByText('Next round')).toBeInTheDocument();
+});
+
+test('kept late on ENDED: let go on its own after a few seconds', async () => {
+  jest.useFakeTimers();
+  try {
+    const onServer = jest.fn().mockResolvedValue({ ok: true, body: { late: true } });
+    const { rerender } = render(<Room ask={IDEAS} gameState="RESULTS#003" onServer={onServer} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Last word' } });
+    rerender(<Room ask={null} gameState="ENDED" onServer={onServer} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
+    expect(screen.getByRole('status')).toHaveTextContent('kept, but not in the count');
+    act(() => { jest.advanceTimersByTime(LATE_HOLD_MS - 100); });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    act(() => { jest.advanceTimersByTime(200); });
+    expect(screen.getByText('Next round')).toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
 });
