@@ -9,6 +9,40 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 16 Oct 2026: Share demo holds steady when two plugins are running
+
+**Test:** merge of dev `d0b8443b` (and the notes and help commit after it). **Review tag:** `reviewable/2026-10-16-…` (named in the push).
+
+### New
+
+- **Engage plugin 1.18.0.** Each plugin copy now names itself when it reports the
+  Wi-Fi share. The host's Session panel says the plugin is out of date until it is
+  updated from **Connect**.
+
+### Fixed
+
+- **Share demo's count flipped between 0 and 1, and a participant's Open the build
+  link swapped addresses every few seconds.** Two plugin copies were sharing one room:
+  an old prod plugin (1.14.0) beside the test plugin, each with its own address, key and
+  count. The room now stays with the copy that holds it; any other copy is told to stop
+  and closes its address. If the copy holding the room goes quiet for 30 seconds, the
+  next one takes over.
+
+### What to look at
+
+1. **Update the test plugin** from the Build Room's **Connect** panel and restart Claude Code. Session › Claude should show 1.18.0 and no out-of-date notice.
+2. **Steady count.** Connect a folder, let Claude show the running app, press **Share demo**, and open the build from a phone, laptop or tablet on the same Wi-Fi. Watch the host's chip and the participant's screen for a minute: the count stays at 1 and the link does not change.
+3. **A second window.** Open a second Claude Code window on the same folder and connect it. The count and the link still do not change, and the second window does not open its own address.
+4. **Hand-over.** Quit the window that was sharing. Within about 30 seconds the other one takes over: the chip shows *On* again, and participants get a new link (the old one stops working).
+
+### Known gaps
+
+- An old plugin (1.17.0 or earlier) alongside another old one still flips as before; the fix needs at least one copy on 1.18.0.
+- After a hand-over the participant must press **Open the build** again: the new copy has a new key.
+- The prod tier still serves plugin 1.14.0 until prod is promoted.
+
+---
+
 ## 16 Oct 2026: the host console on two screens
 
 **Test:** merge of dev `0e137d29` (and the help and notes commit after it). **Review tag:** `reviewable/2026-10-16-…` (named in the push).

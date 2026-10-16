@@ -144,6 +144,25 @@ check('Share demo (D5 b): "off" once Claude has shown a local app; null before t
   assert.deepStrictEqual(L.lanPublicView({ ...empty, lan: { Wanted: true }, logs: [{ By: 'agent', Link: 'http://localhost:5173/' }] }, NOW), { state: 'off' });
 });
 
+console.log('\nbuild-lan: one reporter per room (owner, 2026-10-16)');
+check('the copy holding the room keeps it while its reports are fresh; another copy does not', () => {
+  const A = 'copyAAAAAAAAAAAA'; const B = 'copyBBBBBBBBBBBB';
+  assert.strictEqual(L.reportOwnsRoom(liveRow({ Reporter: A }), A, NOW), true);
+  assert.strictEqual(L.reportOwnsRoom(liveRow({ Reporter: A }), B, NOW), false);
+  assert.strictEqual(L.reportOwnsRoom(liveRow({ Reporter: A, ReportedAt: ago(31000) }), B, NOW), true, 'stale: handed on');
+  assert.strictEqual(L.reportOwnsRoom({}, B, NOW), true, 'nobody holds it yet');
+});
+check('a plugin too old to name itself never takes the room from one that does', () => {
+  assert.strictEqual(L.reportOwnsRoom(liveRow({ Reporter: 'copyAAAAAAAAAAAA' }), '', NOW), false);
+  assert.strictEqual(L.reportOwnsRoom(liveRow({ Reporter: '' }), 'copyAAAAAAAAAAAA', NOW), true, 'a named copy takes over from an old one');
+  assert.strictEqual(L.reportOwnsRoom(liveRow({ Reporter: '' }), '', NOW), true, 'two old copies behave as before');
+});
+check('the reporter id is kept only when it looks like one', () => {
+  assert.strictEqual(L.normalizeReport({ status: 'off', reporter: 'copyAAAAAAAAAAAA' }).value.Reporter, 'copyAAAAAAAAAAAA');
+  assert.strictEqual(L.normalizeReport({ status: 'off', reporter: 'x y' }).value.Reporter, '');
+  assert.strictEqual(L.normalizeReport({ status: 'off' }).value.Reporter, '');
+});
+
 console.log('\nbuild-lan: the host\'s view');
 check('the host sees the links with the key; Claude\'s copy has no key', () => {
   const host = L.lanHostView(liveRow(), NOW, { withKey: true });

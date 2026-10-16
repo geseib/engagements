@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.17.0';
+const VERSION = '1.18.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -2518,6 +2518,14 @@ const bareHost = (hostname) => hostname.replace(/^\[|\]$/g, '');
 const PRIVATE_V4_RE = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
 const lan = { key: '', gateways: new Map(), seen: new Map(), error: '', lastAnswerAt: Date.now() };
+/**
+ * Who this process is, to Engage (1.18.0, owner 2026-10-16). Two copies on one
+ * room (another tier's old plugin, a second window) each ran a gateway, and the
+ * room flipped between their counts and keys every round. Engage now keeps the
+ * room with the first copy and tells any other one "not wanted".
+ */
+const LAN_REPORTER = randomBytes(12).toString('base64url');
+let lanToldAnother = false;
 
 /** This laptop's Wi-Fi address: en0 first on macOS, then any private IPv4. */
 function lanAddress() {
@@ -2696,9 +2704,12 @@ async function lanRound() {
       key: lanStatusNow === 'live' ? lan.key : '',
       open: lanOpenCount(),
       error: lan.error,
+      reporter: LAN_REPORTER,
     };
     const answer = await api('POST', 'share/report', report, AbortSignal.timeout(8000), { background: true });
     lan.lastAnswerAt = Date.now();
+    if (answer && answer.another && !lanToldAnother) log('wi-fi share: another Claude Code window shares this room; this one stays closed');
+    lanToldAnother = Boolean(answer && answer.another);
     lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || []);
   } catch (e) {
     log('wi-fi share round failed:', e && e.message);
