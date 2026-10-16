@@ -150,6 +150,40 @@ describe('Space on the rail and the top line', () => {
     fireEvent.keyDown(button, { key: ' ' });
     expect(p.footer.onAction).toHaveBeenCalledWith(controls.primary);
   });
+
+  /* THE WALK (15 Oct): click a response, press →, press Space. Chrome flips
+     the still-focused button to :focus-visible after the key press, so the
+     button must not still hold focus: a pointer press lets go of it. */
+  test('a response pressed with the mouse lets go of focus: the next Space advances the room', () => {
+    stubFocusVisible(true);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    const { button, putUp } = mainButton(p);
+    button.focus();
+    fireEvent.click(button, { detail: 1 });
+    expect(putUp).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).not.toBe(button);
+    fireEvent.keyDown(document.activeElement, { key: ' ' });
+    expect(p.footer.onAction).toHaveBeenCalledWith(controls.primary);
+    expect(putUp).toHaveBeenCalledTimes(1);
+  });
+
+  test('a response pressed from the keyboard (detail 0) keeps focus', () => {
+    stubFocusVisible(true);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    const { button } = mainButton(p);
+    button.focus();
+    fireEvent.click(button, { detail: 0 });
+    expect(document.activeElement).toBe(button);
+  });
+
+  test('a text field clicked inside the console keeps focus', () => {
+    const p = props();
+    render(<HostConsole {...p}><textarea data-testid="ta" /></HostConsole>);
+    const ta = screen.getByTestId('ta');
+    ta.focus();
+    fireEvent.click(ta, { detail: 1 });
+    expect(document.activeElement).toBe(ta);
+  });
 });
 
 test('the footer says what is next on the wall, only when given (spec §3.5)', () => {
