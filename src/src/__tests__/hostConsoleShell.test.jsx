@@ -283,3 +283,36 @@ describe('Late & not reviewed (late items Task 4)', () => {
     expect(onReviewLate).toHaveBeenCalled();
   });
 });
+
+/* THE SCOREBOARD FROM THE PEOPLE SECTION (owner, 16 Oct 2026): a button that
+   opens or closes the scoreboard on the wall through the page's own toggle,
+   labelled for what it will do, drawn only where a scoreboard is allowed.
+   rejects: a dead button on a poll; a label that says the state, not the act. */
+describe('People: the scoreboard button', () => {
+  const withBoard = (scoreboard) => props({ rail: { ...props().rail, scoreboard } });
+  test('closed: "Show scoreboard" opens it', () => {
+    const onToggle = jest.fn();
+    render(<HostConsole {...withBoard({ show: true, enabled: true, open: false, onToggle })}><div /></HostConsole>);
+    const b = screen.getByRole('button', { name: 'Show scoreboard' });
+    expect(b.closest('[data-section="people"]')).not.toBeNull();
+    fireEvent.click(b);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+  test('open: "Hide scoreboard" closes it', () => {
+    const onToggle = jest.fn();
+    render(<HostConsole {...withBoard({ show: true, enabled: true, open: true, onToggle })}><div /></HostConsole>);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide scoreboard' }));
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+  test('before a round is scored: there, disabled, with the reason', () => {
+    render(<HostConsole {...withBoard({ show: true, enabled: false, open: false, reason: 'Scores appear after the first round', onToggle: jest.fn() })}><div /></HostConsole>);
+    expect(screen.getByRole('button', { name: 'Show scoreboard' })).toBeDisabled();
+    expect(screen.getByText('Scores appear after the first round')).toBeInTheDocument();
+  });
+  test('where no scoreboard is allowed, no button', () => {
+    render(<HostConsole {...withBoard({ show: false, enabled: false, open: false, onToggle: jest.fn() })}><div /></HostConsole>);
+    expect(screen.queryByRole('button', { name: /scoreboard/i })).toBeNull();
+    render(<HostConsole {...props()}><div /></HostConsole>);
+    expect(screen.queryByRole('button', { name: /scoreboard/i })).toBeNull();
+  });
+});

@@ -35,6 +35,7 @@ function Section({ id, title, summary, alert = false, open, onToggle, children, 
 export default function ConsoleRail({
   moment, rounds = [], total = null, people = [], counts = {}, late = [], lateCount = null, lateWall = null,
   onLateShow = () => {}, onLateMark = () => {}, connected = true, onOpenSection = () => {},
+  scoreboard = null,
 }) {
   // A refusal from the late buttons, said in the section (as LateList does).
   const [lateError, setLateError] = useState('');
@@ -81,6 +82,23 @@ export default function ConsoleRail({
             </li>
           ))}
         </ul>
+        {/* THE SCOREBOARD, ON THE WALL OR OFF IT (owner, 16 Oct 2026): the
+            page's own toggle (the S key's), drawn only where a scoreboard is
+            allowed (config/scoreboard.js scoreboardAvailability: Trivia and
+            Call & Answer), disabled with its reason before a round is scored. */}
+        {scoreboard && scoreboard.show ? (
+          <div className="hc-board">
+            <button
+              type="button"
+              className="hc-btn"
+              disabled={!scoreboard.enabled}
+              onClick={() => scoreboard.onToggle(!scoreboard.open)}
+            >
+              {scoreboard.open ? CW.hideScoreboard : CW.showScoreboard}
+            </button>
+            {!scoreboard.enabled && scoreboard.reason ? <span className="hc-meta">{scoreboard.reason}</span> : null}
+          </div>
+        ) : null}
       </Section>
       {/* LATE & NOT REVIEWED (late items Task 4): the whole count, the first
           few with their two quiet buttons; "Review them" opens the full list

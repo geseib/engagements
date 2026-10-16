@@ -8073,6 +8073,7 @@ Focus on actionable business strategy insights.`;
             onLateMark: markLateReviewed,
             connected: wsConnected,
             onOpenSection: openSetupAt,
+            scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
           }}
           footer={{
             // roundStep's own status: the count, said here and in the People header only.

@@ -41,6 +41,8 @@ const CW = Object.freeze({
   upNext: 'Up next',
   nextOnWall: 'Next on the wall',
   scoreboardOnWall: 'The scoreboard is on the wall',
+  showScoreboard: 'Show scoreboard',
+  hideScoreboard: 'Hide scoreboard',
   takeItDown: 'Take it down',
   noLate: 'Nothing is waiting.',
   reportSoFar: 'The report so far',
