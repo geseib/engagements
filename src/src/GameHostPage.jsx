@@ -7,7 +7,7 @@ import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
-import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
+import { focusFromFrame, focusToStage, focusRequest, sameFocus, normaliseFocus } from './config/stageFocus';
 import RW from './config/roundWords';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -167,6 +167,34 @@ const SURVEY_READ_STATES = new Set(['SURVEY#OPEN', 'SURVEY#CLOSED', 'ENDED']);
 /* The trivia option slots and the correct-answer test that used to live here
    are in config/questionCard.js now, beside the card that reads them
    (components/QuestionCard.jsx). */
+
+/**
+ * THE QUESTION LINE ABOVE THE STAGE'S CARDS, PRESSABLE (owner, 16 Oct 2026):
+ * wherever the host can put a response up, the question can go back up too.
+ * One screen: it opens the question large, over the stage. Two screens: the
+ * same press puts it on the wall (expandQuestion publishes the focus).
+ */
+function StageQuestionRecap({ question, onOpen }) {
+  return (
+    <p
+      className="recap is-openable"
+      data-drop="4"
+      data-drop-note="The prompt"
+      role="button"
+      tabIndex={0}
+      aria-label="Show the question on the screen"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      {question.title || question.question}
+    </p>
+  );
+}
 
 function GameHostPage() {
   // 🎯 AUTHENTICATION
@@ -333,6 +361,7 @@ function GameHostPage() {
 
     if (!pendingFocusRef.current) return;
     const restored = focusToStage(pendingFocusRef.current, { answerCount: answers.length });
+    setWallFocus(normaliseFocus(pendingFocusRef.current).focus);
     pendingFocusRef.current = null;
     setLessonExpanded(restored.lessonExpanded);
     setSpotlightIndex(restored.spotlightIndex);
@@ -365,6 +394,12 @@ function GameHostPage() {
   const [currentQuestionVotes, setCurrentQuestionVotes] = useState([]);
   const [manualStateChange, setManualStateChange] = useState(false);
   const [lessonExpanded, setLessonExpanded] = useState(false);
+  /* WHAT KIND OF FOCUS THE WALL HOLDS ('none' | 'question' | 'answer' | 'join'),
+     as the server last said or this page last sent. The console reads it to
+     mark "The question" on the wall (owner, 16 Oct 2026); on two screens a
+     question focus is the wall's, so it does not also open the laptop's
+     expanded-question overlay, which is a one-screen thing. */
+  const [wallFocus, setWallFocus] = useState('none');
   // THE ONE HOST PANEL. It replaced both edge tabs, both side panels and the
   // full-screen question browser — four surfaces, one dock button. Closed by
   // default: it is a fixed overlay over a fixed-height stage, so opening it is
@@ -2824,6 +2859,7 @@ Focus on actionable business strategy insights.`;
       if (Number.isInteger(focus.rev)) focusRevRef.current = focus.rev;
 
       const next = focusToStage(focus, { answerCount: answersRef.current.length });
+      setWallFocus(focus.focus);
       setLessonExpanded(next.lessonExpanded);
       setSpotlightIndex(next.spotlightIndex);
       // The join code, put up or taken down on any surface (this page's own
@@ -7548,6 +7584,28 @@ Focus on actionable business strategy insights.`;
     publishFocus({ focus: 'question' });
   };
 
+  /*
+    THE QUESTION, BACK ON THE WALL (owner, 16 Oct 2026), from the console's
+    "The question" row. At VOTE the wall's own default is Response 1, so the
+    question is a focus of its own (the wall's QUESTION_FOCUS moment, the same
+    one the Remote puts up). At RESULTS the wall's default IS the question's
+    view: the task line over the tally ("What the room backed"), so the press
+    takes any focus down, as Stop showing does, rather than covering the
+    tally with the question alone.
+  */
+  const putQuestionOnWall = () => {
+    if (phaseOfGameState(gameStateRef.current) === 'VOTE') {
+      setSpotlightIndex(null);
+      setLessonExpanded(true);
+      publishFocus({ focus: 'question' });
+      return;
+    }
+    if (spotlightIndex !== null) setStagePageIndex(pageOf(spotlightIndex, stagePageSize));
+    setSpotlightIndex(null);
+    setLessonExpanded(false);
+    publishFocus({ focus: 'none' });
+  };
+
   const collapseQuestion = () => {
     setLessonExpanded(false);
     publishFocus({ focus: 'none' });
@@ -7587,6 +7645,7 @@ Focus on actionable business strategy insights.`;
     const body = focusRequest({ ...focus, state: gameStateRef.current });
     // No round on screen — nothing can be focused, so there is nothing to say.
     if (!body) return;
+    setWallFocus(body.focus);
 
     authFetch(`${API_BASE}games/${gameId}/stage-focus`, {
       method: 'POST',
@@ -7933,11 +7992,11 @@ Focus on actionable business strategy insights.`;
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
         // The stage's readiness guard: no rows (and no press) until this vote's own have landed.
-        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden onWallIndex={spotlightIndex === null ? 0 : spotlightIndex} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} onWallIndex={wallFocus === 'question' ? null : (spotlightIndex === null ? 0 : spotlightIndex)} onPutOnWall={openSpotlight} />;
       case 'RESULTS':
       case 'RESPONSES':
         // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
-        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} />;
       case 'FEEDBACK':
@@ -8337,11 +8396,7 @@ Focus on actionable business strategy insights.`;
                 <div className="kicker">
                   {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
-                {currentQuestion && (
-                  <p className="recap" data-drop="4" data-drop-note="The prompt">
-                    {currentQuestion.title || currentQuestion.question}
-                  </p>
-                )}
+                {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
                 {currentQuestion?.image && (
                   <img
                     className="stage-art"
@@ -8381,7 +8436,7 @@ Focus on actionable business strategy insights.`;
                     const label = navigatorLabel(answer, idx, { phase: 'VOTE' });
                     // With two surfaces the wall walks the responses from the
                     // start of voting; this card marks the one it shows.
-                    const showing = twoSurfaces && idx === (spotlightIndex === null ? 0 : spotlightIndex);
+                    const showing = twoSurfaces && wallFocus !== 'question' && idx === (spotlightIndex === null ? 0 : spotlightIndex);
                     return (
                       <div
                         key={idx}
@@ -8552,11 +8607,7 @@ Focus on actionable business strategy insights.`;
                      in a round whose names are hidden. */
                   <>
                   <div className="kicker">{RW.whatTheRoomBacked}</div>
-                  {currentQuestion && (
-                    <p className="recap" data-drop="4" data-drop-note="The prompt">
-                      {currentQuestion.title || currentQuestion.question}
-                    </p>
-                  )}
+                  {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
                   <div className="cards is-ideas">
                     {answerPage.items.map((answer, i) => {
                       const idx = answerPage.offset + i;
@@ -9209,7 +9260,7 @@ Focus on actionable business strategy insights.`;
           loading overlay above stays: it reports a real wait. */}
 
       {/* Expanded Lesson Modal */}
-      {lessonExpanded && questions.length > 0 && (
+      {lessonExpanded && questions.length > 0 && !(useConsole && wallFocus === 'question') && (
         <div className="expanded-lesson-overlay" onClick={collapseQuestion}>
           <div className="expanded-lesson-content" onClick={(e) => e.stopPropagation()}>
             <div className="expanded-lesson-header">

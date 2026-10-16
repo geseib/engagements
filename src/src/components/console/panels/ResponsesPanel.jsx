@@ -17,12 +17,19 @@ import StageGathering from '../../stage/StageGathering';
  * stageAnswersStatus) and no rows until 'ready'; until then this panel says
  * what the stage says ("Gathering responses…", or that they did not load,
  * with the stage's retry) instead of "No responses yet."
+ *
+ * THE QUESTION, BACK ON THE WALL (owner, 16 Oct 2026): at VOTE and RESULTS,
+ * wherever a response can go up, a first row "The question" (the task text)
+ * puts the question back up (`onQuestionToWall`), marked "On the wall now"
+ * while the wall shows it (`questionOnWall`). The task then shows only there.
  */
 export default function ResponsesPanel({
   kicker, title, task = '', phase, responses = [], authorsHidden = true,
   onWallIndex = null, onPutOnWall = null, stillWriting = 0, side = null, upNext = null,
   status = 'ready', gatheringNoun = 'responses', onRetry = null,
+  questionOnWall = false, onQuestionToWall = null,
 }) {
+  const questionRow = Boolean(onQuestionToWall) && (phase === 'VOTE' || phase === 'RESULTS');
   const ready = status === 'ready';
   const rows = ready ? responses : [];
   const ordered = phase === 'ASK'
@@ -37,14 +44,27 @@ export default function ResponsesPanel({
     <section className="hc-panel">
       <p className="hc-kicker">{kicker}</p>
       <h2 className="hc-h">{title}</h2>
-      {task ? <div className="hc-task"><span className="hc-task-k">{CW.theTask}</span>{task}</div> : null}
+      {task && !questionRow ? <div className="hc-task"><span className="hc-task-k">{CW.theTask}</span>{task}</div> : null}
       <div className={`hc-cols${side ? '' : ' is-one'}`}>
         <div className="hc-resps">
+          {questionRow ? (
+            <button
+              type="button"
+              data-testid="hc-question"
+              className={`hc-resp hc-question${questionOnWall ? ' is-onwall' : ''}`}
+              onClick={onQuestionToWall}
+            >
+              <span className="hc-resp-body">
+                <small>{CW.theQuestion}{questionOnWall ? ` · ${CW.onTheWall}` : ''}</small>
+                {task || title}
+              </span>
+            </button>
+          ) : null}
           {ready ? null : <StageGathering status={status} noun={gatheringNoun} onRetry={onRetry} />}
           {ready && ordered.length === 0 ? <p className="hc-muted">{CW.waitingForResponses}</p> : null}
           {ordered.map(({ r, i }) => {
             const label = navigatorLabel(r, i, { phase: labelPhase, authorsHidden: phase === 'VOTE' ? true : authorsHidden });
-            const onWall = onWallIndex === i;
+            const onWall = !questionOnWall && onWallIndex === i;
             const Tag = onPutOnWall ? 'button' : 'div';
             return (
               <Tag
@@ -63,7 +83,7 @@ export default function ResponsesPanel({
             );
           })}
           {stillWriting > 0 ? <p className="hc-muted">{`${stillWriting} ${CW.stillWriting}`}</p> : null}
-          {onPutOnWall && ready ? <p className="hc-muted">{CW.pressToWall}</p> : null}
+          {onPutOnWall && ready ? <p className="hc-muted">{questionRow ? CW.pressToWallOrQuestion : CW.pressToWall}</p> : null}
           {upNext ? <div className="hc-card"><h3 className="hc-card-h">{CW.upNext}</h3><p className="hc-strong">{upNext.title}</p><p className="hc-muted">{upNext.task}</p></div> : null}
         </div>
         {side}

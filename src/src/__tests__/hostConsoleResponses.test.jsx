@@ -108,3 +108,31 @@ test('answering and voting never show points', () => {
   rerender(<ResponsesPanel kicker="k" title="t" phase="VOTE" responses={SCORED} authorsHidden={false} />);
   expect(container.querySelector('.hc-pts')).toBeNull();
 });
+
+/* PUT THE QUESTION ON THE WALL (owner, 16 Oct 2026): wherever the host can put
+   a response on the wall, they can put the question back up. A first row,
+   "The question", with the task text; pressing it calls onQuestionToWall; it
+   is marked "On the wall now" when the wall shows it, and then no response is.
+   rejects: no way back to the question once a response is up. */
+test('voting: a first row puts the question back on the wall, and says when it is there', () => {
+  const onQuestionToWall = jest.fn();
+  const { rerender } = render(<ResponsesPanel kicker="k" title="The ballot" phase="VOTE" responses={R} task="Which process must go?" onWallIndex={0} onPutOnWall={() => {}} questionOnWall={false} onQuestionToWall={onQuestionToWall} />);
+  const q = screen.getByTestId('hc-question');
+  expect(q.tagName).toBe('BUTTON');
+  expect(q.textContent).toMatch('The question');
+  expect(q.textContent).toMatch('Which process must go?');
+  expect(q).not.toHaveClass('is-onwall');
+  fireEvent.click(q);
+  expect(onQuestionToWall).toHaveBeenCalled();
+  rerender(<ResponsesPanel kicker="k" title="The ballot" phase="VOTE" responses={R} task="Which process must go?" onWallIndex={null} onPutOnWall={() => {}} questionOnWall onQuestionToWall={onQuestionToWall} />);
+  expect(screen.getByTestId('hc-question')).toHaveClass('is-onwall');
+  expect(screen.getByTestId('hc-question').textContent).toMatch('On the wall now');
+  expect(screen.getAllByTestId('hc-resp').some((n) => n.classList.contains('is-onwall'))).toBe(false);
+  // The task shows once, in the question row, not again as the panel's task line.
+  expect(screen.getAllByText('Which process must go?')).toHaveLength(1);
+});
+
+test('no question row without a way to put it up, or while answering', () => {
+  render(<ResponsesPanel kicker="k" title="t" phase="ASK" responses={R} task="Which process must go?" authorsHidden onQuestionToWall={() => {}} />);
+  expect(screen.queryByTestId('hc-question')).toBeNull();
+});

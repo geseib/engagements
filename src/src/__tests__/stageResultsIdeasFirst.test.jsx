@@ -12,7 +12,7 @@
  * beside the idea; a name or points while the round hides names.
  */
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 
 jest.mock('../auth/AuthContext', () => ({
   __esModule: true,
@@ -126,4 +126,15 @@ test('hidden round: no name and no points, the share bar stays', async () => {
   const cards = [...document.querySelectorAll('.cards .card')];
   expect(document.querySelector('.cards').textContent).not.toMatch(/Ada|Ben|Cleo|points/);
   expect(cards[0].querySelector('.share')).not.toBeNull();
+}, 15000);
+
+/* PUT THE QUESTION ON THE WALL (owner, 16 Oct 2026): on the stage, where the
+   cards put a response up, the question line above them puts the question up. */
+test('the question line above the cards puts the question up', async () => {
+  await mount({ anonymous: false });
+  const q = screen.getByRole('button', { name: 'Show the question on the screen' });
+  expect(q.textContent).toBe('Temperature control');
+  expect(document.querySelector('.expanded-lesson-overlay')).toBeNull();
+  fireEvent.click(q);
+  expect(document.querySelector('.expanded-lesson-overlay')).not.toBeNull();
 }, 15000);
