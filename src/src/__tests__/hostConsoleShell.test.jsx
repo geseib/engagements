@@ -192,3 +192,24 @@ test('the footer says what is next on the wall, only when given (spec §3.5)', (
   rerender(<HostConsole {...props({ footer: { ...props().footer, nextOnWall: 'Next on the wall: the vote' } })}><div /></HostConsole>);
   expect(container.querySelector('.hc-foot .hc-next').textContent).toBe('Next on the wall: the vote');
 });
+
+/* THE QUEUE COUNTS THE SAME ROUNDS THE STRIP DOES (walk, 15 Oct: the queue
+   said "1 of 7" while the strip said "Round 1 of 80"). The page knows only a
+   few rounds' titles; the header still says the session's total. */
+test('the round queue header says the strip\'s total, and lists what it knows', () => {
+  const p = props();
+  const rail = { ...p.rail, moment: 'LOBBY', total: 80, rounds: [{ n: 1, title: 'Churchill', state: 'now' }, { n: 2, title: 'Meiji', state: 'next' }] };
+  const { container } = render(<HostConsole {...p} rail={rail}><div /></HostConsole>);
+  const queue = container.querySelector('[data-section="queue"]');
+  expect(queue.querySelector('summary').textContent).toMatch('1 of 80');
+  expect(queue.querySelectorAll('.hc-list li')).toHaveLength(2);
+});
+
+test('with no total known, the queue header says the round alone, never a count of the list', () => {
+  const p = props();
+  const rail = { ...p.rail, moment: 'LOBBY', rounds: [{ n: 3, title: 'Churchill', state: 'now' }, { n: 4, title: 'Meiji', state: 'next' }] };
+  const { container } = render(<HostConsole {...p} rail={rail}><div /></HostConsole>);
+  const summary = container.querySelector('[data-section="queue"] summary').textContent;
+  expect(summary).not.toMatch(/of 2/);
+  expect(summary).toMatch(/3/);
+});

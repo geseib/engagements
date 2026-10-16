@@ -27,14 +27,18 @@ function Section({ id, title, summary, alert = false, open, onToggle, children, 
  * session tools. The section that matters for the moment opens by itself; the
  * host's own open/close choice holds until the moment changes.
  */
-export default function ConsoleRail({ moment, rounds = [], people = [], counts = {}, late = [], connected = true, onOpenSection = () => {} }) {
+export default function ConsoleRail({ moment, rounds = [], total = null, people = [], counts = {}, late = [], connected = true, onOpenSection = () => {} }) {
   const [open, setOpen] = useState(() => consoleRailFor(moment));
   useEffect(() => { setOpen(consoleRailFor(moment)); }, [moment]);
   const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
   const nowRound = rounds.find((r) => r.state === 'now');
+  // The session's total is the strip's ("Round 1 of 80"), never the length of
+  // the list: the page knows only a few rounds' titles (walk, 15 Oct: the
+  // queue said "1 of 7" beside "Round 1 of 80"). No total known: the round.
+  const queueSummary = !nowRound ? '' : (Number(total) > 0 ? `${nowRound.n} of ${Number(total)}` : String(nowRound.n));
   return (
     <aside className="hc-rail" aria-label="Session">
-      <Section id="queue" title={CW.queue} summary={nowRound ? `${nowRound.n} of ${rounds.length}` : ''} open={open === 'queue'} onToggle={toggle} link={CW.allRounds} onLink={() => onOpenSection('history')}>
+      <Section id="queue" title={CW.queue} summary={queueSummary} open={open === 'queue'} onToggle={toggle} link={CW.allRounds} onLink={() => onOpenSection('history')}>
         <ul className="hc-list">
           {rounds.map((r) => (
             <li key={r.n} className={r.state === 'now' ? 'is-now' : ''}>

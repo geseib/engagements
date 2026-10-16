@@ -7843,6 +7843,8 @@ Focus on actionable business strategy insights.`;
           rail={{
             moment: consoleMoment,
             rounds: consoleRounds,
+            // The strip's total ("Round 1 of 80"), so the queue says the same.
+            total: workflow && workflow.round ? workflow.round.of : null,
             people: consolePeople,
             counts: { players: players.length, answered: answeredCount, voted: playersWhoVoted.length },
             late: [],
