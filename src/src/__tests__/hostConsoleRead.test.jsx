@@ -97,3 +97,47 @@ test('a question for the room in the console: pressing an idea still puts it on 
   fireEvent.click(screen.getByRole('button', { name: /The agencies/ }));
   expect(onPick).toHaveBeenCalledWith('c', 'i1', true);
 });
+
+/* WHICH PART OF THE READ THE WALL SHOWS (owner, 16 Oct 2026). The console
+   marks the slice on the wall now: an accent bar along its left edge and "On
+   the wall" on its first line, scrolled into view when the page changes. The
+   slices are the wall's own (config/stagePaging.js prosePageSlice, the same
+   budget), so the marking matches the wall exactly.
+   rejects: a marker drawn from a different cut than the wall's. */
+describe('the read marks the page on the wall', () => {
+  const { prosePageSlice } = require('../config/stagePaging');
+  const MD = ['## Summary', '', 'One.', '', 'Two.', '', '## Discussion topics', '', '1. Who would miss it?', '', '2. What would we stop?'].join('\n');
+  const BUDGET = 4;
+  test('each wall page is its own slice; the one on the wall is marked', () => {
+    const pages = prosePageSlice(MD, 0, BUDGET).pages;
+    expect(pages).toBeGreaterThan(1);
+    const { container } = render(<ReadPanel kicker="k" markdown={MD} page={1} budget={BUDGET} />);
+    const slices = [...container.querySelectorAll('.hc-read-page')];
+    expect(slices).toHaveLength(pages);
+    const on = container.querySelectorAll('.hc-read-page.is-onwall');
+    expect(on).toHaveLength(1);
+    expect(on[0]).toBe(slices[1]);
+    expect(on[0].firstElementChild.textContent).toBe('On the wall');
+    expect(on[0].textContent).toMatch('Who would miss it?');
+    expect(slices[0].textContent).not.toMatch('On the wall');
+  });
+  test('the page that goes up is scrolled into view', () => {
+    const spy = jest.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = spy;
+    try {
+      const { rerender, container } = render(<ReadPanel kicker="k" markdown={MD} page={0} budget={BUDGET} />);
+      spy.mockClear();
+      rerender(<ReadPanel kicker="k" markdown={MD} page={1} budget={BUDGET} />);
+      expect(spy).toHaveBeenCalled();
+      expect(spy.mock.instances[spy.mock.instances.length - 1]).toBe(container.querySelector('.hc-read-page.is-onwall'));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+  test('with no page given, nothing is marked (the read as before)', () => {
+    const { container } = render(<ReadPanel kicker="k" markdown={MD} />);
+    expect(container.querySelector('.is-onwall')).toBeNull();
+    expect(container.textContent).toMatch('Who would miss it?');
+  });
+});

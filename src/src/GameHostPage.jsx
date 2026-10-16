@@ -7998,7 +7998,8 @@ Focus on actionable business strategy insights.`;
         // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
         return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
-        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} />;
+        // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
+        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} />;
       case 'FEEDBACK':
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':

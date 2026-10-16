@@ -31,6 +31,7 @@ const CW = Object.freeze({
   theTask: 'The task',
   theQuestion: 'The question',
   onTheWall: 'On the wall now',
+  onTheWallShort: 'On the wall',
   pressToWall: 'Press a response to put it on the wall.',
   pressToWallOrQuestion: 'Press a response, or the question, to put it on the wall.',
   theBallot: 'The ballot, in the order the room sees it',
