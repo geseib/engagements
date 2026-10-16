@@ -6,6 +6,8 @@
  *     SK  FOLLOWUP#{nnn}#SUGGESTED                     the checked suggestions for the round's read
  *         FOLLOWUP#{nnn}#ASK#{askId}                   one sent ask
  *         FOLLOWUP#{nnn}#ASK#{askId}#A#{playerName}    one person's answer to it
+ *         FOLLOWUP#{nnn}#ASK#{askId}#LATE#{playerName} one person's LATE answer (after the
+ *                                                      results or the round moved on; never counted)
  *         FOLLOWUP#LIVE                                the session's one live ask, a pointer
  *
  * The round comes first, so "every follow-up of round 3" is one begins_with,
@@ -48,18 +50,23 @@ const answerSk = (round, askId, playerName) => {
   const p = answersPrefix(round, askId);
   return p && isName(playerName) ? `${p}${playerName}` : null;
 };
+const latePrefix = (round, askId) => { const sk = askSk(round, askId); return sk ? `${sk}#LATE#` : null; };
+const lateSk = (round, askId, playerName) => {
+  const p = latePrefix(round, askId);
+  return p && isName(playerName) ? `${p}${playerName}` : null;
+};
 
 /**
- * What a FOLLOWUP# key is: { kind: 'suggested'|'ask'|'answer'|'live', round, askId, playerName }
+ * What a FOLLOWUP# key is: { kind: 'suggested'|'ask'|'answer'|'late'|'live', round, askId, playerName }
  * or null for anything else.
  */
 function parseFollowUpSk(sk) {
   const s = String(sk || '');
   if (s === LIVE_SK) return { kind: 'live' };
-  const m = /^FOLLOWUP#(\d{3})#(SUGGESTED|ASK#([a-z0-9]+)(?:#A#(.+))?)$/.exec(s);
+  const m = /^FOLLOWUP#(\d{3})#(SUGGESTED|ASK#([a-z0-9]+)(?:#(A|LATE)#(.+))?)$/.exec(s);
   if (!m) return null;
   if (m[2] === 'SUGGESTED') return { kind: 'suggested', round: m[1] };
-  if (m[4] !== undefined) return { kind: 'answer', round: m[1], askId: m[3], playerName: m[4] };
+  if (m[5] !== undefined) return { kind: m[4] === 'LATE' ? 'late' : 'answer', round: m[1], askId: m[3], playerName: m[5] };
   return { kind: 'ask', round: m[1], askId: m[3] };
 }
 
@@ -75,5 +82,7 @@ module.exports = {
   askSk,
   answersPrefix,
   answerSk,
+  latePrefix,
+  lateSk,
   parseFollowUpSk,
 };

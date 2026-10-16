@@ -15,7 +15,12 @@ import './FollowUpCard.css';
  *
  *   ask      the public read's ask (followup-play/live)
  *   yours    this person's answer, or null
- *   onSend   (value) => Promise<{ ok, error }>
+ *   onSend   (value) => Promise<{ ok, error, body }>
+ *
+ * LATE (session flow v3 §4.4): an answer that reaches the server after "Show
+ * results" or after the round moved on is kept, but not counted; the reply
+ * carries `late: true` and the card says so, even once it turns to the
+ * room's answer.
  */
 export function surveyQuestionOf(ask) {
   if (!ask) return null;
@@ -36,6 +41,8 @@ export default function FollowUpCard({ ask, yours = null, onSend }) {
   const [sent, setSent] = useState(yours !== null && yours !== undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [late, setLate] = useState(false);
+  useEffect(() => { setLate(false); }, [ask && ask.askId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     setValue(yours);
     setSent(yours !== null && yours !== undefined);
@@ -53,7 +60,10 @@ export default function FollowUpCard({ ask, yours = null, onSend }) {
     setError('');
     const r = await onSend(ask.kind === 'ideas' ? value.trim() : value);
     setBusy(false);
-    if (r && r.ok) setSent(true);
+    if (r && r.ok) {
+      setSent(true);
+      if (r.body && r.body.late) setLate(true);
+    }
     else setError((r && r.error) || 'That did not send. Try again.');
   };
 
@@ -77,6 +87,7 @@ export default function FollowUpCard({ ask, yours = null, onSend }) {
           <ul className="fu-ideas">{ask.picked.map((p, i) => <li key={i}>{p}</li>)}</ul>
         )}
         <p className="fu-foot">{ask.kind === 'ideas' ? FW.ideasCount(t.n || 0, (ask.picked || []).length) : FW.answered(t.n || 0)}</p>
+        {late && <p className="fu-sent" role="status">{FW.keptLate}</p>}
       </section>
     );
   }
@@ -91,11 +102,11 @@ export default function FollowUpCard({ ask, yours = null, onSend }) {
         <Input
           question={question}
           value={value}
-          onChange={(v) => { setValue(v); setSent(false); }}
+          onChange={(v) => { setValue(v); if (!late) setSent(false); }}
           onBlur={() => {}}
         />
       </form>
-      {sent && <p className="fu-sent" role="status">{FW.sent}</p>}
+      {sent && <p className="fu-sent" role="status">{late ? FW.keptLate : FW.sent}</p>}
       {error && <p className="fu-error" role="alert">{error}</p>}
       <button type="submit" form="fu-form" className="plr-btn" disabled={busy || sent || !answered(ask, value)}>
         {busy ? FW.sending : FW.send}

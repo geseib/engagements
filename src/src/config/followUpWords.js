@@ -79,6 +79,8 @@ const FW = Object.freeze({
   ideaPlaceholder: 'Your answer',
   send: 'Send',
   sent: 'Sent. You can change it until the results are shown.',
+  // Session flow v3 §4.4: an answer that reached the server after the results.
+  keptLate: 'The results are already up. Your answer is kept, but not in the count.',
   change: 'Change my answer',
   openIcon: (kindLabel, section, point) => `${kindLabel} ask from ${section}, point ${point}. Preview it.`,
   // The composer (session flow v3 §4.1).

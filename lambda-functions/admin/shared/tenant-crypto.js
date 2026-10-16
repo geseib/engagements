@@ -559,6 +559,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *                                      and the frozen `Tally` (for a later
    *                                      open ask, the room's own sentences);
    *    FOLLOWUP#nnn#ASK#<id>#A#<name>    `Value` and `Text`, one person's answer.
+   *    FOLLOWUP#nnn#ASK#<id>#LATE#<name> the same two fields, an answer that
+   *                                      arrived late (session flow v3 §4.4);
+   *                                      `Kind`, `ArrivedDuring`, `Reviewed`
+   *                                      are structure.
    *  `Kind`, `Status`, `Origin`, `FromAnswers`, the counts of drops and marks,
    *  the times, `Model` and `PlayerName` (plaintext on every player row) are
    *  structure and stay readable. `Suggested` (session flow v3) is Workie's

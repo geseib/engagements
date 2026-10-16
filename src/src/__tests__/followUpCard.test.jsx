@@ -57,3 +57,22 @@ test('closed: the room\'s answer in counts, and only the picked ideas', () => {
   expect(container.querySelectorAll('.fu-ideas li')).toHaveLength(1);
   expect(container.textContent).toMatch(/5 ideas · 1 shown/);
 });
+
+test('late (session flow v3 §4.4): the reply says it is kept, but not in the count', async () => {
+  const onSend = jest.fn().mockResolvedValue({ ok: true, body: { late: true } });
+  render(<FollowUpCard ask={IDEAS} onSend={onSend} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'After the results' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(await screen.findByRole('status')).toHaveTextContent(/^The results are already up\. Your answer is kept, but not in the count\.$/);
+  expect(screen.queryByText(/change it until the results are shown/)).toBeNull();
+});
+
+test('late, then the card turns to the room\'s answer: the line stays', async () => {
+  const onSend = jest.fn().mockResolvedValue({ ok: true, body: { late: true } });
+  const { rerender } = render(<FollowUpCard ask={RATE} onSend={onSend} />);
+  fireEvent.click(screen.getByRole('radio', { name: /4/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await screen.findByRole('status');
+  rerender(<FollowUpCard ask={{ ...RATE, status: 'closed', tally: { n: 3, counts: [0, 0, 1, 2, 0], mean: 3.7 } }} yours={4} onSend={onSend} />);
+  expect(screen.getByRole('status')).toHaveTextContent('The results are already up. Your answer is kept, but not in the count.');
+});

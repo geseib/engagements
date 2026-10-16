@@ -295,10 +295,11 @@ const followUpRows = () => table.prefix(PK, 'FOLLOWUP#');
     assert.strictEqual(row.Status, 'closed');
     assert.ok(isEnvelope(row.Tally));
   });
-  await check('an answer after close: 409, nothing written', async () => {
+  await check('a change after close: 409, nothing written (a late answer is tests/late-ask-answers.js)', async () => {
     const r = await answer(rateId, 'Ada', 'c-ada', 1);
     assert.strictEqual(r.status, 409);
-    assert.strictEqual(r.body.code, 'NOT_LIVE');
+    assert.strictEqual(r.body.code, 'ALREADY_ANSWERED');
+    assert.deepStrictEqual(table.prefix(PK, `FOLLOWUP#003#ASK#${rateId}#LATE#`), []);
   });
   await check('closing twice: 409', async () => {
     assert.strictEqual((await host('POST', `asks/${rateId}/close`, { body: { round: '003' } })).status, 409);
