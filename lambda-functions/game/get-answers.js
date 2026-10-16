@@ -165,9 +165,14 @@ exports.handler = async (event) => {
       return await getOwnAnswer(gameId, targetQuestionId, player, clientId);
     }
 
-    // Get all answers for this question
+    // Get all answers for this question. The host's door reads strongly
+    // consistent: it is called the instant a `playerAnswered` frame lands, a
+    // few milliseconds after the write, and an eventually consistent read can
+    // miss the row that frame announced (review of test a76fda95, issue #34:
+    // the count said 3 of 4 while the list said "No responses yet").
     const answersQuery = await db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
+      ...(onHostDoor ? { ConsistentRead: true } : {}),
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
         ':pk': `GAME#${gameId}`,

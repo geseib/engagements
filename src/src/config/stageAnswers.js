@@ -88,3 +88,20 @@ export function answerText(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return '';
 }
+
+/**
+ * THE LIST CATCHES UP WITH THE COUNT (review of test a76fda95, issue #34:
+ * "3 of 4" answered while the list said "No responses yet", until a reload).
+ * During ASK the host's list is fetched once per `playerAnswered` frame; a
+ * fetch refused, dropped or read too early was never tried again.
+ *
+ * How long to wait before refetching, or null when there is nothing to catch
+ * up (the rows already match the count) or the round has spent its tries, so
+ * a count the server cannot back never polls forever.
+ */
+export const CATCH_UP_TRIES = 5;
+export function answersCatchUpDelay(answeredCount, rowCount, tries) {
+  if (!(Number(answeredCount) > Number(rowCount))) return null;
+  if (Number(tries) >= CATCH_UP_TRIES) return null;
+  return 1500 * (2 ** Math.min(Math.max(0, Number(tries) || 0), 2));
+}
