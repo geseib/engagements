@@ -697,7 +697,7 @@ const buildRoom = {
         {
           t: 'list',
           items: [
-            { title: 'Share demo', text: 'When Claude first shows the app, the Build Room asks once whether to share it. Share demo lets people on this Wi-Fi open this laptop\'s app on their phones, laptops and tablets; no one else can. Nothing is shared until you press it. Guest Wi-Fi often blocks this; test it from another device first. Anyone who cannot reach it still sees the screenshots.' },
+            { title: 'Share demo', text: 'When Claude first shows the app, the Build Room asks once whether to share it. Share demo lets people on this Wi-Fi open this laptop\'s app on their phones, laptops and tablets; no one else can. Nothing is shared until you press it. Guest Wi-Fi often blocks this; test it from another device first. Anyone who cannot reach it still sees the screenshots. Only one Claude Code window shares a room at a time; if the count jumps, update the plugin from Connect.' },
             { title: 'Wrap up', text: 'A summary, what was built, links and next steps, written by Claude or by you, saved into the report. Check the report, then end the session.' },
             { title: 'Save report', text: 'Keeps the report as a PDF, as for any session. The code stays in the project folder on your laptop.' },
           ],
