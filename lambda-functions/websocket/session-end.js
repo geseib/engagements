@@ -61,10 +61,14 @@ async function endSession(db, tableName, gameId, {
   await db.send(new UpdateCommand({
     TableName: tableName,
     Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-    UpdateExpression: 'SET #state = :state, #updatedAt = :updatedAt',
+    // EndedAt is its own stamp (late items, Task 1): the 24-hour late window
+    // (game/late-window.js) measures from it, and UpdatedAt moves with any
+    // later STATE write (a display profile change, say).
+    UpdateExpression: 'SET #state = :state, #updatedAt = :updatedAt, #endedAt = :updatedAt',
     ExpressionAttributeNames: {
       '#state': 'State',
       '#updatedAt': 'UpdatedAt',
+      '#endedAt': 'EndedAt',
     },
     ExpressionAttributeValues: {
       ':state': 'ENDED',

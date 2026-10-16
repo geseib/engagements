@@ -127,6 +127,9 @@ async function closedRate() {
     assert.strictEqual(shut.open, false);
     assert.strictEqual(shut.code, 'COMMENTS_CLOSED');
     assert.strictEqual(shut.error, 'Comments are closed for this session.');
+    // EndedAt wins over UpdatedAt, which a later STATE write (a display
+    // profile change) moves: ended 25 h ago, touched 1 h ago, is closed.
+    assert.strictEqual(lateWindow({ meta: {}, state: { State: 'ENDED', EndedAt: ago(25), UpdatedAt: ago(1) }, now }).open, false);
     // An ENDED session with no time to measure from is not guessed open.
     assert.strictEqual(lateWindow({ meta: {}, state: { State: 'ENDED' }, now }).open, false);
   });
@@ -148,6 +151,12 @@ async function closedRate() {
     const r = await answer(askId, 'Linus', 'c-linus', 2);
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
     assert.strictEqual(r.body.late, true);
+    // One transaction: no on-time row for this person, and the LATE put.
+    const tx = table.log.filter((l) => l.type === 'transact').pop();
+    const cc = tx.input.TransactItems[0].ConditionCheck;
+    assert.strictEqual(cc.Key.SK, `FOLLOWUP#003#ASK#${askId}#A#Linus`);
+    assert.strictEqual(cc.ConditionExpression, 'attribute_not_exists(SK)');
+    assert.strictEqual(tx.input.TransactItems[1].Put.Item.SK, `FOLLOWUP#003#ASK#${askId}#LATE#Linus`);
     const row = table.get(PK, `FOLLOWUP#003#ASK#${askId}#LATE#Linus`);
     assert.ok(row, 'no LATE row');
     assert.strictEqual(row.Kind, 'rate');
@@ -204,6 +213,14 @@ async function closedRate() {
     assert.strictEqual(r.body.code, 'WINDOW_CLOSED');
     assert.ok(/closed/i.test(r.body.error), r.body.error);
     assert.strictEqual(table.prefix(PK, `FOLLOWUP#003#ASK#${askId}#LATE#`).length, 0);
+  });
+
+  await check('EndedAt 25 h ago, UpdatedAt 1 h ago (a later profile change): refused', async () => {
+    const askId = await closedRate();
+    setState({ State: 'ENDED', EndedAt: new Date(Date.now() - 25 * HOUR).toISOString(), UpdatedAt: new Date(Date.now() - HOUR).toISOString() });
+    const r = await answer(askId, 'Grace', undefined, 5);
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.body.code, 'WINDOW_CLOSED');
   });
 
   say('\n6. after "Close comments"');

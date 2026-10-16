@@ -21,6 +21,15 @@ import './FollowUpCard.css';
  * results" or after the round moved on is kept, but not counted; the reply
  * carries `late: true` and the card says so, even once it turns to the
  * room's answer.
+ *
+ * A DRAFT IS NEVER LOST (§4.4: "The answer box stays open while the player is
+ * typing. If the round closes first, Send still works."). While something is
+ * typed or picked and not sent, a closed ask keeps its form and Send. The
+ * parent keeps the card on screen after the round moves on, from the draft
+ * this card reports:
+ *   draft         an unsent value to start from (a remount after the room moved)
+ *   keptLate      this person's answer was already kept late
+ *   onDraft       (value|null) => void, the unsent value, or null when there is none
  */
 export function surveyQuestionOf(ask) {
   if (!ask) return null;
@@ -36,22 +45,29 @@ export function answered(ask, value) {
   return Array.isArray(value) && value.length === 1 && Number.isInteger(value[0]);
 }
 
-export default function FollowUpCard({ ask, yours = null, onSend }) {
-  const [value, setValue] = useState(yours);
-  const [sent, setSent] = useState(yours !== null && yours !== undefined);
+const has = (v) => v !== null && v !== undefined;
+
+export default function FollowUpCard({ ask, yours = null, onSend, draft = null, keptLate = false, onDraft }) {
+  const [value, setValue] = useState(has(yours) ? yours : draft);
+  const [sent, setSent] = useState(has(yours));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [late, setLate] = useState(false);
-  useEffect(() => { setLate(false); }, [ask && ask.askId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [late, setLate] = useState(Boolean(keptLate));
+  useEffect(() => { setLate(Boolean(keptLate)); }, [ask && ask.askId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    setValue(yours);
-    setSent(yours !== null && yours !== undefined);
+    setValue(has(yours) ? yours : draft);
+    setSent(has(yours));
   }, [ask && ask.askId, yours]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unsent = !sent && answered(ask, value) ? value : null;
+  useEffect(() => {
+    if (onDraft) onDraft(unsent);
+  }, [JSON.stringify(unsent)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!ask) return null;
   const kind = KINDS[ask.kind] || KINDS.ideas;
   const words = ask.kind === 'rate' ? `“${ask.statement}”` : ask.question;
-  const closed = ask.status === 'closed';
+  // A closed ask with an unsent draft keeps its form: Send is kept late.
+  const closed = ask.status === 'closed' && unsent === null;
 
   const send = async (e) => {
     if (e) e.preventDefault();

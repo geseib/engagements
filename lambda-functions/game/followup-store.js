@@ -500,8 +500,6 @@ async function writeLateAnswer(db, { gameId, round, ask, orgId, playerName, valu
   const sk = keys.lateSk(round, ask.AskId, playerName);
   const onTimeSk = keys.answerSk(round, ask.AskId, playerName);
   if (!sk || !onTimeSk) throw new Error('followup-store: bad late answer key');
-  const onTime = await db.send(new GetCommand({ TableName: table(), Key: { PK: pkOf(gameId), SK: onTimeSk } }));
-  if (onTime && onTime.Item) return { ok: false, code: 'ALREADY_ANSWERED' };
   const item = {
     PK: pkOf(gameId),
     SK: sk,
@@ -517,8 +515,21 @@ async function writeLateAnswer(db, { gameId, round, ask, orgId, playerName, valu
     Reviewed: null,
     ttl: ttlFrom(now, LATE_DAYS),
   };
+  // One transaction: no on-time answer from this person, and no late one yet.
+  // An on-time write racing this one cannot slip in between a read and a put.
   try {
-    await db.send(new PutCommand({ TableName: table(), Item: await seal(orgId, item), ConditionExpression: 'attribute_not_exists(SK)' }));
+    await transact(db, {
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: table(),
+            Key: { PK: pkOf(gameId), SK: onTimeSk },
+            ConditionExpression: 'attribute_not_exists(SK)',
+          },
+        },
+        { Put: { TableName: table(), Item: await seal(orgId, item), ConditionExpression: 'attribute_not_exists(SK)' } },
+      ],
+    });
   } catch (e) {
     if (isConditionFailure(e)) return { ok: false, code: 'ALREADY_ANSWERED' };
     throw e;

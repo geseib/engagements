@@ -6,6 +6,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import FollowUpCard, { answered, surveyQuestionOf } from '../components/FollowUpCard';
+import useHeldFollowUp from '../utils/useHeldFollowUp';
 
 const CHOICE = { askId: 'a1', round: '003', kind: 'choice', status: 'live', question: 'Which test first?', options: ['On-call logs', 'Shadow invoices'] };
 const RATE = { askId: 'a2', round: '003', kind: 'rate', status: 'live', statement: 'People will trust a bot at 3am' };
@@ -75,4 +76,77 @@ test('late, then the card turns to the room\'s answer: the line stays', async ()
   await screen.findByRole('status');
   rerender(<FollowUpCard ask={{ ...RATE, status: 'closed', tally: { n: 3, counts: [0, 0, 1, 2, 0], mean: 3.7 } }} yours={4} onSend={onSend} />);
   expect(screen.getByRole('status')).toHaveTextContent('The results are already up. Your answer is kept, but not in the count.');
+});
+
+test('a draft survives the ask closing: the form and Send stay, and Send is kept late', async () => {
+  const onSend = jest.fn().mockResolvedValue({ ok: true, body: { late: true } });
+  const { rerender } = render(<FollowUpCard ask={IDEAS} onSend={onSend} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Still typing' } });
+  rerender(<FollowUpCard ask={{ ...IDEAS, status: 'closed', tally: { n: 2 }, picked: [] }} onSend={onSend} />);
+  expect(screen.getByRole('textbox')).toHaveValue('Still typing');
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(onSend).toHaveBeenCalledWith('Still typing'));
+  expect(await screen.findByRole('status')).toHaveTextContent('The results are already up. Your answer is kept, but not in the count.');
+});
+
+test('no draft: a closed ask turns to the room\'s answer as before', () => {
+  const { rerender, container } = render(<FollowUpCard ask={IDEAS} onSend={jest.fn()} />);
+  rerender(<FollowUpCard ask={{ ...IDEAS, status: 'closed', tally: { n: 2 }, picked: [] }} onSend={jest.fn()} />);
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(container.textContent).toMatch(/2 ideas · 0 shown/);
+});
+
+/*
+  THE PARENT'S HOLD (PlayerPage + utils/useHeldFollowUp.js), wired as
+  PlayerPage wires it: the public read's ask when there is one, else the held
+  one, with the held draft to start from.
+*/
+function Room({ ask, gameState, onServer }) {
+  const { held, onDraft, keptLate, release, heldFor } = useHeldFollowUp(gameState);
+  const shown = ask || (held && held.ask);
+  if (!shown) return <p>Next round</p>;
+  const h = heldFor(shown);
+  const onSend = async (value) => {
+    const r = await onServer(shown, value);
+    if (r.ok && r.body && r.body.late) keptLate(shown); else if (r.ok) release();
+    return r;
+  };
+  return (
+    <FollowUpCard
+      key={ask ? 'results' : 'held'}
+      ask={shown}
+      draft={h ? h.draft : null}
+      keptLate={Boolean(h && h.late)}
+      onDraft={onDraft(shown)}
+      onSend={onSend}
+    />
+  );
+}
+
+test('the room moves on (the ask goes null) with a draft: the card stays, and Send is kept late', async () => {
+  const onServer = jest.fn().mockResolvedValue({ ok: true, body: { late: true } });
+  const { rerender } = render(<Room ask={IDEAS} gameState="RESULTS#003" onServer={onServer} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Before it moved' } });
+  rerender(<Room ask={null} gameState="ASK#004" onServer={onServer} />);
+  expect(screen.getByRole('textbox')).toHaveValue('Before it moved');
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(onServer).toHaveBeenCalledWith(IDEAS, 'Before it moved'));
+  expect(await screen.findByRole('status')).toHaveTextContent('The results are already up. Your answer is kept, but not in the count.');
+  // Let go once the state next moves.
+  rerender(<Room ask={null} gameState="VOTE#004" onServer={onServer} />);
+  expect(screen.getByText('Next round')).toBeInTheDocument();
+});
+
+test('the room moves on with nothing typed: the card goes', () => {
+  const { rerender } = render(<Room ask={IDEAS} gameState="RESULTS#003" onServer={jest.fn()} />);
+  rerender(<Room ask={null} gameState="ASK#004" onServer={jest.fn()} />);
+  expect(screen.getByText('Next round')).toBeInTheDocument();
+});
+
+test('a draft emptied after the room moved on lets the card go', () => {
+  const { rerender } = render(<Room ask={IDEAS} gameState="RESULTS#003" onServer={jest.fn()} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
+  rerender(<Room ask={null} gameState="ASK#004" onServer={jest.fn()} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
+  expect(screen.getByText('Next round')).toBeInTheDocument();
 });

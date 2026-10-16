@@ -27,6 +27,8 @@ import ChoiceInput from './components/survey/ChoiceInput';
 import YesNoInput from './components/survey/YesNoInput';
 import TextInput from './components/survey/TextInput';
 import FollowUpCard from './components/FollowUpCard';
+import FW from './config/followUpWords';
+import useHeldFollowUp from './utils/useHeldFollowUp';
 import { fetchLiveAsk, answerAsk } from './utils/followUpsClient';
 import { isAnswered as pollIsAnswered, summaryFor as pollSummary } from './components/survey/surveyAnswers';
 import { namesMode } from './config/surveyNames';
@@ -406,6 +408,10 @@ function PlayerPage({ event = null } = {}) {
   // The latest state for socket handlers registered once (answerReceived).
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
+  // A draft answer to a question for the room is never lost (session flow v3 §4.4): utils/useHeldFollowUp.js.
+  const {
+    held: heldFollowUp, onDraft: followUpDraft, keptLate: keepFollowUpLate, release: releaseFollowUp, heldFor,
+  } = useHeldFollowUp(gameState);
   /*
     NULL UNTIL THE SERVER SAYS. This defaulted to 'call-and-answer', which is a
     claim: a phone joining a survey that was already open showed the
@@ -1486,14 +1492,21 @@ function PlayerPage({ event = null } = {}) {
   };
   followUpLoadRef.current = loadFollowUp;
   const answerFollowUp = async (value) => {
-    const ask = followUp && followUp.ask;
+    const ask = (heldFollowUp && heldFollowUp.ask) || (followUp && followUp.ask);
     if (!ask) return { ok: false, error: 'This question is no longer open' };
     const r = await answerAsk({
       apiBase: API_BASE, gameId, round: ask.round, askId: ask.askId, playerName, clientId: getClientId(gameId), value,
     });
-    if (r.ok) setFollowUp((f) => (f ? { ...f, yours: value } : f));
+    if (r.ok && r.body && r.body.late) {
+      // Kept late: the card stays up with its line until the state next moves.
+      keepFollowUpLate(ask);
+    } else if (r.ok) {
+      releaseFollowUp();
+      setFollowUp((f) => (f && f.ask && f.ask.askId === ask.askId ? { ...f, yours: value } : f));
+    }
     return r;
   };
+
 
   const loadFeedbackRound = async () => {
     const result = await fetchFeedbackRound({ apiBase: API_BASE, gameId });
@@ -3409,6 +3422,14 @@ function PlayerPage({ event = null } = {}) {
     ? () => loadMyFeedbackAnswers(myFeedbackNumber)
     : undefined;
 
+  /* A QUESTION FOR THE ROOM WITH A DRAFT, OR JUST KEPT LATE (session flow v3
+     §4.4): when the RESULTS arm below would not show this ask (the room moved
+     on), the held one is shown here instead, ahead of the state's own branch,
+     as the player-own feedback composer is. */
+  const followUpOnResults = gameState.startsWith('RESULTS#') && followUp && followUp.ask
+    && (followUp.ask.status === 'live' || askBeatRef.current);
+  const heldFollowUpShowing = Boolean(heldFollowUp) && !(followUpOnResults && heldFor(followUp.ask));
+
   if (myFeedbackShowing) {
     volume = 'act';
     ctx = position ? `${position} · Feedback` : 'Feedback';
@@ -3454,6 +3475,29 @@ function PlayerPage({ event = null } = {}) {
      true for anything that is not ASK#/VOTE#/RESULTS#, so a finished session
      rendered "✅ You're in! / Waiting for the game to start… / ● Ready to
      play" and left the player there permanently (INVENTORY §7.2). */
+  } else if (heldFollowUpShowing) {
+    volume = 'act';
+    ctx = position ? `${position} · Question` : 'Question';
+    body = (
+      <>
+        {!heldFollowUp.late && (
+          <p className="plr-lede plr-muted" role="note">{FW.roomMovedOn}</p>
+        )}
+        <FollowUpCard
+          ask={heldFollowUp.ask}
+          draft={heldFollowUp.draft}
+          keptLate={heldFollowUp.late}
+          onSend={answerFollowUp}
+          onDraft={followUpDraft(heldFollowUp.ask)}
+        />
+        {!heldFollowUp.late && (
+          <button type="button" className="plr-btn plr-btn--ghost" onClick={releaseFollowUp}>
+            {FW.leaveDraft}
+          </button>
+        )}
+      </>
+    );
+
   } else if (gameState === 'ENDED') {
     volume = 'watch';
     ctx = 'Session complete';
@@ -4121,8 +4165,7 @@ function PlayerPage({ event = null } = {}) {
     }
 
   /* -------------------------------------------------------------- RESULTS -- */
-  } else if (gameState.startsWith('RESULTS#') && followUp && followUp.ask
-    && (followUp.ask.status === 'live' || askBeatRef.current)) {
+  } else if (followUpOnResults) {
     /*
       A QUESTION FOR THE ROOM (docs/design/followup-icons): the host sent one
       from Workie's read. Answer it here; the result follows once the host
@@ -4130,7 +4173,16 @@ function PlayerPage({ event = null } = {}) {
     */
     volume = followUp.ask.status === 'live' ? 'act' : 'watch';
     ctx = position ? `${position} · Question` : 'Question';
-    body = <FollowUpCard ask={followUp.ask} yours={followUp.yours} onSend={answerFollowUp} />;
+    body = (
+      <FollowUpCard
+        ask={followUp.ask}
+        yours={followUp.yours}
+        draft={heldFor(followUp.ask) ? heldFor(followUp.ask).draft : null}
+        keptLate={Boolean(heldFor(followUp.ask) && heldFor(followUp.ask).late)}
+        onSend={answerFollowUp}
+        onDraft={followUpDraft(followUp.ask)}
+      />
+    );
 
   } else if (gameState.startsWith('RESULTS#') && feedbackRound) {
     /*
