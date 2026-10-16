@@ -34,3 +34,26 @@ test('keyboard focus is visible on the console\'s own controls', () => {
     expect(css).toMatch(new RegExp(`${sel.replace(/\./g, '\\.')}:focus-visible`));
   }
 });
+
+/* WORKIE'S READ ON DUSK (walk, 15 Oct): styles.css .markdown-* hardcodes the
+   paper theme's dark text, so the read was dark on dark. Inside .hc every
+   text-bearing markdown class takes a token colour and a ladder size. */
+const rule = (sel) => {
+  const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = css.match(new RegExp(`(?:^|[},])\\s*[^{}]*${esc}\\s*(?:,[^{]*)?\\{([^}]*)\\}`, 'm'));
+  return m ? m[1] : '';
+};
+test('the read takes dusk colours and the ladder', () => {
+  const colourOf = (sel) => (rule(sel).match(/(?:^|;)\s*color:\s*([^;]+)/) || [])[1];
+  expect(colourOf('.hc .markdown-content')).toBe('var(--text)');
+  for (const sel of ['.hc .markdown-p', '.hc .markdown-li', '.hc .markdown-h2', '.hc .markdown-h3', '.hc .markdown-content strong', '.hc .markdown-td', '.hc .markdown-th']) {
+    expect([sel, colourOf(sel)]).toEqual([sel, 'var(--text)']);
+  }
+  expect(colourOf('.hc .markdown-content em')).toBe('var(--muted)');
+  expect(colourOf('.hc .markdown-link')).toBe('var(--info)');
+  expect(rule('.hc .markdown-content')).toMatch(/font-size:\s*15px/);
+  expect(rule('.hc .markdown-h2')).toMatch(/font-size:\s*19px/);
+  expect(rule('.hc .markdown-h3')).toMatch(/font-size:\s*15px/);
+  // The ask chips: never under the 12px floor inside the console.
+  expect(rule('.hc .askicon')).toMatch(/font-size:\s*12px/);
+});

@@ -84,4 +84,26 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .hc-cols.is-read { grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); }
 .hc-code-big { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: .08em; color: var(--accent-text); }
 .hc-list--flat { padding: 0; }
-.hc-md { font-size: 15px; }
+
+/* WORKIE'S READ ON DUSK (walk, 15 Oct). styles.css .markdown-* hardcodes the
+   paper theme's dark text (#2c3e50), so inside the console the read was dark
+   on dark. Every text-bearing class takes a token colour and a ladder size. */
+.hc .markdown-content { color: var(--text); font-size: 15px; line-height: 1.55; }
+.hc .markdown-p, .hc .markdown-li { color: var(--text); font-size: 15px; }
+.hc .markdown-h1, .hc .markdown-h2 { color: var(--text); font-size: 19px; border-bottom-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-h3, .hc .markdown-h4, .hc .markdown-h5, .hc .markdown-h6 { color: var(--text); font-size: 15px; }
+.hc .markdown-content strong { color: var(--text); }
+.hc .markdown-content em { color: var(--muted); }
+.hc .markdown-link { color: var(--info); }
+.hc .markdown-li::marker { color: inherit; }
+.hc .markdown-quote { color: var(--muted); border-left-color: var(--accent); }
+.hc .markdown-hr { border-top-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-pre, .hc .markdown-content code { background: var(--surface-2); border-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-pre .markdown-code-block, .hc .markdown-content code { color: var(--text); font-size: 13px; }
+.hc .markdown-table { border-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-th { color: var(--text); background: var(--surface-2); border-bottom-color: rgb(var(--glow-rgb) / .12); font-size: 13px; }
+.hc .markdown-td { color: var(--text); border-bottom-color: rgb(var(--glow-rgb) / .12); font-size: 13px; }
+/* The ask chips (AskIcons.css sizes them .62em, under the floor here). */
+.hc .askicon { font-size: 12px; }
+.hc .askicons-after { font-size: 13px; }
+.hc .askicons-after .askicons { font-size: inherit; }
