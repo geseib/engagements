@@ -124,10 +124,12 @@ release.
 - **Keys** live one per person, on a new row `BUILD#RKEY#<player>`: the key's hash, the
   `ClientId` it was minted for, and when. Only the hash is stored.
 - **A phone gets its key** from a new phone route, `POST /build-play/remote-key`, checked
-  like every phone route (`{playerName, clientId}` against the `PLAYER#` row). It returns
-  the person's existing key if it was minted for this `clientId`, or mints one. The phone
-  calls it **when its screen first shows the remote button**, not when it is pressed, so
-  the button stays a plain link (browsers block a new tab opened after a wait).
+  like every phone route (`{playerName, clientId}` against the `PLAYER#` row). Every call
+  mints a fresh key and replaces the person's row, which ends their previous key (the
+  server holds hashes only, so it cannot hand an old key back). The phone keeps its link
+  and calls the route only **when its screen first shows the remote button** without a
+  saved link, not when it is pressed, so the button stays a plain link (browsers block a
+  new tab opened after a wait).
 - **Which keys are live:** a key counts only while its person's `PLAYER#` row exists, is
   not removed, and has the same `ClientId` the key was minted for. So:
   - **removing a person** ends their key;
