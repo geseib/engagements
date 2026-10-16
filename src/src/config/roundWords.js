@@ -30,6 +30,10 @@ const RW = Object.freeze({
   startVoting: 'Start voting',
   showResults: 'Show results',
   whatWeHeard: 'What we heard',
+  /** RESULTS, ideas first (owner, 16 Oct 2026): the heading over the tally. */
+  whatTheRoomBacked: 'What the room backed',
+  /** The small credit under an idea: "8 points", then " — Ada" when the round shows names. */
+  backedCredit: (points, name) => `${points === 1 ? '1 point' : `${points} points`}${name ? ` — ${name}` : ''}`,
   nextPage: 'Next page',
   backPage: 'Back a page',
   nextRound: (noun) => `Next ${nounOf(noun)}`,

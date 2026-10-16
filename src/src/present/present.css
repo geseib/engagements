@@ -237,6 +237,28 @@ html.present-locked body {
   --ui-trow-gap: 24px;
   --ui-trow-bar-h: calc(14px * var(--fit));
 }
+/* RESULTS, IDEAS FIRST (docs/design/results-ideas-first, version A): each row a
+   card, the idea the headline in full (three lines at most, then the fitter),
+   the credit small under it, the share bar along the foot; the top row outlined. */
+.present .present-tally.is-ideas { gap: calc(16px * var(--fit)); }
+.present .present-tally.is-ideas .present-trow {
+  grid-template-columns: 1.4em minmax(0, 1fr);
+  align-items: start;
+  background: var(--surface);
+  border-radius: 18px;
+  padding: calc(18px * var(--fit)) calc(26px * var(--fit));
+}
+.present .present-tally.is-ideas .present-trow .ui-trow-points { display: none; }
+.present .present-tally.is-ideas .present-trow.is-top { box-shadow: inset 0 0 0 3px var(--accent); }
+.present .present-tally.is-ideas .present-trow.is-top .ui-trow-rank { color: var(--accent-text); }
+.present .present-idea {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-weight: 700;
+  line-height: 1.18;
+}
 .present .present-more { font-size: calc(var(--L-body) * var(--fit)); color: var(--muted); padding-left: calc(var(--L-secondary) * 1.4 * var(--fit) + 24px); margin: calc(22px * var(--fit)) 0 0; }
 
 /* ---- the response navigator ---- */

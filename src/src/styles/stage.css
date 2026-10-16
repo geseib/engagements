@@ -989,6 +989,15 @@ a.dock-more{text-decoration:none}
 .card .rank{flex:none;font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-secondary)*.78));color:var(--muted);width:2.3em;text-align:center}
 .card.lead .rank{color:var(--primary)}
+/* RESULTS, IDEAS FIRST (owner, 16 Oct 2026, docs/design/results-ideas-first
+   version A): the idea is the headline (three lines at most, then the
+   fitter), the points and name a small credit under it, and the room's backing
+   a bar along the card's foot, relative to the top idea. */
+.cards.is-ideas .card{align-items:flex-start}
+.cards.is-ideas .card .ans{font-weight:700;line-height:1.18;display:-webkit-box;
+  -webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.cards.is-ideas .card .who{opacity:.72;font-weight:500}
+.card .share{position:absolute;left:0;bottom:0;height:calc(.4vh + 3px);background:var(--accent);opacity:.85;z-index:0}
 
 /* ------------------------------------------------------------------- PAGER
    Ported from docs/design/host-redesign/05-vote.html:385-389, which is the one

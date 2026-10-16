@@ -17,7 +17,9 @@
  *     the input holds: rows are rebuilt from the answer text alone.
  *   - RESULTS and RESPONSES name an author only when the round's authors are
  *     shown (config/anonymity.js authorsHiddenNow), and the points go wherever
- *     the names go.
+ *     the names go. RESULTS leads with the idea (owner, 16 Oct 2026): the
+ *     name and points are a small credit under it, and the share bar (backing
+ *     relative to the top idea, never a score) shows in every round.
  *
  * Words come from config/roundWords.js. Read pages are sliced exactly as the
  * host page slices them (config/stagePaging.js prosePageSlice, the session's
@@ -89,15 +91,24 @@ function tallyRows(snapshot, results) {
     authorsRevealed: snapshot.authorsRevealed,
   });
   const order = tallyOrder(results && results.voteTallies, []);
+  // The share bar is the room's backing relative to the top idea: a proportion,
+  // never a score, so it stays in a round whose names (and points) are hidden.
+  const top = order.reduce((m, r) => Math.max(m, int(r.points)), 0);
   return order.map((row, i) => {
     const named = !hidden && row.playerName;
+    const points = hidden ? null : int(row.points);
     return {
       n: i + 1,
       label: named ? String(row.playerName) : `Response ${i + 1}`,
       text: String(row.answer || ''),
+      // RESULTS, IDEAS FIRST (owner, 16 Oct 2026): the idea is the headline, in full.
+      idea: String(row.answer || ''),
       first: firstWords(row.answer),
       // A score beside a response is attribution by arithmetic: it goes where the names go.
-      points: hidden ? null : int(row.points),
+      points,
+      credit: points === null ? null : RW.backedCredit(points, named ? String(row.playerName) : ''),
+      share: top > 0 ? int(row.points) / top : 0,
+      top: i === 0 && top > 0,
       named: Boolean(named),
     };
   });
@@ -269,13 +280,14 @@ export function presentModel(snapshot, reads = {}) {
     case 'RESULTS': {
       const rows = tallyRows(snapshot, reads.results);
       const show = rows.length > TALLY_WHOLE ? TALLY_TOP : rows.length;
-      const max = rows.reduce((m, r) => Math.max(m, r.points || 0), 0) || 1;
       return {
         moment,
         ...common,
         title: String(q.title || ''),
+        heading: RW.whatTheRoomBacked,
+        task: taskOf(q, snapshot),
         loading: !reads.results,
-        rows: rows.slice(0, show).map((r) => ({ ...r, share: r.points === null ? null : (r.points || 0) / max })),
+        rows: rows.slice(0, show),
         more: rows.length - show,
         total: rows.length,
         voted: int(snapshot.roomCounts && snapshot.roomCounts.voted),

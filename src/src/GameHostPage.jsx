@@ -8540,11 +8540,29 @@ Focus on actionable business strategy insights.`;
                      raw frequency was the wrong claim anyway. */
                   <WavelengthConvergence analysis={wavelengthAnalysis} />
                 ) : (
-                  <div className="cards">
+                  /* RESULTS, IDEAS FIRST (owner, 16 Oct 2026,
+                     docs/design/results-ideas-first version A): "the voting is
+                     less about the people and more about getting the best or
+                     most relevant ideas to the top of the conversation." The
+                     idea is the headline, in full; the rank and the share bar
+                     say how much the room backed it; the points and the name
+                     are a small credit, only while the names show; the top
+                     card is outlined (.lead). The share is backing relative to
+                     the top idea, a proportion and never a score, so it stays
+                     in a round whose names are hidden. */
+                  <>
+                  <div className="kicker">{RW.whatTheRoomBacked}</div>
+                  {currentQuestion && (
+                    <p className="recap" data-drop="4" data-drop-note="The prompt">
+                      {currentQuestion.title || currentQuestion.question}
+                    </p>
+                  )}
+                  <div className="cards is-ideas">
                     {answerPage.items.map((answer, i) => {
                       const idx = answerPage.offset + i;
                       const points = answer.points || 0;
-                      const player = players.find((p) => p.name === answer.player);
+                      const topPoints = answers.reduce((m, a) => Math.max(m, a.points || 0), 0);
+                      const share = topPoints > 0 ? points / topPoints : 0;
                       // THE SETTING BEATS THE ROW HERE, and it has to: these rows
                       // always carry their author by the time RESULTS is showing,
                       // because entering RESULTS reveals the round server-side
@@ -8610,19 +8628,17 @@ Focus on actionable business strategy insights.`;
                           {/* "1st", not "1" — the owner's word for it. */}
                           <span className="rank">{placeLabel(answer.placement)}</span>
                           <div className="body">
-                            <div className="ans">{`“${answerText(answer.answer)}”`}</div>
-                            <span className="who revealed">{displayName}</span>
+                            <div className="ans">{answerText(answer.answer)}</div>
+                            {showPoints && (
+                              <span className="who revealed">{RW.backedCredit(points, displayName)}</span>
+                            )}
                           </div>
-                          {showPoints && (
-                            <span className="tally">
-                              {`+${points}`}
-                              <small>{`${answer.votes || 0} votes · ${player?.score || 0} total`}</small>
-                            </span>
-                          )}
+                          <span className="share" aria-hidden="true" style={{ width: `${Math.max(3, Math.round(share * 100))}%` }} />
                         </div>
                       );
                     })}
                   </div>
+                  </>
                 )}
 
                 {/* RESULTS PAGES TOO, AND ON THIS PHASE IT MATTERS MOST.
@@ -8644,42 +8660,12 @@ Focus on actionable business strategy insights.`;
                   />
                 )}
 
-                {/* THE PODIUM IS CONTENT, AND IT LIVES HERE — inside .content,
-                    not in the meter and not in the setup panel.
-
-                    The meter cannot hold it: it returns null on RESULTS,
-                    FIELD_NOTES and ENDED, so the podium exists exactly where
-                    the meter does not. And even if it could, fitPolicy.js
-                    enters the meter into the sacrifice list at priority -1,
-                    ahead of every data-drop group — a podium there would be
-                    the FIRST thing thrown away on the densest results screen,
-                    which is worse than no podium because the host has already
-                    told the room it is coming.
-
-                    THE PODIUM WENT MISSING ENTIRELY, and this prop is why.
-                    It passed `!anonymityActive(...)` — the session setting,
-                    inverted, standing in for the reveal flag — on the reasoning
-                    that by RESULTS the server flag is true for every round and
-                    so decides nothing. The first half is right; the conclusion
-                    was not. Substituting the setting made the expression read
-                    `false` for the whole of any anonymous call-and-answer
-                    session, `standingsVisible` returned false with it, and
-                    `podiumEntries` bailed at its second gate — no top three at
-                    RESULTS, ever, on the format that has one. Reported together
-                    with the missing names, because it is the same substitution
-                    made twice.
-
-                    So: pass the flag. It is false exactly while the round is
-                    genuinely unrevealed, which is the case this gate is for, and
-                    it carries the names and the arithmetic together — a score
-                    that jumps names its author as surely as a label. */}
-                <Podium
-                  phase="RESULTS"
-                  gameType={currentGameType}
-                  anonymousUntilReveal={anonymousUntilReveal}
-                  authorsRevealed={authorsRevealed}
-                  players={players}
-                />
+                {/* NO PODIUM ON THE RESULTS (owner, 16 Oct 2026, results ideas
+                    first): the three names with points ranked PEOPLE on the one
+                    moment that is about the ideas. The standings stay on the
+                    scoreboard, opened on demand (S, the Remote, the Players tab,
+                    the console's People section). config/podium.js and its
+                    rulings are untouched, and ENDED keeps its podium below. */}
 
                 {/* Reading one answer properly. `answers` in FULL, not
                     `answerPage.items` — the pager is what the grid shows, and

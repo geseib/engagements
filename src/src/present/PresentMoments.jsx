@@ -167,24 +167,34 @@ export function PresentVoting({ model }) {
   );
 }
 
+/**
+ * RESULTS, IDEAS FIRST (owner, 16 Oct 2026, docs/design/results-ideas-first
+ * version A): "the voting is less about the people and more about getting the
+ * best or most relevant ideas to the top of the conversation." The idea is the
+ * headline, in full (up to three lines, then the fitter); the rank and the
+ * share bar say how much the room backed it; the points and, only when the
+ * round shows names, "— Name" are the small credit line. The top row is
+ * outlined. No points cell: the points live in the credit.
+ */
 export function PresentTally({ model }) {
   return (
     <div className="present-moment present-frame">
-      <Top model={model} right="Results" />
+      <Top model={model} right={model.heading || 'Results'} />
       <div className="present-main">
+        <TaskLine task={model.task} slim />
         {model.loading && !model.rows.length ? (
           <p className="present-lead">Counting the votes</p>
         ) : (
-          <div className="present-tally">
+          <div className="present-tally is-ideas">
             {model.rows.map((row) => (
               <TallyRow
                 key={row.n}
-                className="present-trow"
+                className={`present-trow${row.top ? ' is-top' : ''}`}
                 rank={row.n}
-                label={row.label}
-                sub={row.first}
+                label={<span className="present-idea">{row.idea}</span>}
+                sub={row.credit}
                 share={row.share}
-                points={row.points}
+                points={null}
               />
             ))}
           </div>

@@ -222,7 +222,11 @@ describe('the page actually renders it, in the right place, from the right sourc
     // nothing mounts. The gating condition is load-bearing: a bare
     // /<Podium/ still matches after the element is renamed.
     expect(host).toMatch(/import\s+Podium\s+from\s+'\.\/components\/stage\/Podium'/);
-    expect((host.match(/<Podium\s/g) || []).length).toBe(2);
+    // ONE, at ENDED: the RESULTS podium came off (owner, 16 Oct 2026, results
+    // ideas first: the results are about the ideas, the standings live on the
+    // scoreboard). config/podium.js and its RESULTS/ENDED rule are unchanged.
+    expect((host.match(/<Podium\s/g) || []).length).toBe(1);
+    expect(host).not.toMatch(/<Podium\s+phase="RESULTS"/);
   });
 
   /**
@@ -251,7 +255,7 @@ describe('the page actually renders it, in the right place, from the right sourc
     // the gate permanent, and takes the podium with it for the entire session.
     const at = [];
     for (let i = host.indexOf('<Podium'); i !== -1; i = host.indexOf('<Podium', i + 1)) at.push(i);
-    expect(at).toHaveLength(2);
+    expect(at).toHaveLength(1); // ENDED only since 16 Oct 2026 (results ideas first)
     for (const i of at) {
       const props = host.slice(i, host.indexOf('/>', i));
       expect(props).toMatch(/authorsRevealed=\{authorsRevealed\}/);
@@ -276,7 +280,7 @@ describe('the page actually renders it, in the right place, from the right sourc
     // a version with the ENDED podium hoisted out of <Stage> entirely.
     const at = [];
     for (let i = host.indexOf('<Podium'); i !== -1; i = host.indexOf('<Podium', i + 1)) at.push(i);
-    expect(at).toHaveLength(2);
+    expect(at).toHaveLength(1); // ENDED only since 16 Oct 2026 (results ideas first)
     for (const i of at) {
       expect(i).toBeGreaterThan(contentOpen);
       expect(i).toBeLessThan(stageClose);
