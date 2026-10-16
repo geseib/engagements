@@ -4,6 +4,8 @@
  * room's answer once the host shows it.
  */
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import FollowUpCard, { answered, surveyQuestionOf } from '../components/FollowUpCard';
 import useHeldFollowUp, { LATE_HOLD_MS } from '../utils/useHeldFollowUp';
@@ -119,7 +121,9 @@ function Room({ ask, gameState, onServer }) {
       keptLate={Boolean(h && h.late)}
       onDraft={onDraft(shown)}
       onSend={onSend}
-      onDone={release}
+      // Done only on the HELD card: on the results arm the card stays up as
+      // the round's content, so Done there would do nothing.
+      onDone={ask ? undefined : release}
     />
   );
 }
@@ -189,4 +193,21 @@ test('kept late on ENDED: let go on its own after a few seconds', async () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+test('kept late on the results arm (the ask still up): no Done, which could only do nothing there', async () => {
+  const onServer = jest.fn().mockResolvedValue({ ok: true, body: { late: true } });
+  render(<Room ask={IDEAS} gameState="RESULTS#003" onServer={onServer} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'After the results' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('kept, but not in the count');
+  expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+});
+
+test('PlayerPage passes onDone to the held card only, never to the RESULTS arm card', () => {
+  const page = fs.readFileSync(path.join(__dirname, '..', 'PlayerPage.jsx'), 'utf8');
+  const arm = page.slice(page.indexOf('} else if (followUpOnResults) {'), page.indexOf("} else if (gameState.startsWith('RESULTS#') && feedbackRound) {"));
+  expect(arm).toMatch(/<FollowUpCard/);
+  expect(arm).not.toMatch(/onDone=/);
+  expect(page).toMatch(/onLeave=\{releaseFollowUp\}/);
 });

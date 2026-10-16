@@ -4160,6 +4160,8 @@ function PlayerPage({ event = null } = {}) {
       A QUESTION FOR THE ROOM (docs/design/followup-icons): the host sent one
       from Workie's read. Answer it here; the result follows once the host
       shows it. Tested before the feedback round: one beat at a time.
+      No onDone here: this card IS the round's content and stays up after a
+      late send, so a Done would do nothing. Only the held card has one.
     */
     volume = followUp.ask.status === 'live' ? 'act' : 'watch';
     ctx = position ? `${position} · Question` : 'Question';
@@ -4171,7 +4173,6 @@ function PlayerPage({ event = null } = {}) {
         keptLate={Boolean(heldFor(followUp.ask) && heldFor(followUp.ask).late)}
         onSend={answerFollowUp}
         onDraft={followUpDraft(followUp.ask)}
-        onDone={releaseFollowUp}
       />
     );
 
