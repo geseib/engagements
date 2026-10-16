@@ -7934,15 +7934,10 @@ Focus on actionable business strategy insights.`;
   const consoleNotes = hostNotes && hostNotes.background
     ? <div className="hc-card"><h3 className="hc-card-h">{CW.forYou}</h3><p className="hc-muted">{hostNotes.background}</p></div>
     : null;
-  /* THE SCOREBOARD. On one screen it is the stage's own overlay; on two it is
-     drawn on the wall (/present), so the console says it is up and offers the
-     same close its S / Esc keys and its own button use. */
-  const consoleBoard = useConsole && scoreboard.open && scoreboardAvail.show ? (
-    <div className="hc-card">
-      <h3 className="hc-card-h">{CW.scoreboardOnWall}</h3>
-      <button type="button" className="hc-btn" onClick={() => publishScoreboard({ open: false })}>{CW.takeItDown}</button>
-    </div>
-  ) : null;
+  /* THE SCOREBOARD ON TWO SCREENS has one close control on the console: the
+     People section's "Hide scoreboard" (controller ruling, 16 Oct 2026). The
+     card that also said "The scoreboard is on the wall / Take it down" is gone;
+     S and Esc still close it. One screen is unchanged (the stage's overlay). */
   // The stage's status for VOTE / RESULTS responses, said the same way on the
   // console (config/stageAnswers.js): gathering, or failed with its retry.
   const consoleGathering = {
@@ -8097,7 +8092,6 @@ Focus on actionable business strategy insights.`;
             onReviewLate: openLateList,
           }}
         >
-          {consoleBoard}
           {consolePanel}
         </HostConsole>
       ) : (

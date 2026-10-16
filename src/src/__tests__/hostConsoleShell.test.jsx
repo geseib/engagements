@@ -316,3 +316,15 @@ describe('People: the scoreboard button', () => {
     expect(screen.queryByRole('button', { name: /scoreboard/i })).toBeNull();
   });
 });
+
+/* ONE SCOREBOARD CLOSE ON THE CONSOLE (controller ruling, 16 Oct 2026): the
+   People section's button. The page no longer draws a second "Take it down"
+   card in the main area. rejects: two controls for one act. */
+test('the page draws no second scoreboard card on the console', () => {
+  // eslint-disable-next-line global-require
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  expect(src).not.toMatch(/consoleBoard/);
+  expect(src).not.toMatch(/Take it down|takeItDown|scoreboardOnWall/);
+  expect(src).toMatch(/scoreboard: \{ \.\.\.scoreboardAvail, open: scoreboard\.open, onToggle:/);
+});
