@@ -53,7 +53,7 @@ import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, presentHref } from './config/surfaces';
+import { twoSurfacesHere, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
@@ -108,7 +108,8 @@ import {
   answeredCountFrom, waitingRoster, joinedRoster, answererIdsFrom,
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
-import { authFetch } from './auth/authFetch';
+import { authFetch, getActiveOrgId } from './auth/authFetch';
+import { pickSignedInOrg, remoteSignIn } from './config/remoteSignIn';
 import {
   fetchLate, reviewLateItem, closeComments as closeLateComments, lateStatusOf, lateItemsOf,
   setIncludeNotReviewed as saveIncludeNotReviewed,
@@ -1157,6 +1158,29 @@ function GameHostPage() {
   // The room's window and the host's notes, from the host door (host console spec §4.2).
   const [presentDetail, setPresentDetail] = useState(null);
   const [hostNotes, setHostNotes] = useState(null);
+  /*
+    WHO IS SIGNED IN HERE, AND FOR WHICH TEAM (owner, 16 Oct: "tell them in the
+    help and on the setup remote box which team/person is logged in"). The
+    team is the one this browser acts for (X-Engage-Org, the switcher's
+    choice), read once from GET /orgs; a failed read leaves the remote box
+    saying who in general terms rather than naming a wrong team.
+  */
+  const [signedInOrg, setSignedInOrg] = useState(null);
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let live = true;
+    (async () => {
+      try {
+        const res = await authFetch(`${API_BASE}orgs`);
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        if (live) setSignedInOrg(pickSignedInOrg(data && data.orgs, getActiveOrgId()));
+      } catch (e) {
+        /* the box falls back to the general words */
+      }
+    })();
+    return () => { live = false; };
+  }, [currentUser]);
   // The read below, for the `presentChanged` frame (its handler is registered once).
   const readHostStateRef = useRef(() => {});
   /*
@@ -6111,6 +6135,18 @@ Focus on actionable business strategy insights.`;
   // The HOST's own phone, not a player's. The stage's rail carries the player
   // join QR (see Rail's join code); this one hands the operator the remote.
   const remoteUrl = `${window.location.origin}/remote?gameId=${gameId}`;
+  const remoteWho = currentUser ? remoteSignIn({ org: signedInOrg, user: currentUser, privateScreen: twoSurfaces }) : null;
+  /* The Screens group, for Setup in the loop (StepView) — the same group the
+     Session panel's Settings tab draws, with the lobby chooser's handler. */
+  const setupScreens = {
+    choice: twoSurfaces ? 'two' : 'classic',
+    offerChoice: TWO_SURFACE_TYPES.includes(currentGameType || 'call-and-answer'),
+    onChoose: chooseRoomScreen,
+    presentHref: gameId ? presentHref(gameId) : '',
+    presentDetail,
+    profile,
+    onProfileChange: setProfile,
+  };
 
   // State for copy confirmation messages
   const [sidebarCopyMessage, setSidebarCopyMessage] = useState(false);
@@ -7944,6 +7980,7 @@ Focus on actionable business strategy insights.`;
             roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
           }}
           onAllSettings={() => setSetupPanelOpen(true)}
+          screens={setupScreens}
         />
       );
     }
@@ -8136,6 +8173,7 @@ Focus on actionable business strategy insights.`;
                 roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
               }}
               onAllSettings={() => setSetupPanelOpen(true)}
+              screens={setupScreens}
             />
           )
           : null}
@@ -9053,6 +9091,11 @@ Focus on actionable business strategy insights.`;
           onShowJoinCode={() => setQrMode('pinned')}
           profile={profile}
           onProfileChange={setProfile}
+          roomScreen={twoSurfaces ? 'two' : 'classic'}
+          onRoomScreenChange={chooseRoomScreen}
+          presentHref={gameId ? presentHref(gameId) : ''}
+          presentDetail={presentDetail}
+          remoteWho={remoteWho}
           /* THE TWO NAME DECISIONS, both session-level, both the host's.
              `anonymousUntilReveal` is the SAME flag the create dialog set —
              not a second one — so the setter is the same setter; the effect

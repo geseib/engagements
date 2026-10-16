@@ -1,5 +1,6 @@
 import React from 'react';
 import RW from '../../config/roundWords';
+import ScreensGroup from './ScreensGroup';
 
 /**
  * A STEP THE HOST IS LOOKING AT (session flow v3 §4.8; the v3 mockup's
@@ -11,6 +12,12 @@ import RW from '../../config/roundWords';
  *
  * facts: { title, twoScreens, presenting, setName, playerCount, answered,
  *          voted, roundsPlayed }
+ *
+ * SCREENS AT THE TOP OF SETUP (owner, 16 Oct: "there doesnt seem to be a way
+ * when clicking on the setup button to change screen mode"). `screens` is
+ * ScreensGroup's props, the same group the Session panel's Settings tab draws;
+ * changing where the room watches is the one act Setup offers, because it
+ * moves only this laptop and the room's window, never the live round.
  */
 function Row({ label, scope, children }) {
   return (
@@ -21,7 +28,7 @@ function Row({ label, scope, children }) {
   );
 }
 
-export default function StepView({ step, facts = {}, onAllSettings }) {
+export default function StepView({ step, facts = {}, onAllSettings, screens = null }) {
   if (!step) return null;
   const V = RW.view;
   let body;
@@ -29,9 +36,11 @@ export default function StepView({ step, facts = {}, onAllSettings }) {
     body = (
       <>
         <Row label={V.sessionName} scope={V.fromNextRound}>{facts.title || '—'}</Row>
-        <Row label={V.roomScreen} scope={V.fromNextRound}>
-          {facts.twoScreens ? V.twoScreens(facts.presenting) : V.oneScreen}
-        </Row>
+        {screens ? null : (
+          <Row label={V.roomScreen} scope={V.fromNextRound}>
+            {facts.twoScreens ? V.twoScreens(facts.presenting) : V.oneScreen}
+          </Row>
+        )}
         {facts.setName ? <Row label={V.questionSet} scope={V.fromNextRound}>{facts.setName}</Row> : null}
         <Row label={V.joined}>{facts.playerCount ?? 0}</Row>
         <p className="wfs-view-note">{V.settingsScope}</p>
@@ -61,6 +70,7 @@ export default function StepView({ step, facts = {}, onAllSettings }) {
       <div className="wfs-view-card">
         <h2 className="wfs-view-h">{step.label}</h2>
         <p className="wfs-view-explain">{step.explain}</p>
+        {step.id === 'setup' && screens ? <ScreensGroup {...screens} /> : null}
         {body}
       </div>
     </section>

@@ -348,7 +348,12 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Scan the "Controls on your phone" QR from the Settings tab. Your phone becomes the remote and the big screen stays on the room — so you can walk around instead of standing behind a laptop.',
+          text: 'Scan the QR under "Your phone as a remote" in the Settings tab. Your phone becomes the remote and the big screen stays on the room — so you can walk around instead of standing behind a laptop.',
+        },
+        { t: 'h', text: 'Who may sign in on the phone' },
+        {
+          t: 'p',
+          text: 'On a team session, sign in on the phone as any host or admin of that team: it does not have to be the account on this laptop. On a personal account, sign in as you. Only your account can drive this session. The "Your phone as a remote" box names the team and who is signed in on this laptop now.',
         },
         { t: 'h', text: 'What the phone gives you' },
         {

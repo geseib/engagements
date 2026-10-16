@@ -532,7 +532,8 @@ describe('the Settings tab', () => {
     const onProfileChange = jest.fn();
     renderPanel({ onProfileChange });
     openTab('Settings');
-    fireEvent.change(screen.getByLabelText(/display/i), { target: { value: 'table' } });
+    // "Display profile" was renamed "Room screen size" in the 16 Oct regroup (Screens group).
+    fireEvent.change(screen.getByLabelText('Room screen size'), { target: { value: 'table' } });
     expect(onProfileChange).toHaveBeenCalledWith('table');
   });
 
