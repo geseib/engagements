@@ -340,6 +340,9 @@ async function phoneAnswer(db, broadcast, { gameId, meta, state, askId, body }) 
   if (!kept.ok) return respond(409, { error: 'You have already answered this question.', code: kept.code });
   console.log(`Late follow-up answer kept on round ${round} (arrived during ${state.State})`);
   await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status: 'late' });
+  // The host's late list reads /late, which followUpChanged does not refetch
+  // (after ENDED nothing else would): tell the hosts, as a late comment does.
+  await broadcast(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
   return respond(200, { gameId, askId, yours: checked.value, late: true });
 }
 

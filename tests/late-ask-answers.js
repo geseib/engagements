@@ -187,6 +187,24 @@ async function closedRate() {
     assert.strictEqual(table.prefix(PK, `FOLLOWUP#003#ASK#${askId}#LATE#`).length, 0);
   });
 
+  await check('the host hears of it: lateChanged, to hosts only, beside followUpChanged', async () => {
+    const askId = await closedRate();
+    sent.length = 0;
+    const r = await answer(askId, 'Linus', 'c-linus', 2);
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.ok(sent.some((f) => f.type === 'followUpChanged' && f.status === 'late'), JSON.stringify(sent));
+    const late = sent.filter((f) => f.type === 'lateChanged');
+    assert.strictEqual(late.length, 1, JSON.stringify(sent));
+    assert.deepStrictEqual(late[0], { type: 'lateChanged', gameId: GAME });
+  });
+  await check('an on-time answer sends no lateChanged', async () => {
+    seed();
+    const s = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'Rollback is cheap' } });
+    sent.length = 0;
+    assert.strictEqual((await answer(s.body.ask.askId, 'Ada', 'c-ada', 4)).status, 200);
+    assert.strictEqual(sent.some((f) => f.type === 'lateChanged'), false, JSON.stringify(sent));
+  });
+
   say('\n4. the round moved on');
   await check('kept, with the state it arrived during', async () => {
     const askId = await closedRate();
