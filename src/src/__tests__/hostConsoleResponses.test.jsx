@@ -81,3 +81,30 @@ test('results with the names hidden show no names', () => {
   expect(text).not.toMatch(/Ada|Ben|Cleo/);
   expect(text).toMatch('Weekly status meetings');
 });
+
+/* RESULTS HAVE POINTS (walk, 15 Oct): the stage's rule — points only while
+   names are shown, because a score that jumps names its author. */
+const SCORED = [
+  { answer: 'Weekly status meetings', playerName: 'Ada', points: 12 },
+  { answer: 'The paper sign-off sheet', playerName: 'Ben', points: 1 },
+  { answer: 'The Friday phone round-up', playerName: 'Cleo' },
+];
+
+test('results with names shown: each row says its points', () => {
+  render(<ResponsesPanel kicker="k" title="t" phase="RESULTS" responses={SCORED} authorsHidden={false} />);
+  const pts = screen.getAllByTestId('hc-resp').map((n) => n.querySelector('.hc-pts')?.textContent);
+  expect(pts).toEqual(['12 points', '1 point', '0 points']);
+});
+
+test('results with names hidden: no points', () => {
+  const { container } = render(<ResponsesPanel kicker="k" title="t" phase="RESULTS" responses={SCORED} authorsHidden />);
+  expect(container.querySelector('.hc-pts')).toBeNull();
+  expect(container.textContent).not.toMatch(/points?\b/);
+});
+
+test('answering and voting never show points', () => {
+  const { container, rerender } = render(<ResponsesPanel kicker="k" title="t" phase="ASK" responses={SCORED} authorsHidden={false} />);
+  expect(container.querySelector('.hc-pts')).toBeNull();
+  rerender(<ResponsesPanel kicker="k" title="t" phase="VOTE" responses={SCORED} authorsHidden={false} />);
+  expect(container.querySelector('.hc-pts')).toBeNull();
+});

@@ -47,6 +47,7 @@ const CW = Object.freeze({
   commentsTitle: 'Comments as they land',
   noComments: 'No comments yet.',
   waitingForResponses: 'No responses yet.',
+  points: (n) => (n === 1 ? '1 point' : `${n} points`),
 });
 
 export default CW;

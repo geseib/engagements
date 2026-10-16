@@ -29,6 +29,10 @@ export default function ResponsesPanel({
     ? rows.map((r, i) => ({ r, i })).reverse()
     : rows.map((r, i) => ({ r, i }));
   const labelPhase = phase === 'VOTE' ? 'VOTE' : phase === 'RESULTS' ? 'RESULTS' : 'ASK';
+  // THE STAGE'S RULE FOR POINTS (GameHostPage, the RESULTS cards): a score
+  // that jumps names its author as surely as a label would, so points show on
+  // RESULTS only while the names do (standingsVisible === !authorsHidden).
+  const showPoints = phase === 'RESULTS' && !authorsHidden;
   return (
     <section className="hc-panel">
       <p className="hc-kicker">{kicker}</p>
@@ -47,11 +51,14 @@ export default function ResponsesPanel({
                 key={i}
                 type={onPutOnWall ? 'button' : undefined}
                 data-testid="hc-resp"
-                className={`hc-resp${onWall ? ' is-onwall' : ''}${r.isNew ? ' is-new' : ''}`}
+                className={`hc-resp${onWall ? ' is-onwall' : ''}${r.isNew ? ' is-new' : ''}${showPoints ? ' has-pts' : ''}`}
                 onClick={onPutOnWall ? () => onPutOnWall(i) : undefined}
               >
-                <small>{label}{onWall ? ` · ${CW.onTheWall}` : ''}</small>
-                {r.answer}
+                <span className="hc-resp-body">
+                  <small>{label}{onWall ? ` · ${CW.onTheWall}` : ''}</small>
+                  {r.answer}
+                </span>
+                {showPoints ? <span className="hc-pts">{CW.points(r.points || 0)}</span> : null}
               </Tag>
             );
           })}
