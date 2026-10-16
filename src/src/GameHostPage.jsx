@@ -7537,6 +7537,9 @@ Focus on actionable business strategy insights.`;
   const stagePageIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
   const setStagePageIndex = (index) => turnStagePage(pageKey, index);
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
+  // The RESULTS cards' share bars are backing relative to the top idea, over
+  // the whole round (not the page): computed once here, not per card.
+  const resultsTopPoints = answers.reduce((m, a) => Math.max(m, (a && a.points) || 0), 0);
 
   // AUTO-MODE'S HANDS — see the effect above the early returns. Assigned by
   // the same render that draws the stage, so when the timer fires it presses
@@ -8617,8 +8620,7 @@ Focus on actionable business strategy insights.`;
                     {answerPage.items.map((answer, i) => {
                       const idx = answerPage.offset + i;
                       const points = answer.points || 0;
-                      const topPoints = answers.reduce((m, a) => Math.max(m, a.points || 0), 0);
-                      const share = topPoints > 0 ? points / topPoints : 0;
+                      const share = resultsTopPoints > 0 ? points / resultsTopPoints : 0;
                       // THE SETTING BEATS THE ROW HERE, and it has to: these rows
                       // always carry their author by the time RESULTS is showing,
                       // because entering RESULTS reveals the round server-side

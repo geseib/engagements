@@ -138,3 +138,16 @@ test('the question line above the cards puts the question up', async () => {
   fireEvent.click(q);
   expect(document.querySelector('.expanded-lesson-overlay')).not.toBeNull();
 }, 15000);
+
+/* The top idea's points are found once over the whole round, not once per
+   card (review of the 16 Oct batch, finding 3). The share widths above prove
+   the value; this pins where it is computed. */
+test('the share bars read one top-points value, computed outside the cards', () => {
+  // eslint-disable-next-line global-require
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+  const cards = src.slice(src.indexOf('<div className="cards is-ideas">'));
+  const mapBody = cards.slice(0, cards.indexOf('</div>\n                  </>'));
+  expect(mapBody).toMatch(/resultsTopPoints/);
+  expect(mapBody).not.toMatch(/answers\.reduce/);
+  expect(src.indexOf('const resultsTopPoints')).toBeLessThan(src.indexOf('<div className="cards is-ideas">'));
+});
