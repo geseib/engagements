@@ -92,12 +92,18 @@ async function presentingCount(db, tableName, gameId) {
  * The room's window as the host console reports it (host console spec §4.2):
  * the most recently reporting Present viewer's Fullscreen/Visible/StatusAt.
  */
-async function presentingDetail(db, tableName, gameId) {
+/*
+  `ageMs` is the SERVER's now minus the viewer's StatusAt (null with no
+  StatusAt). The host's laptop judges a stale window by it rather than by its
+  own clock against `statusAt`, so a laptop clock a minute or two off cannot
+  call a live window gone, or a gone one live (final review, 15 Oct).
+*/
+async function presentingDetail(db, tableName, gameId, nowMs = Date.now()) {
   const { items } = await queryAll(db, tableName, gameId, 'CONNECTION#', {
     FilterExpression: 'Viewer = :viewer',
     ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#', ':viewer': 'present' },
   });
-  if (!items.length) return { open: false, fullscreen: null, visible: null, statusAt: null };
+  if (!items.length) return { open: false, fullscreen: null, visible: null, statusAt: null, ageMs: null };
   const stamp = (i) => String(i.StatusAt || i.ConnectedAt || '');
   const latest = items.slice().sort((a, b) => stamp(b).localeCompare(stamp(a)))[0];
   return {
@@ -105,7 +111,13 @@ async function presentingDetail(db, tableName, gameId) {
     fullscreen: typeof latest.Fullscreen === 'boolean' ? latest.Fullscreen : null,
     visible: typeof latest.Visible === 'boolean' ? latest.Visible : null,
     statusAt: latest.StatusAt || null,
+    ageMs: ageOf(latest.StatusAt, nowMs),
   };
+}
+
+function ageOf(statusAt, nowMs) {
+  const at = Date.parse(String(statusAt || ''));
+  return Number.isFinite(at) ? Math.max(0, nowMs - at) : null;
 }
 
 module.exports = { roomCounts, presentPlayers, presentingCount, presentingDetail, queryAll };

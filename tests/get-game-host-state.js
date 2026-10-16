@@ -392,7 +392,7 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   put({ PK: 'SET#set-notes', SK: 'Q#1', Title: 'A question', Detail: 'detail', Background: NOTE });
   const noWindow = await call(HOST_ROUTE, NOTES_GAME, { authorizer: hostOf(null, 'admins') });
   await check('no Present viewer: presentDetail reports it closed', () =>
-    assert.deepStrictEqual(noWindow.body.presentDetail, { open: false, fullscreen: null, visible: null, statusAt: null }));
+    assert.deepStrictEqual(noWindow.body.presentDetail, { open: false, fullscreen: null, visible: null, statusAt: null, ageMs: null }));
   await check('the question\'s Background reaches the host door as hostNotes', () =>
     assert.deepStrictEqual(noWindow.body.hostNotes, { background: NOTE }));
   await check('hostNotes is null when the question has no Background', async () => {
@@ -404,13 +404,23 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   put({ PK: NPK, SK: 'CONNECTION#old', ConnectionType: 'PLAYER', Viewer: 'present', ConnectedAt: '2026-10-15T09:00:00.000Z', Fullscreen: false, Visible: false, StatusAt: '2026-10-15T09:01:00.000Z' });
   put({ PK: NPK, SK: 'CONNECTION#new', ConnectionType: 'PLAYER', Viewer: 'present', ConnectedAt: '2026-10-15T09:00:00.000Z', Fullscreen: true, Visible: true, StatusAt: '2026-10-15T09:05:00.000Z' });
   put({ PK: NPK, SK: 'CONNECTION#phone', ConnectionType: 'PLAYER', PlayerName: 'Ada', Fullscreen: false });
+  const beforeRead = Date.now();
   const withWindow = await call(HOST_ROUTE, NOTES_GAME, { authorizer: hostOf(null, 'admins') });
-  await check('the latest reporting viewer\'s booleans and time are handed back; a phone is not a window', () =>
-    assert.deepStrictEqual(withWindow.body.presentDetail, { open: true, fullscreen: true, visible: true, statusAt: '2026-10-15T09:05:00.000Z' }));
+  const afterRead = Date.now();
+  await check('the latest reporting viewer\'s booleans and time are handed back; a phone is not a window', () => {
+    const { ageMs, ...rest } = withWindow.body.presentDetail;
+    assert.deepStrictEqual(rest, { open: true, fullscreen: true, visible: true, statusAt: '2026-10-15T09:05:00.000Z' });
+    assert.strictEqual(typeof ageMs, 'number');
+  });
+  await check('ageMs is the SERVER\'s now minus StatusAt, so the laptop\'s clock never decides staleness', () => {
+    const at = Date.parse('2026-10-15T09:05:00.000Z');
+    const { ageMs } = withWindow.body.presentDetail;
+    assert.ok(ageMs >= beforeRead - at && ageMs <= afterRead - at, `ageMs ${ageMs} outside [${beforeRead - at}, ${afterRead - at}]`);
+  });
   await check('a viewer that has not reported reads open with unknowns', async () => {
     put({ PK: NPK, SK: 'CONNECTION#new', ConnectionType: 'PLAYER', Viewer: 'present', ConnectedAt: '2026-10-15T09:06:00.000Z' });
     const fresh = await call(HOST_ROUTE, NOTES_GAME, { authorizer: hostOf(null, 'admins') });
-    assert.deepStrictEqual(fresh.body.presentDetail, { open: true, fullscreen: null, visible: null, statusAt: null });
+    assert.deepStrictEqual(fresh.body.presentDetail, { open: true, fullscreen: null, visible: null, statusAt: null, ageMs: null });
   });
   const pubNotes = await call(PUBLIC_ROUTE, NOTES_GAME);
   await check('the public door carries neither presentDetail nor hostNotes, nor the note', () => {
