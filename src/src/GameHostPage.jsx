@@ -6861,6 +6861,9 @@ Focus on actionable business strategy insights.`;
     // The response on the wall, in tally order: RESULTS becomes RESPONSES and
     // the primary walks the responses (Next response, then What we heard).
     spotlightIndex,
+    // The question put back up on the wall: during VOTE, Next response then
+    // goes to Response 1 (roundStep), as it does on the Remote.
+    wallFocus,
     // ASK THE ROOM: the question on screen (live, then its results) and how
     // many asks wait beside the read.
     roomAsk: roundAsks.shown

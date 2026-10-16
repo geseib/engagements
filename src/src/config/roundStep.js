@@ -238,6 +238,11 @@ function secondaryFor(moment, ctx, primary) {
       if (!(ctx.answerCount > 0)) {
         return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward', { arm: { text: RW.armSkip(noun) } });
       }
+      // THE QUESTION ON THE WALL (review, 16 Oct 2026): Response 1 is not up
+      // while the question is, so the next response is Response 1 itself.
+      if (moment === 'VOTING' && ctx.focus && ctx.focus.focus === 'question') {
+        return control('next-response', RW.nextResponse, I.NEXT_RESPONSE, 'ArrowRight', { index: 0, part: 0 });
+      }
       const { index, part, parts } = moment === 'VOTING' ? { index: 0, part: 0, parts: 1 } : ctx.responses;
       if (parts > 1 && part < parts - 1) {
         return control('next-part', RW.nextPart, I.NEXT_PART, 'ArrowRight', { index, part: part + 1, parts });
