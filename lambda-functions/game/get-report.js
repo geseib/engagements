@@ -115,6 +115,10 @@ exports.handler = async (event) => {
         
         // Build Room only (build-points-report.js); null elsewhere.
         talkingPoints: report.talkingPoints || null,
+        // "Include items not reviewed" as the report was built, and what it
+        // left out (create-report.js). Absent on reports from before it.
+        includeNotReviewed: report.includeNotReviewed !== false,
+        notReviewedLeftOut: report.notReviewedLeftOut || null,
         reportGeneratedAt: report.reportGeneratedAt,
         reportVersion: report.reportVersion,
         timestamp: new Date().toISOString()

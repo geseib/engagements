@@ -9,6 +9,7 @@ import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import { authFetch } from './auth/authFetch';
+import { fetchLate, lateStatusOf } from './utils/lateClient';
 import { navigateTo } from './auth/navigate';
 import RW from './config/roundWords';
 import { useOptionalAuth } from './auth/AuthContext';
@@ -940,6 +941,36 @@ function HostRemote() {
     ? { status: shownStatus, answered: shownAnswered, total: rosterCount || 0 }
     : null), [shownStatus, shownAnswered, rosterCount]);
   const askReady = roundAsks.enabled ? roundAsks.unsent.length : 0;
+  /*
+    THE LATE COUNT (late items Task 4): the same /late read the laptop makes,
+    so the Remote's status line says what the dock says ("· 1 late answer
+    kept"). Read when the room moves; a failed read keeps the last.
+  */
+  const [lateRounds, setLateRounds] = useState([]);
+  const remoteState = snapshot ? snapshot.state : '';
+  useEffect(() => {
+    if (!gameId || access.status !== ACCESS.OK) return undefined;
+    let cancelled = false;
+    fetchLate({ fetchFn: authFetch, apiBase: apiBase(), gameId }).then((r) => {
+      if (!cancelled && r.ok) setLateRounds(r.rounds);
+    });
+    return () => { cancelled = true; };
+  }, [gameId, access.status, remoteState]);
+  // A late item arrives without the state moving (during the session as at
+  // the end), and the host may review on the laptop: re-read on the roster's
+  // tick, once per ROSTER_POLL_MS, so "N late" stays true throughout. One
+  // timer for the session, not one per state.
+  useEffect(() => {
+    if (!gameId || access.status !== ACCESS.OK) return undefined;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      fetchLate({ fetchFn: authFetch, apiBase: apiBase(), gameId }).then((r) => {
+        if (!cancelled && r.ok) setLateRounds(r.rounds);
+      });
+    }, ROSTER_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [gameId, access.status]);
+  const lateStatus = useMemo(() => lateStatusOf(lateRounds), [lateRounds]);
   const stepExtras = useMemo(() => ({
     playerCount: rosterCount,
     answerCount: onResults || onVoting ? focusAnswers.length : undefined,
@@ -949,8 +980,9 @@ function HostRemote() {
     roomAsk: askRoomAsk,
     asksReady: askReady,
     asksEnabled: Boolean(roundAsks.enabled) && /call/i.test(String(snapshot?.gameType || '')),
+    late: lateStatus,
   }), [rosterCount, onResults, onVoting, focusAnswers.length, notes.ready, setId, goal.reached, goal.line,
-    askRoomAsk, askReady, roundAsks.enabled, snapshot?.gameType]);
+    askRoomAsk, askReady, roundAsks.enabled, snapshot?.gameType, lateStatus]);
   const step = useMemo(() => remoteStep(snapshot, stepExtras), [snapshot, stepExtras]);
   /* The workflow strip as dots (session flow v3 §4.6), from the same step. */
   const strip = useMemo(

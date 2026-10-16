@@ -245,6 +245,9 @@ export function roundsFrom(payload) {
         // Questions for the room sent after the read (docs/design/followup-icons);
         // named here for the same reason as `comments`.
         followUps: Array.isArray(round.followUps) ? round.followUps : [],
+        // "Arrived late" (late items Task 5): the host's, named here for the
+        // same reason. null when the report carried none.
+        late: round.late && typeof round.late === 'object' ? round.late : null,
         // A closed survey's feedback round (comments.js surveyFeedbackRound):
         // its rows are the survey's questions, and RoundReport titles them so.
         ...(round.kind ? { kind: round.kind } : {}),
@@ -264,7 +267,10 @@ export function roundsFrom(payload) {
  */
 export function feedbackRoundFrom(slice) {
   if (!slice) return null;
-  return roundsFrom({ detailedQuestions: [slice] })[0] || null;
+  const round = roundsFrom({ detailedQuestions: [slice] })[0] || null;
+  // A phone never draws "Arrived late" or its review labels (owner, Q14).
+  // The server already leaves it out; this holds if it ever did not.
+  return round ? { ...round, late: null } : null;
 }
 
 /**

@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import CW from '../../config/consoleWords';
 import { consoleRailFor, peopleSummary } from '../../config/consoleRail';
+import LW from '../../config/lateWords';
+import { canShowOnWall } from '../../utils/lateClient';
+
+/** The rail shows the first few; "Review them" opens the whole list. */
+const LATE_SHOWN = 3;
 
 const MARK = { answered: '✓', voted: '✓', here: '✓', writing: '…', 'not-yet': '…' };
 const META = { answered: CW.answered, voted: CW.voted, writing: CW.stillWriting, 'not-yet': CW.notYet, here: '' };
@@ -27,11 +32,31 @@ function Section({ id, title, summary, alert = false, open, onToggle, children, 
  * session tools. The section that matters for the moment opens by itself; the
  * host's own open/close choice holds until the moment changes.
  */
-export default function ConsoleRail({ moment, rounds = [], total = null, people = [], counts = {}, late = [], connected = true, onOpenSection = () => {} }) {
+export default function ConsoleRail({
+  moment, rounds = [], total = null, people = [], counts = {}, late = [], lateCount = null, lateWall = null,
+  onLateShow = () => {}, onLateMark = () => {}, connected = true, onOpenSection = () => {},
+  scoreboard = null,
+}) {
+  // A refusal from the late buttons, said in the section (as LateList does).
+  const [lateError, setLateError] = useState('');
+  // While one call is in flight every late button waits (LateList's `busy`),
+  // so a second press cannot send it twice.
+  const [lateBusy, setLateBusy] = useState(false);
+  const lateAct = (fn) => async (item) => {
+    setLateBusy(true);
+    setLateError('');
+    try {
+      const r = await fn(item);
+      if (r && r.ok === false) setLateError(r.error || 'That did not work.');
+    } finally {
+      setLateBusy(false);
+    }
+  };
   const [open, setOpen] = useState(() => consoleRailFor(moment));
   useEffect(() => { setOpen(consoleRailFor(moment)); }, [moment]);
   const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
   const nowRound = rounds.find((r) => r.state === 'now');
+  const waiting = Number.isFinite(Number(lateCount)) && lateCount !== null ? Number(lateCount) : late.length;
   // The session's total is the strip's ("Round 1 of 80"), never the length of
   // the list: the page knows only a few rounds' titles (walk, 15 Oct: the
   // queue said "1 of 7" beside "Round 1 of 80"). No total known: the round.
@@ -57,15 +82,47 @@ export default function ConsoleRail({ moment, rounds = [], total = null, people 
             </li>
           ))}
         </ul>
+        {/* THE SCOREBOARD, ON THE WALL OR OFF IT (owner, 16 Oct 2026): the
+            page's own toggle (the S key's), drawn only where a scoreboard is
+            allowed (config/scoreboard.js scoreboardAvailability: Trivia and
+            Call & Answer), disabled with its reason before a round is scored. */}
+        {scoreboard && scoreboard.show ? (
+          <div className="hc-board">
+            <button
+              type="button"
+              className="hc-btn"
+              disabled={!scoreboard.enabled}
+              onClick={() => scoreboard.onToggle(!scoreboard.open)}
+            >
+              {scoreboard.open ? CW.hideScoreboard : CW.showScoreboard}
+            </button>
+            {!scoreboard.enabled && scoreboard.reason ? <span className="hc-meta">{scoreboard.reason}</span> : null}
+          </div>
+        ) : null}
       </Section>
-      <Section id="late" title={CW.late} summary={String(late.length)} alert={late.length > 0} open={open === 'late'} onToggle={toggle} link={late.length ? CW.reviewLate : null} onLink={() => onOpenSection('history')}>
+      {/* LATE & NOT REVIEWED (late items Task 4): the whole count, the first
+          few with their two quiet buttons; "Review them" opens the full list
+          in the Session panel's Rounds tab. */}
+      <Section id="late" title={CW.late} summary={String(waiting)} alert={waiting > 0} open={open === 'late'} onToggle={toggle} link={waiting ? CW.reviewLate : null} onLink={() => onOpenSection('history')}>
         {late.length ? (
           <ul className="hc-list">
-            {late.map((l) => (
-              <li key={l.id}><span className="hc-bullet">•</span><span>{l.label}<span className="hc-meta">{l.meta ? ` · ${l.meta}` : ''}</span></span></li>
+            {late.slice(0, LATE_SHOWN).map((l) => (
+              <li key={l.id} className="hc-late">
+                <span className="hc-bullet">•</span>
+                <span>
+                  {l.label}<span className="hc-meta">{l.meta ? ` · ${l.meta}` : ''}</span>
+                  {l.item ? (
+                    <span className="hc-late-acts">
+                      {canShowOnWall(l.item, lateWall) ? <button type="button" className="hc-link" disabled={lateBusy} onClick={() => lateAct(onLateShow)(l.item)}>{LW.show}</button> : null}
+                      {!l.item.reviewed ? <button type="button" className="hc-link" disabled={lateBusy} onClick={() => lateAct(onLateMark)(l.item)}>{LW.markReviewed}</button> : null}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
             ))}
           </ul>
         ) : <p className="hc-empty">{CW.noLate}</p>}
+        {lateError ? <p className="hc-empty hc-error" role="alert">{lateError}</p> : null}
       </Section>
       <Section id="tools" title={CW.tools} summary={connected ? `● ${CW.connected}` : CW.offline} open={open === 'tools'} onToggle={toggle}>
         <ul className="hc-list">

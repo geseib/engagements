@@ -691,6 +691,16 @@ function requiredGroupsForRoute(method, path) {
   if (path === 'games/{gameId}/followups/{proxy+}' || /^games\/[^/]+\/followups\/.+$/.test(path)) {
     return ['hosts', 'admins'];
   }
+  // ── THE HOST'S LATE LIST (session flow v3 §4.4, late items Task 3) ───────
+  //
+  // `GET /games/{gameId}/late` returns every late answer and added-later
+  // comment, decrypted; `POST .../late/review` labels one or closes comments.
+  // Named here because "GET + games is public" below would admit any pool
+  // account. comments.js additionally asks callerMayDriveSession. Template
+  // and concrete path, as above.
+  if (/^games\/[^/]+\/late(?:\/review)?$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
   // ── A SURVEY'S HOST READS ────────────────────────────────────────────────
   //
   // `GET /games/{gameId}/survey/progress` and `/survey/people` say who has and

@@ -131,6 +131,10 @@ export function initialGameSession() {
     // count. Default ON (refresh-2026-09-22 RATIONALE §7 Q1's recommendation);
     // per-game for the same reason as the setting above.
     wallComments: true,
+    // "Include items not reviewed" in the session report (late items Task 5).
+    // Default ON, and per-game: it is this session's, kept on its METADATA
+    // and read back with the late list, so a new session starts on.
+    includeNotReviewed: true,
     // AUTO-MODE — the session advances itself when everyone has responded,
     // paging through responses and Workie's summary at reading pace first
     // (config/autoMode.js holds the arithmetic; the host page holds the one

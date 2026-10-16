@@ -17,6 +17,24 @@ const { houseWeightsFor, availableAngles, pickAngle, buildAngleDirective } = req
 const { extractVariableTokens } = require('./template-variables');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
+const { lateIncludedLine } = require('./late-labels');
+
+/**
+ * The block a Redo gives Workie (owner Q5): the round's late answers, said
+ * to be late, unvoted and unscored. In a round that hid names, no name.
+ */
+function lateAnswersLayer(lateAnswers, { hidden }) {
+  const lines = lateAnswers.map((a) => (hidden || !a.playerName
+    ? `- "${a.answer}"`
+    : `- ${a.playerName}: "${a.answer}"`));
+  return [
+    'ANSWERS THAT ARRIVED LATE',
+    `These ${lateAnswers.length === 1 ? 'answer' : `${lateAnswers.length} answers`} came in after the room had moved on.`
+      + ' They were not voted on and earned no points. Read them with the rest, do not rank them,'
+      + ' and say where one adds something the room did not.',
+    ...lines,
+  ].join('\n');
+}
 const { consensusLabel } = require('./consensus');
 // buildWavelengthProse lives in wavelength.js WITH the engine, not here.
 // promptPreflight.test.js extracts "the hardcoded fallback" by slicing from
@@ -192,11 +210,12 @@ async function sessionOrgId(gameId) {
  */
 const HOST_ROUTE = /\/ai-summary\/host$/;
 
-async function refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug, followUps }) {
+async function refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug, followUps, redo }) {
   const rc = event.requestContext || {};
   const route = rc.routeKey || event.routeKey || event.rawPath || '';
   if (!HOST_ROUTE.test(route)) {
-    const hostOnly = Boolean(generateNew) || debug === 'true' || promptDebug === 'true' || Boolean(followUps);
+    const hostOnly = Boolean(generateNew) || debug === 'true' || promptDebug === 'true' || Boolean(followUps)
+      || redo === 'true';
     if (!hostOnly) return null;
     return {
       statusCode: 403,
@@ -950,10 +969,15 @@ const handle = async (event, context) => {
   // persist, and broadcast the result over WebSocket.
   const workerMode = event.__workerMode === true;
   try {
-    let gameId, questionId, generateNew, debug, promptDebug, model, variants, followUps;
+    let gameId, questionId, generateNew, debug, promptDebug, model, variants, followUps, redo;
     // The follow-up suggestions alone, from the read already stored (the
     // host's "make them again"). Never the read itself.
     const followUpsOnly = workerMode && event.followUpsOnly === true;
+    // THE HOST PRESSED REDO (owner, Q5: late answers are listed beside the
+    // read, not in it; "Redo includes them and says so"). The HTTP route
+    // passes `redo=true` through to the worker as `includeLate`; a first read,
+    // an automatic retry of one and every other read leave the late rows out.
+    const includeLate = workerMode && event.includeLate === true;
     if (workerMode) {
       ({ gameId, questionId, debug, promptDebug } = event); // questionId === targetQuestionId
       generateNew = 'true';
@@ -961,7 +985,7 @@ const handle = async (event, context) => {
     } else {
       ({ gameId } = event.pathParameters || {});
       const queryParams = event.queryStringParameters || {};
-      ({ questionId, generateNew, debug, promptDebug, model, variants, followUps } = queryParams);
+      ({ questionId, generateNew, debug, promptDebug, model, variants, followUps, redo } = queryParams);
     }
 
     if (!gameId) {
@@ -975,7 +999,7 @@ const handle = async (event, context) => {
     // generateNew, debug and promptDebug are the host's (refuseUnlessHost).
     // The worker was started by a request that already passed this.
     if (!workerMode) {
-      const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug, followUps });
+      const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug, followUps, redo });
       if (refusal) return refusal;
     }
 
@@ -1143,6 +1167,8 @@ const handle = async (event, context) => {
           // apart after the fact.
           fallback: existingSummary.Item.Fallback === true,
           fallbackReason: existingSummary.Item.Fallback === true ? (existingSummary.Item.FallbackReason || null) : null,
+          // How many late answers a Redo read in (0: none).
+          lateAnswersIncluded: existingSummary.Item.LateAnswersIncluded || 0,
           generatedAt: existingSummary.Item.GeneratedAt,
           fromCache: true
         };
@@ -1226,6 +1252,8 @@ const handle = async (event, context) => {
           debug,
           promptDebug,
           ...(jobId ? { jobId } : {}),
+          // The host's Redo: include the round's late answers (see includeLate).
+          ...(redo === 'true' ? { includeLate: true } : {}),
           // Only a staff request on dev carries a model; the worker then writes
           // that model's variant and leaves the room's read alone.
           ...(requestedModel ? { model: requestedModel.id } : {})
@@ -1481,6 +1509,37 @@ const handle = async (event, context) => {
     const answers = summaryOrgId
       ? await decryptItems(summaryOrgId, 'answer', answersQuery.Items || [])
       : (answersQuery.Items || []);
+
+    /*
+      THE LATE ANSWERS, ON A REDO ONLY (session flow v3 §4.4, owner Q5). Their
+      own rows (QUESTION#nnn#LATE#<player>, websocket/message.js), outside the
+      ANSWER# prefix above, so they never join `answers`: every tally, score,
+      winner and the room's order below is built from the on-time answers
+      alone. They reach Workie as their own block (generateAISummary) and the
+      read then says how many it included. Paged: a one-call Query past 1 MB
+      truncates silently.
+    */
+    let lateAnswers = [];
+    if (includeLate && !isSurveySummary) {
+      const lateRows = [];
+      let ExclusiveStartKey;
+      do {
+        // eslint-disable-next-line no-await-in-loop
+        const page = await db.send(new QueryCommand({
+          TableName: process.env.TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+          ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': `QUESTION#${paddedQuestionNumber}#LATE#` },
+          ...(ExclusiveStartKey ? { ExclusiveStartKey } : {}),
+        }));
+        lateRows.push(...((page && page.Items) || []));
+        ExclusiveStartKey = page && page.LastEvaluatedKey;
+      } while (ExclusiveStartKey);
+      const opened = summaryOrgId ? await decryptItems(summaryOrgId, 'answer', lateRows) : lateRows;
+      lateAnswers = opened
+        .filter((r) => typeof r.Answer === 'string' && r.Answer.trim())
+        .sort((a, b) => String(a.SubmittedAt || '').localeCompare(String(b.SubmittedAt || '')))
+        .map((r) => ({ playerName: r.PlayerName || null, answer: r.Answer.trim() }));
+    }
     
     // Get stored results data if available (contains wavelength commonWords)
     const storedResultsQuery = isSurveySummary ? {} : await db.send(new GetCommand({
@@ -1877,6 +1936,8 @@ const handle = async (event, context) => {
         maxScore: results.maxScore
       },
       votes: votes || [],
+      // A Redo's late answers ([] otherwise): their own block in the prompt.
+      lateAnswers,
       gameId: gameId,
       questionSetId: questionSetId,
       paddedQuestionNumber: paddedQuestionNumber,
@@ -1939,6 +2000,16 @@ const handle = async (event, context) => {
       };
     }
 
+    // A Redo that read the late answers says so, on the read's last line
+    // (owner Q5). Only the model read them: the template fallback is built
+    // from the on-time answers, so it never claims them.
+    const lateIncluded = !summaryData.fallback && lateAnswers.length ? lateAnswers.length : 0;
+    if (lateIncluded) {
+      const line = lateIncludedLine(lateIncluded);
+      summaryData.markdownResponse = `${String(summaryData.markdownResponse || '').trimEnd()}\n\n${line}`;
+      if (summaryData.fullResponse) summaryData.fullResponse = `${String(summaryData.fullResponse).trimEnd()}\n\n${line}`;
+    }
+
     // Store the enhanced AI summary in DynamoDB (keeping same storage key)
     const now = new Date().toISOString();
     const pickerOn = modelPickerOn();
@@ -1970,6 +2041,8 @@ const handle = async (event, context) => {
       // Which context the model had: five booleans, plaintext like
       // PersonaSource — never the content, so never in ENCRYPTED_FIELDS.
       ...(summaryData.contextUsed ? { ContextUsed: summaryData.contextUsed } : {}),
+      // How many late answers a Redo read (a count, plaintext like the flags).
+      ...(lateIncluded ? { LateAnswersIncluded: lateIncluded } : {}),
       // Which angle this round was read from (round-angles.js). Plaintext, like
       // PersonaSource: a word from a fixed list, never the room's content.
       ...(summaryData.angle ? { Angle: summaryData.angle } : {}),
@@ -2068,6 +2141,7 @@ const handle = async (event, context) => {
       contextUsed: summaryData.contextUsed || null,
       fallback: summaryData.fallback === true,
       fallbackReason: summaryData.fallback ? (summaryData.fallbackReason || null) : null,
+      lateAnswersIncluded: lateIncluded,
       generatedAt: now,
       fromCache: false
     };
@@ -2362,7 +2436,7 @@ function modelFailureReason(e) {
 }
 exports.modelFailureReason = modelFailureReason;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '', survey = null, modelChoice = null, recordModel = false }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '', survey = null, modelChoice = null, recordModel = false, lateAnswers = [] }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -3581,6 +3655,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // words the model reads whatever the template says; BEFORE the briefing, so
   // withholdBriefing — which cuts from the briefing's heading to the end —
   // never takes it with it.
+  // THE LATE ANSWERS, on a Redo only (owner Q5): their own block, after the
+  // template, so they are read with the rest and never ranked with them.
+  // Names follow the round's Names setting, as the responses above do.
+  if (Array.isArray(lateAnswers) && lateAnswers.length) {
+    prompt += `\n\n${lateAnswersLayer(lateAnswers, { hidden })}`;
+  }
+
   prompt += `\n\n${HONESTY_RULE}`;
 
   /*

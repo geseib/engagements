@@ -1,0 +1,27 @@
+/* ============================================================
+   .late — THE HOST'S LATE LIST (components/LateList.jsx)
+   Grouped by round, two quiet buttons per item. The host's screens only.
+   Tokens only; laptop sizes 12 / 13 / 15 / 19 / 24px.
+   ============================================================ */
+.late { display: grid; gap: 14px; font-size: 13px; color: var(--text); }
+.late-empty, .late-closed, .late-explain { margin: 0; font-size: 13px; color: var(--muted); }
+.late-round { display: grid; gap: 8px; }
+.late-round-h { margin: 0; font-size: 15px; font-weight: 700; }
+.late-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.late-item { display: grid; gap: 4px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid rgb(var(--glow-rgb) / .12); }
+.late-item.is-reviewed { background: transparent; }
+.late-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.late-kind { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.late-label { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+.late-label.is-waiting { color: var(--accent-text); }
+.late-text { margin: 0; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.late-meta { margin: 0; font-size: 12px; color: var(--muted); }
+.late-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.late-btn { font: inherit; font-size: 12px; font-weight: 700; color: var(--info); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+.late-btn:hover:not(:disabled) { background: var(--surface); }
+.late-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.late-btn:disabled { opacity: .5; cursor: default; }
+.late-error { margin: 0; font-size: 13px; color: var(--danger); }
+.late-close { display: grid; gap: 6px; justify-items: start; padding-top: 8px; border-top: 1px solid rgb(var(--glow-rgb) / .12); }
+.late-section { margin: 12px 0 16px; }
+.late-heading { margin: 0 0 8px; font-size: 15px; font-weight: 700; }

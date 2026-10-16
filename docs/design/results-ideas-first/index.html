@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results, ideas first</title>
+<style>
+  /* Mockup for the owner, 16 Oct 2026: "the voting is less about the people and more about
+     getting the best or most relevant ideas to the top of the conversation."
+     Drawn at a 1280x720 wall, dusk palette. Switch versions with the tabs. */
+  :root { --bg:#0f1a2e; --surface:#16243d; --surface-2:#1d2f4d; --text:#eef2f8; --muted:#9aabc4; --accent:#f6a94c; --accent-text:#f6b766; --info:#7fb2ff; --success:#5fd3a2; --rule:rgba(160,190,230,.16); }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#0a1220; color:var(--text); font-family: "Inter", system-ui, sans-serif; padding:16px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; margin:0 auto 12px; max-width:1280px; }
+  .bar button { font:inherit; font-size:14px; color:var(--text); background:var(--surface); border:1px solid var(--rule); border-radius:999px; padding:6px 14px; cursor:pointer; }
+  .bar button[aria-pressed="true"] { background:var(--accent); color:#1a1205; border-color:var(--accent); font-weight:700; }
+  .note { max-width:1280px; margin:0 auto 12px; color:var(--muted); font-size:14px; line-height:1.5; }
+  .scroll { overflow-x:auto; }
+  .wall { width:1280px; height:720px; margin:0 auto; background:var(--bg); border-radius:12px; position:relative; padding:40px 56px; display:flex; flex-direction:column; gap:20px; }
+  .top { display:flex; justify-content:space-between; color:var(--muted); font-size:18px; letter-spacing:.06em; text-transform:uppercase; }
+  .top b { color:var(--text); }
+  .task { font-size:22px; color:var(--muted); }
+  .task b { color:var(--text); font-weight:600; }
+  .foot { margin-top:auto; color:var(--muted); font-size:18px; display:flex; justify-content:space-between; }
+  .v[hidden] { display:none; }
+
+  /* Today, two screens: the name is the headline, the idea is cut to its first words. */
+  .t-row { display:grid; grid-template-columns:56px 1fr 120px; align-items:center; gap:16px; background:var(--surface); border-radius:14px; padding:14px 18px; }
+  .t-n { font-size:30px; font-weight:800; color:var(--accent-text); }
+  .t-name { font-size:34px; font-weight:800; }
+  .t-sub { font-size:20px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .t-pts { font-size:26px; font-weight:800; text-align:right; }
+  .podium { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .pod { background:var(--surface); border-radius:14px; padding:14px; text-align:center; }
+  .pod small { display:block; color:var(--muted); font-size:16px; }
+  .pod b { display:block; font-size:30px; }
+  .pod span { font-size:28px; font-weight:800; color:var(--accent-text); }
+
+  /* A: ideas first, credit small, the podium becomes the top three ideas. */
+  .a-row { display:grid; grid-template-columns:52px 1fr; gap:18px; background:var(--surface); border-radius:14px; padding:16px 20px; position:relative; overflow:hidden; }
+  .a-row.is-top { background:var(--surface-2); box-shadow: inset 0 0 0 2px var(--accent); }
+  .a-share { position:absolute; inset:auto 0 0 0; height:6px; background:var(--accent); opacity:.85; }
+  .a-n { font-size:30px; font-weight:800; color:var(--accent-text); }
+  .a-idea { font-size:34px; font-weight:700; line-height:1.18; }
+  .a-meta { margin-top:6px; font-size:18px; color:var(--muted); display:flex; gap:14px; }
+  .a-meta .who::before { content:"— "; }
+
+  /* B: ideas only on the wall; who and points live on the scoreboard, on demand. */
+  .b-lead { background:var(--surface-2); border-radius:18px; padding:26px 30px; box-shadow: inset 0 0 0 2px var(--accent); }
+  .b-k { font-size:18px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-text); font-weight:700; }
+  .b-idea { font-size:46px; font-weight:800; line-height:1.15; margin-top:8px; }
+  .b-why { margin-top:10px; font-size:20px; color:var(--muted); }
+  .b-rest { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .b-row { background:var(--surface); border-radius:14px; padding:14px 18px; display:grid; grid-template-columns:40px 1fr; gap:12px; }
+  .b-n { font-size:24px; font-weight:800; color:var(--muted); }
+  .b-txt { font-size:24px; line-height:1.25; }
+  .b-bar { margin-top:8px; height:6px; border-radius:3px; background:var(--rule); position:relative; overflow:hidden; }
+  .b-bar i { position:absolute; inset:0 auto 0 0; background:var(--info); }
+</style>
+</head>
+<body>
+<div class="bar" role="tablist" aria-label="Version">
+  <button type="button" data-v="today" aria-pressed="false">Today (two screens)</button>
+  <button type="button" data-v="a" aria-pressed="true">A · Ideas first, name as a credit</button>
+  <button type="button" data-v="b" aria-pressed="false">B · Ideas only, people on the scoreboard</button>
+</div>
+<p class="note" id="note"></p>
+
+<div class="scroll">
+<div class="wall">
+
+  <section class="v" data-v="today">
+    <div class="top"><span>Round 2 of 80 · <b>Temperature control</b></span><span>Results</span></div>
+    <div style="display:grid;gap:12px">
+      <div class="t-row"><div class="t-n">1</div><div><div class="t-name">Ada</div><div class="t-sub">Set the thermostat rule before…</div></div><div class="t-pts">8 pts</div></div>
+      <div class="t-row"><div class="t-n">2</div><div><div class="t-name">Ben</div><div class="t-sub">Cool the room when the argument…</div></div><div class="t-pts">6 pts</div></div>
+      <div class="t-row"><div class="t-n">3</div><div><div class="t-name">Cleo</div><div class="t-sub">Name the temperature out loud</div></div><div class="t-pts">4 pts</div></div>
+    </div>
+    <div class="podium" style="margin-top:20px">
+      <div class="pod"><small>Most backed</small><b>Ada</b><span>16</span></div>
+      <div class="pod"><small>2nd</small><b>Ben</b><span>12</span></div>
+      <div class="pod"><small>3rd</small><b>Cleo</b><span>8</span></div>
+    </div>
+  </section>
+
+  <section class="v" data-v="a">
+    <div class="top"><span>Round 2 of 80 · <b>Temperature control</b></span><span>What the room backed</span></div>
+    <p class="task" style="margin:0"><b>The task:</b> How could you adapt this lesson to your work, project, or team?</p>
+    <div style="display:grid;gap:12px">
+      <div class="a-row is-top"><div class="a-n">1</div><div><div class="a-idea">Set the thermostat rule before the meeting starts, not halfway through it</div><div class="a-meta"><span>8 points · 2 first places</span><span class="who">Ada</span></div></div><span class="a-share" style="width:100%"></span></div>
+      <div class="a-row"><div class="a-n">2</div><div><div class="a-idea">Cool the room when the argument heats up</div><div class="a-meta"><span>6 points</span><span class="who">Ben</span></div></div><span class="a-share" style="width:75%"></span></div>
+      <div class="a-row"><div class="a-n">3</div><div><div class="a-idea">Name the temperature out loud</div><div class="a-meta"><span>4 points</span><span class="who">Cleo</span></div></div><span class="a-share" style="width:50%"></span></div>
+    </div>
+    <div class="foot"><span>3 responses · 3 voted</span><span>Scoreboard: press S</span></div>
+  </section>
+
+  <section class="v" data-v="b" hidden>
+    <div class="top"><span>Round 2 of 80 · <b>Temperature control</b></span><span>What the room backed</span></div>
+    <div class="b-lead">
+      <div class="b-k">The room's top idea</div>
+      <div class="b-idea">Set the thermostat rule before the meeting starts, not halfway through it</div>
+      <div class="b-why">Backed by most of the room: 2 of 3 put it first</div>
+    </div>
+    <div class="b-rest">
+      <div class="b-row"><div class="b-n">2</div><div><div class="b-txt">Cool the room when the argument heats up</div><div class="b-bar"><i style="width:75%"></i></div></div></div>
+      <div class="b-row"><div class="b-n">3</div><div><div class="b-txt">Name the temperature out loud</div><div class="b-bar"><i style="width:50%"></i></div></div></div>
+    </div>
+    <div class="foot"><span>3 responses · 3 voted</span><span>Who wrote what, and the points: the scoreboard (S)</span></div>
+  </section>
+
+</div>
+</div>
+
+<script>
+  const notes = {
+    today: 'Today on the room\'s window: each row\'s headline is the person; the idea is cut to its first words. One screen adds three podium cards ranking people by points.',
+    a: 'A: the idea is the headline, in full. Rank and a share bar show what the room backed. Points and the name are a small credit line, and the name only appears when the round shows names. The people podium is gone from results; the scoreboard (S) still has standings on demand for groups that like the points.',
+    b: 'B: only ideas on the wall. The top idea leads, the rest follow with share bars. No names or points at all on the results; who wrote what and the points live on the scoreboard, which the host opens when the group wants it.',
+  };
+  const show = (v) => {
+    document.querySelectorAll('.v').forEach((s) => { s.hidden = s.dataset.v !== v; });
+    document.querySelectorAll('.bar button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    document.getElementById('note').textContent = notes[v];
+  };
+  document.querySelectorAll('.bar button').forEach((b) => b.addEventListener('click', () => show(b.dataset.v)));
+  show('a');
+</script>
+</body>
+</html>

@@ -34,7 +34,8 @@ describe('the panel', () => {
     expect(screen.getByRole('heading', { name: /^Names · From the next round/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Feedback · From the next round/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Pace · Applies now/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^Display · Applies now/ })).toBeInTheDocument();
+    // Display is now "Room screen size" inside the Screens group (16 Oct regroup); the group carries its scope.
+    expect(screen.getByRole('heading', { name: /^Screens · Applies now/ })).toBeInTheDocument();
   });
 
   test('a held change shows its new value and that it waits for the next round', () => {

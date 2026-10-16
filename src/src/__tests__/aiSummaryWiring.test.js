@@ -93,8 +93,16 @@ describe("the host's door to the summary", () => {
     const body = functionBody('triggerAISummary');
     expect(body).not.toBeNull();
     expect(body).toMatch(
-      /authFetch\(\s*`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?questionId=\$\{questionId\}&generateNew=true\$\{debugParam\}`/
+      /authFetch\(\s*`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?questionId=\$\{questionId\}&generateNew=true\$\{debugParam\}\$\{redoParam\}`/
     );
+  });
+
+  // Late items Task 5 (owner Q5): the host's Redo, and only the Redo, asks
+  // the worker to read the round's late answers in.
+  it('the Redo buttons ask for redo; an ordinary read does not', () => {
+    expect(functionBody('triggerAISummary')).toMatch(/const redoParam = redo \? '&redo=true' : ''/);
+    expect(functionBody('handleRegenerateAISummary')).toMatch(/startAISummaryGeneration\(currentQuestionNum, 0, \{ redo: true \}\)/);
+    expect(functionBody('regenerateRoundSummary')).toMatch(/triggerAISummary\([^)]*\), \{ redo: true \}\)/);
   });
 
   // rejects: the debug read going back to the public route, where it is now

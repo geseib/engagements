@@ -601,8 +601,10 @@ describe('GameHostPage wires the reveal through the gate', () => {
     const panelSrc = readFileSync(
       join(__dirname, '..', 'components', 'stage', 'SessionSetupPanel.jsx'), 'utf8',
     ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
-    const names = panelSrc.slice(panelSrc.indexOf('<h3 className="setup-h">Names'));
-    const namesSection = names.slice(0, names.indexOf('<h3 className="setup-h">Display'));
+    // 16 Oct regroup: Names is a sub-heading of "The rounds", and that group ends where Joining starts
+    // (the display profile moved up into Screens), so the window is Names to the end of the rounds.
+    const names = panelSrc.slice(panelSrc.indexOf('<h4 className="setup-h setup-h--sub">Names'));
+    const namesSection = names.slice(0, names.indexOf('<section className="setup-group setup-group--joining"'));
     expect(namesSection.length).toBeGreaterThan(200);
     expect(namesSection).not.toMatch(/\bprofile\b/);
   });

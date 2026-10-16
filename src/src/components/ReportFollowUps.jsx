@@ -1,5 +1,5 @@
 import React from 'react';
-import FW, { KINDS, RATE_ENDS } from '../config/followUpWords';
+import FW, { KINDS, endsOf, scaleLabel } from '../config/followUpWords';
 
 /**
  * QUESTIONS FOR THE ROOM, IN THE REPORTS (docs/design/followup-icons, phase D;
@@ -16,6 +16,12 @@ import FW, { KINDS, RATE_ENDS } from '../config/followUpWords';
  *   then the result: Choose per option, Rate as the average and each count,
  *   Ideas as every idea in two groups, "Shown to the room" and "Not shown"
  *   (owner, 15 Oct, Q1).
+ *
+ * A LATE IDEA THE HOST PUT ON THE WALL (walk W2, 16 Oct 2026) is not one of
+ * the record's ideas: it is listed under Arrived late (ReportLate). So the
+ * two counts stay about the ideas that came in on time, and one line under
+ * them says "1 late idea was shown to the room · see Arrived late", matched
+ * to the question by its words (the round's `late.askAnswers`).
  *
  * A row from before the full record prints what it has. No name anywhere:
  * create-report.js stores none for these. Shared by the session report
@@ -36,7 +42,10 @@ function originLine(f) {
   return [words ? FW.workieSuggested(words) : '', FW.editedBy(f.edits || [])].filter(Boolean).join(' · ');
 }
 
-export default function ReportFollowUps({ followUps, className = 'report-followups' }) {
+const lateShownFor = (late, f) => (late && Array.isArray(late.askAnswers) ? late.askAnswers : [])
+  .filter((a) => a && a.reviewed === 'shown' && a.askQuestion && a.askQuestion === f.question).length;
+
+export default function ReportFollowUps({ followUps, late = null, className = 'report-followups' }) {
   if (!Array.isArray(followUps) || followUps.length === 0) return null;
   return (
     <div className={className}>
@@ -84,7 +93,7 @@ export default function ReportFollowUps({ followUps, className = 'report-followu
                 </p>
                 <ul className="report-followup-list">
                   {[5, 4, 3, 2, 1].map((v) => (
-                    <li key={v}>{`${v === 5 ? RATE_ENDS.high : v === 1 ? RATE_ENDS.low : v} — ${(t.counts && t.counts[v - 1]) || 0}`}</li>
+                    <li key={v}>{`${scaleLabel(endsOf(f), v)} — ${(t.counts && t.counts[v - 1]) || 0}`}</li>
                   ))}
                 </ul>
               </>
@@ -96,6 +105,9 @@ export default function ReportFollowUps({ followUps, className = 'report-followu
                 <p className="report-followup-note"><b>{FW.notShown(notShown.length)}</b></p>
                 {notShown.map((p, j) => <blockquote key={`n${j}`} className="comment-text">{p.text}</blockquote>)}
               </>
+            ) : null}
+            {f.kind === 'ideas' && lateShownFor(late, f) > 0 ? (
+              <p className="report-followup-note report-followup-late">{FW.lateShown(lateShownFor(late, f))}</p>
             ) : null}
             {f.status === 'closed' && f.kind === 'ideas' && !ideas && (f.picked || []).map((p, j) => (
               <blockquote key={j} className="comment-text">{p}</blockquote>

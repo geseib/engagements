@@ -155,6 +155,10 @@ export function snapshotFromHostState(json, extras = {}) {
     roomAsk: extras.roomAsk || null,
     asksReady: extras.asksReady || 0,
     asksEnabled: Boolean(extras.asksEnabled),
+    // The late items still waiting ({ notReviewed, answers }): the same count
+    // the host page's dock appends (late items Task 4). Only from `extras`,
+    // never the payload, so a surface that does not read /late says nothing.
+    late: extras.late || null,
   };
 }
 

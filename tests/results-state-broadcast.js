@@ -45,26 +45,10 @@ let sent = [];
 let goneConnections = new Set();
 
 /**
- * A minimal, honest UpdateCommand applier. The real client mutates the stored
+ * An honest UpdateCommand applier (tests/helpers/stage-table.js, in fakeDoc). The real client mutates the stored
  * item; a stub that returns {} (as most suites here do) would let a handler
  * that never writes the state pass this file, which is exactly the bug.
  */
-function applyUpdate(input) {
-  const k = key(input.Key.PK, input.Key.SK);
-  const item = store.get(k) || { ...input.Key };
-  const names = input.ExpressionAttributeNames || {};
-  const values = input.ExpressionAttributeValues || {};
-
-  const setClause = String(input.UpdateExpression || '').replace(/^\s*SET\s+/i, '');
-  for (const pair of setClause.split(',')) {
-    const [lhs, rhs] = pair.split('=').map((s) => s.trim());
-    if (!lhs || !rhs) continue;
-    const attr = names[lhs] || lhs;
-    item[attr] = values[rhs];
-  }
-  store.set(k, item);
-  return {};
-}
 
 const fakeDoc = {
   send: async (cmd) => {
@@ -79,7 +63,10 @@ const fakeDoc = {
         store.delete(key(inp.Key.PK, inp.Key.SK));
         return {};
       case 'update':
-        return applyUpdate(inp);
+        // The real applier (tests/helpers/stage-table.js), conditions included:
+        // enterResultsState's conditional clear of a question focus
+        // (game/question-focus.js) must fail on a round with none, as it does in DynamoDB.
+        return require('./helpers/stage-table').applyUpdate(store, key, inp);
       case 'query': {
         const pk = inp.ExpressionAttributeValues[':pk'];
         const prefix = inp.ExpressionAttributeValues[':sk'] ?? '';

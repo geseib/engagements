@@ -22,6 +22,7 @@
  *     playerCount, answerCount, roundNoun, hasQuestionSet, goalLine }
  */
 import RW from './roundWords';
+import LW from './lateWords';
 import { hostRunsVotePhase } from './hostControls';
 import { statusTone } from '../utils/statusTone';
 
@@ -158,14 +159,27 @@ function primaryFor(moment, ctx) {
         ? control('open-vote', RW.startVoting, I.FINISH, 'ListChecks')
         : control('reveal-from-ask', RW.showResults, I.FINISH, 'ChartBar');
       if (none) return { ...base, disabled: true, hint: RW.nobodyAnswered };
+      /*
+        IN PLACE, NOT A MODAL (walk W3, 16 Oct 2026): the first press turns the
+        button to "Start voting anyway" with "1 of 3 still writing. Press again
+        to start voting." above it, and the second press within six seconds
+        acts (HostActionBar's inPlace arm, as Start round N mid-read). The old
+        light "Proceed to voting?" dialog is gone from the host page.
+      */
+      const of = ctx.progress && Number(ctx.progress.total);
       if (waiting > 0) {
-        base.arm = { text: runsVote ? RW.armVote(waiting) : RW.armResults(waiting, 'answering') };
+        base.arm = {
+          text: runsVote ? RW.armVote(waiting, of) : RW.armResults(waiting, 'answering', of),
+          confirmLabel: RW.anyway(base.label),
+          inPlace: true,
+        };
       }
       return base;
     }
     case 'VOTING': {
       const base = control('reveal', RW.showResults, I.REVEAL, 'ChartBar');
-      if (waiting > 0) base.arm = { text: RW.armResults(waiting, 'voting') };
+      const of = ctx.progress && Number(ctx.progress.total);
+      if (waiting > 0) base.arm = { text: RW.armResults(waiting, 'voting', of), confirmLabel: RW.anyway(base.label), inPlace: true };
       return base;
     }
     case 'RESULTS':
@@ -210,7 +224,16 @@ function primaryFor(moment, ctx) {
       const ask = ctx.roomAsk || {};
       const left = stillToAct({ received: ask.answered, total: ask.total });
       const show = control('close-ask', RW.showResults, I.CLOSE_ASK, 'ChartBar');
-      if (left > 0) show.arm = { text: RW.armResults(left, 'answering') };
+      // In place on the laptop too (walk of dev 92f8b24d: without `inPlace`
+      // HostActionBar ignored the arm, and one press closed the question with
+      // 0 of 6 answered). The total gives "Nobody has answered yet" at zero.
+      if (left > 0) {
+        show.arm = {
+          text: RW.armResults(left, 'answering', ask.total),
+          confirmLabel: RW.anyway(show.label),
+          inPlace: true,
+        };
+      }
       return show;
     }
     case 'ROOM_RESULTS':
@@ -236,6 +259,11 @@ function secondaryFor(moment, ctx, primary) {
       // response steps by part first. Skip while there is nothing to show.
       if (!(ctx.answerCount > 0)) {
         return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward', { arm: { text: RW.armSkip(noun) } });
+      }
+      // THE QUESTION ON THE WALL (review, 16 Oct 2026): Response 1 is not up
+      // while the question is, so the next response is Response 1 itself.
+      if (moment === 'VOTING' && ctx.focus && ctx.focus.focus === 'question') {
+        return control('next-response', RW.nextResponse, I.NEXT_RESPONSE, 'ArrowRight', { index: 0, part: 0 });
       }
       const { index, part, parts } = moment === 'VOTING' ? { index: 0, part: 0, parts: 1 } : ctx.responses;
       if (parts > 1 && part < parts - 1) {
@@ -364,6 +392,28 @@ function statusFor(moment, ctx) {
   }
 }
 
+/**
+ * THE LATE COUNT (session flow v3 §4.4; late items Task 4): one count, one
+ * place, so the dock, the console footer and the Remote say the same thing.
+ * "3 of 4 voted · 1 late answer kept"; at the end "2 items not reviewed ·
+ * Review". `late.link` is the part a surface may draw as a link to the list
+ * (always the last part of the text); `late.line` is the count itself.
+ */
+function withLate(status, moment, ctx) {
+  const n = ctx.late.notReviewed;
+  if (!(n > 0) || moment === 'UNKNOWN' || moment === 'OTHER') return status;
+  if (moment === 'ENDED') {
+    const line = LW.endedCount(n);
+    return { text: `${line} · ${LW.review}`, tone: 'pending', late: { line, link: LW.review } };
+  }
+  const line = LW.statusCount(n, ctx.late.answers >= n);
+  return {
+    ...status,
+    text: status.text ? `${status.text} · ${line}` : line,
+    late: { line, link: line },
+  };
+}
+
 function nextFor(moment, ctx, primary) {
   const L = RW.nextLine;
   switch (moment) {
@@ -398,6 +448,7 @@ export function normaliseContext(ctx = {}) {
   const parts = Math.max(1, intOr(focus.parts, 1));
   const total = Math.max(1, answerCount || 0, intOr(focus.index, 0) + 1);
   const totalRounds = Number(ctx.totalRounds) > 0 ? Number(ctx.totalRounds) : null;
+  const late = ctx.late || {};
   return {
     ...ctx,
     roundNoun: noun,
@@ -412,6 +463,10 @@ export function normaliseContext(ctx = {}) {
     playerCount,
     hasQuestionSet: ctx.hasQuestionSet !== false,
     goalLine: ctx.goalLine || '',
+    late: {
+      notReviewed: Math.max(0, intOr(late.notReviewed, 0)),
+      answers: Math.max(0, intOr(late.answers, 0)),
+    },
     notes: { page, pages, ready: notes.ready === false ? false : notes.ready },
     responses: {
       index: Math.max(0, intOr(focus.index, 0)),
@@ -435,7 +490,7 @@ export function roundStep(moment, rawCtx) {
     moment: resolved,
     primary,
     secondary,
-    status: statusFor(resolved, ctx),
+    status: withLate(statusFor(resolved, ctx), resolved, ctx),
     next: nextFor(resolved, ctx, primary),
     more: MORE_IDS,
   };

@@ -129,7 +129,7 @@ const requirements = {
           t: 'list',
           items: [
             'A laptop driving the big screen, signed in as a host.',
-            'Optionally a phone as the remote — scan the "Controls on your phone" QR from the Settings tab.',
+            'Optionally a phone as the remote — scan the QR under "Your phone as a remote" in the Settings tab.',
             'A screen the back of the room can read. Set the display profile to match it before people arrive.',
           ],
         },

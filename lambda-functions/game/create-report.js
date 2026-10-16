@@ -7,6 +7,7 @@ const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
 const followUpKeys = require('./followup-keys');
+const followUpKinds = require('./followup-kinds');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 const { displayOrder } = require('./answer-order');
 const { shapeForLog } = require('./log-shape');
@@ -15,6 +16,8 @@ const { surveyResultsPayload } = require('./survey-host');
 const { normalizeNames } = require('./survey-names');
 const { talkingPointsReport } = require('./build-points-report');
 const buildStore = require('./build-store');
+const { lateByRound, lateOrder, includesNotReviewed } = require('./late-list');
+const { leftOutLine } = require('./late-labels');
 
 /**
  * WHOSE SESSION IS THIS? — off the row, though the route is no longer public.
@@ -265,6 +268,9 @@ exports.handler = async (event) => {
     for (const row of commentItems) {
       const parsed = parseCommentSk(row.SK);
       if (!parsed) continue;
+      // A comment added after its round is a late item: it is printed under
+      // the round's "Arrived late", with its label, and not here as well.
+      if (row.AddedLater === true) continue;
       const list = commentsByRound.get(parsed.questionNumber) || [];
       list.push({
         commentId: parsed.commentId,
@@ -298,6 +304,9 @@ exports.handler = async (event) => {
         kind: row.Kind,
         question: row.Question || null,
         statement: row.Statement || null,
+        // The scale's two ends (owner, 16 Oct): the ask's own, or the default
+        // for a Rate stored before then; null for any other kind.
+        ends: row.Kind === 'rate' ? followUpKinds.endsOf(row) : null,
         options: (row.Options || []).map((o) => (o && typeof o === 'object' ? o.text : String(o))),
         anchor: row.Anchor || null,
         origin: row.Origin || null,
@@ -329,6 +338,71 @@ exports.handler = async (event) => {
       list.sort((a, b) => String(a.commentId).localeCompare(String(b.commentId)));
     }
 
+    /*
+      ARRIVED LATE (session flow v3 §4.4; late items Task 5). Per round, the
+      late round answers, the late answers to a question for the room and the
+      comments added after the round, each with the owner's review label. Read
+      through late-list.js, the reader the host's late list uses, so the two
+      cannot disagree about what is late or whose name may show (`who` is null
+      in a round that hid names; an answer to a question for the room never
+      has an author). It goes INSIDE each round entry, so it lands in that
+      round's own row (report-store.js) and never grows the head.
+
+      "INCLUDE ITEMS NOT REVIEWED" (§4.5) is applied HERE, at creation, and
+      not at display: create-report rebuilds the whole report on every open,
+      so a host who changes the setting regenerates and sees it at once, and
+      a saved or downloaded report carries exactly what the host chose. Off,
+      the not-reviewed late items are left out and the report says how many.
+      Only late items carry a review label; an on-time comment is printed as
+      it always was.
+    */
+    const includeNotReviewed = includesNotReviewed(gameMetadata.Item);
+    let lateRounds = new Map();
+    try {
+      lateRounds = await lateByRound(db, { gameId, meta: gameMetadata.Item, state: gameState.Item || null, withRefs: false });
+    } catch (error) {
+      console.error('❌ REPORT: the late items could not be read; "Arrived late" is empty this time:', error.message);
+    }
+    const askQuestions = new Map(followUpItems.map((row) => [row.AskId, row.Question || null]));
+    const commentsById = new Map(commentItems.map((row) => [(parseCommentSk(row.SK) || {}).commentId, row]));
+    const leftOutTotal = { comments: 0, answers: 0 };
+    const lateByNumber = new Map();
+    for (const [round, items] of lateRounds) {
+      const late = { answers: [], askAnswers: [], comments: [], leftOut: { comments: 0, answers: 0 } };
+      for (const it of items.slice().sort(lateOrder)) {
+        if (!includeNotReviewed && it.reviewed === null) {
+          late.leftOut[it.kind === 'comment' ? 'comments' : 'answers'] += 1;
+          continue;
+        }
+        const base = {
+          text: it.text,
+          who: it.author || null,
+          arrivedDuring: it.arrivedDuring,
+          arrivedAt: it.arrivedAt,
+          label: it.label,
+          reviewed: it.reviewed,
+        };
+        if (it.kind === 'answer') late.answers.push(base);
+        if (it.kind === 'askAnswer') late.askAnswers.push({ ...base, askQuestion: askQuestions.get(it.askId) || null });
+        if (it.kind === 'comment') {
+          // What it is about: the stored label only where the round showed
+          // names (a response's label can carry its author's name).
+          const row = commentsById.get(it.ref) || {};
+          late.comments.push({
+            ...base,
+            anchorKind: row.AnchorKind || null,
+            ...(roundIsHidden(round) ? {} : { anchorLabel: row.AnchorLabel || null }),
+          });
+        }
+      }
+      leftOutTotal.comments += late.leftOut.comments;
+      leftOutTotal.answers += late.leftOut.answers;
+      lateByNumber.set(round, late);
+    }
+    const emptyLate = () => ({ answers: [], askAnswers: [], comments: [], leftOut: { comments: 0, answers: 0 } });
+    const printedComments = [...commentsByRound.values()].reduce((n, list) => n + list.length, 0)
+      + [...lateByNumber.values()].reduce((n, late) => n + late.comments.length, 0);
+
     // Who actually played.
     //
     // Hoisted above gameStats deliberately. `players` is the raw result of a
@@ -359,7 +433,9 @@ exports.handler = async (event) => {
       // Counted off the rows the report actually renders, so the front page and
       // the rounds cannot disagree. Stays plaintext with the rest of gameStats —
       // it is a count, not content.
-      totalComments: commentItems.length
+      // On-time comments plus the added-later ones the report prints (the
+      // setting may leave some out).
+      totalComments: printedComments
     };
 
     // Get game metadata for scoring configuration
@@ -473,7 +549,7 @@ exports.handler = async (event) => {
       and a comment row is 30, so any session read in its third week reaches
       exactly this state.
     */
-    const questionNumbersFromComments = [...commentsByRound.keys()];
+    const questionNumbersFromComments = [...commentsByRound.keys(), ...lateByNumber.keys()];
 
     // Combine all four sources and deduplicate
     const questionNumbers = [...new Set([
@@ -763,6 +839,8 @@ exports.handler = async (event) => {
           // a row written before ContextUsed existed, so the renderer can tell
           // "nothing was on" from "we never recorded this".
           contextUsed: questionAISummary.ContextUsed || null,
+          // How many late answers a Redo read in (owner Q5); 0 for every other read.
+          lateAnswersIncluded: questionAISummary.LateAnswersIncluded || 0,
           hasStructuredData: !!(questionAISummary.SummaryText && questionAISummary.DiscussionQuestions)
         } : null,
         
@@ -776,6 +854,8 @@ exports.handler = async (event) => {
         comments: commentsByRound.get(questionNumber) || [],
         // Questions for the room sent after this round's read (always an array).
         followUps: followUpsByRound.get(questionNumber) || [],
+        // "Arrived late": always present, so a renderer has one shape.
+        late: lateByNumber.get(questionNumber) || emptyLate(),
 
         // Results metadata
         processedAt: questionResults?.ProcessedAt,
@@ -1113,6 +1193,12 @@ exports.handler = async (event) => {
         roundNoun: questionSetData.roundNoun || questionSetData.RoundNoun || null
       } : null,
       
+      // "Include items not reviewed" as this report was built with it, and
+      // what it left out: counts and the one line the report prints. Counts
+      // and a setting, never content, so they stay plaintext on the head.
+      includeNotReviewed,
+      notReviewedLeftOut: { ...leftOutTotal, line: leftOutLine(leftOutTotal) },
+
       // Metadata
       reportGeneratedAt: new Date().toISOString(),
       reportVersion: '2.0'

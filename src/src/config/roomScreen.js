@@ -89,3 +89,23 @@ export function storeRoomScreen(storage, choice) {
     return false;
   }
 }
+
+/*
+  THE SCREENS GROUP (owner, 16 Oct: "there doesnt seem to be a way when
+  clicking on the setup button to change screen mode"; the mockup
+  docs/design/settings-consolidation, tab 1). The same choice as the lobby's,
+  offered in Settings and in Setup in the loop. "Room screen size" was
+  "Display profile": it sizes whatever the room watches, on one screen or two.
+*/
+export const SCREEN_WORDS = Object.freeze({
+  group: 'Screens',
+  where: 'Where the room watches',
+  whereHintTwo: 'Two screens gives you the console on this laptop',
+  whereHintOne: 'The projector shows this laptop',
+  one: 'One screen',
+  two: 'Two screens',
+  window: 'Room\'s window',
+  open: 'Open ↗',
+  size: 'Room screen size',
+  sizeHint: 'How big the room\'s screen draws everything',
+});

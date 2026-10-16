@@ -16,7 +16,52 @@ export const KINDS = Object.freeze({
   rate: { label: 'Rate', icon: 'Gauge', blurb: 'Rate a statement from the room, 1 to 5.', wall: 'Rate it' },
 });
 
-export const RATE_ENDS = Object.freeze({ low: '1 · Disagree', high: '5 · Agree' });
+/*
+  THE SCALE'S TWO ENDS (owner, 16 Oct 2026: "host should be able to change what
+  the high low says … a drop down of common choices on either end which auto
+  changes the other with the last being custom"; docs/design/settings-consolidation,
+  tab 2). The ends are the ask's own (`ask.ends`); an ask without them, sent
+  before then, reads as the default pair. The server's twin is
+  lambda-functions/game/followup-kinds.js (DEFAULT_ENDS, ENDS_MAX).
+*/
+export const RATE_PAIRS = Object.freeze([
+  Object.freeze({ low: 'Disagree', high: 'Agree' }),
+  Object.freeze({ low: 'No', high: 'Yes' }),
+  Object.freeze({ low: 'Low', high: 'High' }),
+  Object.freeze({ low: 'Unlikely', high: 'Likely' }),
+  Object.freeze({ low: 'Hard', high: 'Easy' }),
+]);
+export const DEFAULT_ENDS = RATE_PAIRS[0];
+export const ENDS_MAX = 24;
+export const ENDS_WORDS = Object.freeze({
+  lowMeans: '1 means',
+  highMeans: '5 means',
+  to: 'to',
+  custom: 'Custom…',
+  lowCustom: '1 means, your words',
+  highCustom: '5 means, your words',
+  hint: 'Pick one end and the other follows. Custom lets you type both.',
+  needBoth: `Write both ends of the scale, up to ${ENDS_MAX} characters each`,
+});
+
+/** An ask's ends: its own (`ends`, or the phone's `scale`), else the default pair. */
+export function endsOf(ask) {
+  const a = ask || {};
+  const e = a.ends || (a.scale && { low: a.scale.lowLabel, high: a.scale.highLabel });
+  return e && typeof e.low === 'string' && typeof e.high === 'string' && e.low.trim() && e.high.trim()
+    ? { low: e.low, high: e.high }
+    : { ...DEFAULT_ENDS };
+}
+
+/** A point's label on the scale: "1 · Cold", "5 · Hot", or the bare number between. */
+export function scaleLabel(ends, v) {
+  if (v === 1) return `1 · ${ends.low}`;
+  if (v === 5) return `5 · ${ends.high}`;
+  return String(v);
+}
+
+/** The default ends as labels, for anything with no ask in hand. */
+export const RATE_ENDS = Object.freeze({ low: scaleLabel(DEFAULT_ENDS, 1), high: scaleLabel(DEFAULT_ENDS, 5) });
 
 /*
   THE COMPOSER'S KINDS (session flow v3 §4.1). The three asks plus Comments,
@@ -30,7 +75,7 @@ export const COMMENTS_KIND = Object.freeze({ label: 'Comments', icon: 'ChatCircl
 export const KIND_LINES = Object.freeze({
   ideas: 'Short written answers. Anonymous.',
   choice: 'Pick one of 2 to 4 options. Anonymous.',
-  rate: 'Agree or disagree with a statement, 1 to 5. Anonymous.',
+  rate: 'Rate a statement 1 to 5, between two ends you name. Anonymous.',
   comments: 'Comment on what we heard, the results or a response. Names are shown.',
 });
 export const PRIVACY_LINES = Object.freeze({
@@ -79,6 +124,11 @@ const FW = Object.freeze({
   ideaPlaceholder: 'Your answer',
   send: 'Send',
   sent: 'Sent. You can change it until the results are shown.',
+  // Session flow v3 §4.4: an answer that reached the server after the results.
+  keptLate: 'The results are already up. Your answer is kept, but not in the count.',
+  roomMovedOn: 'The room has moved on. Your answer is still here, and you can still send it.',
+  leaveDraft: 'Leave it',
+  done: 'Done',
   change: 'Change my answer',
   openIcon: (kindLabel, section, point) => `${kindLabel} ask from ${section}, point ${point}. Preview it.`,
   // The composer (session flow v3 §4.1).
@@ -111,6 +161,8 @@ const FW = Object.freeze({
   answeredOfRoom: (n, of) => (Number.isInteger(of) ? `${n} of ${of} in the room answered` : `${n} answered`),
   shownToRoom: (n) => `Shown to the room (${n})`,
   notShown: (n) => `Not shown (${n})`,
+  /** Under an Ideas record: late ideas the host put on the wall (walk W2, 16 Oct 2026). */
+  lateShown: (n) => `${n} late ${n === 1 ? 'idea was' : 'ideas were'} shown to the room · see Arrived late`,
   sentFromRemote: 'Sent from the Remote',
 });
 

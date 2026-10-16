@@ -30,6 +30,10 @@ const RW = Object.freeze({
   startVoting: 'Start voting',
   showResults: 'Show results',
   whatWeHeard: 'What we heard',
+  /** RESULTS, ideas first (owner, 16 Oct 2026): the heading over the tally. */
+  whatTheRoomBacked: 'What the room backed',
+  /** The small credit under an idea: "8 points", then " — Ada" when the round shows names. */
+  backedCredit: (points, name) => `${points === 1 ? '1 point' : `${points} points`}${name ? ` — ${name}` : ''}`,
   nextPage: 'Next page',
   backPage: 'Back a page',
   nextRound: (noun) => `Next ${nounOf(noun)}`,
@@ -67,8 +71,21 @@ const RW = Object.freeze({
   nobodyAnswered: 'Nobody has answered yet',
 
   // ── Arm texts: the first press of an early advance ────────────────────
-  armVote: (n) => `${n} still answering. Press again to start voting.`,
-  armResults: (n, kind = 'voting') => `${n} still ${kind === 'answering' ? 'answering' : 'voting'}. Press again to show results.`,
+  /** "1 of 3 still writing. Press again to start voting." (walk W3, 16 Oct 2026: said in place, not in a modal). */
+  // Nobody yet (walk of dev 26af5fc8, F2): "Nobody has voted yet", never "6 of 6 still voting".
+  armVote: (n, total) => {
+    if (Number(total) > 0 && Number(n) >= Number(total)) return 'Nobody has answered yet. Press again to start voting.';
+    return Number(total) > 0
+      ? `${n} of ${total} still writing. Press again to start voting.`
+      : `${n} still answering. Press again to start voting.`;
+  },
+  armResults: (n, kind = 'voting', total) => {
+    const answering = kind === 'answering';
+    if (Number(total) > 0 && Number(n) >= Number(total)) {
+      return `Nobody has ${answering ? 'answered' : 'voted'} yet. Press again to show results.`;
+    }
+    return `${Number(total) > 0 ? `${n} of ${total}` : n} still ${answering ? 'answering' : 'voting'}. Press again to show results.`;
+  },
   armSkip: (noun) => `Press again to skip this ${nounOf(noun)}.`,
 
   // ── Status lines (the dock's left, the Remote's status card) ──────────

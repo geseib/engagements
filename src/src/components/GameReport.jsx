@@ -24,6 +24,7 @@ import StatusMessage from './StatusMessage';
 import RankIcon from './RankIcon';
 import MarkdownRenderer from './MarkdownRenderer';
 import ReportFollowUps from './ReportFollowUps';
+import ReportLate from './ReportLate';
 import { authFetch } from '../auth/authFetch';
 import ReportSavedDialog from './ReportSavedDialog';
 import { saveReportPdf } from '../utils/saveReport';
@@ -651,6 +652,13 @@ function ReportDocument({ reportData }) {
         </aside>
       )}
 
+      {/* ---- WHAT "INCLUDE ITEMS NOT REVIEWED" LEFT OUT ----------------
+          One line, the server's words (late-labels.js), and only when the
+          host turned the setting off and something was left out. */}
+      {reportData.notReviewedLeftOut && reportData.notReviewedLeftOut.line && (
+        <p className="report-left-out report-keep" role="note">{reportData.notReviewedLeftOut.line}</p>
+      )}
+
       {/* ---- ROUNDS, or a survey's results ------------------------------ */}
       <div className="report-content">
         {isSurvey ? (
@@ -814,7 +822,8 @@ function ReportDocument({ reportData }) {
               </div>
 
               <ReportComments comments={question.comments} />
-              <ReportFollowUps followUps={question.followUps} />
+              <ReportFollowUps followUps={question.followUps} late={question.late} />
+              <ReportLate late={question.late} roundNoun={noun} />
             </section>
           );
         })}

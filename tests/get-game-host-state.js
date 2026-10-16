@@ -106,6 +106,8 @@ async function check(label, fn) {
 const ORG = 'org_acme';
 const RIVAL = 'org_globex';
 const TITLE = 'Leeds support review';
+const ID_SECRET = 'SESSION-ID-SECRET-NEVER-SENT-9-bbbbbbbbbbbbbbbb';
+const RAWS = [];
 
 // What must never cross the public route. Distinctive, so a substring check on
 // the raw body means something.
@@ -132,6 +134,8 @@ async function seedSession(gameId, { orgId, state, round }) {
     QuestionSetScope: 'org',
     CreatedAt: '2026-09-26T09:00:00.000Z',
     Started: true,
+    // The session's id secret (game/id-secret.js): never in any reply, host door included.
+    IdSecret: ID_SECRET,
   };
   put(orgId ? await encryptItem(orgId, 'session', meta) : meta);
   put({ PK: `GAME#${gameId}`, SK: 'STATE', State: state, LessonNumber: round });
@@ -184,6 +188,7 @@ async function call(routeKey, gameId, { query = null, authorizer = null, playerI
   });
   let body = {};
   try { body = JSON.parse(res.body || '{}'); } catch { body = { unparsed: res.body }; }
+  RAWS.push(String(res.body || ''));
   return { status: res.statusCode, body, raw: String(res.body || ''), read: reads.slice() };
 }
 
@@ -426,6 +431,11 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   await check('the public door carries neither presentDetail nor hostNotes, nor the note', () => {
     assert.ok(!('presentDetail' in pubNotes.body) && !('hostNotes' in pubNotes.body));
     assert.ok(!pubNotes.raw.includes(NOTE), 'the Background reached the public door');
+  });
+
+  await check('no reply above, public or host door, carried the session\'s IdSecret', () => {
+    assert.ok(RAWS.length > 10, `only ${RAWS.length} replies`);
+    for (const raw of RAWS) assert.ok(!raw.includes(ID_SECRET) && !raw.includes('IdSecret'), raw.slice(0, 200));
   });
 
   say(`\n${pass} passed, ${fail} failed`);

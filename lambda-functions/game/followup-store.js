@@ -14,6 +14,8 @@
  *   SUGGESTED  30 days, as the read it was made from (QUESTION#nnn#AISummary)
  *   ASK        ROUND_RECORD_DAYS (30) from when it was sent, as ROUND# rows
  *   answer      7 days (STARTED_DAYS), as answer and vote rows
+ *   LATE        30 days (LATE_DAYS), as comments: the report and the host's
+ *               late list need it as long as they need comments
  *   LIVE        7 days; deleted when the ask closes
  * The frozen `Tally` on the ask row is what the Stage, the report and the PDF
  * read, so a report built after day 7 still has its numbers.
@@ -29,10 +31,11 @@ const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS, STARTED_DAYS } = require('./session-ttl');
 const { pollTally } = require('./poll-round');
 const keys = require('./followup-keys');
-const crypto = require('crypto');
 const { toSurveyQuestion, tallyOf } = require('./followup-kinds');
+const { sessionIdSecret, keyedId } = require('./id-secret');
 
 const SUGGESTED_DAYS = 30;
+const LATE_DAYS = 30;
 const LIVE_DAYS = STARTED_DAYS;
 
 const table = () => process.env.TABLE_NAME;
@@ -171,27 +174,32 @@ function suggestionsWire(row) {
 
 // ─────────────────────────────────────────────────────────────── asks ──
 
-/** The round's asks (opened) and, for each, its answer rows (still sealed). */
+/**
+ * The round's asks (opened) and, for each, its answer rows and its LATE rows
+ * (both still sealed). The late rows are never counted: only `answerRows` are.
+ */
 async function readRound(db, { gameId, round, orgId }) {
   const prefix = keys.asksPrefix(round);
   if (!prefix) return [];
   const rows = await queryAll(db, gameId, prefix);
   const asks = [];
   const answers = new Map();
+  const late = new Map();
   for (const row of rows) {
     const k = keys.parseFollowUpSk(row.SK);
     if (!k) continue;
     if (k.kind === 'ask') asks.push(row);
-    else if (k.kind === 'answer') {
-      const list = answers.get(k.askId) || [];
+    else if (k.kind === 'answer' || k.kind === 'late') {
+      const into = k.kind === 'late' ? late : answers;
+      const list = into.get(k.askId) || [];
       list.push(row);
-      answers.set(k.askId, list);
+      into.set(k.askId, list);
     }
   }
   const opened = await openAll(orgId, asks);
   return opened
     .sort((a, b) => String(a.SK).localeCompare(String(b.SK)))
-    .map((ask) => ({ ask, answerRows: answers.get(ask.AskId) || [] }));
+    .map((ask) => ({ ask, answerRows: answers.get(ask.AskId) || [], lateRows: late.get(ask.AskId) || [] }));
 }
 
 async function readAsk(db, { gameId, round, askId, orgId }) {
@@ -231,7 +239,7 @@ async function createAsk(db, { gameId, round, orgId, value, origin, anchor = nul
     QuestionNumber: keys.roundOf(round),
     AskId: askId,
     Kind: value.kind,
-    ...(value.kind === 'rate' ? { Statement: value.statement } : {}),
+    ...(value.kind === 'rate' ? { Statement: value.statement, Ends: value.ends } : {}),
     ...(value.kind === 'ideas' ? { Question: value.question } : {}),
     ...(value.kind === 'choice' ? { Question: value.question, Options: origin.options } : {}),
     ...(anchor ? { Anchor: anchor } : {}),
@@ -300,14 +308,16 @@ async function finishAsk(db, { gameId, round, askId, orgId, status, now = new Da
 }
 
 /** Count a closed ask's answers and store the count on it, sealed. Idempotent. */
-async function freezeTally(db, { gameId, round, ask, orgId }) {
+async function freezeTally(db, { gameId, round, ask, orgId, secret = null }) {
   const prefix = keys.answersPrefix(round, ask.AskId);
   const rows = prefix ? await queryAll(db, gameId, prefix) : [];
   const tally = await countAnswers(ask, rows, orgId);
   // EVERY IDEA, FROZEN ON CLOSE (session flow v3 §4.2; owner, 15 Oct, Q1):
   // the report lists them all, shown or not, and the answer rows expire at
   // seven days. Words, an id and when, never a name.
-  const ideas = ask.Kind === 'ideas' ? await ideasAt(rows, orgId) : null;
+  const ideas = ask.Kind === 'ideas'
+    ? await ideasAt(rows, orgId, secret || await sessionIdSecret(db, gameId))
+    : null;
   const sealed = await seal(orgId, ideas ? { Tally: tally, Ideas: ideas } : { Tally: tally });
   await db.send(new UpdateCommand({
     TableName: table(),
@@ -367,25 +377,34 @@ async function setBeat(db, { gameId, round, beat, now = new Date().toISOString()
 
 // ──────────────────────────────────────────────────────────── ideas ──
 
-/** A stable id for one answer that says nothing about whose it is. */
-const ideaId = (sk) => crypto.createHash('sha256').update(String(sk)).digest('hex').slice(0, 12);
+/**
+ * A stable id for one answer that says nothing about whose it is: keyed by
+ * the session's secret (id-secret.js), because the key it is made from ends
+ * in the player's name and a plain hash of it can be matched against the roster.
+ */
+const ideaId = (secret, sk) => keyedId(secret, sk);
 
-/** An Ideas ask's answers as the host sees them: the words and an id, oldest first, never a name. */
-async function ideasOf(answerRows, orgId) {
-  const opened = await openAll(orgId, answerRows || []);
-  return opened
+/**
+ * An Ideas ask's answers as the host sees them: the words and an id, oldest
+ * first, never a name. Late replies (session flow v3 §4.4) follow, each
+ * marked `late: true`; they are never part of the frozen `Ideas` (ideasAt).
+ */
+async function ideasOf(answerRows, orgId, lateRows = [], secret) {
+  const words = (rows) => rows
     .filter((r) => typeof r.Value === 'string' && r.Value.trim())
-    .sort((a, b) => String(a.At || '').localeCompare(String(b.At || '')))
-    .map((r) => ({ id: ideaId(r.SK), text: r.Value.trim() }));
+    .sort((a, b) => String(a.At || a.SubmittedAt || '').localeCompare(String(b.At || b.SubmittedAt || '')));
+  const onTime = words(await openAll(orgId, answerRows || [])).map((r) => ({ id: ideaId(secret, r.SK), text: r.Value.trim() }));
+  const late = words(await openAll(orgId, lateRows || [])).map((r) => ({ id: ideaId(secret, r.SK), text: r.Value.trim(), late: true }));
+  return [...onTime, ...late];
 }
 
 /** The same, with when each arrived, for the frozen copy on the ask. */
-async function ideasAt(answerRows, orgId) {
+async function ideasAt(answerRows, orgId, secret) {
   const opened = await openAll(orgId, answerRows || []);
   return opened
     .filter((r) => typeof r.Value === 'string' && r.Value.trim())
     .sort((a, b) => String(a.At || '').localeCompare(String(b.At || '')))
-    .map((r) => ({ id: ideaId(r.SK), text: r.Value.trim(), at: r.At || null }));
+    .map((r) => ({ id: ideaId(secret, r.SK), text: r.Value.trim(), at: r.At || null }));
 }
 
 /**
@@ -394,16 +413,25 @@ async function ideasAt(answerRows, orgId) {
  *
  * @returns {Promise<{ok: true, picked: object[]} | {ok: false, code: 'NOT_FOUND'|'NOT_IDEAS'}>}
  */
-async function pickIdea(db, { gameId, round, askId, orgId, id, picked }) {
+async function pickIdea(db, { gameId, round, askId, orgId, id, picked, secret = null }) {
   const ask = await readAsk(db, { gameId, round, askId, orgId });
   if (!ask) return { ok: false, code: 'NOT_FOUND' };
   if (ask.Kind !== 'ideas') return { ok: false, code: 'NOT_IDEAS' };
   const prefix = keys.answersPrefix(round, askId);
-  const ideas = await ideasOf(prefix ? await queryAll(db, gameId, prefix) : [], orgId);
+  const latePrefix = keys.latePrefix(round, askId);
+  const key = secret || await sessionIdSecret(db, gameId);
+  // A late idea can go on the wall too (late items plan, Task 3 reuses this pick).
+  const ideas = await ideasOf(
+    prefix ? await queryAll(db, gameId, prefix) : [],
+    orgId,
+    latePrefix ? await queryAll(db, gameId, latePrefix) : [],
+    key,
+  );
   const current = Array.isArray(ask.Picked) ? ask.Picked : [];
   let next = current.filter((p) => p.id !== id);
+  let idea = null;
   if (picked) {
-    const idea = ideas.find((i) => i.id === id);
+    idea = ideas.find((i) => i.id === id);
     if (!idea) return { ok: false, code: 'NOT_FOUND' };
     next = [...next, { id, text: idea.text }];
   }
@@ -415,7 +443,25 @@ async function pickIdea(db, { gameId, round, askId, orgId, id, picked }) {
     ExpressionAttributeNames: { '#p': 'Picked' },
     ExpressionAttributeValues: { ':p': sealed.Picked },
   }));
-  return { ok: true, picked: next };
+  // A LATE idea put on the wall is "Reviewed with the room" (session flow v3
+  // §4.4, late items Task 3). Taking it down again does not undo that: it was
+  // shown. Its row is the one whose key hashes to this id.
+  let lateShown = false;
+  if (idea && idea.late) {
+    const lateRow = (latePrefix ? await queryAll(db, gameId, latePrefix) : []).find((r) => ideaId(key, r.SK) === id);
+    if (lateRow) {
+      await db.send(new UpdateCommand({
+        TableName: table(),
+        Key: { PK: pkOf(gameId), SK: lateRow.SK },
+        UpdateExpression: 'SET #r = :r, #at = :at',
+        ConditionExpression: 'attribute_exists(SK)',
+        ExpressionAttributeNames: { '#r': 'Reviewed', '#at': 'ReviewedAt' },
+        ExpressionAttributeValues: { ':r': 'shown', ':at': new Date().toISOString() },
+      }));
+      lateShown = true;
+    }
+  }
+  return { ok: true, picked: next, lateShown };
 }
 
 // ──────────────────────────────────────────────────────────── answers ──
@@ -464,6 +510,60 @@ async function writeAnswer(db, { gameId, round, askId, orgId, playerName, value,
   return { ok: true };
 }
 
+/**
+ * KEEP A LATE ANSWER (session flow v3 §4.4): one that arrived after "Show
+ * results" or after the round moved on. Its own row,
+ * `FOLLOWUP#nnn#ASK#<id>#LATE#<player>`, outside the answers prefix, so the
+ * frozen `Tally` and `Ideas` never see it and no count moves. Sealed as an
+ * answer is (`Value`, `Text`); 30 days; `Reviewed: null` until the host
+ * reviews it. The caller has checked the window and the value.
+ *
+ * Someone who answered on time keeps that answer: a late one is a change and
+ * is refused. One late answer per person.
+ *
+ * @returns {Promise<{ok: true, row: object} | {ok: false, code: 'ALREADY_ANSWERED'}>}
+ */
+async function writeLateAnswer(db, { gameId, round, ask, orgId, playerName, value, text, arrivedDuring, now = new Date().toISOString() }) {
+  const sk = keys.lateSk(round, ask.AskId, playerName);
+  const onTimeSk = keys.answerSk(round, ask.AskId, playerName);
+  if (!sk || !onTimeSk) throw new Error('followup-store: bad late answer key');
+  const item = {
+    PK: pkOf(gameId),
+    SK: sk,
+    GameId: gameId,
+    QuestionNumber: keys.roundOf(round),
+    AskId: ask.AskId,
+    Kind: ask.Kind,
+    PlayerName: playerName,
+    Value: value,
+    Text: text,
+    ArrivedDuring: arrivedDuring || null,
+    SubmittedAt: now,
+    Reviewed: null,
+    ttl: ttlFrom(now, LATE_DAYS),
+  };
+  // One transaction: no on-time answer from this person, and no late one yet.
+  // An on-time write racing this one cannot slip in between a read and a put.
+  try {
+    await transact(db, {
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: table(),
+            Key: { PK: pkOf(gameId), SK: onTimeSk },
+            ConditionExpression: 'attribute_not_exists(SK)',
+          },
+        },
+        { Put: { TableName: table(), Item: await seal(orgId, item), ConditionExpression: 'attribute_not_exists(SK)' } },
+      ],
+    });
+  } catch (e) {
+    if (isConditionFailure(e)) return { ok: false, code: 'ALREADY_ANSWERED' };
+    throw e;
+  }
+  return { ok: true, row: item };
+}
+
 async function readAnswer(db, { gameId, round, askId, orgId, playerName }) {
   const sk = keys.answerSk(round, askId, playerName);
   if (!sk) return null;
@@ -475,6 +575,7 @@ module.exports = {
   isConditionFailure,
   SUGGESTED_DAYS,
   LIVE_DAYS,
+  LATE_DAYS,
   followUpsEnabled,
   queryAll,
   writeSuggestions,
@@ -491,8 +592,10 @@ module.exports = {
   freezeTally,
   settleLive,
   writeAnswer,
+  writeLateAnswer,
   readAnswer,
   setBeat,
   ideasOf,
+  ideaId,
   pickIdea,
 };

@@ -22,6 +22,10 @@
  *     GET  /games/{id}/followup-play/live          the round's current ask: kind, words,
  *                                                  options; after close, the counts
  *     POST /games/{id}/followup-play/asks/{askId}/answer
+ *                                                  on time while live; after "Show
+ *                                                  results" or once the round moved
+ *                                                  on, kept LATE (session flow v3
+ *                                                  §4.4) and never counted
  *
  * Remaking the suggestions is the read's own worker, on the host's
  * GET /games/{id}/ai-summary/host?followUps=suggest — it has the model grants,
@@ -46,6 +50,8 @@ const { pollAnswerText } = require('./poll-question');
 const keys = require('./followup-keys');
 const kinds = require('./followup-kinds');
 const store = require('./followup-store');
+const { lateWindow } = require('./late-window');
+const { sessionIdSecret } = require('./id-secret');
 
 const respond = (statusCode, body) => ({
   statusCode,
@@ -82,6 +88,7 @@ function hostWire(ask, tally, ideas) {
     round: ask.QuestionNumber,
     kind: ask.Kind,
     statement: ask.Statement || null,
+    ...(ask.Kind === 'rate' ? { ends: kinds.endsOf(ask) } : {}),
     question: ask.Question || null,
     anchor: ask.Anchor || null,
     options: (ask.Options || []).map((o) => ({ text: o.text, ...(o.ownWords ? { ownWords: true } : { answer: o.answer }) })),
@@ -106,8 +113,9 @@ function hostWire(ask, tally, ideas) {
  */
 function phoneWire(ask, answered = null) {
   const kind = ask.Kind;
+  const ends = kind === 'rate' ? kinds.endsOf(ask) : null;
   const words = kind === 'rate'
-    ? { statement: ask.Statement, scale: { lowLabel: kinds.RATE.lowLabel, highLabel: kinds.RATE.highLabel } }
+    ? { statement: ask.Statement, ends, scale: { lowLabel: ends.low, highLabel: ends.high } }
     : kind === 'ideas'
       ? { question: ask.Question, maxLength: kinds.LIMITS.idea }
       : { question: ask.Question, options: (ask.Options || []).map((o) => o.text) };
@@ -138,14 +146,17 @@ async function hostRound(db, { gameId, meta, state, round }) {
     store.readLivePointer(db, { gameId }),
   ]);
   const asks = [];
-  for (const { ask, answerRows } of rows) {
+  // The session's id secret, fetched (or made) once, and only if an Ideas ask needs it.
+  let secret = null;
+  const idKey = async () => (secret = secret || await sessionIdSecret(db, gameId, meta));
+  for (const { ask, answerRows, lateRows } of rows) {
     let tally = null;
     if (ask.Status === 'closed') {
-      tally = ask.Tally || (await store.freezeTally(db, { gameId, round: padded, ask, orgId })).Tally;
+      tally = ask.Tally || (await store.freezeTally(db, { gameId, round: padded, ask, orgId, secret: await idKey() })).Tally;
     } else if (ask.Status === 'live') {
       tally = await store.countAnswers(ask, answerRows, orgId);
     }
-    const ideas = ask.Kind === 'ideas' ? await store.ideasOf(answerRows, orgId) : null;
+    const ideas = ask.Kind === 'ideas' ? await store.ideasOf(answerRows, orgId, lateRows, await idKey()) : null;
     asks.push(hostWire(ask, tally, ideas));
   }
   return respond(200, {
@@ -237,13 +248,17 @@ async function pick(db, broadcast, { gameId, meta, askId, body }) {
   if (typeof body.id !== 'string' || !body.id || typeof body.picked !== 'boolean') {
     return respond(400, { error: 'id and picked are required' });
   }
-  const done = await store.pickIdea(db, { gameId, round, askId, orgId: orgOf(meta), id: body.id, picked: body.picked });
+  const done = await store.pickIdea(db, {
+    gameId, round, askId, orgId: orgOf(meta), id: body.id, picked: body.picked, secret: await sessionIdSecret(db, gameId, meta),
+  });
   if (!done.ok) {
     return done.code === 'NOT_FOUND'
       ? respond(404, { error: 'Not found' })
       : respond(409, { error: 'Only an Ideas question has answers to pick', code: done.code });
   }
   await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status: 'picked' });
+  // A late idea on the wall is now "Reviewed with the room": the host's late list refetches.
+  if (done.lateShown) await broadcast(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
   return respond(200, { gameId, askId, picked: done.picked });
 }
 
@@ -295,22 +310,42 @@ async function phoneAnswer(db, broadcast, { gameId, meta, state, askId, body }) 
   if (!playerName) return respond(400, { error: 'playerName is required' });
 
   if (!(await isMember(db, gameId, playerName, body.clientId))) return respond(409, { error: 'you have not joined this session' });
-  if (onScreenRound(state) !== round) return respond(409, { error: 'this question is no longer open', code: 'NOT_LIVE', currentState: state.State });
   if (state.EventPaused) return respond(409, { error: 'The host has paused this for a moment.', code: 'PAUSED' });
 
   const orgId = orgOf(meta);
   const ask = await store.readAsk(db, { gameId, round, askId, orgId });
   if (!ask) return respond(404, { error: 'Follow-up question not found' });
-  if (ask.Status !== 'live') return respond(409, { error: 'this question is no longer open', code: 'NOT_LIVE' });
+  // A cancelled question was taken back from the room: nothing, late or not.
+  if (ask.Status !== 'live' && ask.Status !== 'closed') return respond(409, { error: 'this question is no longer open', code: 'NOT_LIVE' });
 
   const checked = kinds.checkValue(ask, body.value);
   if (!checked.ok) return respond(400, { error: checked.error });
   const text = pollAnswerText(kinds.toSurveyQuestion(ask), checked.value);
-  const written = await store.writeAnswer(db, { gameId, round, askId, orgId, playerName, value: checked.value, text });
-  if (!written.ok) return respond(409, { error: 'this question is no longer open', code: 'NOT_LIVE' });
 
-  await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status: 'answered' });
-  return respond(200, { gameId, askId, yours: checked.value });
+  // ON TIME: the question is live and its round is the one on screen. A close
+  // racing this write refuses it (writeAnswer's ConditionCheck); then it is late.
+  if (ask.Status === 'live' && onScreenRound(state) === round) {
+    const written = await store.writeAnswer(db, { gameId, round, askId, orgId, playerName, value: checked.value, text });
+    if (written.ok) {
+      await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status: 'answered' });
+      return respond(200, { gameId, askId, yours: checked.value });
+    }
+  }
+
+  // LATE (session flow v3 §4.4): after "Show results" or after the round moved
+  // on. Kept apart from the count, while the window allows (late-window.js).
+  const gate = lateWindow({ meta, state });
+  if (!gate.open) return respond(409, { error: gate.error, code: gate.code });
+  const kept = await store.writeLateAnswer(db, {
+    gameId, round, ask, orgId, playerName, value: checked.value, text, arrivedDuring: state.State,
+  });
+  if (!kept.ok) return respond(409, { error: 'You have already answered this question.', code: kept.code });
+  console.log(`Late follow-up answer kept on round ${round} (arrived during ${state.State})`);
+  await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status: 'late' });
+  // The host's late list reads /late, which followUpChanged does not refetch
+  // (after ENDED nothing else would): tell the hosts, as a late comment does.
+  await broadcast(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
+  return respond(200, { gameId, askId, yours: checked.value, late: true });
 }
 
 // ───────────────────────────────────────────────────────── handler ──

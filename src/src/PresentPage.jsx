@@ -38,6 +38,17 @@ function fitcheckOn() {
   }
 }
 
+/**
+ * What the fitter re-runs on. The results rows are in it (walk of dev
+ * 26af5fc8, F1): they land after the moment does, and without them the wall
+ * was fitted to "Counting the votes" and never again.
+ */
+export function presentFitKey(model) {
+  const rows = Array.isArray(model.rows) ? model.rows.map((r) => (r && (r.idea || r.label)) || '').join('\u241E') : '';
+  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task]
+    .map((x) => (x === undefined ? '' : String(x))).join('|');
+}
+
 export default function PresentPage() {
   const gameId = useMemo(gameIdFromUrl, []);
   const { snapshot, reads, refetch } = usePresentation(gameId);
@@ -65,8 +76,7 @@ export default function PresentPage() {
     return () => document.removeEventListener('click', onClick);
   }, [joinShown, armed, toggleJoin]);
 
-  const fitKey = [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined]
-    .map((x) => (x === undefined ? '' : String(x))).join('|');
+  const fitKey = presentFitKey(model);
 
   const showBoard = Boolean(model.scoreboard && hasScoreboard(snapshot && snapshot.gameType));
   const overlay = showBoard ? (

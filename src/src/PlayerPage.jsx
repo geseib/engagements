@@ -26,7 +26,8 @@ import RatingInput from './components/survey/RatingInput';
 import ChoiceInput from './components/survey/ChoiceInput';
 import YesNoInput from './components/survey/YesNoInput';
 import TextInput from './components/survey/TextInput';
-import FollowUpCard from './components/FollowUpCard';
+import FollowUpCard, { HeldFollowUp } from './components/FollowUpCard';
+import useHeldFollowUp from './utils/useHeldFollowUp';
 import { fetchLiveAsk, answerAsk } from './utils/followUpsClient';
 import { isAnswered as pollIsAnswered, summaryFor as pollSummary } from './components/survey/surveyAnswers';
 import { namesMode } from './config/surveyNames';
@@ -355,6 +356,10 @@ function PlayerPage({ event = null } = {}) {
    *  composer currently holds unsent text, so this page can decide whether
    *  it is safe to follow the room automatically once the round moves on. */
   const [myFeedbackHasDraft, setMyFeedbackHasDraft] = useState(false);
+  /** A comment just posted after the room left this round (late items Task
+   *  2): the panel stays up, so the player sees the server's yes, until they
+   *  press the way back themselves. */
+  const [myFeedbackPostedLate, setMyFeedbackPostedLate] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -406,6 +411,10 @@ function PlayerPage({ event = null } = {}) {
   // The latest state for socket handlers registered once (answerReceived).
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
+  // A draft answer to a question for the room is never lost (session flow v3 §4.4): utils/useHeldFollowUp.js.
+  const {
+    held: heldFollowUp, onDraft: followUpDraft, keptLate: keepFollowUpLate, release: releaseFollowUp, heldFor,
+  } = useHeldFollowUp(gameState);
   /*
     NULL UNTIL THE SERVER SAYS. This defaulted to 'call-and-answer', which is a
     claim: a phone joining a survey that was already open showed the
@@ -1486,14 +1495,21 @@ function PlayerPage({ event = null } = {}) {
   };
   followUpLoadRef.current = loadFollowUp;
   const answerFollowUp = async (value) => {
-    const ask = followUp && followUp.ask;
+    const ask = (heldFollowUp && heldFollowUp.ask) || (followUp && followUp.ask);
     if (!ask) return { ok: false, error: 'This question is no longer open' };
     const r = await answerAsk({
       apiBase: API_BASE, gameId, round: ask.round, askId: ask.askId, playerName, clientId: getClientId(gameId), value,
     });
-    if (r.ok) setFollowUp((f) => (f ? { ...f, yours: value } : f));
+    if (r.ok && r.body && r.body.late) {
+      // Kept late: the card stays up with its line until the state next moves.
+      keepFollowUpLate(ask);
+    } else if (r.ok) {
+      releaseFollowUp();
+      setFollowUp((f) => (f && f.ask && f.ask.askId === ask.askId ? { ...f, yours: value } : f));
+    }
     return r;
   };
+
 
   const loadFeedbackRound = async () => {
     const result = await fetchFeedbackRound({ apiBase: API_BASE, gameId });
@@ -1684,6 +1700,7 @@ function PlayerPage({ event = null } = {}) {
     setMyFeedbackComments([]);
     setMyFeedbackSummary(null);
     setMyFeedbackHasDraft(false);
+    setMyFeedbackPostedLate(false);
     setMyFeedbackAnswersStatus('loading');
   };
 
@@ -1701,11 +1718,11 @@ function PlayerPage({ event = null } = {}) {
    */
   useEffect(() => {
     if (myFeedbackOpen && myFeedbackNumber
-      && gameState !== `RESULTS#${myFeedbackNumber}` && !myFeedbackHasDraft) {
+      && gameState !== `RESULTS#${myFeedbackNumber}` && !myFeedbackHasDraft && !myFeedbackPostedLate) {
       closeMyFeedback();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber]);
+  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber]);
 
   /** Post one comment from the player's OWN panel — the same shape as
    *  `submitComment` above, kept separate because it writes to
@@ -1725,6 +1742,12 @@ function PlayerPage({ event = null } = {}) {
     });
     if (result.ok && result.comment) {
       setMyFeedbackComments((current) => [...current, result.comment]);
+    }
+    // Posted after the room moved on: keep the panel up for the receipt. Set
+    // before the composer clears its draft, so the effect above never closes
+    // the panel between the two.
+    if (result.ok && gameState !== `RESULTS#${myFeedbackNumber}`) {
+      setMyFeedbackPostedLate(true);
     }
     return result;
   };
@@ -3381,7 +3404,8 @@ function PlayerPage({ event = null } = {}) {
      Independent of `feedbackRound`/the branch below that reads it: that one is
      the host-triggered, whole-room switch and is unaffected by any of this. */
   const myFeedbackStillOpen = myFeedbackOpen && gameState === `RESULTS#${myFeedbackNumber}`;
-  const myFeedbackShowing = myFeedbackOpen && (myFeedbackStillOpen || myFeedbackHasDraft);
+  const myFeedbackShowing = myFeedbackOpen
+    && (myFeedbackStillOpen || myFeedbackHasDraft || myFeedbackPostedLate);
   /* THE SESSION HAS ENDED, NOT MERELY "THE NEXT QUESTION IS LIVE" (fix round
      2, item 3) — the exact wording matters when there is no next question to
      go to at all. `myFeedbackExitLabel` covers both the button and the top
@@ -3409,6 +3433,15 @@ function PlayerPage({ event = null } = {}) {
     ? () => loadMyFeedbackAnswers(myFeedbackNumber)
     : undefined;
 
+  /* A QUESTION FOR THE ROOM WITH A DRAFT, OR JUST KEPT LATE (session flow v3
+     §4.4): when the RESULTS arm below would not show this ask (the room moved
+     on), the held one is drawn as a compact panel ABOVE whatever the state's
+     own branch draws. It never hides the new round's answer box: both are on
+     the page, and the player answers either in any order. */
+  const followUpOnResults = gameState.startsWith('RESULTS#') && followUp && followUp.ask
+    && (followUp.ask.status === 'live' || askBeatRef.current);
+  const heldFollowUpShowing = Boolean(heldFollowUp) && !(followUpOnResults && heldFor(followUp.ask));
+
   if (myFeedbackShowing) {
     volume = 'act';
     ctx = position ? `${position} · Feedback` : 'Feedback';
@@ -3428,9 +3461,11 @@ function PlayerPage({ event = null } = {}) {
         </button>
         {!myFeedbackStillOpen && (
           <p className="plr-lede plr-muted" role="status">
-            {myFeedbackEnded
-              ? 'The session has ended. What you have written is still here — you can copy it, or close this.'
-              : 'The next question is live. What you have written is still here — you can copy it, or go to the question.'}
+            {myFeedbackPostedLate
+              ? 'Posted. It is kept with this round.'
+              : myFeedbackEnded
+                ? 'The session has ended. You can still post what you have written.'
+                : 'The next question is live. You can still post what you have written. It is kept with this round.'}
           </p>
         )}
         <FeedbackRoundPanel
@@ -3441,7 +3476,6 @@ function PlayerPage({ event = null } = {}) {
           onDraftChange={setMyFeedbackHasDraft}
           answersEmptyText={myFeedbackAnswersEmptyText}
           onRetryAnswers={myFeedbackRetryAnswers}
-          postDisabled={!myFeedbackStillOpen}
         />
         <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
           {myFeedbackExitLabel}
@@ -4121,16 +4155,26 @@ function PlayerPage({ event = null } = {}) {
     }
 
   /* -------------------------------------------------------------- RESULTS -- */
-  } else if (gameState.startsWith('RESULTS#') && followUp && followUp.ask
-    && (followUp.ask.status === 'live' || askBeatRef.current)) {
+  } else if (followUpOnResults) {
     /*
       A QUESTION FOR THE ROOM (docs/design/followup-icons): the host sent one
       from Workie's read. Answer it here; the result follows once the host
       shows it. Tested before the feedback round: one beat at a time.
+      No onDone here: this card IS the round's content and stays up after a
+      late send, so a Done would do nothing. Only the held card has one.
     */
     volume = followUp.ask.status === 'live' ? 'act' : 'watch';
     ctx = position ? `${position} · Question` : 'Question';
-    body = <FollowUpCard ask={followUp.ask} yours={followUp.yours} onSend={answerFollowUp} />;
+    body = (
+      <FollowUpCard
+        ask={followUp.ask}
+        yours={followUp.yours}
+        draft={heldFor(followUp.ask) ? heldFor(followUp.ask).draft : null}
+        keptLate={Boolean(heldFor(followUp.ask) && heldFor(followUp.ask).late)}
+        onSend={answerFollowUp}
+        onDraft={followUpDraft(followUp.ask)}
+      />
+    );
 
   } else if (gameState.startsWith('RESULTS#') && feedbackRound) {
     /*
@@ -4498,6 +4542,20 @@ function PlayerPage({ event = null } = {}) {
           Everything the room shares — the questions, the results, the discussion — is on
           the main screen. This page is only ever <b>your</b> half.
         </LookUpCue>
+      </>
+    );
+  }
+
+  if (heldFollowUpShowing) {
+    body = (
+      <>
+        <HeldFollowUp
+          held={heldFollowUp}
+          onSend={answerFollowUp}
+          onDraft={followUpDraft(heldFollowUp.ask)}
+          onLeave={releaseFollowUp}
+        />
+        {body}
       </>
     );
   }

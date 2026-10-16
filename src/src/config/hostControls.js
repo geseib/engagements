@@ -730,6 +730,7 @@ export function snapshotFromHostPage({
   answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
   spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
   roomAsk = null, asksReady = 0, asksEnabled = false, roundNumber = null, totalRounds = null,
+  late = null, wallFocus = 'none',
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
@@ -746,9 +747,13 @@ export function snapshotFromHostPage({
       ? String(STATE_FOR_PHASE[resolvedPhase]).replace(/#001$/, `#${String(Number(roundNumber)).padStart(3, '0')}`)
       : STATE_FOR_PHASE[resolvedPhase],
     stageBeat: BEAT_FOR_PHASE[resolvedPhase] || 'results',
+    // The question put back up (wallFocus, the page's record of the wall's
+    // focus) reads as the Remote reads the stored focus, so → agrees on both.
     focus: onWall
       ? { focus: 'answer', index: spotlightIndex, part: responsePart, parts: responseParts, phase: resolvedPhase }
-      : { focus: 'none', index: null },
+      : (wallFocus === 'question' && (resolvedPhase === 'VOTE' || resolvedPhase === 'RESULTS')
+        ? { focus: 'question', index: null }
+        : { focus: 'none', index: null }),
     notes: { page: notesPage, pages: notesPages, ready: notesReady },
     progress: { received, total, allIn: roomIsComplete({ phase: resolvedPhase, responded, playerCount }) },
     playerCount,
@@ -765,6 +770,9 @@ export function snapshotFromHostPage({
     // state above is a template (ASK#001), so the number travels on its own.
     roundNumber: Number(roundNumber) > 0 ? Number(roundNumber) : null,
     totalRounds: Number(totalRounds) > 0 ? Number(totalRounds) : null,
+    // The late items still waiting ({ notReviewed, answers }), for the
+    // status line's count (late items Task 4). The Remote passes the same.
+    late,
   };
 }
 

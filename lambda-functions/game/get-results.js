@@ -15,6 +15,7 @@ const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { readPollQuestion, pollTally } = require('./poll-round');
 const { displayOrder } = require('./answer-order');
 const { claimSummaryJob } = require('./summary-job');
+const { clearQuestionFocus } = require('./question-focus');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -283,15 +284,28 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
   await db.send(new UpdateCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: `GAME#${gameId}`, SK: `ROUND#${paddedQuestionId}` },
-    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt, #ttl = if_not_exists(#ttl, :ttl)',
+    // #shown (late items Task 2 review): the one mark that this round's
+    // RESULTS were really put up. reveal-authors.js and stage-focus.js also
+    // write this row, on a round a host may still skip from VOTE, so neither
+    // the row nor AuthorsRevealed proves the room saw results. comments.js
+    // asks for this before taking a comment on a round the room has left.
+    UpdateExpression: 'SET #revealed = :true, #qn = :qn, #updatedAt = :updatedAt, #ttl = if_not_exists(#ttl, :ttl), '
+      + '#shown = if_not_exists(#shown, :updatedAt)',
     ExpressionAttributeNames: {
-      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt', '#ttl': 'ttl'
+      '#revealed': 'AuthorsRevealed', '#qn': 'QuestionNumber', '#updatedAt': 'UpdatedAt', '#ttl': 'ttl',
+      '#shown': 'ResultsShownAt'
     },
     ExpressionAttributeValues: {
       ':true': true, ':qn': paddedQuestionId, ':updatedAt': new Date().toISOString(),
       ':ttl': ttlFrom(null, ROUND_RECORD_DAYS)
     }
   }));
+
+  // A question put back up during VOTE comes down with it (question-focus.js):
+  // the wall shows the results the dock and the Remote say it shows.
+  await clearQuestionFocus({
+    db, UpdateCommand, broadcast: broadcastToGame, table: process.env.TABLE_NAME, gameId, padded: paddedQuestionId,
+  });
 
   await broadcastResultsReady(gameId, paddedQuestionId);
 

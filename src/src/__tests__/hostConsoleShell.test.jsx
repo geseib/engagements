@@ -1,6 +1,6 @@
 // src/src/__tests__/hostConsoleShell.test.jsx
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import HostConsole from '../components/console/HostConsole';
 import { stripFor } from '../config/workflowStrip';
 
@@ -212,4 +212,119 @@ test('with no total known, the queue header says the round alone, never a count 
   const summary = container.querySelector('[data-section="queue"] summary').textContent;
   expect(summary).not.toMatch(/of 2/);
   expect(summary).toMatch(/3/);
+});
+
+describe('Late & not reviewed (late items Task 4)', () => {
+  const answer = { kind: 'answer', ref: 'aaaaaaaaaaaa', round: '001', text: 'A late thought', who: 'Ada', reviewed: null };
+  const comment = { kind: 'comment', ref: '202610161000000-abc', round: '001', text: 'More on this', who: 'Omar', reviewed: null };
+  const late = [answer, comment, { ...answer, ref: 'bbbbbbbbbbbb' }, { ...answer, ref: 'cccccccccccc' }]
+    .map((item) => ({ id: `${item.kind}:${item.ref}`, label: item.text, meta: item.who, item }));
+
+  test('the count is the whole count; the first few show with their buttons', async () => {
+    const onLateShow = jest.fn();
+    const onLateMark = jest.fn();
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 5, lateWall: { round: '001', beat: 'feedback' }, onLateShow, onLateMark } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const sec = container.querySelector('[data-section="late"]');
+    expect(sec.querySelector('summary').textContent).toMatch('5');
+    expect(sec.querySelectorAll('li')).toHaveLength(3);
+    // No wall for a late round answer.
+    const [first, second] = sec.querySelectorAll('li');
+    expect(first.textContent).not.toMatch('Show on the wall');
+    fireEvent.click([...first.querySelectorAll('button')].find((b) => b.textContent === 'Mark reviewed'));
+    expect(onLateMark).toHaveBeenCalledWith(answer);
+    // The buttons wait out the first call (no double send) before the next.
+    await act(async () => {});
+    fireEvent.click([...second.querySelectorAll('button')].find((b) => b.textContent === 'Show on the wall'));
+    expect(onLateShow).toHaveBeenCalledWith(comment);
+    fireEvent.click(screen.getByRole('button', { name: 'Review them' }));
+    expect(p.rail.onOpenSection).toHaveBeenCalledWith('history');
+  });
+
+  test('an earlier round\'s comment: no Show, only Mark reviewed (review fix)', () => {
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 4, lateWall: { round: '002', beat: 'feedback' } } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    expect(container.querySelector('[data-section="late"]').textContent).not.toMatch('Show on the wall');
+  });
+
+  test('a refusal is said in the rail', async () => {
+    const onLateMark = jest.fn(() => Promise.resolve({ ok: false, error: 'That did not work.' }));
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 4, onLateMark } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const first = container.querySelector('[data-section="late"] li');
+    fireEvent.click([...first.querySelectorAll('button')].find((b) => b.textContent === 'Mark reviewed'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That did not work.');
+  });
+
+  test('while a call is in flight every late button waits, so a second press cannot send it twice', async () => {
+    let finish;
+    const onLateMark = jest.fn(() => new Promise((resolve) => { finish = resolve; }));
+    const onLateShow = jest.fn(() => Promise.resolve({ ok: true }));
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 4, lateWall: { round: '001', beat: 'feedback' }, onLateMark, onLateShow } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const sec = container.querySelector('[data-section="late"]');
+    const buttons = () => [...sec.querySelectorAll('li button')];
+    const mark = () => buttons().find((b) => b.textContent === 'Mark reviewed');
+    fireEvent.click(mark());
+    expect(buttons().every((b) => b.disabled)).toBe(true);
+    fireEvent.click(mark());
+    fireEvent.click(buttons().find((b) => b.textContent === 'Show on the wall'));
+    expect(onLateMark).toHaveBeenCalledTimes(1);
+    expect(onLateShow).not.toHaveBeenCalled();
+    await act(async () => { finish({ ok: true }); });
+    expect(buttons().every((b) => !b.disabled)).toBe(true);
+  });
+
+  test('the footer\'s late count opens the list', () => {
+    const onReviewLate = jest.fn();
+    const status = { text: '3 of 4 answered · 1 late answer kept', tone: 'pending', late: { line: '1 late answer kept', link: '1 late answer kept' } };
+    render(<HostConsole {...props({ footer: { ...props().footer, status, onReviewLate } })}><div /></HostConsole>);
+    fireEvent.click(screen.getByRole('button', { name: '1 late answer kept' }));
+    expect(onReviewLate).toHaveBeenCalled();
+  });
+});
+
+/* THE SCOREBOARD FROM THE PEOPLE SECTION (owner, 16 Oct 2026): a button that
+   opens or closes the scoreboard on the wall through the page's own toggle,
+   labelled for what it will do, drawn only where a scoreboard is allowed.
+   rejects: a dead button on a poll; a label that says the state, not the act. */
+describe('People: the scoreboard button', () => {
+  const withBoard = (scoreboard) => props({ rail: { ...props().rail, scoreboard } });
+  test('closed: "Show scoreboard" opens it', () => {
+    const onToggle = jest.fn();
+    render(<HostConsole {...withBoard({ show: true, enabled: true, open: false, onToggle })}><div /></HostConsole>);
+    const b = screen.getByRole('button', { name: 'Show scoreboard' });
+    expect(b.closest('[data-section="people"]')).not.toBeNull();
+    fireEvent.click(b);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+  test('open: "Hide scoreboard" closes it', () => {
+    const onToggle = jest.fn();
+    render(<HostConsole {...withBoard({ show: true, enabled: true, open: true, onToggle })}><div /></HostConsole>);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide scoreboard' }));
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+  test('before a round is scored: there, disabled, with the reason', () => {
+    render(<HostConsole {...withBoard({ show: true, enabled: false, open: false, reason: 'Scores appear after the first round', onToggle: jest.fn() })}><div /></HostConsole>);
+    expect(screen.getByRole('button', { name: 'Show scoreboard' })).toBeDisabled();
+    expect(screen.getByText('Scores appear after the first round')).toBeInTheDocument();
+  });
+  test('where no scoreboard is allowed, no button', () => {
+    render(<HostConsole {...withBoard({ show: false, enabled: false, open: false, onToggle: jest.fn() })}><div /></HostConsole>);
+    expect(screen.queryByRole('button', { name: /scoreboard/i })).toBeNull();
+    render(<HostConsole {...props()}><div /></HostConsole>);
+    expect(screen.queryByRole('button', { name: /scoreboard/i })).toBeNull();
+  });
+});
+
+/* ONE SCOREBOARD CLOSE ON THE CONSOLE (controller ruling, 16 Oct 2026): the
+   People section's button. The page no longer draws a second "Take it down"
+   card in the main area. rejects: two controls for one act. */
+test('the page draws no second scoreboard card on the console', () => {
+  // eslint-disable-next-line global-require
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  expect(src).not.toMatch(/consoleBoard/);
+  expect(src).not.toMatch(/Take it down|takeItDown|scoreboardOnWall/);
+  expect(src).toMatch(/scoreboard: \{ \.\.\.scoreboardAvail, open: scoreboard\.open, onToggle:/);
 });

@@ -4200,6 +4200,27 @@ Resources:
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
+        # THE HOST'S LATE LIST (session flow v3 §4.4): every late answer and
+        # added-later comment, and their review labels; the POST also closes
+        # comments once the session has ended. Not public: Cognito here,
+        # callerMayDriveSession in the handler (comments.js), 404 to anyone
+        # else. On this function, not a new one: the stack is near its limit.
+        LateListEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/late
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        LateReviewEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /games/{gameId}/late/review
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
         # The one round a participant is being asked to comment on: the round
         # actually on the `feedback` beat, its report slice and its comments,
         # and nothing else. Public, and deliberately NOT `GET /report?role=host`

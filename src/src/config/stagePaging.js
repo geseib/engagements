@@ -93,6 +93,32 @@ export function pageSizeFor(profile) {
 }
 
 /**
+ * THE RESULTS CARDS, IDEAS FIRST (walk of dev 26af5fc8, F3). A results card
+ * now carries the idea as its headline (up to three lines), a credit line and
+ * a share bar, so it is taller than a voting card, and its type has a pixel
+ * floor the fitter cannot go under.
+ *
+ * Measured on dev 92f8b24d (16 Oct 2026), one screen, the real stage and
+ * dock, six ideas of 149 and 317 characters: at 1280x720 the voting sizes ran
+ * over at the floor on every profile (Room 3: 50-96px, TV 2: 63-91px, Table 4:
+ * 33px, Call 3: 110px). These sizes fit with the longest ideas at 1280x720,
+ * 1366x768 and 1440x900: Room 2 (fit .93), Call 2, TV 1, Table 3 (fit 1).
+ * Used for RESULTS only; every other phase reads PAGE_SIZE.
+ */
+export const RESULTS_PAGE_SIZE = {
+  room: 2,
+  tv: 1,
+  call: 2,
+  table: 3,
+};
+
+export function resultsPageSizeFor(profile) {
+  const size = RESULTS_PAGE_SIZE[String(profile ?? '').toLowerCase()];
+  // Unknown profile: Room's budget, as pageSizeFor falls back to Room's.
+  return Number.isFinite(size) && size > 0 ? size : RESULTS_PAGE_SIZE.room;
+}
+
+/**
  * How many pages a list of `total` items needs.
  *
  * Never less than 1, so callers can divide and compare without guarding: an

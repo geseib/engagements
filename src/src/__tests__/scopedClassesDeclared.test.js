@@ -65,6 +65,8 @@ const SURFACES = [
   // Events M2–M4: the attendee's page and the event on the wall.
   ['event/EventAttendeePage', 'evp'],
   ['event/EventStage', 'ag'],
+  // Late items Task 4: the host's late list.
+  ['LateList', 'late'],
 ];
 
 /** Class names appearing in string literals and template literals in the JSX. */

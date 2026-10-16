@@ -348,9 +348,22 @@ function assertFreshRoundTtl(ttl, label) {
     put({ PK: 'GAME#3001', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQuestionId: '001' });
     put({ PK: 'GAME#3001', SK: 'QUESTION#001#ANSWER#Ada', PlayerName: 'Ada', Answer: 'x' });
     put({ PK: 'GAME#3001', SK: 'QUESTION#001#VOTE#Ada', PlayerName: 'Ada', Votes: { 1: 1 } });
+    // Late items Task 2 review: focus, beat and reveal all wrote this row, and
+    // none of them is the room seeing results — comments.js's gate for a past
+    // round rests on that.
+    assert.strictEqual(roundOf('3001', '001').ResultsShownAt, undefined,
+      'a writer other than get-results stamped ResultsShownAt');
     const r4 = await closeRound('3001');
     assert.strictEqual(r4.statusCode, 200, JSON.stringify(r4.body));
     assert.strictEqual(roundOf('3001', '001').ttl, stamped, 'get-results moved a ttl it did not create');
+    const shownAt = roundOf('3001', '001').ResultsShownAt;
+    assert.ok(Number.isFinite(Date.parse(shownAt)), `ResultsShownAt was ${shownAt}`);
+    // Showing results again does not move it.
+    put({ ...roundOf('3001', '001'), ResultsShownAt: '2026-01-01T00:00:00.000Z' });
+    put({ PK: 'GAME#3001', SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, CurrentQuestionId: '001' });
+    const r5 = await closeRound('3001');
+    assert.strictEqual(r5.statusCode, 200, JSON.stringify(r5.body));
+    assert.strictEqual(roundOf('3001', '001').ResultsShownAt, '2026-01-01T00:00:00.000Z');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

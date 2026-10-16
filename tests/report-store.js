@@ -104,6 +104,46 @@ const LIMIT = 400 * 1024;
     assert.ok(rows.filter((r) => r.SK.startsWith('REPORT#R#')).every((r) => r.Round && r.Round.ct), 'a round row is in the clear');
   });
 
+  await check('a late-heavy round (30 late answers, 30 late comments, 1000 characters each) keeps every row under 100 KB', async () => {
+    const thousand = (seed) => `${words(200, seed)} `.repeat(3).slice(0, 1000);
+    const lateItem = (kind, j) => ({
+      kind, text: thousand(j), who: people[j], author: people[j], arrivedDuring: 'ASK#004',
+      arrivedAt: `2026-10-16T09:${String(j).padStart(2, '0')}:00.000Z`, label: 'Not reviewed', reviewed: null,
+      ...(kind === 'comment' ? { anchorKind: 'summary', anchorLabel: 'What we heard' } : {}),
+    });
+    // Thirty people who all answered late: no on-time answers, an ordinary
+    // read. (Stacked on the crowded round above it measures about 126 KB:
+    // still far under the 400 KB item limit.)
+    const heavy = {
+      questionNumber: '003',
+      questionData: { title: 'Round 3', detail: words(80, 3) },
+      answers: [],
+      aiSummary: { markdownResponse: words(300, 3) },
+      comments: [],
+      followUps: [],
+      late: {
+        answers: people.map((_, j) => lateItem('answer', j)),
+        askAnswers: [],
+        comments: people.map((_, j) => lateItem('comment', j)),
+        leftOut: { comments: 0, answers: 0 },
+      },
+    };
+    assert.strictEqual(heavy.late.answers.length, 30);
+    assert.strictEqual(heavy.late.comments.length, 30);
+    assert.ok(heavy.late.answers.every((a) => a.text.length === 1000));
+    assert.ok(heavy.late.comments.every((c) => c.text.length === 1000));
+    const report = { ...LONG, gameId: '9003', detailedQuestions: [round(1), round(2), heavy] };
+    await S.writeReport(doc, { table: TABLE, gameId: '9003', orgId: 'acme', report, ttl: 123 });
+    const rows = [...store.values()].filter((r) => r.PK === 'GAME#9003');
+    assert.strictEqual(rows.length, 4);
+    const heavyRow = rows.find((r) => r.SK === 'REPORT#R#003');
+    assert.ok(heavyRow, 'no row for the late-heavy round');
+    assert.ok(bytes(heavyRow) > 60 * 1024, `the late items did not land in the round row (${Math.round(bytes(heavyRow) / 1024)} KB)`);
+    for (const r of rows) assert.ok(bytes(r) < 100 * 1024, `${r.SK} is ${Math.round(bytes(r) / 1024)} KB`);
+    const back = await S.readReportRound(doc, { table: TABLE, gameId: '9003', orgId: 'acme', questionNumber: '3' });
+    assert.deepStrictEqual(back.late, heavy.late);
+  });
+
   console.log('\n2. Reading it back');
   await check('the whole report: one GetItem and one Query, every round, in order, exactly', async () => {
     const before = { ...calls };

@@ -160,6 +160,11 @@ function seed(gameId, { orgId = 'acme', gameType = 'trivia', state = 'ASK#003' }
   const res = await endSession('5101');
   check('responds 200', () => assert.strictEqual(res.statusCode, 200, res.body));
   check('STATE reads ENDED', () => assert.strictEqual(stateOf('5101').State, 'ENDED'));
+  check('STATE carries its own EndedAt (the 24-hour late window measures from it)', () => {
+    const st = stateOf('5101');
+    assert.ok(st.EndedAt && !Number.isNaN(Date.parse(st.EndedAt)), JSON.stringify(st));
+    assert.strictEqual(st.EndedAt, st.UpdatedAt);
+  });
   check('the write is an UpdateCommand on STATE, never a PUT — METADATA is not rewritten', () => {
     assert.strictEqual(updates.length, 1);
     assert.strictEqual(updates[0].Key.SK, 'STATE');

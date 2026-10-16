@@ -1,5 +1,5 @@
 import { useRosterMode, rosterRevealFor } from './hooks/useRosterReveal';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
@@ -7,7 +7,7 @@ import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
-import { focusFromFrame, focusToStage, focusRequest, sameFocus } from './config/stageFocus';
+import { focusFromFrame, focusToStage, focusRequest, sameFocus, normaliseFocus } from './config/stageFocus';
 import RW from './config/roundWords';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -53,9 +53,9 @@ import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, presentHref } from './config/surfaces';
+import { twoSurfacesHere, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
 import {
-  pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
+  pageSizeFor, resultsPageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
 import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
@@ -108,7 +108,13 @@ import {
   answeredCountFrom, waitingRoster, joinedRoster, answererIdsFrom,
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
-import { authFetch } from './auth/authFetch';
+import { authFetch, getActiveOrgId } from './auth/authFetch';
+import { pickSignedInOrg, remoteSignIn } from './config/remoteSignIn';
+import {
+  fetchLate, reviewLateItem, closeComments as closeLateComments, lateStatusOf, lateItemsOf,
+  setIncludeNotReviewed as saveIncludeNotReviewed,
+} from './utils/lateClient';
+import { lateRailMeta } from './config/lateWords';
 import useRoundAsks from './hooks/useRoundAsks';
 import AskComposer, { AskComposerBody } from './components/AskComposer';
 import HostConsole from './components/console/HostConsole';
@@ -162,6 +168,34 @@ const SURVEY_READ_STATES = new Set(['SURVEY#OPEN', 'SURVEY#CLOSED', 'ENDED']);
 /* The trivia option slots and the correct-answer test that used to live here
    are in config/questionCard.js now, beside the card that reads them
    (components/QuestionCard.jsx). */
+
+/**
+ * THE QUESTION LINE ABOVE THE STAGE'S CARDS, PRESSABLE (owner, 16 Oct 2026):
+ * wherever the host can put a response up, the question can go back up too.
+ * One screen: it opens the question large, over the stage. Two screens: the
+ * same press puts it on the wall (expandQuestion publishes the focus).
+ */
+function StageQuestionRecap({ question, onOpen }) {
+  return (
+    <p
+      className="recap is-openable"
+      data-drop="4"
+      data-drop-note="The prompt"
+      role="button"
+      tabIndex={0}
+      aria-label="Show the question on the screen"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      {question.title || question.question}
+    </p>
+  );
+}
 
 function GameHostPage() {
   // 🎯 AUTHENTICATION
@@ -328,6 +362,7 @@ function GameHostPage() {
 
     if (!pendingFocusRef.current) return;
     const restored = focusToStage(pendingFocusRef.current, { answerCount: answers.length });
+    setWallFocus(normaliseFocus(pendingFocusRef.current).focus);
     pendingFocusRef.current = null;
     setLessonExpanded(restored.lessonExpanded);
     setSpotlightIndex(restored.spotlightIndex);
@@ -360,6 +395,12 @@ function GameHostPage() {
   const [currentQuestionVotes, setCurrentQuestionVotes] = useState([]);
   const [manualStateChange, setManualStateChange] = useState(false);
   const [lessonExpanded, setLessonExpanded] = useState(false);
+  /* WHAT KIND OF FOCUS THE WALL HOLDS ('none' | 'question' | 'answer' | 'join'),
+     as the server last said or this page last sent. The console reads it to
+     mark "The question" on the wall (owner, 16 Oct 2026); on two screens a
+     question focus is the wall's, so it does not also open the laptop's
+     expanded-question overlay, which is a one-screen thing. */
+  const [wallFocus, setWallFocus] = useState('none');
   // THE ONE HOST PANEL. It replaced both edge tabs, both side panels and the
   // full-screen question browser — four surfaces, one dock button. Closed by
   // default: it is a fixed overlay over a fixed-height stage, so opening it is
@@ -1117,6 +1158,29 @@ function GameHostPage() {
   // The room's window and the host's notes, from the host door (host console spec §4.2).
   const [presentDetail, setPresentDetail] = useState(null);
   const [hostNotes, setHostNotes] = useState(null);
+  /*
+    WHO IS SIGNED IN HERE, AND FOR WHICH TEAM (owner, 16 Oct: "tell them in the
+    help and on the setup remote box which team/person is logged in"). The
+    team is the one this browser acts for (X-Engage-Org, the switcher's
+    choice), read once from GET /orgs; a failed read leaves the remote box
+    saying who in general terms rather than naming a wrong team.
+  */
+  const [signedInOrg, setSignedInOrg] = useState(null);
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let live = true;
+    (async () => {
+      try {
+        const res = await authFetch(`${API_BASE}orgs`);
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        if (live) setSignedInOrg(pickSignedInOrg(data && data.orgs, getActiveOrgId()));
+      } catch (e) {
+        /* the box falls back to the general words */
+      }
+    })();
+    return () => { live = false; };
+  }, [currentUser]);
   // The read below, for the `presentChanged` frame (its handler is registered once).
   const readHostStateRef = useRef(() => {});
   /*
@@ -1258,6 +1322,35 @@ function GameHostPage() {
   */
   const loadRoundCommentsRef = useRef(() => {});
 
+  /*
+    THE LATE LIST (session flow v3 §4.4; late items Task 4): every late round
+    answer, late answer to a question for the room and comment added later,
+    by round, from GET /late. Read on load, on `lateChanged` and
+    `lateAnswerKept`, and after a comment lands. Hooks here, above the early
+    returns, like the rest. The socket handlers go through the ref, so they
+    never hold a stale gameId.
+  */
+  const [lateItems, setLateItems] = useState([]);
+  const [lateCounts, setLateCounts] = useState({ notReviewed: 0 });
+  const [commentsClosedAt, setCommentsClosedAt] = useState(null);
+  // "Include items not reviewed" (Settings › Report; late items Task 5). The
+  // server's (METADATA IncludeNotReviewed), read with the late list.
+  const [includeNotReviewed, setIncludeNotReviewed] = useState(true);
+  const loadLateRef = useRef(() => {});
+  const lateStatus = useMemo(() => lateStatusOf(lateItems), [lateItems]);
+  // On load, and when the room moves (a round closing makes items late; the
+  // end opens Close comments). A new session starts empty.
+  useEffect(() => {
+    if (!gameId) {
+      setLateItems([]);
+      setLateCounts({ notReviewed: 0 });
+      setCommentsClosedAt(null);
+      setIncludeNotReviewed(true);
+      return;
+    }
+    loadLateRef.current();
+  }, [gameId, gameState]);
+
   /**
    * The beat the SERVER last reported, AND the exact game state it reported it
    * for. Both halves, because a bare beat outlives the round it belongs to.
@@ -1392,6 +1485,69 @@ function GameHostPage() {
     if (result.ok) setRoundComments(result.comments);
   };
   loadRoundCommentsRef.current = loadRoundComments;
+
+  const loadLate = async () => {
+    if (!gameId) return;
+    const r = await fetchLate({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    // Only on success: a failed read keeps what the host had.
+    if (!r.ok) return;
+    setLateItems(r.rounds);
+    setLateCounts(r.counts);
+    setCommentsClosedAt(r.commentsClosedAt);
+    setIncludeNotReviewed(r.includeNotReviewed);
+  };
+  loadLateRef.current = loadLate;
+
+  /*
+    THE LATE LIST'S BUTTONS. "Show on the wall" reuses the routes that already
+    put things up (the comment feature route; the Ideas pick), which mark the
+    item 'shown' themselves and send lateChanged. "Mark reviewed" is the late
+    review route. Each resolves { ok, error } for the list to say.
+  */
+  const showLateOnWall = async (item) => {
+    if (!gameId || !item) return { ok: false, error: 'No session.' };
+    let r;
+    if (item.kind === 'comment') {
+      r = await featureComment({
+        fetchFn: authFetch, apiBase: API_BASE, gameId, commentId: item.ref, questionNumber: item.round, featured: true,
+      });
+      loadRoundCommentsRef.current();
+    } else if (item.kind === 'askAnswer') {
+      r = await pickIdea({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: item.round, askId: item.askId, id: item.id, picked: true });
+    } else {
+      return { ok: false, error: 'That cannot go on the wall.' };
+    }
+    loadLateRef.current();
+    return r && r.ok ? { ok: true } : { ok: false, error: (r && r.error) || 'That did not work.' };
+  };
+  const markLateReviewed = async (item) => {
+    if (!gameId || !item) return { ok: false, error: 'No session.' };
+    const r = await reviewLateItem({ fetchFn: authFetch, apiBase: API_BASE, gameId, item, how: 'read' });
+    loadLateRef.current();
+    return r;
+  };
+  const closeComments = async () => {
+    if (!gameId) return { ok: false, error: 'No session.' };
+    const r = await closeLateComments({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    if (r.ok && r.body && r.body.commentsClosedAt) setCommentsClosedAt(r.body.commentsClosedAt);
+    loadLateRef.current();
+    return r;
+  };
+  /**
+   * "Include items not reviewed". Applies at once (it changes only the next
+   * report, never the room), so it is not held for the next round. Shown at
+   * once and put back if the server refuses.
+   */
+  const changeIncludeNotReviewed = async (include) => {
+    if (!gameId) return { ok: false, error: 'No session.' };
+    const before = includeNotReviewed;
+    setIncludeNotReviewed(include);
+    const r = await saveIncludeNotReviewed({ fetchFn: authFetch, apiBase: API_BASE, gameId, include });
+    if (!r.ok) setIncludeNotReviewed(before);
+    return r;
+  };
+  /** The dock's count, the footer's and "Review": the Session panel at Rounds. */
+  const openLateList = () => openSetupAt('history');
 
   /*
     THE HOST PUTS ONE COMMENT ON THE WALL — a press on an arrival in the meter.
@@ -1606,6 +1762,9 @@ function GameHostPage() {
   // again knows what to re-request without re-deriving it from a game state
   // that may have moved on.
   const aiQuestionRef = useRef(null);
+  // Whether the generation in flight is the host's Redo, so its automatic
+  // retries and "Try again" stay a Redo (late answers included, owner Q5).
+  const aiRedoRef = useRef(false);
   const aiRetryTimerRef = useRef(null);
   const aiPollTimerRef = useRef(null);
 
@@ -1666,6 +1825,7 @@ function GameHostPage() {
     authorsRevealed: setAuthorsRevealed,
     nameWaitingWhenAnonymous: setNameWaitingWhenAnonymous,
     wallComments: setWallComments,
+    includeNotReviewed: setIncludeNotReviewed,
     autoMode: setAutoMode,
     players: setPlayers,
     removedPlayers: setRemovedPlayers,
@@ -2095,14 +2255,17 @@ function GameHostPage() {
    * Fire the generate trigger once and report what happened. No state, no
    * retrying, no rendering — just "did the request reach the API and get a yes".
    */
-  const triggerAISummary = async (questionId) => {
+  const triggerAISummary = async (questionId, { redo = false } = {}) => {
     const debugParam = gameDebugMode ? '&debug=true' : '';
+    // THE HOST'S REDO reads the round's late answers in too and says so
+    // (session flow v3 §4.4, owner Q5); a first read never does.
+    const redoParam = redo ? '&redo=true' : '';
     try {
       // Fire-and-forget: response is 202 {status:'generating'}; result comes via WS.
       // authFetch, on the host's route: the public one refuses generateNew
       // (get-ai-summary.js), and this one carries the Cognito authorizer.
       const response = await authFetch(
-        `${API_BASE}games/${gameId}/ai-summary/host?questionId=${questionId}&generateNew=true${debugParam}`,
+        `${API_BASE}games/${gameId}/ai-summary/host?questionId=${questionId}&generateNew=true${debugParam}${redoParam}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       );
       if (!response.ok && response.status !== 202) {
@@ -2130,16 +2293,18 @@ function GameHostPage() {
    * succeed next time — schedules a bounded, backed-off retry. A 4xx is never
    * retried automatically: the server has answered, and asking again is noise.
    */
-  const startAISummaryGeneration = async (questionId, attempt = 0) => {
+  const startAISummaryGeneration = async (questionId, attempt = 0, { redo = false } = {}) => {
     if (!questionId) return;
     aiQuestionRef.current = questionId;
+    // A new request decides; its own retries keep what it decided.
+    if (attempt === 0) aiRedoRef.current = redo === true;
     clearAITimers();
     setAiSummaryFailure(null);
     setAiRetrying(false);
     setLoadingAIInsights(true);
 
     console.log(`🤖 Triggering AI generation for ${questionId} (attempt ${attempt + 1})`);
-    const result = await triggerAISummary(questionId);
+    const result = await triggerAISummary(questionId, { redo: aiRedoRef.current });
 
     if (result.ok) {
       console.log('✅ AI generation triggered (awaiting WebSocket completion)');
@@ -2184,7 +2349,8 @@ function GameHostPage() {
     if (regeneratingRounds.includes(roundNumber)) return;
     setRegeneratingRounds((prev) => [...prev, roundNumber]);
 
-    const result = await triggerAISummary(encodeURIComponent(roundNumber));
+    // Regenerating a past round is a Redo: its late answers are read in too.
+    const result = await triggerAISummary(encodeURIComponent(roundNumber), { redo: true });
     if (!result.ok) {
       setRegeneratingRounds((prev) => prev.filter((n) => n !== roundNumber));
       // `headline` and `detail` are what classifyAISummaryFailure actually
@@ -2202,7 +2368,7 @@ function GameHostPage() {
     const questionId = aiQuestionRef.current || gameState.match(/#(\d+)/)?.[1];
     if (!questionId) return;
     setCurrentAIInsights(null);
-    startAISummaryGeneration(questionId, 0);
+    startAISummaryGeneration(questionId, 0, { redo: aiRedoRef.current });
   };
 
   // Regenerate AI Summary with new generation. The server returns 202
@@ -2218,7 +2384,8 @@ function GameHostPage() {
 
     console.log('🔄 Regenerating AI Summary for question:', currentQuestionNum);
     setCurrentAIInsights(null); // Clear current insights to show loading
-    await startAISummaryGeneration(currentQuestionNum, 0);
+    // Redo: the round's late answers are read in too, and the read says so.
+    await startAISummaryGeneration(currentQuestionNum, 0, { redo: true });
   };
 
   // Generate AI prompt from template
@@ -2716,6 +2883,7 @@ Focus on actionable business strategy insights.`;
       if (Number.isInteger(focus.rev)) focusRevRef.current = focus.rev;
 
       const next = focusToStage(focus, { answerCount: answersRef.current.length });
+      setWallFocus(focus.focus);
       setLessonExpanded(next.lessonExpanded);
       setSpotlightIndex(next.spotlightIndex);
       // The join code, put up or taken down on any surface (this page's own
@@ -2758,7 +2926,13 @@ Focus on actionable business strategy insights.`;
     */
     webSocketClient.onMessage('commentPosted', () => {
       loadRoundCommentsRef.current();
+      // A comment after its round is a late item (late items Task 4).
+      loadLateRef.current();
     });
+    // THE LATE LIST CHANGED (an item kept, reviewed, shown, or comments
+    // closed): re-read it. Host-only frames.
+    webSocketClient.onMessage('lateChanged', () => { loadLateRef.current(); });
+    webSocketClient.onMessage('lateAnswerKept', () => { loadLateRef.current(); });
     // The host featured or un-featured one; every screen re-reads the rows.
     webSocketClient.onMessage('commentFeatured', () => {
       loadRoundCommentsRef.current();
@@ -2935,6 +3109,8 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('commentFeatured');
+      webSocketClient.offMessage('lateChanged');
+      webSocketClient.offMessage('lateAnswerKept');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('followUpChanged');
       webSocketClient.offMessage('aiSummaryError');
@@ -4783,32 +4959,13 @@ Focus on actionable business strategy insights.`;
   const handleFinishQuestion = async () => {
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
     if (currentGameType === 'trivia' || currentGameType === 'wavelength' || currentGameType === 'poll') {
-      // Warn if not all players have answered
-      if (answeredCount < players.length) {
-        const proceed = await showConfirmation(
-          'Show Results?',
-          `Only ${answeredCount} of ${players.length} players have answered. Do you want to show results anyway?`,
-          'Show Results'
-        );
-        if (!proceed) return;
-      }
-      
       // Skip voting phase for both trivia and wavelength
       console.log(`🧠 ${currentGameType.toUpperCase()}: Using unified handleShowResults() mechanism (skipping voting phase)`);
       await handleShowResults();
       return;
     }
     
-    // Call and Answer flow - proceed to voting
-    // Warn if not all players have answered
-    if (answeredCount < players.length) {
-      const proceed = await showConfirmation(
-        'Proceed to Voting?',
-        `Only ${answeredCount} of ${players.length} players have answered. Do you want to proceed to voting anyway?`,
-        'Proceed to Voting'
-      );
-      if (!proceed) return;
-    }
+    // Call and Answer flow - proceed to voting.
 
     /*
       NO PLACEHOLDER STATE. This set `gameState` to 'voting' while start-vote
@@ -4863,16 +5020,11 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleShowResults = async () => {
-    // For trivia and wavelength games, no voting phase - skip vote check
-    // For call-and-answer games, warn if not all players have voted
-    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && currentGameType !== 'poll' && playersWhoVoted.length < players.length) {
-      const proceed = await showConfirmation(
-        'Show Results?',
-        `Only ${playersWhoVoted.length} of ${players.length} players have voted. Do you want to show results anyway?`,
-        'Show Results'
-      );
-      if (!proceed) return;
-    }
+    /* AN EARLY ADVANCE ASKS IN PLACE, NOT IN A MODAL (walk W3, 16 Oct 2026):
+       roundStep arms the primary (`arm.inPlace`), so the dock and the console
+       turn it to "Start voting anyway" / "Show results anyway" with the count
+       above, and the second press lands here. The Remote asks with its own
+       second tap. handleFinishQuestion above follows the same rule. */
 
     setSessionActionError('');
     // Show loading overlay
@@ -5893,6 +6045,9 @@ Focus on actionable business strategy insights.`;
           report's front page cannot state it however many the backend counted.
         */
         totalComments: (report.gameStats && report.gameStats.totalComments) || 0,
+        // What "Include items not reviewed" left out, and the line saying so
+        // (late items Task 5). Same rebuilt-from-scratch reason as above.
+        notReviewedLeftOut: report.notReviewedLeftOut || null,
         allAnswers: [],
         allVotes: []
       };
@@ -5980,6 +6135,18 @@ Focus on actionable business strategy insights.`;
   // The HOST's own phone, not a player's. The stage's rail carries the player
   // join QR (see Rail's join code); this one hands the operator the remote.
   const remoteUrl = `${window.location.origin}/remote?gameId=${gameId}`;
+  const remoteWho = currentUser ? remoteSignIn({ org: signedInOrg, user: currentUser, privateScreen: twoSurfaces && presenting > 0 }) : null;
+  /* The Screens group, for Setup in the loop (StepView) — the same group the
+     Session panel's Settings tab draws, with the lobby chooser's handler. */
+  const setupScreens = {
+    choice: twoSurfaces ? 'two' : 'classic',
+    offerChoice: TWO_SURFACE_TYPES.includes(currentGameType || 'call-and-answer'),
+    onChoose: chooseRoomScreen,
+    presentHref: gameId ? presentHref(gameId) : '',
+    presentDetail,
+    profile,
+    onProfileChange: setProfile,
+  };
 
   // State for copy confirmation messages
   const [sidebarCopyMessage, setSidebarCopyMessage] = useState(false);
@@ -6113,7 +6280,7 @@ Focus on actionable business strategy insights.`;
     let pageText = '';
     let notesReady = false;
     if (phase === 'RESULTS') {
-      const slice = pageSlice(answers, rawIndex, pageSizeFor(profile));
+      const slice = pageSlice(answers, rawIndex, resultsPageSizeFor(profile));
       page = slice.page;
       pages = slice.pages;
     } else if (phase === 'FIELD_NOTES') {
@@ -6706,6 +6873,9 @@ Focus on actionable business strategy insights.`;
     // The response on the wall, in tally order: RESULTS becomes RESPONSES and
     // the primary walks the responses (Next response, then What we heard).
     spotlightIndex,
+    // The question put back up on the wall: during VOTE, Next response then
+    // goes to Response 1 (roundStep), as it does on the Remote.
+    wallFocus,
     // ASK THE ROOM: the question on screen (live, then its results) and how
     // many asks wait beside the read.
     roomAsk: roundAsks.shown
@@ -6718,6 +6888,9 @@ Focus on actionable business strategy insights.`;
     // The round on screen, for "Start round 3" and the workflow strip.
     roundNumber: hostPhase === 'LOBBY' || hostPhase === 'ENDED' ? null : lessonNumber,
     totalRounds: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions,
+    // The late items still waiting: roundStep appends the one count to the
+    // status ("· 1 late answer kept"; at the end "2 items not reviewed · Review").
+    late: lateStatus,
   });
   /*
     AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
@@ -7358,7 +7531,9 @@ Focus on actionable business strategy insights.`;
    * label page two's first card "Response 1" on the projector while twelve
    * phones called it "Response 4".
    */
-  const stagePageSize = pageSizeFor(profile);
+  // RESULTS cards are ideas first and taller (config/stagePaging.js
+  // RESULTS_PAGE_SIZE, measured): fewer per page there than when voting.
+  const stagePageSize = hostPhase === 'RESULTS' ? resultsPageSizeFor(profile) : pageSizeFor(profile);
   const pageKey = `${hostPhase}#${lessonNumber}`;
   /* ONE INDEX FOR THE WHOLE STAGE, because the states that page are mutually
      exclusive and the key already carries the phase. FIELD_NOTES pages prose
@@ -7376,6 +7551,9 @@ Focus on actionable business strategy insights.`;
   const stagePageIndex = stagePage && stagePage.key === pageKey ? stagePage.index : 0;
   const setStagePageIndex = (index) => turnStagePage(pageKey, index);
   const answerPage = pageSlice(answers, stagePageIndex, stagePageSize);
+  // The RESULTS cards' share bars are backing relative to the top idea, over
+  // the whole round (not the page): computed once here, not per card.
+  const resultsTopPoints = answers.reduce((m, a) => Math.max(m, (a && a.points) || 0), 0);
 
   // AUTO-MODE'S HANDS — see the effect above the early returns. Assigned by
   // the same render that draws the stage, so when the timer fires it presses
@@ -7426,6 +7604,28 @@ Focus on actionable business strategy insights.`;
     publishFocus({ focus: 'question' });
   };
 
+  /*
+    THE QUESTION, BACK ON THE WALL (owner, 16 Oct 2026), from the console's
+    "The question" row. At VOTE the wall's own default is Response 1, so the
+    question is a focus of its own (the wall's QUESTION_FOCUS moment, the same
+    one the Remote puts up). At RESULTS the wall's default IS the question's
+    view: the task line over the tally ("What the room backed"), so the press
+    takes any focus down, as Stop showing does, rather than covering the
+    tally with the question alone.
+  */
+  const putQuestionOnWall = () => {
+    if (phaseOfGameState(gameStateRef.current) === 'VOTE') {
+      setSpotlightIndex(null);
+      setLessonExpanded(true);
+      publishFocus({ focus: 'question' });
+      return;
+    }
+    if (spotlightIndex !== null) setStagePageIndex(pageOf(spotlightIndex, stagePageSize));
+    setSpotlightIndex(null);
+    setLessonExpanded(false);
+    publishFocus({ focus: 'none' });
+  };
+
   const collapseQuestion = () => {
     setLessonExpanded(false);
     publishFocus({ focus: 'none' });
@@ -7465,6 +7665,7 @@ Focus on actionable business strategy insights.`;
     const body = focusRequest({ ...focus, state: gameStateRef.current });
     // No round on screen — nothing can be focused, so there is nothing to say.
     if (!body) return;
+    setWallFocus(body.focus);
 
     authFetch(`${API_BASE}games/${gameId}/stage-focus`, {
       method: 'POST',
@@ -7544,6 +7745,18 @@ Focus on actionable business strategy insights.`;
         : (hostPhase === 'COLLECTING' && surveyWarnedAt
           ? `${hostControls.status.text} · warning sent`
           : hostControls.status.text);
+  /*
+    THE LATE COUNT ON THE DOCK (session flow v3 §4.4; late items Task 4).
+    roundStep's status already carries it ("· 1 late answer kept"; at the end
+    "2 items not reviewed · Review"); where the dock says its own words instead
+    ("Some are still voting") the same count is added. Never while viewing
+    another step, never in place of a hint. The count is a link to the list.
+  */
+  const lateOnStatus = hostControls.status && hostControls.status.late;
+  const dockLine = lateOnStatus && dockStatus && !viewing && !dockStatus.endsWith(lateOnStatus.link)
+    ? `${dockStatus} · ${lateOnStatus.line}`
+    : dockStatus;
+  const dockLateLink = lateOnStatus && dockLine && dockLine.endsWith(lateOnStatus.link) ? lateOnStatus.link : '';
 
   // Wavelength's two-beat reveal: beat one is a sentence, beat two a terms
   // flow of a different height, and the clustered upgrade can change the flow
@@ -7647,6 +7860,33 @@ Focus on actionable business strategy insights.`;
   // THE HOST CONSOLE: `useConsole` is computed beside `twoSurfaces` (near the
   // top) because the overlay terms read it long before this point.
   const consoleMoment = hostControls.step ? hostControls.step.moment : 'UNKNOWN';
+  /*
+    LATE & NOT REVIEWED, in the rail's shape (late items Task 4): what waits,
+    in the list's order. The rail shows the first few with their buttons; its
+    count is the server's.
+  */
+  /*
+    WHERE "SHOW ON THE WALL" IS HONEST (review fix): the round on the wall now,
+    its beat, and the question for the room up. A late comment can go up only
+    on its own round's feedback beat, a late Idea only on its round's ask beat
+    with its question up; anywhere else the wall would not show it, and the
+    press would still record "Reviewed with the room".
+  */
+  const lateWall = {
+    round: resultsRoundOf(gameState),
+    beat: resultsBeat,
+    askId: roundAsks.shown ? roundAsks.shown.askId : null,
+  };
+  const consoleLate = lateItemsOf(lateItems).filter((item) => !item.reviewed).map((item) => {
+    const text = String(item.text || '');
+    return {
+      id: `${item.kind}:${item.ref}`,
+      label: text.length > 80 ? `${text.slice(0, 79)}…` : text,
+      // LateList's line: who, then when it arrived (lateWords.js lateRailMeta).
+      meta: lateRailMeta(item),
+      item,
+    };
+  });
   const consolePeople = consolePeopleFor({
     moment: consoleMoment,
     players,
@@ -7709,15 +7949,10 @@ Focus on actionable business strategy insights.`;
   const consoleNotes = hostNotes && hostNotes.background
     ? <div className="hc-card"><h3 className="hc-card-h">{CW.forYou}</h3><p className="hc-muted">{hostNotes.background}</p></div>
     : null;
-  /* THE SCOREBOARD. On one screen it is the stage's own overlay; on two it is
-     drawn on the wall (/present), so the console says it is up and offers the
-     same close its S / Esc keys and its own button use. */
-  const consoleBoard = useConsole && scoreboard.open && scoreboardAvail.show ? (
-    <div className="hc-card">
-      <h3 className="hc-card-h">{CW.scoreboardOnWall}</h3>
-      <button type="button" className="hc-btn" onClick={() => publishScoreboard({ open: false })}>{CW.takeItDown}</button>
-    </div>
-  ) : null;
+  /* THE SCOREBOARD ON TWO SCREENS has one close control on the console: the
+     People section's "Hide scoreboard" (controller ruling, 16 Oct 2026). The
+     card that also said "The scoreboard is on the wall / Take it down" is gone;
+     S and Esc still close it. One screen is unchanged (the stage's overlay). */
   // The stage's status for VOTE / RESULTS responses, said the same way on the
   // console (config/stageAnswers.js): gathering, or failed with its retry.
   const consoleGathering = {
@@ -7747,6 +7982,7 @@ Focus on actionable business strategy insights.`;
             roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
           }}
           onAllSettings={() => setSetupPanelOpen(true)}
+          screens={setupScreens}
         />
       );
     }
@@ -7773,13 +8009,14 @@ Focus on actionable business strategy insights.`;
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
         // The stage's readiness guard: no rows (and no press) until this vote's own have landed.
-        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden onWallIndex={spotlightIndex === null ? 0 : spotlightIndex} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} onWallIndex={wallFocus === 'question' ? null : (spotlightIndex === null ? 0 : spotlightIndex)} onPutOnWall={openSpotlight} />;
       case 'RESULTS':
       case 'RESPONSES':
         // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
-        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
-        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} />;
+        // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
+        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} />;
       case 'FEEDBACK':
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':
@@ -7847,9 +8084,14 @@ Focus on actionable business strategy insights.`;
             total: workflow && workflow.round ? workflow.round.of : null,
             people: consolePeople,
             counts: { players: players.length, answered: answeredCount, voted: playersWhoVoted.length },
-            late: [],
+            late: consoleLate,
+            lateCount: lateCounts.notReviewed,
+            lateWall,
+            onLateShow: showLateOnWall,
+            onLateMark: markLateReviewed,
             connected: wsConnected,
             onOpenSection: openSetupAt,
+            scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
           }}
           footer={{
             // roundStep's own status: the count, said here and in the People header only.
@@ -7863,9 +8105,9 @@ Focus on actionable business strategy insights.`;
             shortcutsEnabled: !anyOverlayOpen,
             interceptAdvance: consoleInterceptAdvance,
             onBackKey: consoleOnBackKey,
+            onReviewLate: openLateList,
           }}
         >
-          {consoleBoard}
           {consolePanel}
         </HostConsole>
       ) : (
@@ -7933,6 +8175,7 @@ Focus on actionable business strategy insights.`;
                 roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
               }}
               onAllSettings={() => setSetupPanelOpen(true)}
+              screens={setupScreens}
             />
           )
           : null}
@@ -7969,7 +8212,9 @@ Focus on actionable business strategy insights.`;
           : null}
         dock={(
           <Dock
-            status={dockStatus}
+            status={dockLine}
+            statusLink={dockLateLink}
+            onStatusLink={openLateList}
             notice={Boolean(dockStatus) && hostControls.status.tone === 'notice' && dockStatus === hostControls.status.text}
             hint={dockHint}
             kbd={dockKbd}
@@ -8170,11 +8415,7 @@ Focus on actionable business strategy insights.`;
                 <div className="kicker">
                   {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
-                {currentQuestion && (
-                  <p className="recap" data-drop="4" data-drop-note="The prompt">
-                    {currentQuestion.title || currentQuestion.question}
-                  </p>
-                )}
+                {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
                 {currentQuestion?.image && (
                   <img
                     className="stage-art"
@@ -8214,7 +8455,7 @@ Focus on actionable business strategy insights.`;
                     const label = navigatorLabel(answer, idx, { phase: 'VOTE' });
                     // With two surfaces the wall walks the responses from the
                     // start of voting; this card marks the one it shows.
-                    const showing = twoSurfaces && idx === (spotlightIndex === null ? 0 : spotlightIndex);
+                    const showing = twoSurfaces && wallFocus !== 'question' && idx === (spotlightIndex === null ? 0 : spotlightIndex);
                     return (
                       <div
                         key={idx}
@@ -8373,11 +8614,24 @@ Focus on actionable business strategy insights.`;
                      raw frequency was the wrong claim anyway. */
                   <WavelengthConvergence analysis={wavelengthAnalysis} />
                 ) : (
-                  <div className="cards">
+                  /* RESULTS, IDEAS FIRST (owner, 16 Oct 2026,
+                     docs/design/results-ideas-first version A): "the voting is
+                     less about the people and more about getting the best or
+                     most relevant ideas to the top of the conversation." The
+                     idea is the headline, in full; the rank and the share bar
+                     say how much the room backed it; the points and the name
+                     are a small credit, only while the names show; the top
+                     card is outlined (.lead). The share is backing relative to
+                     the top idea, a proportion and never a score, so it stays
+                     in a round whose names are hidden. */
+                  <>
+                  <div className="kicker">{RW.whatTheRoomBacked}</div>
+                  {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
+                  <div className="cards is-ideas">
                     {answerPage.items.map((answer, i) => {
                       const idx = answerPage.offset + i;
                       const points = answer.points || 0;
-                      const player = players.find((p) => p.name === answer.player);
+                      const share = resultsTopPoints > 0 ? points / resultsTopPoints : 0;
                       // THE SETTING BEATS THE ROW HERE, and it has to: these rows
                       // always carry their author by the time RESULTS is showing,
                       // because entering RESULTS reveals the round server-side
@@ -8443,19 +8697,17 @@ Focus on actionable business strategy insights.`;
                           {/* "1st", not "1" — the owner's word for it. */}
                           <span className="rank">{placeLabel(answer.placement)}</span>
                           <div className="body">
-                            <div className="ans">{`“${answerText(answer.answer)}”`}</div>
-                            <span className="who revealed">{displayName}</span>
+                            <div className="ans">{answerText(answer.answer)}</div>
+                            {showPoints && (
+                              <span className="who revealed">{RW.backedCredit(points, displayName)}</span>
+                            )}
                           </div>
-                          {showPoints && (
-                            <span className="tally">
-                              {`+${points}`}
-                              <small>{`${answer.votes || 0} votes · ${player?.score || 0} total`}</small>
-                            </span>
-                          )}
+                          <span className="share" aria-hidden="true" style={{ width: `${Math.max(3, Math.round(share * 100))}%` }} />
                         </div>
                       );
                     })}
                   </div>
+                  </>
                 )}
 
                 {/* RESULTS PAGES TOO, AND ON THIS PHASE IT MATTERS MOST.
@@ -8477,42 +8729,12 @@ Focus on actionable business strategy insights.`;
                   />
                 )}
 
-                {/* THE PODIUM IS CONTENT, AND IT LIVES HERE — inside .content,
-                    not in the meter and not in the setup panel.
-
-                    The meter cannot hold it: it returns null on RESULTS,
-                    FIELD_NOTES and ENDED, so the podium exists exactly where
-                    the meter does not. And even if it could, fitPolicy.js
-                    enters the meter into the sacrifice list at priority -1,
-                    ahead of every data-drop group — a podium there would be
-                    the FIRST thing thrown away on the densest results screen,
-                    which is worse than no podium because the host has already
-                    told the room it is coming.
-
-                    THE PODIUM WENT MISSING ENTIRELY, and this prop is why.
-                    It passed `!anonymityActive(...)` — the session setting,
-                    inverted, standing in for the reveal flag — on the reasoning
-                    that by RESULTS the server flag is true for every round and
-                    so decides nothing. The first half is right; the conclusion
-                    was not. Substituting the setting made the expression read
-                    `false` for the whole of any anonymous call-and-answer
-                    session, `standingsVisible` returned false with it, and
-                    `podiumEntries` bailed at its second gate — no top three at
-                    RESULTS, ever, on the format that has one. Reported together
-                    with the missing names, because it is the same substitution
-                    made twice.
-
-                    So: pass the flag. It is false exactly while the round is
-                    genuinely unrevealed, which is the case this gate is for, and
-                    it carries the names and the arithmetic together — a score
-                    that jumps names its author as surely as a label. */}
-                <Podium
-                  phase="RESULTS"
-                  gameType={currentGameType}
-                  anonymousUntilReveal={anonymousUntilReveal}
-                  authorsRevealed={authorsRevealed}
-                  players={players}
-                />
+                {/* NO PODIUM ON THE RESULTS (owner, 16 Oct 2026, results ideas
+                    first): the three names with points ranked PEOPLE on the one
+                    moment that is about the ideas. The standings stay on the
+                    scoreboard, opened on demand (S, the Remote, the Players tab,
+                    the console's People section). config/podium.js and its
+                    rulings are untouched, and ENDED keeps its podium below. */}
 
                 {/* Reading one answer properly. `answers` in FULL, not
                     `answerPage.items` — the pager is what the grid shows, and
@@ -8798,6 +9020,15 @@ Focus on actionable business strategy insights.`;
           rounds={rounds}
           historyLoading={historyLoading}
           onOpenRound={setPastRoundIndex}
+          late={{
+            rounds: lateItems,
+            ended: gameState === 'ENDED',
+            commentsClosedAt,
+            wall: lateWall,
+            onShow: showLateOnWall,
+            onMarkReviewed: markLateReviewed,
+            onCloseComments: closeComments,
+          }}
           onClose={closeAllSidePanels}
           wsConnected={wsConnected}
           players={players}
@@ -8862,6 +9093,11 @@ Focus on actionable business strategy insights.`;
           onShowJoinCode={() => setQrMode('pinned')}
           profile={profile}
           onProfileChange={setProfile}
+          roomScreen={twoSurfaces ? 'two' : 'classic'}
+          onRoomScreenChange={chooseRoomScreen}
+          presentHref={gameId ? presentHref(gameId) : ''}
+          presentDetail={presentDetail}
+          remoteWho={remoteWho}
           /* THE TWO NAME DECISIONS, both session-level, both the host's.
              `anonymousUntilReveal` is the SAME flag the create dialog set —
              not a second one — so the setter is the same setter; the effect
@@ -8875,6 +9111,8 @@ Focus on actionable business strategy insights.`;
           onNameWaitingChange={deferSetting('nameWaiting')}
           wallComments={wallComments}
           onWallCommentsChange={deferSetting('wallComments')}
+          includeNotReviewed={includeNotReviewed}
+          onIncludeNotReviewedChange={changeIncludeNotReviewed}
           pendingSettings={pendingSettings}
           settingsRoundLive={settingsRoundLive}
           nextRoundNumber={lessonNumber + 1}
@@ -9045,7 +9283,7 @@ Focus on actionable business strategy insights.`;
           loading overlay above stays: it reports a real wait. */}
 
       {/* Expanded Lesson Modal */}
-      {lessonExpanded && questions.length > 0 && (
+      {lessonExpanded && questions.length > 0 && !(useConsole && wallFocus === 'question') && (
         <div className="expanded-lesson-overlay" onClick={collapseQuestion}>
           <div className="expanded-lesson-content" onClick={(e) => e.stopPropagation()}>
             <div className="expanded-lesson-header">
@@ -9123,6 +9361,7 @@ Focus on actionable business strategy insights.`;
         onClose={() => setPastRoundIndex(null)}
         onRegenerate={regenerateRoundSummary}
         regenerating={regeneratingRounds}
+        roundNoun={getHostRoundNoun()}
         /*
           NO `labelFor`. This prop is what hid the names in the rounds review,
           and removing it is the fix rather than correcting the expression.

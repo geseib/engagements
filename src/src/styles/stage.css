@@ -566,6 +566,10 @@ a.dock-more{text-decoration:none}
      the key hints below give way first. */
   min-width:min(9em, 22vw)}
 .dock .status.go{color:var(--success-text);font-weight:800}
+/* The late count, a link to the host's late list (late items Task 4). */
+.dock .status-link{font:inherit;color:var(--info);background:transparent;border:0;padding:0;cursor:pointer;
+  text-decoration:underline;text-underline-offset:2px}
+.dock .status-link:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 @keyframes cue{0%,100%{opacity:1}50%{opacity:.45}}
 .dock .status.go{animation:cue 1.5s ease-in-out 3}
 @media (prefers-reduced-motion:reduce){.dock .status.go{animation:none}}
@@ -625,6 +629,10 @@ a.dock-more{text-decoration:none}
    useCrowded) — never a button past the edge. */
 .dock[data-crowded]{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
 .dock[data-crowded] .status{flex:1 1 100%;max-width:none}
+/* A crowded dock drops the SPACE hint before it wraps a button to a third
+   row (walk of dev 92f8b24d: TV at 1366x768, SESSION alone on a third row
+   took 60px from the stage). */
+.dock[data-crowded] .kbd{display:none}
 
 /* ------------------------------------------- THE COUNT, WHEN THE COLUMN GOES
    THE DEFECT THIS FIXES, stated as measurement rather than opinion. The fitter
@@ -985,6 +993,18 @@ a.dock-more{text-decoration:none}
 .card .rank{flex:none;font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-secondary)*.78));color:var(--muted);width:2.3em;text-align:center}
 .card.lead .rank{color:var(--primary)}
+/* RESULTS, IDEAS FIRST (owner, 16 Oct 2026, docs/design/results-ideas-first
+   version A): the idea is the headline (three lines at most, then the
+   fitter), the points and name a small credit under it, and the room's backing
+   a bar along the card's foot, relative to the top idea. */
+.cards.is-ideas .card{align-items:flex-start;padding-block:calc(.6vh + 4px)}
+.cards.is-ideas .card .ans{font-weight:700;line-height:1.18;display:-webkit-box;
+  -webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.cards.is-ideas .card .who{opacity:.72;font-weight:500}
+/* The question line above the cards, pressable: it puts the question up. */
+.recap.is-openable{cursor:pointer}
+.recap.is-openable:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.card .share{position:absolute;left:0;bottom:0;height:calc(.4vh + 3px);background:var(--accent);opacity:.85;z-index:0}
 
 /* ------------------------------------------------------------------- PAGER
    Ported from docs/design/host-redesign/05-vote.html:385-389, which is the one

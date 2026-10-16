@@ -32,7 +32,7 @@ test('a VOTE-stamped answer focus during VOTE is VOTE_RESPONSES', () => {
 
 test('Show results is the main step throughout; Next response wraps', () => {
   const first = roundStep('VOTE_RESPONSES', CTX());
-  expect(first.primary).toMatchObject({ id: 'reveal', label: RW.showResults, arm: { text: RW.armResults(2, 'voting') } });
+  expect(first.primary).toMatchObject({ id: 'reveal', label: RW.showResults, arm: { text: RW.armResults(2, 'voting', 5), inPlace: true } });
   expect(first.secondary).toMatchObject({ id: 'next-response', label: RW.nextResponse, index: 1, part: 0 });
   const last = roundStep('VOTE_RESPONSES', CTX({ focus: { focus: 'answer', index: 7, phase: 'VOTE' } }));
   expect(last.secondary).toMatchObject({ id: 'next-response', index: 0 });
@@ -58,4 +58,25 @@ test('the status leads with the vote and says which response is up', () => {
   const s = roundStep('VOTE_RESPONSES', CTX({ focus: { focus: 'answer', index: 1, phase: 'VOTE' } }));
   expect(s.status).toEqual({ text: `${RW.voted(3, 5)} · ${RW.showingResponse(2, 8)}`, tone: 'pending' });
   expect(s.next).toBe(RW.nextLine.VOTING);
+});
+
+/* THE QUESTION ON THE WALL DURING VOTING (review of the 16 Oct batch, finding
+   2): Response 1 is not on the wall while the question is, so Next response
+   goes to Response 1, not past it. Same on the host page and the Remote.
+   rejects: → skipping Response 1 after the question was put back up. */
+test('with the question on the wall, Next response goes to Response 1', () => {
+  const q = roundStep('VOTING', CTX({ focus: { focus: 'question', index: null } }));
+  expect(q.secondary).toMatchObject({ id: 'next-response', index: 0, part: 0 });
+  // One response is still somewhere to go from the question.
+  const one = roundStep('VOTING', CTX({ answerCount: 1, focus: { focus: 'question', index: null } }));
+  expect(one.secondary).toMatchObject({ id: 'next-response', index: 0 });
+});
+
+test('the host page says the question is up when the wall shows it', () => {
+  // eslint-disable-next-line global-require
+  const { snapshotFromHostPage } = require('../config/hostControls');
+  const s = snapshotFromHostPage({ gameType: 'call-and-answer', phase: 'VOTE', answerCount: 3, wallFocus: 'question' });
+  expect(s.focus).toMatchObject({ focus: 'question', index: null });
+  const r = snapshotFromHostPage({ gameType: 'call-and-answer', phase: 'VOTE', answerCount: 3, wallFocus: 'question', spotlightIndex: 1 });
+  expect(r.focus).toMatchObject({ focus: 'answer', index: 1 });
 });

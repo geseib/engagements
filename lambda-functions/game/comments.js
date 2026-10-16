@@ -10,6 +10,9 @@
  *     POST /games/{gameId}/comments   write one
  *     GET  /games/{gameId}/comments   read a section, or a round — NEVER the
  *                                      whole session over this route; see below
+ *     GET  /games/{gameId}/late        the HOST's late list, and
+ *     POST /games/{gameId}/late/review its review labels (late-list.js; Cognito
+ *                                      + callerMayDriveSession, 404 otherwise)
  *
  * ── PUBLIC, AND WHY THAT IS NOT THE SAME AS UNGUARDED ──────────────────────
  *
@@ -106,11 +109,16 @@
  *
  *   1. the session's STATE is `RESULTS#<the round being commented on>`.
  *
- * Without it a phone still showing round 3's composer writes into round 3
- * while the room is on round 4 — the comment then appears in a report against
- * material the room has moved past. Not a security boundary — the code is on
- * the projector — but a correctness one, and the failure it prevents is
- * silent.
+ * SINCE 16 OCT 2026 (session flow v3 §4.4, late items Task 2) THAT FACT IS
+ * WIDER: "the round has been SHOWN". The room is on its RESULTS, on a later
+ * round, or ENDED inside late-window.js's 24 hours (refused once the host
+ * pressed "Close comments"), and the ROUND# record exists. A comment posted
+ * while the room was anywhere but this round's RESULTS is no longer refused
+ * as stale: it is kept with `AddedLater: true` and `PostedDuring`, so the
+ * report and the host's late list can say it arrived after the room moved
+ * on, rather than letting it sit as if said at the time. A round never shown
+ * is still refused. The paragraphs below are the history of the narrower
+ * rule and still explain why the beat is not required.
  *
  * ── THE SECOND FACT, AND WHY IT IS GONE FROM THIS HALF OF THE GATE ─────────
  *
@@ -186,6 +194,20 @@ const { isHidden, redactAnswers } = require('./anonymity');
 const { callerMayDriveSession } = require('./tenant');
 const { SURVEY_CLOSED } = require('./survey-names');
 const { describeSurveyQuestion } = require('./survey-digest');
+const { lateWindow } = require('./late-window');
+const { queryAll } = require('./followup-store');
+const { readLate, reviewLate, isLateRoute } = require('./late-list');
+
+/**
+ * What a refused comment says. The window's own two sentences ("Comments are
+ * closed for this session.", "This session has closed…") live beside its rule
+ * in late-window.js and are passed through as they are.
+ */
+const COMMENT_WORDS = {
+  NOT_SHOWN: 'This round has not been shown yet.',
+  SURVEY_NOT_OPEN: 'This survey is not open for comments.',
+  PAUSED: 'The host has paused this for a moment.',
+};
 // Call & Answer follow-up asks share this function (followups.js header).
 const { handleFollowUps, isFollowUpRoute } = require('./followups');
 
@@ -241,19 +263,19 @@ const respond = (statusCode, body) => ({
  * Tell the room something changed. Never throws: the row is already written by
  * the time this runs, and reporting a failure would tell a participant their
  * comment did not land when it did.
+ *
+ * `hostsOnly`: only HOST connections (`ConnectionType = 'HOST'`), for what the
+ * room must never see, such as the late list's `lateChanged` (owner, Q14:
+ * review labels never reach a phone or the wall).
  */
-const broadcastToGame = async (gameId, message) => {
+const broadcastToGame = async (gameId, message, { hostsOnly = false } = {}) => {
   try {
     const apigateway = new ApiGatewayManagementApiClient({
       endpoint: process.env.WEBSOCKET_API_ENDPOINT,
     });
-    const res = await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#' },
-    }));
-
-    const connections = res.Items || [];
+    // Every page: a one-call Query past 1 MB truncates silently.
+    const all = await queryAll(db, gameId, 'CONNECTION#');
+    const connections = hostsOnly ? all.filter((c) => c.ConnectionType === 'HOST') : all;
     if (connections.length === 0) return;
 
     await Promise.all(connections.map(async (conn) => {
@@ -307,6 +329,8 @@ function toWire(row) {
     featuredAt: row.FeaturedAt || null,
     // Typed by the host for something said in the room.
     fromHost: row.FromHost === true,
+    // Posted after the room left this round's results (late items Task 2).
+    addedLater: row.AddedLater === true,
   };
 }
 
@@ -424,8 +448,9 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
 
   /*
     THE GATE — see the header. `409` rather than `400`: nothing about the
-    request is malformed, the room has simply moved, and a composer that gets
-    a 409 can say "this round is no longer open" instead of "bad request".
+    request is malformed, the round is simply not open, and a composer that
+    gets a 409 can say so in a sentence instead of "bad request". Widened on
+    16 Oct 2026 to "the round has been shown" (header; late items Task 2).
 
     OWNER'S RULING, 26 SEP 2026: this is now the WHOLE gate. Until this date a
     second check followed — `round.StageBeat !== 'feedback'` — refusing a
@@ -439,28 +464,59 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
     check, and nothing here treats it any differently from a comment posted
     while the round is on its tally or its AI read-back.
   */
-  // A closed survey is its own results showing: comments land on 000 while it
-  // is CLOSED, and on nothing else (see SURVEY_ROUND above).
-  const surveyOpenForComments = isSurveySession(meta)
-    && padded === SURVEY_ROUND && String(state.State) === SURVEY_CLOSED;
-  if (String(state.State) !== `RESULTS#${padded}` && !surveyOpenForComments) {
-    return respond(409, {
-      error: 'this round is no longer open for comments',
-      currentState: state.State,
-    });
-  }
-  // An event's item, paused (events M3): nothing is posted until it resumes.
-  if (state.EventPaused) {
-    return respond(409, { error: 'The host has paused this for a moment.', code: 'PAUSED' });
-  }
-  // The round record itself must still exist — a defensive data-integrity
-  // check, not a reintroduction of the beat requirement dropped above.
-  const round = await roundRecord(gameId, padded);
-  if (!round) {
-    return respond(409, {
-      error: 'this round is no longer open for comments',
-      currentState: state.State,
-    });
+  /*
+    A SURVEY keeps its own door, unchanged: a closed survey is its own results
+    showing, so comments land on 000 while it is CLOSED and on nothing else
+    (see SURVEY_ROUND above). Everything below the survey branch is rounds.
+  */
+  const roomState = String(state.State || '');
+  let addedLater = false;
+  if (isSurveySession(meta)) {
+    if (padded !== SURVEY_ROUND || roomState !== SURVEY_CLOSED) {
+      return respond(409, { error: COMMENT_WORDS.SURVEY_NOT_OPEN, currentState: state.State });
+    }
+    if (state.EventPaused) {
+      return respond(409, { error: COMMENT_WORDS.PAUSED, code: 'PAUSED' });
+    }
+  } else {
+    /*
+      COMMENTS AFTER THE ROUND (session flow v3 §4.4; late items Task 2).
+      A round takes comments once it has been SHOWN, not only while it is on
+      screen: the room is on its RESULTS, on a later round, or the session
+      ENDED inside the late window (late-window.js: 24 h, unless the host
+      pressed "Close comments"). One posted while the room was anywhere but
+      this round's RESULTS is kept and marked AddedLater, for the host's late
+      list; it is never put on the wall by itself (only featureComment does).
+    */
+    const late = lateWindow({ meta, state });
+    if (!late.open) {
+      return respond(409, { error: late.error, code: late.code, currentState: state.State });
+    }
+    // An event's item, paused (events M3): nothing is posted until it resumes.
+    if (state.EventPaused) {
+      return respond(409, { error: COMMENT_WORDS.PAUSED, code: 'PAUSED' });
+    }
+    const onItsResults = roomState === `RESULTS#${padded}`;
+    const roomRound = roomState.match(/^[A-Z_]+#(\d+)$/);
+    const roomPastIt = Boolean(roomRound) && Number(roomRound[1]) > Number(padded);
+    const shownByState = onItsResults || roomPastIt || roomState === 'ENDED';
+    /*
+      AND THE ROUND RECORD EXISTS. get-results.js writes ROUND#nnn as it shows
+      results, so a round that never reached them has none. stage-focus.js can
+      write one on VOTE, which is why the record alone is not enough and the
+      state above must also have passed the round.
+    */
+    const round = shownByState ? await roundRecord(gameId, padded) : null;
+    /*
+      A ROUND THE ROOM HAS LEFT MUST HAVE HAD ITS RESULTS UP. get-results.js
+      stamps ResultsShownAt as it shows them; a round skipped from VOTE can
+      still have a ROUND# row (stage-focus, reveal-authors) but never that
+      mark. On its own RESULTS the state already says so.
+    */
+    if (!round || (!onItsResults && !round.ResultsShownAt)) {
+      return respond(409, { error: COMMENT_WORDS.NOT_SHOWN, code: 'NOT_SHOWN', currentState: state.State });
+    }
+    addedLater = !onItsResults;
   }
 
   const now = new Date().toISOString();
@@ -487,6 +543,16 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
     playerName: author,
     name: author,
     ...(asHost ? { FromHost: true } : {}),
+    // Where the room was when this arrived, and whether that was somewhere
+    // other than this round's results (late items Task 2). Reviewed is the
+    // host's label, set by the late routes; null is "Not reviewed".
+    PostedDuring: roomState,
+    AddedLater: addedLater,
+    // A host's own comment after the round is late but not news to the host:
+    // it is born reviewed ('read'), so it never sits in "Not reviewed" and
+    // the report keeps it under "Arrived late" whatever the setting.
+    Reviewed: asHost && addedLater ? 'read' : null,
+    ...(asHost && addedLater ? { ReviewedAt: now } : {}),
     SubmittedAt: now,
     ttl: Math.floor(Date.now() / 1000) + COMMENT_TTL_SECONDS,
   };
@@ -737,6 +803,10 @@ async function readFeedbackRound(gameId) {
   // a second copy of it here.
   const live = JSON.parse((await readComments(gameId, { questionNumber: padded })).body);
 
+  // "Arrived late" is the host's and the report's: its review labels never
+  // reach a phone (owner, Q14), and neither do its late items.
+  const { late: _hostOnly, ...roomSlice } = slice;
+
   return respond(200, {
     gameId,
     // Named separately as well as on the round, because this is what the
@@ -744,7 +814,7 @@ async function readFeedbackRound(gameId) {
     questionNumber: padded,
     roundNoun: report.roundNoun || null,
     gameTitle: report.gameTitle || null,
-    round: { ...slice, comments: live.comments || [] },
+    round: { ...roomSlice, comments: live.comments || [] },
   });
 }
 
@@ -812,21 +882,30 @@ async function featureComment(event, gameId, commentId, body) {
     return respond(404, { error: 'Game not found' });
   }
 
-  const res = await db.send(new QueryCommand({
-    TableName: process.env.TABLE_NAME,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': commentPrefix({ questionNumber: padded }) },
-  }));
-  const row = (res.Items || []).find((item) => (parseCommentSk(item.SK) || {}).commentId === String(commentId));
+  const rows = await queryAll(db, gameId, commentPrefix({ questionNumber: padded }));
+  const row = rows.find((item) => (parseCommentSk(item.SK) || {}).commentId === String(commentId));
   if (!row) return respond(404, { error: 'Comment not found' });
 
   const now = new Date().toISOString();
+  /*
+    ON THE WALL IS "REVIEWED WITH THE ROOM" (session flow v3 §4.4, late items
+    Task 3): featuring an ADDED-LATER comment also sets Reviewed 'shown'. An
+    on-time comment is not a late item and carries no review. Taking it down
+    does not undo that; it was shown.
+  */
+  const markShown = body.featured === true && row.AddedLater === true;
   const updated = await db.send(new UpdateCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: row.PK, SK: row.SK },
-    UpdateExpression: 'SET #featured = :featured, #featuredAt = :at',
-    ExpressionAttributeNames: { '#featured': 'Featured', '#featuredAt': 'FeaturedAt' },
-    ExpressionAttributeValues: { ':featured': body.featured, ':at': now },
+    UpdateExpression: markShown
+      ? 'SET #featured = :featured, #featuredAt = :at, #reviewed = :shown, #reviewedAt = :at'
+      : 'SET #featured = :featured, #featuredAt = :at',
+    ExpressionAttributeNames: {
+      '#featured': 'Featured',
+      '#featuredAt': 'FeaturedAt',
+      ...(markShown ? { '#reviewed': 'Reviewed', '#reviewedAt': 'ReviewedAt' } : {}),
+    },
+    ExpressionAttributeValues: { ':featured': body.featured, ':at': now, ...(markShown ? { ':shown': 'shown' } : {}) },
     ReturnValues: 'ALL_NEW',
   }));
 
@@ -838,6 +917,10 @@ async function featureComment(event, gameId, commentId, body) {
     featured: body.featured,
     timestamp: now,
   });
+  // An added-later comment's label changed: the host's late list refetches.
+  if (markShown) {
+    await broadcastToGame(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
+  }
 
   const orgId = orgOf(meta);
   const plain = orgId ? await decryptItem(orgId, 'comment', updated.Attributes || row) : (updated.Attributes || row);
@@ -847,6 +930,31 @@ async function featureComment(event, gameId, commentId, body) {
     // Not even to the host: a survey's comments carry no name anywhere.
     comment: isSurveySession(meta) ? redactAnswers([wire])[0] : wire,
   });
+}
+
+// ─────────────────────────────────────────────────── late list ──────────────
+
+/**
+ * GET /games/{gameId}/late and POST /games/{gameId}/late/review (late-list.js).
+ * NOT PUBLIC: Cognito in front (template-clean.yaml) and callerMayDriveSession
+ * on the session's own org here, 404 to anyone else, before anything is read
+ * beyond METADATA or anything in the body is looked at.
+ */
+async function lateRoute(event, gameId, method) {
+  const { meta, state } = await readSession(gameId);
+  if (!meta) return respond(404, { error: 'Game not found' });
+  const claims = event?.requestContext?.authorizer?.jwt?.claims || event?.requestContext?.authorizer?.lambda;
+  if (!claims || !callerMayDriveSession(event, meta)) {
+    return respond(404, { error: 'Game not found' });
+  }
+  if (method === 'GET') return readLate(db, { gameId, meta, state: state || null });
+  let body = {};
+  try {
+    body = JSON.parse(event.body || '{}') || {};
+  } catch {
+    return respond(400, { error: 'Body must be JSON' });
+  }
+  return reviewLate(db, broadcastToGame, { gameId, meta, state, body });
 }
 
 // ───────────────────────────────────────────────────────── handler ─────────
@@ -863,6 +971,11 @@ exports.handler = async (event) => {
     // switch; the same table client and the same notify-then-refetch broadcast.
     if (isFollowUpRoute(event.requestContext?.routeKey || event.routeKey)) {
       return await handleFollowUps(event, { db, broadcast: broadcastToGame });
+    }
+    // The host's late list (late-list.js): Cognito in front, and here the
+    // same check featureComment makes, 404 to anyone else.
+    if (isLateRoute(event)) {
+      return await lateRoute(event, gameId, method);
     }
     if (method === 'GET') {
       const route = event.requestContext?.routeKey || event.routeKey || '';

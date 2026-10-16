@@ -1,7 +1,7 @@
 import React from 'react';
 import Icon from '../Icon';
 import './AskStage.css';
-import FW, { KINDS, RATE_ENDS } from '../../config/followUpWords';
+import FW, { KINDS, endsOf, scaleLabel } from '../../config/followUpWords';
 import RW from '../../config/roundWords';
 
 /**
@@ -39,14 +39,14 @@ export default function AskStage({ ask, total = 0, onPick }) {
         </ol>
       )}
       {!closed && ask.kind === 'rate' && (
-        <div className="askstage-ends"><span>{RATE_ENDS.low}</span><span>{RATE_ENDS.high}</span></div>
+        <div className="askstage-ends"><span>{scaleLabel(endsOf(ask), 1)}</span><span>{scaleLabel(endsOf(ask), 5)}</span></div>
       )}
       {!closed && (
         <p className="askstage-count">{FW.answeredOn(n, total || n)}</p>
       )}
 
       {closed && ask.kind === 'choice' && <ChoiceResult ask={ask} tally={tally} />}
-      {closed && ask.kind === 'rate' && <RateResult tally={tally} />}
+      {closed && ask.kind === 'rate' && <RateResult tally={tally} ends={endsOf(ask)} />}
       {closed && ask.kind === 'ideas' && <IdeasResult ask={ask} onPick={onPick} />}
       {closed && ask.kind !== 'ideas' && <p className="askstage-count">{FW.answered(n)}</p>}
     </div>
@@ -70,11 +70,11 @@ function ChoiceResult({ ask, tally }) {
   );
 }
 
-function RateResult({ tally }) {
+function RateResult({ tally, ends }) {
   const counts = Array.isArray(tally.counts) ? tally.counts : [0, 0, 0, 0, 0];
   const max = Math.max(1, ...counts);
   const rows = [5, 4, 3, 2, 1];
-  const label = (v) => (v === 5 ? RATE_ENDS.high : v === 1 ? RATE_ENDS.low : String(v));
+  const label = (v) => scaleLabel(ends, v);
   return (
     <div className="askstage-rate">
       <p className="askstage-mean">

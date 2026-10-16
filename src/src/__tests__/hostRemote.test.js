@@ -216,7 +216,7 @@ describe('remoteStep — every game type x every phase, through roundStep', () =
   it('progress from /host-state arms the early advance', () => {
     const json = { answerProgress: { answersReceived: 2, totalPlayers: 5 } };
     expect(stepOf('ASK#001', 'call-and-answer', null, { json }).primary.arm)
-      .toEqual({ text: '3 still answering. Press again to start voting.' });
+      .toEqual({ text: '3 of 5 still writing. Press again to start voting.', confirmLabel: 'Start voting anyway', inPlace: true });
   });
 });
 

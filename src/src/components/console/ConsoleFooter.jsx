@@ -11,7 +11,23 @@ import HostActionBar from '../HostActionBar';
  */
 const NO_STATUS = Object.freeze({ text: '', tone: '' });
 
-export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey }) {
+/**
+ * The status text, with the late count (roundStep's `status.late.link`, always
+ * the last part) drawn as a link that opens the late list (late items Task 4).
+ */
+function StatusText({ status, onReviewLate }) {
+  const text = (status && status.text) || '';
+  const late = status && status.late;
+  if (!late || !onReviewLate || !late.link || !text.endsWith(late.link)) return text;
+  return (
+    <>
+      {text.slice(0, text.length - late.link.length)}
+      <button type="button" className="hc-status-link" onClick={onReviewLate}>{late.link}</button>
+    </>
+  );
+}
+
+export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey, onReviewLate = null }) {
   /*
     THE FOOTER IS THE CONSOLE'S DOCK. The Session panel and its scrim stop at
     `--dock-measured` so they never cover the main button (useStageFit
@@ -43,7 +59,7 @@ export default function ConsoleFooter({ status, nextOnWall = '', part, controls,
   return (
     <footer className="hc-foot" ref={ref}>
       <div className="hc-status">
-        <b>{status && status.text}</b>
+        <b><StatusText status={status} onReviewLate={onReviewLate} /></b>
         {/* What the wall shows next (spec §3.5, first draft): only when given. */}
         {nextOnWall ? <p className="hc-next">{nextOnWall}</p> : null}
       </div>

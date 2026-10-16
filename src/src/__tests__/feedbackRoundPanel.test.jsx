@@ -363,28 +363,12 @@ describe('the empty-responses text and retry (fix round 2)', () => {
   });
 });
 
-describe('disabling the commit without touching the draft (fix round 2, item 3)', () => {
-  test('Post comment is disabled when postDisabled is true, but the box stays editable', () => {
+describe('a moved-on round no longer disables Post (late items Task 2: comments.js keeps it as added later)', () => {
+  test('the panel has no postDisabled switch and no "copy it" sentence; Post follows the draft', () => {
     mount({ postDisabled: true });
     fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Worth keeping.' } });
-    expect(screen.getByRole('button', { name: /Post comment/ })).toBeDisabled();
-    expect(screen.getByRole('textbox')).toHaveValue('Worth keeping.');
-    expect(screen.getByRole('textbox')).not.toBeDisabled();
-  });
-
-  test('says plainly why, and to copy it instead', () => {
-    mount({ postDisabled: true });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
-    expect(screen.getByText(/moved on/i)).toBeInTheDocument();
-    expect(screen.getByText(/copy/i)).toBeInTheDocument();
-  });
-
-  test('by default (the host-triggered caller) Post comment is never disabled by this', () => {
-    mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
     expect(screen.getByRole('button', { name: /Post comment/ })).not.toBeDisabled();
+    expect(screen.queryByText(/copy it/i)).toBeNull();
   });
 });

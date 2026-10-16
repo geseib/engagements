@@ -229,9 +229,24 @@ export default function useStageFit(stageRef, deps = []) {
     // and change every measurement taken before them.
     const raf = requestAnimationFrame(run);
     window.addEventListener('resize', run);
+    // The dock is an auto grid row: when it takes a second line (Dock.jsx
+    // useCrowded, which runs after this) the stage loses height and the fit
+    // taken before it is stale (walk of dev 92f8b24d: TV results at 1366x768
+    // left at --fit 1 with 86px over). Refit when the dock's height changes.
+    let dockH = null;
+    const dockEl = root.querySelector('.dock');
+    const ro = dockEl && typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+        const h = Math.round(dockEl.getBoundingClientRect().height);
+        if (dockH !== null && h !== dockH) run();
+        dockH = h;
+      })
+      : null;
+    if (ro) ro.observe(dockEl);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', run);
+      if (ro) ro.disconnect();
       // Nothing else removes a property set on the document root, and a stale
       // one would size a panel on a page that has no dock at all.
       document.documentElement.style.removeProperty('--dock-measured');

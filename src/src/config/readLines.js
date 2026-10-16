@@ -7,6 +7,9 @@
  */
 import { plainOf } from './comments';
 
+/** "Includes N answers that arrived late." — game/late-labels.js LATE_INCLUDED_LINE. */
+export const LATE_INCLUDED_LINE = /^Includes \d+ answers? that arrived late\.$/;
+
 export function readLinesOf(markdown, max = 60) {
   const out = [];
   String(markdown || '').split(/\r?\n/).forEach((raw) => {
@@ -16,6 +19,9 @@ export function readLinesOf(markdown, max = 60) {
     if (/^(?:[-*_]\s*){3,}$/.test(line)) return; // a rule
     if (/^\|/.test(line)) return; // a table row
     if (/^```/.test(line)) return;
+    // A Redo's note that late answers were read in (game/late-labels.js
+    // lateIncludedLine) is about the read, not a line of it.
+    if (LATE_INCLUDED_LINE.test(line)) return;
     const text = plainOf(line).replace(/\s+/g, ' ').trim();
     if (text.length > 3 && !out.includes(text)) out.push(text);
   });

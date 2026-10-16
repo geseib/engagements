@@ -246,3 +246,14 @@
 .askp.askc.askc--sheet { width: 100%; max-height: 100dvh; height: 100dvh; margin: 0; border-radius: 0; }
 /* Inline (the host console): the same composer beside Workie's read, no dialog. */
 .askp.askc.askc--inline { width: 100%; max-height: none; border: 1px solid var(--rule-strong); border-radius: 12px; background: var(--surface); }
+
+/* Rate: the scale's two ends (owner, 16 Oct; docs/design/settings-consolidation,
+   tab 2). Two boxes side by side, "to" between; Custom opens two short inputs
+   on the same grid, the same row at every width (the boxes shrink). */
+.askc .askc-ends { display: grid; gap: 8px; margin-top: 12px; }
+.askc .askc-ends-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: end; }
+.askc .askc-end { display: block; min-width: 0; }
+.askc .askc-end .askp-label { margin-bottom: 4px; text-transform: none; letter-spacing: 0; font-size: 13px; }
+.askc .askc-end-select { cursor: pointer; }
+.askc .askc-ends-to { padding-bottom: 10px; font-size: 13px; color: var(--muted); }
+.askc .askc-ends-hint { margin: 0; font-size: 12px; color: var(--muted); }

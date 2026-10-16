@@ -9,6 +9,7 @@ import {
 import { displayLabelFor } from '../config/anonymity';
 import { anchorLabelFor, excerptOf, plainOf } from '../config/comments';
 import ReportFollowUps from './ReportFollowUps';
+import ReportLate from './ReportLate';
 import './RoundReport.css';
 
 /**
@@ -206,6 +207,11 @@ export default function RoundReport({
    * full, with nothing to retry.
    */
   onRetryAnswers,
+  /**
+   * The set's own word for a round ("Lesson"), for "Arrived late"'s "during
+   * Lesson 3 · …". Null reads "Round".
+   */
+  roundNoun = null,
 }) {
   if (!round) return null;
 
@@ -456,7 +462,10 @@ export default function RoundReport({
           regenerated.
         */}
         <CommentList comments={summaryComments} />
-        <ReportFollowUps followUps={round.followUps} className="past-round__followups" />
+        <ReportFollowUps followUps={round.followUps} late={round.late} className="past-round__followups" />
+        {/* "Arrived late" (late items Task 5): the host's. A phone's feedback
+            round never carries `late` (comments.js, sessionHistory.js). */}
+        <ReportLate late={round.late} roundNoun={roundNoun} className="past-round__late" />
 
         {onRegenerate && (
           <button
