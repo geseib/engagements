@@ -76,12 +76,29 @@ const frame = (connectionId, body) => wsMessage({
     assert.strictEqual(get(PK, `CONNECTION#${VIEW}`).Fullscreen, undefined);
     assert.ok(!frames.some((f) => f.message.type === 'presentChanged'));
   });
-  await check('non-boolean values are not written', async () => {
+  await check('non-boolean values are not written: no StatusAt, and the host is told nothing', async () => {
     seed();
     await frame(VIEW, { fullscreen: 'yes', visible: 1 });
     const row = get(PK, `CONNECTION#${VIEW}`);
     assert.strictEqual(row.Fullscreen, undefined);
     assert.strictEqual(row.Visible, undefined);
+    assert.strictEqual(row.StatusAt, undefined);
+    assert.ok(!frames.some((f) => f.message.type === 'presentChanged'));
+  });
+  await check('a frame carrying neither value at all writes nothing and tells no one', async () => {
+    seed();
+    await frame(VIEW, {});
+    assert.strictEqual(get(PK, `CONNECTION#${VIEW}`).StatusAt, undefined);
+    assert.ok(!frames.some((f) => f.message.type === 'presentChanged'));
+  });
+  await check('one boolean is enough: it is written with StatusAt, and the host is told', async () => {
+    seed();
+    await frame(VIEW, { fullscreen: 'yes', visible: true });
+    const row = get(PK, `CONNECTION#${VIEW}`);
+    assert.strictEqual(row.Visible, true);
+    assert.strictEqual(row.Fullscreen, undefined);
+    assert.ok(row.StatusAt);
+    assert.ok(frames.some((f) => f.connectionId === HOST && f.message.type === 'presentChanged'));
   });
   await check('a later report overwrites the earlier one', async () => {
     seed();

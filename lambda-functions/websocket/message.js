@@ -709,6 +709,10 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
  * ignored. The host is told so its console re-reads.
  */
 async function recordPresentStatus(gameId, connectionId, body) {
+  // Nothing to record: a frame carrying neither value as a boolean writes no
+  // StatusAt (it would vouch for a window that reported nothing) and tells
+  // the host nothing.
+  if (typeof body.fullscreen !== 'boolean' && typeof body.visible !== 'boolean') return;
   const key = { PK: `GAME#${gameId}`, SK: `CONNECTION#${connectionId}` };
   const row = await db.send(new GetCommand({ TableName: process.env.TABLE_NAME, Key: key, ProjectionExpression: 'Viewer' }));
   if (!row.Item || row.Item.Viewer !== 'present') return;
