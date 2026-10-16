@@ -106,11 +106,16 @@
  *
  *   1. the session's STATE is `RESULTS#<the round being commented on>`.
  *
- * Without it a phone still showing round 3's composer writes into round 3
- * while the room is on round 4 — the comment then appears in a report against
- * material the room has moved past. Not a security boundary — the code is on
- * the projector — but a correctness one, and the failure it prevents is
- * silent.
+ * SINCE 16 OCT 2026 (session flow v3 §4.4, late items Task 2) THAT FACT IS
+ * WIDER: "the round has been SHOWN". The room is on its RESULTS, on a later
+ * round, or ENDED inside late-window.js's 24 hours (refused once the host
+ * pressed "Close comments"), and the ROUND# record exists. A comment posted
+ * while the room was anywhere but this round's RESULTS is no longer refused
+ * as stale: it is kept with `AddedLater: true` and `PostedDuring`, so the
+ * report and the host's late list can say it arrived after the room moved
+ * on, rather than letting it sit as if said at the time. A round never shown
+ * is still refused. The paragraphs below are the history of the narrower
+ * rule and still explain why the beat is not required.
  *
  * ── THE SECOND FACT, AND WHY IT IS GONE FROM THIS HALF OF THE GATE ─────────
  *
@@ -186,6 +191,18 @@ const { isHidden, redactAnswers } = require('./anonymity');
 const { callerMayDriveSession } = require('./tenant');
 const { SURVEY_CLOSED } = require('./survey-names');
 const { describeSurveyQuestion } = require('./survey-digest');
+const { lateWindow } = require('./late-window');
+
+/**
+ * What a refused comment says. The window's own two sentences ("Comments are
+ * closed for this session.", "This session has closed…") live beside its rule
+ * in late-window.js and are passed through as they are.
+ */
+const COMMENT_WORDS = {
+  NOT_SHOWN: 'This round has not been shown yet.',
+  SURVEY_NOT_OPEN: 'this round is no longer open for comments',
+  PAUSED: 'The host has paused this for a moment.',
+};
 // Call & Answer follow-up asks share this function (followups.js header).
 const { handleFollowUps, isFollowUpRoute } = require('./followups');
 
@@ -307,6 +324,8 @@ function toWire(row) {
     featuredAt: row.FeaturedAt || null,
     // Typed by the host for something said in the room.
     fromHost: row.FromHost === true,
+    // Posted after the room left this round's results (late items Task 2).
+    addedLater: row.AddedLater === true,
   };
 }
 
@@ -424,8 +443,9 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
 
   /*
     THE GATE — see the header. `409` rather than `400`: nothing about the
-    request is malformed, the room has simply moved, and a composer that gets
-    a 409 can say "this round is no longer open" instead of "bad request".
+    request is malformed, the round is simply not open, and a composer that
+    gets a 409 can say so in a sentence instead of "bad request". Widened on
+    16 Oct 2026 to "the round has been shown" (header; late items Task 2).
 
     OWNER'S RULING, 26 SEP 2026: this is now the WHOLE gate. Until this date a
     second check followed — `round.StageBeat !== 'feedback'` — refusing a
@@ -439,28 +459,53 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
     check, and nothing here treats it any differently from a comment posted
     while the round is on its tally or its AI read-back.
   */
-  // A closed survey is its own results showing: comments land on 000 while it
-  // is CLOSED, and on nothing else (see SURVEY_ROUND above).
-  const surveyOpenForComments = isSurveySession(meta)
-    && padded === SURVEY_ROUND && String(state.State) === SURVEY_CLOSED;
-  if (String(state.State) !== `RESULTS#${padded}` && !surveyOpenForComments) {
-    return respond(409, {
-      error: 'this round is no longer open for comments',
-      currentState: state.State,
-    });
-  }
-  // An event's item, paused (events M3): nothing is posted until it resumes.
-  if (state.EventPaused) {
-    return respond(409, { error: 'The host has paused this for a moment.', code: 'PAUSED' });
-  }
-  // The round record itself must still exist — a defensive data-integrity
-  // check, not a reintroduction of the beat requirement dropped above.
-  const round = await roundRecord(gameId, padded);
-  if (!round) {
-    return respond(409, {
-      error: 'this round is no longer open for comments',
-      currentState: state.State,
-    });
+  /*
+    A SURVEY keeps its own door, unchanged: a closed survey is its own results
+    showing, so comments land on 000 while it is CLOSED and on nothing else
+    (see SURVEY_ROUND above). Everything below the survey branch is rounds.
+  */
+  const roomState = String(state.State || '');
+  let addedLater = false;
+  if (isSurveySession(meta)) {
+    if (padded !== SURVEY_ROUND || roomState !== SURVEY_CLOSED) {
+      return respond(409, { error: COMMENT_WORDS.SURVEY_NOT_OPEN, currentState: state.State });
+    }
+    if (state.EventPaused) {
+      return respond(409, { error: COMMENT_WORDS.PAUSED, code: 'PAUSED' });
+    }
+  } else {
+    /*
+      COMMENTS AFTER THE ROUND (session flow v3 §4.4; late items Task 2).
+      A round takes comments once it has been SHOWN, not only while it is on
+      screen: the room is on its RESULTS, on a later round, or the session
+      ENDED inside the late window (late-window.js: 24 h, unless the host
+      pressed "Close comments"). One posted while the room was anywhere but
+      this round's RESULTS is kept and marked AddedLater, for the host's late
+      list; it is never put on the wall by itself (only featureComment does).
+    */
+    const late = lateWindow({ meta, state });
+    if (!late.open) {
+      return respond(409, { error: late.error, code: late.code, currentState: state.State });
+    }
+    // An event's item, paused (events M3): nothing is posted until it resumes.
+    if (state.EventPaused) {
+      return respond(409, { error: COMMENT_WORDS.PAUSED, code: 'PAUSED' });
+    }
+    const onItsResults = roomState === `RESULTS#${padded}`;
+    const roomRound = roomState.match(/^[A-Z_]+#(\d+)$/);
+    const roomPastIt = Boolean(roomRound) && Number(roomRound[1]) > Number(padded);
+    const shownByState = onItsResults || roomPastIt || roomState === 'ENDED';
+    /*
+      AND THE ROUND RECORD EXISTS. get-results.js writes ROUND#nnn as it shows
+      results, so a round that never reached them has none. stage-focus.js can
+      write one on VOTE, which is why the record alone is not enough and the
+      state above must also have passed the round.
+    */
+    const round = shownByState ? await roundRecord(gameId, padded) : null;
+    if (!round) {
+      return respond(409, { error: COMMENT_WORDS.NOT_SHOWN, code: 'NOT_SHOWN', currentState: state.State });
+    }
+    addedLater = !onItsResults;
   }
 
   const now = new Date().toISOString();
@@ -487,6 +532,12 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
     playerName: author,
     name: author,
     ...(asHost ? { FromHost: true } : {}),
+    // Where the room was when this arrived, and whether that was somewhere
+    // other than this round's results (late items Task 2). Reviewed is the
+    // host's label, set by the late routes; null is "Not reviewed".
+    PostedDuring: roomState,
+    AddedLater: addedLater,
+    Reviewed: null,
     SubmittedAt: now,
     ttl: Math.floor(Date.now() / 1000) + COMMENT_TTL_SECONDS,
   };

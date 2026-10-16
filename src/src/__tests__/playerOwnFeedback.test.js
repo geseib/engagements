@@ -171,17 +171,17 @@ describe('while the panel is open', () => {
     expect(branch).toMatch(/onDraftChange=\{setMyFeedbackHasDraft\}/);
   });
 
-  test('says plainly the next question is live once the round has moved on, and offers to copy — never "post it"', () => {
+  test('says plainly the next question is live once the round has moved on, and that the comment can still be posted (late items Task 2)', () => {
     const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
     // The panel itself always renders here — only the banner is conditional —
     // so a draft mid-typing in FeedbackRoundPanel's own local state is never
     // torn down by this branch.
     expect(branch).toMatch(/!myFeedbackStillOpen/);
     expect(branch).toMatch(/next question is live/i);
-    expect(branch).toMatch(/copy it/i);
-    // A post would be refused once the round has moved on (comments.js's
-    // state check) — the banner must not invite one.
-    expect(branch).not.toMatch(/post it/i);
+    // comments.js keeps a comment on a round already shown (AddedLater), so
+    // the banner says it can still go, and no longer tells them to copy it.
+    expect(branch).toMatch(/You can still post what you have written/);
+    expect(branch).not.toMatch(/copy it/i);
     expect(branch).toMatch(/<FeedbackRoundPanel/);
   });
 
@@ -202,9 +202,9 @@ describe('while the panel is open', () => {
     expect(branch).toMatch(/next question is live/i);
   });
 
-  test('the composer is told the round has moved on, so it disables Post rather than letting it fail silently on submit', () => {
+  test('Post stays enabled once the round has moved on: the server keeps it as added later, or refuses it in words (late items Task 2)', () => {
     const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
-    expect(branch).toMatch(/postDisabled=\{!myFeedbackStillOpen\}/);
+    expect(branch).not.toMatch(/postDisabled/);
   });
 
   test('RoundReport is told what to say instead of the responses, and given a retry only on failure', () => {

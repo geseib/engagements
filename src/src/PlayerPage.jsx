@@ -3450,8 +3450,8 @@ function PlayerPage({ event = null } = {}) {
         {!myFeedbackStillOpen && (
           <p className="plr-lede plr-muted" role="status">
             {myFeedbackEnded
-              ? 'The session has ended. What you have written is still here — you can copy it, or close this.'
-              : 'The next question is live. What you have written is still here — you can copy it, or go to the question.'}
+              ? 'The session has ended. You can still post what you have written.'
+              : 'The next question is live. You can still post what you have written. It is kept with this round.'}
           </p>
         )}
         <FeedbackRoundPanel
@@ -3462,7 +3462,6 @@ function PlayerPage({ event = null } = {}) {
           onDraftChange={setMyFeedbackHasDraft}
           answersEmptyText={myFeedbackAnswersEmptyText}
           onRetryAnswers={myFeedbackRetryAnswers}
-          postDisabled={!myFeedbackStillOpen}
         />
         <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
           {myFeedbackExitLabel}

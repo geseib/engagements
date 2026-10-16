@@ -315,10 +315,10 @@ const aComment = (over = {}) => ({
 
   seedGame('4003', { lessonNumber: 4 });
   const wrongRound = await post('4003', aComment({ questionNumber: 3 }));
-  check('refused when the session has moved on to another round', () => {
-    // The stale-phone case. Round 3's composer is still on screen while the
-    // room is on round 4. Still refused: this is fact (1) in the header, and
-    // the ruling above never touched it.
+  check('refused for a round whose results were never shown (no ROUND#003), though the room is past it', () => {
+    // Since late items Task 2 a round the room HAS seen takes comments after
+    // it moves on (tests/comments-after-round.js). Round 3 here never reached
+    // results, so it has no ROUND# record and is still refused.
     assert.strictEqual(wrongRound.statusCode, 409, `got ${wrongRound.statusCode}`);
     assert.strictEqual(rows('4003', 'COMMENT#').length, 0);
   });

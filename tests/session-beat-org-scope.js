@@ -326,9 +326,12 @@ const COMMENT = {
   // A joined player here too, so this is unambiguously testing fact (1) — the
   // state check — and not tripping the membership check from section 2.
   put({ PK: 'GAME#4243', SK: 'PLAYER#A stranger', PlayerName: 'A stranger' });
-  put({ PK: 'GAME#4243', SK: 'STATE', State: 'RESULTS#002', LessonNumber: 2 });
+  // Round 1 back on ASK: not shown, so not open (late items Task 2 opened a
+  // round once it HAS been shown, so "the room is on round 2" no longer is
+  // the refusal case).
+  put({ PK: 'GAME#4243', SK: 'STATE', State: 'ASK#001', LessonNumber: 1 });
   const wrongRoundComment = await postComment('4243', COMMENT);
-  check('a comment for a round the session is not showing is still refused', () =>
+  check('a comment for a round the room has not been shown is still refused', () =>
     assert.strictEqual(wrongRoundComment.statusCode, 409,
       `got ${wrongRoundComment.statusCode}: ${wrongRoundComment.body}`));
 
@@ -339,8 +342,8 @@ const COMMENT = {
   // currentState the composer needs to render "the room has moved on".
   check('...and it is the STATE gate that refused, not membership — with the actual state attached', () => {
     const body = JSON.parse(wrongRoundComment.body);
-    assert.strictEqual(body.error, 'this round is no longer open for comments', `got: ${wrongRoundComment.body}`);
-    assert.strictEqual(body.currentState, 'RESULTS#002');
+    assert.strictEqual(body.error, 'This round has not been shown yet.', `got: ${wrongRoundComment.body}`);
+    assert.strictEqual(body.currentState, 'ASK#001');
   });
 
   console.log('\n3. the owning organisation is unaffected');
