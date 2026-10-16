@@ -464,8 +464,13 @@ export default function SessionSetupPanel({
           The other two tabs are short rows that would sit in an empty column,
           and every pixel of panel is a pixel of projected stage the room
           loses. */}
+      {/* data-theme="dark": the panel is painted dusk (#111D33, styles.css),
+          so its tokens must be dusk too. Under a light page (data-theme=light)
+          the Screens group and the remote's sign-in words drew --text as dark
+          ink on navy (walk of dev 92f8b24d, 16 Oct 2026). */}
       <aside
         className={`setup-panel${tab === 'questions' ? ' setup-panel--wide' : ''}`}
+        data-theme="dark"
         ref={panelRef}
         role="dialog"
         aria-modal="true"

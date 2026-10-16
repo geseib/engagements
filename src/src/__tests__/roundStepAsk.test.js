@@ -22,7 +22,14 @@ test('the ask beat is ROOM_QUESTION while live, ROOM_RESULTS once closed', () =>
 
 test('live: Show results, armed while people are still answering; Cancel the question beside it', () => {
   const s = roundStep('ROOM_QUESTION', CTX());
-  expect(s.primary).toMatchObject({ id: 'close-ask', label: RW.showResults, intent: 'close-ask', arm: { text: RW.armResults(2, 'answering') } });
+  // In place, as a vote's (walk of dev 92f8b24d: without inPlace the laptop
+  // closed the question on one press). rejects: an arm the laptop ignores.
+  expect(s.primary).toMatchObject({
+    id: 'close-ask', label: RW.showResults, intent: 'close-ask',
+    arm: { text: RW.armResults(2, 'answering', 5), confirmLabel: RW.anyway(RW.showResults), inPlace: true },
+  });
+  expect(roundStep('ROOM_QUESTION', CTX({ roomAsk: { status: 'live', answered: 0, total: 6 } })).primary.arm.text)
+    .toBe('Nobody has answered yet. Press again to show results.');
   expect(s.secondary).toMatchObject({ id: 'cancel-ask', label: RW.cancelQuestion, intent: 'cancel-ask' });
   expect(s.status).toEqual({ text: '3 of 5 answered', tone: 'pending' });
   const all = roundStep('ROOM_QUESTION', CTX({ roomAsk: { status: 'live', answered: 5, total: 5 } }));

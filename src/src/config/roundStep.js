@@ -224,7 +224,16 @@ function primaryFor(moment, ctx) {
       const ask = ctx.roomAsk || {};
       const left = stillToAct({ received: ask.answered, total: ask.total });
       const show = control('close-ask', RW.showResults, I.CLOSE_ASK, 'ChartBar');
-      if (left > 0) show.arm = { text: RW.armResults(left, 'answering') };
+      // In place on the laptop too (walk of dev 92f8b24d: without `inPlace`
+      // HostActionBar ignored the arm, and one press closed the question with
+      // 0 of 6 answered). The total gives "Nobody has answered yet" at zero.
+      if (left > 0) {
+        show.arm = {
+          text: RW.armResults(left, 'answering', ask.total),
+          confirmLabel: RW.anyway(show.label),
+          inPlace: true,
+        };
+      }
       return show;
     }
     case 'ROOM_RESULTS':

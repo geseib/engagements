@@ -588,9 +588,13 @@ body {
   cursor: pointer;
 }
 
+/* Wraps: at 660px and below the panel is its 320px minimum and the four tabs
+   need ~430px, so SETTINGS sat past the screen's edge, unreachable (walk of
+   dev 92f8b24d, 16 Oct 2026). */
 .setup-panel__tabs {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 10px 20px 0;
   border-bottom: 1px solid rgba(155, 168, 190, 0.22);
