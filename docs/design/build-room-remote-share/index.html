@@ -250,7 +250,7 @@ body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .
 <p class="ph-cap"><b>(b) Remote off, and this device is not on the Wi-Fi.</b> One honest line; Ask to try it lands on the host's chip.</p></div>
 <div><div class="ph"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Claude is building</div></div>
 <div class="ph-body">
-<div class="po"><p>Opening soon. The host is starting the demo for remote people.</p></div>
+<div class="po po--on"><span class="btn btn--primary">Open the demo ↗</span><p class="m">Same Wi-Fi only. Not here? Opening soon.</p></div>
 <span class="eb">Claude is showing · 10:42</span>
 <p class="q" style="font-size:22px;margin:0">The first board</p>
 <img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
@@ -260,24 +260,26 @@ body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .
 <p class="ph-cap"><b>(c) Remote starting.</b> No dead button while the remote route comes up.</p></div>
 </div>
 
-<div class="sec" id="tm"><h2>Threat model, first draft</h2>
-<p>The owner's rule: remote reaches <b>the same thing the Wi-Fi share reaches</b>, and nothing more. So the question for each risk is what remote changes compared with the Wi-Fi share as built (plugin 1.18.0).</p>
-<table class="tm"><thead><tr><th>Risk</th><th>Wi-Fi share today</th><th>With remote</th><th>Proposed answer</th></tr></thead><tbody>
-<tr><td>A stranger finds the address</td><td>Only people on the same Wi-Fi can even try it.</td><td class="new">Anyone on the internet can reach the address while it is up.</td><td>The address alone opens nothing: no key, the locked page. The address is random and new each time, and never shown or copied; it is used only behind each person's own Open the demo button.</td></tr>
-<tr><td>Someone who joined passes the link on</td><td>One key for the room; a passed link works for anyone on the Wi-Fi.</td><td class="new">A passed link would work for anyone, anywhere.</td><td><b>A key per person, not per room</b>, minted when they press Open the demo and revocable. The gateway counts devices per key; the host can see "3 devices on one person's link". Removing a player kills their key.</td></tr>
-<tr><td>Reaching more of the laptop than the app</td><td>Only the ports Claude showed, only from this project's folder (F4).</td><td class="same">Same gateway, same ports, same folder check.</td><td>The tunnel points at the gateway, never at the dev server. Nothing new opens.</td></tr>
-<tr><td>The dev server's own holes (Vite path traversal, source maps, hot reload)</td><td>Reachable by key holders on the Wi-Fi.</td><td class="new">Reachable by key holders anywhere.</td><td>Unchanged: still only key holders. Keep the gateway's method allowlist and consider blocking <code>/@fs/</code> and <code>*.map</code> at the gateway for remote requests.</td></tr>
-<tr><td>Snooping on the network</td><td>Plain http on the Wi-Fi; a key can be read off the air.</td><td class="same">Better: the tunnel is https end to end.</td><td>Nothing more. (Wi-Fi stays http, as in LATER.md.)</td></tr>
-<tr><td>It stays open by accident</td><td>Fails closed after 30 s without Engage; only session end closes it.</td><td class="same">Same rule.</td><td>The tunnel process is a child of the gateway and dies with it. Off by default every session.</td></tr>
-<tr><td>A third party sees the traffic</td><td>None.</td><td class="new">Cloudflare carries it (TLS ends at their edge).</td><td>Say so in the switch's help line. Owner to decide whether that is acceptable.</td></tr>
+<div class="sec" id="tm"><h2>Threat model, second draft (after the owner's answers)</h2>
+<p>The owner's rule: remote reaches <b>the same thing the Wi-Fi share reaches</b>, and nothing more. So the question for each risk is what remote changes compared with the Wi-Fi share as built (plugin 1.18.0). The full version is in the design doc.</p>
+<table class="tm"><thead><tr><th>Risk</th><th>Wi-Fi share today</th><th>With remote</th><th>Answer</th></tr></thead><tbody>
+<tr><td>A stranger finds the address</td><td>Only people on the same Wi-Fi can even try it.</td><td class="new">Anyone on the internet can reach the address while it is up.</td><td>The address alone opens nothing: no key, the locked page. Random, new each time, never shown or copied.</td></tr>
+<tr><td>Someone who joined passes the link on</td><td>One key for the room; a passed link works for anyone on the Wi-Fi.</td><td class="new">A passed link works for anyone, anywhere.</td><td><b>A key per person</b> (owner: allow it and show it). The host sees "Sam · 2 devices"; Remove ends Sam's key. Moving devices through the existing handover issues a fresh key and ends the old one.</td></tr>
+<tr><td>Reaching more of the laptop than the app</td><td>Only the ports Claude showed, only from this project's folder (F4).</td><td class="same">Same targets, same folder check.</td><td>The tunnel points at a gateway listening on 127.0.0.1 only, never at the dev server.</td></tr>
+<tr><td>The dev server's own holes (Vite <code>/@fs/</code>, source maps)</td><td>Reachable by key holders on the Wi-Fi.</td><td class="new">Reachable by key holders anywhere.</td><td>Still only key holders. The remote gateway refuses <code>/@fs/</code>, <code>/@id/</code> and <code>*.map</code>; Claude shares a built copy when remote is on.</td></tr>
+<tr><td>Guessing keys through the gateway</td><td>One fixed key, checked locally.</td><td class="new">An unknown key makes the plugin ask Engage.</td><td>128-bit keys; at most one Engage check per second; unknown keys remembered as wrong for the session.</td></tr>
+<tr><td>Snooping on the network</td><td>Plain http on the Wi-Fi.</td><td class="same">Better: https to Cloudflare.</td><td>Nothing more.</td></tr>
+<tr><td>A third party sees the traffic</td><td>None.</td><td class="new">Cloudflare carries it, for everyone while remote is on.</td><td>Owner accepted for a trial. Said in the switch's small print.</td></tr>
+<tr><td>The downloaded tool is tampered with</td><td>Nothing downloaded.</td><td class="new">A program fetched from the internet runs on the host's laptop.</td><td>One pinned version, from Cloudflare's GitHub releases, SHA-256 checked before it is ever run; kept in <code>~/.engage/bin</code>.</td></tr>
+<tr><td>It stays open by accident</td><td>Fails closed after 30 s without Engage; session end closes it.</td><td class="same">Same rule.</td><td>cloudflared is the plugin's child and is killed with the gateway; a pid file lets the next start kill an orphan.</td></tr>
 </tbody></table></div>
 
-<div class="qs" id="qs"><h2>Open questions for the owner</h2>
+<div class="qs" id="qs"><h2>Decided, 16 Oct</h2>
 <ol>
-<li><b>A key per person.</b> Stopping a passed-on link means each person's button carries their own key. Worth it, or is one room key (as on Wi-Fi) enough for remote too?</li>
-<li><b>Cloudflare.</b> The free quick tunnel needs no account, but Cloudflare sees the traffic, and the address changes each session. Acceptable, or does it need your own Cloudflare account and domain?</li>
-<li><b>Installing cloudflared.</b> Claude installs it on first use (with the host's yes), or the Connect panel's install step adds it for everyone?</li>
-<li><b>"Here" vs "remote".</b> The phone picks Wi-Fi when it can reach it and remote otherwise. Fine to decide that silently, or should a remote person ever see which route they are on?</li>
+<li><b>Which route.</b> While remote is live, everyone's Open the demo goes the remote way. Public-address guessing was rejected: wrong on company networks.</li>
+<li><b>Key per person.</b> Yes. Usable on more than one device, shown to the host per person; moves with the person through the existing device handover.</li>
+<li><b>Cloudflare.</b> Free quick tunnel, to get a feel for whether it is worth it. Its limits (200 requests at once, no server-sent events, no uptime promise) are known gaps; the owner's own account is the later step and changes nothing on screen.</li>
+<li><b>Installing cloudflared.</b> The plugin downloads it itself on first use.</li>
 </ol></div>
 
 <script src="../build-room-host-redesign/mock.js"></script>
