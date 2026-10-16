@@ -102,7 +102,8 @@ describe('for a host', () => {
     const { result } = renderHook(() => usePresentControls({ gameId: '5479', snapshot, total: 2, refetch: jest.fn() }));
     await waitFor(() => expect(result.current.step && result.current.step.primary.arm).toBeTruthy());
     press('PageDown');
-    await waitFor(() => expect(result.current.confirm && result.current.confirm.note).toBe('2 still answering.'));
+    // roundStep's arm says the room's size since 16 Oct 2026 (walk W3).
+    await waitFor(() => expect(result.current.confirm && result.current.confirm.note).toBe('2 of 4 still writing.'));
     await pause();
     press('ArrowLeft');
     await waitFor(() => expect(result.current.confirm).toBeNull());

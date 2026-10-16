@@ -102,6 +102,10 @@ describe('roundWords', () => {
 
   test('the arm texts say how many and what the second press does', () => {
     expect(RW.armVote(4)).toBe('4 still answering. Press again to start voting.');
+    // With the room's size (walk W3, 16 Oct 2026): "1 of 3 still writing".
+    expect(RW.armVote(1, 3)).toBe('1 of 3 still writing. Press again to start voting.');
+    expect(RW.armResults(2, 'answering', 5)).toBe('2 of 5 still answering. Press again to show results.');
+    expect(RW.armResults(1, 'voting', 3)).toBe('1 of 3 still voting. Press again to show results.');
     expect(RW.armResults(1, 'voting')).toBe('1 still voting. Press again to show results.');
     expect(RW.armResults(2, 'answering')).toBe('2 still answering. Press again to show results.');
   });

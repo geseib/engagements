@@ -159,14 +159,27 @@ function primaryFor(moment, ctx) {
         ? control('open-vote', RW.startVoting, I.FINISH, 'ListChecks')
         : control('reveal-from-ask', RW.showResults, I.FINISH, 'ChartBar');
       if (none) return { ...base, disabled: true, hint: RW.nobodyAnswered };
+      /*
+        IN PLACE, NOT A MODAL (walk W3, 16 Oct 2026): the first press turns the
+        button to "Start voting anyway" with "1 of 3 still writing. Press again
+        to start voting." above it, and the second press within six seconds
+        acts (HostActionBar's inPlace arm, as Start round N mid-read). The old
+        light "Proceed to voting?" dialog is gone from the host page.
+      */
+      const of = ctx.progress && Number(ctx.progress.total);
       if (waiting > 0) {
-        base.arm = { text: runsVote ? RW.armVote(waiting) : RW.armResults(waiting, 'answering') };
+        base.arm = {
+          text: runsVote ? RW.armVote(waiting, of) : RW.armResults(waiting, 'answering', of),
+          confirmLabel: RW.anyway(base.label),
+          inPlace: true,
+        };
       }
       return base;
     }
     case 'VOTING': {
       const base = control('reveal', RW.showResults, I.REVEAL, 'ChartBar');
-      if (waiting > 0) base.arm = { text: RW.armResults(waiting, 'voting') };
+      const of = ctx.progress && Number(ctx.progress.total);
+      if (waiting > 0) base.arm = { text: RW.armResults(waiting, 'voting', of), confirmLabel: RW.anyway(base.label), inPlace: true };
       return base;
     }
     case 'RESULTS':

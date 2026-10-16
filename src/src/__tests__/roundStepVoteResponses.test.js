@@ -32,7 +32,7 @@ test('a VOTE-stamped answer focus during VOTE is VOTE_RESPONSES', () => {
 
 test('Show results is the main step throughout; Next response wraps', () => {
   const first = roundStep('VOTE_RESPONSES', CTX());
-  expect(first.primary).toMatchObject({ id: 'reveal', label: RW.showResults, arm: { text: RW.armResults(2, 'voting') } });
+  expect(first.primary).toMatchObject({ id: 'reveal', label: RW.showResults, arm: { text: RW.armResults(2, 'voting', 5), inPlace: true } });
   expect(first.secondary).toMatchObject({ id: 'next-response', label: RW.nextResponse, index: 1, part: 0 });
   const last = roundStep('VOTE_RESPONSES', CTX({ focus: { focus: 'answer', index: 7, phase: 'VOTE' } }));
   expect(last.secondary).toMatchObject({ id: 'next-response', index: 0 });

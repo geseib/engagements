@@ -4935,32 +4935,13 @@ Focus on actionable business strategy insights.`;
   const handleFinishQuestion = async () => {
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
     if (currentGameType === 'trivia' || currentGameType === 'wavelength' || currentGameType === 'poll') {
-      // Warn if not all players have answered
-      if (answeredCount < players.length) {
-        const proceed = await showConfirmation(
-          'Show Results?',
-          `Only ${answeredCount} of ${players.length} players have answered. Do you want to show results anyway?`,
-          'Show Results'
-        );
-        if (!proceed) return;
-      }
-      
       // Skip voting phase for both trivia and wavelength
       console.log(`🧠 ${currentGameType.toUpperCase()}: Using unified handleShowResults() mechanism (skipping voting phase)`);
       await handleShowResults();
       return;
     }
     
-    // Call and Answer flow - proceed to voting
-    // Warn if not all players have answered
-    if (answeredCount < players.length) {
-      const proceed = await showConfirmation(
-        'Proceed to Voting?',
-        `Only ${answeredCount} of ${players.length} players have answered. Do you want to proceed to voting anyway?`,
-        'Proceed to Voting'
-      );
-      if (!proceed) return;
-    }
+    // Call and Answer flow - proceed to voting.
 
     /*
       NO PLACEHOLDER STATE. This set `gameState` to 'voting' while start-vote
@@ -5015,16 +4996,11 @@ Focus on actionable business strategy insights.`;
   };
 
   const handleShowResults = async () => {
-    // For trivia and wavelength games, no voting phase - skip vote check
-    // For call-and-answer games, warn if not all players have voted
-    if (currentGameType !== 'trivia' && currentGameType !== 'wavelength' && currentGameType !== 'poll' && playersWhoVoted.length < players.length) {
-      const proceed = await showConfirmation(
-        'Show Results?',
-        `Only ${playersWhoVoted.length} of ${players.length} players have voted. Do you want to show results anyway?`,
-        'Show Results'
-      );
-      if (!proceed) return;
-    }
+    /* AN EARLY ADVANCE ASKS IN PLACE, NOT IN A MODAL (walk W3, 16 Oct 2026):
+       roundStep arms the primary (`arm.inPlace`), so the dock and the console
+       turn it to "Start voting anyway" / "Show results anyway" with the count
+       above, and the second press lands here. The Remote asks with its own
+       second tap. handleFinishQuestion above follows the same rule. */
 
     setSessionActionError('');
     // Show loading overlay

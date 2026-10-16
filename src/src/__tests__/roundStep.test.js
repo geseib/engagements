@@ -71,11 +71,17 @@ describe('roundStep: the rules', () => {
     }
   });
 
-  test('ANSWERING not all in: the primary carries an arm with the count', () => {
-    const s = roundStep('ANSWERING', { ...CTX, gameType: 'call-and-answer', progress: { received: 1, total: 5, allIn: false } });
-    expect(s.primary.arm).toEqual({ text: '4 still answering. Press again to start voting.' });
+  // In place, not the old light confirm modal (walk W3, 16 Oct 2026): the
+  // first press turns the button to "Start voting anyway" with the count.
+  test('ANSWERING not all in: the primary carries an in-place arm with the count', () => {
+    const s = roundStep('ANSWERING', { ...CTX, gameType: 'call-and-answer', progress: { received: 2, total: 3, allIn: false } });
+    expect(s.primary.arm).toEqual({ text: '1 of 3 still writing. Press again to start voting.', confirmLabel: 'Start voting anyway', inPlace: true });
     const t = roundStep('ANSWERING', { ...CTX, gameType: 'trivia', progress: { received: 3, total: 5, allIn: false } });
-    expect(t.primary.arm).toEqual({ text: '2 still answering. Press again to show results.' });
+    expect(t.primary.arm).toEqual({ text: '2 of 5 still answering. Press again to show results.', confirmLabel: 'Show results anyway', inPlace: true });
+  });
+  test('VOTING not all in: an in-place arm too', () => {
+    const v = roundStep('VOTING', { ...CTX, gameType: 'call-and-answer', progress: { received: 1, total: 3, allIn: false } });
+    expect(v.primary.arm).toEqual({ text: '2 of 3 still voting. Press again to show results.', confirmLabel: 'Show results anyway', inPlace: true });
   });
 
   test('ANSWERING all in: no arm', () => {
@@ -89,7 +95,7 @@ describe('roundStep: the rules', () => {
 
   test('VOTING not all in arms; the secondary shows the responses (owner, 2026-10-13), Skip when there are none', () => {
     const s = roundStep('VOTING', { ...CTX, gameType: 'call-and-answer', progress: { received: 4, total: 5, allIn: false } });
-    expect(s.primary).toMatchObject({ id: 'reveal', label: 'Show results', arm: { text: '1 still voting. Press again to show results.' } });
+    expect(s.primary).toMatchObject({ id: 'reveal', label: 'Show results', arm: { text: '1 of 5 still voting. Press again to show results.', inPlace: true } });
     // Response 1 is already on the wall; the secondary steps to response 2.
     expect(s.secondary).toMatchObject({ id: 'next-response', label: 'Next response', index: 1, part: 0 });
     expect(roundStep('VOTING', { ...CTX, answerCount: 0 }).secondary).toMatchObject({ id: 'skip', label: 'Skip this round' });
