@@ -3476,7 +3476,10 @@ function PlayerPage({ event = null } = {}) {
 
   if (myFeedbackShowing) {
     volume = 'act';
-    ctx = position ? `${position} · Feedback` : 'Feedback';
+    // The round the panel is about, not the one the session stopped on: from
+    // the end screen a player may open round 1 of 3.
+    const panelRound = myFeedbackAfterEnd && myFeedbackSnapshot ? myFeedbackSnapshot.title : position;
+    ctx = panelRound ? `${panelRound} · Feedback` : 'Feedback';
     body = (
       <>
         {/* A TOP EXIT, NOT ONLY A BOTTOM ONE (minor, fix round 1) — the report

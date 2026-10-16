@@ -836,6 +836,7 @@ describe('the states that did not exist', () => {
     fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
     await waitFor(() => expect(screen.queryByText(/Thanks for playing/i)).toBeNull());
     expect(screen.getByText(/Comments stay open for 24 hours/)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
     // The room cannot "move on" from the end: the panel stays, and a comment can be started.
     await new Promise((r) => setTimeout(r, 50));
     fireEvent.click(screen.getAllByRole('button', { name: /^Comment/ })[0]);
