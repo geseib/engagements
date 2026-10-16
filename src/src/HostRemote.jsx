@@ -956,10 +956,12 @@ function HostRemote() {
     });
     return () => { cancelled = true; };
   }, [gameId, access.status, remoteState]);
-  // At the end nothing moves the state, but the host may still review on the
-  // laptop: re-read on the roster's tick so "N items not reviewed" stays true.
+  // A late item arrives without the state moving (during the session as at
+  // the end), and the host may review on the laptop: re-read on the roster's
+  // tick, once per ROSTER_POLL_MS, so "N late" stays true throughout. One
+  // timer for the session, not one per state.
   useEffect(() => {
-    if (!gameId || access.status !== ACCESS.OK || remoteState !== 'ENDED') return undefined;
+    if (!gameId || access.status !== ACCESS.OK) return undefined;
     let cancelled = false;
     const timer = setInterval(() => {
       fetchLate({ fetchFn: authFetch, apiBase: apiBase(), gameId }).then((r) => {
@@ -967,7 +969,7 @@ function HostRemote() {
       });
     }, ROSTER_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [gameId, access.status, remoteState]);
+  }, [gameId, access.status]);
   const lateStatus = useMemo(() => lateStatusOf(lateRounds), [lateRounds]);
   const stepExtras = useMemo(() => ({
     playerCount: rosterCount,

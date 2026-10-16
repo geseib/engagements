@@ -73,9 +73,11 @@ describe('the surfaces carry it', () => {
     expect(remote).toMatch(/fetchLate\(/);
   });
 
-  test('the Remote re-reads at the end on the roster tick, so its count stays true', () => {
+  test('the Remote re-reads on the roster tick during the session and at the end, so its count stays true', () => {
     const remote = read('HostRemote.jsx');
-    expect(remote).toMatch(/remoteState !== 'ENDED'\) return undefined;[\s\S]{0,300}fetchLate\([\s\S]{0,200}ROSTER_POLL_MS\)/);
+    // One timer, gated on access alone: not only at ENDED.
+    expect(remote).toMatch(/access\.status !== ACCESS\.OK\) return undefined;\s*let cancelled = false;\s*const timer = setInterval\(\(\) => \{\s*fetchLate\([\s\S]{0,200}ROSTER_POLL_MS\);\s*return \(\) => \{ cancelled = true; clearInterval\(timer\); \};\s*\}, \[gameId, access\.status\]\);/);
+    expect(remote).not.toMatch(/remoteState !== 'ENDED'\) return undefined;[\s\S]{0,300}fetchLate\(/);
   });
 
   test('Present never passes the count, so the wall stays label-free (Q14)', () => {
