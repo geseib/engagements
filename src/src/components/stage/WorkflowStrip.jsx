@@ -65,6 +65,9 @@ function Step({ step, viewing, onView }) {
 
 export default function WorkflowStrip({
   strip, mode = 'full', viewing = null, onView = null, viewingWhere = '', onBack = null, places = null,
+  /* The host console carries "Your part now" in its footer, beside the
+     buttons, so its strip leaves the line out (host console spec §3.2). */
+  hidePart = false,
 }) {
   if (!strip) return null;
   const slim = mode === 'slim';
@@ -106,7 +109,7 @@ export default function WorkflowStrip({
           {onBack ? <button type="button" className="wfs-bar-back" onClick={onBack}>{RW.backToRoom}</button> : null}
         </p>
       ) : null}
-      {!slim && !viewing && strip.part ? (
+      {!slim && !viewing && !hidePart && strip.part ? (
         <p className="wfs-part">
           <span className="wfs-part-k">{RW.yourPartLabel}</span>
           {strip.part.before}

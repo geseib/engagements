@@ -168,7 +168,9 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
 
   // rejects: sending on the page's stale belief about the phase. The room
   // moved to VOTE while the phone was offline; the page has not heard yet.
-  test('a held answer for a round the room has closed is dropped, not sent', async () => {
+  // Session flow v3 §4.4: late answers are kept, not lost. The server keeps it
+  // apart from the vote and tells the phone (answerReceived, late).
+  test('a held answer for a round the room has closed is sent late, not dropped', async () => {
     await joinAndReachQuestion();
     await pickParisAndSubmit();
 
@@ -176,9 +178,10 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     webSocketClient.sendCleanMessage.mockReturnValue(true);
     await setConnected(true);
 
-    await screen.findByText(/Your last answer did not reach the room/i);
-    expect(webSocketClient.sendCleanMessage).toHaveBeenCalledTimes(1);   // the original, failed send only
-    expect(sessionStorage.getItem(KEY)).toBeNull();
+    await waitFor(() => expect(webSocketClient.sendCleanMessage).toHaveBeenCalledTimes(2));
+    expect(webSocketClient.sendCleanMessage).toHaveBeenLastCalledWith('ANSWER#001', expect.objectContaining({ answerType: 'trivia' }));
+    await waitFor(() => expect(sessionStorage.getItem(KEY)).toBeNull());
+    expect(screen.queryByText(/Your last answer did not reach the room/i)).not.toBeInTheDocument();
   });
 
   test('a reload while held restores it and sends it once connected', async () => {
@@ -198,7 +201,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     expect(sessionStorage.getItem(KEY)).toBeNull();
   });
 
-  test('a reload into a later round drops the held answer without sending it', async () => {
+  test('a reload into a later round sends the held answer late, and leaves the new round open', async () => {
     sessionStorage.setItem(KEY, JSON.stringify(heldForRoundOne));
     server.state = 'ASK#002';
     server.question = {
@@ -212,8 +215,9 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     await setConnected(true);
 
     await waitFor(() => expect(sessionStorage.getItem(KEY)).toBeNull());
-    expect(webSocketClient.sendCleanMessage).not.toHaveBeenCalled();
+    expect(webSocketClient.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: 'B', answerType: 'trivia' });
     expect(screen.queryByText(/^Not sent yet$/)).not.toBeInTheDocument();
+    // Round 2's form is still there: a late round-1 answer is not round 2's.
     expect(screen.getByRole('button', { name: /Submit Answer/i })).toBeInTheDocument();
   });
 
@@ -249,9 +253,9 @@ describe('pendingVerdict — which round a held answer may go into', () => {
   test.each([
     ['ASK#003', 'send'],
     ['ASK#3', 'send'],
-    ['VOTE#003', 'drop'],
-    ['RESULTS#003', 'drop'],
-    ['ASK#004', 'drop'],
+    ['VOTE#003', 'late'],
+    ['RESULTS#003', 'late'],
+    ['ASK#004', 'late'],
     ['ENDED', 'drop'],
     ['ASK#002', 'wait'],
     ['CREATED', 'wait'],

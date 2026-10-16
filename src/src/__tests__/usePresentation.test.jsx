@@ -6,7 +6,7 @@
  * by a newer one is dropped. A game that is not there says so.
  */
 import { renderHook, act, waitFor } from '@testing-library/react';
-import usePresentation, { REFETCH_DEBOUNCE_MS } from '../present/usePresentation';
+import usePresentation, { REFETCH_DEBOUNCE_MS, FIRST_REPORT_EVERY_MS, FIRST_REPORT_TRIES } from '../present/usePresentation';
 import webSocketClient from '../WebSocketClient';
 
 jest.mock('../WebSocketClient', () => {
@@ -21,6 +21,7 @@ jest.mock('../WebSocketClient', () => {
       onMessage: jest.fn((type, fn) => handlers.set(type, fn)),
       offMessage: jest.fn((type) => handlers.delete(type)),
       onReconnected: jest.fn(function (fn) { this.reconnected = fn; }),
+      sendCleanMessage: jest.fn(() => true),
       onConnectionStatusChange: jest.fn(),
     },
   };
@@ -137,4 +138,56 @@ test('at RESULTS it reads get-results for the round on screen', async () => {
   await waitFor(() => expect(global.fetch.mock.calls.some(([u]) => String(u).includes('get-results'))).toBe(true));
   const [, init] = global.fetch.mock.calls.find(([u]) => String(u).includes('get-results'));
   expect(JSON.parse(init.body)).toEqual({ gameId: '5479', questionNumber: '002' });
+});
+
+/*
+  THE FIRST PRESENT_STATUS WAITS FOR THE SOCKET (final review, 15 Oct).
+  sendCleanMessage returns false before the socket opens; the first report is
+  retried every second until it returns true, ten tries at most.
+*/
+describe('the first PRESENT_STATUS', () => {
+  const statusSends = () => webSocketClient.sendCleanMessage.mock.calls.filter(([type]) => type === 'PRESENT_STATUS').length;
+  afterEach(() => { webSocketClient.sendCleanMessage.mockReset(); webSocketClient.sendCleanMessage.mockImplementation(() => true); });
+
+  test('retried every second until the socket takes it, then no more', async () => {
+    webSocketClient.sendCleanMessage.mockReset();
+    webSocketClient.sendCleanMessage
+      .mockImplementationOnce(() => false)
+      .mockImplementationOnce(() => false)
+      .mockImplementation(() => true);
+    const { result } = renderHook(() => usePresentation('5479'));
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    expect(statusSends()).toBe(0);
+    act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS); });
+    expect(statusSends()).toBe(1);
+    act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS); });
+    expect(statusSends()).toBe(2);
+    act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS); });
+    expect(statusSends()).toBe(3); // accepted
+    act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS * 5); });
+    expect(statusSends()).toBe(3);
+  });
+
+  test('gives up after ten tries; the minute tick still reports', async () => {
+    webSocketClient.sendCleanMessage.mockReset();
+    webSocketClient.sendCleanMessage.mockImplementation(() => false);
+    const { result } = renderHook(() => usePresentation('5479'));
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS * (FIRST_REPORT_TRIES + 5)); });
+    expect(statusSends()).toBe(FIRST_REPORT_TRIES);
+    act(() => { jest.advanceTimersByTime(60 * 1000); });
+    expect(statusSends()).toBe(FIRST_REPORT_TRIES + 1);
+  });
+
+  test('an unmount stops the retries', async () => {
+    webSocketClient.sendCleanMessage.mockReset();
+    webSocketClient.sendCleanMessage.mockImplementation(() => false);
+    const { result, unmount } = renderHook(() => usePresentation('5479'));
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS * 2); });
+    expect(statusSends()).toBe(2);
+    unmount();
+    act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS * 10); });
+    expect(statusSends()).toBe(2);
+  });
 });

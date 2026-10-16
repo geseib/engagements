@@ -40,15 +40,24 @@ export function roundOf(state) {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * What to do with a held answer, given where the room is now:
+ *   'send'  its round is still answering
+ *   'late'  its round has moved on (voting, results, or a later round): send
+ *           it anyway; the server keeps it apart, labelled late, never in the
+ *           vote (session flow v3 §4.4: late answers are kept, not lost)
+ *   'wait'  its round has not started, or the state is not a round yet
+ *   'drop'  the session has ended (owner, 15 Oct, Q4), or it is unusable
+ */
 export function pendingVerdict(pending, state) {
   if (!pending || !Number.isFinite(pending.round)) return 'drop';
   const s = String(state || '');
   if (s === 'ENDED' || s === 'END') return 'drop';
   const n = roundOf(s);
   if (n === null) return 'wait';
-  if (n > pending.round) return 'drop';
+  if (n > pending.round) return 'late';
   if (n < pending.round) return 'wait';
-  return s.startsWith('ASK#') ? 'send' : 'drop';
+  return s.startsWith('ASK#') ? 'send' : 'late';
 }
 
 export function savePendingAnswer(pending) {

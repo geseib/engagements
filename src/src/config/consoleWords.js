@@ -1,0 +1,53 @@
+/**
+ * THE HOST CONSOLE'S WORDS (docs/superpowers/specs/2026-10-15-host-console-design.md).
+ * Round-step labels stay in roundWords.js; these are the console's own.
+ * Sentence case, plain, "phone, laptop or tablet".
+ */
+const CW = Object.freeze({
+  queue: 'Round queue',
+  people: 'People',
+  late: 'Late & not reviewed',
+  tools: 'Session tools',
+  allRounds: 'Rounds and questions',
+  allPlayers: 'All players',
+  reviewLate: 'Review them',
+  questions: 'Questions',
+  rounds: 'Rounds',
+  settings: 'Settings',
+  connected: 'Connected',
+  offline: 'Offline',
+  join: 'Join',
+  roomsWindow: 'Room\'s window',
+  done: 'done',
+  now: 'now',
+  next: 'next',
+  answered: 'answered',
+  voted: 'voted',
+  stillWriting: 'still writing',
+  notYet: 'not yet',
+  respondingTitle: 'Responses as they land',
+  namesHidden: 'Names hidden',
+  forYou: 'For you',
+  theTask: 'The task',
+  onTheWall: 'On the wall now',
+  pressToWall: 'Press a response to put it on the wall.',
+  theBallot: 'The ballot, in the order the room sees it',
+  votes: 'Votes',
+  resultsTitle: 'The results',
+  readTitle: 'Workie\'s read',
+  readOnWall: 'The wall shows this page',
+  upNext: 'Up next',
+  nextOnWall: 'Next on the wall',
+  scoreboardOnWall: 'The scoreboard is on the wall',
+  takeItDown: 'Take it down',
+  noLate: 'Nothing is waiting.',
+  reportSoFar: 'The report so far',
+  joinedSoFar: 'Joined so far',
+  nobodyYet: 'Nobody has joined yet.',
+  commentsTitle: 'Comments as they land',
+  noComments: 'No comments yet.',
+  waitingForResponses: 'No responses yet.',
+  points: (n) => (n === 1 ? '1 point' : `${n} points`),
+});
+
+export default CW;

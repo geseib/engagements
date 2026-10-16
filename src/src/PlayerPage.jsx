@@ -400,7 +400,12 @@ function PlayerPage({ event = null } = {}) {
   // A pending answer the room moved on from before it could be sent. Said out
   // loud rather than dropped silently — silence is the bug being fixed.
   const [missedAnswer, setMissedAnswer] = useState(false);
+  // An answer the server kept, but late (session flow v3 §4.4): what to say.
+  const [lateNotice, setLateNotice] = useState('');
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
+  // The latest state for socket handlers registered once (answerReceived).
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
   /*
     NULL UNTIL THE SERVER SAYS. This defaulted to 'call-and-answer', which is a
     claim: a phone joining a survey that was already open showed the
@@ -993,6 +998,15 @@ function PlayerPage({ event = null } = {}) {
 
     // A question for the room: sent, answered, closed, cancelled or picked.
     webSocketClient.onMessage('followUpChanged', () => followUpLoadRef.current());
+    // THE SERVER'S RECEIPT (session flow v3 §4.4). An answer that arrived after
+    // its round moved on is kept, apart from the vote, and the player hears so
+    // plainly rather than finding out from the results.
+    webSocketClient.onMessage('answerReceived', (data) => {
+      if (!data || !data.late) return;
+      setLateNotice(/^VOTE#/.test(String(gameStateRef.current || ''))
+        ? 'Voting has started. Your answer is kept with this round, but it is not in the vote.'
+        : 'Your answer arrived after the round moved on. It is kept with that round, but it is not counted.');
+    });
 
     /*
       SOMEBODY ELSE COMMENTED. Notify-then-refetch, the house pattern — the
@@ -1135,6 +1149,7 @@ function PlayerPage({ event = null } = {}) {
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('followUpChanged');
+      webSocketClient.offMessage('answerReceived');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       webSocketClient.offMessage('hostMessage');
@@ -1231,12 +1246,18 @@ function PlayerPage({ event = null } = {}) {
           drop(true);
           return;
         }
-        if (verdict !== 'send') return;
+        if (verdict !== 'send' && verdict !== 'late') return;
         const sent = webSocketClient.sendCleanMessage(pending.messageType, {
           answer: pending.answer,
           answerType: pending.answerType,
         });
-        if (sent) {
+        if (sent && verdict === 'late') {
+          // Its round has moved on: the server keeps it, labelled late, and
+          // says so (`answerReceived`). It is NOT this round's answer, so the
+          // form for the round on screen stays open.
+          console.log(`🕓 PLAYER: Held answer for round ${pending.round} sent late`);
+          drop(false);
+        } else if (sent) {
           console.log(`✅ PLAYER: Held answer for round ${pending.round} sent on reconnect`);
           markAnswerSent(pending.receipt ?? pending.answer);
         }
@@ -3218,6 +3239,18 @@ function PlayerPage({ event = null } = {}) {
      dismissible, in the same amber as the offline banner: nothing was
      destroyed on this phone, but the answer did not count and the player
      should hear that from the page rather than find out from the results. */
+  const lateBanner = lateNotice ? (
+    <div className="plr-banner" role="status">
+      <Icon name="Clock" weight="bold" size={16} />
+      <div>
+        <b>Kept, but late.</b> {lateNotice}{' '}
+        <button type="button" className="plr-more" onClick={() => setLateNotice('')}>
+          OK
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   const missedBanner = missedAnswer ? (
     <div className="plr-banner" role="status">
       <Icon name="WifiSlash" weight="bold" size={16} />
@@ -3553,7 +3586,10 @@ function PlayerPage({ event = null } = {}) {
       </div>
     ) : null;
 
-    if (!hasAnswered && pendingAnswer) {
+    // Only a held answer for the round on screen. One for an earlier round goes
+    // late when the connection is back (session flow v3 §4.4); this round's
+    // form stays open meanwhile.
+    if (!hasAnswered && pendingAnswer && roundOf(gameState) === pendingAnswer.round) {
       /* HELD, NOT SUBMITTED (QA 2026-09-29 #1). The socket was down when the
          player pressed Submit, so nothing has left this phone. The receipt
          below must not be shown for it — "locked for the round" over an answer
@@ -3918,6 +3954,16 @@ function PlayerPage({ event = null } = {}) {
             Rank your top {requiredVotes === 1 ? 'one' : requiredVotes === 2 ? 'two' : 'three'}.
           </h1>
           {votedQuestion && <p className="plr-detail plr-muted">{votedQuestion}</p>}
+          {/* STILL WRITING WHEN VOTING STARTED (session flow v3 §4.4). The
+              draft is not thrown away: it can still be sent, and the server
+              keeps it with this round, labelled late, outside the vote. */}
+          {gameType === 'call-and-answer' && !hasAnswered && answerInput.trim() && (
+            <div className="plr-card plr-late-draft">
+              <p className="plr-detail"><b>You were still writing.</b> Send it and it is kept with this round, but it is not in the vote.</p>
+              <p className="plr-quote">{answerInput.trim()}</p>
+              <button type="button" className="plr-more" onClick={() => handleSubmitAnswer(null)}>Send it anyway</button>
+            </div>
+          )}
           {currentQuestion?.image && (
             <img
               src={currentQuestion.image}
@@ -4464,7 +4510,7 @@ function PlayerPage({ event = null } = {}) {
       category={barCategory}
       who={playerName}
       online={wsConnected}
-      banner={offlineBanner || missedBanner}
+      banner={offlineBanner || lateBanner || missedBanner}
       centre={centre}
       dock={dock}
       /* Reading one response in full.

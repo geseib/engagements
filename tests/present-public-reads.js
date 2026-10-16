@@ -141,6 +141,10 @@ const HOST_ONLY = ['questionQueue', 'categoryCounts', 'categoryState', 'answerPr
   const plain = await stateRead('7105');
   const room = await stateRead('7105', { view: 'room' });
   await check('no roomCounts without the parameter', () => assert.strictEqual(plain.body.roomCounts, undefined));
+  await check('the public body carries neither presentDetail nor hostNotes', () => {
+    assert.strictEqual(plain.body.presentDetail, undefined);
+    assert.strictEqual(plain.body.hostNotes, undefined);
+  });
   await check('the room view is the public body plus roomCounts, key for key', () => {
     const { roomCounts, ...rest } = room.body;
     assert.ok(roomCounts);

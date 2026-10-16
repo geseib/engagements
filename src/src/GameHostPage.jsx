@@ -110,7 +110,13 @@ import {
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 import useRoundAsks from './hooks/useRoundAsks';
-import AskComposer from './components/AskComposer';
+import AskComposer, { AskComposerBody } from './components/AskComposer';
+import HostConsole from './components/console/HostConsole';
+import ResponsesPanel from './components/console/panels/ResponsesPanel';
+import ReadPanel from './components/console/panels/ReadPanel';
+import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
+import CW from './config/consoleWords';
+import { consolePeopleFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
@@ -1070,6 +1076,21 @@ function GameHostPage() {
     With the switch off, the profile stays this browser's own, as before.
   */
   const twoSurfaces = twoSurfacesHere(currentGameType);
+  /*
+    THE HOST CONSOLE (docs/superpowers/specs/2026-10-15-host-console-design.md).
+    On two screens, for the round types, outside an event, the laptop renders
+    the console in place of the wall-style <Stage>: the wall is /present, so
+    this screen is private and works at laptop sizes. One screen, surveys and
+    event items keep <Stage>. The console takes data and callbacks only; every
+    hook, fetch and handler stays here.
+
+    THE SPOTLIGHT IS NOT AN OVERLAY ON THE CONSOLE. On the stage a response on
+    the wall mounts <AnswerSpotlight>, which owns ← / → while it is open, so
+    the overlay terms suppress the page's keys. The console never mounts it
+    (the response is on /present), so counting it there killed Space, →, ←
+    and the clicker the moment the host put a response up.
+  */
+  const useConsole = twoSurfaces && !eventCode && ['call-and-answer', 'trivia', 'poll', 'wavelength'].includes(normalizeGameType(currentGameType));
   const [sessionProfile, setSessionProfile] = useState(null);
   const profile = twoSurfaces ? (sessionProfile || DEFAULT_PROFILE) : localProfile;
   const profileRef = useRef(profile);
@@ -1093,6 +1114,11 @@ function GameHostPage() {
   setProfileRef.current = setProfile;
   /** How many Presentations are open on this session (the host door's `presenting`). */
   const [presenting, setPresenting] = useState(0);
+  // The room's window and the host's notes, from the host door (host console spec §4.2).
+  const [presentDetail, setPresentDetail] = useState(null);
+  const [hostNotes, setHostNotes] = useState(null);
+  // The read below, for the `presentChanged` frame (its handler is registered once).
+  const readHostStateRef = useRef(() => {});
   /*
     Read every 10 s while the switch is on: a Presentation connecting sends no
     frame, so the dock's PRESENTING and the session profile come from the host
@@ -1108,15 +1134,19 @@ function GameHostPage() {
         const data = await res.json();
         if (!live) return;
         setPresenting(Number(data.presenting) || 0);
+        setPresentDetail(data.presentDetail || null);
+        setHostNotes(data.hostNotes || null);
         if (PROFILES.includes(data.stageProfile)) setSessionProfile(data.stageProfile);
       } catch (e) {
         /* the next read tries again */
       }
     };
+    readHostStateRef.current = read;
     read();
     const timer = setInterval(read, 10000);
-    return () => { live = false; clearInterval(timer); };
-  }, [twoSurfaces, gameId]);
+    return () => { live = false; clearInterval(timer); readHostStateRef.current = () => {}; };
+  // `lessonNumber`: a new round reads its own host notes now, not 10 s late.
+  }, [twoSurfaces, gameId, lessonNumber]);
 
   /*
     THE JOIN CODE ON THE WALL (owner, 2026-10-13: "when presenting i still need
@@ -2664,6 +2694,9 @@ Focus on actionable business strategy insights.`;
       verbatim. NO restoreGameState, for stage-beat's reason. A frame for
       another session (a slow socket across a switch) is dropped.
     */
+    // The room's window changed (full screen, hidden, opened, closed): read the host door again.
+    webSocketClient.onMessage('presentChanged', () => { readHostStateRef.current(); });
+
     webSocketClient.onMessage('scoreboardChanged', (data) => {
       if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
       applyServerBoard(data);
@@ -2896,6 +2929,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('stageBeatChanged');
       webSocketClient.offMessage('stageFocusChanged');
       webSocketClient.offMessage('scoreboardChanged');
+      webSocketClient.offMessage('presentChanged');
       webSocketClient.offMessage('stageProfileChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
@@ -6210,7 +6244,7 @@ Focus on actionable business strategy insights.`;
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
     lessonExpanded, isLoadingData, qrMode,
-    spotlightOpen: spotlightIndex !== null,
+    spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
   useScoreboardKeys({
@@ -6253,7 +6287,7 @@ Focus on actionable business strategy insights.`;
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
     isLoadingData, qrMode,
-    spotlightOpen: spotlightIndex !== null,
+    spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
   useSessionPanelKey({
@@ -6798,7 +6832,7 @@ Focus on actionable business strategy insights.`;
     // The ask preview is a dialog: Space and the arrows are its own.
     showConfirmModal: showConfirmModal || Boolean(askComposer), showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
-    spotlightOpen: spotlightIndex !== null,
+    spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
     scoreboardOpen: scoreboard.open,
   });
@@ -7551,6 +7585,214 @@ Focus on actionable business strategy insights.`;
     ? `${surveyQuestionCount}:${survey.progress.finished}:${survey.people ? survey.people.length : -1}`
     : '';
 
+  /*
+    THE STRIP'S PRESS AND THE TWO ARROW KEYS, named so the stage's strip and
+    dock and the console's loop and footer run the one same handler each.
+  */
+  const stripOnView = (id) => {
+    // In the lobby, Setup is live: pressing it reopens the choice
+    // of room screen rather than a view of itself.
+    if (id === 'setup' && workflow.live === 'setup') { setRoomScreenOpen((open) => !open); return; }
+    // Ask opens the composer on Workie's ready questions (external
+    // review of test, 15 Oct: "Ask · 1 ready" led to a generic view
+    // and the host had to go back to page 4 of the read). Opening
+    // it sends nothing, so it stays within "looking only".
+    if (id === 'ask' && workflow.live !== 'ask' && hostControls.snapshot && hostControls.snapshot.asksEnabled
+      && /^RESULTS#/.test(String(gameState || ''))) {
+      setViewingStep(null);
+      setAskComposer({ startIndex: roundAsks.unsent.length === 1 ? roundAsks.unsent[0].index : null });
+      return;
+    }
+    setViewingStep(id === workflow.live ? null : id);
+  };
+
+  const consoleInterceptAdvance = () => {
+    // FIELD_NOTES ONLY. FEEDBACK has no read-back document to page
+    // through, so intercepting → there would swallow the advance
+    // key and leave the host pressing a dead one in front of a room.
+    if (hostPhase !== 'FIELD_NOTES' || viewing) return false;
+    const md = currentAIInsights?.markdownResponse;
+    if (!md) return false;
+    const slice = prosePageSlice(md, stagePageIndex, proseBudgetFor(profile));
+    if (slice.page >= slice.pages - 1) return false;
+    setStagePageIndex(slice.page + 1);
+    return true;
+  };
+
+  const consoleOnBackKey = () => {
+    // Looking at another step: ← goes back to the room, never a beat.
+    if (viewing) { setViewingStep(null); return; }
+    /*
+      ONE STEP BACK ALONG THE BEATS, not a jump to the start of
+      them. From FEEDBACK the previous beat is the read-back, not
+      the tally: sending the room straight to the scores would skip
+      the thing they were just commenting on, and would be the only
+      place in the flow where ← moves two steps.
+    */
+    if (hostPhase === 'FEEDBACK') {
+      setResultsBeat('field-notes');
+      publishStageBeat('field-notes');
+      return true;
+    }
+    if (hostPhase !== 'FIELD_NOTES') return false;
+    if (stagePageIndex > 0) {
+      setStagePageIndex(stagePageIndex - 1);
+      return true;
+    }
+    setResultsBeat('results');
+    publishStageBeat('results');
+    return true;
+  };
+
+  // THE HOST CONSOLE: `useConsole` is computed beside `twoSurfaces` (near the
+  // top) because the overlay terms read it long before this point.
+  const consoleMoment = hostControls.step ? hostControls.step.moment : 'UNKNOWN';
+  const consolePeople = consolePeopleFor({
+    moment: consoleMoment,
+    players,
+    answeredNames: playersWhoAnswered,
+    answeredCount,
+    votedNames: playersWhoVoted,
+    votedCount: playersWhoVoted.length,
+    gameType: currentGameType,
+    anonymousUntilReveal,
+    authorsRevealed,
+  });
+  /*
+    THE ROUND QUEUE: the rounds played (the session history, `rounds`), the one
+    on screen, and what the server's plan says comes next (`upNext`, read on
+    every round start and whenever the Session panel opens). Capped at the
+    set's size so "2 of 6" never counts a plan longer than the set.
+  */
+  const consoleRounds = (() => {
+    const ended = hostPhase === 'ENDED';
+    const liveN = !ended && hostPhase !== 'LOBBY' && lessonNumber > 0 ? lessonNumber : 0;
+    const played = (rounds || [])
+      .filter((r) => r.ordinal > 0 && (ended || !liveN || r.ordinal < liveN))
+      .map((r) => ({ n: r.ordinal, title: r.title || '', state: 'done' }));
+    const now = liveN && currentQuestion ? [{ n: liveN, title: currentQuestion.title || currentQuestion.question || '', state: 'now' }] : [];
+    if (ended) return played;
+    const lastN = Math.max(liveN, ...played.map((r) => r.n), 0);
+    const room = roundOf > 0 ? Math.max(0, roundOf - lastN) : (upNext || []).length;
+    const planned = (upNext || [])
+      .filter((row) => row && String(row.questionId) !== String(currentQuestionId || ''))
+      .slice(0, room)
+      .map((row, i) => ({ n: lastN + i + 1, title: row.title || '', state: i === 0 ? 'next' : 'later' }));
+    return played.concat(now, planned);
+  })();
+  const consoleTask = currentQuestion ? getHostInstructionText(currentQuestion) : '';
+  const consoleAuthorsHidden = authorsHiddenNow({ gameType: currentGameType, anonymousUntilReveal, authorsRevealed });
+  const consoleKicker = (label) => [workflow && workflow.round ? workflow.round.label : '', label].filter(Boolean).join(' · ');
+  // The one line roundStep writes for what the main button puts up next.
+  const consoleNext = hostControls.step && hostControls.step.next && consoleMoment !== 'UNKNOWN' && consoleMoment !== 'OTHER'
+    ? `${CW.nextOnWall}: ${hostControls.step.next.charAt(0).toLowerCase()}${hostControls.step.next.slice(1)}`
+    : '';
+  // The composer's body, drawn inline in the read's right-hand column. The
+  // one-screen dialog after </Stage> mounts only when !useConsole: never both.
+  const consoleComposer = useConsole && askComposer ? (
+    <AskComposerBody
+      suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
+        index,
+        ask,
+        section: ask && ask.anchor ? ask.anchor.section : '',
+        point: ask && ask.anchor ? ask.anchor.point : null,
+        sent: !roundAsks.unsent.some((u) => u.index === index),
+      }))}
+      startIndex={askComposer.startIndex}
+      readLines={readLinesOf(currentAIInsights && currentAIInsights.markdownResponse)}
+      onSend={sendRoomAsk}
+      onComments={roundAsks.enabled ? requestFeedbackRound : null}
+      onClose={() => setAskComposer(null)}
+      blocked={Boolean(roundAsks.live)}
+    />
+  ) : null;
+  const consoleNotes = hostNotes && hostNotes.background
+    ? <div className="hc-card"><h3 className="hc-card-h">{CW.forYou}</h3><p className="hc-muted">{hostNotes.background}</p></div>
+    : null;
+  /* THE SCOREBOARD. On one screen it is the stage's own overlay; on two it is
+     drawn on the wall (/present), so the console says it is up and offers the
+     same close its S / Esc keys and its own button use. */
+  const consoleBoard = useConsole && scoreboard.open && scoreboardAvail.show ? (
+    <div className="hc-card">
+      <h3 className="hc-card-h">{CW.scoreboardOnWall}</h3>
+      <button type="button" className="hc-btn" onClick={() => publishScoreboard({ open: false })}>{CW.takeItDown}</button>
+    </div>
+  ) : null;
+  // The stage's status for VOTE / RESULTS responses, said the same way on the
+  // console (config/stageAnswers.js): gathering, or failed with its retry.
+  const consoleGathering = {
+    status: stageResponsesStatus,
+    gatheringNoun: stageGatheringNoun(gameState),
+    onRetry: () => restoreGameState(),
+  };
+  const consolePanel = !useConsole ? null : (() => {
+    /* Drafting a question for the room: the read with the composer beside it,
+       whichever beat the wall is on (the strip marks Ask while it is open,
+       and the room still sees what it saw). */
+    if (consoleComposer) {
+      return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} />;
+    }
+    if (viewStep) {
+      return (
+        <StepView
+          step={viewStep}
+          facts={{
+            title: eventTitle,
+            twoScreens: true,
+            presenting,
+            setName: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.name,
+            playerCount: players.length,
+            answered: answeredCount,
+            voted: playersWhoVoted.length,
+            roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
+          }}
+          onAllSettings={() => setSetupPanelOpen(true)}
+        />
+      );
+    }
+    if (showRoomScreen) {
+      return (
+        <LobbyPanel
+          chooser={(
+            <RoomScreenChooser
+              current={roomScreenChoice}
+              presentHref={gameId ? presentHref(gameId) : ''}
+              onChoose={chooseRoomScreen}
+              onClose={roomScreenChoice ? () => setRoomScreenOpen(false) : null}
+            />
+          )}
+        />
+      );
+    }
+    switch (consoleMoment) {
+      case 'LOBBY':
+        return <LobbyPanel code={gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
+      case 'ANSWERING':
+        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} task={consoleTask} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
+      case 'VOTING':
+      case 'VOTE_RESPONSES':
+        // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
+        // The stage's readiness guard: no rows (and no press) until this vote's own have landed.
+        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden onWallIndex={spotlightIndex === null ? 0 : spotlightIndex} onPutOnWall={openSpotlight} />;
+      case 'RESULTS':
+      case 'RESPONSES':
+        // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
+        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
+      case 'READ':
+        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} />;
+      case 'FEEDBACK':
+        return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
+      case 'ROOM_QUESTION':
+      case 'ROOM_RESULTS':
+        return <RoomQuestionPanel><AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} /></RoomQuestionPanel>;
+      case 'ENDED':
+        return <EndedPanel onOpenReport={() => runHostAction({ intent: HOST_INTENTS.REPORT })} />;
+      default:
+        return null;
+    }
+  })();
+
+
   return (
     <>
     {/* No `rail-right-*` / `rail-left` classes any more: those reserved a
@@ -7577,6 +7819,56 @@ Focus on actionable business strategy insights.`;
           is a fixed panel over it, opened deliberately and closed by
           advancing.
           ------------------------------------------------------------------ */}
+      {/* TWO SCREENS, A ROUND TYPE, NOT AN EVENT ITEM: the host console instead
+          of the stage (host console spec §4.1). Every sibling below — the
+          Session panel, the dialogs, the QR, the spotlight — still renders. */}
+      {useConsole ? (
+        <HostConsole
+          top={{
+            title: eventTitle || 'Engagements',
+            code: gameId,
+            onJoin: () => setQrMode('pinned'),
+            presentHref: gameId ? presentHref(gameId) : '',
+            presentDetail,
+          }}
+          strip={workflow ? {
+            strip: workflow,
+            mode: 'full',
+            // Drafting a question is looking at Ask: the room still sees the read.
+            viewing: viewing || (askComposer && workflow.live !== 'ask' ? 'ask' : null),
+            onView: stripOnView,
+            viewingWhere: liveWhere(workflow),
+            onBack: () => { setViewingStep(null); setAskComposer(null); },
+          } : null}
+          rail={{
+            moment: consoleMoment,
+            rounds: consoleRounds,
+            // The strip's total ("Round 1 of 80"), so the queue says the same.
+            total: workflow && workflow.round ? workflow.round.of : null,
+            people: consolePeople,
+            counts: { players: players.length, answered: answeredCount, voted: playersWhoVoted.length },
+            late: [],
+            connected: wsConnected,
+            onOpenSection: openSetupAt,
+          }}
+          footer={{
+            // roundStep's own status: the count, said here and in the People header only.
+            status: viewing
+              ? { text: RW.viewingNothingMoves, tone: 'info' }
+              : (sessionActionError ? { text: sessionActionError, tone: 'error' } : hostControls.status),
+            nextOnWall: consoleNext,
+            part: workflow ? workflow.part : null,
+            controls: dockControls,
+            onAction: runHostAction,
+            shortcutsEnabled: !anyOverlayOpen,
+            interceptAdvance: consoleInterceptAdvance,
+            onBackKey: consoleOnBackKey,
+          }}
+        >
+          {consoleBoard}
+          {consolePanel}
+        </HostConsole>
+      ) : (
       <Stage
         profile={profile}
         phase={BAR_PHASE[hostPhase] || 'lobby'}
@@ -7606,22 +7898,7 @@ Focus on actionable business strategy insights.`;
               mode={twoSurfaces ? 'full' : 'slim'}
               // Drafting a question is looking at Ask: the room still sees the read.
               viewing={viewing || (askComposer && workflow.live !== 'ask' ? 'ask' : null)}
-              onView={(id) => {
-                // In the lobby, Setup is live: pressing it reopens the choice
-                // of room screen rather than a view of itself.
-                if (id === 'setup' && workflow.live === 'setup') { setRoomScreenOpen((open) => !open); return; }
-                // Ask opens the composer on Workie's ready questions (external
-                // review of test, 15 Oct: "Ask · 1 ready" led to a generic view
-                // and the host had to go back to page 4 of the read). Opening
-                // it sends nothing, so it stays within "looking only".
-                if (id === 'ask' && workflow.live !== 'ask' && hostControls.snapshot && hostControls.snapshot.asksEnabled
-                  && /^RESULTS#/.test(String(gameState || ''))) {
-                  setViewingStep(null);
-                  setAskComposer({ startIndex: roundAsks.unsent.length === 1 ? roundAsks.unsent[0].index : null });
-                  return;
-                }
-                setViewingStep(id === workflow.live ? null : id);
-              }}
+              onView={stripOnView}
               places={twoSurfaces ? setupPanelTabs().map((t) => ({
                 id: t.id,
                 label: t.id === 'players' ? `${t.label} ${players.length}` : t.label,
@@ -7729,18 +8006,7 @@ Focus on actionable business strategy insights.`;
                 through the content before it moves past it. The dock BUTTON
                 always advances: a host who clicks Next Round means it.
               */
-              interceptAdvance={() => {
-                // FIELD_NOTES ONLY. FEEDBACK has no read-back document to page
-                // through, so intercepting → there would swallow the advance
-                // key and leave the host pressing a dead one in front of a room.
-                if (hostPhase !== 'FIELD_NOTES' || viewing) return false;
-                const md = currentAIInsights?.markdownResponse;
-                if (!md) return false;
-                const slice = prosePageSlice(md, stagePageIndex, proseBudgetFor(profile));
-                if (slice.page >= slice.pages - 1) return false;
-                setStagePageIndex(slice.page + 1);
-                return true;
-              }}
+              interceptAdvance={consoleInterceptAdvance}
               /*
                 ← STEPS BACKWARDS — pages first, then the beat. At the first
                 Workie page it returns the room to the RESULTS tally, which is
@@ -7749,30 +8015,7 @@ Focus on actionable business strategy insights.`;
                 exactly this. Published over /stage-beat, so the phone remote
                 follows the step back the same way it follows the step in.
               */
-              onBackKey={() => {
-                // Looking at another step: ← goes back to the room, never a beat.
-                if (viewing) { setViewingStep(null); return; }
-                /*
-                  ONE STEP BACK ALONG THE BEATS, not a jump to the start of
-                  them. From FEEDBACK the previous beat is the read-back, not
-                  the tally: sending the room straight to the scores would skip
-                  the thing they were just commenting on, and would be the only
-                  place in the flow where ← moves two steps.
-                */
-                if (hostPhase === 'FEEDBACK') {
-                  setResultsBeat('field-notes');
-                  publishStageBeat('field-notes');
-                  return true;
-                }
-                if (hostPhase !== 'FIELD_NOTES') return false;
-                if (stagePageIndex > 0) {
-                  setStagePageIndex(stagePageIndex - 1);
-                  return true;
-                }
-                setResultsBeat('results');
-                publishStageBeat('results');
-                return true;
-              }}
+              onBackKey={consoleOnBackKey}
               keyHint={
                 hostPhase === 'FIELD_NOTES'
                   ? `→ next page · ← back · at the end, → ${isSurvey ? 'ends the session' : 'starts the next round'}`
@@ -8437,25 +8680,7 @@ Focus on actionable business strategy insights.`;
             {hostPhase === 'ASKING' && (
               <AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} />
             )}
-            {askComposer && (
-              <AskComposer
-                suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
-                  index,
-                  ask,
-                  section: ask && ask.anchor ? ask.anchor.section : '',
-                  point: ask && ask.anchor ? ask.anchor.point : null,
-                  sent: !roundAsks.unsent.some((u) => u.index === index),
-                }))}
-                startIndex={askComposer.startIndex}
-                readLines={readLinesOf(currentAIInsights && currentAIInsights.markdownResponse)}
-                onSend={sendRoomAsk}
-                onComments={roundAsks.enabled ? requestFeedbackRound : null}
-                onClose={() => setAskComposer(null)}
-                blocked={Boolean(roundAsks.live)}
-                oneScreen={!twoSurfaces}
-                theme="dark"
-              />
-            )}
+
 
             {/* ENDED LEADS WITH THE CONCLUSION, NOT THE TITLE — 10-ended.
                 This printed <h1 class="q">{eventTitle}</h1> while the rail
@@ -8529,6 +8754,7 @@ Focus on actionable business strategy insights.`;
           <p className="reduced" hidden />
         </div>
       </Stage>
+      )}
 
       {/* A SIBLING OF <Stage>, NOT A CHILD, and that is load-bearing. `.stage`
           is `height:100dvh` and this is a fixed overlay, so nothing about the
@@ -8537,6 +8763,30 @@ Focus on actionable business strategy insights.`;
           would enter fitPolicy's world and drive the scale search to its
           floor. Its own geometry stops it at `--dock-measured`, because the
           dock is a no-overlay zone (audit A6). */}
+      {/* THE ASK THE ROOM COMPOSER, A SIBLING OF <Stage> (walk of dev, 15 Oct).
+          Mounted inside the stage it sat in `.main`'s stacking context (z 2),
+          so the workflow strip (z 3) and the dock (z 12) painted over its
+          header and its Send button. Out here its scrim covers everything. */}
+      {askComposer && !useConsole && (
+        <AskComposer
+          suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
+            index,
+            ask,
+            section: ask && ask.anchor ? ask.anchor.section : '',
+            point: ask && ask.anchor ? ask.anchor.point : null,
+            sent: !roundAsks.unsent.some((u) => u.index === index),
+          }))}
+          startIndex={askComposer.startIndex}
+          readLines={readLinesOf(currentAIInsights && currentAIInsights.markdownResponse)}
+          onSend={sendRoomAsk}
+          onComments={roundAsks.enabled ? requestFeedbackRound : null}
+          onClose={() => setAskComposer(null)}
+          blocked={Boolean(roundAsks.live)}
+          oneScreen={!twoSurfaces}
+          theme="dark"
+        />
+      )}
+
       {setupPanelOpen && (
         <SessionSetupPanel
           // A place asked for re-mounts the panel at its tab.

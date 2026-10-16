@@ -139,3 +139,19 @@ describe('the external review of test (15 Oct)', () => {
   });
 });
 
+
+describe('the composer is a sibling of the stage (walk of dev, 15 Oct)', () => {
+  test('it mounts after </Stage>, so the strip and the dock cannot paint over it', () => {
+    const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    const stageEnd = page.indexOf('</Stage>');
+    // The dialog, not the console's inline <AskComposerBody> (built before the return).
+    const composerAt = page.search(/<AskComposer\s/);
+    expect(stageEnd).toBeGreaterThan(-1);
+    expect(composerAt).toBeGreaterThan(stageEnd);
+  });
+});
+
+test('the console hides Your part now in the strip (it lives in the footer)', () => {
+  render(<WorkflowStrip strip={read} mode="full" onView={() => {}} hidePart />);
+  expect(screen.queryByText('Your part now')).not.toBeInTheDocument();
+});

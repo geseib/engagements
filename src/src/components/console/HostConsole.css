@@ -1,0 +1,140 @@
+/* THE HOST CONSOLE (host console spec). Two screens only; private laptop chrome.
+   Laptop ladder 12 / 13 / 15 / 19 / 24px; dusk tokens; scope hc-. */
+.hc { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-columns: 260px minmax(0, 1fr); grid-template-areas: "top top" "loop loop" "rail main" "foot foot"; background: var(--bg); color: var(--text); font-size: 15px; }
+.hc-top { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
+.hc-brand { font-weight: 800; }
+.hc-name { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-spacer { margin-left: auto; }
+.hc-code, .hc-btn { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 8px; padding: 5px 12px; cursor: pointer; text-decoration: none; }
+.hc-code b { color: var(--accent-text); letter-spacing: .06em; margin-left: 4px; }
+.hc-winstat { font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; border: 1px solid rgb(var(--glow-rgb) / .22); color: var(--text); text-decoration: none; }
+.hc-winstat.is-success { border-color: var(--success); background: rgb(var(--success-rgb) / .14); }
+.hc-winstat.is-warn { border-color: var(--warn); background: rgb(var(--warn-rgb) / .14); }
+.hc-winstat.is-muted { color: var(--muted); }
+.hc-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.hc-winstat.is-success .hc-dot { background: var(--success); }
+.hc-winstat.is-warn .hc-dot { background: var(--warn); }
+.hc-loop { grid-area: loop; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
+.hc-loop .wfs { border-bottom: 0; }
+.hc-rail { grid-area: rail; border-right: 1px solid rgb(var(--glow-rgb) / .12); overflow: auto; padding: 8px 0; }
+.hc-sec { border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
+.hc-sec summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; font-weight: 700; }
+.hc-sec summary::-webkit-details-marker { display: none; }
+.hc-count { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 600; }
+.hc-count.is-alert { color: var(--accent-text); }
+.hc-list { list-style: none; margin: 0; padding: 0 14px 10px; display: grid; gap: 6px; font-size: 13px; }
+.hc-list li { display: flex; gap: 8px; align-items: baseline; }
+.hc-n { width: 20px; height: 20px; border-radius: 6px; background: var(--surface-2); display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+.hc-list li.is-now .hc-n { background: var(--info); color: var(--bg); }
+.hc-meta { color: var(--muted); font-size: 12px; }
+.hc-tick { color: var(--success-text); font-weight: 800; }
+.hc-wait { color: var(--muted); }
+.hc-empty { margin: 0; padding: 0 14px 10px; font-size: 13px; color: var(--muted); }
+.hc-link { font: inherit; font-size: 12px; font-weight: 700; color: var(--info); background: transparent; border: 0; padding: 0 14px 10px; cursor: pointer; text-align: left; }
+.hc-list .hc-link { padding: 0; font-size: 13px; }
+.hc-main { grid-area: main; overflow: auto; padding: 16px 20px; display: grid; gap: 14px; align-content: start; container-type: size; }
+.hc-foot { grid-area: foot; display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-top: 1px solid rgb(var(--glow-rgb) / .12); background: var(--surface); }
+.hc-status { font-size: 15px; }
+.hc-next { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.hc-bullet { color: var(--muted); }
+.hc-part { margin: 0; font-size: 13px; color: var(--muted); max-width: 52ch; }
+.hc-part-k { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin-right: .6em; }
+.hc-action { color: var(--accent-text); }
+.hc-acts { margin-left: auto; }
+.hc-acts .host-action-bar__status { display: none; }
+
+/* The bar is position:fixed with a paper background by default (styles.css
+   .host-action-bar). In the console it sits in the footer, in flow. */
+.hc-acts .host-action-bar { position: static; background: none; backdrop-filter: none; border-top: 0; box-shadow: none; z-index: auto; }
+.hc-acts .host-action-bar__inner { max-width: none; min-height: 0; padding: 0; }
+
+/* The bar's own sizes are rem/em on the 16px root (0.7rem = 11px, under the
+   floor); inside the console they are pinned to the laptop ladder. */
+.hc-acts .host-action-bar__hint, .hc-acts .host-action-bar__armed { font-size: 13px; }
+.hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary { font-size: 15px; }
+.hc-acts .host-action-bar__kbd, .hc-acts .host-action-bar__keyhint { font-size: 12px; }
+
+/* Keyboard focus, as WorkflowStrip.css draws it. */
+.hc-sec summary:focus-visible, .hc-link:focus-visible, .hc-code:focus-visible, .hc-btn:focus-visible, .hc-winstat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Responses panel (host console spec 3.4) */
+.hc-panel { display: grid; gap: 12px; }
+.hc-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hc-h { margin: 0; font-size: 24px; line-height: 1.2; }
+.hc-task { border-left: 3px solid var(--accent); padding: 6px 10px; background: var(--surface); border-radius: 0 8px 8px 0; }
+.hc-task-k { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hc-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.hc-cols.is-one { grid-template-columns: minmax(0, 1fr); }
+.hc-resps { display: grid; gap: 8px; }
+.hc-resp { display: block; width: 100%; text-align: left; font: inherit; color: var(--text); background: var(--surface); border: 1px solid rgb(var(--glow-rgb) / .12); border-radius: 10px; padding: 8px 12px; }
+button.hc-resp { cursor: pointer; }
+button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hc-resp small { display: block; font-size: 12px; color: var(--muted); }
+.hc-resp-body { display: block; min-width: 0; }
+.hc-resp.has-pts { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: baseline; }
+.hc-pts { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.hc-resp.is-new { border-color: var(--success); }
+.hc-resp.is-onwall { border-color: var(--info); box-shadow: 0 0 0 1px var(--info); }
+.hc-card { background: var(--surface); border: 1px solid rgb(var(--glow-rgb) / .12); border-radius: 10px; padding: 10px 12px; }
+.hc-card-h { margin: 0 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.hc-muted { margin: 0; font-size: 13px; color: var(--muted); }
+.hc-strong { margin: 0 0 4px; font-weight: 700; }
+
+/* The read beside the inline composer; the lobby; the read's own type. */
+.hc-cols.is-read { grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); }
+/* THE COMPOSER STAYS IN VIEW (walk, 15 Oct: at 1366×768 its Send sat at
+   y≈1259, below the fold of the scrolling main area). The main area is a
+   size container (above), so 100cqh is its visible content height: the
+   composer is never taller than that, sticks at the top as the read scrolls,
+   and only its body scrolls; its title and its Cancel / Send stay in view.
+   The calc() is the fallback for a browser without container units. */
+.hc-cols.is-read > .askc--inline { position: sticky; top: 0; align-self: start; max-height: calc(100dvh - var(--dock-measured, 72px) - 140px); max-height: 100cqh; min-height: 0; display: flex; flex-direction: column; }
+.hc-cols.is-read > .askc--inline .askp-root { flex: 1 1 auto; min-height: 0; }
+.hc-cols.is-read > .askc--inline .askc-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.hc-cols.is-read > .askc--inline .ui-dialog-head, .hc-cols.is-read > .askc--inline .ui-dialog-foot { flex: none; }
+.hc-code-big { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: .08em; color: var(--accent-text); }
+.hc-list--flat { padding: 0; }
+
+/* WORKIE'S READ ON DUSK (walk, 15 Oct). styles.css .markdown-* hardcodes the
+   paper theme's dark text (#2c3e50), so inside the console the read was dark
+   on dark. Every text-bearing class takes a token colour and a ladder size. */
+.hc .markdown-content { color: var(--text); font-size: 15px; line-height: 1.55; }
+.hc .markdown-p, .hc .markdown-li { color: var(--text); font-size: 15px; }
+.hc .markdown-h1, .hc .markdown-h2 { color: var(--text); font-size: 19px; border-bottom-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-h3, .hc .markdown-h4, .hc .markdown-h5, .hc .markdown-h6 { color: var(--text); font-size: 15px; }
+.hc .markdown-content strong { color: var(--text); }
+.hc .markdown-content em { color: var(--muted); }
+.hc .markdown-link { color: var(--info); }
+.hc .markdown-li::marker { color: inherit; }
+.hc .markdown-quote { color: var(--muted); border-left-color: var(--accent); }
+.hc .markdown-hr { border-top-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-pre, .hc .markdown-content code { background: var(--surface-2); border-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-pre .markdown-code-block, .hc .markdown-content code { color: var(--text); font-size: 13px; }
+.hc .markdown-table { border-color: rgb(var(--glow-rgb) / .12); }
+.hc .markdown-th { color: var(--text); background: var(--surface-2); border-bottom-color: rgb(var(--glow-rgb) / .12); font-size: 13px; }
+.hc .markdown-td { color: var(--text); border-bottom-color: rgb(var(--glow-rgb) / .12); font-size: 13px; }
+/* The ask chips (AskIcons.css sizes them .62em, under the floor here). */
+.hc .askicon { font-size: 12px; }
+.hc .askicons-after { font-size: 13px; }
+.hc .askicons-after .askicons { font-size: inherit; }
+
+/* A QUESTION FOR THE ROOM, AT LAPTOP SIZE (walk, 15 Oct). RoomQuestionPanel
+   draws the stage's AskStage, which carries the wall's type (.kicker, .q and
+   --t-*, styles/stage.css; vh-scaled gaps, AskStage.css). The console never
+   uses the wall's sizes: inside .hc every part is pinned to the ladder. The
+   markup and the press (onPick) are the stage's own. */
+.hc .askstage { gap: 12px; }
+.hc .askstage .askstage-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hc .askstage .askstage-kicker svg { width: 14px; height: 14px; }
+.hc .askstage .askstage-q { font-family: inherit; font-size: 24px; font-weight: 800; line-height: 1.2; letter-spacing: 0; max-width: none; color: var(--text); }
+.hc .askstage .askstage-options, .hc .askstage .askstage-bars, .hc .askstage .askstage-ideas { gap: 6px; }
+.hc .askstage .askstage-options li { font-size: 15px; }
+.hc .askstage .askstage-bars li { font-size: 15px; }
+.hc .askstage .askstage-count { font-size: 15px; }
+.hc .askstage .askstage-ends { font-size: 13px; }
+.hc .askstage .askstage-mean { font-size: 15px; }
+.hc .askstage .askstage-mean b { font-size: 19px; }
+.hc .askstage .askstage-bar { height: 8px; }
+.hc .askstage .askstage-idea { font-size: 15px; padding: 8px 12px; border-radius: 10px; }
+.hc .askstage .askstage-idea em { font-size: 13px; }
+.hc .hc-panel > .qdetail { font-size: 15px; max-width: none; }
