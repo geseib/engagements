@@ -25,6 +25,18 @@ test('the read panel draws the read, and the composer beside it when open', () =
   expect(screen.getByTestId('composer').closest('.hc-cols')).toHaveClass('is-read');
 });
 
+/* THE COMPOSER'S SEND STAYS ON SCREEN (walk, 15 Oct: Send at y≈1259 on a
+   768px laptop). The columns start at the top of the main area, so the
+   composer's height can be the main area's own: the kicker rides in the read's
+   column while composing. */
+test('composing: the kicker sits in the read column, so the composer starts at the top', () => {
+  const { container } = render(<ReadPanel kicker="Round 2 · Ask the room" markdown="x" composer={<div data-testid="composer" />} />);
+  const panel = container.querySelector('.hc-panel');
+  expect(panel).toHaveClass('is-composing');
+  expect(panel.firstElementChild).toHaveClass('hc-cols');
+  expect(screen.getByText('Round 2 · Ask the room').closest('.hc-cols')).not.toBeNull();
+});
+
 test('the read panel without a composer is one column', () => {
   const { container } = render(<ReadPanel kicker="Round 2" markdown="Plain words." />);
   expect(container.querySelector('.hc-cols')).toHaveClass('is-one');

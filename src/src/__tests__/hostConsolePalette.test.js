@@ -57,3 +57,16 @@ test('the read takes dusk colours and the ladder', () => {
   // The ask chips: never under the 12px floor inside the console.
   expect(rule('.hc .askicon')).toMatch(/font-size:\s*12px/);
 });
+
+/* THE COMPOSER STAYS IN VIEW (walk, 15 Oct). Geometry is checked in a
+   browser (see the walk-fix report); this pins the rules that give it. */
+test('the inline composer is sticky, the main area\'s height, its body scrolls', () => {
+  expect(css).toMatch(/\.hc-main\s*\{[^}]*container-type:\s*size/);
+  const c = rule('.hc-cols.is-read > .askc--inline');
+  expect(c).toMatch(/position:\s*sticky/);
+  expect(c).toMatch(/top:\s*0/);
+  expect(c).toMatch(/align-self:\s*start/);
+  expect(c).toMatch(/max-height:\s*100cqh/);
+  expect(rule('.hc-cols.is-read > .askc--inline .askc-body')).toMatch(/overflow-y:\s*auto/);
+  expect(rule('.hc-cols.is-read > .askc--inline .ui-dialog-foot')).toMatch(/flex:\s*none/);
+});
