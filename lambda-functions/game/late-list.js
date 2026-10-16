@@ -2,7 +2,7 @@
  * THE HOST'S LATE LIST AND ITS REVIEW (session flow v3 §4.4; late items Task 3).
  *
  *     GET  /games/{gameId}/late          every late item, by round
- *     POST /games/{gameId}/late/review   label one, or close comments
+ *     POST /games/{gameId}/late/review   label one, close comments, or set the report setting
  *
  * Served by the comments function (comments.js hands these routes here, after
  * its Cognito + callerMayDriveSession check: 404 to anyone else). No new Lambda,
@@ -36,6 +36,11 @@
  * CLOSE COMMENTS sets METADATA `CommentsClosedAt` (late-window.js then refuses
  * late ask answers and comments). Only once the session has ENDED (controller
  * ruling): before that, 409.
+ *
+ * THE REPORT SETTING, "Include items not reviewed" (late items Task 5), is the
+ * same POST with `{ kind: 'report', how: 'include' | 'leave-out' }`: METADATA
+ * `IncludeNotReviewed`, any time, and GET returns it as `includeNotReviewed`.
+ * create-report.js reads it, and reads the late items through `lateByRound`.
  */
 const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { decryptItems } = require('./tenant-crypto');
@@ -68,6 +73,13 @@ const respond = (statusCode, body) => ({
 const orgOf = (item) => (item && typeof item.orgId === 'string' ? item.orgId.trim() : '');
 const openAll = async (orgId, entity, rows) => (orgId ? decryptItems(orgId, entity, rows) : rows);
 const hiddenIn = (meta, round) => Boolean(meta && meta.GameType === 'survey') || isHidden(meta, round);
+/**
+ * "Include items not reviewed" (spec §4.5, Settings › Report): on unless the
+ * host turned it off. METADATA `IncludeNotReviewed`; only an explicit false
+ * is off, so every session from before the setting includes everything.
+ */
+const includesNotReviewed = (meta) => !(meta && meta.IncludeNotReviewed === false);
+const REPORT_HOW = { include: true, 'leave-out': false };
 const textOf = (v) => (v === undefined || v === null ? '' : (typeof v === 'string' ? v : JSON.stringify(v)));
 
 function item(kind, row, { round, ref, text, author, who, arrivedDuring, extra = {} }) {
@@ -89,9 +101,20 @@ function item(kind, row, { round, ref, text, author, who, arrivedDuring, extra =
 
 // ───────────────────────────────────────────────────────────── GET ──
 
-async function readLate(db, { gameId, meta }) {
+/**
+ * Every late item in the session, decrypted, as a Map of round → items (not
+ * yet sorted). The one reader: the late list below and the report
+ * (create-report.js, "Arrived late") both come through here, so the two can
+ * never disagree about what is late or whose name may show.
+ *
+ * `withRefs: false` skips the session's id secret (and so every write it
+ * could cause): the report needs no ref, and an answer's or an idea's ref is
+ * then null. A comment's ref is its own id either way.
+ */
+async function lateByRound(db, { gameId, meta, withRefs = true }) {
   const orgId = orgOf(meta);
-  const secret = await sessionIdSecret(db, gameId, meta);
+  const secret = withRefs ? await sessionIdSecret(db, gameId, meta) : null;
+  const refOf = (sk) => (secret ? ideaId(secret, sk) : null);
   const [questionRows, commentRows, followUpRows, roundRows] = await Promise.all([
     queryAll(db, gameId, 'QUESTION#'),
     queryAll(db, gameId, commentPrefix({})),
@@ -118,7 +141,7 @@ async function readLate(db, { gameId, meta }) {
     const author = hidden(round) ? null : (row.PlayerName || player);
     add(round, item('answer', row, {
       round,
-      ref: ideaId(secret, row.SK),
+      ref: refOf(row.SK),
       text: textOf(row.Answer),
       author,
       who: author || LATE_WORDS.LATE_ANSWER,
@@ -147,10 +170,10 @@ async function readLate(db, { gameId, meta }) {
   }
   for (const row of asks) {
     const k = keys.parseFollowUpSk(row.SK);
-    const id = ideaId(secret, row.SK);
+    const id = refOf(row.SK);
     add(k.round, item('askAnswer', row, {
       round: k.round,
-      ref: `${k.askId}:${id}`,
+      ref: id ? `${k.askId}:${id}` : null,
       text: textOf(row.Text !== undefined && row.Text !== null && row.Text !== '' ? row.Text : row.Value),
       author: null,
       who: LATE_WORDS.LATE_ANSWER,
@@ -159,6 +182,16 @@ async function readLate(db, { gameId, meta }) {
       extra: { askId: k.askId, askKind: row.Kind || null, id },
     }));
   }
+  return byRound;
+}
+
+/** Oldest first; on a tie, answers, then ask answers, then comments. */
+const lateOrder = (a, b) => String(a.arrivedAt || '').localeCompare(String(b.arrivedAt || ''))
+  || KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind);
+
+async function readLate(db, { gameId, meta }) {
+  const orgId = orgOf(meta);
+  const byRound = await lateByRound(db, { gameId, meta });
 
   let roundNoun = null;
   try {
@@ -168,12 +201,10 @@ async function readLate(db, { gameId, meta }) {
     console.error('❌ LATE: report head unreadable (roundNoun left null):', err.message);
   }
 
-  const order = (a, b) => String(a.arrivedAt || '').localeCompare(String(b.arrivedAt || ''))
-    || KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind);
   const out = [...byRound.keys()].sort().map((round) => ({
     round,
     roundNoun,
-    items: byRound.get(round).sort(order),
+    items: byRound.get(round).sort(lateOrder),
   }));
   const notReviewed = out.reduce((n, r) => n + r.items.filter((i) => i.reviewed === null).length, 0);
 
@@ -182,6 +213,7 @@ async function readLate(db, { gameId, meta }) {
     rounds: out,
     counts: { notReviewed },
     commentsClosedAt: (meta && meta.CommentsClosedAt) || null,
+    includeNotReviewed: includesNotReviewed(meta),
   });
 }
 
@@ -231,13 +263,36 @@ async function closeComments(db, broadcast, { gameId, state }) {
   return respond(200, { gameId, commentsClosedAt: (res.Attributes && res.Attributes.CommentsClosedAt) || null });
 }
 
+/**
+ * THE REPORT SETTING, "Include items not reviewed" (late items Task 5). On
+ * this route, like Close comments, so it costs no new route. Any time, ENDED
+ * included: it changes only what the next report generation prints
+ * (create-report.js reads it), never what the room was shown.
+ */
+async function setReportSetting(db, broadcast, { gameId, how }) {
+  if (!Object.prototype.hasOwnProperty.call(REPORT_HOW, how)) {
+    return respond(400, { error: "report takes how: 'include' or 'leave-out'" });
+  }
+  await db.send(new UpdateCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
+    UpdateExpression: 'SET #i = :i',
+    ConditionExpression: 'attribute_exists(SK)',
+    ExpressionAttributeNames: { '#i': 'IncludeNotReviewed' },
+    ExpressionAttributeValues: { ':i': REPORT_HOW[how] },
+  }));
+  await broadcast(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
+  return respond(200, { gameId, includeNotReviewed: REPORT_HOW[how] });
+}
+
 async function reviewLate(db, broadcast, { gameId, meta, state, body }) {
   const { kind, how, ref } = body || {};
+  if (kind === 'report') return setReportSetting(db, broadcast, { gameId, how });
   if (kind === 'comments') {
     if (how !== 'close') return respond(400, { error: "comments takes how: 'close'" });
     return closeComments(db, broadcast, { gameId, state });
   }
-  if (!KINDS.includes(kind)) return respond(400, { error: `kind must be one of: ${KINDS.join(', ')}, comments` });
+  if (!KINDS.includes(kind)) return respond(400, { error: `kind must be one of: ${KINDS.join(', ')}, comments, report` });
   if (!REVIEW_STATES.includes(how)) return respond(400, { error: `how must be one of: ${REVIEW_STATES.join(', ')}` });
   if (kind === 'answer' && how === 'shown') return respond(400, { error: LATE_WORDS.NO_WALL, code: 'NO_WALL' });
   const round = keys.roundOf(body.round);
@@ -278,5 +333,5 @@ function isLateRoute(event) {
 }
 
 module.exports = {
-  readLate, reviewLate, isLateRoute, LATE_WORDS,
+  readLate, reviewLate, isLateRoute, lateByRound, lateOrder, includesNotReviewed, LATE_WORDS,
 };

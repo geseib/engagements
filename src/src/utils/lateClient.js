@@ -1,9 +1,10 @@
 /**
  * THE HOST'S LATE LIST, over the wire (lambda-functions/game/late-list.js).
  *
- *     GET  /games/{id}/late          { rounds, counts: { notReviewed }, commentsClosedAt }
+ *     GET  /games/{id}/late          { rounds, counts: { notReviewed }, commentsClosedAt, includeNotReviewed }
  *     POST /games/{id}/late/review   { kind, round, ref, how: 'shown'|'read' }
  *                                    { kind: 'comments', how: 'close' }   (ENDED only)
+ *                                    { kind: 'report', how: 'include'|'leave-out' }   (any time)
  *
  * Both are the host's (Cognito), so the caller hands in `authFetch`. Nothing
  * here throws: every call resolves `{ ok, status, body, error }`.
@@ -32,6 +33,8 @@ export async function fetchLate({ fetchFn, apiBase, gameId }) {
     rounds: Array.isArray(body.rounds) ? body.rounds : [],
     counts: { notReviewed: Number(body.counts && body.counts.notReviewed) || 0 },
     commentsClosedAt: body.commentsClosedAt || null,
+    // "Include items not reviewed": on unless the server says it is off.
+    includeNotReviewed: body.includeNotReviewed !== false,
   };
 }
 
@@ -41,6 +44,11 @@ export function reviewLateItem({ fetchFn, apiBase, gameId, item, how }) {
 
 export function closeComments({ fetchFn, apiBase, gameId }) {
   return call(fetchFn, `${base(apiBase, gameId)}/review`, post({ kind: 'comments', how: 'close' }));
+}
+
+/** The report setting "Include items not reviewed" (late items Task 5). */
+export function setIncludeNotReviewed({ fetchFn, apiBase, gameId, include }) {
+  return call(fetchFn, `${base(apiBase, gameId)}/review`, post({ kind: 'report', how: include ? 'include' : 'leave-out' }));
 }
 
 /** Every item, flat, in the list's order (round, then arrival). */

@@ -25,4 +25,25 @@ const reviewedOf = (row) => (row && REVIEW_STATES.includes(row.Reviewed) ? row.R
 /** The label for a `Reviewed` value; anything unknown is "Not reviewed". */
 const reviewLabel = (reviewed) => REVIEW_LABELS[REVIEW_STATES.includes(reviewed) ? reviewed : 'none'];
 
-module.exports = { REVIEW_LABELS, REVIEW_STATES, reviewedOf, reviewLabel };
+/**
+ * The report's one line when "Include items not reviewed" is off (spec §4.5,
+ * in the owner's words): "2 comments not reviewed are left out of this
+ * report, at the host's choice." "answers" when every one left out is an
+ * answer (a late round answer or a late answer to a question for the room),
+ * "items" when comments and answers are mixed. '' when nothing was left out.
+ */
+function leftOutLine({ comments = 0, answers = 0 } = {}) {
+  const c = Number(comments) || 0;
+  const a = Number(answers) || 0;
+  const n = c + a;
+  if (!n) return '';
+  const noun = !a ? ['comment', 'comments'] : (!c ? ['answer', 'answers'] : ['item', 'items']);
+  return `${n} ${n === 1 ? noun[0] : noun[1]} not reviewed ${n === 1 ? 'is' : 'are'} left out of this report, at the host's choice.`;
+}
+
+/** Workie's read after a Redo that included late answers (owner, Q5). */
+const lateIncludedLine = (n) => `Includes ${n} ${Number(n) === 1 ? 'answer' : 'answers'} that arrived late.`;
+
+module.exports = {
+  REVIEW_LABELS, REVIEW_STATES, reviewedOf, reviewLabel, leftOutLine, lateIncludedLine,
+};

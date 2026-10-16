@@ -199,6 +199,10 @@ export default function SessionSetupPanel({
   // they are about, never the author) or only their count does.
   wallComments = true,
   onWallCommentsChange = () => {},
+  // "Include items not reviewed" (Settings › Report; late items Task 5).
+  // Applies now: it changes only the next report, never the room.
+  includeNotReviewed = true,
+  onIncludeNotReviewedChange = () => {},
   /* AUTO-MODE — the session advances itself when everyone has responded,
      paging through responses and Workie prose at reading pace first. The
      decisions live in config/autoMode.js and the timer in GameHostPage; this
@@ -1065,6 +1069,18 @@ export default function SessionSetupPanel({
                 they say and what they are about, never who wrote them. Press one to
                 put it up for everyone with its author. Off, the wall shows only the count.
               </p>
+
+              <h3 className="setup-h">{LW.report.settingHeading}{scope(null)}</h3>
+              <label className="setup-toggle">
+                <input
+                  type="checkbox"
+                  data-testid="include-not-reviewed"
+                  checked={includeNotReviewed !== false}
+                  onChange={(e) => onIncludeNotReviewedChange(e.target.checked)}
+                />
+                <span>{LW.report.settingLabel}</span>
+              </label>
+              <p className="setup-note">{LW.report.settingNote}</p>
 
               {workie && (
                 <WorkieSettings

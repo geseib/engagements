@@ -1346,3 +1346,13 @@
 .report-paper .report-followup-q { margin: 0 0 6px; overflow-wrap: anywhere; }
 .report-paper .report-followup-list { margin: 4px 0; padding-left: 18px; }
 .report-paper .report-followup-note { margin: 4px 0 0; font-size: 13px; }
+
+/* ARRIVED LATE (components/ReportLate.jsx, late items Task 5): the comment's
+   shape, with the review label set apart in words a monochrome printer keeps.
+   The line saying what "Include items not reviewed" left out sits above the
+   rounds, as plain as the caveat. */
+.report-paper .report-late { margin-top: 20px; padding-top: 4px; }
+.report-paper .report-late-when,
+.report-paper .report-late-label { margin-left: 8px; }
+.report-paper .report-late-label { font-weight: 600; }
+.report-paper .report-left-out { margin: 0 0 16px; font-size: 13px; font-style: italic; }

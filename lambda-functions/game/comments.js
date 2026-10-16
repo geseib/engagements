@@ -799,6 +799,10 @@ async function readFeedbackRound(gameId) {
   // a second copy of it here.
   const live = JSON.parse((await readComments(gameId, { questionNumber: padded })).body);
 
+  // "Arrived late" is the host's and the report's: its review labels never
+  // reach a phone (owner, Q14), and neither do its late items.
+  const { late: _hostOnly, ...roomSlice } = slice;
+
   return respond(200, {
     gameId,
     // Named separately as well as on the round, because this is what the
@@ -806,7 +810,7 @@ async function readFeedbackRound(gameId) {
     questionNumber: padded,
     roundNoun: report.roundNoun || null,
     gameTitle: report.gameTitle || null,
-    round: { ...slice, comments: live.comments || [] },
+    round: { ...roomSlice, comments: live.comments || [] },
   });
 }
 

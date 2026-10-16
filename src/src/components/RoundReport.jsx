@@ -9,6 +9,7 @@ import {
 import { displayLabelFor } from '../config/anonymity';
 import { anchorLabelFor, excerptOf, plainOf } from '../config/comments';
 import ReportFollowUps from './ReportFollowUps';
+import ReportLate from './ReportLate';
 import './RoundReport.css';
 
 /**
@@ -457,6 +458,9 @@ export default function RoundReport({
         */}
         <CommentList comments={summaryComments} />
         <ReportFollowUps followUps={round.followUps} className="past-round__followups" />
+        {/* "Arrived late" (late items Task 5): the host's. A phone's feedback
+            round never carries `late` (comments.js, sessionHistory.js). */}
+        <ReportLate late={round.late} className="past-round__late" />
 
         {onRegenerate && (
           <button

@@ -44,6 +44,24 @@ const LW = Object.freeze({
 
   review: 'Review',
 
+  /*
+    THE REPORT (late items Task 5): each round's "Arrived late", and the
+    setting that leaves the not-reviewed ones out. The line saying how many
+    were left out comes from the server (late-labels.js leftOutLine), with the
+    report it describes.
+  */
+  report: Object.freeze({
+    heading: 'Arrived late',
+    toQuestion: (q) => `To: ${q}`,
+    on: (label) => `On ${label}`,
+    settingHeading: 'Report',
+    settingLabel: 'Include items not reviewed',
+    settingNote: 'Late answers and comments added later carry a label: not reviewed, reviewed with the room, '
+      + 'or reviewed by the host. Off, the report leaves out the ones not reviewed and says how many. '
+      + 'It applies the next time the report is made.',
+    settingFailed: 'The setting did not save. Try again.',
+  }),
+
   /** "during Round 3 · Voting", from a state the server stamped ("VOTE#003"). */
   arrivedDuring(state, roundNoun) {
     const s = String(state || '').trim();

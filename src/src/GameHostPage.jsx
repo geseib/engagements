@@ -111,6 +111,7 @@ import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
 import {
   fetchLate, reviewLateItem, closeComments as closeLateComments, lateStatusOf, lateItemsOf,
+  setIncludeNotReviewed as saveIncludeNotReviewed,
 } from './utils/lateClient';
 import LW from './config/lateWords';
 import useRoundAsks from './hooks/useRoundAsks';
@@ -1273,6 +1274,9 @@ function GameHostPage() {
   const [lateItems, setLateItems] = useState([]);
   const [lateCounts, setLateCounts] = useState({ notReviewed: 0 });
   const [commentsClosedAt, setCommentsClosedAt] = useState(null);
+  // "Include items not reviewed" (Settings › Report; late items Task 5). The
+  // server's (METADATA IncludeNotReviewed), read with the late list.
+  const [includeNotReviewed, setIncludeNotReviewed] = useState(true);
   const loadLateRef = useRef(() => {});
   const lateStatus = useMemo(() => lateStatusOf(lateItems), [lateItems]);
   // On load, and when the room moves (a round closing makes items late; the
@@ -1282,6 +1286,7 @@ function GameHostPage() {
       setLateItems([]);
       setLateCounts({ notReviewed: 0 });
       setCommentsClosedAt(null);
+      setIncludeNotReviewed(true);
       return;
     }
     loadLateRef.current();
@@ -1430,6 +1435,7 @@ function GameHostPage() {
     setLateItems(r.rounds);
     setLateCounts(r.counts);
     setCommentsClosedAt(r.commentsClosedAt);
+    setIncludeNotReviewed(r.includeNotReviewed);
   };
   loadLateRef.current = loadLate;
 
@@ -1466,6 +1472,19 @@ function GameHostPage() {
     const r = await closeLateComments({ fetchFn: authFetch, apiBase: API_BASE, gameId });
     if (r.ok && r.body && r.body.commentsClosedAt) setCommentsClosedAt(r.body.commentsClosedAt);
     loadLateRef.current();
+    return r;
+  };
+  /**
+   * "Include items not reviewed". Applies at once (it changes only the next
+   * report, never the room), so it is not held for the next round. Shown at
+   * once and put back if the server refuses.
+   */
+  const changeIncludeNotReviewed = async (include) => {
+    if (!gameId) return { ok: false, error: 'No session.' };
+    const before = includeNotReviewed;
+    setIncludeNotReviewed(include);
+    const r = await saveIncludeNotReviewed({ fetchFn: authFetch, apiBase: API_BASE, gameId, include });
+    if (!r.ok) setIncludeNotReviewed(before);
     return r;
   };
   /** The dock's count, the footer's and "Review": the Session panel at Rounds. */
@@ -1684,6 +1703,9 @@ function GameHostPage() {
   // again knows what to re-request without re-deriving it from a game state
   // that may have moved on.
   const aiQuestionRef = useRef(null);
+  // Whether the generation in flight is the host's Redo, so its automatic
+  // retries and "Try again" stay a Redo (late answers included, owner Q5).
+  const aiRedoRef = useRef(false);
   const aiRetryTimerRef = useRef(null);
   const aiPollTimerRef = useRef(null);
 
@@ -1744,6 +1766,7 @@ function GameHostPage() {
     authorsRevealed: setAuthorsRevealed,
     nameWaitingWhenAnonymous: setNameWaitingWhenAnonymous,
     wallComments: setWallComments,
+    includeNotReviewed: setIncludeNotReviewed,
     autoMode: setAutoMode,
     players: setPlayers,
     removedPlayers: setRemovedPlayers,
@@ -2173,14 +2196,17 @@ function GameHostPage() {
    * Fire the generate trigger once and report what happened. No state, no
    * retrying, no rendering — just "did the request reach the API and get a yes".
    */
-  const triggerAISummary = async (questionId) => {
+  const triggerAISummary = async (questionId, { redo = false } = {}) => {
     const debugParam = gameDebugMode ? '&debug=true' : '';
+    // THE HOST'S REDO reads the round's late answers in too and says so
+    // (session flow v3 §4.4, owner Q5); a first read never does.
+    const redoParam = redo ? '&redo=true' : '';
     try {
       // Fire-and-forget: response is 202 {status:'generating'}; result comes via WS.
       // authFetch, on the host's route: the public one refuses generateNew
       // (get-ai-summary.js), and this one carries the Cognito authorizer.
       const response = await authFetch(
-        `${API_BASE}games/${gameId}/ai-summary/host?questionId=${questionId}&generateNew=true${debugParam}`,
+        `${API_BASE}games/${gameId}/ai-summary/host?questionId=${questionId}&generateNew=true${debugParam}${redoParam}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       );
       if (!response.ok && response.status !== 202) {
@@ -2208,16 +2234,18 @@ function GameHostPage() {
    * succeed next time — schedules a bounded, backed-off retry. A 4xx is never
    * retried automatically: the server has answered, and asking again is noise.
    */
-  const startAISummaryGeneration = async (questionId, attempt = 0) => {
+  const startAISummaryGeneration = async (questionId, attempt = 0, { redo = false } = {}) => {
     if (!questionId) return;
     aiQuestionRef.current = questionId;
+    // A new request decides; its own retries keep what it decided.
+    if (attempt === 0) aiRedoRef.current = redo === true;
     clearAITimers();
     setAiSummaryFailure(null);
     setAiRetrying(false);
     setLoadingAIInsights(true);
 
     console.log(`🤖 Triggering AI generation for ${questionId} (attempt ${attempt + 1})`);
-    const result = await triggerAISummary(questionId);
+    const result = await triggerAISummary(questionId, { redo: aiRedoRef.current });
 
     if (result.ok) {
       console.log('✅ AI generation triggered (awaiting WebSocket completion)');
@@ -2262,7 +2290,8 @@ function GameHostPage() {
     if (regeneratingRounds.includes(roundNumber)) return;
     setRegeneratingRounds((prev) => [...prev, roundNumber]);
 
-    const result = await triggerAISummary(encodeURIComponent(roundNumber));
+    // Regenerating a past round is a Redo: its late answers are read in too.
+    const result = await triggerAISummary(encodeURIComponent(roundNumber), { redo: true });
     if (!result.ok) {
       setRegeneratingRounds((prev) => prev.filter((n) => n !== roundNumber));
       // `headline` and `detail` are what classifyAISummaryFailure actually
@@ -2280,7 +2309,7 @@ function GameHostPage() {
     const questionId = aiQuestionRef.current || gameState.match(/#(\d+)/)?.[1];
     if (!questionId) return;
     setCurrentAIInsights(null);
-    startAISummaryGeneration(questionId, 0);
+    startAISummaryGeneration(questionId, 0, { redo: aiRedoRef.current });
   };
 
   // Regenerate AI Summary with new generation. The server returns 202
@@ -2296,7 +2325,8 @@ function GameHostPage() {
 
     console.log('🔄 Regenerating AI Summary for question:', currentQuestionNum);
     setCurrentAIInsights(null); // Clear current insights to show loading
-    await startAISummaryGeneration(currentQuestionNum, 0);
+    // Redo: the round's late answers are read in too, and the read says so.
+    await startAISummaryGeneration(currentQuestionNum, 0, { redo: true });
   };
 
   // Generate AI prompt from template
@@ -5979,6 +6009,9 @@ Focus on actionable business strategy insights.`;
           report's front page cannot state it however many the backend counted.
         */
         totalComments: (report.gameStats && report.gameStats.totalComments) || 0,
+        // What "Include items not reviewed" left out, and the line saying so
+        // (late items Task 5). Same rebuilt-from-scratch reason as above.
+        notReviewedLeftOut: report.notReviewedLeftOut || null,
         allAnswers: [],
         allVotes: []
       };
@@ -9018,6 +9051,8 @@ Focus on actionable business strategy insights.`;
           onNameWaitingChange={deferSetting('nameWaiting')}
           wallComments={wallComments}
           onWallCommentsChange={deferSetting('wallComments')}
+          includeNotReviewed={includeNotReviewed}
+          onIncludeNotReviewedChange={changeIncludeNotReviewed}
           pendingSettings={pendingSettings}
           settingsRoundLive={settingsRoundLive}
           nextRoundNumber={lessonNumber + 1}
