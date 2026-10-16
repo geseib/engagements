@@ -97,4 +97,16 @@ const LW = Object.freeze({
   },
 });
 
+/**
+ * THE CONSOLE RAIL'S COMPACT LINE for a late item (walk W1, 16 Oct 2026),
+ * LateList's own: the author, then when it arrived ("Dan · during Round 1 ·
+ * Voting"). No author (a hidden round, or a late answer to a question for the
+ * room): the kind stands in, once. Never the server's `who`, which falls back
+ * to the kind's words and so said it twice.
+ */
+export function lateRailMeta(item = {}) {
+  const who = item.author ? String(item.author) : (LW.kinds[item.kind] || '');
+  return [who, LW.arrivedDuring(item.arrivedDuring, item.roundNoun)].filter(Boolean).join(' · ');
+}
+
 export default LW;

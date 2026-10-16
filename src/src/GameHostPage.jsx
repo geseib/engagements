@@ -113,7 +113,7 @@ import {
   fetchLate, reviewLateItem, closeComments as closeLateComments, lateStatusOf, lateItemsOf,
   setIncludeNotReviewed as saveIncludeNotReviewed,
 } from './utils/lateClient';
-import LW from './config/lateWords';
+import { lateRailMeta } from './config/lateWords';
 import useRoundAsks from './hooks/useRoundAsks';
 import AskComposer, { AskComposerBody } from './components/AskComposer';
 import HostConsole from './components/console/HostConsole';
@@ -7868,7 +7868,8 @@ Focus on actionable business strategy insights.`;
     return {
       id: `${item.kind}:${item.ref}`,
       label: text.length > 80 ? `${text.slice(0, 79)}…` : text,
-      meta: [LW.kinds[item.kind], item.who].filter(Boolean).join(' · '),
+      // LateList's line: who, then when it arrived (lateWords.js lateRailMeta).
+      meta: lateRailMeta(item),
       item,
     };
   });
