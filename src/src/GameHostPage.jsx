@@ -9301,6 +9301,7 @@ Focus on actionable business strategy insights.`;
         onClose={() => setPastRoundIndex(null)}
         onRegenerate={regenerateRoundSummary}
         regenerating={regeneratingRounds}
+        roundNoun={getHostRoundNoun()}
         /*
           NO `labelFor`. This prop is what hid the names in the rounds review,
           and removing it is the fix rather than correcting the expression.

@@ -63,6 +63,8 @@ export default function PastRound({
   onRegenerate,
   /** Round numbers currently regenerating, so the button can say so. */
   regenerating = [],
+  /** The set's word for a round ("Lesson"); null reads "Round". */
+  roundNoun = null,
 }) {
   const total = rounds.length;
   const open = Number.isInteger(index) && index >= 0 && index < total;
@@ -181,6 +183,7 @@ export default function PastRound({
         onRegenerate={onRegenerate}
         regenerating={busy}
         comments={round.comments || []}
+        roundNoun={roundNoun}
         /*
           NO "Workie had" HINT HERE. This dialog only ever opens as a modal
           over the host page, which is the surface the room may be watching —

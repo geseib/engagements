@@ -117,6 +117,20 @@ describe('the round report and the rounds tab', () => {
     expect(screen.getByText('Not reviewed')).toBeInTheDocument();
   });
 
+  test('the set\'s own round noun reaches "Arrived late" ("during Lesson 1"), and the host page passes it', () => {
+    const [round] = roundsFrom({ detailedQuestions: [slice] });
+    const { container } = render(<RoundReport round={round} roundNoun="Lesson" />);
+    expect(container.textContent).toMatch(/during Lesson 1 · Voting/);
+    expect(container.textContent).not.toMatch(/during Round 1/);
+    // PastRound hands it on, and the host page gives PastRound the session's.
+    const fs = require('fs');
+    const path = require('path');
+    const past = fs.readFileSync(path.join(__dirname, '..', 'components', 'PastRound.jsx'), 'utf8');
+    expect(past).toMatch(/<RoundReport[\s\S]{0,400}roundNoun=\{roundNoun\}/);
+    const host = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    expect(host).toMatch(/<PastRound[\s\S]{0,400}roundNoun=\{getHostRoundNoun\(\)\}/);
+  });
+
   test('a phone\'s feedback round never carries it (Q14)', () => {
     const round = feedbackRoundFrom(slice);
     expect(round.late).toBeNull();
