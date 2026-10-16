@@ -548,7 +548,11 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
     // host's label, set by the late routes; null is "Not reviewed".
     PostedDuring: roomState,
     AddedLater: addedLater,
-    Reviewed: null,
+    // A host's own comment after the round is late but not news to the host:
+    // it is born reviewed ('read'), so it never sits in "Not reviewed" and
+    // the report keeps it under "Arrived late" whatever the setting.
+    Reviewed: asHost && addedLater ? 'read' : null,
+    ...(asHost && addedLater ? { ReviewedAt: now } : {}),
     SubmittedAt: now,
     ttl: Math.floor(Date.now() / 1000) + COMMENT_TTL_SECONDS,
   };

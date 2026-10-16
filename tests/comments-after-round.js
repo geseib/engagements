@@ -170,6 +170,44 @@ const commentRows = () => [...table.rows.values()]
     assert.ok(!sent.some((m) => m.type === 'commentFeatured'), 'a commentFeatured frame went out');
   });
 
+  await check('a host\'s own comment after the round is late but already reviewed: Reviewed read, ReviewedAt set', async () => {
+    seed({ state: 'ASK#002' });
+    const routeKey = 'POST /games/{gameId}/comments/host';
+    const res = await handler({
+      routeKey,
+      requestContext: {
+        http: { method: 'POST' }, routeKey,
+        authorizer: { lambda: { userId: 'u-host', groups: 'hosts', orgId: ORG, orgIds: ORG } },
+      },
+      pathParameters: { gameId: GAME },
+      body: JSON.stringify({ ...aComment(), playerName: undefined, clientId: undefined, text: 'Said in the room.' }),
+    });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    const row = commentRows()[0];
+    assert.strictEqual(row.FromHost, true);
+    assert.strictEqual(row.AddedLater, true);
+    assert.strictEqual(row.Reviewed, 'read');
+    assert.ok(Number.isFinite(Date.parse(row.ReviewedAt)), String(row.ReviewedAt));
+  });
+  await check('...on its own results a host\'s comment is on time: Reviewed null, as any', async () => {
+    seed();
+    const routeKey = 'POST /games/{gameId}/comments/host';
+    const res = await handler({
+      routeKey,
+      requestContext: {
+        http: { method: 'POST' }, routeKey,
+        authorizer: { lambda: { userId: 'u-host', groups: 'hosts', orgId: ORG, orgIds: ORG } },
+      },
+      pathParameters: { gameId: GAME },
+      body: JSON.stringify({ ...aComment(), playerName: undefined, clientId: undefined, text: 'Said in the room.' }),
+    });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    const row = commentRows()[0];
+    assert.strictEqual(row.AddedLater, false);
+    assert.strictEqual(row.Reviewed, null);
+    assert.strictEqual(row.ReviewedAt, undefined);
+  });
+
   say('\n3. after the session ended');
   await check('ENDED 23 h ago: 201, added later', async () => {
     seed({ state: 'ENDED', stateExtra: { EndedAt: hoursAgo(23), UpdatedAt: hoursAgo(23) } });
