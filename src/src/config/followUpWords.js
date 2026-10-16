@@ -116,6 +116,8 @@ const FW = Object.freeze({
   answeredOfRoom: (n, of) => (Number.isInteger(of) ? `${n} of ${of} in the room answered` : `${n} answered`),
   shownToRoom: (n) => `Shown to the room (${n})`,
   notShown: (n) => `Not shown (${n})`,
+  /** Under an Ideas record: late ideas the host put on the wall (walk W2, 16 Oct 2026). */
+  lateShown: (n) => `${n} late ${n === 1 ? 'idea was' : 'ideas were'} shown to the room · see Arrived late`,
   sentFromRemote: 'Sent from the Remote',
 });
 

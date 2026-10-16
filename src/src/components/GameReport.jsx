@@ -822,7 +822,7 @@ function ReportDocument({ reportData }) {
               </div>
 
               <ReportComments comments={question.comments} />
-              <ReportFollowUps followUps={question.followUps} />
+              <ReportFollowUps followUps={question.followUps} late={question.late} />
               <ReportLate late={question.late} roundNoun={noun} />
             </section>
           );

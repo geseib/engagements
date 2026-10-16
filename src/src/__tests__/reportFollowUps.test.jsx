@@ -57,3 +57,25 @@ test('sent as written, and written by the host, each say so', () => {
   expect(render(<ReportFollowUps followUps={[{ ...base, origin: 'suggested' }]} />).container.textContent).toMatch(/Sent as Workie wrote it/);
   expect(render(<ReportFollowUps followUps={[{ ...base, origin: 'host' }]} />).container.textContent).toMatch(/Written by the host/);
 });
+
+/* A LATE IDEA PUT ON THE WALL (walk on dev, session 3343, W2). The record said
+   "Shown to the room (0) / Not shown (0)" while a late idea had been shown and
+   was listed under Arrived late. The record now says so in one line under it,
+   "1 late idea was shown to the room · see Arrived late", and the two counts
+   stay about the ideas that came in on time.
+   rejects: a record that reads as if nothing reached the room. */
+test('a late idea shown to the room is named under the record', () => {
+  const f = { kind: 'ideas', question: 'Who first?', options: [], status: 'closed', tally: { n: 0 }, ideas: [], picked: [] };
+  const late = { askAnswers: [
+    { text: 'The agencies', askQuestion: 'Who first?', reviewed: 'shown' },
+    { text: 'Read only', askQuestion: 'Who first?', reviewed: 'read' },
+    { text: 'Another ask', askQuestion: 'Something else?', reviewed: 'shown' },
+  ] };
+  const { container, rerender } = render(<ReportFollowUps followUps={[f]} late={late} />);
+  expect(container.textContent).toMatch('Shown to the room (0)');
+  expect(container.textContent).toMatch('1 late idea was shown to the room · see Arrived late');
+  rerender(<ReportFollowUps followUps={[f]} late={{ askAnswers: [late.askAnswers[0], { ...late.askAnswers[0], text: 'B' }] }} />);
+  expect(container.textContent).toMatch('2 late ideas were shown to the room · see Arrived late');
+  rerender(<ReportFollowUps followUps={[f]} late={null} />);
+  expect(container.textContent).not.toMatch(/late idea/);
+});
