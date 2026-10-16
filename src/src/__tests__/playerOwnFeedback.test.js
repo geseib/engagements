@@ -160,7 +160,7 @@ describe('while the panel is open', () => {
     // falls through to whatever gameState now calls for, rather than
     // stranding a player with nothing to lose on a dead panel.
     const def = sliceFrom(player, 'const myFeedbackShowing =', ';');
-    expect(def).toMatch(/myFeedbackOpen && \(myFeedbackStillOpen \|\| myFeedbackHasDraft\)/);
+    expect(def).toMatch(/myFeedbackOpen\s*&& \(myFeedbackStillOpen \|\| myFeedbackHasDraft \|\| myFeedbackPostedLate\)/);
   });
 
   test('posts a comment through the same FeedbackRoundPanel the host-triggered mode uses, and lifts the draft flag', () => {
@@ -226,17 +226,38 @@ describe('following the room once there is nothing to lose (fix round 1, item 6)
     const fn = sliceFrom(
       player,
       'useEffect(() => {\n    if (myFeedbackOpen && myFeedbackNumber',
-      '}, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber]);',
+      '}, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber]);',
     );
     expect(fn).toMatch(/gameState !== `RESULTS#\$\{myFeedbackNumber\}`/);
     expect(fn).toMatch(/!myFeedbackHasDraft/);
+    // ...and nothing just posted late, whose receipt the player has not seen.
+    expect(fn).toMatch(/!myFeedbackPostedLate/);
     expect(fn).toMatch(/closeMyFeedback\(\)/);
   });
 
   test('the effect is keyed on gameState, so it actually re-runs as the room moves', () => {
     expect(player).toMatch(
-      /\}, \[gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber\]\);/,
+      /\}, \[gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber\]\);/,
     );
+  });
+});
+
+describe('a receipt for a comment posted after the room moved on (late items Task 2 review)', () => {
+  test('a successful post off this round\'s RESULTS sets myFeedbackPostedLate', () => {
+    const fn = sliceFrom(player, 'const submitMyFeedbackComment = async (draft) => {', '\n  };');
+    expect(fn).toMatch(/if \(result\.ok && gameState !== `RESULTS#\$\{myFeedbackNumber\}`\) \{\s*setMyFeedbackPostedLate\(true\)/);
+  });
+
+  test('the panel shows the one line "Posted. It is kept with this round." while the flag holds', () => {
+    const branch = sliceFrom(player, 'if (myFeedbackShowing) {', "gameState === 'ENDED'");
+    expect(branch).toMatch(/myFeedbackPostedLate\s*\?\s*'Posted\. It is kept with this round\.'/);
+    // The posted comment shows in the panel's own list.
+    expect(branch).toMatch(/comments=\{myFeedbackComments\}/);
+  });
+
+  test('closing (the way back to the question) clears it', () => {
+    const fn = sliceFrom(player, 'const closeMyFeedback = () => {', '\n  };');
+    expect(fn).toMatch(/setMyFeedbackPostedLate\(false\)/);
   });
 });
 

@@ -200,7 +200,7 @@ const { lateWindow } = require('./late-window');
  */
 const COMMENT_WORDS = {
   NOT_SHOWN: 'This round has not been shown yet.',
-  SURVEY_NOT_OPEN: 'this round is no longer open for comments',
+  SURVEY_NOT_OPEN: 'This survey is not open for comments.',
   PAUSED: 'The host has paused this for a moment.',
 };
 // Call & Answer follow-up asks share this function (followups.js header).
@@ -502,7 +502,13 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
       state above must also have passed the round.
     */
     const round = shownByState ? await roundRecord(gameId, padded) : null;
-    if (!round) {
+    /*
+      A ROUND THE ROOM HAS LEFT MUST HAVE HAD ITS RESULTS UP. get-results.js
+      stamps ResultsShownAt as it shows them; a round skipped from VOTE can
+      still have a ROUND# row (stage-focus, reveal-authors) but never that
+      mark. On its own RESULTS the state already says so.
+    */
+    if (!round || (!onItsResults && !round.ResultsShownAt)) {
       return respond(409, { error: COMMENT_WORDS.NOT_SHOWN, code: 'NOT_SHOWN', currentState: state.State });
     }
     addedLater = !onItsResults;

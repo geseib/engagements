@@ -77,16 +77,6 @@ export default function FeedbackRoundPanel({
   answersEmptyText,
   onRetryAnswers,
   /**
-   * DISABLE THE COMMIT, NOT THE DRAFT — fix round 2, item 3. Once the round
-   * this panel opened on has left RESULTS, a post would be refused by
-   * comments.js's own state check; disabling "Post comment" says so before
-   * the round trip rather than after it, while the textarea stays open and
-   * selectable so the words can still be copied. Default false: the
-   * host-triggered whole-room panel is only ever shown while its round is
-   * current, so it never needs this.
-   */
-  postDisabled = false,
-  /**
    * WHETHER THE WRITER'S NAME GOES WITH THE COMMENT. True for a round, whose
    * feedback runs attributed (the disclosure below). False for a closed
    * survey's feedback round (27 Sep 2026): comments.js strips the name from
@@ -228,13 +218,6 @@ export default function FeedbackRoundPanel({
 
           {error && <p className="fbr__error">{error}</p>}
 
-          {postDisabled && (
-            <p className="fbr__error" role="status">
-              This round has moved on, so this can no longer be posted — copy it if you want to
-              keep it.
-            </p>
-          )}
-
           <div className="fbr__actions">
             {/* The way out that is not the commit. */}
             <button type="button" className="fbr__cancel" onClick={close} disabled={busy}>
@@ -244,7 +227,7 @@ export default function FeedbackRoundPanel({
               type="button"
               className="fbr__post"
               onClick={send}
-              disabled={busy || !text.trim() || postDisabled}
+              disabled={busy || !text.trim()}
             >
               <Icon name="PaperPlaneTilt" size={16} />
               {busy ? 'Posting…' : 'Post comment'}

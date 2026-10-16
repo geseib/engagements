@@ -98,12 +98,20 @@ const aComment = (over = {}) => ({
 });
 
 /** Round 1 shown; the room on `state`. */
-function seed({ state = 'RESULTS#001', meta = {}, stateExtra = {}, rounds = ['001'] } = {}) {
+function seed({
+  state = 'RESULTS#001', meta = {}, stateExtra = {}, rounds = ['001'], unshown = [],
+} = {}) {
   table.rows.clear();
   sent.length = 0;
   table.put({ PK, SK: 'METADATA', GameType: 'call-and-answer', orgId: ORG, ...meta });
   table.put({ PK, SK: 'STATE', State: state, ...stateExtra });
-  for (const r of rounds) table.put({ PK, SK: `ROUND#${r}`, QuestionNumber: r, AuthorsRevealed: true });
+  // get-results.js stamps ResultsShownAt as it shows a round's results.
+  for (const r of rounds) {
+    table.put({ PK, SK: `ROUND#${r}`, QuestionNumber: r, AuthorsRevealed: true, ResultsShownAt: hoursAgo(2) });
+  }
+  // A ROUND# row with no results shown: stage-focus / reveal-authors wrote it
+  // on VOTE, and the host skipped on.
+  for (const r of unshown) table.put({ PK, SK: `ROUND#${r}`, QuestionNumber: r, StageFocus: 'response' });
   table.put({ PK, SK: 'CONNECTION#c1', ConnectionId: 'c1', ConnectionType: 'HOST' });
   table.put({ PK, SK: 'PLAYER#Ada', PlayerName: 'Ada', ClientId: 'c-ada' });
 }
@@ -214,6 +222,17 @@ const commentRows = () => [...table.rows.values()]
     assert.strictEqual(r.status, 409, JSON.stringify(r.body));
     assert.strictEqual(r.body.code, 'NOT_SHOWN');
     assert.strictEqual(commentRows().length, 0);
+  });
+
+  await check('VOTE#002 skipped to ASK#003 (a ROUND#002 row, no ResultsShownAt): a comment on 2 is refused', async () => {
+    seed({ state: 'ASK#003', rounds: ['001'], unshown: ['002'] });
+    const r = await post(aComment({ questionNumber: 2 }));
+    assert.strictEqual(r.status, 409, JSON.stringify(r.body));
+    assert.strictEqual(r.body.code, 'NOT_SHOWN');
+    assert.strictEqual(commentRows().length, 0);
+    // ...while round 1, whose results were shown, still takes one.
+    const ok = await post(aComment({ questionNumber: 1 }));
+    assert.strictEqual(ok.status, 201, JSON.stringify(ok.body));
   });
 
   await check('a later round number than the room is on: refused even if a ROUND# row exists', async () => {

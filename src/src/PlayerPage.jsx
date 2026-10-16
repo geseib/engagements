@@ -356,6 +356,10 @@ function PlayerPage({ event = null } = {}) {
    *  composer currently holds unsent text, so this page can decide whether
    *  it is safe to follow the room automatically once the round moves on. */
   const [myFeedbackHasDraft, setMyFeedbackHasDraft] = useState(false);
+  /** A comment just posted after the room left this round (late items Task
+   *  2): the panel stays up, so the player sees the server's yes, until they
+   *  press the way back themselves. */
+  const [myFeedbackPostedLate, setMyFeedbackPostedLate] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -1696,6 +1700,7 @@ function PlayerPage({ event = null } = {}) {
     setMyFeedbackComments([]);
     setMyFeedbackSummary(null);
     setMyFeedbackHasDraft(false);
+    setMyFeedbackPostedLate(false);
     setMyFeedbackAnswersStatus('loading');
   };
 
@@ -1713,11 +1718,11 @@ function PlayerPage({ event = null } = {}) {
    */
   useEffect(() => {
     if (myFeedbackOpen && myFeedbackNumber
-      && gameState !== `RESULTS#${myFeedbackNumber}` && !myFeedbackHasDraft) {
+      && gameState !== `RESULTS#${myFeedbackNumber}` && !myFeedbackHasDraft && !myFeedbackPostedLate) {
       closeMyFeedback();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackNumber]);
+  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber]);
 
   /** Post one comment from the player's OWN panel — the same shape as
    *  `submitComment` above, kept separate because it writes to
@@ -1737,6 +1742,12 @@ function PlayerPage({ event = null } = {}) {
     });
     if (result.ok && result.comment) {
       setMyFeedbackComments((current) => [...current, result.comment]);
+    }
+    // Posted after the room moved on: keep the panel up for the receipt. Set
+    // before the composer clears its draft, so the effect above never closes
+    // the panel between the two.
+    if (result.ok && gameState !== `RESULTS#${myFeedbackNumber}`) {
+      setMyFeedbackPostedLate(true);
     }
     return result;
   };
@@ -3393,7 +3404,8 @@ function PlayerPage({ event = null } = {}) {
      Independent of `feedbackRound`/the branch below that reads it: that one is
      the host-triggered, whole-room switch and is unaffected by any of this. */
   const myFeedbackStillOpen = myFeedbackOpen && gameState === `RESULTS#${myFeedbackNumber}`;
-  const myFeedbackShowing = myFeedbackOpen && (myFeedbackStillOpen || myFeedbackHasDraft);
+  const myFeedbackShowing = myFeedbackOpen
+    && (myFeedbackStillOpen || myFeedbackHasDraft || myFeedbackPostedLate);
   /* THE SESSION HAS ENDED, NOT MERELY "THE NEXT QUESTION IS LIVE" (fix round
      2, item 3) — the exact wording matters when there is no next question to
      go to at all. `myFeedbackExitLabel` covers both the button and the top
@@ -3449,9 +3461,11 @@ function PlayerPage({ event = null } = {}) {
         </button>
         {!myFeedbackStillOpen && (
           <p className="plr-lede plr-muted" role="status">
-            {myFeedbackEnded
-              ? 'The session has ended. You can still post what you have written.'
-              : 'The next question is live. You can still post what you have written. It is kept with this round.'}
+            {myFeedbackPostedLate
+              ? 'Posted. It is kept with this round.'
+              : myFeedbackEnded
+                ? 'The session has ended. You can still post what you have written.'
+                : 'The next question is live. You can still post what you have written. It is kept with this round.'}
           </p>
         )}
         <FeedbackRoundPanel
