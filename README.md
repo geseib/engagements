@@ -21,6 +21,13 @@ shows a private console instead of a copy of the wall: the round's steps, who ha
 answered, responses as they land, and whether the room's window is really up. Two screens
 is switched on per game type in `src/src/config/surfaces.js`; today that is Call & Answer.
 
+Call & Answer results show the ideas first, ranked by the room's votes, with the names as
+a small credit; the standings are on the scoreboard, on demand. Nothing that arrives late
+is lost: a late answer, a late answer to a question for the room, and a comment added after
+its round are kept, labelled and listed for the host to review ("Late & not reviewed"), and
+the report shows them under "Arrived late". Comments stay open until 24 hours after the
+session ends (`lambda-functions/game/late-window.js`; the words are `src/src/config/lateWords.js`).
+
 The first five are `src/src/config/gameTypes.js`, the single source of truth for types.
 Build Room and Event are named in `src/src/config/engagementKinds.js`. After each round
 the AI (named Workie on screen) writes a summary of what the room said. Every session
