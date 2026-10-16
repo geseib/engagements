@@ -85,6 +85,21 @@ const call = (send, extra = {}) => F.suggestFollowUps({
     assert.ok(!/\{[A-Za-z]+\}/.test(p), 'an unfilled variable');
     for (const n of NAMES) assert.ok(!p.includes(n), n);
   });
+  await check('a Redo\'s "Includes N answers that arrived late." never reaches the prompt or the grounding', async () => {
+    const L = require(path.join(REPO, 'lambda-functions/game/late-labels.js'));
+    assert.strictEqual(L.withoutLateIncludedLine(`${READ}\n\n${L.lateIncludedLine(3)}`), READ);
+    assert.strictEqual(L.withoutLateIncludedLine(`${READ}\n\n${L.lateIncludedLine(1)}\n`), READ);
+    assert.strictEqual(L.withoutLateIncludedLine('Includes the cost line.'), 'Includes the cost line.');
+    const seen = [];
+    const anchored = [{ type: 'rate', statement: 'Code can be rolled back; a bad backfill cannot.', answers: [3], why: 'x',
+      anchor: { section: 'What the room said', point: 1 } }];
+    const r = await call(async (cmd) => { seen.push(cmd); return toolCall(anchored); },
+      { readBack: `${READ}\n\n${L.lateIncludedLine(3)}` });
+    const prompt = JSON.parse(seen[0].input.body).messages[0].content;
+    assert.ok(prompt.includes(READ));
+    assert.ok(!/arrived late/.test(prompt), 'the late line reached the prompt');
+    assert.strictEqual(r.asks.length, 1, JSON.stringify(r));
+  });
   await check('claude-route turns it into the 5.5 request: auto, the sentence, no prefill', () => {
     const plan = route.toApiRequest(sent[0].input.body, 'claude-sonnet-5-5');
     assert.deepStrictEqual(plan.request.tool_choice, { type: 'auto' });

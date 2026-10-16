@@ -43,7 +43,21 @@ function leftOutLine({ comments = 0, answers = 0 } = {}) {
 
 /** Workie's read after a Redo that included late answers (owner, Q5). */
 const lateIncludedLine = (n) => `Includes ${n} ${Number(n) === 1 ? 'answer' : 'answers'} that arrived late.`;
+/** That line, as a whole line of the stored markdown. */
+const LATE_INCLUDED_LINE = /^\s*Includes \d+ answers? that arrived late\.\s*$/;
+
+/**
+ * The read without that line: it is a note to the host about the read, not
+ * something the read found, so it never grounds a follow-up suggestion
+ * (followup-asks.js). The frontend's readLinesOf leaves it out the same way.
+ */
+const withoutLateIncludedLine = (markdown) => String(markdown || '')
+  .split(/\r?\n/)
+  .filter((line) => !LATE_INCLUDED_LINE.test(line))
+  .join('\n')
+  .trimEnd();
 
 module.exports = {
   REVIEW_LABELS, REVIEW_STATES, reviewedOf, reviewLabel, leftOutLine, lateIncludedLine,
+  LATE_INCLUDED_LINE, withoutLateIncludedLine,
 };

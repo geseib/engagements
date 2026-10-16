@@ -30,6 +30,7 @@ const claudeRoute = require('./claude-route');
 const PROMPT = require('./followup-prompt.json');
 const { checkSuggestions } = require('./followup-grounding');
 const { numberedAnswersText } = require('./numbered-answers');
+const { withoutLateIncludedLine } = require('./late-labels');
 
 /** Bedrock Sonnet 4.6; the switch maps it to claude-sonnet-5-5. */
 const FOLLOWUP_MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
@@ -102,6 +103,9 @@ function toolInputOf(replyBody) {
 async function suggestFollowUps(p) {
   const startedAt = Date.now();
   const ranked = Array.isArray(p.ranked) ? p.ranked : [];
+  // A Redo's "Includes N answers that arrived late." is about the read, not
+  // in it: neither the prompt nor the grounding check sees it.
+  const readBack = withoutLateIncludedLine(p.readBack);
   const base = {
     asks: [], dropped: 0, reasons: {}, raw: 0,
     model: FOLLOWUP_MODEL_ID, servedBy: null, ms: 0, reason: null,
@@ -139,7 +143,7 @@ async function suggestFollowUps(p) {
     responseCount: ranked.length,
     voteCount: Number(p.voteCount) || 0,
     numberedAnswers: numberedAnswersText(ranked),
-    readBack: p.readBack || '',
+    readBack,
   });
 
   const send = p.send || ((cmd) => claudeRoute.send(p.bedrock, cmd, { site: SITE, timeoutMs: ROUTE_TIMEOUT_MS }));
@@ -180,7 +184,7 @@ async function suggestFollowUps(p) {
   if (!input) return finish({ servedBy, reason: REASONS.NO_TOOL_CALL });
   if (!Array.isArray(input.asks)) return finish({ servedBy, reason: REASONS.MALFORMED });
 
-  const checked = checkSuggestions(input.asks, ranked.map((a) => a.text), p.rosterNames || [], { read: p.readBack || '' });
+  const checked = checkSuggestions(input.asks, ranked.map((a) => a.text), p.rosterNames || [], { read: readBack });
   return finish({
     servedBy,
     asks: checked.kept,
