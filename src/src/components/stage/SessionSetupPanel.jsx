@@ -18,6 +18,8 @@ import PlayersList from './PlayersList';
 import WorkieSettings from './WorkieSettings';
 import { nextRoundPickersApply } from '../../config/workieOptions';
 import HelpButton from '../HelpButton';
+import LateList from '../LateList';
+import LW from '../../config/lateWords';
 import BrandMark from '../BrandMark';
 import RW from '../../config/roundWords';
 
@@ -257,6 +259,11 @@ export default function SessionSetupPanel({
      beat. The page's state and handlers, passed through to WorkieSettings;
      null draws nothing. */
   workie = null,
+  /* THE LATE LIST (late items Task 4): `{ rounds, ended, commentsClosedAt,
+     onShow, onMarkReviewed, onCloseComments }` from the page, which owns the
+     reads and the writes; null draws nothing. In the Rounds tab, so one
+     screen (the dock's count) and two (the rail's "Review them") reach it. */
+  late = null,
 }) {
   const held = pendingSettings || {};
   const heldOr = (key, value) => (Object.prototype.hasOwnProperty.call(held, key) ? held[key] : value);
@@ -908,6 +915,13 @@ export default function SessionSetupPanel({
               <div className="setup-row setup-history__actions">
                 <button type="button" onClick={onViewReports}>Session report</button>
               </div>
+
+              {late ? (
+                <div className="late-section">
+                  <h3 className="late-heading">{LW.heading}</h3>
+                  <LateList {...late} />
+                </div>
+              ) : null}
 
               {/*
                 THE ROUNDS PLAYED SO FAR. The list is one half of what the owner

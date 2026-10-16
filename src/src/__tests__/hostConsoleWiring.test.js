@@ -48,3 +48,36 @@ test('the People rows go through the freshness guard, never a bare name lookup',
   expect(page).toMatch(/const consolePeople = consolePeopleFor\(\{[\s\S]{0,200}answeredCount,/);
   expect(page).not.toMatch(/playersWhoAnswered\.includes\(name\) \? 'answered'/);
 });
+
+describe('the late list (late items Task 4)', () => {
+  test('read from /late on load and as the room moves, kept as lateItems and lateCounts', () => {
+    expect(page).toMatch(/const \[lateItems, setLateItems\] = useState\(\[\]\)/);
+    expect(page).toMatch(/const \[lateCounts, setLateCounts\] = useState\(/);
+    expect(page).toMatch(/fetchLate\(\{ fetchFn: authFetch, apiBase: API_BASE, gameId \}\)/);
+    expect(page).toMatch(/loadLateRef\.current\(\);\s*\}, \[gameId, gameState\]\)/);
+  });
+
+  test('re-read on lateChanged, lateAnswerKept and a comment landing; handlers cleaned up', () => {
+    expect(page).toMatch(/onMessage\('lateChanged', \(\) => \{ loadLateRef\.current\(\); \}\)/);
+    expect(page).toMatch(/onMessage\('lateAnswerKept', \(\) => \{ loadLateRef\.current\(\); \}\)/);
+    expect(page).toMatch(/onMessage\('commentPosted', \(\) => \{\s*loadRoundCommentsRef\.current\(\);[\s\S]{0,120}loadLateRef\.current\(\);/);
+    expect(page).toMatch(/offMessage\('lateChanged'\)/);
+    expect(page).toMatch(/offMessage\('lateAnswerKept'\)/);
+  });
+
+  test('the rail gets the real items, the count and the two buttons', () => {
+    expect(page).not.toMatch(/late: \[\],/);
+    expect(page).toMatch(/late: consoleLate,\s*lateCount: lateCounts\.notReviewed,\s*onLateShow: showLateOnWall,\s*onLateMark: markLateReviewed,/);
+  });
+
+  test('Show on the wall reuses the feature route and the Ideas pick; Mark reviewed is the review route', () => {
+    expect(page).toMatch(/const showLateOnWall = async \(item\) => \{[\s\S]{0,400}featureComment\(\{[\s\S]{0,200}commentId: item\.ref, questionNumber: item\.round, featured: true/);
+    expect(page).toMatch(/pickIdea\(\{ fetchFn: authFetch, apiBase: API_BASE, gameId, round: item\.round, askId: item\.askId, id: item\.id, picked: true \}\)/);
+    expect(page).toMatch(/reviewLateItem\(\{ fetchFn: authFetch, apiBase: API_BASE, gameId, item, how: 'read' \}\)/);
+  });
+
+  test('the Session panel\'s Rounds tab carries the full list; Review opens it there', () => {
+    expect(page).toMatch(/late=\{\{\s*rounds: lateItems,\s*ended: gameState === 'ENDED',\s*commentsClosedAt,/);
+    expect(page).toMatch(/const openLateList = \(\) => openSetupAt\('history'\)/);
+  });
+});

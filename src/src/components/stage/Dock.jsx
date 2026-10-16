@@ -101,10 +101,15 @@ function useCrowded(ref, deps) {
 }
 
 export default function Dock({
-  status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null, children, ...rest
+  status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
+  statusLink = '', onStatusLink = null, children, ...rest
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, children]);
+  // THE LATE COUNT AS A LINK (late items Task 4): `statusLink` is the last
+  // part of the status ("1 late answer kept", or "Review" at the end), and
+  // opens the host's late list. Only when the status really ends with it.
+  const linked = Boolean(statusLink && onStatusLink && typeof status === 'string' && status.endsWith(statusLink));
   return (
     <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined} {...rest}>
       {status && (
@@ -113,7 +118,12 @@ export default function Dock({
           aria-live="polite"
           data-goal-notice={notice ? '' : undefined}
         >
-          {status}
+          {linked ? (
+            <>
+              {status.slice(0, status.length - statusLink.length)}
+              <button type="button" className="status-link" onClick={onStatusLink}>{statusLink}</button>
+            </>
+          ) : status}
         </span>
       )}
       {progress && (progress.heading || progress.body) && (

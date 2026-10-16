@@ -730,6 +730,7 @@ export function snapshotFromHostPage({
   answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
   spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
   roomAsk = null, asksReady = 0, asksEnabled = false, roundNumber = null, totalRounds = null,
+  late = null,
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
@@ -765,6 +766,9 @@ export function snapshotFromHostPage({
     // state above is a template (ASK#001), so the number travels on its own.
     roundNumber: Number(roundNumber) > 0 ? Number(roundNumber) : null,
     totalRounds: Number(totalRounds) > 0 ? Number(totalRounds) : null,
+    // The late items still waiting ({ notReviewed, answers }), for the
+    // status line's count (late items Task 4). The Remote passes the same.
+    late,
   };
 }
 

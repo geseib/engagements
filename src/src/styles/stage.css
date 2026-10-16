@@ -566,6 +566,10 @@ a.dock-more{text-decoration:none}
      the key hints below give way first. */
   min-width:min(9em, 22vw)}
 .dock .status.go{color:var(--success-text);font-weight:800}
+/* The late count, a link to the host's late list (late items Task 4). */
+.dock .status-link{font:inherit;color:var(--info);background:transparent;border:0;padding:0;cursor:pointer;
+  text-decoration:underline;text-underline-offset:2px}
+.dock .status-link:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 @keyframes cue{0%,100%{opacity:1}50%{opacity:.45}}
 .dock .status.go{animation:cue 1.5s ease-in-out 3}
 @media (prefers-reduced-motion:reduce){.dock .status.go{animation:none}}

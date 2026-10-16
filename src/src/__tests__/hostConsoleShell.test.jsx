@@ -213,3 +213,37 @@ test('with no total known, the queue header says the round alone, never a count 
   expect(summary).not.toMatch(/of 2/);
   expect(summary).toMatch(/3/);
 });
+
+describe('Late & not reviewed (late items Task 4)', () => {
+  const answer = { kind: 'answer', ref: 'aaaaaaaaaaaa', round: '001', text: 'A late thought', who: 'Ada', reviewed: null };
+  const comment = { kind: 'comment', ref: '202610161000000-abc', round: '001', text: 'More on this', who: 'Omar', reviewed: null };
+  const late = [answer, comment, { ...answer, ref: 'bbbbbbbbbbbb' }, { ...answer, ref: 'cccccccccccc' }]
+    .map((item) => ({ id: `${item.kind}:${item.ref}`, label: item.text, meta: item.who, item }));
+
+  test('the count is the whole count; the first few show with their buttons', () => {
+    const onLateShow = jest.fn();
+    const onLateMark = jest.fn();
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 5, onLateShow, onLateMark } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const sec = container.querySelector('[data-section="late"]');
+    expect(sec.querySelector('summary').textContent).toMatch('5');
+    expect(sec.querySelectorAll('li')).toHaveLength(3);
+    // No wall for a late round answer.
+    const [first, second] = sec.querySelectorAll('li');
+    expect(first.textContent).not.toMatch('Show on the wall');
+    fireEvent.click([...first.querySelectorAll('button')].find((b) => b.textContent === 'Mark reviewed'));
+    expect(onLateMark).toHaveBeenCalledWith(answer);
+    fireEvent.click([...second.querySelectorAll('button')].find((b) => b.textContent === 'Show on the wall'));
+    expect(onLateShow).toHaveBeenCalledWith(comment);
+    fireEvent.click(screen.getByRole('button', { name: 'Review them' }));
+    expect(p.rail.onOpenSection).toHaveBeenCalledWith('history');
+  });
+
+  test('the footer\'s late count opens the list', () => {
+    const onReviewLate = jest.fn();
+    const status = { text: '3 of 4 answered · 1 late answer kept', tone: 'pending', late: { line: '1 late answer kept', link: '1 late answer kept' } };
+    render(<HostConsole {...props({ footer: { ...props().footer, status, onReviewLate } })}><div /></HostConsole>);
+    fireEvent.click(screen.getByRole('button', { name: '1 late answer kept' }));
+    expect(onReviewLate).toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,5 @@
 import { useRosterMode, rosterRevealFor } from './hooks/useRosterReveal';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
@@ -109,6 +109,10 @@ import {
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
 import { authFetch } from './auth/authFetch';
+import {
+  fetchLate, reviewLateItem, closeComments as closeLateComments, lateStatusOf, lateItemsOf,
+} from './utils/lateClient';
+import LW from './config/lateWords';
 import useRoundAsks from './hooks/useRoundAsks';
 import AskComposer, { AskComposerBody } from './components/AskComposer';
 import HostConsole from './components/console/HostConsole';
@@ -1258,6 +1262,31 @@ function GameHostPage() {
   */
   const loadRoundCommentsRef = useRef(() => {});
 
+  /*
+    THE LATE LIST (session flow v3 §4.4; late items Task 4): every late round
+    answer, late answer to a question for the room and comment added later,
+    by round, from GET /late. Read on load, on `lateChanged` and
+    `lateAnswerKept`, and after a comment lands. Hooks here, above the early
+    returns, like the rest. The socket handlers go through the ref, so they
+    never hold a stale gameId.
+  */
+  const [lateItems, setLateItems] = useState([]);
+  const [lateCounts, setLateCounts] = useState({ notReviewed: 0 });
+  const [commentsClosedAt, setCommentsClosedAt] = useState(null);
+  const loadLateRef = useRef(() => {});
+  const lateStatus = useMemo(() => lateStatusOf(lateItems), [lateItems]);
+  // On load, and when the room moves (a round closing makes items late; the
+  // end opens Close comments). A new session starts empty.
+  useEffect(() => {
+    if (!gameId) {
+      setLateItems([]);
+      setLateCounts({ notReviewed: 0 });
+      setCommentsClosedAt(null);
+      return;
+    }
+    loadLateRef.current();
+  }, [gameId, gameState]);
+
   /**
    * The beat the SERVER last reported, AND the exact game state it reported it
    * for. Both halves, because a bare beat outlives the round it belongs to.
@@ -1392,6 +1421,55 @@ function GameHostPage() {
     if (result.ok) setRoundComments(result.comments);
   };
   loadRoundCommentsRef.current = loadRoundComments;
+
+  const loadLate = async () => {
+    if (!gameId) return;
+    const r = await fetchLate({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    // Only on success: a failed read keeps what the host had.
+    if (!r.ok) return;
+    setLateItems(r.rounds);
+    setLateCounts(r.counts);
+    setCommentsClosedAt(r.commentsClosedAt);
+  };
+  loadLateRef.current = loadLate;
+
+  /*
+    THE LATE LIST'S BUTTONS. "Show on the wall" reuses the routes that already
+    put things up (the comment feature route; the Ideas pick), which mark the
+    item 'shown' themselves and send lateChanged. "Mark reviewed" is the late
+    review route. Each resolves { ok, error } for the list to say.
+  */
+  const showLateOnWall = async (item) => {
+    if (!gameId || !item) return { ok: false, error: 'No session.' };
+    let r;
+    if (item.kind === 'comment') {
+      r = await featureComment({
+        fetchFn: authFetch, apiBase: API_BASE, gameId, commentId: item.ref, questionNumber: item.round, featured: true,
+      });
+      loadRoundCommentsRef.current();
+    } else if (item.kind === 'askAnswer') {
+      r = await pickIdea({ fetchFn: authFetch, apiBase: API_BASE, gameId, round: item.round, askId: item.askId, id: item.id, picked: true });
+    } else {
+      return { ok: false, error: 'That cannot go on the wall.' };
+    }
+    loadLateRef.current();
+    return r && r.ok ? { ok: true } : { ok: false, error: (r && r.error) || 'That did not work.' };
+  };
+  const markLateReviewed = async (item) => {
+    if (!gameId || !item) return { ok: false, error: 'No session.' };
+    const r = await reviewLateItem({ fetchFn: authFetch, apiBase: API_BASE, gameId, item, how: 'read' });
+    loadLateRef.current();
+    return r;
+  };
+  const closeComments = async () => {
+    if (!gameId) return { ok: false, error: 'No session.' };
+    const r = await closeLateComments({ fetchFn: authFetch, apiBase: API_BASE, gameId });
+    if (r.ok && r.body && r.body.commentsClosedAt) setCommentsClosedAt(r.body.commentsClosedAt);
+    loadLateRef.current();
+    return r;
+  };
+  /** The dock's count, the footer's and "Review": the Session panel at Rounds. */
+  const openLateList = () => openSetupAt('history');
 
   /*
     THE HOST PUTS ONE COMMENT ON THE WALL — a press on an arrival in the meter.
@@ -2758,7 +2836,13 @@ Focus on actionable business strategy insights.`;
     */
     webSocketClient.onMessage('commentPosted', () => {
       loadRoundCommentsRef.current();
+      // A comment after its round is a late item (late items Task 4).
+      loadLateRef.current();
     });
+    // THE LATE LIST CHANGED (an item kept, reviewed, shown, or comments
+    // closed): re-read it. Host-only frames.
+    webSocketClient.onMessage('lateChanged', () => { loadLateRef.current(); });
+    webSocketClient.onMessage('lateAnswerKept', () => { loadLateRef.current(); });
     // The host featured or un-featured one; every screen re-reads the rows.
     webSocketClient.onMessage('commentFeatured', () => {
       loadRoundCommentsRef.current();
@@ -2935,6 +3019,8 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('commentFeatured');
+      webSocketClient.offMessage('lateChanged');
+      webSocketClient.offMessage('lateAnswerKept');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('followUpChanged');
       webSocketClient.offMessage('aiSummaryError');
@@ -6718,6 +6804,9 @@ Focus on actionable business strategy insights.`;
     // The round on screen, for "Start round 3" and the workflow strip.
     roundNumber: hostPhase === 'LOBBY' || hostPhase === 'ENDED' ? null : lessonNumber,
     totalRounds: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions,
+    // The late items still waiting: roundStep appends the one count to the
+    // status ("· 1 late answer kept"; at the end "2 items not reviewed · Review").
+    late: lateStatus,
   });
   /*
     AN EVENT'S ITEM THAT IS NOT THE ROOM'S YET — a preview, or a paused item.
@@ -7544,6 +7633,18 @@ Focus on actionable business strategy insights.`;
         : (hostPhase === 'COLLECTING' && surveyWarnedAt
           ? `${hostControls.status.text} · warning sent`
           : hostControls.status.text);
+  /*
+    THE LATE COUNT ON THE DOCK (session flow v3 §4.4; late items Task 4).
+    roundStep's status already carries it ("· 1 late answer kept"; at the end
+    "2 items not reviewed · Review"); where the dock says its own words instead
+    ("Some are still voting") the same count is added. Never while viewing
+    another step, never in place of a hint. The count is a link to the list.
+  */
+  const lateOnStatus = hostControls.status && hostControls.status.late;
+  const dockLine = lateOnStatus && dockStatus && !viewing && !dockStatus.endsWith(lateOnStatus.link)
+    ? `${dockStatus} · ${lateOnStatus.line}`
+    : dockStatus;
+  const dockLateLink = lateOnStatus && dockLine && dockLine.endsWith(lateOnStatus.link) ? lateOnStatus.link : '';
 
   // Wavelength's two-beat reveal: beat one is a sentence, beat two a terms
   // flow of a different height, and the clustered upgrade can change the flow
@@ -7647,6 +7748,20 @@ Focus on actionable business strategy insights.`;
   // THE HOST CONSOLE: `useConsole` is computed beside `twoSurfaces` (near the
   // top) because the overlay terms read it long before this point.
   const consoleMoment = hostControls.step ? hostControls.step.moment : 'UNKNOWN';
+  /*
+    LATE & NOT REVIEWED, in the rail's shape (late items Task 4): what waits,
+    in the list's order. The rail shows the first few with their buttons; its
+    count is the server's.
+  */
+  const consoleLate = lateItemsOf(lateItems).filter((item) => !item.reviewed).map((item) => {
+    const text = String(item.text || '');
+    return {
+      id: `${item.kind}:${item.ref}`,
+      label: text.length > 80 ? `${text.slice(0, 79)}…` : text,
+      meta: [LW.kinds[item.kind], item.who].filter(Boolean).join(' · '),
+      item,
+    };
+  });
   const consolePeople = consolePeopleFor({
     moment: consoleMoment,
     players,
@@ -7847,7 +7962,10 @@ Focus on actionable business strategy insights.`;
             total: workflow && workflow.round ? workflow.round.of : null,
             people: consolePeople,
             counts: { players: players.length, answered: answeredCount, voted: playersWhoVoted.length },
-            late: [],
+            late: consoleLate,
+            lateCount: lateCounts.notReviewed,
+            onLateShow: showLateOnWall,
+            onLateMark: markLateReviewed,
             connected: wsConnected,
             onOpenSection: openSetupAt,
           }}
@@ -7863,6 +7981,7 @@ Focus on actionable business strategy insights.`;
             shortcutsEnabled: !anyOverlayOpen,
             interceptAdvance: consoleInterceptAdvance,
             onBackKey: consoleOnBackKey,
+            onReviewLate: openLateList,
           }}
         >
           {consoleBoard}
@@ -7969,7 +8088,9 @@ Focus on actionable business strategy insights.`;
           : null}
         dock={(
           <Dock
-            status={dockStatus}
+            status={dockLine}
+            statusLink={dockLateLink}
+            onStatusLink={openLateList}
             notice={Boolean(dockStatus) && hostControls.status.tone === 'notice' && dockStatus === hostControls.status.text}
             hint={dockHint}
             kbd={dockKbd}
@@ -8798,6 +8919,14 @@ Focus on actionable business strategy insights.`;
           rounds={rounds}
           historyLoading={historyLoading}
           onOpenRound={setPastRoundIndex}
+          late={{
+            rounds: lateItems,
+            ended: gameState === 'ENDED',
+            commentsClosedAt,
+            onShow: showLateOnWall,
+            onMarkReviewed: markLateReviewed,
+            onCloseComments: closeComments,
+          }}
           onClose={closeAllSidePanels}
           wsConnected={wsConnected}
           players={players}
