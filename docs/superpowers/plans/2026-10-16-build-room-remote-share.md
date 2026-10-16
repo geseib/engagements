@@ -16,8 +16,8 @@
 - **The public view never carries a remote address or key.** Only `remote: 'live' | 'starting' | 'off'`. A person's link comes only from their own phone route.
 - **Only key hashes reach the laptop.** SHA-256, base64url. The raw key exists in the phone's link and nowhere else after minting; the backend stores the hash only.
 - **The remote gateway binds 127.0.0.1 only.** Never the Wi-Fi address, never 0.0.0.0.
-- **Same targets, same folder check (F4)** as the Wi-Fi share: `lanTargets`, at most 4, `listenerDir` within the project.
-- **Fail closed:** switch off, session ended, or 30 s without an Engage answer closes remote gateways and kills `cloudflared`.
+- **One tunnel per session** (owner, 16 Oct, after the spike), forwarding to the newest of `lanTargets`, with the Wi-Fi share's folder check (F4). Never reopened without need: quick-tunnel creation is rate-limited (`SPIKE.md`).
+- **Fail closed:** switch off, session ended, or 30 s without an Engage answer closes the remote gateway and kills `cloudflared`.
 - **No network in tests.** A fake `cloudflared` (a node script printing a `trycloudflare.com` line) and a local download server stand in.
 - **Plugin version:** one bump for the whole piece, `1.18.0` → `1.19.0`, and `tests/engage-plugin-version.js`'s PIN updated once, in the last plugin task.
 - **Words:** plain English, sentence case, "phone, laptop or tablet", never "tunnel" on screen. All new strings in `src/src/buildroom/words.js`.
@@ -60,12 +60,12 @@
 
 The spec leaves three facts unchecked. Settle them before building on them. Done on a laptop or this container if outbound to Cloudflare is allowed; if neither, ask the owner to run the commands and paste the output.
 
-- [ ] **Step 1:** Pick the latest `cloudflared` release on GitHub (`cloudflare/cloudflared`). Record the version and the SHA-256 of these assets: `cloudflared-darwin-arm64.tgz`, `cloudflared-darwin-amd64.tgz`, `cloudflared-linux-amd64`, `cloudflared-linux-arm64`, `cloudflared-windows-amd64.exe`. Compute the hashes yourself from the downloaded files; compare with the release's published checksums.
-- [ ] **Step 2:** Run `cloudflared tunnel --no-autoupdate --url http://127.0.0.1:<port>` against a trivial local server. Record the exact line that carries the `https://…trycloudflare.com` address (stdout or stderr, its format), how long until it answers, and what it prints when it fails (no network, Cloudflare refusing).
-- [ ] **Step 3:** Open **four at once** from one machine, then stop and reopen them three times in a minute. Record whether any is refused or rate-limited.
-- [ ] **Step 4:** Through one tunnel, check a websocket upgrade works (hot reload depends on it) and confirm that a request carries `CF-Connecting-IP` (only to document it; nothing will trust it).
-- [ ] **Step 5:** Write `docs/design/build-room-remote-share/SPIKE.md` with all of the above. **Stop and tell the owner** if four tunnels at once are refused, or the address line cannot be parsed reliably; the plan's Task 5 depends on both.
-- [ ] **Step 6:** Commit: `Build Room remote share: spike findings (cloudflared output, limits, pinned hashes)`.
+- [x] **Step 1:** Pick the latest `cloudflared` release on GitHub (`cloudflare/cloudflared`). Record the version and the SHA-256 of these assets: `cloudflared-darwin-arm64.tgz`, `cloudflared-darwin-amd64.tgz`, `cloudflared-linux-amd64`, `cloudflared-linux-arm64`, `cloudflared-windows-amd64.exe`. Compute the hashes yourself from the downloaded files; compare with the release's published checksums.
+- [x] **Step 2:** Run `cloudflared tunnel --no-autoupdate --url http://127.0.0.1:<port>` against a trivial local server. Record the exact line that carries the `https://…trycloudflare.com` address (stdout or stderr, its format), how long until it answers, and what it prints when it fails (no network, Cloudflare refusing).
+- [x] **Step 3:** Open **four at once** from one machine, then stop and reopen them three times in a minute. Record whether any is refused or rate-limited.
+- [x] **Step 4:** Through one tunnel, check a websocket upgrade works (hot reload depends on it) and confirm that a request carries `CF-Connecting-IP` (only to document it; nothing will trust it).
+- [x] **Step 5:** Write `docs/design/build-room-remote-share/SPIKE.md` with all of the above. **Stop and tell the owner** if four tunnels at once are refused, or the address line cannot be parsed reliably; the plan's Task 5 depends on both.
+- [x] **Step 6:** Commit: `Build Room remote share: spike findings (cloudflared output, limits, pinned hashes)`.
 
 ### Task 1: Backend, pure: remote status, report, keys, views (`build-lan.js`)
 
@@ -91,16 +91,16 @@ function liveRemoteKeys(rkeys, players) {
 }
 
 /** A person's link: the remote origin for this target plus ?k=<their key>. */
-function remoteLink(row, localUrl, key)
+function remoteLink(row, localUrl, key)   // RemoteAddress + localUrl's path/search/hash + ?k=; '' unless live
 ```
 
-`normalizeReport` accepts an optional `remote: { status, map: [{ local, remote }], error, devices }`: `status` in `STATUSES`; each `remote` an `https://*.trycloudflare.com` origin (reject anything else); `devices` an object of player name → integer 0–50, at most 200 entries. It returns `RemoteStatus`, `RemoteMap`, `RemoteError`, `RemoteDevices`.
+`normalizeReport` accepts an optional `remote: { status, address, target, error, devices }`: `status` in `STATUSES`; `address` an `https://<name>.trycloudflare.com` origin and nothing else (required when live); `target` a loopback URL (`isLoopbackUrl`); `devices` an object of player name → integer 0–50, at most 200 entries. It returns `RemoteStatus`, `RemoteAddress`, `RemoteTarget`, `RemoteError`, `RemoteDevices`.
 
-`lanPublicView(room, now)`: adds `remote: remoteStatus(...)` when `room.lan.RemoteWanted`; when that is `'live'`, the Wi-Fi `open` is left out (everyone takes the remote route); while `'starting'` or `'failed'`, it is kept.
+`lanPublicView(room, now)`: adds `remote: remoteStatus(...)` when `room.lan.RemoteWanted`, and while it is live, `remoteSince` (when this tunnel went live: the phone's cue that a saved link is stale) and `remotePath` (path, search and hash of the newest agent link, as the Wi-Fi `open` picks it; not secret). Never the address, never a key; when that is `'live'`, the Wi-Fi `open` is left out (everyone takes the remote route); while `'starting'` or `'failed'`, it is kept.
 
 `lanHostView`: adds `remote: { wanted, status, error, people: [{ name, devices }] }`, people sorted by devices descending then name.
 
-- [ ] **Step 1: Write the failing tests** in `tests/build-room-remote.js` (pure section): `hashKey` stable and 43 chars; `mintRemoteKey` unique over 1000 calls; `remoteStatus` for not wanted / wanted and stale / fresh live / fresh failed; `liveRemoteKeys` drops removed, missing, other-`ClientId` and malformed hashes, keeps a player row with no `ClientId`; `normalizeReport` rejects a non-trycloudflare remote origin, an `http:` one, devices out of range; `lanPublicView` never contains `?k=` or `trycloudflare` in its JSON for any remote status, drops Wi-Fi `open` only while remote is live; `lanHostView` people ordering.
+- [ ] **Step 1: Write the failing tests** in `tests/build-room-remote.js` (pure section): `RemoteLiveSince` set on the report that first says live and kept while live; `hashKey` stable and 43 chars; `mintRemoteKey` unique over 1000 calls; `remoteStatus` for not wanted / wanted and stale / fresh live / fresh failed; `liveRemoteKeys` drops removed, missing, other-`ClientId` and malformed hashes, keeps a player row with no `ClientId`; `normalizeReport` rejects a non-trycloudflare remote origin, an `http:` one, devices out of range; `lanPublicView` never contains `?k=` or `trycloudflare` in its JSON for any remote status, drops Wi-Fi `open` only while remote is live; `lanHostView` people ordering.
 - [ ] **Step 2:** Run `node tests/build-room-remote.js`; expect failures.
 - [ ] **Step 3:** Implement in `build-lan.js`.
 - [ ] **Step 4:** Run it and `node tests/build-room-lan.js`; both pass.
@@ -111,13 +111,13 @@ function remoteLink(row, localUrl, key)
 **Files:** modify `build-store.js` (add `SK.rkey = (name) => \`BUILD#RKEY#${name}\``; row kind `buildRemoteKey` in the classifier near `build-store.js:354`; collect into `room.rkeys` near `:515`), `build-room.js`; extend `tests/build-room-remote.js` (handler section; copy the handler harness of `tests/build-crew.js`, which drives `build-room.js` against a fake DynamoDB).
 
 - [ ] **Step 1: Tests first.**
-  - `hostShare({ on: true, remote: true })` sets `RemoteWanted` and clears `RemoteStatus/RemoteMap/RemoteError/RemoteDevices`; `{ on: false }` clears `RemoteWanted` too; `{ remote: false }` alone turns remote off and leaves Wi-Fi on; `remote: true` on an ended session is 409.
+  - `hostShare({ on: true, remote: true })` sets `RemoteWanted` and clears `RemoteStatus/RemoteAddress/RemoteTarget/RemoteError/RemoteDevices`; `{ on: false }` clears `RemoteWanted` too; `{ remote: false }` alone turns remote off and leaves Wi-Fi on; `remote: true` on an ended session is 409.
   - `shareReport` with a `remote` block stores it; its answer carries `remoteWanted` and `remoteKeys` (hashes only, from `liveRemoteKeys`), and `remoteKeys` is `[]` when remote is not wanted. A second reporter (the 1.18.0 rule) gets `remoteWanted: false`.
   - Agent route `POST share/remote-check { hash }` → `{ ok: true, player }` for a live key, `{ ok: false }` otherwise; host and phone roles get 403.
-  - Phone route `POST /build-play/remote-key` → `{ link }` built from the remote map entry for the latest shown target (as `lanPublicView` picks the Wi-Fi one) with a **freshly minted** key; the row (`Hash`, `ClientId`, `PlayerName`, `CreatedAt`; **hash only**, per the spec) is overwritten, so the previous key for that person stops working at the next report; a handover (new `ClientId` on the player row) drops the old hash from `remoteKeys` even before the new device asks; 409 `{ code: 'not-live' }` unless remote status is live. Idempotence lives on the phone, which keeps its link (Task 8), not on the server, which never holds a raw key.
+  - Phone route `POST /build-play/remote-key` → `{ origin, key, since }` (the tunnel's origin, a **freshly minted** key, and `RemoteLiveSince`); the phone builds `origin + remotePath + ?k=key` itself, so a new path from Claude needs no new key; the row (`Hash`, `ClientId`, `PlayerName`, `CreatedAt`; **hash only**, per the spec) is overwritten, so the previous key for that person stops working at the next report; a handover (new `ClientId` on the player row) drops the old hash from `remoteKeys` even before the new device asks; 409 `{ code: 'not-live' }` unless remote status is live. Idempotence lives on the phone, which keeps its link (Task 8), not on the server, which never holds a raw key.
   - Removal needs no new code: `liveRemoteKeys` already drops a player with `RemovedAt` (set by `remove-player.js` and `crewBuilderRemove`). Test both doors.
 - [ ] **Step 2:** Run; expect failures.
-- [ ] **Step 3:** Implement. Routes: `share/remote-check` next to `share/report` (`build-room.js:2681`, agent only); `remote-key` in `routePlay` (`:2779`), after `me` is resolved. `announce` when `RemoteStatus`, `RemoteMap` or the devices change, as `shareReport` already does for the Wi-Fi fields.
+- [ ] **Step 3:** Implement. Routes: `share/remote-check` next to `share/report` (`build-room.js:2681`, agent only); `remote-key` in `routePlay` (`:2779`), after `me` is resolved. `announce` when `RemoteStatus`, `RemoteAddress`, `RemoteTarget` or the devices change, as `shareReport` already does for the Wi-Fi fields.
 - [ ] **Step 4:** Run `node tests/build-room-remote.js`, `node tests/build-room-lan.js`, and the tenancy suites (`tests/no-global-partition-literals.js`, `tests/tenant-session-scoping.js`).
 - [ ] **Step 5:** Commit: `Remote share: switch, report, per-person keys, remote-check and remote-key routes`.
 
@@ -145,7 +145,7 @@ The remote lock:
 
 - [ ] **Step 1: Tests first.** Binds 127.0.0.1 only (connecting on another local address fails); no key → locked page; a hash in `remoteKeys` → 302 then the app; a key not yet in the set → one check, then admitted; 20 wrong keys in a second → at most one check; the same wrong key twice → no second check; `/@fs/etc/passwd`, `/src/main.js.map` refused with a key; websocket upgrade with and without a key; two devices (two cookie jars) with one key → `devices: { Sam: 2 }` in the next report; the key's hash dropped from `remoteKeys` → the next request with that cookie is refused; the Wi-Fi gateway unaffected throughout.
 - [ ] **Step 2:** Run; expect failures.
-- [ ] **Step 3:** Implement: `remote = { gateways, keys: Set, wrong: Set, lastCheckAt, devices: Map }`; `syncRemote(wanted, targets, keys)` opens/closes remote gateways on ports from `ENGAGE_REMOTE_PORT` (default 4950), applying the same folder check as `syncGateways`; called from `lanRound` after `syncGateways`, with `answer.remoteWanted` and `answer.remoteKeys`; the report gains the `remote` block.
+- [ ] **Step 3:** Implement: `remote = { gateway, target, keys: Set, wrong: Set, lastCheckAt, devices: Map }`; `syncRemote(wanted, targets, keys)` opens **one** remote gateway on a port from `ENGAGE_REMOTE_PORT` (default 4950) when wanted, and points it at the **last** of `targets` after the same folder check as `syncGateways` (a target that fails it leaves the gateway forwarding nowhere, answering the locked page's "not answering" words, and the error set). A new target changes `remote.target` only: the listening port, and so the tunnel, stays. Called from `lanRound` after `syncGateways`, with `answer.remoteWanted` and `answer.remoteKeys`; the report gains the `remote` block. Tests add: a new target switches forwarding without closing the listener (same port, an open websocket to the old target is closed).
 - [ ] **Step 4:** Run the new suite and `tests/engage-lan-gateway.js`.
 - [ ] **Step 5:** Commit: `Plugin: the remote gateway, per-person keys, devices per person`.
 
@@ -155,13 +155,16 @@ The remote lock:
 
 - `CLOUDFLARED = { version, assets: { 'darwin-arm64': { file, sha256 }, … } }` from SPIKE.md.
 - `ensureCloudflared()`: `ENGAGE_CLOUDFLARED` (tests) wins; else `~/.engage/bin/cloudflared-<version>[.exe]` if present and its hash matches; else download from `ENGAGE_CLOUDFLARED_BASE` (tests) or `https://github.com/cloudflare/cloudflared/releases/download/<version>/`, follow redirects, write to a temp file, **check SHA-256 before anything else**, then unpack (`tar -xzf` for the macOS `.tgz`), `chmod 0755`, rename into place. A mismatch deletes the file and sets the remote error "Couldn't download Cloudflare's tunnel tool (it did not match the expected file)."
-- `startTunnel(port)`: spawn with `--no-autoupdate --url http://127.0.0.1:<port>`; parse the address with the regex from SPIKE.md; time out after 30 s → error. Record the pid in `~/.engage/cloudflared.pids`.
+- `startTunnel(port)`: **one per session**. Spawn with `--no-autoupdate --url http://127.0.0.1:<port>`; parse the address from stderr with the regex from SPIKE.md; no address in 30 s → error. Record the pid in `~/.engage/cloudflared.pids`.
+- **Ready check before `live`** (SPIKE.md): poll `https://cloudflare-dns.com/dns-query?name=<host>&type=A` (`accept: application/dns-json`) every 2 s until an A record, then one GET through the tunnel to that IP (a pinned `lookup`, never the system resolver) that reaches the gateway (any status the gateway itself gives); 60 s overall → failed "Cloudflare did not finish setting up the remote link." `ENGAGE_DOH_URL` overrides the DNS endpoint in tests.
+- **Exit 1 with `status 429`** in stderr → failed with the 429 words (spec §4.1); the next attempt waits at least 60 s, whatever the switch does.
+- **Never reopened without need:** only switch-on (after off), a tunnel that exited, or a ready check that failed opens a new one.
 - `stopTunnel` on remote off, session end, Engage silent (the existing `LAN_LOST_MS` branch), and on `process.on('exit')`. At plugin start, kill pids from the file that are still `cloudflared` processes, then clear it.
 - Status: `starting` from switch-on until every tunnel has its address; `failed` with a plain reason (download failed, address never came, process exited).
 
-- [ ] **Step 1: Tests first** (local HTTP server as the download base, a fake `cloudflared` script): a good file is fetched once and reused; a bad hash is refused, deleted, never run, error set; a fake that never prints an address → `failed` after the timeout (`ENGAGE_TUNNEL_TIMEOUT_MS` short in tests); remote off kills the child; Engage silent past `LAN_LOST_MS` kills it; a stale pid file entry is cleaned at start; plugin exit kills the child.
+- [ ] **Step 1: Tests first** (local HTTP server as the download base and as the DoH endpoint, a fake `cloudflared` script): a 429 exit gives the 429 words and no reopen for 60 s; a target change never respawns the tunnel; `live` is reported only after the DoH answer and the request through; a good file is fetched once and reused; a bad hash is refused, deleted, never run, error set; a fake that never prints an address → `failed` after the timeout (`ENGAGE_TUNNEL_TIMEOUT_MS` short in tests); remote off kills the child; Engage silent past `LAN_LOST_MS` kills it; a stale pid file entry is cleaned at start; plugin exit kills the child.
 - [ ] **Step 2:** Run; expect failures. **Step 3:** Implement. **Step 4:** Run all three plugin suites.
-- [ ] **Step 5:** Commit: `Plugin: fetch a pinned cloudflared, check it, run one per remote gateway, never leave one behind`.
+- [ ] **Step 5:** Commit: `Plugin: fetch a pinned cloudflared, check it, run one per session, live only when reachable, never leave one behind`.
 
 ### Task 6: Plugin: what Claude is told; the version
 
@@ -189,7 +192,7 @@ The remote lock:
 
 **Files:** modify `BuildPlayer.jsx` (`OpenDemo`, `:742`), `words.js`; extend `buildRemoteShare.test.jsx`.
 
-- When `lan.remote === 'live'`: use the link saved in `localStorage` under `remoteLink_<gameId>_<clientId>` (try/catch around storage); if none, call `POST remote-key` once and save it. Every call mints a new key and ends the old, so call it only when there is no saved link, or after the remote address changed (the saved link's origin is no longer in a fresh fetch's answer) or a handover. Render the same button with no "Same Wi-Fi only." line; while fetching, the button is not shown (never a dead link).
+- When `lan.remote === 'live'`: use the link saved in `localStorage` under `remoteLink_<gameId>_<clientId>` (try/catch around storage); if none, call `POST remote-key` once and save `{ origin, key, since }`. Every call mints a new key and ends the old, so call it only when nothing is saved, the view's `remoteSince` differs from the saved `since` (the tunnel was reopened), or after a handover. The link is `origin + remotePath + ?k=key`, rebuilt as `remotePath` changes. Render the same button with no "Same Wi-Fi only." line; while fetching, the button is not shown (never a dead link).
 - `'starting'`: today's Wi-Fi button and line, plus "Not here? Opening soon."
 - After pressing with remote live: "Didn't open?", "The host may have stopped sharing, or the app on their laptop is restarting.", Try again. Never `wifiSameAdvice`.
 - `'off'` or absent: exactly today.

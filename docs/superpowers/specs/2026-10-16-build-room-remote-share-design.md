@@ -72,17 +72,31 @@ room; remote people never need it.
 
 Everything the Wi-Fi share does stays. Remote adds, beside it:
 
-1. **A remote gateway per shared address**, listening on **127.0.0.1 only**, on its own
-   port. It reuses the Wi-Fi gateway's proxy (`openGateway`: Host/Origin rewriting,
-   websocket upgrades, redirect rewriting, the locked page) with a different key check.
-   The same targets (`lanTargets`, at most 4) and the same folder check (F4) apply: remote
-   reaches only what the Wi-Fi share would. The remote gateway does not depend on a Wi-Fi
-   address, so a laptop on a wired network can share remotely.
-2. **One `cloudflared` per remote gateway**:
+1. **One remote gateway per session** (owner, 16 Oct, after the spike), listening on
+   **127.0.0.1 only**. It forwards to **the newest address Claude showed**, the one Open the
+   demo opens (the last of `lanTargets`). When Claude shows a new one, the gateway switches
+   where it forwards; the tunnel stays as it is. A remote person with an older version open
+   gets the new one on reload. It reuses the Wi-Fi gateway's proxy (`openGateway`:
+   Host/Origin rewriting, websocket upgrades, redirect rewriting, the locked page) with a
+   different key check, and the same folder check (F4): remote reaches a subset of what the
+   Wi-Fi share would. It does not depend on a Wi-Fi address, so a laptop on a wired network
+   can share remotely.
+2. **One `cloudflared` per session**:
    `cloudflared tunnel --no-autoupdate --url http://127.0.0.1:<port>`, a child process of
    the plugin. Its public address (`https://<random>.trycloudflare.com`) is read from its
-   output. A pid file in `~/.engage/` lets the next plugin start kill one left behind by a
+   stderr (`SPIKE.md`). **It is opened when remote turns on and closed when it turns off or
+   the session ends, and never reopened in between without need:** Cloudflare limits how
+   fast quick tunnels are created (the spike met a 429 after 13 in ~85 s on a shared
+   network). A pid file in `~/.engage/` lets the next plugin start kill one left behind by a
    crash.
+   **Ready means reachable.** The printed address is not usable for another 7 to 12 s, and a
+   phone that asks too early can remember "no such name". So the plugin reports remote as
+   live only once Cloudflare's public DNS (DNS over https) has the name and one request
+   through the tunnel answers. It never asks the laptop's own resolver first. About 15 to
+   20 s from switch-on to live.
+   **A 429** is its own failure, in plain words ("Cloudflare is not giving out new remote
+   links from this network right now. Try again in a few minutes."), retried no faster than
+   once a minute.
 3. **The key check is per person.** Engage sends the plugin, on every round, the
    **SHA-256 hashes** of the live keys with the person each belongs to. Only hashes ever
    reach the laptop. A request with `?k=` whose hash is in the set gets a cookie and a
@@ -96,10 +110,11 @@ Everything the Wi-Fi share does stays. Remote adds, beside it:
 5. **Dev-server paths a remote request never gets:** `/@fs/`, `/@id/` and `*.map`. (The
    first threat-model draft spoke of the gateway's "method allowlist"; there is none. The
    Wi-Fi gateway passes every method, and the remote one does the same: the app decides.)
-6. **The round's report grows** by: `remote: { status, map: [{ local, remote }], error,
-   devices: { <player>: <count> } }`. The answer grows by `remoteWanted` and `remoteKeys`.
+6. **The round's report grows** by: `remote: { status, address, target, error,
+   devices: { <player>: <count> } }` (`address` the tunnel's origin, `target` the local
+   address it forwards to now). The answer grows by `remoteWanted` and `remoteKeys`.
 7. **Fail closed, as on Wi-Fi:** no answer from Engage for 30 seconds, the switch off, or
-   the session ended closes the remote gateways and kills `cloudflared`.
+   the session ended closes the remote gateway and kills `cloudflared`.
 
 ### 4.2 Getting `cloudflared`
 
@@ -173,7 +188,7 @@ nothing more. Each row says what remote changes against the Wi-Fi share as built
 |---|---|---|---|
 | A stranger finds the address | Only devices on the same Wi-Fi can try. | Anyone on the internet can reach it while it is up. | The address alone opens nothing: the locked page. Random, new each session, never shown or copied. |
 | A person passes their link on | One room key; works for anyone on the Wi-Fi. | Works for anyone, anywhere. | Per-person key. The host sees the extra device by name and can Remove the person, which ends the key at the next round (4 s). Accepted by the owner. |
-| More of the laptop than the app | Only ports Claude showed, only from this project's folder (F4). | Same targets, same check. | The tunnel reaches a 127.0.0.1 gateway, never the dev server or any other port. |
+| More of the laptop than the app | Only ports Claude showed, only from this project's folder (F4). | Only the newest of those, same check. | The tunnel reaches a 127.0.0.1 gateway, never the dev server or any other port. |
 | The dev server's own holes (Vite `/@fs/`, source maps) | Reachable by key holders on the Wi-Fi. | By key holders anywhere. | Still only key holders; those paths refused on the remote gateway; a built copy is shared. |
 | Guessing keys | One fixed key, checked locally. | An unknown key triggers a check with Engage. | 128-bit keys; one check per second at most; wrong keys remembered. |
 | Keys on the laptop | The room key is in memory. | | Only hashes reach the laptop. |
@@ -195,8 +210,10 @@ piece. If they spoil the trial, the remedy is §8, not code here.
   shows as R3's failure, and phones fall back to the Wi-Fi link.
 - **Some company firewalls block `*.trycloudflare.com`.** A remote person behind one gets
   a dead tab, and while remote is on, so would anyone in the room on such a network.
-- **Not checked yet:** whether Cloudflare limits how many quick tunnels one laptop may open
-  in a period. The first build checks this before relying on four per room.
+- **Creating tunnels is rate-limited** (the spike, 16 Oct: 429 after 13 in ~85 s on airplane
+  Wi-Fi; 17 in 3.5 min were fine at home). Probably per public address, so a room sharing
+  one could meet it. One tunnel per session, never reopened without need, keeps this rare.
+- **15 to 20 s from switch-on to live**, most of it waiting for Cloudflare's DNS.
 
 ## 7. Testing
 

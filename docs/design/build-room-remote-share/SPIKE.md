@@ -83,5 +83,5 @@ Four at once was never refused. **Reopening** is what costs.
 3. **A 429 is its own failure,** in plain words: "Cloudflare is not giving out new remote
    links from this network right now. Try again in a few minutes." No automatic retry
    faster than once a minute.
-4. **Fewer tunnels:** proposed to the owner, 16 Oct (one tunnel per session, pointed at
-   the newest thing Claude showed, instead of one per shared address). Pending.
+4. **Fewer tunnels:** decided by the owner, 16 Oct: one tunnel per session, pointed at
+   the newest thing Claude showed, instead of one per shared address.
