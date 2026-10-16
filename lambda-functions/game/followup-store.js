@@ -421,8 +421,9 @@ async function pickIdea(db, { gameId, round, askId, orgId, id, picked }) {
   );
   const current = Array.isArray(ask.Picked) ? ask.Picked : [];
   let next = current.filter((p) => p.id !== id);
+  let idea = null;
   if (picked) {
-    const idea = ideas.find((i) => i.id === id);
+    idea = ideas.find((i) => i.id === id);
     if (!idea) return { ok: false, code: 'NOT_FOUND' };
     next = [...next, { id, text: idea.text }];
   }
@@ -434,7 +435,25 @@ async function pickIdea(db, { gameId, round, askId, orgId, id, picked }) {
     ExpressionAttributeNames: { '#p': 'Picked' },
     ExpressionAttributeValues: { ':p': sealed.Picked },
   }));
-  return { ok: true, picked: next };
+  // A LATE idea put on the wall is "Reviewed with the room" (session flow v3
+  // §4.4, late items Task 3). Taking it down again does not undo that: it was
+  // shown. Its row is the one whose key hashes to this id.
+  let lateShown = false;
+  if (idea && idea.late) {
+    const lateRow = (latePrefix ? await queryAll(db, gameId, latePrefix) : []).find((r) => ideaId(r.SK) === id);
+    if (lateRow) {
+      await db.send(new UpdateCommand({
+        TableName: table(),
+        Key: { PK: pkOf(gameId), SK: lateRow.SK },
+        UpdateExpression: 'SET #r = :r, #at = :at',
+        ConditionExpression: 'attribute_exists(SK)',
+        ExpressionAttributeNames: { '#r': 'Reviewed', '#at': 'ReviewedAt' },
+        ExpressionAttributeValues: { ':r': 'shown', ':at': new Date().toISOString() },
+      }));
+      lateShown = true;
+    }
+  }
+  return { ok: true, picked: next, lateShown };
 }
 
 // ──────────────────────────────────────────────────────────── answers ──
@@ -569,5 +588,6 @@ module.exports = {
   readAnswer,
   setBeat,
   ideasOf,
+  ideaId,
   pickIdea,
 };

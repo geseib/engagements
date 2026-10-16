@@ -10,6 +10,9 @@
  *     POST /games/{gameId}/comments   write one
  *     GET  /games/{gameId}/comments   read a section, or a round — NEVER the
  *                                      whole session over this route; see below
+ *     GET  /games/{gameId}/late        the HOST's late list, and
+ *     POST /games/{gameId}/late/review its review labels (late-list.js; Cognito
+ *                                      + callerMayDriveSession, 404 otherwise)
  *
  * ── PUBLIC, AND WHY THAT IS NOT THE SAME AS UNGUARDED ──────────────────────
  *
@@ -192,6 +195,8 @@ const { callerMayDriveSession } = require('./tenant');
 const { SURVEY_CLOSED } = require('./survey-names');
 const { describeSurveyQuestion } = require('./survey-digest');
 const { lateWindow } = require('./late-window');
+const { queryAll } = require('./followup-store');
+const { readLate, reviewLate, isLateRoute } = require('./late-list');
 
 /**
  * What a refused comment says. The window's own two sentences ("Comments are
@@ -258,19 +263,19 @@ const respond = (statusCode, body) => ({
  * Tell the room something changed. Never throws: the row is already written by
  * the time this runs, and reporting a failure would tell a participant their
  * comment did not land when it did.
+ *
+ * `hostsOnly`: only HOST connections (`ConnectionType = 'HOST'`), for what the
+ * room must never see, such as the late list's `lateChanged` (owner, Q14:
+ * review labels never reach a phone or the wall).
  */
-const broadcastToGame = async (gameId, message) => {
+const broadcastToGame = async (gameId, message, { hostsOnly = false } = {}) => {
   try {
     const apigateway = new ApiGatewayManagementApiClient({
       endpoint: process.env.WEBSOCKET_API_ENDPOINT,
     });
-    const res = await db.send(new QueryCommand({
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-      ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#' },
-    }));
-
-    const connections = res.Items || [];
+    // Every page: a one-call Query past 1 MB truncates silently.
+    const all = await queryAll(db, gameId, 'CONNECTION#');
+    const connections = hostsOnly ? all.filter((c) => c.ConnectionType === 'HOST') : all;
     if (connections.length === 0) return;
 
     await Promise.all(connections.map(async (conn) => {
@@ -869,21 +874,28 @@ async function featureComment(event, gameId, commentId, body) {
     return respond(404, { error: 'Game not found' });
   }
 
-  const res = await db.send(new QueryCommand({
-    TableName: process.env.TABLE_NAME,
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': commentPrefix({ questionNumber: padded }) },
-  }));
-  const row = (res.Items || []).find((item) => (parseCommentSk(item.SK) || {}).commentId === String(commentId));
+  const rows = await queryAll(db, gameId, commentPrefix({ questionNumber: padded }));
+  const row = rows.find((item) => (parseCommentSk(item.SK) || {}).commentId === String(commentId));
   if (!row) return respond(404, { error: 'Comment not found' });
 
   const now = new Date().toISOString();
+  /*
+    ON THE WALL IS "REVIEWED WITH THE ROOM" (session flow v3 §4.4, late items
+    Task 3): featuring also sets Reviewed 'shown'. Taking it down does not undo
+    that; it was shown.
+  */
   const updated = await db.send(new UpdateCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: row.PK, SK: row.SK },
-    UpdateExpression: 'SET #featured = :featured, #featuredAt = :at',
-    ExpressionAttributeNames: { '#featured': 'Featured', '#featuredAt': 'FeaturedAt' },
-    ExpressionAttributeValues: { ':featured': body.featured, ':at': now },
+    UpdateExpression: body.featured
+      ? 'SET #featured = :featured, #featuredAt = :at, #reviewed = :shown, #reviewedAt = :at'
+      : 'SET #featured = :featured, #featuredAt = :at',
+    ExpressionAttributeNames: {
+      '#featured': 'Featured',
+      '#featuredAt': 'FeaturedAt',
+      ...(body.featured ? { '#reviewed': 'Reviewed', '#reviewedAt': 'ReviewedAt' } : {}),
+    },
+    ExpressionAttributeValues: { ':featured': body.featured, ':at': now, ...(body.featured ? { ':shown': 'shown' } : {}) },
     ReturnValues: 'ALL_NEW',
   }));
 
@@ -895,6 +907,10 @@ async function featureComment(event, gameId, commentId, body) {
     featured: body.featured,
     timestamp: now,
   });
+  // An added-later comment's label changed: the host's late list refetches.
+  if (body.featured && row.AddedLater === true) {
+    await broadcastToGame(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
+  }
 
   const orgId = orgOf(meta);
   const plain = orgId ? await decryptItem(orgId, 'comment', updated.Attributes || row) : (updated.Attributes || row);
@@ -904,6 +920,31 @@ async function featureComment(event, gameId, commentId, body) {
     // Not even to the host: a survey's comments carry no name anywhere.
     comment: isSurveySession(meta) ? redactAnswers([wire])[0] : wire,
   });
+}
+
+// ─────────────────────────────────────────────────── late list ──────────────
+
+/**
+ * GET /games/{gameId}/late and POST /games/{gameId}/late/review (late-list.js).
+ * NOT PUBLIC: Cognito in front (template-clean.yaml) and callerMayDriveSession
+ * on the session's own org here, 404 to anyone else, before anything is read
+ * beyond METADATA or anything in the body is looked at.
+ */
+async function lateRoute(event, gameId, method) {
+  const { meta, state } = await readSession(gameId);
+  if (!meta) return respond(404, { error: 'Game not found' });
+  const claims = event?.requestContext?.authorizer?.jwt?.claims || event?.requestContext?.authorizer?.lambda;
+  if (!claims || !callerMayDriveSession(event, meta)) {
+    return respond(404, { error: 'Game not found' });
+  }
+  if (method === 'GET') return readLate(db, { gameId, meta });
+  let body = {};
+  try {
+    body = JSON.parse(event.body || '{}') || {};
+  } catch {
+    return respond(400, { error: 'Body must be JSON' });
+  }
+  return reviewLate(db, broadcastToGame, { gameId, state, body });
 }
 
 // ───────────────────────────────────────────────────────── handler ─────────
@@ -920,6 +961,11 @@ exports.handler = async (event) => {
     // switch; the same table client and the same notify-then-refetch broadcast.
     if (isFollowUpRoute(event.requestContext?.routeKey || event.routeKey)) {
       return await handleFollowUps(event, { db, broadcast: broadcastToGame });
+    }
+    // The host's late list (late-list.js): Cognito in front, and here the
+    // same check featureComment makes, 404 to anyone else.
+    if (isLateRoute(event.requestContext?.routeKey || event.routeKey)) {
+      return await lateRoute(event, gameId, method);
     }
     if (method === 'GET') {
       const route = event.requestContext?.routeKey || event.routeKey || '';

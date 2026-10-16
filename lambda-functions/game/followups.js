@@ -249,6 +249,8 @@ async function pick(db, broadcast, { gameId, meta, askId, body }) {
       : respond(409, { error: 'Only an Ideas question has answers to pick', code: done.code });
   }
   await broadcast(gameId, { type: 'followUpChanged', gameId, questionNumber: round, askId, status: 'picked' });
+  // A late idea on the wall is now "Reviewed with the room": the host's late list refetches.
+  if (done.lateShown) await broadcast(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
   return respond(200, { gameId, askId, picked: done.picked });
 }
 
