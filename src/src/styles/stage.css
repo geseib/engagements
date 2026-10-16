@@ -629,6 +629,10 @@ a.dock-more{text-decoration:none}
    useCrowded) — never a button past the edge. */
 .dock[data-crowded]{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
 .dock[data-crowded] .status{flex:1 1 100%;max-width:none}
+/* A crowded dock drops the SPACE hint before it wraps a button to a third
+   row (walk of dev 92f8b24d: TV at 1366x768, SESSION alone on a third row
+   took 60px from the stage). */
+.dock[data-crowded] .kbd{display:none}
 
 /* ------------------------------------------- THE COUNT, WHEN THE COLUMN GOES
    THE DEFECT THIS FIXES, stated as measurement rather than opinion. The fitter

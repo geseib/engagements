@@ -169,14 +169,13 @@ test('the host stage draws the RESULTS rows in the order of their labels', async
   render(<GameHostPage />);
   await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
 
-  // Four on the first page: Table (the jsdom default) shows four RESULTS cards
-  // since 16 Oct 2026 (config/stagePaging.js RESULTS_PAGE_SIZE, measured).
+  // Three on the first page: Table (the jsdom default) shows three RESULTS
+  // cards since 16 Oct 2026 (config/stagePaging.js RESULTS_PAGE_SIZE, measured).
   await waitFor(() => {
-    expect(document.querySelectorAll('.card .rank').length).toBe(4);
+    expect(document.querySelectorAll('.card .rank').length).toBe(3);
   }, { timeout: 5000 });
   const ranks = [...document.querySelectorAll('.card .rank')].map((el) => el.textContent);
-  expect(ranks).toEqual(['1st', '2nd', '3rd', '4th']);
+  expect(ranks).toEqual(['1st', '2nd', '3rd']);
   const answers = [...document.querySelectorAll('.card .ans')].map((el) => el.textContent);
   expect(answers[2]).toContain('Rosa');
-  expect(answers[3]).toContain('Maya');
 });

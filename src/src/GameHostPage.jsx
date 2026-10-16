@@ -7532,7 +7532,7 @@ Focus on actionable business strategy insights.`;
    * phones called it "Response 4".
    */
   // RESULTS cards are ideas first and taller (config/stagePaging.js
-  // RESULTS_PAGE_SIZE, measured): Table shows four there, five elsewhere.
+  // RESULTS_PAGE_SIZE, measured): fewer per page there than when voting.
   const stagePageSize = hostPhase === 'RESULTS' ? resultsPageSizeFor(profile) : pageSizeFor(profile);
   const pageKey = `${hostPhase}#${lessonNumber}`;
   /* ONE INDEX FOR THE WHOLE STAGE, because the states that page are mutually

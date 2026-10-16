@@ -188,17 +188,22 @@ describe('the pager line says all three things', () => {
 });
 
 /* THE RESULTS CARDS ARE IDEAS FIRST AND TALLER (walk of dev 26af5fc8, F3).
-   Measured on the real stage at 1280x720 with six 260-character ideas, Table's
-   five ran past the type floor (641px in a 563px box) and dropped the prompt;
-   four fit. RESULTS reads its own page size; every other phase is unchanged.
-   rejects: Table's results back at five; a phase other than RESULTS moved. */
+   Measured on dev 92f8b24d at 1280x720, one screen, real dock, with 149- and
+   317-character ideas: the voting sizes ran 33-110px past the type floor on
+   every profile; Room 2, Call 2, TV 1, Table 3 fit at 1280x720, 1366x768 and
+   1440x900. RESULTS reads its own page size; every other phase is unchanged.
+   rejects: results back at the voting sizes; a phase other than RESULTS moved;
+   an unknown profile given more than Room's results budget. */
 describe('resultsPageSizeFor', () => {
   // eslint-disable-next-line global-require
   const { resultsPageSizeFor, pageSizeFor: base } = require('../config/stagePaging');
-  test('Table shows four results; Room, TV and Call keep theirs', () => {
-    expect(resultsPageSizeFor('table')).toBe(4);
-    for (const p of ['room', 'tv', 'call']) expect(resultsPageSizeFor(p)).toBe(base(p));
-    expect(resultsPageSizeFor('nonsense')).toBe(base('nonsense'));
+  test('results show fewer per page than voting, on every profile', () => {
+    expect(resultsPageSizeFor('room')).toBe(2);
+    expect(resultsPageSizeFor('call')).toBe(2);
+    expect(resultsPageSizeFor('tv')).toBe(1);
+    expect(resultsPageSizeFor('table')).toBe(3);
+    for (const p of ['room', 'tv', 'call', 'table']) expect(resultsPageSizeFor(p)).toBeLessThan(base(p));
+    expect(resultsPageSizeFor('nonsense')).toBe(resultsPageSizeFor('room'));
     expect(base('table')).toBe(5);
   });
   test('the host page pages RESULTS with it, and only RESULTS', () => {
