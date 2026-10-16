@@ -947,7 +947,7 @@ async function lateRoute(event, gameId, method) {
   if (!claims || !callerMayDriveSession(event, meta)) {
     return respond(404, { error: 'Game not found' });
   }
-  if (method === 'GET') return readLate(db, { gameId, meta });
+  if (method === 'GET') return readLate(db, { gameId, meta, state: state || null });
   let body = {};
   try {
     body = JSON.parse(event.body || '{}') || {};

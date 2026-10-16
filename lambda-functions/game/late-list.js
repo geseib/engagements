@@ -44,7 +44,7 @@
  * `IncludeNotReviewed`, any time, and GET returns it as `includeNotReviewed`.
  * create-report.js reads it, and reads the late items through `lateByRound`.
  */
-const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { decryptItems } = require('./tenant-crypto');
 const { isHidden } = require('./anonymity');
 const { commentPrefix, parseCommentSk } = require('./comment-keys');
@@ -104,22 +104,27 @@ function item(kind, row, { round, ref, text, author, who, arrivedDuring, extra =
 // ───────────────────────────────────────────────────────────── GET ──
 
 /**
- * The rounds that can hold a late round answer, from the ROUND# rows: every
- * round from 001 to one past the highest ROUND# row. Not only the rounds with
- * a row: a row is written when a round reaches results (get-results.js) or is
- * otherwise touched, and a round the host moved past without showing results
- * has none. Filling the gaps, and one past the end (the round left without
- * results while the next one ran), costs a few empty Queries; ROUND#000 (the
- * feedback beat) is not a round anyone answers.
+ * The rounds that can hold a late round answer: every round from 001 to the
+ * higher of one past the highest ROUND# row and STATE's `LessonNumber`.
+ *
+ * Both bounds matter. A ROUND# row is written only when a round reaches
+ * results, reveal, a beat, a focus or an ask (get-results.js, stage-beat.js,
+ * ...), never at ASK, and a late round answer is accepted for ANY earlier
+ * round (websocket/late-answer.js `at > n`): with the last row at 002 and the
+ * room on ASK#005, round 004 can hold one. `LessonNumber` is the round the
+ * room is on and survives ENDED. Never CurrentQuestionId: that is the source
+ * question's id, not the round. ROUND#000 (the feedback beat) is no round.
  */
-function lateAnswerRounds(roundKeys) {
+function lateAnswerRounds(roundKeys, lessonNumber = 0) {
   let max = 0;
   for (const k of roundKeys) {
     const n = Number(k);
     if (/^\d{3}$/.test(k) && n > max) max = n;
   }
+  const lesson = Number(lessonNumber);
+  const last = Math.min(Math.max(max + 1, Number.isInteger(lesson) && lesson > 0 ? lesson : 0), 999);
   const out = [];
-  for (let n = 1; n <= Math.min(max + 1, 999); n += 1) out.push(String(n).padStart(3, '0'));
+  for (let n = 1; n <= last; n += 1) out.push(String(n).padStart(3, '0'));
   return out;
 }
 
@@ -133,8 +138,11 @@ function lateAnswerRounds(roundKeys) {
  * could cause): the report needs no ref, and an answer's or an idea's ref is
  * then null. A comment's ref is its own id either way.
  */
-async function lateByRound(db, { gameId, meta, withRefs = true }) {
+async function lateByRound(db, { gameId, meta, state, withRefs = true }) {
   const orgId = orgOf(meta);
+  // STATE bounds the late-answer reads (lateAnswerRounds): one GetItem when
+  // the caller has not read it already.
+  const st = state !== undefined ? state : await readState(db, gameId);
   const secret = withRefs ? await sessionIdSecret(db, gameId, meta) : null;
   const refOf = (sk) => (secret ? ideaId(secret, sk) : null);
   const [commentRows, followUpRows, roundRows] = await Promise.all([
@@ -146,7 +154,7 @@ async function lateByRound(db, { gameId, meta, withRefs = true }) {
   // Late ROUND answers, read narrowly: `QUESTION#nnn#LATE#` per round, never
   // the whole QUESTION# prefix (every answer and vote of the session).
   const questionRows = (await Promise.all(
-    lateAnswerRounds(rounds.keys()).map((n) => queryAll(db, gameId, `QUESTION#${n}#LATE#`)),
+    lateAnswerRounds(rounds.keys(), st && st.LessonNumber).map((n) => queryAll(db, gameId, `QUESTION#${n}#LATE#`)),
   )).flat();
   const hidden = (padded) => hiddenIn(meta, rounds.get(padded));
 
@@ -211,13 +219,22 @@ async function lateByRound(db, { gameId, meta, withRefs = true }) {
   return byRound;
 }
 
+async function readState(db, gameId) {
+  const res = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+    ProjectionExpression: 'LessonNumber',
+  }));
+  return (res && res.Item) || null;
+}
+
 /** Oldest first; on a tie, answers, then ask answers, then comments. */
 const lateOrder = (a, b) => String(a.arrivedAt || '').localeCompare(String(b.arrivedAt || ''))
   || KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind);
 
-async function readLate(db, { gameId, meta }) {
+async function readLate(db, { gameId, meta, state }) {
   const orgId = orgOf(meta);
-  const byRound = await lateByRound(db, { gameId, meta });
+  const byRound = await lateByRound(db, { gameId, meta, state });
 
   let roundNoun = null;
   try {

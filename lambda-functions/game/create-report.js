@@ -355,7 +355,7 @@ exports.handler = async (event) => {
     const includeNotReviewed = includesNotReviewed(gameMetadata.Item);
     let lateRounds = new Map();
     try {
-      lateRounds = await lateByRound(db, { gameId, meta: gameMetadata.Item, withRefs: false });
+      lateRounds = await lateByRound(db, { gameId, meta: gameMetadata.Item, state: gameState.Item || null, withRefs: false });
     } catch (error) {
       console.error('❌ REPORT: the late items could not be read; "Arrived late" is empty this time:', error.message);
     }

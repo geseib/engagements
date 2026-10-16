@@ -118,6 +118,64 @@ const queries = () => table.log.filter((l) => l.type === 'query').map((l) => l.i
     ]);
   });
 
+  say('\nbounded by STATE.LessonNumber too');
+  await check('lateAnswerRounds: the higher of one past the last row and LessonNumber', () => {
+    assert.deepStrictEqual(lateAnswerRounds(['001', '002'], 5), ['001', '002', '003', '004', '005']);
+    assert.deepStrictEqual(lateAnswerRounds(['001', '002', '003'], 2), ['001', '002', '003', '004']);
+    assert.deepStrictEqual(lateAnswerRounds([], 3), ['001', '002', '003']);
+    assert.deepStrictEqual(lateAnswerRounds([], 'junk'), ['001']);
+  });
+
+  /** The last ROUND# row at 002, the room on ASK#005, a late answer on 004 (two past the last row). */
+  function seedPastTheRows({ rows = ['001', '002'], lesson = 5, state = 'ASK#005' } = {}) {
+    table.rows.clear();
+    table.log.length = 0;
+    table.put(META);
+    table.put({ PK, SK: 'STATE', State: state, LessonNumber: lesson, CurrentQuestionId: 'q-xyz' });
+    for (const r of rows) table.put({ PK, SK: `ROUND#${r}`, QuestionNumber: r, AuthorsRevealed: true });
+    late('004', 'Omar', '2026-10-16T09:40:00.000Z');
+  }
+  const authorsOn = (byRound, round) => (byRound.get(round) || []).map((i) => i.author);
+
+  await check('two rounds past the last ROUND# row: found, with STATE read by one GetItem', async () => {
+    seedPastTheRows();
+    const byRound = await lateByRound(table.doc, { gameId: GAME, meta: META, withRefs: false });
+    assert.deepStrictEqual(authorsOn(byRound, '004'), ['Omar']);
+    assert.ok(queries().includes('QUESTION#005#LATE#'));
+    assert.ok(!queries().includes('QUESTION#006#LATE#'));
+    assert.strictEqual(table.log.filter((l) => l.type === 'get' && l.input.Key.SK === 'STATE').length, 1);
+  });
+
+  await check('...and with the caller\'s STATE (no GetItem), still found after ENDED', async () => {
+    seedPastTheRows({ state: 'ENDED' });
+    const state = table.get(PK, 'STATE');
+    const byRound = await lateByRound(table.doc, { gameId: GAME, meta: META, state, withRefs: false });
+    assert.deepStrictEqual(authorsOn(byRound, '004'), ['Omar']);
+    assert.strictEqual(table.log.filter((l) => l.type === 'get').length, 0);
+  });
+
+  await check('LessonNumber the only source (no ROUND# rows at all): found', async () => {
+    seedPastTheRows({ rows: [], lesson: 4 });
+    const byRound = await lateByRound(table.doc, { gameId: GAME, meta: META, withRefs: false });
+    assert.deepStrictEqual(authorsOn(byRound, '004'), ['Omar']);
+  });
+
+  await check('GET /late through comments.js finds it too (the route hands its STATE on)', async () => {
+    seedPastTheRows();
+    process.env.WEBSOCKET_API_ENDPOINT = 'https://ws.test.invalid/dev';
+    const { handler } = require(path.join(REPO, 'lambda-functions/game/comments.js'));
+    const routeKey = 'GET /games/{gameId}/late';
+    table.put({ ...META, orgId: 'org_acme', IdSecret: 'c2VjcmV0LWZvci1uYXJyb3ctcmVhZA==' });
+    const res = await handler({
+      routeKey,
+      requestContext: { http: { method: 'GET' }, routeKey, authorizer: { lambda: { userId: 'u', groups: 'hosts', orgId: 'org_acme', orgIds: 'org_acme' } } },
+      pathParameters: { gameId: GAME },
+    });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    const body = JSON.parse(res.body);
+    assert.deepStrictEqual(body.rounds.map((r) => [r.round, r.items.map((i) => i.who)]), [['004', ['Omar']]]);
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);
