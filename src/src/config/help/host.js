@@ -322,6 +322,12 @@ const running = {
         {
           t: 'note',
           tone: 'tip',
+          title: 'Chrome or Edge with a second display: it opens there for you',
+          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
+        },
+        {
+          t: 'note',
+          tone: 'tip',
           title: 'Putting a response on the wall',
           text: 'Press a response in the main area and it goes up on the wall. Space, → and the clicker still move the room on afterwards.',
         },

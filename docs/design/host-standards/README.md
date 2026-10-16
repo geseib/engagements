@@ -202,12 +202,24 @@ What that needs:
    session panel.
 4. Then add `'build'` to `TWO_SURFACE_TYPES` (or its Build Room equivalent).
 
-## Not built yet: opening the window on the second display for you
+## Opening the window on the second display for you (built 16 Oct 2026)
 
-The plan (`docs/design/two-surface/PLAN.md` 3.9, and the owner's second-screen idea) is
-to use Chrome's **Window Management API** (`window.getScreenDetails()`): with the
-person's permission, open the room's window directly on the external display and full
-screen, instead of "drag it to the projector and press F". It is progressive: browsers
-without it keep the link and the hint. **None of it is built** — no
-`presentWindow.js`, no `getScreenDetails` call. The window-status report (§1) is already
-in place to confirm the result, and it would serve every type above at once.
+`present/roomWindow.js`, used by every "Room's window" link through
+`components/stage/RoomWindowLink.jsx` (console top line, Screens group, the Setup
+chooser, the dock's PRESENT). Where Chrome or Edge offers the **Window Management API**
+and `screen.isExtended` says a second display is attached, a plain click:
+
+1. opens the room's window as a popup **inside the click** (a popup opened after an
+   `await` is blocked), with `placed=1`;
+2. asks `getScreenDetails()` (the browser asks the person once: "manage windows on all
+   your displays") and moves and resizes the popup to fill the other display: never the
+   one the laptop page is on, an external one before a built-in one, then the largest;
+3. on that window, the **first click goes full screen** (`useClickToFill` in
+   `PresentPage.jsx`); a page may only go full screen from a click inside itself, so
+   this is the one step placing cannot do. The laptop's window status confirms it.
+
+Anything else (another browser, one display, a modified or middle click, a blocked popup,
+a refused permission) falls back to the plain link and "drag it to the projector, press F".
+Measured in Chromium with two emulated displays (`--screen-info={1440x900}{1920x1080}`):
+the window lands at x=1440, 1920×1080. Any type that joins `TWO_SURFACE_TYPES` gets it
+by using `RoomWindowLink`.

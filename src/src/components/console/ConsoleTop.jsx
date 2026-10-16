@@ -1,6 +1,7 @@
 import React from 'react';
 import CW from '../../config/consoleWords';
 import { presentStatusFrom } from '../../config/presentStatus';
+import RoomWindowLink from '../stage/RoomWindowLink';
 
 /**
  * THE CONSOLE'S TOP LINE (host console spec §3.1): the session's name, the
@@ -22,14 +23,14 @@ export default function ConsoleTop({ title, code, onJoin, presentHref, presentDe
         </button>
       ) : null}
       {presentHref ? (
-        <a className="hc-btn" href={presentHref} target="_blank" rel="noopener noreferrer" onClick={open}>
+        <RoomWindowLink className="hc-btn" href={presentHref} onClick={open}>
           {`${CW.roomsWindow} ↗`}
-        </a>
+        </RoomWindowLink>
       ) : null}
       {status.state === 'closed' && presentHref ? (
-        <a className={`hc-winstat is-${status.tone}`} href={presentHref} target="_blank" rel="noopener noreferrer" title={status.hint} onClick={open}>
+        <RoomWindowLink className={`hc-winstat is-${status.tone}`} href={presentHref} title={status.hint} onClick={open}>
           <span className="hc-dot" aria-hidden="true" />{status.label}
-        </a>
+        </RoomWindowLink>
       ) : (
         <span className={`hc-winstat is-${status.tone}`} title={status.hint} role="status">
           <span className="hc-dot" aria-hidden="true" />{status.label}

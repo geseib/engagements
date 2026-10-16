@@ -1,6 +1,7 @@
 import React, { useId } from 'react';
 import { SCREEN_WORDS as W } from '../../config/roomScreen';
 import { presentStatusFrom } from '../../config/presentStatus';
+import RoomWindowLink from './RoomWindowLink';
 import './ScreensGroup.css';
 
 /**
@@ -60,7 +61,7 @@ export default function ScreensGroup({
             <span className="scr-label">{W.window}</span>
             <span className={`scr-hint scr-stat is-${status.tone}`} role="status" title={status.hint}>{status.label}</span>
           </div>
-          <a className="scr-open" href={presentHref} target="_blank" rel="noopener noreferrer">{W.open}</a>
+          <RoomWindowLink className="scr-open" href={presentHref}>{W.open}</RoomWindowLink>
         </div>
       ) : null}
       <div className="scr-row">
