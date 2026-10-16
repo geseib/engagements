@@ -58,6 +58,8 @@ const GONE = 'Dorothy-Vaughan-7'; // removed by the host: never counted as in th
 const BACKGROUND = 'PRIVATE-BACKGROUND-NOTE-7';
 const QUEUED = 'c009#099';
 const SET = 'set-room-view';
+const ID_SECRET = 'SESSION-ID-SECRET-NEVER-SENT-7-aaaaaaaaaaaaaaaa';
+const RAWS = [];
 
 function seed(gameId, { state, round = 1, anonymous = true, revealed = false, answerers = 3, voters = 2 }) {
   const PK = `GAME#${gameId}`;
@@ -66,6 +68,8 @@ function seed(gameId, { state, round = 1, anonymous = true, revealed = false, an
     QuestionSetId: SET, QuestionSetScope: 'platform', Target: 5,
     HostPreferences: { anonymousUntilReveal: anonymous },
     CreatedAt: '2026-10-12T09:00:00.000Z', Started: true,
+    // The session's id secret (game/id-secret.js): never in any reply.
+    IdSecret: ID_SECRET,
   });
   table.put({ PK, SK: 'STATE', State: state, LessonNumber: round, CurrentQuestionId: 'q-1' });
   table.put({ PK, SK: 'QUEUE', Queue: [QUEUED], Version: 1 });
@@ -95,6 +99,7 @@ const stateRead = async (gameId, query) => {
     pathParameters: { gameId }, ...(query ? { queryStringParameters: query } : {}),
     requestContext: { routeKey: 'GET /games/{gameId}/state', http: { method: 'GET' } },
   });
+  RAWS.push(String(res.body));
   return { status: res.statusCode, body: JSON.parse(res.body), raw: String(res.body) };
 };
 
@@ -104,6 +109,7 @@ const answersRead = async (gameId, query) => {
     pathParameters: { gameId }, ...(query ? { queryStringParameters: query } : {}),
     requestContext: { routeKey: 'GET /games/{gameId}/answers', http: { method: 'GET' } },
   });
+  RAWS.push(String(res.body));
   return { status: res.statusCode, body: JSON.parse(res.body), raw: String(res.body) };
 };
 
@@ -205,6 +211,11 @@ const HOST_ONLY = ['questionQueue', 'categoryCounts', 'categoryState', 'answerPr
   await check('the room view never turns into one player\'s own-answer lookup', () => {
     assert.ok(Array.isArray(asPlayer.body.answers), asPlayer.raw);
     assert.ok(!asPlayer.raw.includes(NAMES[0]));
+  });
+
+  await check('no reply above carried the session\'s IdSecret, by name or by value', () => {
+    assert.ok(RAWS.length > 5, `only ${RAWS.length} replies`);
+    for (const raw of RAWS) assert.ok(!raw.includes(ID_SECRET) && !raw.includes('IdSecret'), raw.slice(0, 200));
   });
 
   say(`\n${pass} passed, ${fail} failed`);

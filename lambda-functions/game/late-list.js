@@ -43,6 +43,7 @@ const { isHidden } = require('./anonymity');
 const { commentPrefix, parseCommentSk } = require('./comment-keys');
 const keys = require('./followup-keys');
 const { queryAll, ideaId } = require('./followup-store');
+const { sessionIdSecret } = require('./id-secret');
 const { readReportHead } = require('./report-store');
 const { reviewedOf, reviewLabel, REVIEW_STATES } = require('./late-labels');
 
@@ -90,6 +91,7 @@ function item(kind, row, { round, ref, text, author, who, arrivedDuring, extra =
 
 async function readLate(db, { gameId, meta }) {
   const orgId = orgOf(meta);
+  const secret = await sessionIdSecret(db, gameId, meta);
   const [questionRows, commentRows, followUpRows, roundRows] = await Promise.all([
     queryAll(db, gameId, 'QUESTION#'),
     queryAll(db, gameId, commentPrefix({})),
@@ -116,7 +118,7 @@ async function readLate(db, { gameId, meta }) {
     const author = hidden(round) ? null : (row.PlayerName || player);
     add(round, item('answer', row, {
       round,
-      ref: ideaId(row.SK),
+      ref: ideaId(secret, row.SK),
       text: textOf(row.Answer),
       author,
       who: author || LATE_WORDS.LATE_ANSWER,
@@ -145,7 +147,7 @@ async function readLate(db, { gameId, meta }) {
   }
   for (const row of asks) {
     const k = keys.parseFollowUpSk(row.SK);
-    const id = ideaId(row.SK);
+    const id = ideaId(secret, row.SK);
     add(k.round, item('askAnswer', row, {
       round: k.round,
       ref: `${k.askId}:${id}`,
@@ -185,33 +187,22 @@ async function readLate(db, { gameId, meta }) {
 
 // ──────────────────────────────────────────────────────────── POST ──
 
-/** Mark one row reviewed with the room (the wall). For the feature and pick routes. */
-async function markShown(db, key, now = new Date().toISOString()) {
-  await db.send(new UpdateCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { PK: key.PK, SK: key.SK },
-    UpdateExpression: 'SET #r = :r, #at = :at',
-    ConditionExpression: 'attribute_exists(SK)',
-    ExpressionAttributeNames: { '#r': 'Reviewed', '#at': 'ReviewedAt' },
-    ExpressionAttributeValues: { ':r': 'shown', ':at': now },
-  }));
-}
-
 /** The one row a validated ref names, in this game, under its kind's prefix; or null. */
-async function findRow(db, gameId, kind, round, ref) {
+async function findRow(db, gameId, kind, round, ref, secret) {
   if (kind === 'answer') {
     const rows = await queryAll(db, gameId, `QUESTION#${round}#LATE#`);
-    return rows.find((r) => LATE_ANSWER_SK.test(String(r.SK)) && ideaId(r.SK) === ref) || null;
+    return rows.find((r) => LATE_ANSWER_SK.test(String(r.SK)) && ideaId(secret, r.SK) === ref) || null;
   }
   if (kind === 'comment') {
     const rows = await queryAll(db, gameId, commentPrefix({ questionNumber: round }));
-    return rows.find((r) => (parseCommentSk(r.SK) || {}).commentId === ref) || null;
+    // Only an added-later comment is a late item; an on-time one is not reviewed here.
+    return rows.find((r) => (parseCommentSk(r.SK) || {}).commentId === ref && r.AddedLater === true) || null;
   }
   const [, askId, id] = ASK_REF.exec(ref);
   const prefix = keys.latePrefix(round, askId);
   if (!prefix) return null;
   const rows = await queryAll(db, gameId, prefix);
-  return rows.find((r) => (keys.parseFollowUpSk(r.SK) || {}).kind === 'late' && ideaId(r.SK) === id) || null;
+  return rows.find((r) => (keys.parseFollowUpSk(r.SK) || {}).kind === 'late' && ideaId(secret, r.SK) === id) || null;
 }
 
 function refIsWellFormed(kind, ref) {
@@ -240,7 +231,7 @@ async function closeComments(db, broadcast, { gameId, state }) {
   return respond(200, { gameId, commentsClosedAt: (res.Attributes && res.Attributes.CommentsClosedAt) || null });
 }
 
-async function reviewLate(db, broadcast, { gameId, state, body }) {
+async function reviewLate(db, broadcast, { gameId, meta, state, body }) {
   const { kind, how, ref } = body || {};
   if (kind === 'comments') {
     if (how !== 'close') return respond(400, { error: "comments takes how: 'close'" });
@@ -253,7 +244,7 @@ async function reviewLate(db, broadcast, { gameId, state, body }) {
   if (!round) return respond(400, { error: 'round must be a round number' });
   if (!refIsWellFormed(kind, ref)) return respond(400, { error: 'ref does not name a late item' });
 
-  const row = await findRow(db, gameId, kind, round, ref);
+  const row = await findRow(db, gameId, kind, round, ref, kind === 'comment' ? null : await sessionIdSecret(db, gameId, meta));
   if (!row) return respond(404, { error: 'Not found' });
 
   // 'shown' is the stronger fact: a later "Mark reviewed" never takes it back.
@@ -274,9 +265,18 @@ async function reviewLate(db, broadcast, { gameId, state, body }) {
   return respond(200, { gameId, kind, round, ref, reviewed, label: reviewLabel(reviewed) });
 }
 
-/** Does this request belong here? (comments.js asks before routing.) */
-const isLateRoute = (routeKey) => /\/games\/\{gameId\}\/late(?:\/review)?$/.test(String(routeKey || ''));
+/**
+ * Does this request belong here? (comments.js asks before routing.) By its
+ * routeKey, or, when that is absent, by its method and rawPath, so a request
+ * without a routeKey can never fall through to the public comments read.
+ */
+function isLateRoute(event) {
+  const routeKey = String((event && (event.requestContext?.routeKey || event.routeKey)) || '');
+  if (/\/games\/\{gameId\}\/late(?:\/review)?$/.test(routeKey)) return true;
+  const rawPath = String((event && (event.rawPath || event.path || event.requestContext?.http?.path)) || '');
+  return /\/games\/[^/]+\/late(?:\/review)?\/?$/.test(rawPath);
+}
 
 module.exports = {
-  readLate, reviewLate, markShown, isLateRoute, LATE_WORDS,
+  readLate, reviewLate, isLateRoute, LATE_WORDS,
 };

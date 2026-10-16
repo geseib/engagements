@@ -51,6 +51,7 @@ const keys = require('./followup-keys');
 const kinds = require('./followup-kinds');
 const store = require('./followup-store');
 const { lateWindow } = require('./late-window');
+const { sessionIdSecret } = require('./id-secret');
 
 const respond = (statusCode, body) => ({
   statusCode,
@@ -143,14 +144,17 @@ async function hostRound(db, { gameId, meta, state, round }) {
     store.readLivePointer(db, { gameId }),
   ]);
   const asks = [];
+  // The session's id secret, fetched (or made) once, and only if an Ideas ask needs it.
+  let secret = null;
+  const idKey = async () => (secret = secret || await sessionIdSecret(db, gameId, meta));
   for (const { ask, answerRows, lateRows } of rows) {
     let tally = null;
     if (ask.Status === 'closed') {
-      tally = ask.Tally || (await store.freezeTally(db, { gameId, round: padded, ask, orgId })).Tally;
+      tally = ask.Tally || (await store.freezeTally(db, { gameId, round: padded, ask, orgId, secret: await idKey() })).Tally;
     } else if (ask.Status === 'live') {
       tally = await store.countAnswers(ask, answerRows, orgId);
     }
-    const ideas = ask.Kind === 'ideas' ? await store.ideasOf(answerRows, orgId, lateRows) : null;
+    const ideas = ask.Kind === 'ideas' ? await store.ideasOf(answerRows, orgId, lateRows, await idKey()) : null;
     asks.push(hostWire(ask, tally, ideas));
   }
   return respond(200, {
@@ -242,7 +246,9 @@ async function pick(db, broadcast, { gameId, meta, askId, body }) {
   if (typeof body.id !== 'string' || !body.id || typeof body.picked !== 'boolean') {
     return respond(400, { error: 'id and picked are required' });
   }
-  const done = await store.pickIdea(db, { gameId, round, askId, orgId: orgOf(meta), id: body.id, picked: body.picked });
+  const done = await store.pickIdea(db, {
+    gameId, round, askId, orgId: orgOf(meta), id: body.id, picked: body.picked, secret: await sessionIdSecret(db, gameId, meta),
+  });
   if (!done.ok) {
     return done.code === 'NOT_FOUND'
       ? respond(404, { error: 'Not found' })

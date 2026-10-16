@@ -881,21 +881,23 @@ async function featureComment(event, gameId, commentId, body) {
   const now = new Date().toISOString();
   /*
     ON THE WALL IS "REVIEWED WITH THE ROOM" (session flow v3 §4.4, late items
-    Task 3): featuring also sets Reviewed 'shown'. Taking it down does not undo
-    that; it was shown.
+    Task 3): featuring an ADDED-LATER comment also sets Reviewed 'shown'. An
+    on-time comment is not a late item and carries no review. Taking it down
+    does not undo that; it was shown.
   */
+  const markShown = body.featured === true && row.AddedLater === true;
   const updated = await db.send(new UpdateCommand({
     TableName: process.env.TABLE_NAME,
     Key: { PK: row.PK, SK: row.SK },
-    UpdateExpression: body.featured
+    UpdateExpression: markShown
       ? 'SET #featured = :featured, #featuredAt = :at, #reviewed = :shown, #reviewedAt = :at'
       : 'SET #featured = :featured, #featuredAt = :at',
     ExpressionAttributeNames: {
       '#featured': 'Featured',
       '#featuredAt': 'FeaturedAt',
-      ...(body.featured ? { '#reviewed': 'Reviewed', '#reviewedAt': 'ReviewedAt' } : {}),
+      ...(markShown ? { '#reviewed': 'Reviewed', '#reviewedAt': 'ReviewedAt' } : {}),
     },
-    ExpressionAttributeValues: { ':featured': body.featured, ':at': now, ...(body.featured ? { ':shown': 'shown' } : {}) },
+    ExpressionAttributeValues: { ':featured': body.featured, ':at': now, ...(markShown ? { ':shown': 'shown' } : {}) },
     ReturnValues: 'ALL_NEW',
   }));
 
@@ -908,7 +910,7 @@ async function featureComment(event, gameId, commentId, body) {
     timestamp: now,
   });
   // An added-later comment's label changed: the host's late list refetches.
-  if (body.featured && row.AddedLater === true) {
+  if (markShown) {
     await broadcastToGame(gameId, { type: 'lateChanged', gameId }, { hostsOnly: true });
   }
 
@@ -944,7 +946,7 @@ async function lateRoute(event, gameId, method) {
   } catch {
     return respond(400, { error: 'Body must be JSON' });
   }
-  return reviewLate(db, broadcastToGame, { gameId, state, body });
+  return reviewLate(db, broadcastToGame, { gameId, meta, state, body });
 }
 
 // ───────────────────────────────────────────────────────── handler ─────────
@@ -964,7 +966,7 @@ exports.handler = async (event) => {
     }
     // The host's late list (late-list.js): Cognito in front, and here the
     // same check featureComment makes, 404 to anyone else.
-    if (isLateRoute(event.requestContext?.routeKey || event.routeKey)) {
+    if (isLateRoute(event)) {
       return await lateRoute(event, gameId, method);
     }
     if (method === 'GET') {

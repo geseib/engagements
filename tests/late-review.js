@@ -80,8 +80,11 @@ const hoursAgo = (h) => new Date(Date.now() - h * HOUR).toISOString();
 const HOST = { lambda: { userId: 'u-host', groups: 'hosts', orgId: ORG, orgIds: ORG } };
 const RIVAL = { lambda: { userId: 'u-rival', groups: 'hosts', orgId: 'org_rival', orgIds: 'org_rival' } };
 const ASK = 'k00000001abc';
-/** The Ideas pick's id for a row: the first 12 hex of sha256 of its key. */
-const idOf = (sk) => nodeCrypto.createHash('sha256').update(sk).digest('hex').slice(0, 12);
+/** The session's id secret (METADATA IdSecret), fixed here so ids can be worked out by hand. */
+const SECRET = 'c2Vzc2lvbi1zZWNyZXQtZm9yLWxhdGUtcmV2aWV3LXRlc3Q=';
+/** The Ideas pick's id / a late ref: the first 12 hex of HMAC-SHA256(secret, key). */
+const idOf = (sk, secret = SECRET) => nodeCrypto.createHmac('sha256', secret).update(sk).digest('hex').slice(0, 12);
+const sha = (s) => nodeCrypto.createHash('sha256').update(s).digest('hex');
 
 const call = async (method, routeKey, { gameId = GAME, body, authorizer, pathParameters = {} } = {}) => {
   const res = await handler({
@@ -101,10 +104,13 @@ const sealed = (entity, row) => C.encryptItem(ORG, entity, row);
  * Round 1 named (AuthorsRevealed), round 2 hid names (anonymous until reveal,
  * never revealed). Late items on both, plus on-time rows that must not appear.
  */
-async function seed({ state = 'ASK#003', stateExtra = {} } = {}) {
+async function seed({ state = 'ASK#003', stateExtra = {}, secret = SECRET } = {}) {
   table.rows.clear();
   sent.length = 0;
-  table.put({ PK, SK: 'METADATA', GameType: 'call-and-answer', orgId: ORG, HostPreferences: { anonymousUntilReveal: true } });
+  table.put({
+    PK, SK: 'METADATA', GameType: 'call-and-answer', orgId: ORG, HostPreferences: { anonymousUntilReveal: true },
+    ...(secret ? { IdSecret: secret } : {}),
+  });
   table.put({ PK, SK: 'STATE', State: state, ...stateExtra });
   table.put({ PK, SK: 'ROUND#001', QuestionNumber: '001', AuthorsRevealed: true, ResultsShownAt: hoursAgo(2) });
   table.put({ PK, SK: 'ROUND#002', QuestionNumber: '002', AuthorsRevealed: false, ResultsShownAt: hoursAgo(1) });
@@ -227,6 +233,62 @@ const lateFrames = () => sent.filter((s) => s.message.type === 'lateChanged');
     assert.notStrictEqual(row(`FOLLOWUP#001#ASK#${ASK}#LATE#Grace`).Value, 'The finance team');
   });
 
+  say('\n1b. refs cannot be traced to a name (keyed by the session\'s secret)');
+  await check('no ref or idea id matches any roster name under plain sha256 or other guessable schemes', async () => {
+    await seed();
+    const b = (await getLate()).body;
+    const refs = b.rounds.flatMap((r) => r.items.flatMap((i) => [i.ref, i.id].filter(Boolean)));
+    const ids = refs.flatMap((ref) => String(ref).split(':'));
+    const roster = ['Ada', 'Bea', 'Grace', 'Linus'];
+    const guesses = new Set();
+    for (const name of roster) {
+      for (const round of ['001', '002']) {
+        for (const sk of [`QUESTION#${round}#LATE#${name}`, `FOLLOWUP#${round}#ASK#${ASK}#LATE#${name}`, `FOLLOWUP#${round}#ASK#${ASK}#A#${name}`, name]) {
+          const h = sha(sk);
+          guesses.add(h.slice(0, 12));
+          guesses.add(h.slice(-12));
+          guesses.add(nodeCrypto.createHash('md5').update(sk).digest('hex').slice(0, 12));
+          guesses.add(nodeCrypto.createHmac('sha256', GAME).update(sk).digest('hex').slice(0, 12));
+          guesses.add(nodeCrypto.createHmac('sha256', ORG).update(sk).digest('hex').slice(0, 12));
+        }
+      }
+    }
+    for (const id of ids) assert.ok(!guesses.has(id), `ref part ${id} is guessable`);
+  });
+  await check('a session with no secret gets one on first need (32 random bytes), and refs are stable across reads', async () => {
+    await seed({ secret: null });
+    const first = (await getLate()).body;
+    const made = row('METADATA').IdSecret;
+    assert.strictEqual(Buffer.from(String(made), 'base64').length, 32);
+    const second = (await getLate()).body;
+    const refsOf = (b) => b.rounds.flatMap((r) => r.items.map((i) => i.ref));
+    assert.deepStrictEqual(refsOf(second), refsOf(first));
+    assert.strictEqual(row('METADATA').IdSecret, made);
+    assert.strictEqual(first.rounds[0].items[0].ref, idOf('QUESTION#001#LATE#Ada', made));
+  });
+  await check('the secret is never in a reply: GET /late, review, close, feature, the Ideas host read and pick', async () => {
+    await seed({ state: 'ENDED', stateExtra: { EndedAt: hoursAgo(1) } });
+    const replies = [
+      await getLate(),
+      await review({ kind: 'comment', round: 1, ref: '000000000000010-aaaa', how: 'read' }),
+      await call('POST', 'POST /games/{gameId}/comments/{commentId}/feature', {
+        authorizer: HOST, pathParameters: { commentId: '000000000000010-aaaa' }, body: { questionNumber: 1, featured: true },
+      }),
+      await call('GET', 'GET /games/{gameId}/followups/{proxy+}', { authorizer: HOST, pathParameters: { proxy: 'round/001' } }),
+      await call('POST', 'POST /games/{gameId}/followups/{proxy+}', {
+        authorizer: HOST, pathParameters: { proxy: `asks/${ASK}/pick` }, body: { round: '001', id: idOf(`FOLLOWUP#001#ASK#${ASK}#A#Bea`), picked: true },
+      }),
+      await call('GET', 'GET /games/{gameId}/comments', { authorizer: null }),
+      await review({ kind: 'comments', how: 'close' }),
+    ];
+    assert.deepStrictEqual(replies.map((r) => r.status), [200, 200, 200, 200, 200, 400, 200]);
+    for (const r of replies) {
+      const raw = JSON.stringify(r.body);
+      assert.ok(!raw.includes(SECRET) && !raw.includes('IdSecret'), raw.slice(0, 200));
+    }
+    assert.ok(!sent.some((f) => JSON.stringify(f).includes(SECRET)), 'a broadcast carried the secret');
+  });
+
   say('\n2. Review Focus 3: nobody but this session\'s host');
   await check('GET with no identity: 404, nothing in the body', async () => {
     const r = await getLate({ authorizer: null });
@@ -330,6 +392,27 @@ const lateFrames = () => sent.filter((s) => s.message.type === 'lateChanged');
     assert.strictEqual(row('QUESTION#001#ANSWER#Bea').Reviewed, undefined);
     const wrongRound = await review({ kind: 'comment', round: 2, ref: '000000000000010-aaaa', how: 'read' });
     assert.strictEqual(wrongRound.status, 404, JSON.stringify(wrongRound.body));
+    const onTimeComment = await review({ kind: 'comment', round: 1, ref: '000000000000005-bbbb', how: 'read' });
+    assert.strictEqual(onTimeComment.status, 404, JSON.stringify(onTimeComment.body));
+    assert.strictEqual(row('COMMENT#001#summary##000000000000005-bbbb').Reviewed, null);
+  });
+  await check('no routeKey: the late routes are still found by method and rawPath, never the public comments read', async () => {
+    await seed();
+    const bare = async (method, rawPath, authorizer, body) => {
+      const res = await handler({
+        rawPath, requestContext: { http: { method, path: rawPath }, ...(authorizer ? { authorizer } : {}) },
+        pathParameters: { gameId: GAME }, body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: res.statusCode, body: JSON.parse(res.body) };
+    };
+    const anon = await bare('GET', `/games/${GAME}/late`, null);
+    assert.strictEqual(anon.status, 404, JSON.stringify(anon.body));
+    assert.ok(!anon.body.comments && !anon.body.rounds);
+    const asHost = await bare('GET', `/dev/games/${GAME}/late`, HOST);
+    assert.strictEqual(asHost.status, 200, JSON.stringify(asHost.body));
+    assert.ok(Array.isArray(asHost.body.rounds));
+    const reviewed = await bare('POST', `/games/${GAME}/late/review`, HOST, { kind: 'comment', round: 1, ref: '000000000000010-aaaa', how: 'read' });
+    assert.strictEqual(reviewed.status, 200, JSON.stringify(reviewed.body));
   });
 
   say('\n5. "Close comments"');
@@ -380,6 +463,35 @@ const lateFrames = () => sent.filter((s) => s.message.type === 'lateChanged');
     });
     assert.strictEqual(off.status, 200, JSON.stringify(off.body));
     assert.strictEqual(row('COMMENT#001#summary##000000000000010-aaaa').Reviewed, 'shown');
+  });
+  await check('featuring an ON-TIME comment stamps no review on it', async () => {
+    await seed();
+    const r = await call('POST', 'POST /games/{gameId}/comments/{commentId}/feature', {
+      authorizer: HOST, pathParameters: { commentId: '000000000000005-bbbb' }, body: { questionNumber: 1, featured: true },
+    });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const c = row('COMMENT#001#summary##000000000000005-bbbb');
+    assert.strictEqual(c.Featured, true);
+    assert.strictEqual(c.Reviewed, null);
+    assert.strictEqual(c.ReviewedAt, undefined);
+    assert.strictEqual(lateFrames().length, 0);
+  });
+  await check('pick then unpick a late idea by its keyed id: on, then off, and it stays shown', async () => {
+    await seed();
+    const routeKey = 'POST /games/{gameId}/followups/{proxy+}';
+    const id = idOf(`FOLLOWUP#001#ASK#${ASK}#LATE#Grace`);
+    const pick = (picked) => call('POST', routeKey, { authorizer: HOST, pathParameters: { proxy: `asks/${ASK}/pick` }, body: { round: '001', id, picked } });
+    assert.deepStrictEqual((await pick(true)).body.picked.map((p) => p.id), [id]);
+    const off = await pick(false);
+    assert.strictEqual(off.status, 200, JSON.stringify(off.body));
+    assert.deepStrictEqual(off.body.picked, []);
+    assert.strictEqual(row(`FOLLOWUP#001#ASK#${ASK}#LATE#Grace`).Reviewed, 'shown');
+    // An id made the old way (plain sha256) names nothing.
+    const old = await call('POST', routeKey, {
+      authorizer: HOST, pathParameters: { proxy: `asks/${ASK}/pick` },
+      body: { round: '001', id: sha(`FOLLOWUP#001#ASK#${ASK}#LATE#Grace`).slice(0, 12), picked: true },
+    });
+    assert.strictEqual(old.status, 404, JSON.stringify(old.body));
   });
   await check('picking a late idea through the Ideas pick sets Reviewed shown on its LATE row', async () => {
     await seed();

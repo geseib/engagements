@@ -31,8 +31,8 @@ const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS, STARTED_DAYS } = require('./session-ttl');
 const { pollTally } = require('./poll-round');
 const keys = require('./followup-keys');
-const crypto = require('crypto');
 const { toSurveyQuestion, tallyOf } = require('./followup-kinds');
+const { sessionIdSecret, keyedId } = require('./id-secret');
 
 const SUGGESTED_DAYS = 30;
 const LATE_DAYS = 30;
@@ -308,14 +308,16 @@ async function finishAsk(db, { gameId, round, askId, orgId, status, now = new Da
 }
 
 /** Count a closed ask's answers and store the count on it, sealed. Idempotent. */
-async function freezeTally(db, { gameId, round, ask, orgId }) {
+async function freezeTally(db, { gameId, round, ask, orgId, secret = null }) {
   const prefix = keys.answersPrefix(round, ask.AskId);
   const rows = prefix ? await queryAll(db, gameId, prefix) : [];
   const tally = await countAnswers(ask, rows, orgId);
   // EVERY IDEA, FROZEN ON CLOSE (session flow v3 §4.2; owner, 15 Oct, Q1):
   // the report lists them all, shown or not, and the answer rows expire at
   // seven days. Words, an id and when, never a name.
-  const ideas = ask.Kind === 'ideas' ? await ideasAt(rows, orgId) : null;
+  const ideas = ask.Kind === 'ideas'
+    ? await ideasAt(rows, orgId, secret || await sessionIdSecret(db, gameId))
+    : null;
   const sealed = await seal(orgId, ideas ? { Tally: tally, Ideas: ideas } : { Tally: tally });
   await db.send(new UpdateCommand({
     TableName: table(),
@@ -375,30 +377,34 @@ async function setBeat(db, { gameId, round, beat, now = new Date().toISOString()
 
 // ──────────────────────────────────────────────────────────── ideas ──
 
-/** A stable id for one answer that says nothing about whose it is. */
-const ideaId = (sk) => crypto.createHash('sha256').update(String(sk)).digest('hex').slice(0, 12);
+/**
+ * A stable id for one answer that says nothing about whose it is: keyed by
+ * the session's secret (id-secret.js), because the key it is made from ends
+ * in the player's name and a plain hash of it can be matched against the roster.
+ */
+const ideaId = (secret, sk) => keyedId(secret, sk);
 
 /**
  * An Ideas ask's answers as the host sees them: the words and an id, oldest
  * first, never a name. Late replies (session flow v3 §4.4) follow, each
  * marked `late: true`; they are never part of the frozen `Ideas` (ideasAt).
  */
-async function ideasOf(answerRows, orgId, lateRows = []) {
+async function ideasOf(answerRows, orgId, lateRows = [], secret) {
   const words = (rows) => rows
     .filter((r) => typeof r.Value === 'string' && r.Value.trim())
     .sort((a, b) => String(a.At || a.SubmittedAt || '').localeCompare(String(b.At || b.SubmittedAt || '')));
-  const onTime = words(await openAll(orgId, answerRows || [])).map((r) => ({ id: ideaId(r.SK), text: r.Value.trim() }));
-  const late = words(await openAll(orgId, lateRows || [])).map((r) => ({ id: ideaId(r.SK), text: r.Value.trim(), late: true }));
+  const onTime = words(await openAll(orgId, answerRows || [])).map((r) => ({ id: ideaId(secret, r.SK), text: r.Value.trim() }));
+  const late = words(await openAll(orgId, lateRows || [])).map((r) => ({ id: ideaId(secret, r.SK), text: r.Value.trim(), late: true }));
   return [...onTime, ...late];
 }
 
 /** The same, with when each arrived, for the frozen copy on the ask. */
-async function ideasAt(answerRows, orgId) {
+async function ideasAt(answerRows, orgId, secret) {
   const opened = await openAll(orgId, answerRows || []);
   return opened
     .filter((r) => typeof r.Value === 'string' && r.Value.trim())
     .sort((a, b) => String(a.At || '').localeCompare(String(b.At || '')))
-    .map((r) => ({ id: ideaId(r.SK), text: r.Value.trim(), at: r.At || null }));
+    .map((r) => ({ id: ideaId(secret, r.SK), text: r.Value.trim(), at: r.At || null }));
 }
 
 /**
@@ -407,17 +413,19 @@ async function ideasAt(answerRows, orgId) {
  *
  * @returns {Promise<{ok: true, picked: object[]} | {ok: false, code: 'NOT_FOUND'|'NOT_IDEAS'}>}
  */
-async function pickIdea(db, { gameId, round, askId, orgId, id, picked }) {
+async function pickIdea(db, { gameId, round, askId, orgId, id, picked, secret = null }) {
   const ask = await readAsk(db, { gameId, round, askId, orgId });
   if (!ask) return { ok: false, code: 'NOT_FOUND' };
   if (ask.Kind !== 'ideas') return { ok: false, code: 'NOT_IDEAS' };
   const prefix = keys.answersPrefix(round, askId);
   const latePrefix = keys.latePrefix(round, askId);
+  const key = secret || await sessionIdSecret(db, gameId);
   // A late idea can go on the wall too (late items plan, Task 3 reuses this pick).
   const ideas = await ideasOf(
     prefix ? await queryAll(db, gameId, prefix) : [],
     orgId,
     latePrefix ? await queryAll(db, gameId, latePrefix) : [],
+    key,
   );
   const current = Array.isArray(ask.Picked) ? ask.Picked : [];
   let next = current.filter((p) => p.id !== id);
@@ -440,7 +448,7 @@ async function pickIdea(db, { gameId, round, askId, orgId, id, picked }) {
   // shown. Its row is the one whose key hashes to this id.
   let lateShown = false;
   if (idea && idea.late) {
-    const lateRow = (latePrefix ? await queryAll(db, gameId, latePrefix) : []).find((r) => ideaId(r.SK) === id);
+    const lateRow = (latePrefix ? await queryAll(db, gameId, latePrefix) : []).find((r) => ideaId(key, r.SK) === id);
     if (lateRow) {
       await db.send(new UpdateCommand({
         TableName: table(),
