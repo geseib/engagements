@@ -108,7 +108,7 @@ function remoteLink(row, localUrl, key)   // RemoteAddress + localUrl's path/sea
 
 ### Task 2: Backend, handlers (`build-store.js`, `build-room.js`)
 
-**Files:** modify `build-store.js` (add `SK.rkey = (name) => \`BUILD#RKEY#${name}\``; row kind `buildRemoteKey` in the classifier near `build-store.js:354`; collect into `room.rkeys` near `:515`), `build-room.js`; extend `tests/build-room-remote.js` (handler section; copy the handler harness of `tests/build-crew.js`, which drives `build-room.js` against a fake DynamoDB).
+**Files:** modify `build-store.js` (add `SK.rkey = (name) => \`BUILD#RKEY#${name}\``; row kind `buildRemoteKey` in the classifier near `build-store.js:354`; collect into `room.rkeys` near `:515`), `build-room.js`; create `tests/build-room-remote-routes.js` (the handler, on the harness of `tests/build-crew.js`, which drives `build-room.js` against a fake DynamoDB; the pure suite stays pure). The report's answer carries `remoteWanted`/`remoteKeys` only while remote is wanted, so `tests/build-room.js`'s exact answers stay unchanged. `buildLan`'s sealed fields gain `RemoteAddress`, `RemoteError`, `RemoteDevices` in all three copies of `tenant-crypto.js`.
 
 - [ ] **Step 1: Tests first.**
   - `hostShare({ on: true, remote: true })` sets `RemoteWanted` and clears `RemoteStatus/RemoteAddress/RemoteTarget/RemoteError/RemoteDevices`; `{ on: false }` clears `RemoteWanted` too; `{ remote: false }` alone turns remote off and leaves Wi-Fi on; `remote: true` on an ended session is 409.

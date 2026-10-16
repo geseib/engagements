@@ -316,6 +316,8 @@ const SK = Object.freeze({
   log: (iso) => `BUILD#LOG#${timeKey(iso)}`,
   idea: (iso) => `BUILD#IDEA#${timeKey(iso)}`,
   key: (hash) => `BUILD#KEY#${hash}`,
+  // Remote share: one key per person, its hash only (build-lan.js).
+  rkey: (player) => `BUILD#RKEY#${player}`,
   img: (iso) => `BUILD#IMG#${timeKey(iso)}`,
   // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md).
   point: (iso) => `BUILD#POINT#${timeKey(iso)}`,
@@ -500,6 +502,7 @@ function roomFromRows(rows) {
   const room = {
     state: null, activity: null, lan: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
     builders: [], tasks: [], shares: [], comments: [], reviews: [], points: [], preqs: [], run: null, seen: null,
+    rkeys: [],
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
@@ -513,6 +516,7 @@ function roomFromRows(rows) {
     else if (sk.startsWith('BUILD#LOG#')) room.logs.push(r);
     else if (sk.startsWith('BUILD#IDEA#')) room.ideas.push(r);
     else if (sk.startsWith('BUILD#KEY#')) room.keys.push(r);
+    else if (sk.startsWith('BUILD#RKEY#')) room.rkeys.push(r);
     else if (sk.startsWith('BUILD#IMG#')) room.images.push(r);
     else if (sk.startsWith('BUILD#POINT#')) room.points.push(r);
     else if (sk.startsWith('BUILD#PREQ#')) room.preqs.push(r);

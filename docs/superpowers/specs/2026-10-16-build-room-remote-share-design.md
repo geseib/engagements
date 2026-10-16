@@ -112,7 +112,7 @@ Everything the Wi-Fi share does stays. Remote adds, beside it:
    Wi-Fi gateway passes every method, and the remote one does the same: the app decides.)
 6. **The round's report grows** by: `remote: { status, address, target, error,
    devices: { <player>: <count> } }` (`address` the tunnel's origin, `target` the local
-   address it forwards to now). The answer grows by `remoteWanted` and `remoteKeys`.
+   address it forwards to now). The answer grows by `remoteWanted` and `remoteKeys`, **only while remote is wanted**: absent means not wanted, so the answer is byte-for-byte today's when remote is off.
 7. **Fail closed, as on Wi-Fi:** no answer from Engage for 30 seconds, the switch off, or
    the session ended closes the remote gateway and kills `cloudflared`.
 
@@ -214,6 +214,7 @@ piece. If they spoil the trial, the remedy is §8, not code here.
   Wi-Fi; 17 in 3.5 min were fine at home). Probably per public address, so a room sharing
   one could meet it. One tunnel per session, never reopened without need, keeps this rare.
 - **15 to 20 s from switch-on to live**, most of it waiting for Cloudflare's DNS.
+- **History links stay Wi-Fi links.** The History tab's older "Claude is showing" links carry the Wi-Fi room key, as before remote existed. Only Open the demo goes the remote way; a remote person who taps an old History link gets a dead tab. One tunnel only ever reaches the newest thing anyway.
 
 ## 7. Testing
 

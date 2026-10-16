@@ -113,6 +113,18 @@ async function loadPlayers(ctx) {
   return [...names].sort((a, b) => a.localeCompare(b));
 }
 
+/** The PLAYER# rows themselves (not their scores), removed ones included: remote keys check both. */
+async function loadPlayerRows(ctx) {
+  const rows = await queryAll(ctx.pk, 'PLAYER#');
+  return rows.filter((r) => !String(r.SK).includes('#SCORE') && !String(r.SK).includes('#STATE'));
+}
+
+/** The remote keys that open the gateway now (build-lan.js liveRemoteKeys). */
+async function liveRemoteKeys(ctx) {
+  const [rkeys, players] = await Promise.all([queryAll(ctx.pk, 'BUILD#RKEY#'), loadPlayerRows(ctx)]);
+  return LAN.liveRemoteKeys(rkeys, players);
+}
+
 async function sessionState(ctx) {
   const r = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: 'STATE' }, ProjectionExpression: '#s', ExpressionAttributeNames: { '#s': 'State' } }));
   return (r && r.Item && r.Item.State) || null;
@@ -2019,18 +2031,39 @@ async function updateLan(ctx, set) {
   await db.send(new UpdateCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN }, UpdateExpression: `SET ${sets.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
 }
 
-/** The host's switch: `{on}` turns sharing on or off; `{dismissOffer}` hides the one-time offer. */
+/** Every remote field back to "nothing yet": a switch either way makes the old tunnel dead. */
+const REMOTE_CLEARED = Object.freeze({ RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {}, RemoteLiveSince: null });
+
+/**
+ * The host's switch: `{on}` turns sharing on or off; `{remote}` opens it to
+ * people who are not here too (remote share, owner 2026-10-16), and needs
+ * sharing on; `{dismissOffer}` hides the one-time offer. Remote is off by
+ * default every time sharing is switched, unless the same call asks for it.
+ */
 async function hostShare(ctx, body) {
   const b = body || {};
   const now = new Date().toISOString();
+  const wantsRemote = typeof b.remote === 'boolean';
+  if ((b.on === true || b.remote === true) && (await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
+  if (b.remote === true && b.on !== true) {
+    const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+    if (!(res && res.Item && res.Item.Wanted)) return fail(409, 'Share the demo first');
+  }
   if (b.dismissOffer === true) await updateLan(ctx, { OfferDismissedAt: now });
   if (typeof b.on === 'boolean') {
-    if (b.on && (await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
     // The plugin closes its gateways on a switch either way, so the old key and
     // map are dead: clear them, and the row reads 'starting' until the plugin's
     // next live report brings its new key.
-    await updateLan(ctx, { Wanted: b.on, WantedAt: now, OfferDismissedAt: now, Status: 'off', Key: '', Map: [], Open: 0, Error: '' });
+    await updateLan(ctx, {
+      Wanted: b.on, WantedAt: now, OfferDismissedAt: now, Status: 'off', Key: '', Map: [], Open: 0, Error: '',
+      RemoteWanted: b.on && b.remote === true, ...REMOTE_CLEARED,
+    });
     await logEntry(ctx, { kind: 'note', by: 'host', text: b.on ? 'You shared the build on this Wi-Fi' : 'You stopped sharing the build on this Wi-Fi' });
+  } else if (wantsRemote) {
+    await updateLan(ctx, { RemoteWanted: b.remote, RemoteWantedAt: now, ...REMOTE_CLEARED });
+  }
+  if (wantsRemote && (typeof b.on !== 'boolean' || b.on)) {
+    await logEntry(ctx, { kind: 'note', by: 'host', text: b.remote ? 'You opened the demo to people who are not here' : 'You closed the demo to people who are not here' });
   }
   const room = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
@@ -2051,10 +2084,11 @@ async function shareReport(ctx, body) {
   const v = norm.value;
   // A second plugin copy on this room closes its gateway and writes nothing.
   if (before.Wanted && !LAN.reportOwnsRoom(before, v.Reporter, now)) return reply(200, { wanted: false, targets: [], another: true });
-  const set = { ...v, ReportedAt: now };
+  const set = { ...v, ReportedAt: now, RemoteLiveSince: LAN.remoteLiveSince(before, v, now) };
   if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
   await updateLan(ctx, set);
-  const changed = ['Status', 'Key', 'Open', 'Error'].some((k) => before[k] !== v[k])
+  const changed = ['Status', 'Key', 'Open', 'Error', 'RemoteStatus', 'RemoteAddress', 'RemoteTarget', 'RemoteSupported'].some((k) => before[k] !== v[k])
+    || JSON.stringify(before.RemoteDevices || {}) !== JSON.stringify(v.RemoteDevices || {})
     || !sameMap(before.Map || [], v.Map);
   if (changed) {
     const rev = (await touchState(ctx)).Rev;
@@ -2063,7 +2097,41 @@ async function shareReport(ctx, body) {
   const ended = (await sessionState(ctx)) === 'ENDED';
   // Targets matter only while sharing is wanted: skip reading the room otherwise.
   const targets = before.Wanted ? LAN.lanTargets(await loadRoom(ctx)) : [];
-  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets });
+  // Remote share: the HASHES of the keys that open the gateway now, never a key.
+  // Absent unless remote is wanted, so the answer is unchanged when it is off.
+  const remoteWanted = Boolean(before.Wanted && before.RemoteWanted) && !ended;
+  const remote = remoteWanted ? { remoteWanted, remoteKeys: await liveRemoteKeys(ctx) } : {};
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, ...remote });
+}
+
+/**
+ * The plugin met a key it has not heard of (minted since its last round):
+ * is it live, and whose? Hashes only, both ways.
+ */
+async function shareRemoteCheck(ctx, body) {
+  const hash = String((body && body.hash) || '');
+  if (!LAN.KEY_HASH_RE.test(hash)) return fail(400, 'hash must be a key hash');
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+  const lan = (res && res.Item) || {};
+  if (!lan.Wanted || !lan.RemoteWanted || (await sessionState(ctx)) === 'ENDED') return reply(200, { ok: false });
+  const hit = (await liveRemoteKeys(ctx)).find((k) => k.hash === hash);
+  return reply(200, hit ? { ok: true, player: hit.player } : { ok: false });
+}
+
+/**
+ * A phone's own way in: the tunnel's origin, a fresh key, and when the tunnel
+ * went live. The phone builds origin + path + ?k= itself and keeps it; every
+ * call ends this person's previous key. Only the hash is stored.
+ */
+async function playRemoteKey(ctx, me, input) {
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+  const raw = (res && res.Item) || {};
+  const lan = ctx.orgId && res && res.Item ? await decryptItem(ctx.orgId, 'buildLan', raw) : raw;
+  const now = new Date().toISOString();
+  if (LAN.remoteStatus(lan, now) !== 'live') return fail(409, 'The demo is not open to people outside the room right now', { code: 'not-live' });
+  const { key, hash } = LAN.mintRemoteKey();
+  await put(ctx, { SK: S.SK.rkey(me.playerName), PlayerName: me.playerName, Hash: hash, ClientId: String(input.clientId || '').slice(0, 100), CreatedAt: now });
+  return reply(200, { origin: lan.RemoteAddress, key, since: lan.RemoteLiveSince || null });
 }
 
 // ── Talking points, research and ideas ──────────────────────────────────────
@@ -2680,6 +2748,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   // Before the ended check: an ended session still answers the plugin (wanted: false).
   if (a === 'share' && b === 'report' && !c) return role === 'agent' ? shareReport(ctx, body) : fail(403, 'Only Claude Code reports the Wi-Fi share');
 
+  if (a === 'share' && b === 'remote-check' && !c) return role === 'agent' ? shareRemoteCheck(ctx, body) : fail(403, 'Only Claude Code checks a remote key');
+
   const ended = (await sessionState(ctx)) === 'ENDED';
   if (ended && !(a === 'outcome' || (a === 'log' && b))) return fail(409, 'This session has ended');
 
@@ -2795,6 +2865,7 @@ async function routePlay(ctx, method, parts, body, query) {
   }
   if (method !== 'POST') return fail(404, 'Not found');
   if ((await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
+  if (a === 'remote-key' && !parts[1]) return playRemoteKey(ctx, me, input);
   const now = new Date().toISOString();
   const room = await loadRoom(ctx);
 
