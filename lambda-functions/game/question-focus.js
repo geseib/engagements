@@ -6,8 +6,14 @@
  * question" row, the Remote, the stage). Nothing took it down when the round
  * moved on to RESULTS, and get-game-state hands a stored 'question' focus back
  * in any phase, so the wall kept showing the question while the dock and the
- * Remote said RESULTS. get-results.js's enterResultsState now clears it, on
- * the server, so every surface follows the one stored fact.
+ * Remote said RESULTS. game/get-results.js's enterResultsState now clears it,
+ * on the server, so every surface follows the one stored fact.
+ *
+ * The same holds one phase earlier: a question put up during ASK (from the
+ * Remote, say) is cleared when the round enters VOTE, by websocket/start-vote.js
+ * and message.js's REQUEST_VOTE, so the wall shows the ballot the dock says.
+ * TWO IDENTICAL COPIES: game/question-focus.js and websocket/question-focus.js
+ * (separate deploy bundles); tests/question-focus-vote.js holds them equal.
  *
  * Conditional on the focus BEING the question: a response or the join code
  * someone put up is not this function's to take down. A new round needs no

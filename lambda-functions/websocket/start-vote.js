@@ -5,6 +5,7 @@ const { isHidden, redactAnswers } = require('./anonymity');
 const { inDisplayOrder } = require('./answer-order');
 const { callerMayDriveSession } = require('./tenant');
 const { decryptItems } = require('./tenant-crypto');
+const { clearQuestionFocus } = require('./question-focus');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -152,6 +153,12 @@ exports.handler = async (event) => {
     //
     // get-results.js already puts `newState` on its gameStateChanged frame; the
     // convention existed, this handler just didn't follow it.
+    // A question put up during ASK comes down as voting opens (question-focus.js):
+    // the wall shows the ballot the dock and the Remote say it shows.
+    await clearQuestionFocus({
+      db, UpdateCommand, broadcast: broadcastToGame, table: process.env.TABLE_NAME, gameId, padded: paddedQuestionNumber,
+    });
+
     await broadcastToGame(gameId, {
       type: 'votingStarted',
       gameId: gameId,

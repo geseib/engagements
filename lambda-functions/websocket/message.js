@@ -5,6 +5,7 @@ const { refSetRef, resolveSetPartition } = require('./set-version');
 const { isHidden } = require('./anonymity');
 const { encryptItem, decryptItem } = require('./tenant-crypto');
 const { ORG } = require('./tenant');
+const { clearQuestionFocus } = require('./question-focus');
 const { countAnsweredQuestion, COUNT_PROJECTION } = require('./session-count');
 const { isPollRound, pollQuestionOf, pollAnswerText } = require('./poll-question');
 const { checkAnswer } = require('./survey-answer');
@@ -288,6 +289,11 @@ async function handleRequestVote(gameId, messageData) {
       }
     }));
     
+    // A question put up during ASK comes down as voting opens (question-focus.js).
+    await clearQuestionFocus({
+      db, UpdateCommand, broadcast: broadcastToRoom, table: process.env.TABLE_NAME, gameId, padded: currentQuestionId,
+    });
+
     console.log(`✅ Call-and-answer game ${gameId} transitioned to voting state: ${newState}`);
     
   } catch (error) {
@@ -387,6 +393,11 @@ async function handleCreateResults(gameId, messageData) {
       }
     }));
     
+    // A question put up during VOTE comes down at RESULTS (question-focus.js).
+    await clearQuestionFocus({
+      db, UpdateCommand, broadcast: broadcastToRoom, table: process.env.TABLE_NAME, gameId, padded: currentQuestionId,
+    });
+
     console.log(`✅ Game ${gameId} transitioned to results state: ${newState}`);
     console.log(`🏆 Winners: ${winners.join(', ')} with ${maxVotes} votes each`);
     
@@ -974,6 +985,16 @@ async function getHostConnections(gameId) {
     console.error(`❌ Error getting host connections for game ${gameId}:`, error);
     return [];
   }
+}
+
+/**
+ * One frame to everyone attached to the game, host connections included (the
+ * question-focus clear on the legacy REQUEST_VOTE / CREATE_RESULTS paths).
+ */
+async function broadcastToRoom(gameId, message) {
+  const [hosts, players] = await Promise.all([getHostConnections(gameId), getPlayerConnections(gameId)]);
+  const ids = [...new Set([...hosts, ...players].map((c) => c.ConnectionId).filter(Boolean))];
+  await Promise.allSettled(ids.map((id) => sendToConnection(id, message)));
 }
 
 /**
