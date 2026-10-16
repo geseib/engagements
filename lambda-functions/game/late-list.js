@@ -9,7 +9,9 @@
  * because the stack is near its resource limit.
  *
  * THREE KINDS OF LATE ITEM, each its own row, each read with a paged Query (a
- * one-call Query past 1 MB truncates silently):
+ * one-call Query past 1 MB truncates silently). Late round answers are read
+ * per round (`QUESTION#nnn#LATE#`, lateAnswerRounds), not as the whole
+ * QUESTION# prefix:
  *
  *   answer      QUESTION#nnn#LATE#<player>               websocket/message.js
  *   askAnswer   FOLLOWUP#nnn#ASK#<id>#LATE#<player>      followup-store.js
@@ -102,6 +104,26 @@ function item(kind, row, { round, ref, text, author, who, arrivedDuring, extra =
 // ───────────────────────────────────────────────────────────── GET ──
 
 /**
+ * The rounds that can hold a late round answer, from the ROUND# rows: every
+ * round from 001 to one past the highest ROUND# row. Not only the rounds with
+ * a row: a row is written when a round reaches results (get-results.js) or is
+ * otherwise touched, and a round the host moved past without showing results
+ * has none. Filling the gaps, and one past the end (the round left without
+ * results while the next one ran), costs a few empty Queries; ROUND#000 (the
+ * feedback beat) is not a round anyone answers.
+ */
+function lateAnswerRounds(roundKeys) {
+  let max = 0;
+  for (const k of roundKeys) {
+    const n = Number(k);
+    if (/^\d{3}$/.test(k) && n > max) max = n;
+  }
+  const out = [];
+  for (let n = 1; n <= Math.min(max + 1, 999); n += 1) out.push(String(n).padStart(3, '0'));
+  return out;
+}
+
+/**
  * Every late item in the session, decrypted, as a Map of round → items (not
  * yet sorted). The one reader: the late list below and the report
  * (create-report.js, "Arrived late") both come through here, so the two can
@@ -115,13 +137,17 @@ async function lateByRound(db, { gameId, meta, withRefs = true }) {
   const orgId = orgOf(meta);
   const secret = withRefs ? await sessionIdSecret(db, gameId, meta) : null;
   const refOf = (sk) => (secret ? ideaId(secret, sk) : null);
-  const [questionRows, commentRows, followUpRows, roundRows] = await Promise.all([
-    queryAll(db, gameId, 'QUESTION#'),
+  const [commentRows, followUpRows, roundRows] = await Promise.all([
     queryAll(db, gameId, commentPrefix({})),
     queryAll(db, gameId, keys.ROOT),
     queryAll(db, gameId, 'ROUND#'),
   ]);
   const rounds = new Map(roundRows.map((r) => [String(r.SK).replace('ROUND#', ''), r]));
+  // Late ROUND answers, read narrowly: `QUESTION#nnn#LATE#` per round, never
+  // the whole QUESTION# prefix (every answer and vote of the session).
+  const questionRows = (await Promise.all(
+    lateAnswerRounds(rounds.keys()).map((n) => queryAll(db, gameId, `QUESTION#${n}#LATE#`)),
+  )).flat();
   const hidden = (padded) => hiddenIn(meta, rounds.get(padded));
 
   const [answers, comments, asks] = await Promise.all([
@@ -333,5 +359,5 @@ function isLateRoute(event) {
 }
 
 module.exports = {
-  readLate, reviewLate, isLateRoute, lateByRound, lateOrder, includesNotReviewed, LATE_WORDS,
+  readLate, reviewLate, isLateRoute, lateByRound, lateOrder, includesNotReviewed, lateAnswerRounds, LATE_WORDS,
 };
