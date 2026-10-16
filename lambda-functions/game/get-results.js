@@ -15,6 +15,7 @@ const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
 const { readPollQuestion, pollTally } = require('./poll-round');
 const { displayOrder } = require('./answer-order');
 const { claimSummaryJob } = require('./summary-job');
+const { clearQuestionFocus } = require('./question-focus');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -299,6 +300,12 @@ const enterResultsState = async (event, gameId, paddedQuestionId) => {
       ':ttl': ttlFrom(null, ROUND_RECORD_DAYS)
     }
   }));
+
+  // A question put back up during VOTE comes down with it (question-focus.js):
+  // the wall shows the results the dock and the Remote say it shows.
+  await clearQuestionFocus({
+    db, UpdateCommand, broadcast: broadcastToGame, table: process.env.TABLE_NAME, gameId, padded: paddedQuestionId,
+  });
 
   await broadcastResultsReady(gameId, paddedQuestionId);
 

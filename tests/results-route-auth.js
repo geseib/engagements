@@ -47,23 +47,7 @@ const key = (pk, sk) => `${pk}|${sk}`;
 
 let sent = [];
 
-/** Honest UpdateCommand applier: a stub that returned {} would hide the bug. */
-function applyUpdate(input) {
-  const k = key(input.Key.PK, input.Key.SK);
-  const item = store.get(k) || { ...input.Key };
-  const names = input.ExpressionAttributeNames || {};
-  const values = input.ExpressionAttributeValues || {};
-
-  const setClause = String(input.UpdateExpression || '').replace(/^\s*SET\s+/i, '');
-  for (const pair of setClause.split(',')) {
-    const [lhs, rhs] = pair.split('=').map((s) => s.trim());
-    if (!lhs || !rhs) continue;
-    const attr = names[lhs] || lhs;
-    item[attr] = values[rhs];
-  }
-  store.set(k, item);
-  return {};
-}
+/** Honest UpdateCommand applier (tests/helpers/stage-table.js, below): a stub that returned {} would hide the bug. */
 
 const fakeDoc = {
   send: async (cmd) => {
@@ -78,7 +62,10 @@ const fakeDoc = {
         store.delete(key(inp.Key.PK, inp.Key.SK));
         return {};
       case 'update':
-        return applyUpdate(inp);
+        // The real applier (tests/helpers/stage-table.js), conditions included:
+        // enterResultsState's conditional clear of a question focus
+        // (game/question-focus.js) must fail on a round with none, as it does in DynamoDB.
+        return require('./helpers/stage-table').applyUpdate(store, key, inp);
       case 'query': {
         const pk = inp.ExpressionAttributeValues[':pk'];
         const prefix = inp.ExpressionAttributeValues[':sk'] ?? '';
