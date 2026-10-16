@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings and Rate ends</title>
+<style>
+  /* Mockup for the owner, 16 Oct 2026.
+     1. Setup / Settings: screen mode reachable from Setup; Settings grouped; the remote box says who may sign in.
+     2. Ask the room, Rate: the scale's two ends are editable from a list of pairs, or custom.
+     Laptop ladder 12/13/15/19/24, dusk palette. */
+  :root { --bg:#0f1a2e; --surface:#16243d; --surface-2:#1d2f4d; --text:#eef2f8; --muted:#9aabc4; --accent:#f6a94c; --accent-text:#f6b766; --info:#7fb2ff; --success:#5fd3a2; --rule:rgba(160,190,230,.16); }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#0a1220; color:var(--text); font-family:"Inter", system-ui, sans-serif; font-size:15px; padding:16px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; max-width:1100px; margin:0 auto 12px; }
+  .tabs button { font:inherit; font-size:13px; color:var(--text); background:var(--surface); border:1px solid var(--rule); border-radius:999px; padding:6px 14px; cursor:pointer; }
+  .tabs button[aria-pressed="true"] { background:var(--accent); color:#1a1205; border-color:var(--accent); font-weight:700; }
+  .note { max-width:1100px; margin:0 auto 14px; color:var(--muted); font-size:13px; line-height:1.5; }
+  .v[hidden] { display:none; }
+  .cols { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px; max-width:1100px; margin:0 auto; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .panel { background:var(--bg); border:1px solid var(--rule); border-radius:12px; padding:16px 18px; }
+  .panel > h2 { margin:0 0 4px; font-size:19px; }
+  .panel > .sub { margin:0 0 12px; color:var(--muted); font-size:13px; }
+  .grp { border-top:1px solid var(--rule); padding:12px 0; }
+  .grp h3 { margin:0 0 8px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .row { display:flex; align-items:center; gap:10px; padding:6px 0; font-size:15px; }
+  .row small { color:var(--muted); font-size:12px; display:block; }
+  .tog { margin-left:auto; width:38px; height:22px; border-radius:11px; background:var(--accent); position:relative; flex:none; }
+  .tog::after { content:""; position:absolute; top:3px; right:3px; width:16px; height:16px; border-radius:50%; background:#fff; }
+  .tog.off { background:var(--surface-2); } .tog.off::after { right:auto; left:3px; }
+  .seg { margin-left:auto; display:inline-flex; border:1px solid var(--rule); border-radius:8px; overflow:hidden; flex:none; }
+  .seg span { padding:5px 10px; font-size:13px; }
+  .seg span.on { background:var(--accent); color:#1a1205; font-weight:700; }
+  .sel { margin-left:auto; background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:5px 10px; font-size:13px; flex:none; }
+  .scope { font-size:12px; color:var(--muted); margin-left:6px; text-transform:none; letter-spacing:0; }
+  .muted { color:var(--muted); font-size:13px; }
+  .remote { display:grid; grid-template-columns: 96px 1fr; gap:12px; align-items:start; background:var(--surface); border-radius:10px; padding:12px; }
+  .qr { width:96px; height:96px; border-radius:8px; background: repeating-conic-gradient(#fff 0 25%, #0f1a2e 0 50%) 0 0/16px 16px; }
+  .who { margin-top:8px; padding:8px 10px; border-radius:8px; background:rgba(127,178,255,.12); border:1px solid rgba(127,178,255,.35); font-size:13px; }
+  .who b { color:var(--text); }
+  .url { font-family: ui-monospace, monospace; font-size:12px; color:var(--info); word-break:break-all; }
+  details { border-top:1px solid var(--rule); padding:10px 0; } summary { cursor:pointer; font-size:13px; color:var(--muted); }
+  .old li { padding:3px 0; font-size:15px; } .old { margin:0; padding-left:18px; }
+  .bad { color:#ff9b8a; font-size:12px; }
+
+  /* Rate composer */
+  .comp { background:var(--bg); border:1px solid var(--rule); border-radius:12px; padding:16px 18px; max-width:560px; }
+  .kind { display:flex; gap:8px; margin:8px 0 12px; }
+  .kind span { border:1px solid var(--rule); border-radius:8px; padding:6px 10px; font-size:13px; }
+  .kind span.on { border-color:var(--accent); background:rgba(246,169,76,.14); }
+  .q { background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:10px; font-size:15px; }
+  .ends { display:grid; grid-template-columns: 1fr auto 1fr; gap:10px; align-items:end; margin-top:12px; }
+  .ends label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .ends .box { background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:8px 10px; font-size:15px; display:flex; justify-content:space-between; }
+  .ends .box.edit { border-color:var(--accent); }
+  .ends .arrow { color:var(--muted); padding-bottom:9px; }
+  .scale { display:flex; justify-content:space-between; gap:6px; margin-top:14px; }
+  .scale span { flex:1; text-align:center; background:var(--surface); border-radius:8px; padding:8px 0; font-size:15px; }
+  .scale-ends { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-top:4px; }
+  .menu { margin-top:6px; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:6px; font-size:13px; }
+  .menu div { padding:5px 8px; border-radius:6px; display:flex; justify-content:space-between; }
+  .menu div.on { background:rgba(246,169,76,.18); }
+  .menu div small { color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="tabs">
+  <button type="button" data-v="settings" aria-pressed="true">1 · Setup and Settings</button>
+  <button type="button" data-v="rate" aria-pressed="false">2 · Rate: the scale's ends</button>
+</div>
+<p class="note" id="note"></p>
+
+<section class="v" data-v="settings">
+<div class="cols">
+  <div class="panel">
+    <h2>Today</h2>
+    <p class="sub">Settings tab, one long list of nine sections.</p>
+    <ol class="old">
+      <li>Names</li><li>Feedback</li><li>Pace</li><li>Scoreboard</li>
+      <li>Display <span class="bad">· "Display profile": not clear it sizes the room's screen</span></li>
+      <li>Players join at</li>
+      <li>Controls on your phone <span class="bad">· QR and link only; says nothing about who must sign in</span></li>
+      <li>Session</li><li>Keys</li>
+    </ol>
+    <p class="muted" style="margin-top:12px">Screen mode (one or two screens) is not here at all. It is only offered in the lobby, so a host who pressed Setup mid-session has no way to change it.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Proposed: Settings</h2>
+    <p class="sub">Four groups, most used first. Setup in the loop opens here too.</p>
+
+    <div class="grp">
+      <h3>Screens</h3>
+      <div class="row"><div>Where the room watches<small>Two screens gives you the console on this laptop</small></div><div class="seg"><span>One screen</span><span class="on">Two screens</span></div></div>
+      <div class="row"><div>Room's window<small>On, full screen</small></div><span class="sel">Open ↗</span></div>
+      <div class="row"><div>Room screen size<small>How big the room's screen draws everything (was "Display profile")</small></div><span class="sel">Room ▾</span></div>
+    </div>
+
+    <div class="grp">
+      <h3>Your phone as a remote</h3>
+      <div class="remote">
+        <div class="qr" aria-label="QR code"></div>
+        <div>
+          <div style="font-size:15px">Scan with your phone to drive the room from it.</div>
+          <div class="url">engage.dev.seibtribe.us/remote?g=4473</div>
+          <div class="who">Sign in on the phone as <b>any host or admin of Relay Labs</b>.<br>On this laptop now: <b>George Seib</b> · Relay Labs</div>
+        </div>
+      </div>
+      <p class="muted" style="margin:8px 0 0">For a personal account the box reads: Sign in on the phone as <b>you</b> (george@…). Only your account can drive this session.</p>
+    </div>
+
+    <div class="grp">
+      <h3>The rounds <span class="scope">· from the next round</span></h3>
+      <div class="row"><div>Hide names until revealed</div><span class="tog"></span></div>
+      <div class="row"><div>Show comments on the wall as they arrive</div><span class="tog"></span></div>
+      <div class="row"><div>Pace: auto-advance when everyone has answered</div><span class="tog off"></span></div>
+      <div class="row"><div>Scoreboard look</div><span class="sel">Departure board ▾</span></div>
+    </div>
+
+    <div class="grp">
+      <h3>Joining</h3>
+      <div class="row"><div>Players join at<small class="url">engage.dev.seibtribe.us/play · code 4473</small></div></div>
+    </div>
+
+    <details><summary>Session: end it, start another</summary><p class="muted">Today's Session section, unchanged.</p></details>
+    <details><summary>Keyboard shortcuts</summary><p class="muted">Today's Keys list, unchanged.</p></details>
+  </div>
+</div>
+</section>
+
+<section class="v" data-v="rate" hidden>
+<div class="cols">
+  <div class="comp">
+    <div style="font-size:19px;font-weight:700">Ask the room</div>
+    <div class="kind"><span>Ideas</span><span>Choose</span><span class="on">Rate</span><span>Comments</span></div>
+    <div class="q">Name the temperature out loud</div>
+    <div class="ends">
+      <div><label>1 means</label><div class="box edit"><span>Cold</span><span>▾</span></div></div>
+      <div class="arrow">to</div>
+      <div><label>5 means</label><div class="box edit"><span>Hot</span><span>▾</span></div></div>
+    </div>
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+    <div class="scale-ends"><span>Cold</span><span>Hot</span></div>
+    <p class="muted" style="margin-top:12px">The phones, the wall and the report all show these words.</p>
+  </div>
+
+  <div class="comp">
+    <div style="font-size:15px;font-weight:700">The list under either end</div>
+    <p class="muted" style="margin:4px 0 8px">Pick one end and the other follows. Custom lets you type both.</p>
+    <div class="menu">
+      <div class="on"><span>Disagree → Agree</span><small>the default</small></div>
+      <div><span>No → Yes</span></div>
+      <div><span>Low → High</span></div>
+      <div><span>Unlikely → Likely</span><small>added</small></div>
+      <div><span>Hard → Easy</span><small>added</small></div>
+      <div><span>Custom…</span><small>type both ends</small></div>
+    </div>
+    <p class="muted" style="margin-top:10px">Choosing "High" in the 5 box sets the 1 box to "Low"; choosing "Low" in the 1 box sets 5 to "High". Custom opens two short text boxes (24 characters each), like Cold and Hot here.</p>
+  </div>
+</div>
+</section>
+
+<script>
+  const notes = {
+    settings: 'Setup in the loop and the Session panel\'s Settings tab both open this grouped view. Screen mode moves here (it was lobby-only). Display profile is renamed and sits with the screens, because it sizes whatever the room watches on one screen or two. The remote box says who may sign in on the phone: any host or admin of the team, or only you on a personal account, and who is signed in on this laptop now. Session and Keys fold away.',
+    rate: 'Workie wrote "Name the temperature out loud", so "Disagree to Agree" makes no sense. The two ends are editable: a list of common pairs where picking one end sets the other, and Custom to type both. The two pairs added to your four are Unlikely/Likely and Hard/Easy.',
+  };
+  const show = (v) => {
+    document.querySelectorAll('.v').forEach((s) => { s.hidden = s.dataset.v !== v; });
+    document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    document.getElementById('note').textContent = notes[v];
+  };
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => show(b.dataset.v)));
+  show('settings');
+</script>
+</body>
+</html>
