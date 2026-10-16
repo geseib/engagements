@@ -158,15 +158,17 @@ bundle with long content (six entries of 130–320 characters) at **1280×720, 1
 
 | Standard | C&A | Trivia | Poll | Survey | Build Room |
 |---|---|---|---|---|---|
-| Two screens (`TWO_SURFACE_TYPES`) | yes | no | no | no | no (own Present toggle) |
-| Strip + one main button (`roundStep`) | yes | yes | yes | not checked | no (own `buildScreens`) |
-| Press twice, in place | yes | yes | yes | not checked | not checked |
-| Settings scope labels | yes | yes | yes | not checked | own panel |
-| Fit order + measured paging | yes | stage only | stage only | walk-through | not measured |
-| Late items kept | yes | no | no | no (deferred) | no |
-| Per-session id secret | Ideas, late refs | — | — | — | not checked |
+| Two screens (`TWO_SURFACE_TYPES`) | yes | no | no | no | no: four screens on one signed-in page; the room's screen is laptop state |
+| Strip + one main button (`roundStep`) | yes | yes | yes | **no strip**; one primary per phase, but Closed and Ended carry two secondaries; words inline | no strip (no rounds); one function (`stageModel`) decides the Stage's moves |
+| Press twice, in place | yes, except Skip | partly: Skip, Ask now, next question use dialogs | partly, as Trivia | no: Close the survey is a dialog (irreversible, allowed by §3) | no: 5 `window.confirm`, 7 modal confirms |
+| Settings scope labels | yes | yes | yes | shown, but says "From the next round" with no rounds | none |
+| Fit order + measured paging | yes | stage only | stage only; **open answers cut at 6 silently** | walk-through fitted and paged | Stage screen only; Build and History unfitted, unpaged |
+| Late items kept | yes | **kept on the server, unscored**; no rule for what they count | **kept on the server, unvalidated**; no rule | no (refused by design) | no: answers and votes refused; ideas always kept |
+| Per-session id secret | Ideas, late refs; answer order is a plain hash (Q9) | late refs | late refs | n/a | not used: ids are random |
+| Dusk theme declared (§9) | console and wall yes; one-screen `Stage` no | no (`Stage`) | no (`Stage`) | panels yes; `Stage` no | yes (page root) |
 
-"Not checked" means nobody has looked yet, not that it is missing.
+Audited 16 Oct 2026 against `3f07c0e4`. Every cell's evidence, with `file:line`, is in
+`docs/design/parity/PLAN.md` §1; the Q numbers are that plan's open questions.
 
 ### Trivia
 Shares the round loop and the stage fitter already. For two screens it needs wall moments
@@ -180,7 +182,8 @@ the wall moment for each poll kind (`POLL_KINDS`), with the fit order applied to
 choice labels. Late answers: decide whether a poll keeps them (it has no vote to protect).
 
 ### Survey
-No rounds, so the strip is Open › Collecting › Closed rather than round steps. Late
+No rounds, so the strip would be Open › Collecting › Closed rather than round steps; **it
+is not built** (survey controls bypass `roundStep`, so no strip renders). Late
 answers are deferred by design (owner: surveys out of scope for phase 5). The wall's
 walk-through (`SurveyWalkthrough`) already uses the fitter.
 
@@ -201,6 +204,11 @@ What that needs:
 3. **Window status** (`PRESENT_STATUS`) and the Screens group in the Build Room's
    session panel.
 4. Then add `'build'` to `TWO_SURFACE_TYPES` (or its Build Room equivalent).
+
+The audit found two more: the projected screens still carry host controls (the Stage's
+dock, picks, Share demo), which must move onto Host as a "Room's dock" read from the same
+`stageModel`; and screenshots are private today, so the wall needs its own image read.
+The phased plan, tasks and open questions are in `docs/design/parity/PLAN.md` §2.
 
 ## Opening the window on the second display for you (built 16 Oct 2026)
 
