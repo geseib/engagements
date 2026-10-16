@@ -7718,6 +7718,13 @@ Focus on actionable business strategy insights.`;
       <button type="button" className="hc-btn" onClick={() => publishScoreboard({ open: false })}>{CW.takeItDown}</button>
     </div>
   ) : null;
+  // The stage's status for VOTE / RESULTS responses, said the same way on the
+  // console (config/stageAnswers.js): gathering, or failed with its retry.
+  const consoleGathering = {
+    status: stageResponsesStatus,
+    gatheringNoun: stageGatheringNoun(gameState),
+    onRetry: () => restoreGameState(),
+  };
   const consolePanel = !useConsole ? null : (() => {
     /* Drafting a question for the room: the read with the composer beside it,
        whichever beat the wall is on (the strip marks Ask while it is open,
@@ -7765,11 +7772,12 @@ Focus on actionable business strategy insights.`;
       case 'VOTING':
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
-        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={answers} authorsHidden onWallIndex={spotlightIndex === null ? 0 : spotlightIndex} onPutOnWall={openSpotlight} />;
+        // The stage's readiness guard: no rows (and no press) until this vote's own have landed.
+        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden onWallIndex={spotlightIndex === null ? 0 : spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'RESULTS':
       case 'RESPONSES':
         // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
-        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={answers} authorsHidden={consoleAuthorsHidden} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} />;
       case 'FEEDBACK':

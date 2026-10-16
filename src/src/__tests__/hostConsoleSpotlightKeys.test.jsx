@@ -1,4 +1,6 @@
 /**
+ * THE CONSOLE'S VOTE, MOUNTED ON THE REAL PAGE (final review, 15 Oct).
+ *
  * A RESPONSE ON THE WALL DOES NOT TAKE THE KEYS AWAY (final review, 15 Oct).
  * On two screens the console puts a response up on /present; it never mounts
  * the stage's <AnswerSpotlight>, so the spotlight is not a local overlay and
@@ -55,7 +57,12 @@ beforeAll(() => {
   global.ResizeObserver = global.ResizeObserver || class { observe() {} disconnect() {} unobserve() {} };
 });
 
+let answersDelay = 50;
+let answersFail = false;
+
 beforeEach(() => {
+  answersDelay = 50;
+  answersFail = false;
   localStorage.clear();
   sessionStorage.clear();
   localStorage.setItem('engage.surfaces', 'two');
@@ -80,8 +87,8 @@ beforeEach(() => {
     // A network's worth of delay: the page lets VOTE rows in only once the
     // stage is on that vote, which a same-tick mock would beat.
     if (u.includes(`games/${GAME}/answers/host`)) {
-      await new Promise((r) => setTimeout(r, 50));
-      return ok({ answers: ANSWERS });
+      await new Promise((r) => setTimeout(r, answersDelay));
+      return answersFail ? { ok: false, status: 500, json: async () => ({}), text: async () => '' } : ok({ answers: ANSWERS });
     }
     if (u.includes(`games/${GAME}/question?role=host`)) {
       return ok({ id: 'q1', title: 'The Meiji Restoration', questionDetail: 'Which process ended?' });
@@ -113,4 +120,32 @@ test('a response put on the wall from the console: → → still drives the foot
   const closes = global.fetch.mock.calls.slice(before)
     .filter(([u, o]) => String(u).endsWith(`games/${GAME}/close-round`) && o && o.method === 'POST');
   expect(closes).toHaveLength(1);
+});
+
+/*
+  THE STAGE'S READINESS GUARD, ON THE CONSOLE (final review, 15 Oct). Until
+  this vote's own rows land, the console lists none (so no press can publish
+  an index into the previous phase's list) and says what the stage says.
+*/
+test('before the vote\'s rows land the console says "Gathering responses…", lists none, then lists them', async () => {
+  answersDelay = 400;
+  const { container } = render(<GameHostPage />);
+  await screen.findByText('Gathering responses…', {}, { timeout: 5000 });
+  expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]')).toHaveLength(0);
+  expect(container.querySelector('.hc-main').textContent).not.toMatch('No responses yet.');
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
+  expect(screen.queryByText('Gathering responses…')).toBeNull();
+});
+
+test('a vote whose rows did not load says so on the console, with the stage\'s retry', async () => {
+  answersFail = true;
+  const { container } = render(<GameHostPage />);
+  await screen.findByText('The responses did not load.', {}, { timeout: 5000 });
+  expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]')).toHaveLength(0);
+  const reads = () => global.fetch.mock.calls.filter(([u]) => String(u).includes(`games/${GAME}/host-state`)).length;
+  const before = reads();
+  answersFail = false;
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Try again' })); });
+  await waitFor(() => expect(reads()).toBeGreaterThan(before));
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
 });

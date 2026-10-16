@@ -25,8 +25,10 @@ test('in the console the composer is inline, not the dialog', () => {
 test('the console puts responses on the wall in the spotlight\'s own index space', () => {
   // `answers` is already the room's order (voting order at VOTE, tallyOrder at
   // RESULTS), the same array the stage cards index for openSpotlight.
-  expect(page).toMatch(/phase="VOTE" responses=\{answers\}[^>]*onPutOnWall=\{openSpotlight\}/);
-  expect(page).toMatch(/phase="RESULTS" responses=\{answers\}[^>]*onPutOnWall=\{openSpotlight\}/);
+  // Gated by the stage's readiness guard: no rows until this phase's land.
+  expect(page).toMatch(/phase="VOTE" responses=\{stageResponsesReady \? answers : \[\]\} \{\.\.\.consoleGathering\}[^>]*onPutOnWall=\{openSpotlight\}/);
+  expect(page).toMatch(/phase="RESULTS" responses=\{stageResponsesReady \? answers : \[\]\} \{\.\.\.consoleGathering\}[^>]*onPutOnWall=\{openSpotlight\}/);
+  expect(page).toMatch(/const consoleGathering = \{\s*status: stageResponsesStatus,/);
 });
 
 test('the strip and the keys share one handler on both surfaces', () => {

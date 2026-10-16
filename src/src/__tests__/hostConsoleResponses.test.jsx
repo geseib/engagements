@@ -43,3 +43,41 @@ test('between rounds shows Up next', () => {
   render(<ResponsesPanel kicker="k" title="t" phase="BETWEEN" responses={[]} upNext={{ title: 'Fleming', task: 'What accident is worth a second look?' }} />);
   expect(screen.getByText('Fleming')).toBeInTheDocument();
 });
+
+/* THE STAGE'S READINESS GUARD (final review, 15 Oct). */
+test('gathering: no rows, no press, the stage\'s words instead of "No responses yet."', () => {
+  const onPutOnWall = jest.fn();
+  render(<ResponsesPanel kicker="k" title="t" phase="VOTE" responses={R} status="gathering" onPutOnWall={onPutOnWall} onWallIndex={0} />);
+  expect(screen.queryAllByTestId('hc-resp')).toHaveLength(0);
+  expect(screen.getByText('Gathering responses…')).toBeInTheDocument();
+  expect(screen.queryByText('No responses yet.')).toBeNull();
+  expect(screen.queryByText('Press a response to put it on the wall.')).toBeNull();
+});
+
+test('failed: says the results did not load, and the retry runs', () => {
+  const onRetry = jest.fn();
+  render(<ResponsesPanel kicker="k" title="t" phase="RESULTS" responses={R} status="failed" gatheringNoun="results" onRetry={onRetry} />);
+  expect(screen.queryAllByTestId('hc-resp')).toHaveLength(0);
+  expect(screen.getByText('The results did not load.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(onRetry).toHaveBeenCalled();
+});
+
+test('answering with a press: newest first, so the first item shown is original index 2, and the press says 2', () => {
+  const onPutOnWall = jest.fn();
+  render(<ResponsesPanel kicker="k" title="t" phase="ASK" responses={R} authorsHidden onWallIndex={2} onPutOnWall={onPutOnWall} />);
+  const items = screen.getAllByTestId('hc-resp');
+  expect(items[0].textContent).toMatch('The Friday phone round-up');
+  expect(items[0]).toHaveClass('is-onwall');
+  expect(items[0].textContent).toMatch('On the wall now');
+  expect(items[1]).not.toHaveClass('is-onwall');
+  fireEvent.click(items[0]);
+  expect(onPutOnWall).toHaveBeenCalledWith(2);
+});
+
+test('results with the names hidden show no names', () => {
+  render(<ResponsesPanel kicker="k" title="t" phase="RESULTS" responses={R} authorsHidden />);
+  const text = screen.getAllByTestId('hc-resp').map((n) => n.textContent).join(' ');
+  expect(text).not.toMatch(/Ada|Ben|Cleo/);
+  expect(text).toMatch('Weekly status meetings');
+});
