@@ -13,15 +13,19 @@
  * THE ROOM MUST NEVER SEE AN EMAIL ADDRESS (SessionSetupPanel's header). On one
  * screen the room watches this laptop, so the email is printed only where the
  * laptop is private (two screens); on one screen the person's name stands in.
+ * Two screens chosen is not enough: until the room's window is up (the host
+ * door's `presenting` > 0) the room may still be watching this laptop, so the
+ * caller passes `privateScreen` only when both hold.
  */
 
-/** The organisation this browser acts for (the X-Engage-Org choice), else the personal one. */
+/** The organisation this browser acts for (the X-Engage-Org choice), else the personal one, else null. */
 export function pickSignedInOrg(orgs, activeOrgId) {
   const list = Array.isArray(orgs) ? orgs : [];
   if (!list.length) return null;
   return list.find((o) => o && o.orgId === activeOrgId)
     || list.find((o) => o && o.type === 'personal')
-    || list[0];
+    // No match: say "this session's team" rather than guess a team by order.
+    || null;
 }
 
 function personName(user) {

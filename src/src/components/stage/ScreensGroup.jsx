@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { SCREEN_WORDS as W } from '../../config/roomScreen';
 import { presentStatusFrom } from '../../config/presentStatus';
 import './ScreensGroup.css';
@@ -37,6 +37,8 @@ export default function ScreensGroup({
   onProfileChange = () => {},
 }) {
   const two = choice === 'two';
+  // Setup and the panel can both draw this group: one id each.
+  const sizeId = useId();
   const status = presentStatusFrom(presentDetail);
   return (
     <div className="scr">
@@ -63,10 +65,10 @@ export default function ScreensGroup({
       ) : null}
       <div className="scr-row">
         <div className="scr-k">
-          <label className="scr-label" htmlFor="scr-size">{W.size}</label>
+          <label className="scr-label" htmlFor={sizeId}>{W.size}</label>
           <span className="scr-hint">{W.sizeHint}</span>
         </div>
-        <select id="scr-size" className="scr-select" value={profile} onChange={(e) => onProfileChange(e.target.value)}>
+        <select id={sizeId} className="scr-select" value={profile} onChange={(e) => onProfileChange(e.target.value)}>
           {DISPLAY_PROFILES.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}

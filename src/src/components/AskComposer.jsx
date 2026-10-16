@@ -141,7 +141,7 @@ export function AskComposerBody({
   const shownEnds = endsFrom(endsChoice) || {
     low: flat(endsChoice.low) || DEFAULT_ENDS.low, high: flat(endsChoice.high) || DEFAULT_ENDS.high,
   };
-  /** Either box: a pair index, or 'custom' (keeping the words the pair had, to edit). */
+  /** Either box: a pair index, or 'custom' (two empty boxes to type the ends into; a second Custom keeps what was typed). */
   const pickEnds = (value) => {
     setError('');
     if (value === 'custom') {

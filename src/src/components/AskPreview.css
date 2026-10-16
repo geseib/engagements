@@ -249,7 +249,7 @@
 
 /* Rate: the scale's two ends (owner, 16 Oct; docs/design/settings-consolidation,
    tab 2). Two boxes side by side, "to" between; Custom opens two short inputs
-   on the same grid. Wraps to one column on a phone's sheet. */
+   on the same grid, the same row at every width (the boxes shrink). */
 .askc .askc-ends { display: grid; gap: 8px; margin-top: 12px; }
 .askc .askc-ends-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: end; }
 .askc .askc-end { display: block; min-width: 0; }

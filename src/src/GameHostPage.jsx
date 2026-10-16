@@ -6135,7 +6135,7 @@ Focus on actionable business strategy insights.`;
   // The HOST's own phone, not a player's. The stage's rail carries the player
   // join QR (see Rail's join code); this one hands the operator the remote.
   const remoteUrl = `${window.location.origin}/remote?gameId=${gameId}`;
-  const remoteWho = currentUser ? remoteSignIn({ org: signedInOrg, user: currentUser, privateScreen: twoSurfaces }) : null;
+  const remoteWho = currentUser ? remoteSignIn({ org: signedInOrg, user: currentUser, privateScreen: twoSurfaces && presenting > 0 }) : null;
   /* The Screens group, for Setup in the loop (StepView) — the same group the
      Session panel's Settings tab draws, with the lobby chooser's handler. */
   const setupScreens = {

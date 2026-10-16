@@ -113,8 +113,9 @@ function hostWire(ask, tally, ideas) {
  */
 function phoneWire(ask, answered = null) {
   const kind = ask.Kind;
+  const ends = kind === 'rate' ? kinds.endsOf(ask) : null;
   const words = kind === 'rate'
-    ? { statement: ask.Statement, ends: kinds.endsOf(ask), scale: { lowLabel: kinds.endsOf(ask).low, highLabel: kinds.endsOf(ask).high } }
+    ? { statement: ask.Statement, ends, scale: { lowLabel: ends.low, highLabel: ends.high } }
     : kind === 'ideas'
       ? { question: ask.Question, maxLength: kinds.LIMITS.idea }
       : { question: ask.Question, options: (ask.Options || []).map((o) => o.text) };

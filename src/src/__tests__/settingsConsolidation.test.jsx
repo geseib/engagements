@@ -136,6 +136,15 @@ describe('the remote says who may sign in on the phone', () => {
     expect(pickSignedInOrg([personal, team], 'org_A')).toBe(team);
     expect(pickSignedInOrg([personal, team], 'org_gone')).toBe(personal);
     expect(pickSignedInOrg([], 'org_A')).toBeNull();
+    // rejects: guessing a team by list order when none is chosen or personal
+    expect(pickSignedInOrg([team], 'org_gone')).toBeNull();
+  });
+
+  test('two screens is not private until the room\'s window is up', () => {
+    // rejects: `privateScreen: twoSurfaces` alone — on two screens chosen with
+    // no window open, the room may still be watching the laptop.
+    const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    expect(page).toMatch(/privateScreen: twoSurfaces && presenting > 0/);
   });
 });
 
