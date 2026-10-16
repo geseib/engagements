@@ -199,7 +199,11 @@ export function PresentTally({ model }) {
             ))}
           </div>
         )}
-        {model.more > 0 ? <p className="present-more">{`and ${model.more} more ${model.more === 1 ? 'response' : 'responses'}`}</p> : null}
+        {/* Always drawn, so the fitter can count the rows it takes down
+            (PresentStage.jsx fitTally); data-more is the model's own count. */}
+        <p className="present-more" data-more={model.more || 0} hidden={!(model.more > 0)}>
+          {model.more > 0 ? `and ${model.more} more ${model.more === 1 ? 'idea' : 'ideas'}` : ''}
+        </p>
       </div>
       <div className="present-foot">
         <span><b>{model.total}</b>{` ${model.total === 1 ? 'response' : 'responses'} · `}<b>{model.voted}</b>{' voted'}</span>

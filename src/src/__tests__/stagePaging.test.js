@@ -186,3 +186,25 @@ describe('the pager line says all three things', () => {
     expect(line).toContain('↑ ↓');
   });
 });
+
+/* THE RESULTS CARDS ARE IDEAS FIRST AND TALLER (walk of dev 26af5fc8, F3).
+   Measured on the real stage at 1280x720 with six 260-character ideas, Table's
+   five ran past the type floor (641px in a 563px box) and dropped the prompt;
+   four fit. RESULTS reads its own page size; every other phase is unchanged.
+   rejects: Table's results back at five; a phase other than RESULTS moved. */
+describe('resultsPageSizeFor', () => {
+  // eslint-disable-next-line global-require
+  const { resultsPageSizeFor, pageSizeFor: base } = require('../config/stagePaging');
+  test('Table shows four results; Room, TV and Call keep theirs', () => {
+    expect(resultsPageSizeFor('table')).toBe(4);
+    for (const p of ['room', 'tv', 'call']) expect(resultsPageSizeFor(p)).toBe(base(p));
+    expect(resultsPageSizeFor('nonsense')).toBe(base('nonsense'));
+    expect(base('table')).toBe(5);
+  });
+  test('the host page pages RESULTS with it, and only RESULTS', () => {
+    // eslint-disable-next-line global-require
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    expect(src).toMatch(/const stagePageSize = hostPhase === 'RESULTS' \? resultsPageSizeFor\(profile\) : pageSizeFor\(profile\);/);
+    expect(src).toMatch(/pageSlice\(answers, rawIndex, resultsPageSizeFor\(profile\)\)/);
+  });
+});

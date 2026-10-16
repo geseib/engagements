@@ -8,7 +8,8 @@
  *     ladder, as it does on the host's stage);
  *   - the scale (--present-scale, --present-x, --present-y);
  *   - the measured fit: shrink the moment to the profile's --fit-min, then
- *     drop the optional block ([data-drop]), then shrink a response's text from
+ *     drop the optional block ([data-drop]), then (the results tally) clamp
+ *     ideas to two lines and show fewer rows, then shrink a response's text from
  *     the primary size to the secondary, then mark data-fit="miss". It never
  *     scrolls and never clips silently.
  *
@@ -31,6 +32,46 @@ export const PRESENT_LADDERS = {
 
 const overflows = (el) => Boolean(el) && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1);
 
+/*
+  THE RESULTS TALLY'S OWN LEVERS (walk of dev 26af5fc8, F1: five long ideas
+  ran 992px of content into a 571px main). Past the floor: clamp each idea to
+  two lines (data-clamp="2"); then take rows down from the bottom, never the
+  first, and count them in the "and N more ideas" line. A refit starts clean.
+*/
+const moreText = (n) => `and ${n} more ${n === 1 ? 'idea' : 'ideas'}`;
+
+function resetTally(canvas) {
+  const tally = canvas.querySelector('.present-tally.is-ideas');
+  if (!tally) return;
+  delete tally.dataset.clamp;
+  tally.querySelectorAll('.present-trow').forEach((row) => { row.hidden = false; });
+  const more = canvas.querySelector('.present-more[data-more]');
+  if (more) {
+    const base = Number(more.dataset.more) || 0;
+    more.hidden = base <= 0;
+    more.textContent = base > 0 ? moreText(base) : '';
+  }
+}
+
+function fitTally(canvas, main) {
+  const tally = canvas.querySelector('.present-tally.is-ideas');
+  if (!tally) return;
+  tally.dataset.clamp = '2';
+  if (!overflows(main)) return;
+  const rows = Array.from(tally.querySelectorAll('.present-trow'));
+  const more = canvas.querySelector('.present-more[data-more]');
+  const base = more ? Number(more.dataset.more) || 0 : 0;
+  let taken = 0;
+  for (let i = rows.length - 1; i >= 1 && overflows(main); i -= 1) {
+    rows[i].hidden = true;
+    taken += 1;
+    if (more) {
+      more.hidden = false;
+      more.textContent = moreText(base + taken);
+    }
+  }
+}
+
 /** Fit one canvas. Exported for the fitter test; returns 'ok' or 'miss'. */
 export function fitCanvas(canvas, profile) {
   if (!canvas) return 'ok';
@@ -39,6 +80,7 @@ export function fitCanvas(canvas, profile) {
   const drops = Array.from(canvas.querySelectorAll('[data-drop]'));
   drops.forEach((el) => { el.hidden = false; });
   canvas.style.setProperty('--fit', '1');
+  resetTally(canvas);
   let ok = true;
   if (main) {
     let fit = 1;
@@ -47,6 +89,7 @@ export function fitCanvas(canvas, profile) {
       canvas.style.setProperty('--fit', String(fit));
     }
     if (overflows(main) && drops.length) drops.forEach((el) => { el.hidden = true; });
+    if (overflows(main)) fitTally(canvas, main);
     if (overflows(main)) ok = false;
   }
   canvas.querySelectorAll('.present-fit-text').forEach((el) => {

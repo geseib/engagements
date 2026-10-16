@@ -55,7 +55,7 @@ import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
 import { twoSurfacesHere, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
 import {
-  pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
+  pageSizeFor, resultsPageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
 import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
@@ -6280,7 +6280,7 @@ Focus on actionable business strategy insights.`;
     let pageText = '';
     let notesReady = false;
     if (phase === 'RESULTS') {
-      const slice = pageSlice(answers, rawIndex, pageSizeFor(profile));
+      const slice = pageSlice(answers, rawIndex, resultsPageSizeFor(profile));
       page = slice.page;
       pages = slice.pages;
     } else if (phase === 'FIELD_NOTES') {
@@ -7531,7 +7531,9 @@ Focus on actionable business strategy insights.`;
    * label page two's first card "Response 1" on the projector while twelve
    * phones called it "Response 4".
    */
-  const stagePageSize = pageSizeFor(profile);
+  // RESULTS cards are ideas first and taller (config/stagePaging.js
+  // RESULTS_PAGE_SIZE, measured): Table shows four there, five elsewhere.
+  const stagePageSize = hostPhase === 'RESULTS' ? resultsPageSizeFor(profile) : pageSizeFor(profile);
   const pageKey = `${hostPhase}#${lessonNumber}`;
   /* ONE INDEX FOR THE WHOLE STAGE, because the states that page are mutually
      exclusive and the key already carries the phase. FIELD_NOTES pages prose

@@ -993,7 +993,7 @@ a.dock-more{text-decoration:none}
    version A): the idea is the headline (three lines at most, then the
    fitter), the points and name a small credit under it, and the room's backing
    a bar along the card's foot, relative to the top idea. */
-.cards.is-ideas .card{align-items:flex-start}
+.cards.is-ideas .card{align-items:flex-start;padding-block:calc(.6vh + 4px)}
 .cards.is-ideas .card .ans{font-weight:700;line-height:1.18;display:-webkit-box;
   -webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .cards.is-ideas .card .who{opacity:.72;font-weight:500}
