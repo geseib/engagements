@@ -112,6 +112,44 @@ describe('Space on the rail and the top line', () => {
     fireEvent.keyDown(join, { key: 'ArrowRight' });
     expect(p.footer.onAction).toHaveBeenCalledWith(controls.primary);
   });
+
+  /* THE MAIN COLUMN TOO (final review, 15 Oct): a response or comment button
+     the host tabbed to means that button, not "advance the room". */
+  const mainButton = (p) => {
+    const putUp = jest.fn();
+    render(<HostConsole {...p}><button type="button" data-testid="resp" onClick={putUp}>Response 1</button></HostConsole>);
+    return { button: screen.getByTestId('resp'), putUp };
+  };
+
+  test('a keyboard-focused response in the main column keeps Space: it is pressed, the room does not advance', () => {
+    stubFocusVisible(true);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    const { button, putUp } = mainButton(p);
+    button.focus();
+    const notPrevented = fireEvent.keyDown(button, { key: ' ' });
+    expect(notPrevented).toBe(true);
+    expect(p.footer.onAction).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    expect(putUp).toHaveBeenCalled();
+  });
+
+  test('a keyboard-focused response in the main column: → still advances', () => {
+    stubFocusVisible(true);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    const { button } = mainButton(p);
+    button.focus();
+    fireEvent.keyDown(button, { key: 'ArrowRight' });
+    expect(p.footer.onAction).toHaveBeenCalledWith(controls.primary);
+  });
+
+  test('a mouse-focused response in the main column: Space advances the room', () => {
+    stubFocusVisible(false);
+    const p = props({ footer: { ...props().footer, shortcutsEnabled: true } });
+    const { button } = mainButton(p);
+    button.focus();
+    fireEvent.keyDown(button, { key: ' ' });
+    expect(p.footer.onAction).toHaveBeenCalledWith(controls.primary);
+  });
 });
 
 test('the footer says what is next on the wall, only when given (spec §3.5)', () => {

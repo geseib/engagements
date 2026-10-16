@@ -43,15 +43,16 @@ export function isTypingTarget(target) {
 
 /*
   THE HOST CONSOLE'S OWN CONTROLS (host console spec §3). A host who TABS to a
-  rail section, a rail link or a top-line control and presses Space means that
-  control, not "advance the room", so a keyboard-focused target inside
-  `.hc-rail` or `.hc-top` keeps its Space (→ still advances: the clicker). A control focused by a mouse click does
+  rail section, a rail link, a top-line control or a response / comment in
+  the main column and presses Space means that control, not "advance the
+  room", so a keyboard-focused target inside `.hc-rail`, `.hc-top` or
+  `.hc-main` keeps its Space (→ still advances: the clicker). A control focused by a mouse click does
   not match :focus-visible and keeps Space = advance: hosts click a section,
   then press Space or the clicker to move on.
 */
 export function isConsoleKeyboardTarget(target) {
   if (!target || typeof target.closest !== 'function') return false;
-  if (!target.closest('.hc-rail, .hc-top')) return false;
+  if (!target.closest('.hc-rail, .hc-top, .hc-main')) return false;
   try {
     return target.matches(':focus-visible');
   } catch (e) {
