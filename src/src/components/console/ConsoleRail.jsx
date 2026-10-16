@@ -38,10 +38,18 @@ export default function ConsoleRail({
 }) {
   // A refusal from the late buttons, said in the section (as LateList does).
   const [lateError, setLateError] = useState('');
+  // While one call is in flight every late button waits (LateList's `busy`),
+  // so a second press cannot send it twice.
+  const [lateBusy, setLateBusy] = useState(false);
   const lateAct = (fn) => async (item) => {
+    setLateBusy(true);
     setLateError('');
-    const r = await fn(item);
-    if (r && r.ok === false) setLateError(r.error || 'That did not work.');
+    try {
+      const r = await fn(item);
+      if (r && r.ok === false) setLateError(r.error || 'That did not work.');
+    } finally {
+      setLateBusy(false);
+    }
   };
   const [open, setOpen] = useState(() => consoleRailFor(moment));
   useEffect(() => { setOpen(consoleRailFor(moment)); }, [moment]);
@@ -87,8 +95,8 @@ export default function ConsoleRail({
                   {l.label}<span className="hc-meta">{l.meta ? ` · ${l.meta}` : ''}</span>
                   {l.item ? (
                     <span className="hc-late-acts">
-                      {canShowOnWall(l.item, lateWall) ? <button type="button" className="hc-link" onClick={() => lateAct(onLateShow)(l.item)}>{LW.show}</button> : null}
-                      {!l.item.reviewed ? <button type="button" className="hc-link" onClick={() => lateAct(onLateMark)(l.item)}>{LW.markReviewed}</button> : null}
+                      {canShowOnWall(l.item, lateWall) ? <button type="button" className="hc-link" disabled={lateBusy} onClick={() => lateAct(onLateShow)(l.item)}>{LW.show}</button> : null}
+                      {!l.item.reviewed ? <button type="button" className="hc-link" disabled={lateBusy} onClick={() => lateAct(onLateMark)(l.item)}>{LW.markReviewed}</button> : null}
                     </span>
                   ) : null}
                 </span>

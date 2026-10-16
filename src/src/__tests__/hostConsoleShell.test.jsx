@@ -1,6 +1,6 @@
 // src/src/__tests__/hostConsoleShell.test.jsx
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import HostConsole from '../components/console/HostConsole';
 import { stripFor } from '../config/workflowStrip';
 
@@ -220,7 +220,7 @@ describe('Late & not reviewed (late items Task 4)', () => {
   const late = [answer, comment, { ...answer, ref: 'bbbbbbbbbbbb' }, { ...answer, ref: 'cccccccccccc' }]
     .map((item) => ({ id: `${item.kind}:${item.ref}`, label: item.text, meta: item.who, item }));
 
-  test('the count is the whole count; the first few show with their buttons', () => {
+  test('the count is the whole count; the first few show with their buttons', async () => {
     const onLateShow = jest.fn();
     const onLateMark = jest.fn();
     const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 5, lateWall: { round: '001', beat: 'feedback' }, onLateShow, onLateMark } });
@@ -233,6 +233,8 @@ describe('Late & not reviewed (late items Task 4)', () => {
     expect(first.textContent).not.toMatch('Show on the wall');
     fireEvent.click([...first.querySelectorAll('button')].find((b) => b.textContent === 'Mark reviewed'));
     expect(onLateMark).toHaveBeenCalledWith(answer);
+    // The buttons wait out the first call (no double send) before the next.
+    await act(async () => {});
     fireEvent.click([...second.querySelectorAll('button')].find((b) => b.textContent === 'Show on the wall'));
     expect(onLateShow).toHaveBeenCalledWith(comment);
     fireEvent.click(screen.getByRole('button', { name: 'Review them' }));
@@ -252,6 +254,25 @@ describe('Late & not reviewed (late items Task 4)', () => {
     const first = container.querySelector('[data-section="late"] li');
     fireEvent.click([...first.querySelectorAll('button')].find((b) => b.textContent === 'Mark reviewed'));
     expect(await screen.findByRole('alert')).toHaveTextContent('That did not work.');
+  });
+
+  test('while a call is in flight every late button waits, so a second press cannot send it twice', async () => {
+    let finish;
+    const onLateMark = jest.fn(() => new Promise((resolve) => { finish = resolve; }));
+    const onLateShow = jest.fn(() => Promise.resolve({ ok: true }));
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 4, lateWall: { round: '001', beat: 'feedback' }, onLateMark, onLateShow } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const sec = container.querySelector('[data-section="late"]');
+    const buttons = () => [...sec.querySelectorAll('li button')];
+    const mark = () => buttons().find((b) => b.textContent === 'Mark reviewed');
+    fireEvent.click(mark());
+    expect(buttons().every((b) => b.disabled)).toBe(true);
+    fireEvent.click(mark());
+    fireEvent.click(buttons().find((b) => b.textContent === 'Show on the wall'));
+    expect(onLateMark).toHaveBeenCalledTimes(1);
+    expect(onLateShow).not.toHaveBeenCalled();
+    await act(async () => { finish({ ok: true }); });
+    expect(buttons().every((b) => !b.disabled)).toBe(true);
   });
 
   test('the footer\'s late count opens the list', () => {
