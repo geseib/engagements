@@ -223,7 +223,7 @@ describe('Late & not reviewed (late items Task 4)', () => {
   test('the count is the whole count; the first few show with their buttons', () => {
     const onLateShow = jest.fn();
     const onLateMark = jest.fn();
-    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 5, onLateShow, onLateMark } });
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 5, lateWall: { round: '001', beat: 'feedback' }, onLateShow, onLateMark } });
     const { container } = render(<HostConsole {...p}><div /></HostConsole>);
     const sec = container.querySelector('[data-section="late"]');
     expect(sec.querySelector('summary').textContent).toMatch('5');
@@ -237,6 +237,21 @@ describe('Late & not reviewed (late items Task 4)', () => {
     expect(onLateShow).toHaveBeenCalledWith(comment);
     fireEvent.click(screen.getByRole('button', { name: 'Review them' }));
     expect(p.rail.onOpenSection).toHaveBeenCalledWith('history');
+  });
+
+  test('an earlier round\'s comment: no Show, only Mark reviewed (review fix)', () => {
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 4, lateWall: { round: '002', beat: 'feedback' } } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    expect(container.querySelector('[data-section="late"]').textContent).not.toMatch('Show on the wall');
+  });
+
+  test('a refusal is said in the rail', async () => {
+    const onLateMark = jest.fn(() => Promise.resolve({ ok: false, error: 'That did not work.' }));
+    const p = props({ rail: { ...props().rail, moment: 'READ', late, lateCount: 4, onLateMark } });
+    const { container } = render(<HostConsole {...p}><div /></HostConsole>);
+    const first = container.querySelector('[data-section="late"] li');
+    fireEvent.click([...first.querySelectorAll('button')].find((b) => b.textContent === 'Mark reviewed'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That did not work.');
   });
 
   test('the footer\'s late count opens the list', () => {

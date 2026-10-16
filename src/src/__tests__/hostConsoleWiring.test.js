@@ -67,7 +67,7 @@ describe('the late list (late items Task 4)', () => {
 
   test('the rail gets the real items, the count and the two buttons', () => {
     expect(page).not.toMatch(/late: \[\],/);
-    expect(page).toMatch(/late: consoleLate,\s*lateCount: lateCounts\.notReviewed,\s*onLateShow: showLateOnWall,\s*onLateMark: markLateReviewed,/);
+    expect(page).toMatch(/late: consoleLate,\s*lateCount: lateCounts\.notReviewed,\s*lateWall,\s*onLateShow: showLateOnWall,\s*onLateMark: markLateReviewed,/);
   });
 
   test('Show on the wall reuses the feature route and the Ideas pick; Mark reviewed is the review route', () => {
@@ -79,5 +79,11 @@ describe('the late list (late items Task 4)', () => {
   test('the Session panel\'s Rounds tab carries the full list; Review opens it there', () => {
     expect(page).toMatch(/late=\{\{\s*rounds: lateItems,\s*ended: gameState === 'ENDED',\s*commentsClosedAt,/);
     expect(page).toMatch(/const openLateList = \(\) => openSetupAt\('history'\)/);
+  });
+
+  test('"Show on the wall" is offered only for the round and beat on the wall (review fix)', () => {
+    expect(page).toMatch(/const lateWall = \{\s*round: resultsRoundOf\(gameState\),\s*beat: resultsBeat,\s*askId: roundAsks\.shown \? roundAsks\.shown\.askId : null,/);
+    expect(page).toMatch(/lateCount: lateCounts\.notReviewed,\s*lateWall,/);
+    expect(page).toMatch(/commentsClosedAt,\s*wall: lateWall,/);
   });
 });

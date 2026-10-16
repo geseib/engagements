@@ -9,8 +9,9 @@ import './LateList.css';
  * Everything that arrived after its moment, grouped by round: a late round
  * answer, a late answer to a question for the room, a comment added later.
  * Each says what it is, who sent it, when it arrived and its review label,
- * with two quiet buttons: "Show on the wall" (a comment or a late Idea; a
- * late round answer has no wall view) and "Mark reviewed".
+ * with two quiet buttons: "Show on the wall" (a comment or a late Idea, and
+ * only while the wall is on that item's round and beat, so the press really
+ * shows it; a late round answer has no wall view) and "Mark reviewed".
  *
  * The host's only. Never imported by a phone, wall or Present file (Q14,
  * __tests__/lateList.test.jsx). Presentational: the page owns the reads and
@@ -18,7 +19,7 @@ import './LateList.css';
  *
  * At ENDED, "Close comments": comments stay open until 24 h after the end.
  */
-function LateItem({ item, roundNoun, busy, onShow, onMarkReviewed }) {
+function LateItem({ item, roundNoun, wall, busy, onShow, onMarkReviewed }) {
   const when = LW.arrivedDuring(item.arrivedDuring, roundNoun);
   const label = item.label || LW.labels[item.reviewed || 'none'] || LW.labels.none;
   return (
@@ -32,9 +33,9 @@ function LateItem({ item, roundNoun, busy, onShow, onMarkReviewed }) {
         {item.who}
         {when ? ` · ${when}` : ''}
       </p>
-      {(canShowOnWall(item) || !item.reviewed) ? (
+      {(canShowOnWall(item, wall) || !item.reviewed) ? (
         <div className="late-acts">
-          {canShowOnWall(item) ? (
+          {canShowOnWall(item, wall) ? (
             <button type="button" className="late-btn" disabled={busy} onClick={() => onShow(item)}>{LW.show}</button>
           ) : null}
           {!item.reviewed ? (
@@ -50,6 +51,8 @@ export default function LateList({
   rounds = [],
   ended = false,
   commentsClosedAt = null,
+  // The round on the wall now: { round, beat, askId } (lateClient canShowOnWall).
+  wall = null,
   onShow = () => Promise.resolve({ ok: true }),
   onMarkReviewed = () => Promise.resolve({ ok: true }),
   onCloseComments = () => Promise.resolve({ ok: true }),
@@ -78,6 +81,7 @@ export default function LateList({
                 key={`${item.kind}:${item.ref}`}
                 item={item}
                 roundNoun={r.roundNoun}
+                wall={wall}
                 busy={busy}
                 onShow={run(onShow)}
                 onMarkReviewed={run(onMarkReviewed)}

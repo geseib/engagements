@@ -956,6 +956,18 @@ function HostRemote() {
     });
     return () => { cancelled = true; };
   }, [gameId, access.status, remoteState]);
+  // At the end nothing moves the state, but the host may still review on the
+  // laptop: re-read on the roster's tick so "N items not reviewed" stays true.
+  useEffect(() => {
+    if (!gameId || access.status !== ACCESS.OK || remoteState !== 'ENDED') return undefined;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      fetchLate({ fetchFn: authFetch, apiBase: apiBase(), gameId }).then((r) => {
+        if (!cancelled && r.ok) setLateRounds(r.rounds);
+      });
+    }, ROSTER_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [gameId, access.status, remoteState]);
   const lateStatus = useMemo(() => lateStatusOf(lateRounds), [lateRounds]);
   const stepExtras = useMemo(() => ({
     playerCount: rosterCount,

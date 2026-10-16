@@ -33,9 +33,16 @@ function Section({ id, title, summary, alert = false, open, onToggle, children, 
  * host's own open/close choice holds until the moment changes.
  */
 export default function ConsoleRail({
-  moment, rounds = [], total = null, people = [], counts = {}, late = [], lateCount = null,
+  moment, rounds = [], total = null, people = [], counts = {}, late = [], lateCount = null, lateWall = null,
   onLateShow = () => {}, onLateMark = () => {}, connected = true, onOpenSection = () => {},
 }) {
+  // A refusal from the late buttons, said in the section (as LateList does).
+  const [lateError, setLateError] = useState('');
+  const lateAct = (fn) => async (item) => {
+    setLateError('');
+    const r = await fn(item);
+    if (r && r.ok === false) setLateError(r.error || 'That did not work.');
+  };
   const [open, setOpen] = useState(() => consoleRailFor(moment));
   useEffect(() => { setOpen(consoleRailFor(moment)); }, [moment]);
   const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
@@ -80,8 +87,8 @@ export default function ConsoleRail({
                   {l.label}<span className="hc-meta">{l.meta ? ` · ${l.meta}` : ''}</span>
                   {l.item ? (
                     <span className="hc-late-acts">
-                      {canShowOnWall(l.item) ? <button type="button" className="hc-link" onClick={() => onLateShow(l.item)}>{LW.show}</button> : null}
-                      {!l.item.reviewed ? <button type="button" className="hc-link" onClick={() => onLateMark(l.item)}>{LW.markReviewed}</button> : null}
+                      {canShowOnWall(l.item, lateWall) ? <button type="button" className="hc-link" onClick={() => lateAct(onLateShow)(l.item)}>{LW.show}</button> : null}
+                      {!l.item.reviewed ? <button type="button" className="hc-link" onClick={() => lateAct(onLateMark)(l.item)}>{LW.markReviewed}</button> : null}
                     </span>
                   ) : null}
                 </span>
@@ -89,6 +96,7 @@ export default function ConsoleRail({
             ))}
           </ul>
         ) : <p className="hc-empty">{CW.noLate}</p>}
+        {lateError ? <p className="hc-empty hc-error" role="alert">{lateError}</p> : null}
       </Section>
       <Section id="tools" title={CW.tools} summary={connected ? `● ${CW.connected}` : CW.offline} open={open === 'tools'} onToggle={toggle}>
         <ul className="hc-list">

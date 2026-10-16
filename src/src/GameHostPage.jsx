@@ -7753,6 +7753,18 @@ Focus on actionable business strategy insights.`;
     in the list's order. The rail shows the first few with their buttons; its
     count is the server's.
   */
+  /*
+    WHERE "SHOW ON THE WALL" IS HONEST (review fix): the round on the wall now,
+    its beat, and the question for the room up. A late comment can go up only
+    on its own round's feedback beat, a late Idea only on its round's ask beat
+    with its question up; anywhere else the wall would not show it, and the
+    press would still record "Reviewed with the room".
+  */
+  const lateWall = {
+    round: resultsRoundOf(gameState),
+    beat: resultsBeat,
+    askId: roundAsks.shown ? roundAsks.shown.askId : null,
+  };
   const consoleLate = lateItemsOf(lateItems).filter((item) => !item.reviewed).map((item) => {
     const text = String(item.text || '');
     return {
@@ -7964,6 +7976,7 @@ Focus on actionable business strategy insights.`;
             counts: { players: players.length, answered: answeredCount, voted: playersWhoVoted.length },
             late: consoleLate,
             lateCount: lateCounts.notReviewed,
+            lateWall,
             onLateShow: showLateOnWall,
             onLateMark: markLateReviewed,
             connected: wsConnected,
@@ -8923,6 +8936,7 @@ Focus on actionable business strategy insights.`;
             rounds: lateItems,
             ended: gameState === 'ENDED',
             commentsClosedAt,
+            wall: lateWall,
             onShow: showLateOnWall,
             onMarkReviewed: markLateReviewed,
             onCloseComments: closeComments,

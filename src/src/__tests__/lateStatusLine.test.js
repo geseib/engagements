@@ -73,6 +73,18 @@ describe('the surfaces carry it', () => {
     expect(remote).toMatch(/fetchLate\(/);
   });
 
+  test('the Remote re-reads at the end on the roster tick, so its count stays true', () => {
+    const remote = read('HostRemote.jsx');
+    expect(remote).toMatch(/remoteState !== 'ENDED'\) return undefined;[\s\S]{0,300}fetchLate\([\s\S]{0,200}ROSTER_POLL_MS\)/);
+  });
+
+  test('Present never passes the count, so the wall stays label-free (Q14)', () => {
+    const present = read('present/presentControls.js');
+    const call = present.slice(present.indexOf('remoteStep(hostState'), present.indexOf('}) : null;', present.indexOf('remoteStep(hostState')));
+    expect(call).toMatch(/remoteStep\(hostState/);
+    expect(call).not.toMatch(/\blate\b/);
+  });
+
   test('the dock and the console footer turn the count into a link to the list', () => {
     const page = read('GameHostPage.jsx');
     expect(page).toMatch(/statusLink=\{dockLateLink\}/);

@@ -59,9 +59,26 @@ export function lateStatusOf(rounds) {
   return { notReviewed: waiting.length, answers };
 }
 
-/** Can this item go on the wall? A comment, or a late Idea. Never a late round answer. */
-export function canShowOnWall(item) {
+/**
+ * Can this item go on the wall NOW? Only where the wall would really show it,
+ * because putting it up also records "Reviewed with the room" (review fix,
+ * controller ruling 16 Oct): a press that changes nothing on the wall would be
+ * a false record in the report.
+ *
+ *   comment     the wall is on that round's feedback beat (the wall reads the
+ *               featured comment of the round on screen, and only there:
+ *               present/usePresentation.js, the stage's scopedRoundComments)
+ *   askAnswer   a late Idea, when the wall is on that round's ask beat with
+ *               that same question up (the wall reads the round's shown ask)
+ *   answer      never: a late round answer has no wall view
+ *
+ * `wall` is `{ round: '003', beat, askId }`: the round on the wall (its
+ * results), the results beat, and the question for the room on screen.
+ */
+export function canShowOnWall(item, wall) {
   if (!item || item.reviewed === 'shown') return false;
-  if (item.kind === 'comment') return true;
-  return item.kind === 'askAnswer' && item.askKind === 'ideas' && Boolean(item.askId && item.id);
+  if (!wall || !wall.round || String(wall.round) !== String(item.round)) return false;
+  if (item.kind === 'comment') return wall.beat === 'feedback';
+  return item.kind === 'askAnswer' && item.askKind === 'ideas' && Boolean(item.askId && item.id)
+    && wall.beat === 'ask' && wall.askId === item.askId;
 }

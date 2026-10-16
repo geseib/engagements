@@ -56,12 +56,30 @@ describe('the list', () => {
   });
 
   test('no "Show on the wall" for a late round answer; none once shown', () => {
-    render(<LateList rounds={ROUNDS} onShow={noop} onMarkReviewed={noop} />);
+    render(<LateList rounds={ROUNDS} wall={{ round: '001', beat: 'feedback' }} onShow={noop} onMarkReviewed={noop} />);
     const items = screen.getAllByRole('listitem');
     expect(within(items[0]).queryByRole('button', { name: LW.show })).toBeNull();
     expect(within(items[1]).getByRole('button', { name: LW.show })).toBeInTheDocument();
-    expect(within(items[2]).getByRole('button', { name: LW.show })).toBeInTheDocument();
     expect(within(items[3]).queryByRole('button', { name: LW.show })).toBeNull();
+  });
+
+  test('"Show on the wall" only while the wall is on that item\'s round and beat (review fix)', () => {
+    const shows = (wall) => {
+      const { unmount } = render(<LateList rounds={ROUNDS} wall={wall} onShow={noop} onMarkReviewed={noop} />);
+      const items = screen.getAllByRole('listitem');
+      const out = items.map((li) => Boolean(within(li).queryByRole('button', { name: LW.show })));
+      unmount();
+      return out;
+    };
+    // No wall known, another round, the wrong beat: only Mark reviewed.
+    expect(shows(null)).toEqual([false, false, false, false]);
+    expect(shows({ round: '002', beat: 'feedback' })).toEqual([false, false, false, false]);
+    expect(shows({ round: '001', beat: 'results' })).toEqual([false, false, false, false]);
+    // Round 1's feedback beat: its comment can go up.
+    expect(shows({ round: '001', beat: 'feedback' })).toEqual([false, true, false, false]);
+    // Round 2's ask beat with that question up: the late Idea can go up.
+    expect(shows({ round: '002', beat: 'ask', askId: 'ask123' })).toEqual([false, false, true, false]);
+    expect(shows({ round: '002', beat: 'ask', askId: 'other1' })).toEqual([false, false, false, false]);
   });
 
   test('"Mark reviewed" is hidden once reviewed', () => {
@@ -75,7 +93,7 @@ describe('the list', () => {
   test('the buttons hand the item to the page', async () => {
     const onShow = jest.fn(noop);
     const onMarkReviewed = jest.fn(noop);
-    render(<LateList rounds={ROUNDS} onShow={onShow} onMarkReviewed={onMarkReviewed} />);
+    render(<LateList rounds={ROUNDS} wall={{ round: '002', beat: 'ask', askId: 'ask123' }} onShow={onShow} onMarkReviewed={onMarkReviewed} />);
     const items = screen.getAllByRole('listitem');
     fireEvent.click(within(items[0]).getByRole('button', { name: LW.markReviewed }));
     expect(onMarkReviewed).toHaveBeenCalledWith(expect.objectContaining({ kind: 'answer', ref: 'aaaaaaaaaaaa', round: '001' }));
@@ -151,12 +169,17 @@ describe('the client', () => {
     expect(lateStatusOf([])).toEqual({ notReviewed: 0, answers: 0 });
   });
 
-  test('only a comment or a late Idea can go on the wall', () => {
-    expect(canShowOnWall(ROUNDS[0].items[0])).toBe(false);
-    expect(canShowOnWall(ROUNDS[0].items[1])).toBe(true);
-    expect(canShowOnWall(ROUNDS[1].items[0])).toBe(true);
-    expect(canShowOnWall({ ...ROUNDS[1].items[0], askKind: 'rate' })).toBe(false);
-    expect(canShowOnWall(ROUNDS[1].items[1])).toBe(false);
+  test('only a comment or a late Idea, and only where the wall shows it', () => {
+    const r1Feedback = { round: '001', beat: 'feedback' };
+    const r2Ask = { round: '002', beat: 'ask', askId: 'ask123' };
+    expect(canShowOnWall(ROUNDS[0].items[0], r1Feedback)).toBe(false);
+    expect(canShowOnWall(ROUNDS[0].items[1], r1Feedback)).toBe(true);
+    expect(canShowOnWall(ROUNDS[0].items[1])).toBe(false);
+    expect(canShowOnWall(ROUNDS[0].items[1], { round: '003', beat: 'feedback' })).toBe(false);
+    expect(canShowOnWall(ROUNDS[1].items[0], r2Ask)).toBe(true);
+    expect(canShowOnWall(ROUNDS[1].items[0], { ...r2Ask, beat: 'results' })).toBe(false);
+    expect(canShowOnWall({ ...ROUNDS[1].items[0], askKind: 'rate' }, r2Ask)).toBe(false);
+    expect(canShowOnWall(ROUNDS[1].items[1], { round: '002', beat: 'feedback' })).toBe(false);
   });
 });
 
