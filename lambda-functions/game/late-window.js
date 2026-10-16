@@ -6,9 +6,11 @@
  * the host pressed "Close comments" (METADATA `CommentsClosedAt`). Late ROUND
  * answers follow a stricter rule (websocket/late-answer.js: running only).
  *
- * When the session ended is STATE's `UpdatedAt`, which session-end.js stamps
- * as it writes ENDED (survey-host.js also writes `EndedAt`; either is read).
- * An ENDED session with neither is not guessed open.
+ * When the session ended is STATE's `EndedAt`, which session-end.js stamps
+ * as it writes ENDED (survey-host.js writes it too). `UpdatedAt` is read only
+ * as a fallback for a session that ended before EndedAt existed: any later
+ * STATE write moves it, so it is never preferred. An ENDED session with
+ * neither is not guessed open.
  *
  * Pure: `now` is injectable, and nothing is read here.
  */

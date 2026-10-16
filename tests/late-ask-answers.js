@@ -134,6 +134,14 @@ async function closedRate() {
     assert.strictEqual(lateWindow({ meta: {}, state: { State: 'ENDED' }, now }).open, false);
   });
 
+  await check('the header says the end is EndedAt, stamped by session-end; UpdatedAt only a fallback', () => {
+    const src = require('fs').readFileSync(path.join(REPO, 'lambda-functions/game/late-window.js'), 'utf8');
+    const header = src.slice(0, src.indexOf('*/'));
+    assert.match(header, /STATE's `EndedAt`, which session-end\.js stamps/);
+    assert.doesNotMatch(header, /STATE's `UpdatedAt`, which session-end/);
+    assert.match(header, /`UpdatedAt` is read only\s+\* as a fallback/);
+  });
+
   say('\n2. on time, then late, from the same person');
   await check('the late one is a change: 409, no LATE row', async () => {
     const askId = await closedRate();
