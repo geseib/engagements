@@ -1076,6 +1076,21 @@ function GameHostPage() {
     With the switch off, the profile stays this browser's own, as before.
   */
   const twoSurfaces = twoSurfacesHere(currentGameType);
+  /*
+    THE HOST CONSOLE (docs/superpowers/specs/2026-10-15-host-console-design.md).
+    On two screens, for the round types, outside an event, the laptop renders
+    the console in place of the wall-style <Stage>: the wall is /present, so
+    this screen is private and works at laptop sizes. One screen, surveys and
+    event items keep <Stage>. The console takes data and callbacks only; every
+    hook, fetch and handler stays here.
+
+    THE SPOTLIGHT IS NOT AN OVERLAY ON THE CONSOLE. On the stage a response on
+    the wall mounts <AnswerSpotlight>, which owns ← / → while it is open, so
+    the overlay terms suppress the page's keys. The console never mounts it
+    (the response is on /present), so counting it there killed Space, →, ←
+    and the clicker the moment the host put a response up.
+  */
+  const useConsole = twoSurfaces && !eventCode && ['call-and-answer', 'trivia', 'poll', 'wavelength'].includes(normalizeGameType(currentGameType));
   const [sessionProfile, setSessionProfile] = useState(null);
   const profile = twoSurfaces ? (sessionProfile || DEFAULT_PROFILE) : localProfile;
   const profileRef = useRef(profile);
@@ -6229,7 +6244,7 @@ Focus on actionable business strategy insights.`;
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
     lessonExpanded, isLoadingData, qrMode,
-    spotlightOpen: spotlightIndex !== null,
+    spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
   useScoreboardKeys({
@@ -6272,7 +6287,7 @@ Focus on actionable business strategy insights.`;
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
     isLoadingData, qrMode,
-    spotlightOpen: spotlightIndex !== null,
+    spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
   useSessionPanelKey({
@@ -6817,7 +6832,7 @@ Focus on actionable business strategy insights.`;
     // The ask preview is a dialog: Space and the arrows are its own.
     showConfirmModal: showConfirmModal || Boolean(askComposer), showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode,
-    spotlightOpen: spotlightIndex !== null,
+    spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
     scoreboardOpen: scoreboard.open,
   });
@@ -7629,15 +7644,8 @@ Focus on actionable business strategy insights.`;
     return true;
   };
 
-  /*
-    THE HOST CONSOLE (docs/superpowers/specs/2026-10-15-host-console-design.md).
-    On two screens, for the round types, outside an event, the laptop renders
-    the console in place of the wall-style <Stage>: the wall is /present, so
-    this screen is private and works at laptop sizes. One screen, surveys and
-    event items keep <Stage>. The console takes data and callbacks only; every
-    hook, fetch and handler stays here.
-  */
-  const useConsole = twoSurfaces && !eventCode && ['call-and-answer', 'trivia', 'poll', 'wavelength'].includes(normalizeGameType(currentGameType));
+  // THE HOST CONSOLE: `useConsole` is computed beside `twoSurfaces` (near the
+  // top) because the overlay terms read it long before this point.
   const consoleMoment = hostControls.step ? hostControls.step.moment : 'UNKNOWN';
   const consolePeople = consolePeopleFor({
     moment: consoleMoment,
