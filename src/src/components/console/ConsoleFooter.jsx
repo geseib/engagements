@@ -20,17 +20,26 @@ export default function ConsoleFooter({ status, nextOnWall = '', part, controls,
   */
   const ref = useRef(null);
   useEffect(() => {
+    const root = document.documentElement;
+    let mine = '';
     const publish = () => {
       const h = ref.current ? Math.ceil(ref.current.getBoundingClientRect().height) : 0;
-      if (h > 0) document.documentElement.style.setProperty('--dock-measured', `${h}px`);
+      if (h > 0) {
+        mine = `${h}px`;
+        root.style.setProperty('--dock-measured', mine);
+      }
     };
     publish();
-    window.addEventListener('resize', publish);
+    // Measured when the footer's own box changes, not on every render. jsdom
+    // has no ResizeObserver: there the one measurement above stands.
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(publish) : null;
+    if (observer && ref.current) observer.observe(ref.current);
     return () => {
-      window.removeEventListener('resize', publish);
-      document.documentElement.style.removeProperty('--dock-measured');
+      if (observer) observer.disconnect();
+      // Only ours: a stage mounted since may have published its own.
+      if (mine && root.style.getPropertyValue('--dock-measured') === mine) root.style.removeProperty('--dock-measured');
     };
-  }, [status, nextOnWall, part, controls]);
+  }, []);
   return (
     <footer className="hc-foot" ref={ref}>
       <div className="hc-status">

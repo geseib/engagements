@@ -41,3 +41,8 @@ test('the strip and the keys share one handler on both surfaces', () => {
 test('one screen still renders the stage', () => {
   expect(page).toMatch(/<Stage\b/);
 });
+
+test('the People rows go through the freshness guard, never a bare name lookup', () => {
+  expect(page).toMatch(/const consolePeople = consolePeopleFor\(\{[\s\S]{0,200}answeredCount,/);
+  expect(page).not.toMatch(/playersWhoAnswered\.includes\(name\) \? 'answered'/);
+});

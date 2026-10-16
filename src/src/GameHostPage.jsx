@@ -116,6 +116,7 @@ import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import ReadPanel from './components/console/panels/ReadPanel';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import CW from './config/consoleWords';
+import { consolePeopleFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
@@ -7638,12 +7639,16 @@ Focus on actionable business strategy insights.`;
   */
   const useConsole = twoSurfaces && !eventCode && ['call-and-answer', 'trivia', 'poll', 'wavelength'].includes(normalizeGameType(currentGameType));
   const consoleMoment = hostControls.step ? hostControls.step.moment : 'UNKNOWN';
-  const consolePeople = players.map((p) => {
-    const name = p.name || p.playerName;
-    let state = 'here';
-    if (consoleMoment === 'ANSWERING') state = playersWhoAnswered.includes(name) ? 'answered' : 'writing';
-    else if (consoleMoment === 'VOTING' || consoleMoment === 'VOTE_RESPONSES') state = playersWhoVoted.includes(name) ? 'voted' : 'not-yet';
-    return { name, state };
+  const consolePeople = consolePeopleFor({
+    moment: consoleMoment,
+    players,
+    answeredNames: playersWhoAnswered,
+    answeredCount,
+    votedNames: playersWhoVoted,
+    votedCount: playersWhoVoted.length,
+    gameType: currentGameType,
+    anonymousUntilReveal,
+    authorsRevealed,
   });
   /*
     THE ROUND QUEUE: the rounds played (the session history, `rounds`), the one
