@@ -1390,6 +1390,39 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     v = (await playCall('GET', 'state', priya)).body;
     assert.strictEqual(v.lan.open, 'http://192.168.1.20:4900/?k=bbbbbbbbbbbbbbbbbbbbbb');
   });
+  await check('two plugin copies on one room: the first keeps it, the second is told not wanted, and nothing flips', async () => {
+    // Owner, 16 Oct: "it is oscillating between 0 and 1 when i am viewing from a
+    // participant screen". The old prod plugin and the test plugin both reported
+    // to one test room every 4 s, each with its own gateway, key and count.
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await hostCall('POST', 'share', { on: true });
+    const a = await report(LIVE({ reporter: 'copyAAAAAAAAAAAA', open: 1 }));
+    assert.deepStrictEqual(a.body, { wanted: true, targets: ['http://localhost:5173'] });
+    const b = await report(LIVE({ reporter: 'copyBBBBBBBBBBBB', open: 0, key: 'bbbbbbbbbbbbbbbbbbbbbb', map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4901' }] }));
+    assert.deepStrictEqual(b.body, { wanted: false, targets: [], another: true }, 'the second copy closes its gateway');
+    const host = (await hostCall('GET', 'state')).body.lan;
+    assert.strictEqual(host.open, 1, 'the first copy\'s count stands');
+    assert.strictEqual(host.map[0].lan, 'http://192.168.1.20:4900');
+    const v = (await playCall('GET', 'state', priya)).body;
+    assert.strictEqual(v.lan.open, 'http://192.168.1.20:4900/?k=abcdefghijklmnopqrstuv', 'the participant link does not swap');
+    // A plugin too old to say who it is cannot take the room from one that does.
+    const old = await report(LIVE({ open: 0, key: 'cccccccccccccccccccccc' }));
+    assert.strictEqual(old.body.wanted, false);
+    assert.strictEqual((await hostCall('GET', 'state')).body.lan.open, 1);
+  });
+  await check('a copy that stops reporting hands the room on after 30 s', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await hostCall('POST', 'share', { on: true });
+    await report(LIVE({ reporter: 'copyAAAAAAAAAAAA' }));
+    const row = store.get(key(`GAME#${GAME}`, 'BUILD#LAN'));
+    row.ReportedAt = new Date(Date.now() - 31 * 1000).toISOString();
+    const b = await report(LIVE({ reporter: 'copyBBBBBBBBBBBB', key: 'bbbbbbbbbbbbbbbbbbbbbb' }));
+    assert.strictEqual(b.body.wanted, true);
+    const v = (await playCall('GET', 'state', priya)).body;
+    assert.strictEqual(v.lan.open, 'http://192.168.1.20:4900/?k=bbbbbbbbbbbbbbbbbbbbbb');
+  });
   await check('a report never takes Claude\'s inbox and never marks Claude as seen', async () => {
     seed();
     await hostCall('POST', 'directions', { text: 'Make the counters bigger' });
