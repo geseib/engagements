@@ -1,5 +1,5 @@
 import React from 'react';
-import FW, { KINDS, RATE_ENDS } from '../config/followUpWords';
+import FW, { KINDS, endsOf, scaleLabel } from '../config/followUpWords';
 
 /**
  * QUESTIONS FOR THE ROOM, IN THE REPORTS (docs/design/followup-icons, phase D;
@@ -93,7 +93,7 @@ export default function ReportFollowUps({ followUps, late = null, className = 'r
                 </p>
                 <ul className="report-followup-list">
                   {[5, 4, 3, 2, 1].map((v) => (
-                    <li key={v}>{`${v === 5 ? RATE_ENDS.high : v === 1 ? RATE_ENDS.low : v} — ${(t.counts && t.counts[v - 1]) || 0}`}</li>
+                    <li key={v}>{`${scaleLabel(endsOf(f), v)} — ${(t.counts && t.counts[v - 1]) || 0}`}</li>
                   ))}
                 </ul>
               </>

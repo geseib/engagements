@@ -177,6 +177,9 @@ function askFacts(ask) {
     status: ask.status,
     question: String(ask.question || ''),
     statement: String(ask.statement || ''),
+    // The scale's two ends (owner, 16 Oct): the ask's own, or null for the default.
+    ends: ask.ends && typeof ask.ends.low === 'string' && typeof ask.ends.high === 'string'
+      ? { low: String(ask.ends.low), high: String(ask.ends.high) } : null,
     options: Array.isArray(ask.options) ? ask.options.map(String) : [],
     tally: tally ? {
       n: int(tally.n),

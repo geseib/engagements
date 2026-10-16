@@ -199,5 +199,28 @@ check('the send context is checked: laptop or remote, a whole room size, nothing
   assert.deepStrictEqual(K.sendContextOf(undefined), { sentFrom: null, roomSize: null });
 });
 
+console.log('\n9. the scale\'s two ends (owner, 16 Oct: "host should be able to change what the high low says")');
+check('no ends: the default pair, Disagree to Agree', () => {
+  assert.deepStrictEqual(K.normalizeFollowUp({ kind: 'rate', statement: 'x' }).value.ends, { low: 'Disagree', high: 'Agree' });
+  assert.deepStrictEqual(K.normalizeFollowUp({ kind: 'rate', statement: 'x', ends: null }).value.ends, { low: 'Disagree', high: 'Agree' });
+  assert.deepStrictEqual(K.endsOf({ Kind: 'rate', Statement: 'x' }), { low: 'Disagree', high: 'Agree' });
+});
+check('custom ends are trimmed, whitespace folded, 1 to 24 characters each, both required', () => {
+  assert.deepStrictEqual(K.normalizeFollowUp({ kind: 'rate', statement: 'x', ends: { low: '  Cold ', high: 'Very\n hot' } }).value.ends, { low: 'Cold', high: 'Very hot' });
+  assert.deepStrictEqual(K.normalizeFollowUp({ kind: 'rate', statement: 'x', ends: { low: 'a'.repeat(24), high: 'b' } }).value.ends, { low: 'a'.repeat(24), high: 'b' });
+  for (const ends of [{ low: '', high: 'Hot' }, { low: 'Cold', high: '   ' }, { low: 'a'.repeat(25), high: 'b' }, { low: 'Cold' }, { low: 3, high: 'Hot' }, 'Cold-Hot']) {
+    const r = K.normalizeFollowUp({ kind: 'rate', statement: 'x', ends });
+    assert.ok(r.error && /1 to 24 characters/.test(r.error), JSON.stringify(ends));
+  }
+});
+check('only a rate ask carries ends', () => {
+  assert.ok(!('ends' in K.normalizeFollowUp({ kind: 'ideas', question: 'q', ends: { low: 'a', high: 'b' } }).value));
+});
+check('the phone\'s survey question carries the ask\'s own ends, stored or normalized', () => {
+  assert.deepStrictEqual(K.toSurveyQuestion({ Kind: 'rate', Statement: 'x', Ends: { low: 'Cold', high: 'Hot' } }),
+    { kind: 'rating', scale: '1-5', lowLabel: 'Cold', highLabel: 'Hot', required: true });
+  assert.deepStrictEqual(K.toSurveyQuestion({ kind: 'rate', statement: 'x', ends: { low: 'No', high: 'Yes' } }).lowLabel, 'No');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

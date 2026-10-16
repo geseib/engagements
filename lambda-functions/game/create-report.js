@@ -7,6 +7,7 @@ const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
 const followUpKeys = require('./followup-keys');
+const followUpKinds = require('./followup-kinds');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 const { displayOrder } = require('./answer-order');
 const { shapeForLog } = require('./log-shape');
@@ -303,6 +304,9 @@ exports.handler = async (event) => {
         kind: row.Kind,
         question: row.Question || null,
         statement: row.Statement || null,
+        // The scale's two ends (owner, 16 Oct): the ask's own, or the default
+        // for a Rate stored before then; null for any other kind.
+        ends: row.Kind === 'rate' ? followUpKinds.endsOf(row) : null,
         options: (row.Options || []).map((o) => (o && typeof o === 'object' ? o.text : String(o))),
         anchor: row.Anchor || null,
         origin: row.Origin || null,

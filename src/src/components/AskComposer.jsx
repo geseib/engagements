@@ -5,7 +5,8 @@ import './ui/Dialog.css';
 import './ui/Button.css';
 import './AskPreview.css';
 import FW, {
-  KINDS, RATE_ENDS, COMPOSER_KINDS, COMMENTS_KIND, KIND_LINES, PRIVACY_LINES,
+  KINDS, COMPOSER_KINDS, COMMENTS_KIND, KIND_LINES, PRIVACY_LINES,
+  RATE_PAIRS, DEFAULT_ENDS, ENDS_MAX, ENDS_WORDS as EW, scaleLabel,
 } from '../config/followUpWords';
 
 /**
@@ -48,10 +49,29 @@ export function startingWords(ask) {
   return { question: a.question || '', statement: a.statement || '', options };
 }
 
+/*
+  THE SCALE'S TWO ENDS (owner, 16 Oct; docs/design/settings-consolidation,
+  tab 2). `ends` is `{ pair }` (an index into RATE_PAIRS) or
+  `{ pair: 'custom', low, high }`. Either box picks a pair, so picking an end
+  sets the other; Custom takes both, 1 to 24 characters each.
+*/
+export const DEFAULT_ENDS_CHOICE = Object.freeze({ pair: 0 });
+
+/** The ends a choice means, `{low, high}`, or null while a custom end is blank. */
+export function endsFrom(choice) {
+  const c = choice || DEFAULT_ENDS_CHOICE;
+  if (c.pair === 'custom') {
+    const low = flat(c.low);
+    const high = flat(c.high);
+    return low && high && low.length <= ENDS_MAX && high.length <= ENDS_MAX ? { low, high } : null;
+  }
+  return RATE_PAIRS[c.pair] || DEFAULT_ENDS;
+}
+
 const kindOf = (ask) => (ask && ['ideas', 'choice', 'rate'].includes(ask.type) ? ask.type : 'ideas');
 
 /** The send body, or the reason it cannot be sent yet. `entry` may be null (blank). */
-export function askBody(kind, words, entry) {
+export function askBody(kind, words, entry, endsChoice = DEFAULT_ENDS_CHOICE) {
   const q = flat(words.question);
   const st = flat(words.statement);
   const ask = entry && entry.ask ? entry.ask : {};
@@ -62,7 +82,11 @@ export function askBody(kind, words, entry) {
   };
   if (kind === 'rate') {
     if (!st) return { error: 'Write the statement the room will rate' };
-    return { body: { ...base, statement: st } };
+    const ends = endsFrom(endsChoice);
+    if (!ends) return { error: EW.needBoth };
+    // The default pair adds nothing: the server reads an absent `ends` as it.
+    const isDefault = ends.low === DEFAULT_ENDS.low && ends.high === DEFAULT_ENDS.high;
+    return { body: { ...base, statement: st, ...(isDefault ? {} : { ends: { low: ends.low, high: ends.high } }) } };
   }
   if (!q) return { error: 'Write the question' };
   if (kind === 'ideas') return { body: { ...base, question: q } };
@@ -106,13 +130,26 @@ export function AskComposerBody({
   const [entry, setEntry] = useState(first);
   const [kind, setKind] = useState(first ? kindOf(first.ask) : 'ideas');
   const [words, setWords] = useState(() => startingWords(first && first.ask));
+  const [endsChoice, setEndsChoice] = useState(DEFAULT_ENDS_CHOICE);
   const [busy, setBusyState] = useState(false);
   const setBusy = (b) => { setBusyState(b); if (onBusyChange) onBusyChange(b); };
   const [error, setError] = useState('');
 
   const kinds = onComments ? COMPOSER_KINDS : COMPOSER_KINDS.filter((k) => k !== 'comments');
   const comments = kind === 'comments';
-  const built = useMemo(() => (comments ? { body: {} } : askBody(kind, words, entry)), [comments, kind, words, entry]);
+  const built = useMemo(() => (comments ? { body: {} } : askBody(kind, words, entry, endsChoice)), [comments, kind, words, entry, endsChoice]);
+  const shownEnds = endsFrom(endsChoice) || {
+    low: flat(endsChoice.low) || DEFAULT_ENDS.low, high: flat(endsChoice.high) || DEFAULT_ENDS.high,
+  };
+  /** Either box: a pair index, or 'custom' (keeping the words the pair had, to edit). */
+  const pickEnds = (value) => {
+    setError('');
+    if (value === 'custom') {
+      setEndsChoice((c) => (c.pair === 'custom' ? c : { pair: 'custom', low: '', high: '' }));
+      return;
+    }
+    setEndsChoice({ pair: Number(value) });
+  };
   const edited = !comments && editedFrom(entry, kind, words);
   const requestClose = () => { if (!busy) onClose(); };
 
@@ -120,6 +157,7 @@ export function AskComposerBody({
     setEntry(s);
     setKind(s ? kindOf(s.ask) : 'ideas');
     setWords(startingWords(s && s.ask));
+    setEndsChoice(DEFAULT_ENDS_CHOICE);
     setError('');
   };
 
@@ -269,6 +307,49 @@ export function AskComposerBody({
                   onChange={(e) => setWords((w) => ({ ...w, question: e.target.value }))}
                 />
               )}
+              {kind === 'rate' && (
+                <div className="askc-ends">
+                  <div className="askc-ends-row">
+                    <label className="askc-end">
+                      <span className="askp-label">{EW.lowMeans}</span>
+                      <select className="askp-input askc-end-select" value={String(endsChoice.pair)} onChange={(e) => pickEnds(e.target.value)}>
+                        {RATE_PAIRS.map((p, i) => <option key={p.low} value={String(i)}>{p.low}</option>)}
+                        <option value="custom">{EW.custom}</option>
+                      </select>
+                    </label>
+                    <span className="askc-ends-to" aria-hidden="true">{EW.to}</span>
+                    <label className="askc-end">
+                      <span className="askp-label">{EW.highMeans}</span>
+                      <select className="askp-input askc-end-select" value={String(endsChoice.pair)} onChange={(e) => pickEnds(e.target.value)}>
+                        {RATE_PAIRS.map((p, i) => <option key={p.high} value={String(i)}>{p.high}</option>)}
+                        <option value="custom">{EW.custom}</option>
+                      </select>
+                    </label>
+                  </div>
+                  {endsChoice.pair === 'custom' ? (
+                    <div className="askc-ends-row">
+                      <input
+                        className="askp-input askc-end"
+                        maxLength={ENDS_MAX}
+                        aria-label={EW.lowCustom}
+                        placeholder={EW.lowCustom}
+                        value={endsChoice.low}
+                        onChange={(e) => { const v = e.target.value; setEndsChoice((c) => ({ ...c, low: v })); }}
+                      />
+                      <span className="askc-ends-to" aria-hidden="true">{EW.to}</span>
+                      <input
+                        className="askp-input askc-end"
+                        maxLength={ENDS_MAX}
+                        aria-label={EW.highCustom}
+                        placeholder={EW.highCustom}
+                        value={endsChoice.high}
+                        onChange={(e) => { const v = e.target.value; setEndsChoice((c) => ({ ...c, high: v })); }}
+                      />
+                    </div>
+                  ) : null}
+                  <p className="askc-ends-hint">{EW.hint}</p>
+                </div>
+              )}
               {kind === 'choice' && (
                 <ol className="askp-options">
                   {words.options.map((o, i) => (
@@ -348,7 +429,7 @@ export function AskComposerBody({
                     <div className="askp-scale-row" aria-hidden="true">
                       {[1, 2, 3, 4, 5].map((n) => <span key={n} className="askp-scale-n">{n}</span>)}
                     </div>
-                    <div className="askp-scale-ends"><span>{RATE_ENDS.low}</span><span>{RATE_ENDS.high}</span></div>
+                    <div className="askp-scale-ends"><span>{scaleLabel(shownEnds, 1)}</span><span>{scaleLabel(shownEnds, 5)}</span></div>
                   </div>
                 )}
                 {kind === 'ideas' && <div className="askp-idea" aria-hidden="true">{FW.ideaPlaceholder}</div>}
