@@ -70,3 +70,17 @@ test('the inline composer is sticky, the main area\'s height, its body scrolls',
   expect(rule('.hc-cols.is-read > .askc--inline .askc-body')).toMatch(/overflow-y:\s*auto/);
   expect(rule('.hc-cols.is-read > .askc--inline .ui-dialog-foot')).toMatch(/flex:\s*none/);
 });
+
+/* A QUESTION FOR THE ROOM AT LAPTOP SIZE (walk, 15 Oct): AskStage carries
+   the wall's type (--t-*, .q, .kicker); inside .hc it is pinned to the ladder. */
+test('the room question in the console uses the laptop ladder', () => {
+  const size = (sel) => (rule(sel).match(/font-size:\s*(\d+)px/) || [])[1];
+  expect(size('.hc .askstage .askstage-kicker')).toBe('12');
+  expect(size('.hc .askstage .askstage-q')).toBe('24');
+  expect(size('.hc .askstage .askstage-count')).toBe('15');
+  expect(size('.hc .askstage .askstage-idea')).toBe('15');
+  expect(size('.hc .askstage .askstage-options li')).toBe('15');
+  expect(size('.hc .askstage .askstage-bars li')).toBe('15');
+  // No viewport-scaled spacing from the wall's stylesheet either.
+  expect(rule('.hc .askstage')).toMatch(/gap:\s*12px/);
+});

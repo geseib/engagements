@@ -3,7 +3,8 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AskComposerBody } from '../components/AskComposer';
 import ReadPanel from '../components/console/panels/ReadPanel';
-import { LobbyPanel, FeedbackPanel, EndedPanel } from '../components/console/panels/SimplePanels';
+import { LobbyPanel, FeedbackPanel, EndedPanel, RoomQuestionPanel } from '../components/console/panels/SimplePanels';
+import AskStage from '../components/stage/AskStage';
 
 test('the composer body renders without a dialog, and sends', async () => {
   const onSend = jest.fn().mockResolvedValue({ ok: true });
@@ -86,4 +87,13 @@ test('ended: open the report', () => {
   render(<EndedPanel onOpenReport={onOpenReport} />);
   fireEvent.click(screen.getByRole('button', { name: 'Open session report' }));
   expect(onOpenReport).toHaveBeenCalled();
+});
+
+test('a question for the room in the console: pressing an idea still puts it on the wall', () => {
+  const onPick = jest.fn();
+  const ask = { askId: 'c', kind: 'ideas', status: 'closed', question: 'Who first?', tally: { n: 2 }, ideas: [{ id: 'i1', text: 'The agencies' }, { id: 'i2', text: 'Discount signups' }], picked: [] };
+  const { container } = render(<div className="hc"><RoomQuestionPanel><AskStage ask={ask} total={5} onPick={onPick} /></RoomQuestionPanel></div>);
+  expect(container.querySelector('.hc .hc-panel .askstage')).not.toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /The agencies/ }));
+  expect(onPick).toHaveBeenCalledWith('c', 'i1', true);
 });

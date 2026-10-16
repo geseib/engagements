@@ -117,3 +117,24 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .hc .askicon { font-size: 12px; }
 .hc .askicons-after { font-size: 13px; }
 .hc .askicons-after .askicons { font-size: inherit; }
+
+/* A QUESTION FOR THE ROOM, AT LAPTOP SIZE (walk, 15 Oct). RoomQuestionPanel
+   draws the stage's AskStage, which carries the wall's type (.kicker, .q and
+   --t-*, styles/stage.css; vh-scaled gaps, AskStage.css). The console never
+   uses the wall's sizes: inside .hc every part is pinned to the ladder. The
+   markup and the press (onPick) are the stage's own. */
+.hc .askstage { gap: 12px; }
+.hc .askstage .askstage-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hc .askstage .askstage-kicker svg { width: 14px; height: 14px; }
+.hc .askstage .askstage-q { font-family: inherit; font-size: 24px; font-weight: 800; line-height: 1.2; letter-spacing: 0; max-width: none; color: var(--text); }
+.hc .askstage .askstage-options, .hc .askstage .askstage-bars, .hc .askstage .askstage-ideas { gap: 6px; }
+.hc .askstage .askstage-options li { font-size: 15px; }
+.hc .askstage .askstage-bars li { font-size: 15px; }
+.hc .askstage .askstage-count { font-size: 15px; }
+.hc .askstage .askstage-ends { font-size: 13px; }
+.hc .askstage .askstage-mean { font-size: 15px; }
+.hc .askstage .askstage-mean b { font-size: 19px; }
+.hc .askstage .askstage-bar { height: 8px; }
+.hc .askstage .askstage-idea { font-size: 15px; padding: 8px 12px; border-radius: 10px; }
+.hc .askstage .askstage-idea em { font-size: 13px; }
+.hc .hc-panel > .qdetail { font-size: 15px; max-width: none; }
