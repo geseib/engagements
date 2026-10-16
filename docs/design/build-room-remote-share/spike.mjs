@@ -23,6 +23,13 @@
  *   4. Through one tunnel: a websocket upgrade, and which client-address
  *      headers arrive. And what a visitor gets when the local server is down.
  *
+ * Second run (16 Oct): the first run's laptop never resolved the new
+ * addresses (ENOTFOUND for 60 s). Asking this laptop's resolver too early
+ * gets "no such name" and that answer is then remembered. So this run asks
+ * Cloudflare's public DNS (1.1.1.1, over https) until the name exists,
+ * connects to that address directly, and only then asks the laptop's own
+ * resolver, once, to record whether it has caught up.
+ *
  * SPIKE_FAKE_CLOUDFLARED=<path> skips the downloads and runs that program
  * instead (how this script was tested without network).
  */
@@ -32,6 +39,7 @@ import { mkdtempSync, writeFileSync, rmSync, chmodSync, existsSync, readdirSync 
 import { tmpdir, platform, arch } from 'node:os';
 import { join } from 'node:path';
 import http from 'node:http';
+import dns from 'node:dns';
 import https from 'node:https';
 
 const ASSETS = ['cloudflared-darwin-arm64.tgz', 'cloudflared-darwin-amd64.tgz', 'cloudflared-linux-amd64', 'cloudflared-linux-arm64', 'cloudflared-windows-amd64.exe'];
@@ -150,10 +158,39 @@ function openTunnel(bin, port) {
 
 function close(t) { if (t && t.child) { try { t.child.kill('SIGTERM'); } catch {} children.delete(t.child); } }
 
+/** Resolved addresses, from public DNS, so the laptop's resolver is never asked early. */
+const pinned = new Map();
+const pinnedLookup = (host, opts, cb) => {
+  const ip = pinned.get(host);
+  if (!ip) return dns.lookup(host, opts, cb);
+  if (opts && opts.all) return cb(null, [{ address: ip, family: 4 }]);
+  return cb(null, ip, 4);
+};
+
+/** Ask 1.1.1.1 (DNS over https) until the name has an A record. */
+async function untilResolves(host, limitMs = 120000) {
+  const start = t0();
+  while (t0() - start < limitMs) {
+    try {
+      const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${host}&type=A`, { headers: { accept: 'application/dns-json' } });
+      const j = await r.json();
+      const a = (j.Answer || []).find((x) => x.type === 1);
+      if (a) { pinned.set(host, a.data); return { ms: t0() - start, ip: a.data }; }
+    } catch {}
+    await sleep(2000);
+  }
+  return { ms: null };
+}
+
+/** The laptop's own resolver, asked once, after public DNS has the name. */
+function systemResolves(host) {
+  return new Promise((resolve) => dns.lookup(host, (e, ip) => resolve(e ? `no (${e.code})` : `yes (${ip})`)));
+}
+
 function get(url) {
   const lib = url.startsWith('https:') ? https : http;
   return new Promise((resolve) => {
-    const req = lib.get(url, { timeout: 15000 }, (res) => {
+    const req = lib.get(url, { timeout: 15000, lookup: pinnedLookup }, (res) => {
       let body = ''; res.on('data', (d) => { body += d; }); res.on('end', () => resolve({ status: res.statusCode, body }));
     });
     req.on('timeout', () => req.destroy(new Error('timeout')));
@@ -163,6 +200,13 @@ function get(url) {
 
 /** How long until the address answers 200 (Cloudflare's DNS can lag the address line). */
 async function untilAnswers(address, limitMs = 60000) {
+  const host = new URL(address).hostname;
+  if (!FAKE && !pinned.has(host)) {
+    const d = await untilResolves(host);
+    if (d.ms === null) return { ms: null, dnsMs: null, last: { status: 0, body: 'never in public DNS within 120 s' } };
+    const v = await untilAnswers(address, limitMs);
+    return { ...v, dnsMs: d.ms };
+  }
   const start = t0();
   let last = null;
   while (t0() - start < limitMs) {
@@ -177,7 +221,7 @@ function wsUpgrade(address) {
   const u = new URL(address);
   const lib = u.protocol === 'https:' ? https : http;
   return new Promise((resolve) => {
-    const req = lib.request({ host: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: '/ws', headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': randomBytes(16).toString('base64') }, timeout: 15000 });
+    const req = lib.request({ host: u.hostname, lookup: pinnedLookup, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: '/ws', headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': randomBytes(16).toString('base64') }, timeout: 15000 });
     req.on('upgrade', (res, socket) => { socket.destroy(); resolve(`101 (upgrade passed through)`); });
     req.on('response', (res) => resolve(`${res.statusCode} (no upgrade)`));
     req.on('timeout', () => req.destroy(new Error('timeout')));
@@ -202,7 +246,9 @@ async function main() {
   } else {
     say(`Address line after ${one.ms} ms:`); say('```'); say(one.line); say('```');
     const a = await untilAnswers(one.address);
-    say(a.ms === null ? `**Never answered 200** in 60 s; last: ${a.last.status} ${a.last.body.slice(0, 200)}` : `Answered 200 after a further **${a.ms} ms**.`);
+    if (a.dnsMs !== undefined) say(`In public DNS (1.1.1.1) after a further **${a.dnsMs === null ? 'never (120 s)' : `${a.dnsMs} ms`}**.`);
+    say(a.ms === null ? `**Never answered 200** in 60 s; last: ${a.last.status} ${a.last.body.slice(0, 200)}` : `Then answered 200 after **${a.ms} ms**.`);
+    if (!FAKE) say(`This laptop's own resolver, asked once afterwards: **${await systemResolves(new URL(one.address).hostname)}**.`);
     say(''); say('## 4. Through that tunnel');
     say(`- Websocket upgrade: **${await wsUpgrade(one.address)}**`);
     const h = await get(`${one.address}/headers`);
@@ -220,15 +266,16 @@ async function main() {
 
   say(''); say('## 3. Four at once, then reopened three times');
   const o2 = await origin();
-  say('| Round | Opened | Slowest address (ms) | All answered 200 | Errors |');
-  say('|---|---|---|---|---|');
+  say('| Round | Opened | Slowest address (ms) | Slowest in public DNS (ms) | All answered 200 | Errors |');
+  say('|---|---|---|---|---|---|');
   const started = t0();
   for (let round = 1; round <= 4; round += 1) {
     const four = await Promise.all([0, 1, 2, 3].map(() => openTunnel(bin, o2.port)));
     const ok = four.filter((t) => t.address);
     const answered = await Promise.all(ok.map((t) => untilAnswers(t.address, 45000)));
     const errs = four.filter((t) => t.error).map((t) => `${t.error}: ${(t.lines.filter((l) => /err|fail|429|limit|too many/i.test(l)).slice(-2).join(' / ') || '').slice(0, 200)}`);
-    say(`| ${round === 1 ? '1 (first four)' : `${round} (reopen ${round - 1})`} | ${ok.length}/4 | ${ok.length ? Math.max(...ok.map((t) => t.ms)) : '–'} | ${answered.every((a) => a.ms !== null) && ok.length === 4 ? 'yes' : `no (${answered.filter((a) => a.ms !== null).length})`} | ${errs.join('; ') || '–'} |`);
+    const dnsTimes = answered.map((a) => a.dnsMs);
+    say(`| ${round === 1 ? '1 (first four)' : `${round} (reopen ${round - 1})`} | ${ok.length}/4 | ${ok.length ? Math.max(...ok.map((t) => t.ms)) : '–'} | ${dnsTimes.some((x) => x === null) ? `${dnsTimes.filter((x) => x === null).length} never` : (dnsTimes.length && dnsTimes[0] !== undefined ? Math.max(...dnsTimes) : '–')} | ${answered.every((a) => a.ms !== null) && ok.length === 4 ? 'yes' : `no (${answered.filter((a) => a.ms !== null).length})`} | ${errs.join('; ') || '–'} |`);
     four.forEach(close);
     await sleep(2000);
   }
