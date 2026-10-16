@@ -16,6 +16,11 @@ scanning a QR code or typing a four-digit code. Players never sign in and instal
 | **Build Room** | The host's Claude Code builds something while the room suggests, chooses and rates. The host decides. | — |
 | **Event** | One join code for an agenda of sessions, talks and breaks. On dev and test only for now. | — |
 
+On two screens (the room watches a separate window on the projector), the host's laptop
+shows a private console instead of a copy of the wall: the round's steps, who has
+answered, responses as they land, and whether the room's window is really up. Two screens
+is switched on per game type in `src/src/config/surfaces.js`; today that is Call & Answer.
+
 The first five are `src/src/config/gameTypes.js`, the single source of truth for types.
 Build Room and Event are named in `src/src/config/engagementKinds.js`. After each round
 the AI (named Workie on screen) writes a summary of what the room said. Every session
@@ -80,6 +85,9 @@ The plugin's source is `src/public/engage-mcp.mjs`; `tests/engage-plugin.js` and
 
 - **Users**: the help guides inside the app (the Help button, and `/help` on the site).
   Their content is `src/src/config/help/`; `src/src/__tests__/helpContent.test.js` checks it.
+- **Reviewers**: `RELEASE_NOTES.md`, one entry per push to test: what changed, what was
+  fixed, and what to look at. It is updated before every push to test, with the help
+  and this README.
 - **Engineers**: `CLAUDE.md` (deploy rules, environments), `DEPLOYMENT.md`,
   `docs/architecture/` (API, data model, auth), and `docs/handoff/` for the latest state
   of work in progress.

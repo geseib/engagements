@@ -208,6 +208,12 @@ const playing = {
           t: 'p',
           text: 'Once you have submitted, your screen tells you it is waiting for everyone else. Switching apps or locking your phone does not lose your answer.',
         },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'Answering late',
+          text: 'If the round moves on before your answer arrives, it is still kept with that round and your screen says "Kept, but late." If voting has already started, a late answer is kept for the record but is not in the vote. Still writing when voting starts? Your screen offers "Send it anyway".',
+        },
       ],
     },
     {
@@ -230,7 +236,7 @@ const playing = {
       blocks: [
         {
           t: 'p',
-          text: 'On Call & Answer rounds, once everyone has answered the room ranks the answers. You cannot vote for your own.',
+          text: 'On Call & Answer rounds, once everyone has answered the room ranks the answers. Your own answer is marked "Yours", and you may rank it like any other.',
         },
         { t: 'h', text: 'Two ways to do it' },
         {

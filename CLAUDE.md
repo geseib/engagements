@@ -32,6 +32,23 @@ What the widened permission does **not** change:
   `scripts/deploy-clean.sh` survives as a guarded escape hatch for a broken
   pipeline: backend only, and it refuses test, prod and every twin stack.
 
+## **Before every push to test: notes, help, README**
+
+Owner, 2026-10-16: *"before every push to test, we need to make sure docs/help in the app
+are updated, readme and releasenotes are updated."* The remote reviewer comments only
+after a push to test, and reads the release notes to know what to look at.
+
+In the same push, before the merge into `test`:
+1. **`RELEASE_NOTES.md`** gets a new entry at the top: the date, the dev commit merged,
+   **New**, **Fixed**, **What to look at** (numbered, concrete steps a reviewer can
+   follow on engage.test), and **Known gaps**. Plain words; no commit-log dumps.
+2. **In-app help** (`src/src/config/help/*.js`) says what changed for hosts, players and
+   admins, and nothing in it contradicts what shipped. `helpContent.test.js` must pass.
+3. **`README.md`** reflects anything a newcomer would now get wrong.
+
+`tests/release-notes.js` checks the notes' shape. It cannot check that they are current;
+that is on whoever pushes.
+
 ## **WHAT COUNTS AS A DEPLOY — read this before believing the template**
 
 **BOTH a `<tier>-v*` TAG AND A PUSH TO THE TIER BRANCH DEPLOY.** Confirmed by the owner
