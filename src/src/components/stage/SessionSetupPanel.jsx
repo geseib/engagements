@@ -290,6 +290,13 @@ export default function SessionSetupPanel({
     () => (setupPanelTabs().some((t) => t.id === initialTab) ? initialTab : 'players'),
   );
   const [search, setSearch] = useState('');
+  /* "Include items not reviewed" said it failed, rather than flipping back in silence. */
+  const [includeFailed, setIncludeFailed] = useState(false);
+  const changeInclude = async (include) => {
+    setIncludeFailed(false);
+    const r = await onIncludeNotReviewedChange(include);
+    if (r && r.ok === false) setIncludeFailed(true);
+  };
   const [filterCategory, setFilterCategory] = useState('');
   const [unaskedOnly, setUnaskedOnly] = useState(false);
   /* "a button that has enabled categories only" — see filterBrowserRows. */
@@ -1076,10 +1083,11 @@ export default function SessionSetupPanel({
                   type="checkbox"
                   data-testid="include-not-reviewed"
                   checked={includeNotReviewed !== false}
-                  onChange={(e) => onIncludeNotReviewedChange(e.target.checked)}
+                  onChange={(e) => changeInclude(e.target.checked)}
                 />
                 <span>{LW.report.settingLabel}</span>
               </label>
+              {includeFailed && <p className="setup-note" role="alert">{LW.report.settingFailed}</p>}
               <p className="setup-note">{LW.report.settingNote}</p>
 
               {workie && (

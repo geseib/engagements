@@ -9,7 +9,7 @@
  * in Settings; and the phone's feedback round never carrying any of it (Q14).
  */
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import ReportLate from '../components/ReportLate';
 import RoundReport from '../components/RoundReport';
 import { ReportDocument } from '../components/GameReport';
@@ -152,6 +152,26 @@ describe('the setting, in Settings', () => {
     renderSettings({ includeNotReviewed: true, onIncludeNotReviewedChange: onChange });
     fireEvent.click(screen.getByTestId('include-not-reviewed'));
     expect(onChange).toHaveBeenCalledWith(false);
+  });
+
+  test('a refused change says so in an alert line', async () => {
+    const onChange = jest.fn().mockResolvedValue({ ok: false, error: 'Network down' });
+    renderSettings({ includeNotReviewed: true, onIncludeNotReviewedChange: onChange });
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByTestId('include-not-reviewed'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The setting did not save. Try again.');
+  });
+
+  test('a saved change says nothing, and clears an earlier failure', async () => {
+    const onChange = jest.fn()
+      .mockResolvedValueOnce({ ok: false, error: 'Network down' })
+      .mockResolvedValueOnce({ ok: true });
+    renderSettings({ includeNotReviewed: true, onIncludeNotReviewedChange: onChange });
+    fireEvent.click(screen.getByTestId('include-not-reviewed'));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByTestId('include-not-reviewed'));
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
   test('off shows off', () => {
