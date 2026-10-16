@@ -62,6 +62,7 @@ let appPort = 0;
 let wanted = false;
 let apiDown = false;
 let targets = [];
+let another = false;
 const reports = [];
 const api = http.createServer((req, res) => {
   let body = '';
@@ -72,7 +73,7 @@ const api = http.createServer((req, res) => {
     if (req.url.endsWith('/build/share/report')) {
       if (apiDown) { res.statusCode = 500; return res.end('{"error":"down"}'); }
       reports.push(JSON.parse(body));
-      return res.end(JSON.stringify({ wanted, targets }));
+      return res.end(JSON.stringify(another ? { wanted: false, targets: [], another: true } : { wanted, targets }));
     }
     res.end('{}');
   });
@@ -276,6 +277,20 @@ function get(url, headers = {}) {
     assert.notStrictEqual(lastReport().key, key);
     const r = await get(`${gw}/`, { Cookie: cookie });
     assert.strictEqual(r.status, 403);
+  });
+  await check('the plugin names itself, the same name every round (one reporter per room, 1.18.0)', async () => {
+    const names = reports.slice(-3).map((r) => r.reporter);
+    assert.match(names[0], /^[A-Za-z0-9_-]{16}$/);
+    assert.ok(names.every((n) => n === names[0]));
+  });
+  await check('another copy holds the room: this one closes its door and stays closed', async () => {
+    another = true;
+    await until(() => lastReport().status === 'off');
+    await assert.rejects(get(`${gw}/`, { Cookie: cookie }));
+    another = false;
+    await until(() => lastReport().status === 'live');
+    key = lastReport().key;
+    cookie = (await get(`${gw}/?k=${key}`)).headers['set-cookie'][0].split(';')[0];
   });
   await check('it never opens a port for an address that is not on this laptop', async () => {
     targets = [appOrigin, 'http://192.168.1.50:3000'];

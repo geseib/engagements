@@ -2049,6 +2049,8 @@ async function shareReport(ctx, body) {
   const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
   const before = res && res.Item ? (ctx.orgId ? await decryptItem(ctx.orgId, 'buildLan', res.Item) : res.Item) : {};
   const v = norm.value;
+  // A second plugin copy on this room closes its gateway and writes nothing.
+  if (before.Wanted && !LAN.reportOwnsRoom(before, v.Reporter, now)) return reply(200, { wanted: false, targets: [], another: true });
   const set = { ...v, ReportedAt: now };
   if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
   await updateLan(ctx, set);

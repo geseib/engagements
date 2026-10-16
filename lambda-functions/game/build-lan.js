@@ -15,6 +15,8 @@ const QUIET_AFTER_MS = 2 * 60 * 1000;
 const MAX_TARGETS = 4;
 const STATUSES = Object.freeze(['off', 'live', 'failed']);
 const KEY_RE = /^[A-Za-z0-9_-]{20,64}$/;
+/** One plugin process (1.18.0+): random at its start, so two copies on one room differ. */
+const REPORTER_RE = /^[A-Za-z0-9_-]{12,64}$/;
 
 const hostOf = (url) => { try { return new URL(String(url)); } catch (e) { return null; } };
 
@@ -83,7 +85,27 @@ function normalizeReport(body) {
     .map((m) => ({ local: hostOf(m.local).origin, lan: hostOf(m.lan).origin }));
   const error = String(b.error || '').replace(/\s+/g, ' ').trim().slice(0, 200);
   const validKey = status === 'off' ? '' : (KEY_RE.test(key) ? key : '');
-  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error } };
+  const reporter = REPORTER_RE.test(String(b.reporter || '')) ? String(b.reporter) : '';
+  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error, Reporter: reporter } };
+}
+
+/**
+ * ONE REPORTER PER ROOM (owner, 2026-10-16: the count "oscillating between 0
+ * and 1" on a participant's screen). Two plugin copies on one room — the old
+ * prod plugin beside the test one, or two Claude Code windows in one folder —
+ * each run a gateway with its own key, port and count, and the row kept
+ * whichever reported last, every 4 s. The copy that reported first keeps the
+ * room while its reports are fresh; any other copy is told not wanted, so it
+ * closes its gateway. A plugin too old to send a reporter id ('') keeps a room
+ * only from another old one, never from a copy that names itself.
+ */
+function reportOwnsRoom(before, reporter, now) {
+  const b = before || {};
+  const fresh = b.ReportedAt && Date.parse(now) - Date.parse(b.ReportedAt) < REPORT_FRESH_MS;
+  if (!fresh) return true;
+  const owner = String(b.Reporter || '');
+  if (owner === reporter) return true;
+  return !owner && Boolean(reporter);
 }
 
 function lanStatus(row, now) {
@@ -151,5 +173,5 @@ function lanHostView(row, now, { withKey: showKey = false } = {}) {
 
 module.exports = {
   SK_LAN, REPORT_FRESH_MS, QUIET_AFTER_MS, MAX_TARGETS,
-  isLoopbackUrl, isPrivateLanUrl, lanTargets, normalizeReport, lanStatus, lanTranslator, lanPublicView, lanHostView,
+  isLoopbackUrl, isPrivateLanUrl, lanTargets, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
 };
