@@ -290,6 +290,49 @@ const running = {
       ],
     },
     {
+      title: 'Two screens: your laptop console',
+      icon: 'Monitor',
+      blocks: [
+        {
+          t: 'p',
+          text: 'When the room watches a separate window (Room\'s window ↗, dragged onto the projector), your laptop stops showing a copy of the wall. It shows your console: what you need for the step, and nothing the room needs.',
+        },
+        {
+          t: 'table',
+          head: ['Part', 'What it is for'],
+          rows: [
+            ['Top line', 'The join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
+            ['The loop', 'The round\'s steps. Press one to look at it privately; the room stays where it is until you press Back to the room.'],
+            ['Left rail', 'Round queue, People, Late & not reviewed, Session tools. The one that matters for the step opens by itself.'],
+            ['Main area', 'Responses as they land, the ballot in the room\'s order, results, Workie\'s read with Ask the room beside it.'],
+            ['Footer', 'The one count for the step, Your part now, and the buttons.'],
+          ],
+        },
+        { t: 'h', text: 'Is the room\'s window up?' },
+        {
+          t: 'list',
+          items: [
+            { title: 'On, full screen', text: 'Connected, visible and full screen. You are ready.' },
+            { title: 'Open, not full screen', text: 'Click that window and press F.' },
+            { title: 'Hidden', text: 'The window is minimised or behind another tab.' },
+            { title: 'Not open', text: 'Press it to open one, then drag it onto the projector.' },
+          ],
+        },
+        {
+          t: 'note',
+          tone: 'tip',
+          title: 'Putting a response on the wall',
+          text: 'Press a response in the main area and it goes up on the wall. Space, → and the clicker still move the room on afterwards.',
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'One screen is unchanged',
+          text: 'If your laptop itself is on the projector, keep one screen: the room needs to see what you see, so the console stays out of the way.',
+        },
+      ],
+    },
+    {
       title: 'Choosing what to ask next',
       icon: 'Shuffle',
       blocks: [
