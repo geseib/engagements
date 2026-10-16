@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Room: Remote share · mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../build-room-host-redesign/mock.css">
+<link rel="stylesheet" href="../build-room-host-redesign/v2.css">
+<style>
+/* SHARE DEMO (owner, 2026-10-10, after a session where Wi-Fi sharing stayed
+   off and the room only saw screenshots). Extends v2.css and the Wi-Fi share
+   mockups (../build-room-lan-share). One orange element per frame: every
+   other amber (join code, phase dot, on-tab underline) goes neutral here. */
+body.is-solo .pg-nav,body.is-solo .pg-title,body.is-solo .frame-h,body.is-solo .sec,body.is-solo .qs,body.is-solo .row-wrap,body.is-solo .fitrow{display:none !important}
+.frame-h{max-width:1440px;margin:34px auto 10px;padding:0 20px}
+.frame-h h2{margin:0;font:800 20px/1.2 var(--font-display)}
+.frame-h p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.frame-h .rec{display:inline-block;margin:0 0 0 8px;padding:2px 9px;border-radius:999px;font:700 12px/1.4 var(--font-ui);color:var(--m-success-text);border:1px solid rgba(79,178,134,.5);background:var(--m-tint-green)}
+.sec{max-width:1440px;margin:56px auto 0;padding:0 20px;border-top:1px solid var(--m-rule)}
+.sec h2{margin:20px 0 0;font:800 26px/1.2 var(--font-display)}
+.sec p{margin:6px 0 0;color:var(--muted);max-width:96ch}
+.sec p b{color:var(--text)}
+.lab{font:700 14px/1 var(--font-ui);color:var(--muted);margin:6px 0 -4px 4px}
+
+/* No stray orange */
+.scr .phase--build::before{background:var(--muted)}
+.scr .join .code,.hjoin b,.joinbox b{color:var(--text)}
+.view.is-on{box-shadow:inset 0 -2px 0 var(--secondary)}
+.dotline--blue::before{background:var(--secondary)}
+.dotline b{color:var(--text);font-weight:600}
+.vtab.is-on{border-color:var(--secondary);background:var(--m-tint-blue)}
+.pulse{background:var(--secondary);box-shadow:0 0 0 8px var(--m-tint-blue)}
+
+/* ---- header tools: the live-build button and the share chip ------------ */
+.hdr{gap:12px}
+.lb{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--m-rule);background:var(--surface-2);font:600 13px/1 var(--font-ui);color:var(--text);white-space:nowrap}
+.lb small{color:var(--muted);font-weight:500;font-size:12px}
+.sh{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--m-rule);font:600 13px/1 var(--font-ui);color:var(--text);white-space:nowrap;background:var(--surface)}
+.sh::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);opacity:.7}
+.sh b{font-weight:800}
+.sh--on{color:var(--m-success-text);border-color:rgba(79,178,134,.5);background:var(--m-tint-green)}
+.sh--on::before{background:var(--success);opacity:1}
+.sh--starting{color:var(--secondary);border-color:rgba(124,167,230,.55);background:var(--m-tint-blue)}
+.sh--starting::before{background:var(--secondary);opacity:1}
+.sh--quiet{color:var(--danger-text);border-color:rgba(229,100,94,.45);background:var(--m-tint-red)}
+.sh--quiet::before{background:var(--danger);opacity:1}
+.sh--failed{color:var(--danger-text);border-color:rgba(229,100,94,.45);background:var(--m-tint-red)}
+.sh--failed::before{background:var(--danger);opacity:1}
+.sh .ask{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--surface-2);color:var(--text);font-size:12px;font-weight:800}
+.sh.is-open,.lb.is-open{box-shadow:0 0 0 2px var(--secondary)}
+
+/* ---- the nudge ---------------------------------------------------------- */
+.nudge{display:flex;flex-direction:column;gap:10px;border:1px solid rgba(124,167,230,.55);background:linear-gradient(var(--m-tint-blue),var(--m-tint-blue)),var(--surface);border-radius:12px;padding:14px 16px}
+.nudge .t{margin:0;font:800 19px/1.25 var(--font-ui)}
+.nudge .s{margin:0;font-size:15px;line-height:1.4}
+.nudge .who{margin:0;font-size:13px;color:var(--muted);line-height:1.45;display:flex;gap:8px;align-items:flex-start}
+.nudge .who::before{content:"";flex:none;margin-top:4px;width:10px;height:10px;border-radius:2px;border:2px solid var(--muted);border-top-width:4px}
+.nudge .acts{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.nudge .acts .btn{min-height:34px}
+.nudge img{display:block;width:100%;border-radius:8px;border:1px solid var(--m-rule)}
+
+/* the popover form (option B and the chip's panel) */
+.pop{position:absolute;z-index:45;width:min(420px,calc(100vw - 32px));background:var(--m-drawer);border:1px solid rgba(155,168,190,.45);border-radius:14px;padding:16px 18px;
+  display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.pop::before{content:"";position:absolute;top:-7px;right:var(--tip,60px);width:12px;height:12px;background:var(--m-drawer);border-left:1px solid rgba(155,168,190,.45);border-top:1px solid rgba(155,168,190,.45);transform:rotate(45deg)}
+.pop .top{display:flex;align-items:center;gap:10px}
+.pop h3{margin:0;font:800 19px/1.2 var(--font-ui)}
+.pop .x{margin-left:auto;flex:none;width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--m-rule);border-radius:8px;color:var(--muted);font-weight:800}
+.pop .say{margin:0;font-size:13px;color:var(--muted);line-height:1.45}
+.pop .say b{color:var(--text)}
+.pop .stat{display:flex;align-items:baseline;gap:8px;font-size:15px}
+.pop .stat b{font:800 30px/1 var(--font-display);color:var(--m-success-text)}
+.pop .stat span{color:var(--muted);font-size:13px}
+.pop .addr{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:10px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg)}
+.pop .addr .qr{width:88px;height:88px;padding:6px;background-size:10px 10px;box-shadow:inset 0 0 0 6px #fff}
+.pop .addr .u{font:600 15px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.pop .addr .u small{display:block;word-break:normal;font:500 12px/1.4 var(--font-ui);color:var(--muted);margin-top:4px}
+.pop .warn{border:1px solid rgba(229,100,94,.45);background:var(--m-tint-red);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5}
+.pop .warn b{color:var(--danger-text)}
+.pop .warn ul{margin:6px 0 0;padding-left:18px;color:var(--text)}
+.pop .foot{display:flex;gap:8px;align-items:center;justify-content:flex-end;border-top:1px solid var(--m-rule);padding-top:12px;flex-wrap:wrap}
+.pop .foot .left{margin-right:auto}
+
+/* ---- Build screen ------------------------------------------------------- */
+.urlbar .u small{color:var(--muted);margin-left:8px;font-family:var(--font-ui)}
+.urlbar .local{color:var(--muted)}
+.bs-row{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--m-rule);background:var(--bg)}
+.bs-row h2{margin:0;font:800 24px/1.1 var(--font-display)}
+.bs-row .bnote{color:var(--muted);font-size:15px}
+.bs-wrap{display:grid;grid-template-rows:auto 44px 1fr;min-height:0}
+.bs-card{position:absolute;left:18px;bottom:18px;display:flex;align-items:center;gap:16px;background:rgba(12,22,40,.95);border:1px solid var(--m-rule);border-radius:14px;padding:14px 18px;font-size:18px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:620px}
+.bs-card p{margin:0;line-height:1.35}
+.bs-card small{display:block;color:var(--muted);font-size:15px}
+.bs-card--on{border-color:rgba(79,178,134,.5)}
+.bs-card .btn{font-size:15px}
+
+/* ---- Stage (Room ladder) ------------------------------------------------ */
+.demo-stage{display:grid;grid-template-columns:auto 1fr;gap:56px;align-items:center;padding:10px 0 0}
+.demo-stage .qr--big{width:400px;height:400px}
+.demo-stage h2{margin:0 0 18px;font:800 var(--L-hero)/1.02 var(--font-display);max-width:12ch}
+.demo-stage .l{margin:0 0 12px;font-size:var(--L-secondary);line-height:1.25}
+.demo-stage .m{margin:0;font-size:var(--L-body);color:var(--muted)}
+.demo-stage .count{margin-top:28px;font-size:var(--L-meta);color:var(--m-success-text);font-weight:700}
+
+/* ---- participants ------------------------------------------------------- */
+.row-wrap{display:flex;gap:34px;justify-content:center;flex-wrap:wrap;padding:10px 20px 6px}
+.ph{width:395px;height:812px;background:var(--bg);border:10px solid #050A14;border-radius:40px;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.ph .ph-body{gap:12px}
+.ph-cap{max-width:395px;text-align:center;font-size:13px;color:var(--muted);margin:12px auto 0}
+.ph-cap b{color:var(--text)}
+.po{display:flex;flex-direction:column;gap:8px;border:1px solid var(--m-rule);background:var(--surface);border-radius:14px;padding:14px}
+.po .btn{justify-content:center;font-size:17px;min-height:50px}
+.po p{margin:0;font-size:14px;line-height:1.45}
+.po .m{color:var(--muted);font-size:13px}
+.po--on{border-color:rgba(79,178,134,.5);background:linear-gradient(var(--m-tint-green),var(--m-tint-green)),var(--surface)}
+.po--on p{text-align:center}
+.po--warn{border-color:rgba(229,100,94,.45)}
+.po h4{margin:0;font:800 16px/1.3 var(--font-ui)}
+.ph-shot{border-radius:10px;border:1px solid var(--m-rule);display:block;width:100%}
+.ph-fb{display:flex;gap:8px}
+.ph-fb .btn{flex:1;justify-content:center}
+.ph-tabs span.is-on{color:var(--text);box-shadow:inset 0 2px 0 var(--secondary)}
+.eb{font:800 13px/1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.lap{width:1100px;margin:0 auto;border:12px solid #050A14;border-bottom-width:28px;border-radius:16px;background:var(--bg);box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}
+.lap-bar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#0A1222;border-bottom:1px solid var(--m-rule)}
+.lap-bar i{width:10px;height:10px;border-radius:50%;background:var(--surface-2)}
+.lap-bar .ad{flex:1;margin-left:8px;padding:6px 12px;border-radius:8px;background:var(--surface);font:500 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.lap-top{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--m-rule)}
+.lap-top b{font-size:17px}
+.lap-tabs{display:flex;gap:4px;margin-left:auto}
+.lap-tabs span{padding:7px 14px;border-radius:8px;font:700 14px/1 var(--font-ui);color:var(--muted)}
+.lap-tabs span.is-on{color:var(--text);background:var(--m-tint-blue)}
+.lap-body{display:grid;grid-template-columns:360px 1fr;gap:26px;padding:22px}
+
+/* ---- the fit check: the same popovers at 660 and 375 ------------------- */
+.fitrow{display:flex;gap:30px;flex-wrap:wrap;padding:10px 20px;justify-content:center;align-items:flex-start}
+.vp{border:1px dashed rgba(155,168,190,.45);border-radius:10px;background:#0C1628;position:relative;padding:60px 16px 16px;overflow:hidden}
+.vp .tag{position:absolute;top:10px;left:16px;font:700 12px/1 var(--font-ui);color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.vp--660{width:660px}
+.vp--375{width:375px}
+.vp .pop{position:relative;width:100%;max-width:420px;margin-left:auto}
+.vp .pop::before{display:none}
+
+/* ---- tables ------------------------------------------------------------- */
+.vt{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px;table-layout:fixed}
+.vt th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--m-rule)}
+.vt td{padding:10px 12px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45}
+.vt td:first-child{font-weight:700}
+.vt code{font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:4px}
+.qs{max-width:1440px;margin:40px auto 80px;padding:0 20px}
+.qs h2{font:800 26px/1.2 var(--font-display);margin:0}
+.qs ol{margin:10px 0 0;padding-left:22px;max-width:96ch}
+.qs li{margin:0 0 12px;line-height:1.5;color:var(--muted)}
+.qs li b{color:var(--text)}
+@media (max-width:700px){.vt{font-size:13px}.vt th,.vt td{padding:8px 6px}}
+/* REMOTE SHARE (owner, 2026-10-16): the same Share demo button, one extra
+   switch. The tunnel reaches exactly what the Wi-Fi share reaches. */
+.sw{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--m-rule);border-radius:10px;background:var(--bg)}
+.sw .tg{flex:none;width:42px;height:24px;border-radius:12px;background:var(--surface-2);border:1px solid var(--m-rule);position:relative;margin-top:2px}
+.sw .tg::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--muted)}
+.sw .tg.is-on{background:var(--m-tint-green);border-color:rgba(79,178,134,.6)}
+.sw .tg.is-on::after{left:20px;background:var(--success)}
+.sw .tx{font-size:14px;line-height:1.45}
+.sw .tx b{display:block;font-size:15px}
+.sw .tx small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.split{display:flex;gap:18px;font-size:13px;color:var(--muted)}
+.split b{color:var(--text);font-size:15px}
+.rlink{font:600 14px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.tm{width:100%;border-collapse:collapse;font-size:14px;margin-top:14px}
+.tm th{text-align:left;font:800 12px/1.2 var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:9px 10px;border-bottom:1px solid var(--m-rule)}
+.tm td{padding:9px 10px;border-bottom:1px solid var(--m-rule);vertical-align:top;line-height:1.45}
+.tm td:first-child{font-weight:700;width:22%}
+.tm .new{color:var(--danger-text);font-weight:700}
+.tm .same{color:var(--m-success-text);font-weight:700}
+</style>
+</head>
+<body>
+<nav class="pg-nav"><b style="color:var(--muted)">Build Room · Remote share</b>
+<a href="#r1">R1 The switch</a><a href="#r2">R2 Remote on</a><a href="#r3">R3 Starting, failed</a><a href="#r4">R4 Phones</a><a href="#tm">Threat model</a><a href="#qs">Open questions</a>
+<span class="sp"></span><a href="../build-room-share-demo/index.html">Share demo (2026-10-10)</a><a href="../build-room-lan-share/LATER.md">LATER.md</a></nav>
+<div class="pg-title"><h1>Share demo, past the Wi-Fi: one more switch, the same button for everyone</h1>
+<p>Owner, 2026-10-16. Remote people join the session from a link, like everyone else, and open the build from <b>Open the demo</b> on their screen, exactly as on Wi-Fi. The host turns it on inside the Share demo panel with one extra switch. It opens the same thing the Wi-Fi share opens, behind the same lock, and nothing more. The build is always a web page, even when the room is making a document; Claude is told so at the start.</p></div>
+
+<div class="frame-h" id="r1"><h2>R1 · The switch, in the Share demo panel (sharing on, remote off)</h2><p>The D2 panel as built, with one new row under the address. Off by default every session. The switch's words say who it reaches; it never says "tunnel".</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="height:640px">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the counters</b></span><span class="lb">Open the build ↗</span><span class="sh sh--on is-open">Shared · <b>11</b> opened</span><span class="hjoin">Join <b>6717</b></span><span class="chip">18 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="host"><section class="col"><div class="now"><p class="nq">Claude is building the counters</p></div></section><section class="col"></section><section class="col"></section></div>
+<div class="pop" style="top:54px;right:200px;--tip:70px" role="dialog" aria-label="Share demo">
+<div class="top"><h3>Demo shared on this Wi-Fi</h3><span class="x">✕</span></div>
+<div class="stat"><b>11</b> opened it <span>· 18 here</span></div>
+<div class="addr"><span class="qr"></span><div class="u">192.168.1.20:4900<small>People on this Wi-Fi can open it.</small></div><span class="btn btn--sm btn--ghost">Copy</span></div>
+<div class="sw"><span class="tg"></span><div class="tx"><b>Also open it to people who are not here</b>People who joined from a link, on Zoom or another network, get the same Open the demo button.<small>Only people in this session can open it. It closes when you turn this off or the session ends.</small></div></div>
+<div class="foot"><span class="btn btn--ghost left">Stop sharing</span><span class="btn btn--primary">Show on the Stage</span></div>
+</div>
+</div></div></div>
+
+<div class="frame-h" id="r2"><h2>R2 · Remote on: one count, split by where people are</h2><p>The chip keeps one number. The panel splits it: here (Wi-Fi) and remote. The remote link is not shown or copied: it only ever reaches people through their own Open the demo button, which carries their way in. Stop sharing turns both off.</p></div>
+<div class="fit"><div class="fit-box"><div class="scr2" style="height:640px">
+<header class="hdr"><span class="mm" style="color:var(--text)">Main menu</span><span class="ttl">Monday build session</span><div class="views"><span class="view is-on">Host<kbd>1</kbd></span><span class="view">Stage<kbd>2</kbd></span><span class="view">Build<kbd>3</kbd></span><span class="view">History<kbd>4</kbd></span></div><span style="flex:1"></span><span class="dotline dotline--blue"><b>Claude is building the counters</b></span><span class="lb">Open the build ↗</span><span class="sh sh--on is-open">Shared · <b>14</b> opened</span><span class="hjoin">Join <b>6717</b></span><span class="chip">22 joined</span><span class="btn btn--sm btn--ghost">SESSION</span></header>
+<div class="host"><section class="col"><div class="now"><p class="nq">Claude is building the counters</p></div></section><section class="col"></section><section class="col"></section></div>
+<div class="pop" style="top:54px;right:200px;--tip:70px" role="dialog" aria-label="Share demo">
+<div class="top"><h3>Demo shared, here and remote</h3><span class="x">✕</span></div>
+<div class="stat"><b>14</b> opened it <span>· 22 joined</span></div>
+<div class="split"><span><b>11</b> here on Wi-Fi</span><span><b>3</b> remote</span></div>
+<div class="addr"><span class="qr"></span><div class="u">192.168.1.20:4900<small>People on this Wi-Fi can open it.</small></div><span class="btn btn--sm btn--ghost">Copy</span></div>
+<div class="sw"><span class="tg is-on"></span><div class="tx"><b>Also open to people who are not here</b>On. Remote people open it from their Open the demo button.<small>A link someone pastes elsewhere opens nothing: each one is tied to a person who joined.</small></div></div>
+<div class="foot"><span class="btn btn--ghost left">Stop sharing</span><span class="btn btn--primary">Show on the Stage</span></div>
+</div>
+</div></div></div>
+
+<div class="frame-h" id="r3"><h2>R3 · Remote starting, and remote failed</h2><p>Remote needs one tool on the laptop the first time. The plugin says what is missing in plain words; the Wi-Fi share keeps working whatever happens to remote.</p></div>
+<div class="row-wrap" style="align-items:flex-start">
+<div class="pop" style="position:relative;--tip:-99px" role="dialog" aria-label="Share demo">
+<div class="top"><h3>Demo shared on this Wi-Fi</h3><span class="x">✕</span></div>
+<div class="stat"><b>11</b> opened it <span>· 18 here</span></div>
+<div class="sw"><span class="tg is-on"></span><div class="tx"><b>Also open to people who are not here</b>Starting… Remote people see "Opening soon" until it is ready.</div></div>
+<div class="foot"><span class="btn btn--ghost left">Stop sharing</span><span class="btn btn--primary">Show on the Stage</span></div>
+</div>
+<div class="pop" style="position:relative;--tip:-99px" role="dialog" aria-label="Share demo">
+<div class="top"><h3>Demo shared on this Wi-Fi</h3><span class="x">✕</span></div>
+<div class="stat"><b>11</b> opened it <span>· 18 here</span></div>
+<div class="sw"><span class="tg is-on"></span><div class="tx"><b>Also open to people who are not here</b><span style="color:var(--danger-text)">Didn't start.</span> This laptop needs cloudflared, once. Ask Claude to install it, then turn this off and on.<small>People here on the Wi-Fi are not affected.</small></div></div>
+<div class="foot"><span class="btn btn--ghost left">Stop sharing</span><span class="btn btn--primary">Show on the Stage</span></div>
+</div>
+</div>
+
+<div class="frame-h" id="r4"><h2>R4 · On a phone, laptop or tablet: one button, wherever they are</h2><p>The participant never picks a route. On the host's Wi-Fi the button opens the Wi-Fi address; anywhere else it opens the remote one. The screenshot is always below.</p></div>
+<div class="row-wrap">
+<div><div class="ph"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Claude is building</div></div>
+<div class="ph-body">
+<div class="po po--on"><span class="btn btn--primary">Open the demo ↗</span><p class="m">Works from anywhere.</p></div>
+<span class="eb">Claude is showing · 10:42</span>
+<p class="q" style="font-size:22px;margin:0">The first board</p>
+<img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
+<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div>
+</div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<p class="ph-cap"><b>(a) Remote on.</b> Same button as on Wi-Fi. Here or remote, it just works.</p></div>
+<div><div class="ph"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Claude is building</div></div>
+<div class="ph-body">
+<div class="po"><p>The demo is shared on the host's Wi-Fi only. Screenshots are below.</p><span class="btn">Ask to try it</span></div>
+<span class="eb">Claude is showing · 10:42</span>
+<p class="q" style="font-size:22px;margin:0">The first board</p>
+<img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
+<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div>
+</div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<p class="ph-cap"><b>(b) Remote off, and this device is not on the Wi-Fi.</b> One honest line; Ask to try it lands on the host's chip.</p></div>
+<div><div class="ph"><div class="ph-top"><b>Monday build session</b><div class="hint" style="margin-top:6px">Claude is building</div></div>
+<div class="ph-body">
+<div class="po"><p>Opening soon. The host is starting the demo for remote people.</p></div>
+<span class="eb">Claude is showing · 10:42</span>
+<p class="q" style="font-size:22px;margin:0">The first board</p>
+<img class="ph-shot" src="../build-room-lan-share/img/board.svg" alt="Screenshot of the first board">
+<div class="ph-fb"><span class="btn">Looks good</span><span class="btn">Needs a change</span></div>
+</div>
+<div class="ph-tabs"><span class="is-on">Now</span><span>Ideas</span><span>History</span></div></div>
+<p class="ph-cap"><b>(c) Remote starting.</b> No dead button while the remote route comes up.</p></div>
+</div>
+
+<div class="sec" id="tm"><h2>Threat model, first draft</h2>
+<p>The owner's rule: remote reaches <b>the same thing the Wi-Fi share reaches</b>, and nothing more. So the question for each risk is what remote changes compared with the Wi-Fi share as built (plugin 1.18.0).</p>
+<table class="tm"><thead><tr><th>Risk</th><th>Wi-Fi share today</th><th>With remote</th><th>Proposed answer</th></tr></thead><tbody>
+<tr><td>A stranger finds the address</td><td>Only people on the same Wi-Fi can even try it.</td><td class="new">Anyone on the internet can reach the address while it is up.</td><td>The address alone opens nothing: no key, the locked page. The address is random and new each time, and never shown or copied; it is used only behind each person's own Open the demo button.</td></tr>
+<tr><td>Someone who joined passes the link on</td><td>One key for the room; a passed link works for anyone on the Wi-Fi.</td><td class="new">A passed link would work for anyone, anywhere.</td><td><b>A key per person, not per room</b>, minted when they press Open the demo and revocable. The gateway counts devices per key; the host can see "3 devices on one person's link". Removing a player kills their key.</td></tr>
+<tr><td>Reaching more of the laptop than the app</td><td>Only the ports Claude showed, only from this project's folder (F4).</td><td class="same">Same gateway, same ports, same folder check.</td><td>The tunnel points at the gateway, never at the dev server. Nothing new opens.</td></tr>
+<tr><td>The dev server's own holes (Vite path traversal, source maps, hot reload)</td><td>Reachable by key holders on the Wi-Fi.</td><td class="new">Reachable by key holders anywhere.</td><td>Unchanged: still only key holders. Keep the gateway's method allowlist and consider blocking <code>/@fs/</code> and <code>*.map</code> at the gateway for remote requests.</td></tr>
+<tr><td>Snooping on the network</td><td>Plain http on the Wi-Fi; a key can be read off the air.</td><td class="same">Better: the tunnel is https end to end.</td><td>Nothing more. (Wi-Fi stays http, as in LATER.md.)</td></tr>
+<tr><td>It stays open by accident</td><td>Fails closed after 30 s without Engage; only session end closes it.</td><td class="same">Same rule.</td><td>The tunnel process is a child of the gateway and dies with it. Off by default every session.</td></tr>
+<tr><td>A third party sees the traffic</td><td>None.</td><td class="new">Cloudflare carries it (TLS ends at their edge).</td><td>Say so in the switch's help line. Owner to decide whether that is acceptable.</td></tr>
+</tbody></table></div>
+
+<div class="qs" id="qs"><h2>Open questions for the owner</h2>
+<ol>
+<li><b>A key per person.</b> Stopping a passed-on link means each person's button carries their own key. Worth it, or is one room key (as on Wi-Fi) enough for remote too?</li>
+<li><b>Cloudflare.</b> The free quick tunnel needs no account, but Cloudflare sees the traffic, and the address changes each session. Acceptable, or does it need your own Cloudflare account and domain?</li>
+<li><b>Installing cloudflared.</b> Claude installs it on first use (with the host's yes), or the Connect panel's install step adds it for everyone?</li>
+<li><b>"Here" vs "remote".</b> The phone picks Wi-Fi when it can reach it and remote otherwise. Fine to decide that silently, or should a remote person ever see which route they are on?</li>
+</ol></div>
+
+<script src="../build-room-host-redesign/mock.js"></script>
+</body>
+</html>
