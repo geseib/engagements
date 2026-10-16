@@ -936,10 +936,11 @@ function HostRemote() {
     act comes next or what it is called.
   */
   const shownStatus = roundAsks.shown ? roundAsks.shown.status : null;
+  const shownKind = roundAsks.shown ? roundAsks.shown.kind || null : null;
   const shownAnswered = roundAsks.shown && roundAsks.shown.tally ? roundAsks.shown.tally.n || 0 : 0;
   const askRoomAsk = useMemo(() => (shownStatus
-    ? { status: shownStatus, answered: shownAnswered, total: rosterCount || 0 }
-    : null), [shownStatus, shownAnswered, rosterCount]);
+    ? { status: shownStatus, kind: shownKind, answered: shownAnswered, total: rosterCount || 0 }
+    : null), [shownStatus, shownKind, shownAnswered, rosterCount]);
   const askReady = roundAsks.enabled ? roundAsks.unsent.length : 0;
   /*
     THE LATE COUNT (late items Task 4): the same /late read the laptop makes,

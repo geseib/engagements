@@ -6879,7 +6879,7 @@ Focus on actionable business strategy insights.`;
     // ASK THE ROOM: the question on screen (live, then its results) and how
     // many asks wait beside the read.
     roomAsk: roundAsks.shown
-      ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
+      ? { status: roundAsks.shown.status, kind: roundAsks.shown.kind || null, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
       : null,
     asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
     // The composer exists for this session: "Ask the room" replaces Request

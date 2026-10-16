@@ -163,6 +163,8 @@ const RW = Object.freeze({
     FEEDBACK: (a) => `The room is commenting. Then ${a}.`,
     ROOM_QUESTION: (a) => `The room is answering. Then ${a}.`,
     ROOM_RESULTS: (a) => `Pick the ideas to show. Then ${a}, or ask another question.`,
+    /** A Choose or a Rate result (or a kind not known yet): nothing to pick. */
+    ROOM_RESULTS_ANSWER: (a) => `The room's answer is up. Talk it through, then ${a}, or ask another question.`,
     ENDED: (a) => `The session is over. ${a}.`,
   }),
   /** What each step is, for hover on the laptop and a long press on the Remote. */
