@@ -15,6 +15,7 @@ code carries a `file:line` read on this branch.
 
 | Phase | What | Template resources | Owner can test on dev |
 |---|---|---|---|
+| **H1–H5** | **Build Room History: every used contribution and every ask, marked when a version went to Claude** (§2.8) | 0 | Send an idea, vote on ideas, combine two decisions: History shows each with its mark |
 | **B1–B9** | **Build Room two-screen mode** (§2) | **0** (both build routes are `{proxy+}`) | Open the room's window on the projector; 2/3/4 on the laptop move it; the laptop stays on Host |
 | B10 | Build Room's other standards: in-place confirms, scope labels, late answers, theme already done (§3) | 0 | Press twice instead of dialogs; Settings say when a change applies |
 | T1–T5 | Trivia on two screens (§4.1) | 0 | A trivia round with the wall on the projector; the correct answer only on the laptop |
@@ -255,7 +256,69 @@ In `BuildRoomPage.jsx`, behind `twoSurfacesOn({ …, gameType: 'build' })`:
   before the first ask if no choice is stored. The choice stays per browser in
   `engage.surfaces` (`config/roomScreen.js:73-91`), as for C&A.
 
-### 2.8 Tasks
+### 2.8 History: what the room gave, and what reached Claude (owner, 16 Oct)
+
+Owner, 16 Oct: *"history needs to include user contributions that are used. same for any
+asks. we need to mark them if we send some version to claude."*
+
+**What History misses today:**
+
+| A room contribution reaches Claude by… | Recorded as | On History today |
+|---|---|---|
+| **Send** on an idea (`direct`) | idea row `Status: promoted, PromotedVia: claude`; a log entry `kind: 'idea', forAgent: true`, the idea's text (`build-room.js:811-845`) | **Nothing.** `roomStory` draws `showing`, `verbal`, `milestone`, `outcome`, `image` and `step` only (`buildScreens.js:799-811`) |
+| **Add to the open Ideas ask** (`suggest`) | a response row `Source: 'idea'`, with no link back to the idea (`build-room.js:813-820`) | Only if it wins the vote, and then not as the room member's idea |
+| **Vote from ideas** (`asks-from-ideas`) | `ask.FromIdeas` ids; options built in that order (`build-room.js:1055-1085`; `build-store.js:756-769`) | "N ideas from the room" in the chain (`buildScreens.js:772`); not which idea won |
+| **Combine** decided asks, or a direction the host writes from an idea | a `direction` log entry, with no link to its sources (`build-room.js:795-801`) | **Nothing**: the room's log drops `direction` (`build-store.js:1561-1567`) |
+| A decision whose words the host **changed** before sending | `decision.direction` only | The changed words, unmarked |
+
+Every ask, decided or not, should appear too. Today only decided asks are drawn
+(`buildScreens.js:820-833`).
+
+**The rule.** History lists every room contribution that was used, and every ask that went
+to the room. Each one carries **one mark** saying what happened to it:
+
+| Mark | When |
+|---|---|
+| **Sent to Claude** | its words went as written (a sent idea; a decision with the default direction) |
+| **Sent to Claude, reworded** | a version went: the host changed the words, or it went into a combined direction |
+| **Chosen by the room** → then one of the two above | it won a vote or an Ideas ask |
+| **In a vote, not chosen** | it was an option or a suggestion that lost |
+| **Saved for later** | held for Claude, not yet sent (`as: 'later'`, `heldForLater`) |
+| **Not sent** | a decision recorded only (`sentToAgent: false`), or an ask closed without a decision |
+
+The marks Claude has it / waiting for Claude stay as they are (`decisionChain`,
+`buildScreens.js:788-790`). On the wall a contribution is "An idea from the room", never a
+name. On a phone's own History it also says "Yours" (the existing `mine`, `buildScreens.js:831`).
+
+**What the server must record.** Provenance is stamped when something is sent, never
+guessed from text later:
+
+- the `direct` idea log entry gains `IdeaId` and `AsWritten: true`;
+- a `suggest` response row gains `IdeaId`, so a winning suggestion leads back to its idea;
+- each option made by `voteFromIdeas` gains `ideaId`;
+- `POST directions` accepts `fromIdeaIds` / `fromAskIds` (the composer sends what it was
+  filled from: Combine's ticked asks, an idea opened in the composer). The server checks
+  those ids exist and stores `From` on the log entry, with
+  `AsWritten = (text === the source's own text)`;
+- `decide` stores `Reworded: true` when the sent direction differs from the server's own
+  default for that pick (`questionAnswer`, `build-store.js`).
+
+Sessions made before this have none of it. Where `PromotedVia: 'claude'` or `FromIdeas`
+exists, History says "Sent to Claude" or "In a vote" with no reworded mark. It never
+claims "as written" without the stamp.
+
+**Tasks** (one screen and the wall both draw History, so these come **before B2**, and
+`wallView` carries the new fields from the start):
+
+| # | Task | Files | Tests (first) |
+|---|---|---|---|
+| H1 | Stamp provenance (the five bullets above) | `build-room.js`, `build-store.js` (`voteFromIdeas`, `logView`, `askView`) | `tests/build-provenance.js`: each route stamps its ids; a forged `fromIdeaIds` → 400; `AsWritten` true only for identical text; `Reworded` set when the host changed a decision |
+| H2 | `contributionsOf(room)`: every used idea, with its mark and where it went (ask n, direction, later) | `buildScreens.js` (pure) | `__tests__/buildContributions.test.js`: one fixture per row of the first table; old rows with no stamps never read as "as written" |
+| H3 | `roomStory` draws contributions (a `gave` item: the idea and its mark, under the ask or step it fed) and every ask that reached the room, decided or not, with its mark | `buildScreens.js`, `BuildRoomPage.jsx` (`StoryItem`) | extend the `roomStory` tests: sent idea present; losing option "In a vote, not chosen"; combined direction marks each source ask "reworded"; no name anywhere in the wall's story |
+| H4 | The marks' words; "Made so far" counts used by the same rule | `buildroom/words.js`, `HistoryScreen` | words parity test; count matches `contributionsOf` |
+| H5 | The public and wall views carry the stamps with no names (ids and marks only) | `build-store.js` (`publicView`, later `wallView`) | B2's no-names scan covers the new fields |
+
+### 2.9 Tasks
 
 Each task: test first, see it fail for the right reason, implement, commit. Gates per the
 standards §10. **No task touches `template-clean.yaml`; if one seems to, stop and report.**
@@ -273,11 +336,11 @@ standards §10. **No task touches `template-clean.yaml`; if one seems to, stop a
 | B9 | Screens group in `BuildSessionPanel`, the chooser, `'build'` added to `TWO_SURFACE_TYPES`; words, help (`config/help/`), release notes | `BuildSessionPanel.jsx`, `config/surfaces.js`, `config/roomScreen.js` (href with type), help | `surfaces.test.js` (build on dev, off on test/prod by default); `buildSessionPanel` Screens test; panel measured at 660/375 |
 | B9m | **Measure** (standards §5): the wall at 1280×720, 1366×768, 1440×900, 1920×1080 × Room/TV/Call/Table, with long asks (six options of 130–320 chars), a 40-entry History, a tall screenshot. History on the wall shows the newest entries that fit and "and N earlier" (fit lever 3); never scrolls | `buildroom/screens/*`, `BuildRoom.css` | numbers in the commit; `data-fit="miss"` count zero |
 
-Order: B1→B2→B3→B4 (server, one deploy), B5→B6 (refactor, no behaviour change, one
-deploy), B7→B8→B9→B9m. Each arrow is a dev push the owner can look at; B6's push must
+Order: H1→H5 (History, §2.8; useful on one screen at once), then B1→B2→B3→B4 (server,
+one deploy), B5→B6 (refactor, no behaviour change, one deploy), B7→B8→B9→B9m. Each arrow is a dev push the owner can look at; B6's push must
 look identical to today.
 
-### 2.9 Owner's checks on dev after B9
+### 2.10 Owner's checks on dev after B9
 
 1. Build session on `engage.dev.seibtribe.us`, Chrome, two displays. Settings › Screens ›
    two screens; Room's window ↗ opens on the projector; click once: full screen; the laptop
@@ -361,4 +424,7 @@ Each with a recommendation and the cost of getting it wrong.
 | Q9 | C&A's answer order is a plain hash of the author (`answer-order.js:59-62`). Key it under `IdSecret`? | **Yes, separately from this plan**: two guarded-identical copies to change together | If left: a person holding the roster can match "Response N" to a name in a hidden-name round |
 | Q10 | Late trivia and poll answers are already kept. Do they count? | **Trivia: kept, never scored, listed. Poll: counted only if the results have not been shown** | If wrong: a score or tally that changes after the room saw it |
 | Q11 | Should `/present` refuse types outside `TWO_SURFACE_TYPES` until they are built? | **Yes**: show "This session shows on the host's screen" | If not: a trivia session on `/present` shows C&A's moments today |
+| Q13 | Does an idea the host **put on the wall** (`wall`, acknowledged, not sent) count as "used" on History? | **No**: History's "used" means it fed an ask or reached Claude. The wall moment is already brief by design | If wrong: those ideas need one more mark, "Shown to the room" |
+| Q14 | When is a version "reworded"? | **Any change to the words** the server would have sent by default, including combining. No similarity threshold | If too strict: a fixed typo reads as "reworded". Cheap to loosen later; a guessed threshold is not |
+| Q15 | Names on History contributions on the laptop's own History (one screen, Host only)? | **No names on History anywhere** (it is a projected screen); the queue and the report keep names | If hosts want them: a host-only toggle |
 | Q12 | Builders' names on the wall's crew board (and the wheel's "Ada spins the wheel", `buildScreens.js:452`): fine, or only with "List names" on? | **Follow "List names"**: one rule for every name on the wall | If wrong: a name on the projector the host did not choose to show |
