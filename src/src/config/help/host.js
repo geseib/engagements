@@ -721,6 +721,10 @@ const plan = {
   installNote, shareWho, wrapUpSaved), buildroom/pluginTier.js (one plugin per
   tier) and buildroom/buildHostApi.js (the two commands the Connect window
   shows). Words the room sees on its own screens live in words.js, not here.
+  17 Oct: what the share opens (build-lan.js lanScopes, the plugin's gateway,
+  .engage/share.json, plugin 1.20.0), the room's window (BuildSessionPanel's
+  Screens group, present/buildwall/), the still dock (buildControls.js), and
+  History's marks (buildScreens.js contributionsOf, askOutcome).
 */
 const buildRoom = {
   id: 'host-build-room',
@@ -775,6 +779,10 @@ const buildRoom = {
           t: 'list',
           items: [
             { title: 'Share demo', text: 'When Claude first shows the app, the Build Room asks once whether to share it. Share demo lets people on this Wi-Fi open this laptop\'s app on their phones, laptops and tablets; no one else can. Nothing is shared until you press it. Guest Wi-Fi often blocks this; test it from another device first. Anyone who cannot reach it still sees the screenshots. Only one Claude Code window shares a room at a time; if the count jumps, update the plugin from Connect.' },
+            { title: 'What the share opens', text: 'Open the build and the QR go to the page Claude showed, not its folder. The room can open only the pages Claude linked and what those pages load; a folder\'s file list is never shown. The share panel names each server: Demo, Mockups, or App 1 and 2 when nothing says. To name them yourself, put a file .engage/share.json in the project folder with "demo", "mockups" and a "label"; it wins over Claude\'s guess. Each session takes its Wi-Fi ports from a block worked out from its code, and every page it serves names the session, so two rooms on one laptop are easy to tell apart. These need plugin 1.20.0: update it from Connect and restart Claude Code.' },
+            { title: 'The room\'s window', text: 'Session, then Settings, then Screens: Room\'s window opens Stage, Build or History in a window of its own for the projector, on the second display in Chrome. It follows the screen you pick with 2, 3 and 4, needs no sign-in, and never shows a name. New link cuts off every open window (press it twice).' },
+            { title: 'The Stage\'s buttons', text: 'The buttons along the bottom stay where they are. Space presses the main one; a move made early, such as Show results while people are still answering, asks you to press again. Host takes you back to the Host screen in one press; its number says how many things wait for you.' },
+            { title: 'History', text: 'History shows every idea from the room that was used, and every ask the room saw. Each says what happened: chosen by the room or not, sent to Claude as written, reworded by the host, kept for later, or not sent. It never shows who sent an idea; a phone marks its own ideas as yours. Made so far counts the ideas used by the same rule.' },
             { title: 'Wrap up', text: 'A summary, what was built, links and next steps, written by Claude or by you, saved into the report. Check the report, then end the session.' },
             { title: 'Save report', text: 'Keeps the report as a PDF, as for any session. The code stays in the project folder on your laptop.' },
           ],
