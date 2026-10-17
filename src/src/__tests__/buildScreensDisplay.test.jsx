@@ -6,14 +6,18 @@
  * and nothing with role=button: the build's link and the codes stay, they are
  * for the room.
  *
- * The rooms here are the host's (build-store.js hostView), the only read that
- * exists today; the no-names half of this check waits for B2's wallView.
+ * The first rooms here are the host's (build-store.js hostView). The no-names
+ * half draws each screen from a REAL wall body (build-store.js wallView through
+ * roomFromRows, testing/buildWallFixture.js, put into the screens' shape by
+ * present/buildwall/wallRoom.js) whose rows name players, an idea's author,
+ * voters and a spinner: none of them may reach the screen.
  */
 import React from 'react';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 import BuildStageScreen from '../buildroom/screens/BuildStageScreen';
 import BuildBuildScreen from '../buildroom/screens/BuildBuildScreen';
 import BuildHistoryScreen from '../buildroom/screens/BuildHistoryScreen';
+import { wallRoom } from '../present/buildwall/wallRoom';
 
 const S = require('../../../lambda-functions/game/build-store');
 
@@ -115,5 +119,28 @@ describe('Build and History with no controls: nothing pressable', () => {
     expect(container.querySelector('[role="group"][aria-label="Show"]')).not.toBeNull();
     container.querySelector('.brm-decided-open').click();
     expect(onOpenAsk).toHaveBeenCalledWith('002');
+  });
+});
+
+describe('from the wall read: no name, no button (B2\'s wallView, B7)', () => {
+  const F = require('../testing/buildWallFixture');
+  const MOMENTS = [
+    ['between asks', {}], ['an ask live', { ask: 'live' }], ['voting', { ask: 'voting' }],
+    ['results', { ask: 'results' }], ['the wheel landed', { ask: 'wheel' }], ['a long history', { history: 12 }],
+  ];
+  const SCREENS = [
+    ['Stage', (r) => <BuildStageScreen room={r} now={Date.now()} show={{}} />],
+    ['Stage, codes up', (r) => <BuildStageScreen room={r} now={Date.now()} show={{ codesUp: true }} />],
+    ['Build', (r) => <BuildBuildScreen room={r} now={Date.now()} />],
+    ['History', (r) => <BuildHistoryScreen room={r} now={Date.now()} />],
+  ];
+  test('the fixture does name people: the check means something', () => {
+    const rows = JSON.stringify(F.rows({ ask: 'wheel' }));
+    F.NAMES.forEach((n) => expect(rows).toMatch(n));
+  });
+  test.each(MOMENTS.flatMap(([m, o]) => SCREENS.map(([s, draw]) => [`${m} · ${s}`, o, draw])))('%s', (name, opts, draw) => {
+    const { container } = render(draw(wallRoom(F.wallBody(opts))));
+    expect(pressable(container)).toEqual([]);
+    F.NAMES.forEach((n) => expect(container.textContent).not.toMatch(n));
   });
 });

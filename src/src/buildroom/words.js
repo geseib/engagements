@@ -543,6 +543,24 @@ export const W = Object.freeze({
   hostWaitingSr: (n) => ` ${n} waiting`,
   sessionKeys: 'Session (\\)',
   askingSr: ' asking to take a name',
+  // The room's window (parity PLAN §2.4, B7): the wall on the projector, no sign-in, no buttons
+  wallLinkChanged: "This window's link has changed. Open the room's window again from the laptop.",
+  wallNotFound: 'This session has ended or the code is wrong.',
+  wallConnecting: 'Connecting to the room…',
+  wallEnded: 'Session ended',
+  /** History on the wall: the newest entries that fit, then how many are not shown. */
+  wallEarlier: (n) => `and ${n} earlier`,
+  // The Screens group in Settings (parity PLAN §2.7, B9 in part)
+  screensGroup: 'Screens',
+  screensScope: 'Applies now',
+  wallOpen: "Room's window ↗",
+  wallOpenHint: 'Opens the room’s own window: the Stage, Build or History you pick here, with nothing to press and no names.',
+  wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History.',
+  wallNewLink: 'New link',
+  wallNewLinkArmed: 'New link anyway',
+  wallNewLinkWhy: 'Every open window stops until it is opened again from here. Press again to make a new link.',
+  wallNewLinkHint: 'Stops every window opened with the old link.',
+  wallNewLinkDone: 'New link made. Open the room’s window again.',
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */

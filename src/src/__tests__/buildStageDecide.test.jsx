@@ -52,7 +52,8 @@ const state = () => {
   if (room.state && room.state.Crew) view.crew = C.crewView(room, 'host', null);
   return view;
 };
-const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket'));
+// The room's window hears every screen change (build/wall, B7); these tests are about the ask.
+const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket') && !c.url.endsWith('/build/wall'));
 const lastPost = () => posts()[posts().length - 1];
 let failNext = null;
 

@@ -10,6 +10,10 @@
  * items and the ask window are pressable, as before. With none (the room's
  * window, B7) it shows Everything and nothing on it can be pressed.
  *
+ * `fit` is the wall's: `{ story, decided }`, how many of the newest of each
+ * fit the screen (measured by present/buildwall/BuildWall.jsx); the rest are
+ * counted, "and N earlier", never cut silently. The host's page passes none.
+ *
  * controls: { onOpenAsk(askId) }
  */
 import React, { useState } from 'react';
@@ -109,7 +113,15 @@ export function StoryItem({ item, onOpen = null }) {
   );
 }
 
-export default function BuildHistoryScreen({ room, now = Date.now(), controls = null }) {
+/** "and N earlier": what the wall's fit left out, said, never cut silently (standards §5). */
+function Earlier({ n }) {
+  if (!n) return null;
+  return <p className="brm-hint brm-earlier" data-earlier={n}>{W.wallEarlier(n)}</p>;
+}
+
+export default function BuildHistoryScreen({
+  room, now = Date.now(), controls = null, fit = null,
+}) {
   const [chosen, setFilter] = useState('all');
   // The room's window has no filters: it shows the story.
   const filter = controls ? chosen : 'all';
@@ -125,8 +137,14 @@ export default function BuildHistoryScreen({ room, now = Date.now(), controls = 
   const decided = asks
     .filter((a) => a.status === 'decided' && a.decision)
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
-  const ideas = room.ideas || [];
-  const usedIdeas = gave.length;
+  // The wall's read carries only the used ideas, and the counts beside them.
+  const ideaTotal = room.ideaCounts ? Number(room.ideaCounts.total) || 0 : (room.ideas || []).length;
+  const usedIdeas = room.ideaCounts ? Number(room.ideaCounts.used) || 0 : gave.length;
+  // THE WALL'S FIT (fit lever 3): the newest story entries that fit, the newest decisions that fit.
+  const storyCap = fit && Number.isInteger(fit.story) ? Math.max(1, fit.story) : shown.length;
+  const storyShown = shown.slice(0, storyCap);
+  const decidedCap = fit && Number.isInteger(fit.decided) ? Math.max(1, fit.decided) : decided.length;
+  const decidedShown = decided.slice(Math.max(0, decided.length - decidedCap));
   const noop = () => undefined;
   return (
     <div className="brm-screenbody brm-histscreen" data-capability="history">
@@ -145,11 +163,12 @@ export default function BuildHistoryScreen({ room, now = Date.now(), controls = 
         ) : <p className="brm-empty">Claude&apos;s screenshots and mockups collect here as it works.</p>)}
         {(filter === 'all' || filter === 'decisions') && (shown.length ? (
           <ol className="brm-story" aria-label={filter === 'decisions' ? 'Decisions' : 'The story so far'}>
-            {shown.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} />)}
+            {storyShown.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} />)}
           </ol>
         ) : (
           <p className="brm-empty">{filter === 'decisions' ? 'Nothing decided yet.' : W.nothingYet}</p>
         ))}
+        {(filter === 'all' || filter === 'decisions') && <Earlier n={shown.length - storyShown.length} />}
       </div>
       <div className="brm-histside">
         {controls && (
@@ -163,9 +182,10 @@ export default function BuildHistoryScreen({ room, now = Date.now(), controls = 
         )}
         <section className="brm-panel" aria-labelledby="brm-decided-h">
           <h2 className="brm-h" id="brm-decided-h">Decided so far</h2>
+          <Earlier n={decided.length - decidedShown.length} />
           {decided.length ? (
-            <ol className="brm-list brm-decided">
-              {decided.map((a) => {
+            <ol className="brm-list brm-decided" start={decided.length - decidedShown.length + 1}>
+              {decidedShown.map((a) => {
                 const words = (
                   <>
                     {a.decision.direction || a.prompt}
@@ -188,7 +208,7 @@ export default function BuildHistoryScreen({ room, now = Date.now(), controls = 
         <section className="brm-panel" aria-labelledby="brm-made-h">
           <h2 className="brm-h" id="brm-made-h">Made so far</h2>
           <p className="brm-made">
-            {W.madeSoFar(arts.length, ideas.length, usedIdeas)}
+            {W.madeSoFar(arts.length, ideaTotal, usedIdeas)}
           </p>
         </section>
       </div>

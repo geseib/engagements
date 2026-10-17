@@ -7,7 +7,9 @@
  * client (buildHostApi.js, whose routes /build/state among them are signed in).
  *
  * The existing guard (presentStage.test.jsx) reads present/ one level deep;
- * this one follows the whole tree. Read as text: nothing is imported.
+ * this one follows the whole tree, from the window itself
+ * (present/buildwall/BuildWall.jsx, its hook and its adapter) and from every
+ * part it draws with. Read as text: nothing is imported.
  */
 const fs = require('fs');
 const path = require('path');
@@ -50,15 +52,24 @@ const chainTo = (from, file) => {
   return out.join(' -> ');
 };
 
-/** What the room's window will be built from. */
+/** The room's window itself (B7), and what it is built from. */
 const SCREENS_DIR = path.join(SRC, 'buildroom', 'screens');
 const STARTS = [
+  path.join(SRC, 'present', 'buildwall', 'BuildWall.jsx'),
+  path.join(SRC, 'present', 'buildwall', 'useBuildWall.js'),
+  path.join(SRC, 'present', 'buildwall', 'wallRoom.js'),
   path.join(SRC, 'buildroom', 'buildScreens.js'),
   path.join(SRC, 'buildroom', 'links.js'),
   ...(fs.existsSync(SCREENS_DIR) ? fs.readdirSync(SCREENS_DIR).filter((f) => /\.jsx?$/.test(f)).map((f) => path.join(SCREENS_DIR, f)) : []),
 ];
 
 describe('the walker itself', () => {
+  test('it follows the wall into the screens it draws', () => {
+    const from = walk(path.join(SRC, 'present', 'buildwall', 'BuildWall.jsx'));
+    expect([...from.keys()].some((f) => /screens[\\/]BuildHistoryScreen\.jsx$/.test(f))).toBe(true);
+    expect([...from.keys()].some((f) => /buildroom[\\/]buildScreens\.js$/.test(f))).toBe(true);
+  });
+
   test('it does find the signed-in fetch where it is: buildHostApi.js reaches it', () => {
     const from = walk(path.join(SRC, 'buildroom', 'buildHostApi.js'));
     expect([...from.keys()].some((f) => FORBIDDEN[0].test(f))).toBe(true);

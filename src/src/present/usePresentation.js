@@ -25,19 +25,14 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import webSocketClient from '../WebSocketClient';
-import { fullscreenElement } from '../utils/fullscreen';
+import { startPresentStatus } from './presentStatusReporter';
 
-/** What the room's window tells the host console (host console spec 4.2). */
-export function presentStatusPayload({ fullscreen, hidden }) {
-  return { fullscreen: Boolean(fullscreen), visible: !hidden };
-}
+// The window's own report (PRESENT_STATUS) is shared with the Build Room wall.
+export { presentStatusPayload, FIRST_REPORT_EVERY_MS, FIRST_REPORT_TRIES } from './presentStatusReporter';
 
 export const REFETCH_DEBOUNCE_MS = 400;
 export const POLL_LIVE_MS = 3000;
 export const POLL_IDLE_MS = 10000;
-/* The first PRESENT_STATUS: retried this often until the socket takes it, this many times at most. */
-export const FIRST_REPORT_EVERY_MS = 1000;
-export const FIRST_REPORT_TRIES = 10;
 
 /** Every frame that can change what the wall shows. */
 export const FOLLOW_FRAMES = [
@@ -196,38 +191,11 @@ export default function usePresentation(gameId) {
     const viewerId = viewerIdForTab(storage);
     webSocketClient.connect(gameId, null, false, { viewerId });
     FOLLOW_FRAMES.forEach((type) => webSocketClient.onMessage(type, () => schedule(true)));
-    const report = () => webSocketClient.sendCleanMessage('PRESENT_STATUS', presentStatusPayload({
-        fullscreen: Boolean(fullscreenElement()),
-        hidden: typeof document !== 'undefined' && document.visibilityState === 'hidden',
-      }));
-    const onChange = () => report();
-    document.addEventListener('fullscreenchange', onChange);
-    document.addEventListener('webkitfullscreenchange', onChange);
-    document.addEventListener('visibilitychange', onChange);
-    webSocketClient.onReconnected(() => { schedule(true); report(); });
-    /*
-      THE FIRST REPORT WAITS FOR THE SOCKET. `sendCleanMessage` returns false
-      until the socket is open, and a fixed one-shot at 1 s was lost whenever
-      the connect took longer, leaving the host's "Room's window" on unknowns
-      until the minute tick. So: try every second until a send is accepted,
-      at most FIRST_REPORT_TRIES times.
-    */
-    let firstReport = null;
-    let tries = 0;
-    const tryFirstReport = () => {
-      tries += 1;
-      if (report() === true || tries >= FIRST_REPORT_TRIES) { firstReport = null; return; }
-      firstReport = setTimeout(tryFirstReport, FIRST_REPORT_EVERY_MS);
-    };
-    firstReport = setTimeout(tryFirstReport, FIRST_REPORT_EVERY_MS);
-    const tick = setInterval(report, 60 * 1000);
+    const status = startPresentStatus(webSocketClient);
+    webSocketClient.onReconnected(() => { schedule(true); status.report(); });
     return () => {
       clearTimeout(debounceRef.current);
-      if (firstReport) clearTimeout(firstReport);
-      clearInterval(tick);
-      document.removeEventListener('fullscreenchange', onChange);
-      document.removeEventListener('webkitfullscreenchange', onChange);
-      document.removeEventListener('visibilitychange', onChange);
+      status.stop();
       FOLLOW_FRAMES.forEach((type) => webSocketClient.offMessage(type));
       webSocketClient.onReconnected(null);
       webSocketClient.disconnect();

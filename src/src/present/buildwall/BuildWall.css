@@ -1,0 +1,76 @@
+/*
+ * THE BUILD ROOM'S WINDOW (present/buildwall/BuildWall.jsx; parity PLAN §2.4).
+ *
+ * Dusk, declared on the root (`data-theme="dark"`), on the Build Room's own
+ * tokens (BuildRoom.css `.brm`), so every pairing is one the host's Stage,
+ * Build and History screens already carry: text on --bg, muted on --bg.
+ * Nothing new is painted here; this sheet only sizes and fits.
+ *
+ * TYPE: the room's screens are read from across a room, so the Build Room's
+ * stage sizes (--brm-st-*) and its body sizes (--brm-t-*) are re-pointed at
+ * the display profile's ladder (styles/stage.css --L-*, declared on :root per
+ * profile: Room, TV, Call, Table). The profile is the server's (wall.profile).
+ *
+ * NEVER SCROLLS (host standards §5): the window is the viewport, overflow is
+ * hidden, and what does not fit is cut by the page and counted ("and N
+ * earlier", BuildWall.jsx useHistoryFit), never by this sheet silently.
+ */
+.brm.bwall {
+  --brm-st-q: var(--L-secondary);
+  --brm-st-body: var(--L-body);
+  --brm-st-meta: var(--L-meta);
+  --brm-t-body: var(--L-body);
+  --brm-t-head: var(--L-secondary);
+  --brm-t-label: var(--L-meta);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.bwall .bwall-frame {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.bwall .bwall-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 24px;
+  padding: 16px 32px 0;
+  font-size: var(--L-meta);
+  color: var(--muted);
+}
+.bwall .bwall-title { color: var(--text); font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.bwall .bwall-join { margin-left: auto; white-space: nowrap; }
+.bwall .bwall-join b { color: var(--text); letter-spacing: 0.08em; }
+.bwall .bwall-ended { margin-left: auto; white-space: nowrap; }
+
+.bwall .bwall-body { min-height: 0; overflow: hidden; }
+.bwall .bwall-body > .brm-screenbody { height: 100%; box-sizing: border-box; padding: 16px 32px 24px; }
+
+/* Build: the newest screenshot takes what is left, whole (contain), never taller. */
+.bwall .brm-buildscreen { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.bwall .brm-buildscreen .brm-shot--build { min-height: 0; display: flex; flex-direction: column; }
+.bwall .brm-buildscreen .brm-shot--build img {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+  object-fit: contain;
+  object-position: top;
+}
+.bwall .brm-buildscreen .brm-shot--build figcaption { flex: none; font-size: var(--L-meta); }
+
+/* History: two columns of the screen's height; each is cut by the page, never scrolled. */
+.bwall .brm-histscreen { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+.bwall .brm-histscreen .brm-histmain,
+.bwall .brm-histscreen .brm-histside { min-height: 0; overflow: hidden; align-content: start; }
+.bwall .brm-earlier { margin: 8px 0 0; font-size: var(--L-meta); color: var(--muted); }
+
+/* Connecting, a changed link, a gone session: one line, centred. */
+.brm.bwall--quiet { display: grid; place-items: center; padding: 32px; }
+.bwall .bwall-quiet { margin: 0; max-width: 32ch; text-align: center; font-size: var(--L-secondary); line-height: 1.3; }

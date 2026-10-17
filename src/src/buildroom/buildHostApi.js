@@ -89,6 +89,11 @@ export function buildApi(gameId) {
   return {
     /** HostState. */
     state: () => call(`${root}state`),
+    /**
+     * What the room's window shows (parity PLAN §2.9a): `{screen?, codes?, profile?, rotate?}`
+     * → `{wall}`, plus `{wallKey}` when it rotated.
+     */
+    wall: (body) => post('wall', body),
     /** `{kind, prompt, detail?, options?, lowLabel?, highLabel?, maxPicks?, draft?}` → `{ask}` */
     createAsk: (body) => post('asks', body),
     getAsk: (askId) => call(`${root}asks/${seg(askId)}`),

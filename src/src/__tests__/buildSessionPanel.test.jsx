@@ -498,7 +498,8 @@ describe('Settings, in four groups', () => {
     await openRoom(hostState({ crew: CREW_ON }));
     openSettings();
     const heads = within(panel()).getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(heads).toEqual(['The room', 'Claude', 'Crew', 'This session']);
+    // Screens first (parity PLAN §2.7; standards §4: most used first).
+    expect(heads).toEqual(['Screens', 'The room', 'Claude', 'Crew', 'This session']);
     const buttons = within(panel()).getAllByRole('button').map((b) => b.textContent.trim());
     expect(buttons[buttons.indexOf('End session') + 1]).toMatch(/Close/);
     const end = within(panel()).getByRole('button', { name: 'End session' });
@@ -771,5 +772,87 @@ describe('the plugin update notice (owner, 2026-10-10): the Host screen only', (
   test('a finished session says nothing about the plugin', async () => {
     await openRoom(hostState({ st: OLD, ended: true }));
     expect(screen.queryByTestId('brm-plugin-dot')).toBeNull();
+  });
+});
+
+describe('Screens: the room\'s window (parity PLAN §2.7, B9 in part)', () => {
+  const KEY = 'K3y_abcdefghijklmnopqrstuvwxyz0123456789ABCD';
+  const withWall = (view, over = {}) => ({
+    ...view,
+    wallKey: KEY,
+    wall: { screen: 'stage', codes: 'none', profile: 'room', rev: 1 },
+    presenting: 1,
+    presentDetail: { open: true, fullscreen: true, visible: true, statusAt: NOW, ageMs: 1000 },
+    ...over,
+  });
+  const group = () => panel().querySelector('[data-group="screens"]');
+
+  test('first, Applies now, with the room\'s window link to the wall and its key', async () => {
+    await openRoom(withWall(hostState()));
+    openSettings();
+    const g = group();
+    expect(g).not.toBeNull();
+    expect(g).toHaveAttribute('data-capability', 'screens');
+    expect(within(g).getByText('Applies now')).toBeInTheDocument();
+    const link = within(g).getByRole('link', { name: /Room's window/ });
+    expect(link).toHaveAttribute('href', `/present?gameId=${GAME}&type=build&k=${encodeURIComponent(KEY)}`);
+    expect(link).toHaveAttribute('data-capability', 'room-window');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  test('the window\'s status is the server\'s: on, full screen; not open with no viewer', async () => {
+    await openRoom(withWall(hostState()));
+    openSettings();
+    expect(within(group()).getByRole('status')).toHaveTextContent("Room's window: on, full screen");
+  });
+
+  test('no viewer on the session reads as not open, whatever the detail says', async () => {
+    await openRoom(withWall(hostState(), { presenting: 0 }));
+    openSettings();
+    expect(within(group()).getByRole('status')).toHaveTextContent("Room's window: not open");
+  });
+
+  test('the room screen size posts build/wall {profile}', async () => {
+    await openRoom(withWall(hostState()));
+    openSettings();
+    const select = within(group()).getByRole('combobox');
+    expect(select.value).toBe('room');
+    fireEvent.change(select, { target: { value: 'tv' } });
+    await waitFor(() => expect(posts().some((c) => path(c) === `games/${GAME}/build/wall`)).toBe(true));
+    expect(posts().find((c) => path(c) === `games/${GAME}/build/wall`).body).toEqual({ profile: 'tv' });
+  });
+
+  test('New link asks in place first; the second press rotates the key', async () => {
+    await openRoom(withWall(hostState()));
+    openSettings();
+    const before = posts().length;
+    const btn = within(group()).getByRole('button', { name: 'New link' });
+    fireEvent.click(btn);
+    expect(posts().length).toBe(before);
+    expect(within(group()).getByRole('button', { name: 'New link anyway' })).toBeInTheDocument();
+    expect(group().textContent).toMatch('Press again to make a new link.');
+    fireEvent.click(within(group()).getByRole('button', { name: 'New link anyway' }));
+    await waitFor(() => expect(lastPost() && path(lastPost())).toBe(`games/${GAME}/build/wall`));
+    expect(lastPost().body).toEqual({ rotate: true });
+  });
+
+  test('the armed press settles back after 6 s', async () => {
+    jest.useFakeTimers();
+    try {
+      await openRoom(withWall(hostState()));
+      openSettings();
+      fireEvent.click(within(group()).getByRole('button', { name: 'New link' }));
+      act(() => { jest.advanceTimersByTime(6100); });
+      expect(within(group()).getByRole('button', { name: 'New link' })).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('an older server with no wall key: the size is offered, no link to open', async () => {
+    await openRoom(hostState());
+    openSettings();
+    expect(within(group()).queryByRole('link', { name: /Room's window/ })).toBeNull();
+    expect(within(group()).getByRole('combobox')).toBeInTheDocument();
   });
 });

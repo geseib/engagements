@@ -66,7 +66,7 @@ function hostState({ st = {}, asks = [] } = {}) {
     { SK: 'BUILD#IDEA#0000000000002#i2', IdeaId: '2-i2', Status: 'later', Source: 'room', PlayerName: 'Dee', Text: 'Print a rota', CreatedAt: ago(110) },
     { SK: 'BUILD#LOG#0000000000001#s1', LogId: '1-s1', Kind: 'showing', Text: 'Header is live', Link: 'http://localhost:5173/', By: 'agent', CreatedAt: ago(90) },
   ];
-  return S.hostView({
+  const view = S.hostView({
     gameId: GAME,
     meta: { Title: 'Volunteer sign-up', Details: 'A one-page site to pick a shift in a minute.' },
     sessionState: 'STARTED',
@@ -74,6 +74,10 @@ function hostState({ st = {}, asks = [] } = {}) {
     players: ['Ana', 'Dee', 'Priya', 'Sam'],
     now: NOW,
   });
+  // What build-room.js adds to the host's read (parity PLAN §2.9a): the wall key and the window's status.
+  return {
+    ...view, wallKey: 'K'.repeat(43), wall: { screen: 'stage', codes: 'none', profile: 'room', rev: 1 }, presenting: 0, presentDetail: null,
+  };
 }
 
 const MOMENTS = [
@@ -123,7 +127,7 @@ beforeEach(() => {
 
 test('the list is the §2.6b table: unique ids, each with a name and where it lives on one screen', () => {
   expect(new Set(CAPABILITY_IDS).size).toBe(CAPABILITY_IDS.length);
-  expect(CAPABILITY_IDS.length).toBe(18);
+  expect(CAPABILITY_IDS.length).toBe(20);
   CAPABILITIES.forEach((c) => {
     expect(c.id).toMatch(/^[a-z][a-z-]+$/);
     expect(c.name).toBeTruthy();
