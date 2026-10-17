@@ -72,6 +72,22 @@ const hasAnswers = (round) => Array.isArray(round && round.answers) && round.ans
  */
 const neverHeldAnswers = (round) => String(round && round.questionNumber) === '000';
 
+/**
+ * COULD THIS ROUND'S ANSWERS HAVE EXPIRED YET?
+ *
+ * ANSWER rows live seven days (the table above). A round with no answers that
+ * started less than seven days ago never had any to lose, so calling them
+ * "expired" is false: a round opened and closed with nobody answering, reported
+ * minutes later, read "responses for round 004 have expired" (review of test
+ * 32ac4eb4, issue #35). Unknown age keeps the old, cautious answer: yes.
+ */
+const ANSWER_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+function answersCouldHaveExpired(startedAt, now = Date.now()) {
+  const t = typeof startedAt === 'number' ? startedAt : Date.parse(startedAt || '');
+  if (!Number.isFinite(t)) return true;
+  return now - t >= ANSWER_RETENTION_MS;
+}
+
 /** `undefined`/`null` mean "the live table had nothing to say", not "empty". */
 const pick = (live, kept) => (live === undefined || live === null ? kept : live);
 
@@ -92,8 +108,13 @@ const resolvedQuestion = (round) => !!(round && round.questionData && round.ques
  *
  * @returns {{ round: object, recovered: boolean, unrecoverable: boolean }}
  */
-function mergeRound(live, kept) {
-  if (!kept) return { round: live, recovered: false, unrecoverable: !hasAnswers(live) && !neverHeldAnswers(live) };
+function mergeRound(live, kept, mayHaveExpired = true) {
+  if (!kept) {
+    return {
+      round: live, recovered: false,
+      unrecoverable: !hasAnswers(live) && !neverHeldAnswers(live) && mayHaveExpired,
+    };
+  }
   // The round fell out of the rebuild entirely. That is the votes-only round:
   // `questionNumbers` is built from votes ∪ results ∪ summaries, so a round
   // that was answered and voted but never closed disappears the moment its
@@ -122,7 +143,7 @@ function mergeRound(live, kept) {
         : {}),
     },
     recovered,
-    unrecoverable: !liveHas && !keptHas && !neverHeldAnswers(live),
+    unrecoverable: !liveHas && !keptHas && !neverHeldAnswers(live) && mayHaveExpired,
   };
 }
 
@@ -137,7 +158,7 @@ const byQuestionNumber = (a, b) =>
  * @returns {{ detailedQuestions: object[], playerPerformance: object[],
  *            gameStats: object, completeness: object }}
  */
-function reconcileReport(stored, rebuilt) {
+function reconcileReport(stored, rebuilt, { answersMayHaveExpired } = {}) {
   const liveRounds = Array.isArray(rebuilt.detailedQuestions) ? rebuilt.detailedQuestions : [];
   const keptRounds = Array.isArray(stored && stored.detailedQuestions) ? stored.detailedQuestions : [];
   const keptByNumber = new Map(keptRounds.map((r) => [String(r.questionNumber), r]));
@@ -149,7 +170,8 @@ function reconcileReport(stored, rebuilt) {
   const unrecoverableRounds = [];
 
   for (const n of numbers) {
-    const { round, recovered, unrecoverable } = mergeRound(liveByNumber.get(n), keptByNumber.get(n));
+    const mayHaveExpired = typeof answersMayHaveExpired === 'function' ? answersMayHaveExpired(n) !== false : true;
+    const { round, recovered, unrecoverable } = mergeRound(liveByNumber.get(n), keptByNumber.get(n), mayHaveExpired);
     if (!round) continue;
     detailedQuestions.push(round);
     if (recovered) recoveredRounds.push(n);
@@ -256,4 +278,4 @@ function describe({ stored, recoveredRounds, unrecoverableRounds, roundCount }) 
   return completeness;
 }
 
-module.exports = { reconcileReport, reconcileStats, mergeRound };
+module.exports = { reconcileReport, reconcileStats, mergeRound, answersCouldHaveExpired };
