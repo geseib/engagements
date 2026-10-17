@@ -11,7 +11,7 @@ const followUpKinds = require('./followup-kinds');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 const { displayOrder } = require('./answer-order');
 const { shapeForLog } = require('./log-shape');
-const { reconcileReport } = require('./report-merge');
+const { reconcileReport, answersCouldHaveExpired } = require('./report-merge');
 const { surveyResultsPayload } = require('./survey-host');
 const { normalizeNames } = require('./survey-names');
 const { talkingPointsReport } = require('./build-points-report');
@@ -995,8 +995,17 @@ exports.handler = async (event) => {
     // one row, and reads the same.
     const storedReport = await readReport(db, { table: process.env.TABLE_NAME, gameId, orgId: reportOrgId });
 
+    // When each round started, from its REF row (already in allQuestionItems),
+    // else the session's start or creation: a round younger than the 7-day
+    // answer ttl with no answers never had any, and is not "expired".
+    const roundStartedAt = new Map(allQuestionItems
+      .filter((item) => /^QUESTION#\d+#REF$/.test(item.SK) && item.StartedAt)
+      .map((item) => [item.SK.split('#')[1], item.StartedAt]));
+    const sessionStartedAt = gameState.Item?.StartedAt || gameMetadata.Item.CreatedAt;
     const reconciled = reconcileReport(storedReport, {
       detailedQuestions, playerPerformance, gameStats
+    }, {
+      answersMayHaveExpired: (n) => answersCouldHaveExpired(roundStartedAt.get(n) || sessionStartedAt),
     });
 
     /*

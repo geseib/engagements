@@ -1657,7 +1657,14 @@ function PlayerPage({ event = null } = {}) {
       if (!res.ok) { setMyFeedbackAnswersStatus('error'); return; }
       const data = await res.json();
       const ranked = rankedResultsFrom(data);
-      setMyFeedbackSnapshot((current) => (current ? { ...current, answers: ranked } : current));
+      // An earlier round picked on the end screen is known only as "Round N";
+      // its stored read carries the question's title for the heading (#35).
+      const questionTitle = typeof data.questionTitle === 'string' ? data.questionTitle.trim() : '';
+      setMyFeedbackSnapshot((current) => (current ? {
+        ...current,
+        answers: ranked,
+        ...(current.roundLabel && questionTitle ? { title: questionTitle } : {}),
+      } : current));
       setMyFeedbackAnswersStatus(feedbackAnswersStatusFrom(data));
     } catch {
       setMyFeedbackAnswersStatus('error');
@@ -1682,6 +1689,9 @@ function PlayerPage({ event = null } = {}) {
     setMyFeedbackNumber(padded);
     setMyFeedbackSnapshot({
       title: q.title || 'This round',
+      // The end screen's "Round N" stays the top line's name for the round
+      // once the heading becomes the question's title.
+      roundLabel: chosen ? chosen.title : '',
       detail: q.questionDetail || q.detail || '',
       options: ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
         .map((key) => q[key]).filter(Boolean),
@@ -1755,6 +1765,17 @@ function PlayerPage({ event = null } = {}) {
     })();
     return () => { cancelled = true; };
   }, [gameState, gameId]);
+
+  /* At the end, read the final score and standing from /players. They were
+     only ever filled on RESULTS, so a player who reloaded or rejoined after
+     the end read "Final score 0" with no standing while the host and the
+     report said 6 (issue #35). Waits for the name, which a rejoin restores
+     after the state arrives. */
+  useEffect(() => {
+    if (gameState !== 'ENDED' || !gameId || !playerName) return;
+    loadPlayerScoreInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, gameId, playerName]);
 
   /** Post one comment from the player's OWN panel — the same shape as
    *  `submitComment` above, kept separate because it writes to
@@ -3476,7 +3497,10 @@ function PlayerPage({ event = null } = {}) {
 
   if (myFeedbackShowing) {
     volume = 'act';
-    ctx = position ? `${position} · Feedback` : 'Feedback';
+    // The round the panel is about, not the one the session stopped on: from
+    // the end screen a player may open round 1 of 3.
+    const panelRound = myFeedbackAfterEnd && myFeedbackSnapshot ? (myFeedbackSnapshot.roundLabel || myFeedbackSnapshot.title) : position;
+    ctx = panelRound ? `${panelRound} · Feedback` : 'Feedback';
     body = (
       <>
         {/* A TOP EXIT, NOT ONLY A BOTTOM ONE (minor, fix round 1) — the report
