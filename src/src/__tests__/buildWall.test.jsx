@@ -49,8 +49,14 @@ beforeEach(() => {
   window.API_BASE = API;
   queue = [];
   webSocketClient.handlers.clear();
-  webSocketClient.connect.mockClear();
-  webSocketClient.sendCleanMessage.mockClear();
+  // Installed per test: a runner with resetMocks on (react-scripts) wipes the factory's implementations.
+  webSocketClient.connect.mockReset();
+  webSocketClient.connect.mockImplementation(() => true);
+  webSocketClient.isConnected.mockImplementation(() => true);
+  webSocketClient.onMessage.mockImplementation((type, fn) => webSocketClient.handlers.set(type, fn));
+  webSocketClient.offMessage.mockImplementation((type) => webSocketClient.handlers.delete(type));
+  webSocketClient.sendCleanMessage.mockReset();
+  webSocketClient.sendCleanMessage.mockImplementation(() => true);
   global.fetch = jest.fn(() => {
     const next = queue.length ? queue.shift() : reply(F.wallBody());
     return typeof next === 'function' ? next() : next;

@@ -184,7 +184,7 @@ export default function BuildHistoryScreen({
           <h2 className="brm-h" id="brm-decided-h">Decided so far</h2>
           <Earlier n={decided.length - decidedShown.length} />
           {decided.length ? (
-            <ol className="brm-list brm-decided">
+            <ol className="brm-list brm-decided" start={decided.length - decidedShown.length + 1}>
               {decidedShown.map((a) => {
                 const words = (
                   <>

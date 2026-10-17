@@ -70,6 +70,7 @@ const overflows = (el) => Boolean(el) && el.scrollHeight > el.clientHeight + 1;
  */
 function useHistoryFit(on, key) {
   const [size, setSize] = useState(0);
+  const [loads, setLoads] = useState(0);
   // The cut belongs to one story at one size: a new one starts from everything.
   const [cut, setCut] = useState({ at: '', story: null, decided: null });
   const at = `${on}|${key}|${size}`;
@@ -77,8 +78,15 @@ function useHistoryFit(on, key) {
   useEffect(() => {
     if (!on) return undefined;
     const onResize = () => setSize((s) => s + 1);
+    // A picture that arrives makes its row taller: measure again, keeping the cut
+    // (only ever shorter, so a picture mounting again cannot start a loop).
+    const onLoad = (e) => { if (e.target && e.target.tagName === 'IMG') setLoads((n) => n + 1); };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    document.addEventListener('load', onLoad, true);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('load', onLoad, true);
+    };
   }, [on]);
   useLayoutEffect(() => {
     if (!on) return;
@@ -104,7 +112,7 @@ function useHistoryFit(on, key) {
       if (fit && fit.decided === 1) delete next.decided;
     }
     if (Object.keys(next).length) setCut({ ...(fit || { story: null, decided: null }), ...next, at });
-  }, [on, fit, at]);
+  }, [on, fit, at, loads]);
   return fit;
 }
 
