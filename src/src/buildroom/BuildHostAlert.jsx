@@ -59,6 +59,7 @@ export default function HostAlert({ alert, variant, onHost, onGo, onMarkAll }) {
   return (
     <span
       className={`brm-hostalert-wrap brm-hostalert-wrap--${variant}`}
+      data-capability="host-alert"
       ref={wrap}
       // Focus leaving for somewhere outside closes the list. A null target (a click on nothing focusable) is the mousedown handler's.
       onBlur={(e) => { if (showList && e.relatedTarget && wrap.current && !wrap.current.contains(e.relatedTarget)) setOpen(false); }}

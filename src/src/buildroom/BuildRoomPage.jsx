@@ -1153,7 +1153,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                 />
               )}
               {current ? (
-                <div className="brm-now">
+                <div className="brm-now" data-capability="ask-path">
                   {/* THE ASK AS FOUR STEPS (owner, 2026-10-07). "Go with B"
                       is the room's choice and goes straight on; a click on
                       another option still asks first. */}
@@ -1193,7 +1193,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
 
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
             them), then the room's ideas (C1, C2). */}
-        <section className="brm-hostcol" aria-labelledby="brm-waiting-h">
+        <section className="brm-hostcol" aria-labelledby="brm-waiting-h" data-capability="queue">
           <h2 className="brm-h5" id="brm-waiting-h" tabIndex={-1}>
             Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
           </h2>
@@ -1227,12 +1227,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         {/* WHAT HAPPENED (owner, 2026-10-05): the timeline, the asks and the
             screenshots, one open at a time; the open one fills the column and
             scrolls inside itself, so the page never scrolls. */}
-        <aside className="brm-hostcol brm-hostcol--stack">
+        <aside className="brm-hostcol brm-hostcol--stack" data-capability="whats-next">
           {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
           <HistoryStack
             items={[
               ...(room.opening && room.opening.phase === 'opening' ? [{
-                key: 'opening', label: 'The opening',
+                key: 'opening', label: 'The opening', capability: 'opening',
                 count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
                 body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
               }] : []),
@@ -1716,18 +1716,19 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
           busy={share.busy} run={share.run} api={share.api} onShowWall={share.onShowWall} nudge={Boolean(share.nudge)}
         />
       )}
-      <span className="brm-agentwrap"><AgentChip room={room} now={now} /></span>
+      <span className="brm-agentwrap" data-capability="claude-status"><AgentChip room={room} now={now} /></span>
       {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
       <button
         type="button"
         className="brm-codewrap brm-codebtn"
+        data-capability="share-demo"
         title={bothCodes ? 'Show both codes on the Stage' : 'Show the QR code'}
         aria-label={bothCodes ? `Join code ${room.gameId}. Show both codes on the Stage` : `Join code ${room.gameId}. Show the QR code`}
         onClick={onQr}
       >
         <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
       </button>
-      <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers}>{room.playerCount || 0} joined</button>
+      <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers} data-capability="players">{room.playerCount || 0} joined</button>
     </>
   );
 }
@@ -1778,7 +1779,7 @@ function RoomHeader({
         {!tucked && <HeaderTools {...tools} />}
         {/* SESSION (owner, 2026-10-09): the same word and key as the other
             engagements, last on the right where the three-dot menu was. */}
-        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession}>
+        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
           SESSION <kbd>\</kbd>
           {askingCount > 0 && <span className="brm-sess-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
           {/* The plugin is out of date: a dot, on the Host screen only (never on the Stage, Build or History the room sees). */}
@@ -1865,7 +1866,7 @@ function HistoryStack({ items }) {
       {items.map((it) => {
         const isOpen = open === it.key;
         return (
-          <div key={it.key} className={`brm-stackitem${isOpen ? ' is-open' : ''}`}>
+          <div key={it.key} className={`brm-stackitem${isOpen ? ' is-open' : ''}`} data-capability={it.capability}>
             <button
               type="button"
               className="brm-stackhead"
@@ -2082,6 +2083,7 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
         meter={codesUp ? null : <RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} waiting={joinedWaiting} />}
         dock={(
           <Dock
+            data-capability={move ? 'ask-moves' : undefined}
             onMouseEnter={() => setOverDock(true)}
             onMouseLeave={() => setOverDock(false)}
             onFocus={() => setOverDock(true)}
@@ -2103,14 +2105,14 @@ function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api
             <HostAlert alert={alert} variant="stage" onHost={onHost} onGo={onAlertGo} onMarkAll={onAlertAll} />
             {/* SESSION is last, so it is never the lead. The count lights it when someone
                 asks to take a name; nothing on the Stage names the person. */}
-            <button type="button" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} title="Session (\)">
+            <button type="button" data-capability="settings" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} title="Session (\)">
               <span className="dock-more-lbl">SESSION</span>
               {askingCount > 0 && <span className="brm-screen-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
             </button>
           </Dock>
         )}
       >
-        <div className="content"><div className="fitbox">{content}</div></div>
+        <div className="content" data-capability={!ended && !codesUp && !crewOn && current && !pointsVote ? 'board-pick' : undefined}><div className="fitbox">{content}</div></div>
       </Stage>
       <WallComment comment={freshWallComment(room, now)} />
       {editing && editable && (
@@ -2147,7 +2149,7 @@ function BuildScreen({ room, now, ended = false, busy = false, run, api }) {
   let shown = link;
   if (shareLink) { try { shown = new URL(shareLink).host; } catch (e) { shown = ''; } }
   return (
-    <section className="brm-screenbody brm-buildscreen" aria-label="The build">
+    <section className="brm-screenbody brm-buildscreen" aria-label="The build" data-capability="build-screen">
       <WallComment comment={freshWallComment(room, now)} />
       <div className="brm-row brm-buildrow">
         <h2 className="brm-q">{W.buildSoFar}</h2>
@@ -2289,7 +2291,7 @@ function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
   const usedIdeas = gave.length;
   const noop = () => undefined;
   return (
-    <div className="brm-screenbody brm-histscreen">
+    <div className="brm-screenbody brm-histscreen" data-capability="history">
       <div className="brm-histmain">
         {filter === 'timeline' && <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />}
         {filter === 'artifacts' && (arts.length ? (
@@ -3372,7 +3374,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
     if (ok !== undefined) { setText(''); setAlsoTell(false); setSaid('Logged.'); }
   };
   return (
-    <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h">
+    <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h" data-capability="composer">
       <h2 className="brm-h5" id="brm-compose-h">Add something</h2>
       <form onSubmit={tell}>
         <label className="brm-sr" htmlFor="brm-compose">Tell Claude, or log what the room said</label>
