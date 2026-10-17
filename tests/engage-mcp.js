@@ -448,6 +448,24 @@ const hardStop = setTimeout(() => {
       stateLan = undefined;
     }
   });
+  await check('room_status tells Claude about the remote share only while the host wants it: a built copy, no server-sent events', async () => {
+    stateLan = { status: 'live', map: [], open: 2, remote: { wanted: false, status: 'off', error: '', people: [] } };
+    try {
+      const off = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(!/SHARING REMOTELY/.test(off), off);
+      stateLan = { status: 'live', map: [], open: 2, remote: { wanted: true, status: 'starting', error: '', people: [] } };
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/SHARING REMOTELY/.test(t) && /BUILT copy/.test(t) && /never server-sent events/.test(t) && /200 requests/.test(t), t);
+    } finally {
+      stateLan = undefined;
+    }
+  });
+  await check('both standing instruction blocks say the build is always a web page, and what remote sharing asks', async () => {
+    // Owner, 16 Oct: "the build is always a web page, even a document; Claude is told so at the start".
+    const src = fs.readFileSync(SCRIPT, 'utf8');
+    const line = /^- The build is always something people open as a web page, even when the room is making a document[^\n]*SHARING REMOTELY[^\n]*built copy[^\n]*server-sent events/gm;
+    assert.strictEqual((src.match(line) || []).length, 2);
+  });
   await check('room_status with kickoff tells Engage (Connect step 4); without it, it does not', async () => {
     const before = requests.length;
     await mcp.request('tools/call', { name: 'room_status', arguments: { kickoff: true } });

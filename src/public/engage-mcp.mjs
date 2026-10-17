@@ -554,6 +554,10 @@ function renderState(st) {
   if (st.lan && st.lan.status === 'live') {
     lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths.');
   }
+  if (st.lan && st.lan.remote && st.lan.remote.wanted) {
+    // Remote share (spec §4.5): one tunnel to the newest thing shown, and Cloudflare's quick-tunnel limits.
+    lines.push('', 'SHARING REMOTELY: people who are not in the room open your app too, through one remote link to the newest thing you showed, and while it is on everyone in the room uses it as well. Show a BUILT copy, not the dev server, where the project has one (for Vite: npm run build, then vite preview on its own port), and post_update "showing" with that address: a dev server loads a page as a hundred files and the remote link carries at most 200 requests at once. For live updates use websockets or polling, never server-sent events (the remote link does not carry them).');
+  }
   if (st.opening && st.opening.phase === 'opening') {
     const steps = st.opening.steps || [];
     lines.push('', 'PHASE: OPENING. The room is framing the build with the host. Do not write product code yet: prepare (the project folder and git), read the brief as it fills, and propose a probing question when an answer is thin (ask_room_for_ideas with forStep). The host presses Start building; you then get the whole brief as a direction.',
@@ -2386,6 +2390,7 @@ How to collaborate:
 - Show, don't just tell: screenshot each mockup and share_image it onto its Choose option (askId + label), so phones see it too; before wrap_up, share_image one or two screenshots of the finished product with kind "final" for the report.
 - Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
 - Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
+- The build is always something people open as a web page, even when the room is making a document or a plan: serve it from this project's folder on one local address. When the host also opens it to people who are not in the room, room_status says SHARING REMOTELY; then show a built copy rather than the dev server, and never use server-sent events.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here: the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too, on their laptops, tablets and phones.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
 - After you implement each decision, call commit with a plain first line ("Add the calm header") and the decision's askId; it goes into DECISIONS.md and the room's timeline. Not after every edit: each turn is already kept as a hidden snapshot. The ${SKILL_NAME} skill has the rules.
@@ -3811,6 +3816,7 @@ skill is how you keep the project something they can open next week and understa
 - Before starting another, check whether something is already listening on that port.
 - Do not stop servers you did not start.
 - Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
+- The build is always something people open as a web page, even when the room is making a document or a plan: serve it from this project's folder on one local address. When the host also opens it to people who are not in the room, room_status says SHARING REMOTELY; then show a built copy rather than the dev server, and never use server-sent events.
 
 ## The opening: frame it with the room, then build
 

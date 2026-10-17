@@ -168,8 +168,10 @@ the button. The words are in `words.js`; the Wi-Fi words do not change.
 
 ### 4.5 What Claude is told
 
-At the start of a Build Room session, as now (the build is always a web page). Added, when
-remote turns on (the instruction the plugin already gives for the Wi-Fi share):
+At the start of a Build Room session, in both standing instruction blocks: the build is always
+a web page, even a document, served from the project folder on one local address. (This was
+assumed to be there already; it was not, and was added in Task 6, 17 Oct.) And in
+room_status while the host wants remote (`SHARING REMOTELY`, beside `SHARING ON WI-FI`):
 
 - **Share a built copy, not the development server**, where the project has one
   (`vite build` then `vite preview`, or the equivalent). A dev server loads a page as a
