@@ -114,6 +114,10 @@ function upgrade(port, cookie) {
   fs.mkdirSync(path.join(dir, '.engage'));
   fs.writeFileSync(path.join(dir, '.engage', 'session.json'), JSON.stringify({ key: KEY, tier: 'prod' }));
   fs.writeFileSync(path.join(dir, 'app.js'), APP_SOURCE);
+  // No tunnel in this suite (Task 5 has its own): a cloudflared that never
+  // prints an address, so nothing reaches the network and remote stays "not yet live".
+  const quiet = path.join(dir, 'quiet-cloudflared');
+  fs.writeFileSync(quiet, '#!/bin/sh\nexec sleep 600\n'); fs.chmodSync(quiet, 0o755);
   const procs = [];
   function startApp(name) {
     const proc = spawn(process.execPath, ['app.js', name], { cwd: dir, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -137,7 +141,7 @@ function upgrade(port, cookie) {
 
   const base = 48000 + Math.floor(Math.random() * 500);
   const rbase = base + 600;
-  const env = { ...process.env, CLAUDE_PROJECT_DIR: dir, ENGAGE_LAN_ADDRESS: '127.0.0.1', ENGAGE_LAN_PORT: String(base), ENGAGE_REMOTE_PORT: String(rbase), ENGAGE_LAN_FAST_MS: '100', ENGAGE_LAN_IDLE_MS: '100', ENGAGE_LAN_LOST_MS: '600', ENGAGE_ACTIVITY_MS: '60000', ENGAGE_REMOTE_WAIT_MS: '1500' };
+  const env = { ...process.env, CLAUDE_PROJECT_DIR: dir, ENGAGE_LAN_ADDRESS: '127.0.0.1', ENGAGE_LAN_PORT: String(base), ENGAGE_REMOTE_PORT: String(rbase), ENGAGE_LAN_FAST_MS: '100', ENGAGE_LAN_IDLE_MS: '100', ENGAGE_LAN_LOST_MS: '600', ENGAGE_ACTIVITY_MS: '60000', ENGAGE_REMOTE_WAIT_MS: '1500', ENGAGE_CLOUDFLARED: quiet, ENGAGE_TUNNEL_TIMEOUT_MS: '600000', HOME: dir };
   delete env.ENGAGE_KEY;
   env.ENGAGE_API = `http://127.0.0.1:${api.address().port}/`;
   env.ENGAGE_ALLOW_LOCAL_API = '1';

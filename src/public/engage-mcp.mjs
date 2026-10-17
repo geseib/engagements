@@ -28,8 +28,9 @@ import { join as pathJoin, resolve as pathResolve, relative as pathRelative, isA
 import { homedir, networkInterfaces } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 // THE PLUGIN'S VERSION. Bump it with every change to this file:
@@ -2760,6 +2761,10 @@ const REMOTE_WAITERS_MAX = 200;
 const remote = {
   gateway: null, target: '', keys: new Map(), wrong: new Set(), lastCheckAt: 0,
   devices: new Map(), address: '', error: '', waiters: [],
+  // The tunnel (below): 'none' | 'starting' | 'live'; its own error, kept
+  // apart from the target's; no new tunnel before retryAt (Cloudflare limits
+  // how fast they are created: SPIKE.md).
+  tunnel: null, tunnelState: 'none', tunnelError: '', retryAt: 0, gen: 0,
 };
 /**
  * Resolves true once a round brings this hash among Engage's keys, false after
@@ -2844,6 +2849,7 @@ function remoteDeviceCounts() {
 
 function closeRemote() {
   wakeRemoteWaiters(true);
+  stopTunnel();
   if (remote.gateway) closeGateway(remote.gateway);
   remote.gateway = null;
   remote.target = '';
@@ -2854,7 +2860,7 @@ function closeRemote() {
 
 /** Bring the remote gateway in line with what Engage asked for. */
 async function syncRemote(wanted, targets, keys) {
-  if (!wanted) { closeRemote(); remote.error = ''; return; }
+  if (!wanted) { closeRemote(); remote.error = ''; remote.tunnelError = ''; return; }
   remote.keys = new Map((keys || []).filter((k) => k && KEY_HASH_SHAPE.test(String(k.hash || ''))).map((k) => [k.hash, String(k.player || '')]));
   wakeRemoteWaiters();
   // The newest address Claude showed, if it is a server in THIS project's folder (F4).
@@ -2883,12 +2889,231 @@ async function syncRemote(wanted, targets, keys) {
     }
     if (!remote.gateway && !remote.error) remote.error = `Every port from ${REMOTE_PORT} is in use on this laptop.`;
   }
+  ensureTunnel();
 }
 
 /** The report's remote block. 'live' only with a reachable tunnel address (Task 5). */
 function remoteReport() {
-  const status = !remote.gateway && !remote.error ? 'off' : (remote.error ? 'failed' : (remote.address ? 'live' : 'off'));
-  return { status, address: status === 'live' ? remote.address : '', target: remote.target, error: remote.error, devices: remote.gateway ? remoteDeviceCounts() : {} };
+  const error = remote.error || remote.tunnelError;
+  const status = !remote.gateway && !error ? 'off' : (error ? 'failed' : (remote.address ? 'live' : 'off'));
+  return { status, address: status === 'live' ? remote.address : '', target: remote.target, error, devices: remote.gateway ? remoteDeviceCounts() : {} };
+}
+
+// ── The tunnel: cloudflared, fetched once, one per session ───────────────────
+//
+// SPIKE.md (16 Oct 2026) for every number here. The address is printed on
+// stderr ~5 s after start but is not reachable for another 7-12 s, and a
+// phone that asks too early can remember "no such name"; so remote is live
+// only once Cloudflare's public DNS has the name AND a request through the
+// tunnel reaches this gateway. Creating tunnels is rate-limited (429), so one
+// is opened when remote turns on and never reopened without need, and never
+// sooner than a minute after the last attempt failed.
+
+const CLOUDFLARED = Object.freeze({
+  version: '2026.10.1',
+  assets: Object.freeze({
+    'darwin-arm64': { file: 'cloudflared-darwin-arm64.tgz', sha256: '647615df99d49cd179ea5e13ef760b9bbfb33630f6ae62f87e33dfadda60adcc' },
+    'darwin-x64': { file: 'cloudflared-darwin-amd64.tgz', sha256: '3b0dbaf378337e9d7fb6cd235a76d1d6a7dee434c2d8edf9281164fb6a3837ab' },
+    'linux-x64': { file: 'cloudflared-linux-amd64', sha256: '3bfc539f45d2620c71debb7a86be0efa737ed5ccbad9eb85c787116900e5c586' },
+    'linux-arm64': { file: 'cloudflared-linux-arm64', sha256: '2c65dfabf616c40efc7545d107d7a57ad5e21377e2964b7e88af19a238074a46' },
+    'win32-x64': { file: 'cloudflared-windows-amd64.exe', sha256: '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6' },
+  }),
+});
+const TUNNEL_ADDRESS_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
+const TUNNEL_ADDRESS_MS = Math.max(50, Number(process.env.ENGAGE_TUNNEL_TIMEOUT_MS) || 30000);
+const TUNNEL_READY_MS = Math.max(50, Number(process.env.ENGAGE_TUNNEL_READY_MS) || 60000);
+const TUNNEL_RETRY_MS = Math.max(50, Number(process.env.ENGAGE_TUNNEL_RETRY_MS) || 60000);
+const DOH_URL = process.env.ENGAGE_DOH_URL || 'https://cloudflare-dns.com/dns-query';
+const TUNNEL_WORDS = Object.freeze({
+  platform: 'Remote share does not run on this kind of laptop yet.',
+  download: "Couldn't download Cloudflare's tunnel tool. Check this laptop is online, then turn this off and on.",
+  mismatch: "Couldn't download Cloudflare's tunnel tool (it did not match the expected file).",
+  refused: 'Cloudflare is not giving out new remote links from this network right now. Try again in a few minutes.',
+  noAddress: 'Cloudflare did not give this laptop a remote link.',
+  notReady: 'Cloudflare did not finish setting up the remote link.',
+  stopped: 'The remote link stopped. It will try again in a minute.',
+});
+const engageHome = () => pathJoin(homedir(), '.engage');
+const pidFile = () => pathJoin(engageHome(), 'cloudflared.pids');
+const sha256Of = (buf) => createHash('sha256').update(buf).digest('hex');
+
+/**
+ * The path of a cloudflared we may run, fetching it the first time. Throws
+ * an Error whose message is one of TUNNEL_WORDS. ENGAGE_CLOUDFLARED names a
+ * program to run instead (tests; anyone who installs their own). The pinned
+ * hash is checked BEFORE anything is unpacked or run.
+ */
+async function ensureCloudflared() {
+  if (process.env.ENGAGE_CLOUDFLARED) return process.env.ENGAGE_CLOUDFLARED;
+  const asset = CLOUDFLARED.assets[`${process.platform}-${process.arch}`];
+  if (!asset) throw new Error(TUNNEL_WORDS.platform);
+  const binDir = pathJoin(engageHome(), 'bin');
+  const bin = pathJoin(binDir, `cloudflared-${CLOUDFLARED.version}${process.platform === 'win32' ? '.exe' : ''}`);
+  const stamp = `${bin}.sha256`;
+  const expected = process.env.ENGAGE_CLOUDFLARED_SHA256 || asset.sha256;
+  // Installed before: its own hash was recorded beside it when it passed.
+  try { if (readFileSync(stamp, 'utf8').trim() === sha256Of(readFileSync(bin))) return bin; } catch { /* not installed */ }
+  const base = process.env.ENGAGE_CLOUDFLARED_BASE || `https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED.version}/`;
+  let buf;
+  try {
+    const res = await fetch(new URL(asset.file, base), { redirect: 'follow', signal: AbortSignal.timeout(120000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    buf = Buffer.from(await res.arrayBuffer());
+  } catch (e) {
+    log('cloudflared download failed:', e && e.message);
+    throw new Error(TUNNEL_WORDS.download);
+  }
+  if (sha256Of(buf) !== expected) { log('cloudflared download did not match the pinned hash'); throw new Error(TUNNEL_WORDS.mismatch); }
+  mkdirSync(binDir, { recursive: true });
+  const part = pathJoin(binDir, `.part-${randomBytes(6).toString('hex')}`);
+  try {
+    if (asset.file.endsWith('.tgz')) {
+      mkdirSync(part);
+      writeFileSync(pathJoin(part, 'a.tgz'), buf);
+      execFileSync('tar', ['-xzf', pathJoin(part, 'a.tgz'), '-C', part], { stdio: 'ignore', timeout: 60000 });
+      renameSync(pathJoin(part, 'cloudflared'), bin);
+    } else {
+      writeFileSync(part, buf);
+      renameSync(part, bin);
+    }
+    if (process.platform !== 'win32') chmodSync(bin, 0o755);
+    writeFileSync(stamp, `${sha256Of(readFileSync(bin))}\n`);
+  } catch (e) {
+    log('cloudflared install failed:', e && e.message);
+    throw new Error(TUNNEL_WORDS.download);
+  } finally {
+    try { rmSync(part, { recursive: true, force: true }); } catch { /* gone */ }
+  }
+  return bin;
+}
+
+function readPids() { try { return JSON.parse(readFileSync(pidFile(), 'utf8')).filter(Number.isInteger); } catch { return []; } }
+function writePids(pids) {
+  try { mkdirSync(engageHome(), { recursive: true }); writeFileSync(pidFile(), JSON.stringify(pids)); } catch { /* best effort */ }
+}
+/** A cloudflared a crashed plugin left running (its pid file says so, and it still is one). */
+function killOrphans() {
+  const mine = remote.tunnel ? remote.tunnel.pid : 0;
+  for (const pid of readPids()) {
+    if (pid === mine) continue;
+    try {
+      const name = execFileSync('ps', ['-p', String(pid), '-o', 'comm='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 });
+      // Linux cuts a process's name to 15 characters, so match the stem.
+      if (/cloudflare/.test(name)) process.kill(pid, 'SIGTERM');
+    } catch { /* gone, or not ours to ask about */ }
+  }
+  writePids(mine ? [mine] : []);
+}
+
+function stopTunnel() {
+  const t = remote.tunnel;
+  remote.gen += 1; // a start still in flight finds itself stale
+  remote.tunnel = null; remote.tunnelState = 'none'; remote.address = '';
+  if (t) { try { t.kill('SIGTERM'); } catch { /* already gone */ } writePids(readPids().filter((p) => p !== t.pid)); }
+}
+
+let exitHooked = false;
+function hookExit() {
+  if (exitHooked) return;
+  exitHooked = true;
+  process.on('exit', () => { if (remote.tunnel) try { remote.tunnel.kill('SIGTERM'); } catch { /* gone */ } });
+  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, () => { stopTunnel(); process.exit(0); });
+}
+
+/** Public DNS over https, never this laptop's resolver (it would remember "no such name"). */
+async function publicDnsA(host) {
+  const u = new URL(DOH_URL);
+  u.searchParams.set('name', host); u.searchParams.set('type', 'A');
+  const res = await fetch(u, { headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(5000) });
+  const j = await res.json();
+  const a = (j.Answer || []).find((x) => x.type === 1);
+  return a ? String(a.data) : '';
+}
+
+/** One request through the tunnel, to the address public DNS gave: does it reach this gateway? */
+function reachesGateway(address, ip) {
+  const u = new URL(address);
+  const probe = process.env.ENGAGE_TUNNEL_PROBE ? new URL(process.env.ENGAGE_TUNNEL_PROBE) : null;
+  const lib = probe ? (probe.protocol === 'https:' ? https : http) : https;
+  return new Promise((resolve) => {
+    const req = lib.request({
+      host: probe ? probe.hostname : u.hostname,
+      port: probe ? probe.port : 443,
+      path: '/', method: 'GET', timeout: 10000,
+      headers: { Host: u.host },
+      ...(probe ? {} : { servername: u.hostname, lookup: (h, o, cb) => (o && o.all ? cb(null, [{ address: ip, family: 4 }]) : cb(null, ip, 4)) }),
+    }, (res) => {
+      let b = ''; res.on('data', (c) => { if (b.length < 4096) b += c; });
+      res.on('end', () => resolve(res.statusCode === 403 && b.includes('Open this from the Build Room')));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => resolve(false));
+    req.end();
+  });
+}
+
+/** Start the tunnel in the background; rounds keep reporting 'starting' meanwhile. */
+function ensureTunnel() {
+  if (!remote.gateway || remote.tunnelState !== 'none' || Date.now() < remote.retryAt) return;
+  const gen = ++remote.gen;
+  remote.tunnelState = 'starting'; remote.tunnelError = '';
+  hookExit();
+  const port = Number(new URL(remote.gateway.lan).port);
+  const fail = (words) => {
+    if (gen !== remote.gen) return;
+    stopTunnel();
+    remote.tunnelError = words;
+    remote.retryAt = Date.now() + TUNNEL_RETRY_MS;
+  };
+  (async () => {
+    let bin;
+    try { bin = await ensureCloudflared(); } catch (e) { return fail(e.message); }
+    if (gen !== remote.gen) return;
+    killOrphans();
+    const child = spawn(bin, ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${port}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+    remote.tunnel = child;
+    writePids([...readPids().filter((p) => p !== child.pid), child.pid]);
+    let tail = '';
+    let address = '';
+    const gotAddress = new Promise((resolve) => {
+      const onData = (d) => {
+        tail = (tail + String(d)).slice(-4000);
+        const m = TUNNEL_ADDRESS_RE.exec(tail);
+        if (m && !address) { address = m[0]; resolve(address); }
+      };
+      child.stdout.on('data', onData);
+      child.stderr.on('data', onData);
+      child.on('exit', () => resolve(''));
+      setTimeout(() => resolve(''), TUNNEL_ADDRESS_MS);
+    });
+    child.on('error', () => {});
+    child.on('exit', () => {
+      if (gen !== remote.gen || remote.tunnel !== child) return;
+      // Before an address: a refusal or a crash. After one: it stopped.
+      fail(remote.tunnelState === 'live' ? TUNNEL_WORDS.stopped : (/status 429/.test(tail) ? TUNNEL_WORDS.refused : TUNNEL_WORDS.noAddress));
+    });
+    const got = await gotAddress;
+    if (gen !== remote.gen) return;
+    if (!got) {
+      if (/status 429/.test(tail)) return fail(TUNNEL_WORDS.refused);
+      return fail(TUNNEL_WORDS.noAddress);
+    }
+    // Ready means reachable: public DNS has the name, and a request gets through.
+    const host = new URL(got).hostname;
+    const until = Date.now() + TUNNEL_READY_MS;
+    while (Date.now() < until && gen === remote.gen) {
+      let ip = '';
+      try { ip = await publicDnsA(host); } catch { /* not yet */ }
+      if (ip && await reachesGateway(got, ip)) {
+        if (gen !== remote.gen) return;
+        remote.address = got; remote.tunnelState = 'live';
+        log('remote share live');
+        return;
+      }
+      await new Promise((r) => setTimeout(r, Math.min(2000, TUNNEL_READY_MS)));
+    }
+    fail(TUNNEL_WORDS.notReady);
+  })().catch((e) => { log('remote tunnel:', e && e.message); fail(TUNNEL_WORDS.noAddress); });
 }
 
 /** One round: report what is open, read back what the host wants. */

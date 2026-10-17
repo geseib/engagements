@@ -166,6 +166,12 @@ The remote lock:
 - [ ] **Step 2:** Run; expect failures. **Step 3:** Implement. **Step 4:** Run all three plugin suites.
 - [ ] **Step 5:** Commit: `Plugin: fetch a pinned cloudflared, check it, run one per session, live only when reachable, never leave one behind`.
 
+**Done 17 Oct, with what this container could not test** (carry into the walk, Task 9, and the release notes' known gaps):
+- **The macOS `.tgz` unpack** (`tar -xzf`, then `cloudflared` from inside) runs only on a Mac; the suite serves the Linux asset.
+- **A system proxy is not used** for the download or the DNS check (Node's `fetch` ignores `HTTPS_PROXY`). A laptop that reaches the internet only through a proxy gets "Couldn't download…".
+- **Windows:** the orphan check uses `ps`, so a cloudflared left by a crash on Windows is not cleaned up at the next start.
+- **Test-only overrides** read from the plugin's own environment, never from the project folder (F1): `ENGAGE_CLOUDFLARED`, `ENGAGE_CLOUDFLARED_BASE`, `ENGAGE_CLOUDFLARED_SHA256`, `ENGAGE_DOH_URL`, `ENGAGE_TUNNEL_PROBE`, and the `ENGAGE_TUNNEL_*_MS` timings.
+
 ### Task 6: Plugin: what Claude is told; the version
 
 **Files:** modify `engage-mcp.mjs` (the Wi-Fi share instruction at `:554`, `:2387`, `:3381`); `tests/engage-plugin-version.js`.
