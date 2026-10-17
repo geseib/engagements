@@ -407,6 +407,8 @@ export const W = Object.freeze({
   remoteMore: (n) => `and ${n} more`,
   remoteRemove: 'Remove',
   remoteRemoveSure: (name) => `Remove ${name}?`,
+  remoteSoon: 'Not here? Opening soon.',
+  remoteDidntOpen: 'The host may have stopped sharing, or the app on their laptop is restarting.',
   onlyThisLaptop: 'Only this laptop can open it.',
   anyoneOnWifi: 'Anyone on this Wi-Fi',
   /** The Stage's HOST list (option B): one grey line, never a pop-up on the wall. */

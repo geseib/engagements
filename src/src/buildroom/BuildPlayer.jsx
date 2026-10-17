@@ -4,7 +4,7 @@ import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
-import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin } from './buildPlayApi';
+import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin, mintRemoteKey } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
 import { W } from './words';
 import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine } from './buildScreens';
@@ -739,9 +739,68 @@ function isLaptop() {
  * change, out of scope), so the question is asked once the person has tried.
  * The screenshots below are the fallback, not a lesser view.
  */
-function OpenDemo({ lan }) {
-  const open = lan && lan.open ? lan.open : '';
+/**
+ * REMOTE SHARE ON A PHONE, LAPTOP OR TABLET (docs/design/build-room-remote-share
+ * R4; owner 2026-10-16). While remote is live, everyone's Open the demo goes the
+ * remote way, here or not. The shared view never carries the address or a key:
+ * this device asks for its own (origin, key, when the tunnel went live) and
+ * keeps it, because every ask ends the person's previous key. It asks again
+ * only when the tunnel was reopened (a new `remoteSince`) or this device has a
+ * new identity (a handover gives a new clientId, so a new storage key).
+ */
+function useRemoteLink(lan, who) {
+  const live = Boolean(lan && lan.remote === 'live');
+  const since = (lan && lan.remoteSince) || '';
+  const store = who && who.gameId ? `remoteLink_${who.gameId}_${who.clientId || ''}` : '';
+  const read = () => {
+    try { const v = JSON.parse(window.localStorage.getItem(store) || 'null'); return v && v.since === since ? v : null; } catch (e) { return null; }
+  };
+  const [parts, setParts] = useState(() => (live && store ? read() : null));
+  useEffect(() => {
+    if (!live || !store) { setParts(null); return undefined; }
+    const saved = read();
+    if (saved) { setParts(saved); return undefined; }
+    let gone = false;
+    setParts(null);
+    mintRemoteKey(who).then((r) => {
+      if (gone || !r.ok || !r.data || !r.data.origin || !r.data.key) return;
+      const v = { origin: r.data.origin, key: r.data.key, since: r.data.since || since };
+      try { window.localStorage.setItem(store, JSON.stringify(v)); } catch (e) { /* private window: keep it for this page */ }
+      setParts(v);
+    });
+    return () => { gone = true; };
+  }, [live, since, store]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!live || !parts) return '';
+  try {
+    const u = new URL((lan && lan.remotePath) || '/', parts.origin);
+    u.searchParams.set('k', parts.key);
+    return u.toString();
+  } catch (e) { return ''; }
+}
+
+function OpenDemo({ lan, who = null }) {
+  const remoteLink = useRemoteLink(lan, who);
+  const remote = (lan && lan.remote) || '';
+  const open = remote === 'live' ? remoteLink : (lan && lan.open ? lan.open : '');
   const [tried, setTried] = useState('');
+  if (remote === 'live' && open) {
+    if (tried === open) {
+      return (
+        <section className="bpl-open bpl-open--warn" aria-label={W.demoDidntOpen}>
+          <h2 className="bpl-open-h">{W.demoDidntOpen}</h2>
+          <p className="plr-help">{W.remoteDidntOpen}</p>
+          <a className="bpl-open-again" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab">{W.tryAgain} ↗</a>
+        </section>
+      );
+    }
+    return (
+      <section className="bpl-open" aria-label={W.openDemo}>
+        <a className="bpl-send bpl-open-btn" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
+      </section>
+    );
+  }
+  // Remote live but this device's own link not here yet: no dead button.
+  if (remote === 'live') return null;
   if (open) {
     if (tried === open) {
       return (
@@ -756,7 +815,7 @@ function OpenDemo({ lan }) {
     return (
       <section className="bpl-open" aria-label={W.openDemo}>
         <a className="bpl-send bpl-open-btn" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
-        <p className="plr-help bpl-open-note">{W.sameWifiOnly}</p>
+        <p className="plr-help bpl-open-note">{remote === 'starting' ? `${W.sameWifiOnly} ${W.remoteSoon}` : W.sameWifiOnly}</p>
       </section>
     );
   }
@@ -1172,7 +1231,7 @@ export default function BuildPlayer({
      picture in History), and the way to send an idea. */
   /* OPEN THE DEMO, at the top of Now (Share demo D5): the way in while the
      host shares it, else one honest line above the screenshots. */
-  const openBuild = !isEnded ? <OpenDemo lan={view.lan} /> : null;
+  const openBuild = !isEnded ? <OpenDemo lan={view.lan} who={api} /> : null;
   const run = view.run && view.run.status === 'running' ? view.run : null;
   const nowExtras = isEnded ? null : (
     <>

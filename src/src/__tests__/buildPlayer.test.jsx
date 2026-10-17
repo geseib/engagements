@@ -497,6 +497,68 @@ describe('send an idea', () => {
   });
 });
 
+describe('Open the demo, remote share (docs/design/build-room-remote-share R4; owner 2026-10-16)', () => {
+  const ORIGIN = 'https://fake-tunnel-name.trycloudflare.com';
+  const SINCE = '2026-10-16T12:00:00.000Z';
+  const LIVE = { remote: 'live', remoteSince: SINCE, remotePath: '/board?x=1' };
+  const STORE = `remoteLink_${GAME}_${CID}`;
+  const minted = (key = 'KEYremote1234567890abc', since = SINCE) => (url) => (
+    url.endsWith('/build-play/remote-key') ? { status: 200, body: { origin: ORIGIN, key, since } } : { status: 200, body: { ok: true, mine: mineEmpty() } }
+  );
+  const mints = () => calls().filter((c) => c.url.endsWith('/build-play/remote-key'));
+  beforeEach(() => { window.localStorage.clear(); });
+
+  test('live: this phone asks once for its own link; the same button, no "Same Wi-Fi only."', async () => {
+    serve(baseView({ lan: LIVE }), minted());
+    await mount();
+    const link = await screen.findByRole('link', { name: 'Open the demo ↗' });
+    expect(link).toHaveAttribute('href', `${ORIGIN}/board?x=1&k=KEYremote1234567890abc`);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(screen.queryByText('Same Wi-Fi only.')).toBeNull();
+    expect(mints()).toHaveLength(1);
+    expect(mints()[0].body).toEqual({ playerName: ME, clientId: CID });
+  });
+  test('a link this device already holds for this tunnel is used as is: no new key (each one ends the last)', async () => {
+    window.localStorage.setItem(STORE, JSON.stringify({ origin: ORIGIN, key: 'SAVEDkey', since: SINCE }));
+    serve(baseView({ lan: LIVE }), minted());
+    await mount();
+    const link = await screen.findByRole('link', { name: 'Open the demo ↗' });
+    expect(link).toHaveAttribute('href', `${ORIGIN}/board?x=1&k=SAVEDkey`);
+    expect(mints()).toHaveLength(0);
+  });
+  test('a reopened tunnel (a new remoteSince): the saved link is stale, so a new one is asked for', async () => {
+    window.localStorage.setItem(STORE, JSON.stringify({ origin: 'https://old-name.trycloudflare.com', key: 'OLD', since: '2026-10-16T09:00:00.000Z' }));
+    serve(baseView({ lan: LIVE }), minted('NEWkey'));
+    await mount();
+    const link = await screen.findByRole('link', { name: 'Open the demo ↗' });
+    expect(link).toHaveAttribute('href', `${ORIGIN}/board?x=1&k=NEWkey`);
+    expect(mints()).toHaveLength(1);
+  });
+  test('until its own link comes, no button at all (never a dead one)', async () => {
+    serve(baseView({ lan: LIVE }), (url) => (url.endsWith('/build-play/remote-key') ? { status: 409, body: { error: 'not live', code: 'not-live' } } : { status: 200, body: {} }));
+    await mount();
+    await screen.findByRole('button', { name: /Send an idea to the host/ });
+    await waitFor(() => expect(mints()).toHaveLength(1));
+    expect(screen.queryByRole('link', { name: 'Open the demo ↗' })).toBeNull();
+  });
+  test("(d) after pressing it: Didn't open? with the remote reason, never the Wi-Fi advice", async () => {
+    serve(baseView({ lan: LIVE }), minted());
+    await mount();
+    fireEvent.click(await screen.findByRole('link', { name: 'Open the demo ↗' }));
+    expect(await screen.findByText("Didn't open?")).toBeInTheDocument();
+    expect(screen.getByText('The host may have stopped sharing, or the app on their laptop is restarting.')).toBeInTheDocument();
+    expect(screen.queryByText('Same Wi-Fi; no mobile data, no VPN.')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Try again ↗' })).toHaveAttribute('href', `${ORIGIN}/board?x=1&k=KEYremote1234567890abc`);
+  });
+  test('(c) starting: today\'s Wi-Fi button, and one line for people who are not here', async () => {
+    serve(baseView({ lan: { open: 'http://192.168.1.20:4900/?k=KEY', remote: 'starting' } }), minted());
+    await mount();
+    expect(await screen.findByRole('link', { name: 'Open the demo ↗' })).toHaveAttribute('href', 'http://192.168.1.20:4900/?k=KEY');
+    expect(screen.getByText('Same Wi-Fi only. Not here? Opening soon.')).toBeInTheDocument();
+    expect(mints()).toHaveLength(0);
+  });
+});
+
 describe('Open the demo (Share demo, docs/design/build-room-share-demo D5)', () => {
   const OPEN = 'http://192.168.1.20:4900/?k=KEY';
   const SHOWING = { logId: 'L9', kind: 'showing', text: 'Header B is live', createdAt: '2026-10-04T12:00:00.000Z', link: 'http://localhost:5173/' };
