@@ -12,6 +12,8 @@
  *
  * Crew mode (docs/design/build-room-crew/FLOWS.md; `routePlayCrew`):
  *
+ *   POST games/{id}/build-play/remote-key        {playerName, clientId}            → {origin, key, since}
+ *        (remote share: this person's own way in; each call ends their previous key)
  *   POST games/{id}/build-play/crew/builder-key  {playerName, clientId}            → {key, gameId}
  *   POST games/{id}/build-play/crew/claim        {playerName, clientId, taskId}
  *   POST games/{id}/build-play/crew/react        {playerName, clientId, shareId, kind, text?}
@@ -112,6 +114,11 @@ export function sendPreviewFeedback({ apiBase, gameId, playerName, clientId }, a
  * own Claude Code connects with. Shown once: the server keeps only its hash,
  * and a second call retires the first key.
  */
+/** Remote share: this phone's own link parts. 409 `code: 'not-live'` when remote is not live. */
+export function mintRemoteKey({ apiBase, gameId, playerName, clientId }) {
+  return post(apiBase, gameId, 'remote-key', { playerName, clientId }, {});
+}
+
 export function mintBuilderKey({ apiBase, gameId, playerName, clientId }) {
   return post(apiBase, gameId, 'crew/builder-key', { playerName, clientId }, {});
 }

@@ -13,7 +13,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../components/Icon';
 import { copyText } from '../utils/copyText';
-import { wifiState, demoRunnable } from './wifiShare';
+import { wifiState, demoRunnable, remoteState, remotePeople } from './wifiShare';
 import { useKeepOnScreen } from './keepOnScreen';
 import { W } from './words';
 
@@ -99,6 +99,7 @@ function Address({ link, note, copy = true }) {
  */
 export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, onShowWall, offer = false }) {
   const s = wifiState(lan, now);
+  const rs = remoteState(lan);
   const map = (lan && lan.map) || [];
   const panelRef = useRef(null);
   useKeepOnScreen(panelRef, true, s.state);
@@ -108,7 +109,7 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
     onClose();
   };
   const live = s.state === 'on' || s.state === 'quiet';
-  const head = live ? W.shareLiveHead : s.state === 'off' ? W.shareNudgeHead : W.shareDemo;
+  const head = live ? (rs === 'live' ? W.remoteLiveHead : W.shareLiveHead) : s.state === 'off' ? W.shareNudgeHead : W.shareDemo;
   let body;
   let foot;
   if (s.state === 'off') {
@@ -142,6 +143,7 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
       <>
         <QuietWarning />
         <Address link={link} note={W.wifiFailsForRoom} copy={false} />
+        <RemoteSwitch lan={lan} busy={busy} run={run} api={api} />
       </>
     );
     foot = (
@@ -154,9 +156,11 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
   } else {
     body = (
       <>
-        <p className="brm-wifipanel-stat">{W.shareOpenedOf(s.open, here)}</p>
+        <p className="brm-wifipanel-stat">{rs === 'live' ? W.remoteOpenedOf(s.open, here) : W.shareOpenedOf(s.open, here)}</p>
+        {rs === 'live' && <RemotePeople people={remotePeople(lan)} busy={busy} run={run} api={api} />}
         <Address link={link} note={W.shareWhoShort} />
-        {s.open < here && <p className="brm-wifipanel-say">{W.shareNotAll(s.open, here)}</p>}
+        {s.open < here && rs !== 'live' && <p className="brm-wifipanel-say">{W.shareNotAll(s.open, here)}</p>}
+        <RemoteSwitch lan={lan} busy={busy} run={run} api={api} />
       </>
     );
     foot = (
@@ -176,6 +180,72 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
       {live && <AppList map={map} />}
       <div className="brm-wifipanel-foot">{foot}</div>
     </div>
+  );
+}
+
+/**
+ * REMOTE SHARE, R1-R3 (owner 2026-10-16): one switch under the address, off by
+ * default every session. Its words say who it reaches; never "tunnel". Off and
+ * on again is also how a failed start is retried.
+ */
+export function RemoteSwitch({ lan, busy, run, api }) {
+  const rs = remoteState(lan);
+  const on = rs !== 'off';
+  const remote = (lan && lan.remote) || {};
+  let line;
+  let small = null;
+  if (rs === 'off') { line = W.remoteOffBody; small = W.remoteOffSmall; }
+  else if (rs === 'starting') line = W.remoteStarting;
+  else if (rs === 'live') { line = W.remoteLiveBody; small = W.remoteLiveSmall; }
+  else { line = <><b className="brm-wifipanel-bad">{W.remoteFailedHead}</b> {remote.error}</>; small = W.remoteWifiFine; }
+  return (
+    <div className={`brm-wifipanel-sw brm-wifipanel-sw--${rs}`} data-testid="brm-remote">
+      <button
+        type="button" role="switch" aria-checked={on} aria-label={W.remoteSwitch}
+        className={`brm-wifipanel-tg${on ? ' is-on' : ''}`} disabled={busy}
+        onClick={() => run(() => api.share({ remote: !on }))}
+      />
+      <div className="brm-wifipanel-swtx">
+        <b>{W.remoteSwitch}</b>
+        <span {...(rs === 'starting' ? { role: 'status' } : {})}>{line}</span>
+        {small && <small>{small}</small>}
+      </div>
+    </div>
+  );
+}
+
+const PEOPLE_SHOWN = 3;
+
+/**
+ * R2: who opened it remotely, by name, with devices. More than one device on
+ * a person is marked, with Remove: the Session panel's own remove (reversible
+ * there), which ends their key. A second press confirms.
+ */
+export function RemotePeople({ people, busy, run, api }) {
+  const [sure, setSure] = useState('');
+  if (!people || !people.length) return null;
+  const shown = people.slice(0, PEOPLE_SHOWN);
+  const more = people.length - shown.length;
+  const remove = (name) => {
+    if (sure !== name) { setSure(name); return; }
+    setSure('');
+    run(() => api.playerRemoved(name, true));
+  };
+  return (
+    <ul className="brm-wifipanel-people" aria-label="Who opened it remotely">
+      {shown.map((p) => (
+        <li key={p.name} className={p.devices > 1 ? 'is-many' : ''}>
+          <span className="brm-wifipanel-who" title={p.name}>{p.name}</span>
+          <span className="brm-wifipanel-dev">{W.remoteDevices(p.devices)}</span>
+          {p.devices > 1 && (
+            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => remove(p.name)}>
+              {sure === p.name ? W.remoteRemoveSure(p.name) : W.remoteRemove}
+            </button>
+          )}
+        </li>
+      ))}
+      {more > 0 && <li className="brm-wifipanel-more">{W.remoteMore(more)}</li>}
+    </ul>
   );
 }
 
