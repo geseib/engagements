@@ -248,7 +248,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten }) {
+async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -282,6 +282,9 @@ async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, fo
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
     ...(forAgent ? { ForAgentAs: kind4 } : {}),
     ...(forAgent && claudeNote ? { ClaudeNote: claudeNote } : {}),
+    // THE RELEASE GATE (§2c): Claude's post waits on the host's queue; the host's alone, always.
+    ...(hold ? { Released: false } : {}),
+    ...(hostOnly ? { HostOnly: true } : {}),
     CreatedAt: now,
   };
   const saved = await put(ctx, row);
@@ -414,7 +417,7 @@ async function createAsk(ctx, role, body) {
   };
   await put(ctx, ask);
   if (status === 'live') await makeCurrent(ctx, room, askId, role);
-  else await logEntry(ctx, { kind: 'ask', text: `Claude proposed a question: ${v.prompt}`, by: 'system', askId });
+  else await logEntry(ctx, { kind: 'ask', text: `Claude proposed a question: ${v.prompt}`, by: 'system', askId, hostOnly: true });
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -794,6 +797,52 @@ async function hostResponse(ctx, askId, respId, body) {
   return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host') });
 }
 
+/**
+ * THE RELEASE GATE (§2c): whether Claude's posts and screenshots wait for the
+ * host now. Read off BUILD#STATE (Settings is plain), so a post needs no room load.
+ */
+async function holdsPosts(ctx) {
+  const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: '#s', ExpressionAttributeNames: { '#s': 'Settings' } }));
+  return S.settingsOf(got && got.Item).reviewAgentPosts;
+}
+
+/**
+ * POST build/posts {action: 'release'|'keep', ids: [logId, …]} (§2c), the
+ * host's only. Every id must be waiting on the queue, or nothing changes.
+ * Release stamps ReleasedAt (the room's History keeps the entry at the time it
+ * happened: its key is untouched); a screenshot's entry releases its picture.
+ * Keep stamps KeptAt: the host's for good, never released after.
+ */
+const POSTS_PER_CALL = 50;
+async function postsAction(ctx, body) {
+  const b = body || {};
+  const action = String(b.action || '');
+  if (!['release', 'keep'].includes(action)) return fail(400, 'action must be release or keep');
+  const ids = Array.isArray(b.ids) ? [...new Set(b.ids.map((x) => String(x || '')).filter(Boolean))] : [];
+  if (!ids.length) return fail(400, 'Say which posts: ids');
+  if (ids.length > POSTS_PER_CALL) return fail(400, `${POSTS_PER_CALL} at a time at most`);
+  const room = await loadRoom(ctx);
+  const entries = ids.map((id) => findLog(room, id));
+  if (entries.some((e) => !e || !S.isHeld(e))) return fail(404, 'That is not a post waiting for you');
+  if (entries.some((e) => !S.awaitingRelease(e))) return fail(409, 'You kept that one to yourself, so it stays private');
+  const now = new Date().toISOString();
+  for (const e of entries) {
+    if (action === 'release') {
+      const { Released, ...rest } = e;
+      await put(ctx, { ...rest, Released: true, ReleasedAt: now });
+      const pic = e.Kind === 'image' ? room.images.find((i) => i.ImageId === e.Detail && S.isHeld(i)) : null;
+      if (pic) { const { Released: r2, ...p2 } = pic; await put(ctx, { ...p2, Released: true, ReleasedAt: now }); }
+    } else {
+      await put(ctx, { ...e, KeptAt: now });
+      const pic = e.Kind === 'image' ? room.images.find((i) => i.ImageId === e.Detail && S.isHeld(i)) : null;
+      if (pic) await put(ctx, { ...pic, KeptAt: now });
+    }
+  }
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, action === 'release' ? { released: ids } : { kept: ids });
+}
+
 async function postLog(ctx, role, body) {
   const b = body || {};
   const kind = String(b.kind || (role === 'agent' ? 'progress' : 'verbal')).toLowerCase();
@@ -839,6 +888,8 @@ async function postLog(ctx, role, body) {
     // What the room said can go straight to Claude; a host note never does.
     forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
     as: b.as,
+    // Claude's post waits for the host when the room says so (§2c).
+    hold: role === 'agent' && await holdsPosts(ctx),
   });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -1277,6 +1328,7 @@ async function postSettings(ctx, body) {
   const settings = { ...S.settingsOf(room.state) };
   if (b.reviewAgentAsks !== undefined) settings.reviewAgentAsks = Boolean(b.reviewAgentAsks);
   if (b.listNames !== undefined) settings.listNames = Boolean(b.listNames);
+  if (b.reviewAgentPosts !== undefined) settings.reviewAgentPosts = Boolean(b.reviewAgentPosts);
   const set = { Settings: settings };
   if (b.agentName !== undefined) set.AgentName = S.cleanText(b.agentName, S.LIMITS.agentName) || 'Claude Code';
   const st = await touchState(ctx, { set });
@@ -1506,9 +1558,13 @@ async function postImage(ctx, role, body) {
     Metadata: { sealed: ctx.orgId ? '1' : '0' },
   }));
   const caption = S.cleanText(b.caption, S.LIMITS.logText);
+  // THE RELEASE GATE (§2c): Claude's screenshot waits for the host. A mockup (on an ask)
+  // follows its ask instead, and a builder's picture follows the crew board.
+  const hold = role === 'agent' && !askId && S.settingsOf(room.state).reviewAgentPosts;
   await put(ctx, {
     SK: sk, ImageId: imageId, ContentType: type, Bytes: buf.length, Caption: caption, Kind: kind,
     ...(askId ? { AskId: askId } : {}), ...(label ? { Label: label } : {}),
+    ...(hold ? { Released: false } : {}),
     By: role === 'builder' ? 'builder' : role === 'agent' ? 'agent' : 'host', CreatedAt: now,
     ...(role === 'builder' ? { Name: ctx.builder } : {}),
   });
@@ -1519,10 +1575,11 @@ async function postImage(ctx, role, body) {
     detail: imageId,
     by: role === 'builder' ? 'builder' : role === 'agent' ? 'agent' : 'host',
     askId,
+    hold,
   });
   const st = await touchState(ctx);
   await announce(ctx, st.Rev);
-  return reply(201, { image: { imageId, contentType: type, bytes: buf.length, kind, askId, label, caption } });
+  return reply(201, { image: { imageId, contentType: type, bytes: buf.length, kind, askId, label, caption, ...(hold ? { held: true } : {}) } });
 }
 
 /** One image's bytes, as the browser wants them. */
@@ -1969,9 +2026,13 @@ async function builderState(ctx) {
   const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
   const me = { playerName: ctx.builder };
   const pub = S.publicView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, me, now: new Date().toISOString() });
+  // The builder's Claude reads its own posts while they wait for the host (§2c); nobody else's.
+  const own = room.logs.filter((l) => S.isHeld(l) && l.By === 'builder' && l.Name === ctx.builder && !l.ForBuilder).map(S.logView)
+    .map(({ forAgent, deliveredAt, as, held, from, ...rest }) => rest);
+  const log = own.length ? [...pub.log, ...own].sort((x, y) => String(x.createdAt || '').localeCompare(String(y.createdAt || ''))) : pub.log;
   return {
     gameId: pub.gameId, title: pub.title, goal: pub.goal, state: pub.state, playerCount: pub.playerCount,
-    log: pub.log, outcome: pub.outcome,
+    log, outcome: pub.outcome,
     points: S.pointsClaudeView(room, { role: 'builder', name: ctx.builder }),
     you: { role: 'builder', name: ctx.builder },
     crew: C.crewView(room, 'builder', me),
@@ -2000,7 +2061,7 @@ async function routeBuilder(ctx, method, parts, body, query) {
     if (!['progress', 'milestone', 'showing', 'checkpoint'].includes(kind)) return fail(400, 'kind must be progress, milestone, showing or checkpoint');
     const text = S.cleanText((body || {}).text, S.LIMITS.logText);
     if (!text) return fail(400, 'Write the update');
-    const row = await logEntry(ctx, { kind, text, detail: S.cleanText(body.detail, S.LIMITS.logDetail), link: S.safeUrl(body.link), by: 'builder', name: ctx.builder });
+    const row = await logEntry(ctx, { kind, text, detail: S.cleanText(body.detail, S.LIMITS.logDetail), link: S.safeUrl(body.link), by: 'builder', name: ctx.builder, hold: await holdsPosts(ctx) });
     if (kind === 'checkpoint') {
       const room = await loadRoom(ctx);
       const bl = findBuilder(room, ctx.builder);
@@ -2240,7 +2301,9 @@ async function shareReport(ctx, body) {
   // wanted, so the answer is unchanged when it is off. The plugin applies that
   // address's Wi-Fi scopes to it: remote reaches no more than Wi-Fi.
   const remoteWanted = Boolean(before.Wanted && before.RemoteWanted) && !ended;
-  const remote = remoteWanted ? { remoteWanted, remoteTarget: LAN.remoteTarget(room), remoteKeys: await liveRemoteKeys(ctx) } : {};
+  // The target from the room's rows (§2c), as the phone's path is: a demo Claude
+  // posted that is still held for the host is not what remote people are sent to.
+  const remote = remoteWanted ? { remoteWanted, remoteTarget: LAN.remoteTarget(S.roomRowsForRoom(room)), remoteKeys: await liveRemoteKeys(ctx) } : {};
   return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes, roles, ...remote });
 }
 
@@ -2936,6 +2999,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);
   if (a === 'images' && b) return hostOnly() || imageAction(ctx, b, body);
+  if (a === 'posts' && !b) return hostOnly() || postsAction(ctx, body);
   if (a === 'settings' && !b) return hostOnly() || postSettings(ctx, body);
   if (a === 'seen' && !b) return hostOnly() || postSeen(ctx, body);
   if (a === 'keys' && !b) return hostOnly() || mintAgentKey(ctx, event, body);
@@ -3004,7 +3068,14 @@ async function routePlay(ctx, method, parts, body, query) {
   const me = await playerFrom(ctx, input, why);
   if (!me) return fail(403, 'Join the session first', why.code ? { code: why.code } : undefined);
 
-  if (method === 'GET' && a === 'images' && parts[1]) return getImage(ctx, parts[1]);
+  if (method === 'GET' && a === 'images' && parts[1]) {
+    // Only a picture the room may see (§2c): never a held screenshot, never a mockup for an ask still proposed.
+    // A builder's picture follows the crew board, as before.
+    const room = await loadRoom(ctx);
+    const pic = room.images.find((i) => i.ImageId === parts[1]);
+    if (pic && pic.By !== 'builder' && !S.roomRowsForRoom(room).images.some((i) => i.ImageId === parts[1])) return fail(404, 'No such image');
+    return getImage(ctx, parts[1]);
+  }
   if (a === 'crew' && method === 'POST') return routePlayCrew(ctx, me, parts, input);
   if (method === 'GET' && a === 'state') {
     const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
@@ -3015,6 +3086,9 @@ async function routePlay(ctx, method, parts, body, query) {
     return reply(200, view);
   }
   if (method !== 'POST') return fail(404, 'Not found');
+  // A phone's doors, and no others (a phone never releases a post, §2c). remote-key:
+  // this person's own way in to the remote share (owner 2026-10-16).
+  if (!['idea', 'respond', 'spin', 'vote', 'remote-key'].includes(a)) return fail(404, 'Not found');
   if ((await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
   if (a === 'remote-key' && !parts[1]) return playRemoteKey(ctx, me, input);
   const now = new Date().toISOString();
@@ -3028,7 +3102,8 @@ async function routePlay(ctx, method, parts, body, query) {
     // all carry it with no new kind of row.
     let aboutLogId = '';
     if (input.aboutLogId) {
-      const about = room.logs.find((l) => l.LogId === String(input.aboutLogId) && l.Kind === 'showing');
+      // Only a preview the room was shown: a held one is the host's still (§2c).
+      const about = room.logs.find((l) => l.LogId === String(input.aboutLogId) && l.Kind === 'showing' && !S.isHeld(l));
       if (!about) return fail(409, 'That preview is no longer on screen');
       const verdict = { good: 'Looks good', change: 'Needs a change' }[input.verdict];
       if (!verdict) return fail(400, 'Say whether it looks good or needs a change');

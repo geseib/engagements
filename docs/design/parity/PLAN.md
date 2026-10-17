@@ -1,7 +1,20 @@
 # Parity: bringing Trivia, Poll, Survey and Build Room up to the host standards
 
 Written 16 Oct 2026 on `working/parity-plan`, branched from `working/build-room-host-redesign`
-at `3f07c0e4`. **A plan, not code.** Nothing here is built.
+at `3f07c0e4`.
+
+**Status, 17 Oct 2026.** On test at `50c2fe45` (dev `448d260a`), with release notes:
+H1–H5 (History marks), the Share demo fixes (host link, plugin 1.19.0 scopes, 1.20.0
+labels and per-session ports: §2b S1–S3), B1–B7 (the room's window and its server), D1–D2
+(the still dock on C&A's shared parts). The owner ruled on every open question through Q19.
+**Waiting on the owner:** the console mockup and its five questions
+(`docs/design/build-room-console/`, gates B8); the remote share design and its twelve
+questions (`docs/design/build-room-remote-share/DESIGN.md`); three small rulings (the label on
+the share's locked page, a cloned repo's `share.json`, a player's own "why" on the wall).
+**Ready without a ruling:** the two phone leaks the wall work found (an unseen ask named in
+the timeline, mockups of draft asks), paging long asks (B9m), the laptop's codes card
+following the server, D3 on the signed-in page, and the demo QR and Copy carrying a join
+link instead of the share key. **Not started:** B8–B10, Trivia, Poll, Survey (§4).
 
 Inputs: `docs/design/host-standards/README.md` (the standards, and the table this plan
 corrected), `docs/design/two-surface/PLAN.md`, `docs/superpowers/specs/2026-10-15-host-console-design.md`.
@@ -285,6 +298,7 @@ place changes, the table says where it goes; nothing is dropped to fit the share
 | Settings: codes, List names on the room meter, Claude, Crew, Back to the opening, Wrap up, Report, End session | `BuildSessionPanel.jsx:419-489` | unchanged, plus Screens first | the same panel from the Session rail section |
 | History (filters, the ask window, the mockup viewer), the Build screen (latest shot, open the build) | Build / History screens | unchanged | on the wall (read-only); the laptop opens the same views privately from the rail |
 | The report, wrap-up, end | Session panel, wrapped bar | unchanged | Session section; the footer's ended moment |
+| Releasing Claude's posts (§2c): Release to the room, Keep to myself, Release all, the "Check Claude's posts" switch | Host screen's queue (`BuildHeldPosts`), Session › Settings › Claude | unchanged | Rail section "Waiting for you"; the same Session panel |
 
 **How it is held.** A list, `buildroom/capabilities.js`, names every row above with an id.
 Each entry point carries `data-capability="<id>"`. A test renders the page on one screen
@@ -546,6 +560,54 @@ directory listing of the mockups with a `.js` file "that supposedly linked all 4
 | S1 | **Built (1.19.0).** **Scope each gateway to the paths Claude linked**: a request outside the demo's and the options' own paths gets 404, and a directory listing is never forwarded | the plugin (`engage-mcp.mjs` gateway); a plugin release (`LATEST_PLUGIN`) | about a day, plus every host updating the plugin (the update dot already asks them to) |
 | S2 | **Built (1.19.0).** **Tell Claude** (the MCP server's instructions) to serve the demo and each mockup from their own folder, never a project root, and never to link a helper page | `engage-mcp.mjs` instructions | an hour; relies on Claude following it, so S1 is the guarantee |
 | S3 | **Built (1.20.0).** (a) The plugin reads `.engage/share.json` each round (loopback http only, 4 KB at most, a broken file declares nothing) and reports it; Engage keeps it on the Wi-Fi row and it wins: Open the build, the QR and the phones go to its `demo` page, the declared servers are shared first and their folders are in scope. (b) `post_update` takes `role: demo or mockup`; the demo is the declared one, else the newest link marked demo, else the newest link. Claude is told to set the role and write the file. (c) The share panel names each server Demo, Mockups, "Mockups · Ask 3" or App N, as "localhost:5173 → :4900"; the gateway's own pages say "Build Room 4821 · label or title". The title comes from a state read Claude made, never from the share loop, because an agent's state read takes Claude's inbox. (d) Ports from `4900 + (code mod 100) × 10`, ten per session (`ENGAGE_LAN_PORT` still overrides, twenty from it); `X-Engage-Session` on every gateway answer; `.engage/share-status.json` lists each server local → Wi-Fi → role, with no key. A 1.19.0 plugin keeps working: it declares nothing and ignores the new `roles` in the answer. **Asked for:** mark every shared server's role, and every session (owner, 17 Oct: "push these as a env var or something else, so that the mockup serving vs the demo share are clearly marked. and if im running multiple sessions from the same server, it is clearly labeled to find"). (a) A project file `.engage/share.json` (`demo`, `mockups`, `label`), editable by the host or Claude at any time, reported by the plugin and winning over any guess: Open the build and the QR always go to `demo`, mockup servers are shared only for option previews. Not an env var: it is fixed at Claude Code's start and the same for every server. (b) Claude's show tool takes `role: demo or mockup` and Claude writes the file when it starts servers. (c) Labels: the share panel names each server ("Demo · localhost:5173 → :4900", "Mockups (Ask 3)") instead of App 1/App 2; the gateway's own pages name the session ("Build Room 1215 · title"). (d) Several sessions on one laptop: a port block per game code (`ENGAGE_LAN_PORT` still overrides; today every session starts at 4900 and their ports interleave, likely why 1215 shared on :4904), `X-Engage-Session` on every gateway response, and `.engage/share-status.json` listing local → Wi-Fi → role per project | plugin (`engage-mcp.mjs`), `build-lan.js`, `BuildWifiShare.jsx` | about a day; plugin 1.20.0 |
+
+## 2c. Release gate (owner, 17 Oct)
+
+Owner, 17 Oct: *"Have thing get to host queue to release to room."* Nothing Claude makes
+for the room reaches the room (the phones, the room's window, the laptop's projected
+Stage, Build and History) until the host releases it from the host's queue. Owner's
+ruling the same day: Claude's live status (the doing line, its helper and steps,
+connected, listening) stays live and is never held.
+
+**Built.**
+- **The setting.** `Settings.reviewAgentPosts` on BUILD#STATE, on by default (like
+  `reviewAgentAsks`), set by the host's `POST build/settings`. Off: posts go straight
+  through as before; what is already held stays held until released.
+- **What is held.** Claude's posts (`progress`, `milestone`, `showing`, `checkpoint`,
+  `answer`, from the host's Claude or a builder's) and the host's Claude's screenshots
+  are written with `Released: false` on the log row (and the image row). No flag means
+  released, so every row written before the gate stays visible. A builder's picture
+  follows the crew board, as before.
+- **Where held rows go.** The host's read and Claude's (`roomHold: 'held'|'kept'` on
+  the entry and the image). Never `publicView`, `roomHistory`, `wallView`, the wall's
+  image route or the phone's image route, and they never drive the room's Open the
+  build (`lanPublicView` reads the room's rows). The host's share link and the Wi-Fi
+  targets may still use them. One filter does it: `roomRowsForRoom`
+  (`build-store.js`), which also drops a picture or entry about an ask the room has not
+  seen, and every "Claude proposed a question" entry (`HostOnly` from now; an older row
+  by its words). A phone cannot send preview feedback on a held showing.
+- **Mockups** (an image on an ask) are never held: they appear on phones and the wall
+  exactly when their ask opens, whatever the setting.
+- **The API.** `POST build/posts {action: 'release'|'keep', ids: [logId…]}`, the host's
+  only (Claude and a builder 403, a phone 404), 50 at a time, all or nothing: every id
+  must be waiting (404 otherwise; 409 for one kept). Release stamps `ReleasedAt` and a
+  screenshot's entry releases its picture; the entry keeps its key, so History shows it
+  at the time it happened. Keep stamps `KeptAt`: private for good.
+- **The host's screen.** Waiting for you lists each held post ("Claude wants to show the
+  room": its words, picture and link) with Release to the room and Keep to myself, and
+  Release all when two or more wait (`BuildHeldPosts.jsx`). The Host alert counts them on
+  one grey line of fixed words ("Claude wants to show 2 things", seen ids `post:<logId>`).
+  Session › Settings › Claude: "Check Claude's posts before the room sees them". The
+  host's Timeline marks "Not shown to the room" / "Kept to yourself". The laptop's
+  projected Stage, Build and History draw `roomSees(room)`, the room's copy. Capability
+  id `release-posts`.
+- **The codes card follows the server.** When the server clears `wall.codes` (an ask
+  opened), the laptop's own codes card comes down too; a read from before the server
+  heard the laptop put them up does not count.
+- **Claude** (plugin **1.21.0**) is told its posts and screenshots reach the room once
+  the host releases them, and a held post's reply says it went to the host's queue.
+
+Tests: `tests/build-release.js` (server), `__tests__/buildRelease.test.jsx` (host screen).
 
 ## 3. Build Room's other standards (B10, after two screens)
 

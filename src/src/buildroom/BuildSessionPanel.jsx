@@ -524,6 +524,18 @@ export default function BuildSessionPanel({
                 )}
                 {!ended && slots.autoSwitch}
                 {!ended && <p className="brm-hint brm-sp-note">{W.autoNote}</p>}
+                {/* THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts and screenshots wait for the host. */}
+                {!ended && (
+                  <div data-capability="release-posts">
+                    <Switch
+                      label={W.postsSwitch}
+                      checked={room.settings ? room.settings.reviewAgentPosts !== false : true}
+                      disabled={busy}
+                      onChange={(on) => run(() => api.saveSettings({ reviewAgentPosts: on }))}
+                      note={W.postsNote}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="brm-sp-grp" data-group="crew" data-capability="crew">

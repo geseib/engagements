@@ -127,7 +127,7 @@ beforeEach(() => {
 
 test('the list is the §2.6b table: unique ids, each with a name and where it lives on one screen', () => {
   expect(new Set(CAPABILITY_IDS).size).toBe(CAPABILITY_IDS.length);
-  expect(CAPABILITY_IDS.length).toBe(20);
+  expect(CAPABILITY_IDS.length).toBe(21);
   CAPABILITIES.forEach((c) => {
     expect(c.id).toMatch(/^[a-z][a-z-]+$/);
     expect(c.name).toBeTruthy();

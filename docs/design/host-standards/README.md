@@ -163,16 +163,16 @@ bundle with long content (six entries of 130–320 characters) at **1280×720, 1
 
 | Standard | C&A | Trivia | Poll | Survey | Build Room |
 |---|---|---|---|---|---|
-| Two screens (`TWO_SURFACE_TYPES`) | yes | no | no | no | no: four screens on one signed-in page; the room's screen is laptop state |
-| Strip + one main button (`roundStep`) | yes | yes | yes | **no strip**; one primary per phase, but Closed and Ended carry two secondaries; words inline | no strip (no rounds); one function (`stageModel`) decides the Stage's moves |
-| Press twice, in place | yes, except Skip | partly: Skip, Ask now, next question use dialogs | partly, as Trivia | no: Close the survey is a dialog (irreversible, allowed by §3) | no: 5 `window.confirm`, 7 modal confirms |
-| Settings scope labels | yes | yes | yes | shown, but says "From the next round" with no rounds | none |
-| Fit order + measured paging | yes | stage only | stage only; **open answers cut at 6 silently** | walk-through fitted and paged | Stage screen only; Build and History unfitted, unpaged |
+| Two screens (`TWO_SURFACE_TYPES`) | yes | no | no | no | **partly (17 Oct):** the room's window is built (Session › Settings › Screens; public, no names, follows 2/3/4 from the server); the laptop console waits for the mockup review (B8) |
+| Strip + one main button (`roundStep`) | yes | yes | yes | **no strip**; one primary per phase, but Closed and Ended carry two secondaries; words inline | no strip yet (Q17: the ask path); **one function (`buildControls`) feeds C&A's shared action bar** on the Stage |
+| Press twice, in place | yes, except Skip | partly: Skip, Ask now, next question use dialogs | partly, as Trivia | no: Close the survey is a dialog (irreversible, allowed by §3) | **partly:** the Stage's early moves arm in place (shared bar); `window.confirm` and modal confirms elsewhere remain (B10) |
+| Settings scope labels | yes | yes | yes | shown, but says "From the next round" with no rounds | the new Screens group says Applies now; the rest none (B10) |
+| Fit order + measured paging | yes | stage only | stage only; **open answers cut at 6 silently** | walk-through fitted and paged | Stage on the fitter; the room's window measured (144 renders, nothing scrolls); long six-option asks still cut at 1280×720 (B9m) |
 | Late items kept | yes | **kept on the server, unscored**; no rule for what they count | **kept on the server, unvalidated**; no rule | no (refused by design) | no: answers and votes refused; ideas always kept |
 | Per-session id secret | Ideas, late refs; answer order is a plain hash (Q9) | late refs | late refs | n/a | not used: ids are random |
 | Dusk theme declared (§9) | console and wall yes; one-screen `Stage` no | no (`Stage`) | no (`Stage`) | panels yes; `Stage` no | yes (page root) |
 
-Audited 16 Oct 2026 against `3f07c0e4`. Every cell's evidence, with `file:line`, is in
+Audited 16 Oct 2026 against `3f07c0e4`; Build Room's column updated 17 Oct for what reached test at `50c2fe45`. Every cell's evidence, with `file:line`, is in
 `docs/design/parity/PLAN.md` §1; the Q numbers are that plan's open questions.
 
 ### Trivia

@@ -330,6 +330,19 @@ const rkeys = () => [...store.values()].filter((x) => String(x.SK).startsWith('B
     assert.deepStrictEqual((await checked(L.hashKey(priya.key))), { ok: false });
   });
 
+  console.log('\nthe release gate (§2c)');
+  await check('a demo Claude posted that is still held is not what remote forwards to', async () => {
+    put({ PK, SK: 'BUILD#LOG#0000000000009#held', By: 'agent', Kind: 'showing', Text: 'New demo', Link: 'http://localhost:6006/demo/', Role: 'demo', Released: false, CreatedAt: '2026-10-16T11:30:00.000Z' });
+    await host('POST', 'share', { remote: true });
+    const r = await report(remoteLive());
+    assert.strictEqual(r.body.remoteTarget, 'http://localhost:5173');
+    put({ ...row('BUILD#LOG#0000000000009#held'), Released: true });
+    const after = await report(remoteLive());
+    assert.strictEqual(after.body.remoteTarget, 'http://localhost:6006');
+    store.delete(key(PK, 'BUILD#LOG#0000000000009#held'));
+    await host('POST', 'share', { remote: false });
+  });
+
   console.log('\nwho opened it');
   await check('the plugin\'s device counts reach the host by name, most first', async () => {
     await host('POST', 'share', { remote: true });
