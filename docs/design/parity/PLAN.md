@@ -452,6 +452,35 @@ Order (owner, 17 Oct): **D1–D3 go with the one-screen/two-screen work**, not b
 lands with B6 (the screens split from their controls), D2 with it, D3 with B9m. The
 mockup (B7a) shows the dock as it will be.
 
+## 2b. Share demo shares the demo, not a folder (owner, 17 Oct, dev game 1215)
+
+Reported: Open the build and Share over Wi-Fi opened `http://192.168.0.205:4904/`, a
+directory listing of the mockups with a `.js` file "that supposedly linked all 4 mockups
+... i dont think it was meant for the participants."
+
+**What happened, from the code.**
+- The share opens **up to four** local servers: every loopback address Claude linked in
+  its posts, in a Choose ask's option previews, and in the wrap-up, newest four
+  (`lanTargets`, `lambda-functions/game/build-lan.js:58-72`). The plugin gives each a
+  gateway port from 4900 (`src/public/engage-mcp.mjs:2504, 2638-2642`). `:4904` was one
+  of them, most likely the server Claude started for the mockups.
+- The host's links went to each server's root (fixed in `cc323627`: the host now opens the
+  page Claude showed, as the phones always did). A static server's root is a listing of
+  its whole folder.
+- The gateway forwards whole ports and never looks at paths
+  (`docs/design/build-room-lan-share/LATER.md`, "the gateway forwards whole ports"). So
+  anyone on the Wi-Fi with the key can browse every file the server serves: Claude's
+  helper files, and, if Claude served a project root, project files. Nothing is "run" by
+  the share; a browser shows a `.js` file as text.
+
+**Proposed** (each needs the owner's ruling, Q18):
+
+| # | Change | Where | Cost |
+|---|---|---|---|
+| S1 | **Scope each gateway to the paths Claude linked**: a request outside the demo's and the options' own paths gets 404, and a directory listing is never forwarded | the plugin (`engage-mcp.mjs` gateway); a plugin release (`LATEST_PLUGIN`) | about a day, plus every host updating the plugin (the update dot already asks them to) |
+| S2 | **Tell Claude** (the MCP server's instructions) to serve the demo and each mockup from their own folder, never a project root, and never to link a helper page | `engage-mcp.mjs` instructions | an hour; relies on Claude following it, so S1 is the guarantee |
+| S3 | Name the demo: Claude marks one link as **the** demo (`share_demo` or a `demo: true` on a showing), so Open the build never follows a mockup link by accident | MCP tool + `latestBuild` | half a day; a plugin release |
+
 ## 3. Build Room's other standards (B10, after two screens)
 
 | Standard | Task | Notes |
@@ -530,4 +559,5 @@ recommendations, start with H1"). The Recommended column is now the decision.
 | Q15 | Names on History contributions on the laptop's own History (one screen, Host only)? | **No names on History anywhere** (it is a projected screen); the queue and the report keep names | If hosts want them: a host-only toggle |
 | Q16 | **Ruled 17 Oct: keep it on the header tab, never block the Host button.** The Host alert list: keep it on Build and History's header tab (where it opens downward and moves nothing), or drop it everywhere and rely on the Host screen's "Waiting for you"? | **Keep it on the header tab**, drop it only from the Stage dock: the header list was liked; the dock pop-up is the one that blocks the way back | If wrong: one more click to see what waits from Build or History |
 | Q17 | Build Room's loop line: show the ask path (Ask › Collect › Settle › Send to Claude) in the shared strip, or no strip? | **The ask path in the shared strip**: it is the loop a host works through on every ask, and the strip is how every other type says "where am I" | If it confuses: drop the strip for Build Room; the panels already show the path |
+| Q18 | Share demo exposure (§2b): scope the Wi-Fi gateway to the paths Claude linked (S1), tell Claude to serve only the demo's and mockups' own folders (S2), and let Claude name the one demo link (S3)? | **S1 and S2 now, S3 with the next plugin release**: S1 is the only one that guarantees a participant cannot browse a folder | If S1 is skipped: whatever folder Claude serves stays browsable by everyone in the room |
 | Q12 | Builders' names on the wall's crew board (and the wheel's "Ada spins the wheel", `buildScreens.js:452`): fine, or only with "List names" on? | **Follow "List names"**: one rule for every name on the wall | If wrong: a name on the projector the host did not choose to show |
