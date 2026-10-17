@@ -9,6 +9,7 @@ const { normalizeNames } = require('./survey-names');
 const { roomCounts, presentPlayers, presentingCount, presentingDetail, queryAll } = require('./room-counts');
 const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
+const { lateWindow } = require('./late-window');
 
 /**
  * WHOSE SESSION IS THIS? — read off the row, never off the caller.
@@ -427,6 +428,14 @@ exports.handler = async (event) => {
       ...surveyFacts,
       currentQuestion: lessonNumber, // Return numeric lesson number for frontend
       currentQuestionData: currentQuestionData,
+      /*
+        CAN A ROUND STILL TAKE COMMENTS? (review of test a76fda95, issue #34:
+        after the end the phone had no way back to them.) The same rule the
+        write gate applies (late-window.js): open while the session runs and
+        for 24 hours after it ends, unless the host pressed Close comments.
+        A yes/no only, so it is safe on the public door.
+      */
+      commentsOpen: lateWindow({ meta: gameMetadata.Item, state: stateItem }).open,
       authorsRevealed: authorsRevealed,
       stageBeat: stageBeat,
       stageFocus: stageFocus,

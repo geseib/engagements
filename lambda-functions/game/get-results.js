@@ -596,7 +596,43 @@ const handle = async (event) => {
       const readingTheResolvedRound = resolvedRound !== null
         && parseInt(resolvedRound, 10) === parseInt(String(targetQuestionId), 10);
 
+      // A ROUND ALREADY SHOWN, READ BACK AFTER THE ROOM MOVED ON (review of
+      // test a76fda95, issue #34: a phone commenting on round 1 after the
+      // end could not load its responses). Only what was stored when the
+      // host showed the round (QUESTION#nnn#RESULTS, written on the close and
+      // only then), only for a round before the one the session is on, or
+      // up to its last round once it has ENDED. A single read, returned as
+      // stored: nothing below this point runs, so nothing is scored, written
+      // or announced, and the tallies are the ones the room was shown.
       if (!readingTheResolvedRound) {
+        const askedRound = parseInt(String(targetQuestionId), 10);
+        const onRound = Number(gameState?.LessonNumber) || 0;
+        const ended = gameState?.State === 'ENDED';
+        const pastRound = askedRound >= 1 && (ended ? askedRound <= onRound : askedRound < onRound);
+        if (pastRound) {
+          const paddedPast = String(askedRound).padStart(3, '0');
+          const stored = await db.send(new GetCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedPast}#RESULTS` },
+          }));
+          const storedOrg = orgOf(gameMetadata.Item);
+          const row = stored.Item && storedOrg ? await decryptItem(storedOrg, 'results', stored.Item) : stored.Item;
+          if (row && row.VoteTallies && typeof row.VoteTallies === 'object') {
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                gameId,
+                questionId: paddedPast,
+                voteTallies: row.VoteTallies,
+                totalVotes: Number(row.TotalVotes) || 0,
+                maxScore: Number(row.MaxVotes) || 0,
+                timestamp: row.CompletedAt || null,
+                stored: true,
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+        }
         console.log(`🔒 Refusing to close round ${targetQuestionId} of ${gameId}: not the host`);
         return {
           statusCode: 403,

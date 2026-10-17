@@ -90,7 +90,7 @@ import {
 } from './config/hostControls';
 import {
   stageAnswersKey, stageAnswersReady, askFetchStillCurrent,
-  stageAnswersStatus, stageGatheringNoun, answerText,
+  stageAnswersStatus, stageGatheringNoun, answerText, answersCatchUpDelay,
 } from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
 import useSurveyProgress, {
@@ -283,6 +283,8 @@ function GameHostPage() {
      by any rows landing. */
   const [answersFailedFor, setAnswersFailedFor] = useState(null);
   const answersFetchSeqRef = useRef(0);
+  // The count-ahead-of-list refetches this ASK has spent (see the effect below).
+  const answersCatchUpRef = useRef({ key: null, tries: 0 });
   const showAnswersFor = (rows, forState) => {
     answersFetchSeqRef.current += 1;       // any ASK refetch still in flight is now stale
     setAnswers(rows);
@@ -389,6 +391,30 @@ function GameHostPage() {
    * handlers below close over it as well as the render does.
    */
   const answeredCount = answeredCountFrom(playersWhoAnswered, answers);
+
+  /*
+    THE LIST CATCHES UP WITH THE COUNT (review of test a76fda95, issue #34:
+    "3 of 4" answered while the list said "No responses yet", until a reload).
+    During ASK the list is fetched once per `playerAnswered` frame, and a fetch
+    that is refused, dropped or read before the row is visible was never tried
+    again. While the count is ahead of the rows, refetch on the schedule in
+    config/stageAnswers.js (answersCatchUpDelay). `fetchAnswersForQuestion` is declared further down;
+    the effect runs after render, by when it exists.
+  */
+  useEffect(() => {
+    const m = /^ASK#0*(\d+)$/.exec(String(gameState || ''));
+    if (!m || !gameId) return undefined;
+    const key = `${gameId}#${m[1]}`;
+    if (answersCatchUpRef.current.key !== key) answersCatchUpRef.current = { key, tries: 0 };
+    const delay = answersCatchUpDelay(answeredCount, answers.length, answersCatchUpRef.current.tries);
+    if (delay === null) return undefined;
+    const timer = setTimeout(() => {
+      answersCatchUpRef.current.tries += 1;
+      fetchAnswersForQuestion(m[1]);
+    }, delay);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, gameId, answeredCount, answers.length]);
 
   const [votes, setVotes] = useState([]);
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
@@ -6879,7 +6905,7 @@ Focus on actionable business strategy insights.`;
     // ASK THE ROOM: the question on screen (live, then its results) and how
     // many asks wait beside the read.
     roomAsk: roundAsks.shown
-      ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
+      ? { status: roundAsks.shown.status, kind: roundAsks.shown.kind || null, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
       : null,
     asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
     // The composer exists for this session: "Ask the room" replaces Request

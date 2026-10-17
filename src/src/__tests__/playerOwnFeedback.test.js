@@ -72,7 +72,7 @@ describe('the button on the ordinary results screen', () => {
 
 describe('opening the player\'s own panel', () => {
   test('captures the round number from the live gameState', () => {
-    const fn = sliceFrom(player, 'const openMyFeedback = () => {', '\n  };');
+    const fn = sliceFrom(player, 'const openMyFeedback = (pick = null) => {', '\n  };');
     expect(fn).toMatch(/RESULTS#\(\\d\+\)\$/);
     expect(fn).toMatch(/setMyFeedbackOpen\(true\)/);
   });
@@ -85,7 +85,7 @@ describe('opening the player\'s own panel', () => {
     // is `[]` outright after a reload during RESULTS — so the responses are
     // not read from it at all; they are fetched fresh (loadMyFeedbackAnswers)
     // and merged in once they arrive.
-    const fn = sliceFrom(player, 'const openMyFeedback = () => {', '\n  };');
+    const fn = sliceFrom(player, 'const openMyFeedback = (pick = null) => {', '\n  };');
     expect(fn).toMatch(/setMyFeedbackSnapshot\(\{/);
     expect(fn).toMatch(/answers:\s*\[\]/);
     expect(fn).not.toMatch(/answers:\s*Array\.isArray\(answers\)/);
@@ -119,7 +119,7 @@ describe('opening the player\'s own panel', () => {
   });
 
   test('opening sets the status to loading before the fetch resolves, so the panel never shows "Nobody responded" for a round nobody has checked yet', () => {
-    const fn = sliceFrom(player, 'const openMyFeedback = () => {', '\n  };');
+    const fn = sliceFrom(player, 'const openMyFeedback = (pick = null) => {', '\n  };');
     expect(fn).toMatch(/setMyFeedbackAnswersStatus\('loading'\)/);
   });
 
@@ -160,7 +160,7 @@ describe('while the panel is open', () => {
     // falls through to whatever gameState now calls for, rather than
     // stranding a player with nothing to lose on a dead panel.
     const def = sliceFrom(player, 'const myFeedbackShowing =', ';');
-    expect(def).toMatch(/myFeedbackOpen\s*&& \(myFeedbackStillOpen \|\| myFeedbackHasDraft \|\| myFeedbackPostedLate\)/);
+    expect(def).toMatch(/myFeedbackOpen\s*&& \(myFeedbackStillOpen \|\| myFeedbackHasDraft \|\| myFeedbackPostedLate \|\| myFeedbackAfterEnd\)/);
   });
 
   test('posts a comment through the same FeedbackRoundPanel the host-triggered mode uses, and lifts the draft flag', () => {
@@ -225,8 +225,8 @@ describe('following the room once there is nothing to lose (fix round 1, item 6)
   test('an effect auto-closes the panel once the round has moved on AND there is no draft', () => {
     const fn = sliceFrom(
       player,
-      'useEffect(() => {\n    if (myFeedbackOpen && myFeedbackNumber',
-      '}, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber]);',
+      'useEffect(() => {\n    if (myFeedbackOpen && myFeedbackNumber && !myFeedbackAfterEnd',
+      '}, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber, myFeedbackAfterEnd]);',
     );
     expect(fn).toMatch(/gameState !== `RESULTS#\$\{myFeedbackNumber\}`/);
     expect(fn).toMatch(/!myFeedbackHasDraft/);
@@ -237,7 +237,7 @@ describe('following the room once there is nothing to lose (fix round 1, item 6)
 
   test('the effect is keyed on gameState, so it actually re-runs as the room moves', () => {
     expect(player).toMatch(
-      /\}, \[gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber\]\);/,
+      /\}, \[gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber, myFeedbackAfterEnd\]\);/,
     );
   });
 });

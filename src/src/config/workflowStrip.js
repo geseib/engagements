@@ -81,7 +81,12 @@ function subFor(id, moment, ctx) {
 }
 
 /** Which "Your part now" line a moment reads. */
-function partKey(moment, step) {
+function partKey(moment, step, ctx = {}) {
+  // Picking applies to Ideas only (review of test a76fda95, issue #34 P3):
+  // a Choose or a Rate result has nothing to pick.
+  if (moment === 'ROOM_RESULTS') {
+    return ctx.roomAsk && ctx.roomAsk.kind === 'ideas' ? 'ROOM_RESULTS' : 'ROOM_RESULTS_ANSWER';
+  }
   if (moment === 'READ') {
     if (step.primary.id === 'show-read') return 'READ_WAIT';
     if (step.primary.id === 'notes-page') return 'READ_PAGE';
@@ -143,7 +148,7 @@ export function workflowStrip(step, rawCtx = {}) {
 
   // The line is written around the main button's own label, so the two can
   // never disagree (a disabled primary still names what it will do).
-  const words = RW.yourPart[partKey(moment, step)];
+  const words = RW.yourPart[partKey(moment, step, ctx)];
   let part = null;
   if (words) {
     const MARK = '\u0000';

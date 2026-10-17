@@ -127,3 +127,22 @@ describe('the Viewing bar names where the room is', () => {
     expect(liveWhere(stripFor(snap({ state: 'CREATED' })))).toBe('Setup');
   });
 });
+
+/* A QUESTION FOR THE ROOM'S RESULTS SAY WHAT THERE IS TO DO (review of test
+   a76fda95, issue #34 P3): picking applies to Ideas only.
+   rejects: "Pick the ideas to show" after a Choose or a Rate. */
+describe('Your part now after a question for the room', () => {
+  const after = (kind) => {
+    const s = stripFor(snap({ state: 'RESULTS#002', stageBeat: 'ask', roomAsk: { status: 'closed', kind, answered: 3, total: 4 } }));
+    return `${s.part.before}${s.part.action}${s.part.after}`;
+  };
+  test('Ideas: pick the ideas', () => {
+    expect(after('ideas')).toMatch(/^Pick the ideas to show\./);
+  });
+  test('Choose, Rate or a kind not known yet: nothing to pick', () => {
+    for (const kind of ['choose', 'rate', undefined]) {
+      expect(after(kind)).not.toMatch(/Pick the ideas/);
+      expect(after(kind)).toMatch(/^The room's answer is up\./);
+    }
+  });
+});

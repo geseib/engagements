@@ -58,6 +58,8 @@ const reads = [];
 class GetCommand { constructor(i) { this.input = i; this.type = 'get'; } }
 class QueryCommand { constructor(i) { this.input = i; this.type = 'query'; } }
 
+// Whether each round-answers query read strongly consistent, in call order.
+const answerQueries = [];
 const fakeDoc = {
   send: async (cmd) => {
     const inp = cmd.input || {};
@@ -76,6 +78,7 @@ const fakeDoc = {
     const pk = inp.ExpressionAttributeValues[':pk'];
     const prefix = inp.ExpressionAttributeValues[':sk'];
     reads.push(`query:${prefix}`);
+    if (/#ANSWER#$/.test(String(prefix))) answerQueries.push(Boolean(inp.ConsistentRead));
     const Items = [...store.values()].filter((i) => i.PK === pk && String(i.SK).startsWith(prefix));
     return { Items, Count: Items.length };
   },
@@ -294,6 +297,22 @@ function assertNoAnswers(r) {
       assert.deepStrictEqual(r.read.filter((sk) => sk !== 'METADATA'), [], `read ${r.read.join(', ')}`);
     });
   }
+
+  // THE HOST'S LIST READS WHAT THE FRAME ANNOUNCED (review of test a76fda95,
+  // issue #34: "3 of 4" counted while the list said "No responses yet").
+  // rejects: an eventually consistent host read, which can miss the row a
+  // playerAnswered frame announced milliseconds earlier; paying for strong
+  // reads on the phones' public route, which has no such race.
+  answerQueries.length = 0;
+  await call(HOST_ROUTE, ASK_GAME, { questionId: '001' }, hostOf(ORG));
+  await check('the host\'s door reads the round\'s answers strongly consistent', () => {
+    assert.ok(answerQueries.length > 0 && answerQueries.every(Boolean), JSON.stringify(answerQueries));
+  });
+  answerQueries.length = 0;
+  await call(PUBLIC_ROUTE, VOTE_GAME, { role: 'player', questionId: '001' });
+  await check('the public route keeps its ordinary read', () => {
+    assert.ok(answerQueries.length > 0 && answerQueries.every((c) => c === false), JSON.stringify(answerQueries));
+  });
 
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();

@@ -564,6 +564,10 @@
    own. 26px, matching `.plr-lookup`'s own top margin — the same section-break
    spacing, not the tighter 10px two stacked buttons use. */
 .plr-feedback-btn { margin-top: 26px; }
+/* The end screen's way back to a round's comments (issue #34): wraps, never scrolls sideways. */
+.plr-ended-comments { margin-top: 22px; text-align: left; }
+.plr-ended-rounds { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.plr-btn.plr-ended-round { width: auto; flex: 0 0 auto; }
 
 /* THE TOP EXIT ON THE PLAYER'S OWN FEEDBACK PANEL — a phone-sized escape hatch
    for a report that can run to the length of the whole round: the question,

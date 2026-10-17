@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef } from 'react';
+import RoomWindowLink from './RoomWindowLink';
 import CompletionFlag from './CompletionFlag';
 
 /**
@@ -191,17 +192,15 @@ export default function Dock({
         door's `presenting`). Only where the two-surface switch is on.
       */}
       {present && present.href && (
-        <a
+        <RoomWindowLink
           className="dock-more dock-present"
           href={present.href}
-          target="_blank"
-          rel="noopener noreferrer"
           aria-label={present.presenting > 0 ? 'Presenting. Open another Presentation window' : 'Open the Presentation in a new window'}
           title="Drag it to the second screen and press F"
           data-presenting={present.presenting > 0 ? '' : undefined}
         >
           <span className="dock-more-lbl">{present.presenting > 0 ? 'PRESENTING' : 'PRESENT'}</span>
-        </a>
+        </RoomWindowLink>
       )}
       {onSetup && (
         <button

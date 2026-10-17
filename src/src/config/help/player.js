@@ -218,7 +218,7 @@ const playing = {
           t: 'note',
           tone: 'info',
           title: 'A question for the room, and comments, after the moment',
-          text: 'Answer a question for the room after the host has shown its results and it is still kept: your screen says "The results are already up. Your answer is kept, but not in the count." Once a round\'s results have been shown you can keep commenting on it, marked as added later, until 24 hours after the session ends or the host closes comments. A Rate question shows what its two ends mean, for example 1 Disagree to 5 Agree.',
+          text: 'Answer a question for the room after the host has shown its results and it is still kept: your screen says "The results are already up. Your answer is kept, but not in the count." Once a round\'s results have been shown you can keep commenting on it, marked as added later, until 24 hours after the session ends or the host closes comments. After the end, the closing screen lists the rounds under "Something to add?". A Rate question shows what its two ends mean, for example 1 Disagree to 5 Agree.',
         },
       ],
     },

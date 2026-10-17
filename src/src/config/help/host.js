@@ -322,6 +322,12 @@ const running = {
         {
           t: 'note',
           tone: 'tip',
+          title: 'Chrome or Edge with a second display: it opens there for you',
+          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
+        },
+        {
+          t: 'note',
+          tone: 'tip',
           title: 'Putting a response on the wall',
           text: 'Press a response in the main area and it goes up on the wall. Space, → and the clicker still move the room on afterwards.',
         },
@@ -429,7 +435,7 @@ const lateItems = {
           items: [
             { title: 'Late answer', text: 'An answer to a round that arrived after the round moved on. Kept with its round; not in the vote if voting had started.' },
             { title: 'Late answer to a question', text: 'An answer to a question for the room sent after you showed its results. Kept, but not in the count the room saw.' },
-            { title: 'Comment added later', text: 'Once a round\'s results have been shown, people can keep commenting on it, until 24 hours after the session ends.' },
+            { title: 'Comment added later', text: 'Once a round\'s results have been shown, people can keep commenting on it, until 24 hours after the session ends. After the end, each phone\'s closing screen lists the rounds under "Something to add?" until you close comments.' },
           ],
         },
       ],

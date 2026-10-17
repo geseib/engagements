@@ -82,7 +82,7 @@ function makeServer(overrides = {}) {
       return { ok: true, body: { success: true, playerName: ME } };
     }
     if (url.includes(`games/${GAME}/state`)) {
-      const body = { state: server.state, gameType: server.gameType, currentQuestion: '001' };
+      const body = { state: server.state, gameType: server.gameType, currentQuestion: '001', commentsOpen: server.commentsOpen !== false };
       if (/\/state\/[^/?]+/.test(url)) {
         body.playerQuestionState = {
           questionNumber: 1, hasAnswered: server.answered, hasVoted: server.voted,
@@ -820,6 +820,38 @@ describe('the states that did not exist', () => {
     expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Download Report/i })).toBeNull();
     expect(shell()).toHaveAttribute('data-volume', 'watch');
+  });
+
+  // rejects: an end screen with no way back to a round's comments while they
+  //          are still open (review of test a76fda95, issue #34); a panel
+  //          opened from it that closes itself because the room "moved on";
+  //          the entry offered after the host closed comments.
+  test('at the end, a round can still be commented on while comments are open', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+    await waitFor(() => expect(screen.getByText(/Something to add\?/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
+    await waitFor(() => expect(screen.queryByText(/Thanks for playing/i)).toBeNull());
+    expect(screen.getByText(/Comments stay open for 24 hours/)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    // The room cannot "move on" from the end: the panel stays, and a comment can be started.
+    await new Promise((r) => setTimeout(r, 50));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Comment/ })[0]);
+    await waitFor(() => expect(document.querySelector('textarea')).not.toBeNull());
+  });
+
+  test('once comments are closed, the end screen does not offer them', async () => {
+    const server = makeServer({ state: 'CREATED', commentsOpen: false });
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+    await waitFor(() => expect(screen.getByText(/Thanks for playing/i)).toBeInTheDocument());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/Something to add\?/i)).toBeNull();
   });
 
   // rejects: the reload-on-tap connection chip returning. Its click handler was

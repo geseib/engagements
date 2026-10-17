@@ -17,6 +17,7 @@ import { presentModel } from './present/presentModel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import { hasScoreboard } from './config/scoreboard';
 import useFullscreenKey from './hooks/useFullscreenKey';
+import { fullscreenElement, enterFullscreen, canFullscreen } from './utils/fullscreen';
 import usePresentControls from './present/presentControls';
 import Button from './components/ui/Button';
 import Eyebrow from './components/ui/Eyebrow';
@@ -43,6 +44,35 @@ function fitcheckOn() {
  * 26af5fc8, F1): they land after the moment does, and without them the wall
  * was fitted to "Counting the votes" and never again.
  */
+/** Opened by the host's "Room's window" on the other display (present/roomWindow.js). */
+function placedFromUrl() {
+  try {
+    return new URLSearchParams(window.location.search).get('placed') === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * ONE CLICK FILLS THE SCREEN on a window the host placed on the other display.
+ * A page may only go full screen from a click inside itself, so this is the
+ * one step placing cannot do. The click goes no further (capture phase), so it
+ * does not also take the join code down. F still works, as everywhere.
+ */
+export function useClickToFill(on) {
+  useEffect(() => {
+    if (!on || !canFullscreen()) return undefined;
+    const onClick = (e) => {
+      if (fullscreenElement()) return;
+      e.stopPropagation();
+      e.preventDefault();
+      enterFullscreen(document.documentElement);
+    };
+    window.addEventListener('click', onClick, true);
+    return () => window.removeEventListener('click', onClick, true);
+  }, [on]);
+}
+
 export function presentFitKey(model) {
   const rows = Array.isArray(model.rows) ? model.rows.map((r) => (r && (r.idea || r.label)) || '').join('\u241E') : '';
   return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task]
@@ -54,6 +84,7 @@ export default function PresentPage() {
   const { snapshot, reads, refetch } = usePresentation(gameId);
   const model = gameId ? presentModel(snapshot, reads) : { moment: 'NOT_FOUND', profile: 'room' };
   useFullscreenKey();
+  useClickToFill(useMemo(placedFromUrl, []));
   // Forward and back with the keys or a clicker, for a host who may drive
   // this session (present/presentControls.js); the room's own view is unchanged.
   const total = Number.isInteger(model.total) && model.total > 0
