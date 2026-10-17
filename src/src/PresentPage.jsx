@@ -9,7 +9,7 @@
  * Holds no state of its own: a reload, a dropped network or a second copy on
  * another computer lands on the same moment.
  */
-import React, { useEffect, useMemo } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import PresentStage from './present/PresentStage';
 import { PresentMoment, PhaseWipe } from './present/PresentMoments';
 import usePresentation from './present/usePresentation';
@@ -17,10 +17,15 @@ import { presentModel } from './present/presentModel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import { hasScoreboard } from './config/scoreboard';
 import useFullscreenKey from './hooks/useFullscreenKey';
+import { fullscreenElement, enterFullscreen, canFullscreen } from './utils/fullscreen';
 import usePresentControls from './present/presentControls';
 import Button from './components/ui/Button';
 import Eyebrow from './components/ui/Eyebrow';
 import './present/present.css';
+
+// THE BUILD ROOM'S WINDOW (parity PLAN §2.4): its own chunk, reached before
+// usePresentation starts, whose reads and frames are Call & Answer's.
+const BuildWall = lazy(() => import('./present/buildwall/BuildWall'));
 
 function gameIdFromUrl() {
   try {
@@ -38,11 +43,78 @@ function fitcheckOn() {
   }
 }
 
+/**
+ * What the fitter re-runs on. The results rows are in it (walk of dev
+ * 26af5fc8, F1): they land after the moment does, and without them the wall
+ * was fitted to "Counting the votes" and never again.
+ */
+/** Opened by the host's "Room's window" on the other display (present/roomWindow.js). */
+function placedFromUrl() {
+  try {
+    return new URLSearchParams(window.location.search).get('placed') === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * ONE CLICK FILLS THE SCREEN on a window the host placed on the other display.
+ * A page may only go full screen from a click inside itself, so this is the
+ * one step placing cannot do. The click goes no further (capture phase), so it
+ * does not also take the join code down. F still works, as everywhere.
+ */
+export function useClickToFill(on) {
+  useEffect(() => {
+    if (!on || !canFullscreen()) return undefined;
+    const onClick = (e) => {
+      if (fullscreenElement()) return;
+      e.stopPropagation();
+      e.preventDefault();
+      enterFullscreen(document.documentElement);
+    };
+    window.addEventListener('click', onClick, true);
+    return () => window.removeEventListener('click', onClick, true);
+  }, [on]);
+}
+
+export function presentFitKey(model) {
+  const rows = Array.isArray(model.rows) ? model.rows.map((r) => (r && (r.idea || r.label)) || '').join('\u241E') : '';
+  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task]
+    .map((x) => (x === undefined ? '' : String(x))).join('|');
+}
+
+function paramFromUrl(name) {
+  try {
+    return new URLSearchParams(window.location.search).get(name) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/** The Build Room's window: the wall, placed and filled as the Presentation is. */
+function BuildWallPage({ gameId, k }) {
+  useFullscreenKey();
+  useClickToFill(useMemo(placedFromUrl, []));
+  return (
+    <Suspense fallback={null}>
+      <BuildWall gameId={gameId} k={k} />
+    </Suspense>
+  );
+}
+
+/** `type=build` is the Build Room's wall; anything else, the Presentation. */
 export default function PresentPage() {
+  const route = useMemo(() => ({ gameId: gameIdFromUrl(), type: paramFromUrl('type'), k: paramFromUrl('k') }), []);
+  if (route.type === 'build') return <BuildWallPage gameId={route.gameId} k={route.k} />;
+  return <CallPresentPage />;
+}
+
+function CallPresentPage() {
   const gameId = useMemo(gameIdFromUrl, []);
   const { snapshot, reads, refetch } = usePresentation(gameId);
   const model = gameId ? presentModel(snapshot, reads) : { moment: 'NOT_FOUND', profile: 'room' };
   useFullscreenKey();
+  useClickToFill(useMemo(placedFromUrl, []));
   // Forward and back with the keys or a clicker, for a host who may drive
   // this session (present/presentControls.js); the room's own view is unchanged.
   const total = Number.isInteger(model.total) && model.total > 0
@@ -65,8 +137,7 @@ export default function PresentPage() {
     return () => document.removeEventListener('click', onClick);
   }, [joinShown, armed, toggleJoin]);
 
-  const fitKey = [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined]
-    .map((x) => (x === undefined ? '' : String(x))).join('|');
+  const fitKey = presentFitKey(model);
 
   const showBoard = Boolean(model.scoreboard && hasScoreboard(snapshot && snapshot.gameType));
   const overlay = showBoard ? (

@@ -79,6 +79,12 @@ describe('roundStep: the rules', () => {
     const t = roundStep('ANSWERING', { ...CTX, gameType: 'trivia', progress: { received: 3, total: 5, allIn: false } });
     expect(t.primary.arm).toEqual({ text: '2 of 5 still answering. Press again to show results.', confirmLabel: 'Show results anyway', inPlace: true });
   });
+  test('nobody yet: the arm says so, never "6 of 6 still voting" (walk F2)', () => {
+    const v = roundStep('VOTING', { ...CTX, gameType: 'call-and-answer', progress: { received: 0, total: 6, allIn: false } });
+    expect(v.primary.arm.text).toBe('Nobody has voted yet. Press again to show results.');
+    const a = roundStep('ANSWERING', { ...CTX, gameType: 'call-and-answer', answerCount: 2, progress: { received: 0, total: 6, allIn: false } });
+    expect(a.primary.arm.text).toBe('Nobody has answered yet. Press again to start voting.');
+  });
   test('VOTING not all in: an in-place arm too', () => {
     const v = roundStep('VOTING', { ...CTX, gameType: 'call-and-answer', progress: { received: 1, total: 3, allIn: false } });
     expect(v.primary.arm).toEqual({ text: '2 of 3 still voting. Press again to show results.', confirmLabel: 'Show results anyway', inPlace: true });

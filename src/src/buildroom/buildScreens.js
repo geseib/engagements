@@ -10,7 +10,7 @@
  *
  * Pure: no React, no fetch. The page and its tests share these.
  */
-import { safeHref } from './buildHostApi';
+import { safeHref } from './links';
 import { wifiState } from './wifiShare';
 import { W } from './words';
 
@@ -764,49 +764,83 @@ const STORY_GAP_MS = 2 * 60 * 1000;
 const t = (iso) => Date.parse(iso || '') || 0;
 const askNo = (askId) => Number(askId) || askId;
 
-/** How a decided ask came to be decided, in a few words each (host only). */
-export function decisionChain(ask) {
+/**
+ * How a decided ask came to be decided, in a few words each (host only). With
+ * its `outcome` (askOutcome, H3) the last step also says when the words that
+ * went were not the room's own: the host reworded them, or a decision kept
+ * back went later inside a combined direction.
+ */
+export function decisionChain(ask, outcome = null) {
   if (!ask || !ask.decision) return [];
   const d = ask.decision;
   const chain = [];
-  if (ask.fromIdeas && ask.fromIdeas.length) chain.push(ask.fromIdeas.length === 1 ? 'an idea from the room' : `${ask.fromIdeas.length} ideas from the room`);
-  else if (ask.fromQuestion) chain.push('a ready question');
-  else if (ask.source === 'agent') chain.push('Claude asked');
+  if (ask.fromIdeas && ask.fromIdeas.length) chain.push(W.fromIdeas(ask.fromIdeas.length));
+  else if (ask.fromQuestion) chain.push(W.fromReadyQuestion);
+  else if (ask.source === 'agent') chain.push(W.claudeAsked);
   const r = ask.results || {};
   const method = d.method || (d.spoken ? 'spoken' : 'vote');
-  if (method === 'wheel') chain.push('the wheel picked it');
-  else if (method === 'spoken') chain.push('said out loud');
-  else if (method === 'host') chain.push("the host's pick");
-  else if (ask.kind === 'rating' && r.rating && r.rating.avg !== null && r.rating.avg !== undefined) chain.push(`rated ${r.rating.avg} of 5 by ${r.rating.count}`);
+  if (method === 'wheel') chain.push(W.byWheel);
+  else if (method === 'spoken') chain.push(W.bySpoken);
+  else if (method === 'host') chain.push(W.hostsPick);
+  else if (ask.kind === 'rating' && r.rating && r.rating.avg !== null && r.rating.avg !== undefined) chain.push(W.ratedBy(r.rating.avg, r.rating.count));
   else if (ask.kind === 'choice' && Array.isArray(r.options)) {
     const pick = r.options.find((o) => (d.chosen || []).includes(o.label));
-    if (pick && r.total) chain.push(`${pick.count} of ${r.total} picked it`);
+    if (pick && r.total) chain.push(W.pickedBy(pick.count, r.total));
   } else if (ask.kind === 'suggest' && Array.isArray(r.ranked)) {
     const pick = r.ranked.find((x) => (d.chosen || []).includes(x.respId));
-    if (pick && pick.votes) chain.push(`${pick.votes} voted for it`);
+    if (pick && pick.votes) chain.push(W.votedFor(pick.votes));
   }
-  if (d.sentToAgent === false) chain.push('recorded only');
-  else if (d.heldForLater) chain.push('for Claude, later');
-  else chain.push(d.deliveredAt ? 'Claude has it' : 'waiting for Claude');
+  const delivery = d.deliveredAt ? W.claudeHasIt : W.claudeWaiting;
+  const keptBack = d.sentToAgent === false || d.heldForLater;
+  if (outcome && outcome.mark === 'reworded' && keptBack) chain.push(W.sentInOtherWords);
+  else if (d.sentToAgent === false) chain.push(W.recordedOnly);
+  else if (d.heldForLater) chain.push(W.forClaudeLater);
+  else chain.push(outcome && outcome.mark === 'reworded' ? `${W.reworded}, ${delivery}` : delivery);
   return chain;
 }
 
-export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null } = {}) {
+/** What an idea under an ask came to: the room chose it, or not, or the vote is still on. */
+const IDEA_WORDS = Object.freeze({ chosen: W.ideaChosen, 'not-chosen': W.ideaNotChosen, pending: W.ideaInVote });
+const ideaWord = (c) => (c.chosen === true ? IDEA_WORDS.chosen : c.chosen === false ? IDEA_WORDS['not-chosen'] : IDEA_WORDS.pending);
+
+/** An idea that went on its own (sent, or written into a direction): its chain. */
+function gaveChain(c, entry) {
+  const delivery = entry && entry.deliveredAt ? W.claudeHasIt : W.claudeWaiting;
+  if (c.mark === 'later') return [W.forClaudeLater];
+  if (c.mark === 'reworded') return [W.reworded, delivery];
+  return [c.asWritten === true ? W.sentAsWritten : W.sentToClaude, delivery];
+}
+
+/**
+ * `gave` (contributionsOf, H3) and `ended` come from the host's view: with them
+ * the story also carries every used idea, under the ask it went into or on its
+ * own when it was sent, and every ask the room saw, decided or not, each with
+ * its mark. A phone's story passes neither and is drawn as before.
+ */
+export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null, gave = null, ended = false } = {}) {
   const items = [];
+  const gaveByAsk = new Map();
+  for (const c of gave || []) {
+    if (!c.askId) continue;
+    if (!gaveByAsk.has(c.askId)) gaveByAsk.set(c.askId, []);
+    gaveByAsk.get(c.askId).push({ ideaId: c.ideaId, text: c.text, from: c.from, word: ideaWord(c), ...(c.yours ? { yours: true } : {}) });
+  }
+  const stamped = Array.isArray(gave);
+  const outcomeOf = (a) => (stamped ? askOutcome(a, { log, state: ended ? 'ENDED' : '' }) : null);
   const imgById = new Map((images || []).map((im) => [im.imageId, im]));
   // A picture shared within two minutes after Claude showed something belongs to it.
   const showings = [];
   for (const e of log || []) {
     if (e.kind === 'showing') {
-      const it = { id: e.logId, at: e.createdAt, type: 'showed', heading: 'Claude showed', text: e.text, link: e.link || '', imageIds: [], chain: [] };
+      const it = { id: e.logId, at: e.createdAt, type: 'showed', heading: W.storyShowed, text: e.text, link: e.link || '', imageIds: [], chain: [] };
       items.push(it);
       showings.push(it);
     } else if (e.kind === 'verbal') {
-      items.push({ id: e.logId, at: e.createdAt, type: 'said', heading: 'The room said', text: e.text, imageIds: [], chain: [] });
+      items.push({ id: e.logId, at: e.createdAt, type: 'said', heading: W.storySaid, text: e.text, imageIds: [], chain: [] });
     } else if (e.kind === 'milestone') {
-      items.push({ id: e.logId, at: e.createdAt, type: 'milestone', heading: 'Milestone', text: e.text, imageIds: [], chain: [] });
+      items.push({ id: e.logId, at: e.createdAt, type: 'milestone', heading: W.storyMilestone, text: e.text, imageIds: [], chain: [] });
     } else if (e.kind === 'outcome') {
-      items.push({ id: e.logId, at: e.createdAt, type: 'wrapped', heading: 'Wrapped up', text: e.detail || e.text, imageIds: [], chain: [] });
+      items.push({ id: e.logId, at: e.createdAt, type: 'wrapped', heading: W.storyWrapped, text: e.detail || e.text, imageIds: [], chain: [] });
     }
   }
   for (const e of log || []) {
@@ -815,21 +849,48 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     if (im && im.askId) continue; // a mockup belongs to its ask's decision
     const near = showings.filter((s) => t(e.createdAt) >= t(s.at) && t(e.createdAt) - t(s.at) <= STORY_GAP_MS).pop();
     if (near) near.imageIds.push(e.detail);
-    else items.push({ id: e.logId, at: e.createdAt, type: 'picture', heading: im && im.kind === 'final' ? 'The finished product' : 'Picture', text: e.text, imageIds: [e.detail], chain: [] });
+    else items.push({ id: e.logId, at: e.createdAt, type: 'picture', heading: im && im.kind === 'final' ? W.storyFinal : W.storyPicture, text: e.text, imageIds: [e.detail], chain: [] });
   }
   const decided = asks
     ? asks.filter((a) => a.status === 'decided' && a.decision).map((a) => ({ askId: a.askId, direction: a.decision.direction, at: a.decision.decidedAt || a.decidedAt, ask: a }))
     : (decisions || []).map((d) => ({ askId: d.askId, direction: d.direction, at: d.decidedAt }));
   for (const d of decided) {
+    const outcome = d.ask ? outcomeOf(d.ask) : null;
     const mockups = (images || []).filter((im) => im.askId === d.askId && im.label);
     const chosen = d.ask ? (d.ask.decision.chosen || []) : [];
     const shown = chosen.length ? mockups.filter((im) => chosen.includes(im.label)).concat(mockups.filter((im) => !chosen.includes(im.label))) : mockups;
     items.push({
-      id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: `Decided · Ask ${askNo(d.askId)}`, text: d.direction || '',
+      id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: W.storyDecided(askNo(d.askId)), text: d.direction || '',
       askId: d.askId, imageIds: shown.map((im) => im.imageId), chosenLabels: chosen,
-      chain: d.ask ? decisionChain(d.ask) : [],
+      chain: d.ask ? decisionChain(d.ask, outcome) : [],
       mine: (myIdeas || []).some((i) => i.promotedTo === d.askId),
+      ...(outcome ? { mark: outcome.mark } : {}),
+      ...(gaveByAsk.has(d.askId) ? { ideas: gaveByAsk.get(d.askId) } : {}),
     });
+  }
+  // EVERY ASK THE ROOM SAW (H3): one not decided yet, or closed without a decision.
+  if (stamped) {
+    for (const a of asks || []) {
+      if (a.status === 'decided' && a.decision) continue;
+      const o = outcomeOf(a);
+      if (!o) continue;
+      items.push({
+        id: `asked:${a.askId}`, at: a.openedAt || a.createdAt, type: 'asked', heading: W.storyAsk(askNo(a.askId)), text: a.prompt || '',
+        askId: a.askId, imageIds: [], chain: [o.mark === 'pending' ? W.withTheRoom : W.closedNothingSent], mark: o.mark,
+        ...(gaveByAsk.has(a.askId) ? { ideas: gaveByAsk.get(a.askId) } : {}),
+      });
+    }
+    // An idea that went on its own: when it was sent, never who sent it.
+    const entryOf = new Map((log || []).map((e) => [e.logId, e]));
+    for (const c of gave || []) {
+      if (c.askId) continue;
+      const entry = c.logId ? entryOf.get(c.logId) : null;
+      items.push({
+        id: `gave:${c.ideaId}`, at: (entry && entry.createdAt) || c.at, type: 'gave',
+        heading: c.yours ? W.storyYourIdea : c.from === 'host' ? W.storyHostIdea : W.storyIdea,
+        text: c.text, imageIds: [], chain: gaveChain(c, entry), mark: c.mark, ...(c.yours ? { yours: true } : {}),
+      });
+    }
   }
   // A FINISHED STEP (docs/design/build-room-doing D4) is one entry; what Claude
   // posted while it ran hangs under it, oldest first. Commands never come here.
@@ -877,6 +938,130 @@ export function artifactsOf({ images = [], asks = [] } = {}) {
     const what = im.askId ? `Ask ${askNo(im.askId)} mockup${chosen ? ' · chosen' : ''}` : im.kind === 'final' ? 'the finished product' : 'progress';
     return { ...im, title: im.caption || (im.label ? `Choice ${im.label}` : 'A screenshot'), meta: `${who} · ${what}`, chosen };
   });
+}
+
+// ── WHAT THE ROOM GAVE, AND WHAT REACHED CLAUDE (parity PLAN §2.8, H2) ─────
+//
+// Owner, 2026-10-16: "history needs to include user contributions that are
+// used. same for any asks. we need to mark them if we send some version to
+// claude." One mark per thing, read from what the server stamped when it was
+// sent (H1), never guessed from text:
+//   sent      its words went (as written, when the stamp says so)
+//   reworded  a version went: the host changed the words, or combined it (Q14)
+//   later     held for Claude, not sent yet
+//   not-sent  recorded only, or closed without a decision
+//   not-chosen  in a vote, and another won
+//   pending   still with the room
+// An idea only put on the wall is not "used" (Q13). No names, ever (Q15).
+
+const directionsFrom = (log, key, id) => (log || [])
+  .filter((l) => l.kind === 'direction' && l.from && (l.from[key] || []).includes(id));
+
+/**
+ * The outcome of an ask that went to the room, or null for one the room never
+ * saw (still proposed, or cancelled before it opened).
+ * @returns {{ mark: string, reworded: boolean|null, alsoIn: string[] }|null}
+ */
+export function askOutcome(ask, room) {
+  if (!ask || ask.status === 'proposed' || (ask.status === 'discarded' && !ask.openedAt)) return null;
+  const alsoIn = directionsFrom(room && room.log, 'askIds', ask.askId).map((l) => l.logId);
+  const d = ask.status === 'decided' ? ask.decision : null;
+  if (!d) {
+    const ended = Boolean(room && room.state === 'ENDED');
+    return { mark: ask.status === 'discarded' || ended ? 'not-sent' : 'pending', reworded: null, alsoIn };
+  }
+  const reworded = typeof d.reworded === 'boolean' ? d.reworded : null;
+  const base = d.sentToAgent === false ? 'not-sent' : d.heldForLater ? 'later' : reworded ? 'reworded' : 'sent';
+  // Recorded only or held, then combined into a direction: a version did go.
+  if (alsoIn.length && (base === 'not-sent' || base === 'later')) return { mark: 'reworded', reworded: true, alsoIn };
+  return { mark: base, reworded, alsoIn };
+}
+
+/** As written follows the decision's stamp: unchanged words are as written; no stamp says nothing. */
+const writtenOf = (reworded) => (reworded === true ? false : reworded === false ? true : null);
+
+/** Where an idea went into an ask: the ask and the pick that stands for it (an option's label, or a suggestion's id). */
+function placeInAsk(idea, asks) {
+  if (idea.promotedTo) {
+    const ask = asks.find((a) => a.askId === idea.promotedTo);
+    if (!ask) return null;
+    const opts = ask.options || [];
+    // An option names its idea (H1); an older vote is matched by the order its ideas went in.
+    const opt = opts.find((o) => o.ideaId === idea.ideaId) || opts[(ask.fromIdeas || []).indexOf(idea.ideaId)] || null;
+    return opt ? { ask, pick: opt.label } : null;
+  }
+  for (const ask of asks) {
+    if (ask.kind !== 'suggest') continue;
+    const resp = (ask.responses || []).find((r) => r.ideaId === idea.ideaId)
+      || (idea.promotedVia === 'ideas' ? (ask.responses || []).find((r) => !r.ideaId && r.source === 'idea' && r.text === idea.text) : null);
+    if (resp) return { ask, pick: resp.respId };
+  }
+  return null;
+}
+
+/**
+ * Every room idea that was used, oldest first: what happened to it and where
+ * it went. Item: `{ ideaId, text, from: 'room'|'host', at, mark, chosen:
+ * true|false|null, asWritten: true|false|null, askId, logId, alsoIn: [logId] }`.
+ */
+export function contributionsOf(room) {
+  if (!room) return [];
+  const log = room.log || [];
+  const asks = room.asks || [];
+  const out = [];
+  for (const idea of room.ideas || []) {
+    const dirs = directionsFrom(log, 'ideaIds', idea.ideaId);
+    if (idea.status !== 'promoted' && !dirs.length) continue;
+    const c = {
+      ideaId: idea.ideaId, text: idea.text || '', from: idea.source === 'host' ? 'host' : 'room', at: idea.createdAt || '',
+      mark: null, chosen: null, asWritten: null, askId: null, logId: null, alsoIn: [],
+    };
+    const place = idea.status === 'promoted' ? placeInAsk(idea, asks) : null;
+    if (place) {
+      const o = askOutcome(place.ask, room);
+      c.askId = place.ask.askId;
+      if (o && (o.mark === 'pending' || !place.ask.decision)) c.mark = o ? o.mark : 'pending';
+      else if (o) {
+        c.chosen = (place.ask.decision.chosen || []).includes(place.pick);
+        if (c.chosen) { c.mark = o.mark; c.asWritten = writtenOf(o.reworded); c.alsoIn = o.alsoIn; } else c.mark = 'not-chosen';
+      }
+    } else if (idea.status === 'promoted' && idea.promotedVia !== 'ideas' && !idea.promotedTo) {
+      // Sent on its own. The entry names its idea (H1); an older one is matched by its words.
+      const entry = log.find((l) => l.kind === 'idea' && l.ideaId === idea.ideaId)
+        || log.find((l) => l.kind === 'idea' && !l.ideaId && (l.forAgent || l.held) && l.text === idea.text);
+      c.mark = entry && entry.held ? 'later' : 'sent';
+      c.asWritten = entry && entry.asWritten === true ? true : null;
+      c.logId = entry ? entry.logId : null;
+    }
+    for (const dir of dirs) {
+      const mark = dir.held ? 'later' : dir.asWritten === true ? 'sent' : 'reworded';
+      if (!c.mark || c.mark === 'pending') {
+        c.mark = mark; c.logId = dir.logId; c.asWritten = dir.asWritten;
+      } else {
+        c.alsoIn.push(dir.logId);
+        if (['not-sent', 'later', 'not-chosen'].includes(c.mark) && mark !== 'later') { c.mark = mark; c.asWritten = dir.asWritten; }
+      }
+    }
+    if (c.mark) out.push(c);
+  }
+  return out.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+
+/**
+ * A PHONE'S HISTORY (H5): the story's inputs from GET build-play/state, which
+ * carries `history` (build-store.js roomHistory: the asks the room saw, the
+ * used ideas, the entries that carried them, no names). The phone's own ideas
+ * are marked `yours` from `myIdeas`. Null from an older server: the phone then
+ * draws History as before, from `decisions`.
+ */
+export function historyFromView(view) {
+  const h = view && view.history;
+  if (!h) return null;
+  const log = (view.log || []).filter((l) => l.kind !== 'idea' && l.kind !== 'direction').concat(h.sent || []);
+  const mine = new Set((view.myIdeas || []).map((i) => i.ideaId));
+  const gave = contributionsOf({ ideas: h.ideas || [], asks: h.asks || [], log, state: view.state })
+    .map((c) => (mine.has(c.ideaId) ? { ...c, yours: true } : c));
+  return { log, asks: h.asks || [], gave, ended: view.state === 'ENDED' };
 }
 
 // ── THE HOST'S PATH (owner, 2026-10-07; docs/design/build-room-host-flow) ──

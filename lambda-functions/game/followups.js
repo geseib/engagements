@@ -88,6 +88,7 @@ function hostWire(ask, tally, ideas) {
     round: ask.QuestionNumber,
     kind: ask.Kind,
     statement: ask.Statement || null,
+    ...(ask.Kind === 'rate' ? { ends: kinds.endsOf(ask) } : {}),
     question: ask.Question || null,
     anchor: ask.Anchor || null,
     options: (ask.Options || []).map((o) => ({ text: o.text, ...(o.ownWords ? { ownWords: true } : { answer: o.answer }) })),
@@ -112,8 +113,9 @@ function hostWire(ask, tally, ideas) {
  */
 function phoneWire(ask, answered = null) {
   const kind = ask.Kind;
+  const ends = kind === 'rate' ? kinds.endsOf(ask) : null;
   const words = kind === 'rate'
-    ? { statement: ask.Statement, scale: { lowLabel: kinds.RATE.lowLabel, highLabel: kinds.RATE.highLabel } }
+    ? { statement: ask.Statement, ends, scale: { lowLabel: ends.low, highLabel: ends.high } }
     : kind === 'ideas'
       ? { question: ask.Question, maxLength: kinds.LIMITS.idea }
       : { question: ask.Question, options: (ask.Options || []).map((o) => o.text) };

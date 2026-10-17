@@ -173,6 +173,135 @@ check('the host sees the links with the key; Claude\'s copy has no key', () => {
   assert.ok(!JSON.stringify(agent).includes('KEYkey'));
 });
 
+check('the host\'s Share demo opens the same page the phones do: the demo\'s own path, never the server\'s root (dev 1215, owner 17 Oct)', () => {
+  // Claude serves a folder: the root is a directory listing of mockups and the demo.
+  const room = { lan: liveRow(), logs: [{ By: 'agent', Link: 'http://localhost:5173/demo/index.html' }], asks: [], state: null };
+  const host = L.lanHostView(room.lan, NOW, { withKey: true, room });
+  assert.strictEqual(host.demo, 'http://192.168.1.20:4900/demo/index.html?k=KEYkeyKEYkeyKEYkey1234');
+  assert.strictEqual(host.demo, L.lanPublicView(room, NOW).open, 'the host and the phones open one address');
+  // Claude's copy never carries the key, so no demo link either.
+  const agent = L.lanHostView(room.lan, NOW, { withKey: false, room });
+  assert.strictEqual(agent.demo, undefined);
+  // Not shared: nothing to open.
+  assert.strictEqual(L.lanHostView(liveRow({ Wanted: false }), NOW, { withKey: true, room }).demo, '');
+});
+
+console.log('\nbuild-lan: what each shared server may show (Share demo S1, owner 17 Oct)');
+check('each server is scoped to the folders of the pages Claude linked on it, never more', () => {
+  const room = {
+    logs: [
+      { By: 'agent', Link: 'http://localhost:4000/demo/index.html' },
+      { By: 'agent', Link: 'http://localhost:4000/demo/' },
+      { By: 'agent', Link: 'http://localhost:5173/' },
+      { By: 'host', Link: 'http://localhost:4000/secret/' },
+      { By: 'agent', Link: 'https://example.com/x' },
+    ],
+    asks: [{ Options: [{ url: 'http://localhost:8080/mockups/a.html' }, { url: 'http://localhost:8080/mockups/b.html' }, { url: '' }] }],
+    state: { Outcome: { links: [{ url: 'http://localhost:4000/demo/play.html?level=1' }] } },
+  };
+  assert.deepStrictEqual(L.lanScopes(room), {
+    'http://localhost:4000': ['/demo/'],
+    'http://localhost:5173': ['/'],
+    'http://localhost:8080': ['/mockups/'],
+  });
+});
+check('a scope is a folder: a page\'s own folder, a link to a folder itself, and no ".." ever widens it', () => {
+  assert.strictEqual(L.scopeOf('http://localhost:1/a/b/page.html'), '/a/b/');
+  assert.strictEqual(L.scopeOf('http://localhost:1/a/b/'), '/a/b/');
+  assert.strictEqual(L.scopeOf('http://localhost:1/b'), '/');
+  assert.strictEqual(L.scopeOf('http://localhost:1/a/../../etc/x'), '/etc/'); // resolved, never '..'
+  assert.strictEqual(L.scopeOf('not a url'), '');
+});
+check('only the servers being shared carry scopes (the same four as the targets)', () => {
+  const logs = ['http://localhost:4001/', 'http://localhost:4002/', 'http://localhost:4003/', 'http://localhost:4004/', 'http://localhost:4005/x/'].map((Link) => ({ By: 'agent', Link }));
+  const room = { logs, asks: [], state: null };
+  assert.deepStrictEqual(Object.keys(L.lanScopes(room)).sort(), L.lanTargets(room).slice().sort());
+});
+
+console.log('\nbuild-lan: the declared demo and mockups (Share demo S3, plugin 1.20.0)');
+const declared = (d, over = {}) => liveRow({ Declared: d, ...over });
+check('the report keeps a declared demo, mockups and label; only loopback http, capped', () => {
+  const r = L.normalizeReport({ status: 'off', declared: { demo: 'http://localhost:5173/demo/index.html?x=1', mockups: 'http://127.0.0.1:8080/mockups/', label: '  Team  blue\u0007 room  ' } });
+  assert.deepStrictEqual(r.value.Declared, { demo: 'http://localhost:5173/demo/index.html?x=1', mockups: 'http://127.0.0.1:8080/mockups/', label: 'Team blue room' });
+  const bad = L.normalizeReport({ status: 'off', declared: { demo: 'https://localhost:5173/', mockups: 'http://192.168.1.5:3000/', label: 'x'.repeat(200) } });
+  assert.deepStrictEqual(bad.value.Declared, { label: 'x'.repeat(60) }, 'https and a Wi-Fi address are not this laptop\'s loopback http');
+  assert.deepStrictEqual(L.normalizeReport({ status: 'off', declared: { demo: `http://localhost:1/${'a'.repeat(600)}` } }).value.Declared, {});
+  assert.deepStrictEqual(L.normalizeReport({ status: 'off', declared: { demo: 'http://foo.localhost:1/' } }).value.Declared, {}, 'only a name that is certainly this laptop');
+});
+check('a plugin that declares nothing (1.19.0 and older) leaves nothing declared', () => {
+  assert.deepStrictEqual(L.normalizeReport({ status: 'off' }).value.Declared, {});
+  assert.deepStrictEqual(L.normalizeReport({ status: 'off', declared: 'demo' }).value.Declared, {});
+  assert.deepStrictEqual(L.normalizeReport({ status: 'off', declared: [1] }).value.Declared, {});
+});
+check('the declared demo and mockups servers are shared first, still at most four', () => {
+  const logs = [4001, 4002, 4003, 4004, 4005].map((p) => ({ By: 'agent', Link: `http://localhost:${p}/` }));
+  const room = { lan: declared({ demo: 'http://localhost:5173/demo/', mockups: 'http://localhost:8080/mockups/a.html' }), logs, asks: [], state: null };
+  assert.deepStrictEqual(L.lanTargets(room), ['http://localhost:5173', 'http://localhost:8080', 'http://localhost:4004', 'http://localhost:4005']);
+  // One server for both: listed once.
+  const one = { ...room, lan: declared({ demo: 'http://localhost:5173/demo/', mockups: 'http://localhost:5173/mockups/' }) };
+  assert.deepStrictEqual(L.lanTargets(one), ['http://localhost:5173', 'http://localhost:4003', 'http://localhost:4004', 'http://localhost:4005']);
+});
+check('the declared pages\' own folders are in scope, beside the folders Claude linked', () => {
+  const room = { lan: declared({ demo: 'http://localhost:5173/demo/index.html', mockups: 'http://localhost:5173/mockups/' }), logs: [{ By: 'agent', Link: 'http://localhost:5173/demo/play.html' }], asks: [], state: null };
+  assert.deepStrictEqual(L.lanScopes(room), { 'http://localhost:5173': ['/demo/', '/mockups/'] });
+});
+check('which page is the demo: the declared one, else the newest link Claude marked demo, else the newest link', () => {
+  const logs = [
+    { By: 'agent', Link: 'http://localhost:5173/demo/index.html', Role: 'demo' },
+    { By: 'agent', Link: 'http://localhost:8080/mockups/a.html', Role: 'mockup' },
+    { By: 'agent', Link: 'http://localhost:8080/mockups/b.html' },
+  ];
+  assert.strictEqual(L.lanDemoUrl({ lan: liveRow(), logs, asks: [], state: null }), 'http://localhost:5173/demo/index.html');
+  assert.strictEqual(L.lanDemoUrl({ lan: declared({ demo: 'http://localhost:5173/demo/play.html' }), logs, asks: [], state: null }), 'http://localhost:5173/demo/play.html');
+  assert.strictEqual(L.lanDemoUrl({ lan: liveRow(), logs: logs.map(({ Role, ...l }) => l), asks: [], state: null }), 'http://localhost:8080/mockups/b.html', 'nothing marked: the newest link, as before');
+  assert.strictEqual(L.lanDemoUrl({ lan: null, logs: [], asks: [], state: null }), '');
+});
+check('Open the build and the QR go to the declared demo page, its path kept', () => {
+  const map = [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }, { local: 'http://localhost:8080', lan: 'http://192.168.1.20:4901' }];
+  const room = { lan: declared({ demo: 'http://localhost:5173/demo/index.html' }, { Map: map }), logs: [{ By: 'agent', Link: 'http://localhost:8080/mockups/a.html' }], asks: [], state: null };
+  assert.deepStrictEqual(L.lanPublicView(room, NOW), { open: 'http://192.168.1.20:4900/demo/index.html?k=KEYkeyKEYkeyKEYkey1234' });
+  assert.strictEqual(L.lanHostView(room.lan, NOW, { withKey: true, room }).demo, 'http://192.168.1.20:4900/demo/index.html?k=KEYkeyKEYkeyKEYkey1234');
+  // Marked by Claude, no file: the marked page, not the newer mockup.
+  const marked = { ...room, lan: liveRow({ Map: map }), logs: [{ By: 'agent', Link: 'http://localhost:5173/demo/', Role: 'demo' }, { By: 'agent', Link: 'http://localhost:8080/mockups/a.html', Role: 'mockup' }] };
+  assert.deepStrictEqual(L.lanPublicView(marked, NOW), { open: 'http://192.168.1.20:4900/demo/?k=KEYkeyKEYkeyKEYkey1234' });
+  // A declared demo the gateway did not open: the next best, never nothing.
+  const unopened = { ...room, lan: declared({ demo: 'http://localhost:9999/demo/' }, { Map: map }) };
+  assert.deepStrictEqual(L.lanPublicView(unopened, NOW), { open: 'http://192.168.1.20:4901/mockups/a.html?k=KEYkeyKEYkeyKEYkey1234' });
+});
+check('each shared server carries its role: demo, mockups (with the Choose ask it serves), else none', () => {
+  const map = [
+    { local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' },
+    { local: 'http://localhost:8080', lan: 'http://192.168.1.20:4901' },
+    { local: 'http://localhost:7000', lan: 'http://192.168.1.20:4902' },
+    { local: 'http://localhost:7100', lan: 'http://192.168.1.20:4903' },
+  ];
+  const room = {
+    lan: declared({ demo: 'http://localhost:5173/demo/' }, { Map: map }),
+    logs: [{ By: 'agent', Link: 'http://localhost:7100/', Role: 'mockup' }, { By: 'agent', Link: 'http://localhost:7000/' }],
+    asks: [{ AskId: '002', Options: [{ url: 'http://localhost:8080/m/a.html' }] }, { AskId: '003', Options: [{ url: 'http://localhost:8080/m/b.html' }, { url: 'http://localhost:5173/demo/b' }] }],
+    state: null,
+  };
+  assert.deepStrictEqual(L.lanRoles(room), {
+    'http://localhost:5173': { role: 'demo', ask: null },
+    'http://localhost:8080': { role: 'mockups', ask: 3 },
+    'http://localhost:7100': { role: 'mockups', ask: null },
+  });
+  const host = L.lanHostView(room.lan, NOW, { withKey: true, room });
+  assert.deepStrictEqual(host.map.map((m) => [m.role, m.ask]), [['demo', null], ['mockups', 3], [null, null], ['mockups', null]]);
+  // Claude's copy carries the roles too (they are no secret), never the key.
+  const agent = L.lanHostView(room.lan, NOW, { withKey: false, room });
+  assert.deepStrictEqual(agent.map.map((m) => m.role), ['demo', 'mockups', null, 'mockups']);
+  // Declared mockups wins over a demo guess only where the demo is not declared.
+  assert.strictEqual(L.lanRoles({ ...room, lan: declared({ mockups: 'http://localhost:5173/mock/' }, { Map: map }) })['http://localhost:5173'].role, 'mockups');
+});
+check('with nothing declared or marked, no server is called the demo (dev 1215: the newest link was the mockups)', () => {
+  const room = { lan: liveRow(), logs: [{ By: 'agent', Link: 'http://localhost:5173/' }], asks: [], state: null };
+  assert.deepStrictEqual(L.lanRoles(room), {});
+  assert.strictEqual(L.lanHostView(room.lan, NOW, { withKey: true, room }).map[0].role, null);
+  // No room given (an older caller): the map as before, with no roles.
+  assert.strictEqual(L.lanHostView(liveRow(), NOW, { withKey: true }).map[0].role, null);
+});
+
 console.log(`\n${pass} passed, ${failed} failed`);
 suiteFinished();
 process.exit(failed ? 1 : 0);

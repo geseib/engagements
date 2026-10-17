@@ -52,7 +52,8 @@ const state = () => {
   if (room.state && room.state.Crew) view.crew = C.crewView(room, 'host', null);
   return view;
 };
-const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket'));
+// The room's window hears every screen change (build/wall, B7); these tests are about the ask.
+const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket') && !c.url.endsWith('/build/wall'));
 const lastPost = () => posts()[posts().length - 1];
 let failNext = null;
 
@@ -82,42 +83,49 @@ async function openStage(r = baseRows()) {
   fireEvent.keyDown(window, { key: '2' });
 }
 const dock = () => within(document.querySelector('footer.dock'));
-/** "Press Space to ..." shows only while the pointer is on the dock (copy pass 2026-10-10). */
+/*
+  THE DOCK HOLDS STILL (parity PLAN §2a D1, owner 17 Oct 2026). The "Press
+  Space to ..." hint used to be inserted while the pointer was on the dock,
+  pushing HOST and SESSION sideways as the host reached for them. It is gone:
+  the shared bar's SPACE cap is the key's cue, always in its place, hidden
+  (never removed) while Space does nothing.
+*/
 const overDock = () => { fireEvent.mouseEnter(document.querySelector('footer.dock')); };
 const leaveDock = () => { fireEvent.mouseLeave(document.querySelector('footer.dock')); };
+/** The SPACE cap: 'on' when Space presses the main button, 'off' (kept, hidden) when it does nothing. */
+const spaceCap = () => {
+  const k = document.querySelector('.dock .kbd');
+  if (!k) return null;
+  return k.hasAttribute('data-off') ? 'off' : k.textContent;
+};
 const openEdit = async () => {
   fireEvent.click(dock().getByRole('button', { name: 'Change before sending' }));
   return screen.findByRole('dialog', { name: 'Change before sending' });
 };
 
 describe('R3: the Stage at results', () => {
-  test('Send B to Claude leads, Change before sending sits beside it, and the hint is words with no key cap', async () => {
+  test('Send B to Claude leads, Change before sending sits beside it, and the key is the shared SPACE cap', async () => {
     await openStage();
     expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     // Same order as the Host: the change is to the left of the main button.
     const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.trim());
     expect(names.indexOf('Change before sending')).toBeLessThan(names.indexOf('Send B to Claude'));
-    // Never on the Stage until the pointer is on the dock.
+    expect(spaceCap()).toBe('SPACE');
+    expect(dock().getByRole('button', { name: 'Send B to Claude' })).toHaveAttribute('aria-keyshortcuts', 'Space ArrowRight');
     expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
-    overDock();
-    const hint = document.querySelector('.dock .brm-dockhint');
-    expect(hint.textContent).toBe('Press Space to send');
-    leaveDock();
-    expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
-    overDock();
-    expect(hint.querySelector('b').textContent).toBe('Space');
-    expect(document.querySelector('.dock .kbd')).toBeNull();
   });
 
-  test('the Space hint also shows on keyboard focus in the dock, and goes when focus leaves', async () => {
+  test('the pointer or the keyboard in the dock adds and removes nothing', async () => {
     await openStage();
     const footer = document.querySelector('footer.dock');
-    expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
+    const before = footer.innerHTML;
+    overDock();
     fireEvent.focus(dock().getByRole('button', { name: 'Change before sending' }));
-    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to send');
+    expect(footer.innerHTML).toBe(before);
     fireEvent.blur(dock().getByRole('button', { name: 'Change before sending' }), { relatedTarget: document.body });
-    expect(footer.querySelector('.brm-dockhint')).toBeNull();
+    leaveDock();
+    expect(footer.innerHTML).toBe(before);
   });
 
   test('To Claude posts the body the Host panel posts: the room\'s choice, its sentence, as Do now', async () => {
@@ -159,15 +167,14 @@ describe('R3: the Stage at results', () => {
     expect(dock().queryByRole('button', { name: /to Claude$/ })).toBeNull();
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
-    overDock();
-    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to spin');
+    expect(dock().getByRole('button', { name: 'Spin the wheel' })).toHaveClass('host-action-bar__primary');
+    expect(spaceCap()).toBe('SPACE');
   });
 
   test('a set that says Later: the same button as the Host, Save for later, and nothing goes to Claude', async () => {
     await openStage(baseRows({ ...ASK, ClaudeGets: 'later' }));
     expect(dock().queryByRole('button', { name: 'Send B to Claude' })).toBeNull();
-    overDock();
-    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to save for later');
+    expect(dock().getByRole('button', { name: 'Save for later' })).toHaveClass('host-action-bar__primary');
     fireEvent.click(dock().getByRole('button', { name: 'Save for later' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], as: 'later' }));
     // The Host's Settle button for the same ask says the same.
@@ -195,9 +202,9 @@ describe('R3: the Stage at results', () => {
     ['the wheel landed', () => baseRows({ ...ASK, Wheel: LANDED }, TIE)],
   ])('one orange on the whole Stage, and no Edit button: %s', async (name, mk) => {
     await openStage(mk());
-    // The Stage's orange is the dock's `btn` (not `ghost`) or a Build Room primary; count the whole Stage.
+    // The Stage's orange is the shared bar's main button (D1), or a Build Room primary; count the whole Stage.
     const orange = [...document.querySelectorAll('.brm-room button')]
-      .filter((b) => (b.classList.contains('btn') ? !b.classList.contains('ghost') : b.classList.contains('brm-btn--primary')));
+      .filter((b) => b.classList.contains('host-action-bar__primary') || b.classList.contains('brm-btn--primary') || (b.classList.contains('btn') && !b.classList.contains('ghost')));
     expect(orange.map((b) => b.textContent.trim())).toHaveLength(1);
     expect(dock().queryByRole('button', { name: 'Edit' })).toBeNull();
   });
@@ -212,8 +219,8 @@ describe('R3: the Stage at results', () => {
     expect(turning).toBeDisabled();
     expect(dock().queryByRole('button', { name: /Send B to Claude/ })).toBeNull();
     expect(dock().getByRole('button', { name: 'Spin again' })).toBeDisabled();
-    overDock();
-    expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
+    // Space does nothing: the cap keeps its place, hidden.
+    expect(spaceCap()).toBe('off');
     expect(document.querySelector('.dock .status').textContent).not.toMatch(/\bB\b/);
     fireEvent.keyDown(window, { key: ' ' });
     expect(posts()).toHaveLength(0);
@@ -251,8 +258,7 @@ describe('R3: the Stage at results', () => {
     // A wheel already still on arrival is settled.
     await waitFor(() => expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeEnabled());
     expect(dock().getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
-    overDock();
-    expect(document.querySelector('.dock .brm-dockhint').textContent).toBe('Press Space to send');
+    expect(spaceCap()).toBe('SPACE');
   });
 
   test('a rating sends its average', async () => {

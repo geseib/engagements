@@ -239,7 +239,7 @@ async function createAsk(db, { gameId, round, orgId, value, origin, anchor = nul
     QuestionNumber: keys.roundOf(round),
     AskId: askId,
     Kind: value.kind,
-    ...(value.kind === 'rate' ? { Statement: value.statement } : {}),
+    ...(value.kind === 'rate' ? { Statement: value.statement, Ends: value.ends } : {}),
     ...(value.kind === 'ideas' ? { Question: value.question } : {}),
     ...(value.kind === 'choice' ? { Question: value.question, Options: origin.options } : {}),
     ...(anchor ? { Anchor: anchor } : {}),

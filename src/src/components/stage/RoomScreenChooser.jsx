@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import RoomWindowLink from './RoomWindowLink';
 import { ROOM_WORDS as W, recommendRoomScreen } from '../../config/roomScreen';
 import './RoomScreenChooser.css';
 
@@ -89,7 +90,7 @@ export default function RoomScreenChooser({ current = null, presentHref = '', on
             <p><b>{rec.lead}</b> {rec.detail}</p>
             <div className="rsc-rec-acts">
               {rec.choice === 'two' && presentHref ? (
-                <a className="rsc-btn rsc-btn--quiet" href={presentHref} target="_blank" rel="noopener noreferrer">{W.openPresent}</a>
+                <RoomWindowLink className="rsc-btn rsc-btn--quiet" href={presentHref}>{W.openPresent}</RoomWindowLink>
               ) : null}
               <button type="button" className="rsc-btn" onClick={() => onChoose(rec.choice)}>
                 {rec.choice === 'two' ? W.useTwo : W.useOne}
@@ -116,7 +117,7 @@ export default function RoomScreenChooser({ current = null, presentHref = '', on
           <p className="rsc-card-p">{W.twoBody}</p>
           <div className="rsc-card-acts">
             {presentHref ? (
-              <a className="rsc-btn rsc-btn--quiet" href={presentHref} target="_blank" rel="noopener noreferrer">{W.openPresent}</a>
+              <RoomWindowLink className="rsc-btn rsc-btn--quiet" href={presentHref}>{W.openPresent}</RoomWindowLink>
             ) : null}
             <button type="button" className="rsc-btn" aria-pressed={current === 'two'} onClick={() => onChoose('two')}>
               {current === 'two' ? W.chosen : W.useTwo}

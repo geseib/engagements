@@ -8,6 +8,8 @@ Each one needs its own design and the owner's answers before work starts.
 The Wi-Fi share fails in two cases: a remote participant (Zoom), and a network that keeps devices
 apart (hotel, conference and corporate guest Wi-Fi often do). Three ways out, discussed 2026-10-07.
 
+**Design, 2026-10-17 (for approval):** [../build-room-remote-share/DESIGN.md](../build-room-remote-share/DESIGN.md), a quick tunnel to a stricter door in the plugin, security first.
+
 | Way | Live? | Local backends (DuckDB, an API server) | Exposure | Cost |
 |---|---|---|---|---|
 | **Tunnel** (`cloudflared tunnel --url http://localhost:<port>`, free, no account) | Yes, edits show at once | **Work**: the tunnel reaches the laptop, so everything on it runs as in the room | Anyone on the internet with the link reaches the laptop while it is up | cloudflared installed once per laptop; a new address each session |

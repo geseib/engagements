@@ -435,6 +435,78 @@ const withoutTimestamps = (body) => {
       assert.strictEqual(sent.length, 0));
   }
 
+  // A ROUND ALREADY SHOWN, READ BACK AFTER THE ROOM MOVED ON (review of test
+  // a76fda95, issue #34). rejects: a phone after the end unable to load an
+  // earlier round's results; any write, score or frame on that read; a round
+  // that was never shown (no stored RESULTS row) handed out; the round the
+  // session is on read through the stored path while it is still live.
+  {
+    const id = '9301';
+    const storedRow = {
+      PK: `GAME#${id}`, SK: 'QUESTION#001#RESULTS', GameId: id, QuestionId: '001',
+      VoteTallies: { 0: { playerName: 'Ada', answerText: 'shown answer', totalScore: 5 } },
+      MaxVotes: 5, TotalVotes: 2, CompletedAt: '2026-10-16T10:00:00.000Z',
+    };
+    seedGame(id, 'call-and-answer', 'ENDED', { items: [storedRow] });
+    put({ PK: `GAME#${id}`, SK: 'STATE', State: 'ENDED', LessonNumber: 2, CurrentQuestionId: '002' });
+    const before = JSON.stringify([...store.entries()]);
+    const r1 = await handler(publicEvent(id, '001'));
+    await check('after the end: a shown round reads back as stored', () => {
+      assert.strictEqual(r1.statusCode, 200, r1.body);
+      const b = JSON.parse(r1.body);
+      assert.strictEqual(b.stored, true);
+      assert.deepStrictEqual(b.voteTallies, storedRow.VoteTallies);
+    });
+    await check('that read wrote, scored and announced nothing', () => {
+      assert.strictEqual(JSON.stringify([...store.entries()]), before);
+      assert.strictEqual(sent.length, 0);
+    });
+    const r2 = await handler(publicEvent(id, '002'));
+    await check('a round never shown (no stored row) is still refused', () => assert.strictEqual(r2.statusCode, 403, r2.body));
+
+    const live = '9302';
+    seedGame(live, 'call-and-answer', 'VOTE#002', { items: [{ ...storedRow, PK: `GAME#${live}` }] });
+    put({ PK: `GAME#${live}`, SK: 'STATE', State: 'VOTE#002', LessonNumber: 2, CurrentQuestionId: '002' });
+    const r3 = await handler(publicEvent(live, '001'));
+    await check('mid-session: an earlier shown round reads back too', () => assert.strictEqual(r3.statusCode, 200, r3.body));
+    const r4 = await handler(publicEvent(live, '002'));
+    await check('mid-session: the round being voted on is still refused', () => assert.strictEqual(r4.statusCode, 403, r4.body));
+  }
+
+  // A ROUND NOBODY ANSWERED (review of test 32ac4eb4, issue #35). rejects: an
+  // empty, never-shown round refused after the end, so the phone read "The
+  // responses could not be loaded"; an answered, never-shown round handed out;
+  // an empty round past the answers' 7-day ttl called empty when it may have
+  // expired.
+  {
+    const id = '9303';
+    const recent = new Date(Date.now() - 5 * 60000).toISOString();
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    seedGame(id, 'call-and-answer', 'ENDED');
+    put({ PK: `GAME#${id}`, SK: 'STATE', State: 'ENDED', LessonNumber: 3, CurrentQuestionId: '003' });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#001#REF', StartedAt: recent });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#002#REF', StartedAt: recent });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#002#ANSWER#Ada', PlayerName: 'Ada', AnswerText: 'never shown' });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#003#REF', StartedAt: old });
+    const before = JSON.stringify([...store.entries()]);
+    const e1 = await handler(publicEvent(id, '001'));
+    await check('after the end: a fresh round nobody answered reads back empty', () => {
+      assert.strictEqual(e1.statusCode, 200, e1.body);
+      const b = JSON.parse(e1.body);
+      assert.deepStrictEqual(b.answers, []);
+      assert.strictEqual(b.noAnswers, true);
+      assert.strictEqual(b.voteTallies, undefined);
+    });
+    const e2 = await handler(publicEvent(id, '002'));
+    await check('a never-shown round WITH answers is still refused', () => assert.strictEqual(e2.statusCode, 403, e2.body));
+    const e3 = await handler(publicEvent(id, '003'));
+    await check('an empty round older than the answer ttl is still refused', () => assert.strictEqual(e3.statusCode, 403, e3.body));
+    await check('none of those reads wrote, scored or announced anything', () => {
+      assert.strictEqual(JSON.stringify([...store.entries()]), before);
+      assert.strictEqual(sent.length, 0);
+    });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

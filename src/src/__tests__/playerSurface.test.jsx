@@ -82,7 +82,7 @@ function makeServer(overrides = {}) {
       return { ok: true, body: { success: true, playerName: ME } };
     }
     if (url.includes(`games/${GAME}/state`)) {
-      const body = { state: server.state, gameType: server.gameType, currentQuestion: '001' };
+      const body = { state: server.state, gameType: server.gameType, currentQuestion: '001', commentsOpen: server.commentsOpen !== false };
       if (/\/state\/[^/?]+/.test(url)) {
         body.playerQuestionState = {
           questionNumber: 1, hasAnswered: server.answered, hasVoted: server.voted,
@@ -90,6 +90,7 @@ function makeServer(overrides = {}) {
       }
       return { ok: true, body };
     }
+    if (url.includes('games/get-results') && server.pastResults) return { ok: true, body: server.pastResults };
     if (url.includes(`games/${GAME}/question`)) return { ok: true, body: server.question };
     if (url.includes(`games/${GAME}/answers`)) {
       const body = { gameId: GAME, questionId: '001', answerCount: server.ballot.length };
@@ -820,6 +821,72 @@ describe('the states that did not exist', () => {
     expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Download Report/i })).toBeNull();
     expect(shell()).toHaveAttribute('data-volume', 'watch');
+  });
+
+  // rejects: a final score read only from memory filled during RESULTS, so a
+  //          player who reloads or rejoins after the end sees "Final score 0"
+  //          and no standing while the host and the report say 6 (review of
+  //          test 32ac4eb4, issue #35).
+  test('a player arriving at the end is shown their stored final score and standing', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+
+    await waitFor(() => expect(screen.getByText(/Final standing/i)).toBeInTheDocument());
+    const score = screen.getByText(/Final score/i).nextSibling;
+    expect(score).toHaveTextContent('12');
+  });
+
+  // rejects: an earlier round opened from the end screen headed "Round 1"
+  //          alone, with no question title (review of test 32ac4eb4, issue
+  //          #35); a round nobody answered reading "The responses could not
+  //          be loaded" once the server answers it empty.
+  test('at the end, an earlier round is headed by its question and an empty one says so', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    server.pastResults = { gameId: GAME, questionId: '001', answers: [], noAnswers: true, stored: true, questionTitle: 'Is the demo ready for Tuesday?' };
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+    await waitFor(() => expect(screen.getByText(/Something to add\?/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Is the demo ready for Tuesday?' })).toBeInTheDocument());
+    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    expect(screen.queryByText(/could not be loaded/i)).toBeNull();
+  });
+
+  // rejects: an end screen with no way back to a round's comments while they
+  //          are still open (review of test a76fda95, issue #34); a panel
+  //          opened from it that closes itself because the room "moved on";
+  //          the entry offered after the host closed comments.
+  test('at the end, a round can still be commented on while comments are open', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+    await waitFor(() => expect(screen.getByText(/Something to add\?/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
+    await waitFor(() => expect(screen.queryByText(/Thanks for playing/i)).toBeNull());
+    expect(screen.getByText(/Comments stay open for 24 hours/)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    // The room cannot "move on" from the end: the panel stays, and a comment can be started.
+    await new Promise((r) => setTimeout(r, 50));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Comment/ })[0]);
+    await waitFor(() => expect(document.querySelector('textarea')).not.toBeNull());
+  });
+
+  test('once comments are closed, the end screen does not offer them', async () => {
+    const server = makeServer({ state: 'CREATED', commentsOpen: false });
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+    await waitFor(() => expect(screen.getByText(/Thanks for playing/i)).toBeInTheDocument());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/Something to add\?/i)).toBeNull();
   });
 
   // rejects: the reload-on-tap connection chip returning. Its click handler was

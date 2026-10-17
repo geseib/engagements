@@ -195,6 +195,8 @@ const hardStop = setTimeout(() => {
     // Owner, 2026-10-06: a question asked in the terminal stalled room 6717.
     assert.ok(/NEVER ask a question in this terminal/.test(r.result.instructions) && /ask_room_to_choose with the readings/.test(r.result.instructions));
     assert.ok(/call commit/.test(r.result.instructions), 'the instructions name the commit tool');
+    // Share demo S3: the file that names the demo and the mockups, and the role on each link.
+    assert.ok(/\.engage\/share\.json/.test(r.result.instructions) && /role "demo"/.test(r.result.instructions), 'the instructions name share.json and the link role');
   });
   await check('an unknown protocol version falls back to 2025-06-18', async () => {
     const r = await mcp.request('initialize', { protocolVersion: '1999-01-01' });
@@ -335,6 +337,24 @@ const hardStop = setTimeout(() => {
     assert.ok(!r.result.isError, textOf(r));
     assert.deepStrictEqual(requests[0].body, { kind: 'progress', text: 'Site is up', doing: 'Mocking up 3 graph options', done: 'Scaffolded the site' });
   });
+  await check('post_update marks its link demo or mockup (Share demo S3, 1.20.0); a role needs a link and is one of the two', async () => {
+    requests.length = 0;
+    const r = await mcp.request('tools/call', { name: 'post_update', arguments: { kind: 'showing', text: 'The playable demo', link: 'https://example.com/demo/', role: 'demo' } });
+    assert.ok(!r.result.isError, textOf(r));
+    assert.deepStrictEqual(requests[0].body, { kind: 'showing', text: 'The playable demo', link: 'https://example.com/demo/', role: 'demo' });
+    for (const [args, re] of [
+      [{ text: 'x', role: 'demo' }, /role.*needs a link/i],
+      [{ text: 'x', link: 'https://example.com/', role: 'hero' }, /"role" must be demo or mockup/],
+    ]) {
+      requests.length = 0;
+      const bad = await mcp.request('tools/call', { name: 'post_update', arguments: args });
+      assert.ok(bad.result.isError && re.test(textOf(bad)), JSON.stringify(args) + ' -> ' + textOf(bad));
+      assert.strictEqual(requests.length, 0, 'no API call');
+    }
+    const tools = (await mcp.request('tools/list', {})).result.tools;
+    const props = tools.find((t) => t.name === 'post_update').inputSchema.properties;
+    assert.deepStrictEqual(props.role.enum, ['demo', 'mockup']);
+  });
   await check('a bad doing or done is refused in plain words before any API call', async () => {
     for (const [args, re] of [
       [{ doing: 'Scaffolding' }, /4 to 7 words/],
@@ -444,6 +464,8 @@ const hardStop = setTimeout(() => {
     try {
       const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
       assert.ok(/SHARING ON WI-FI/.test(t) && /laptops, tablets and phones/.test(t) && /never --host 0\.0\.0\.0/.test(t), t);
+      // Share demo S3: Claude names the demo and the mockups, in the file and on each link.
+      assert.ok(/\.engage\/share\.json/.test(t) && /role "demo"/.test(t) && /role "mockup"/.test(t), t);
     } finally {
       stateLan = undefined;
     }

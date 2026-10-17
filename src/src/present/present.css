@@ -259,6 +259,10 @@ html.present-locked body {
   font-weight: 700;
   line-height: 1.18;
 }
+/* past the floor, ideas take two lines (PresentStage.jsx fitTally) */
+.present .present-tally[data-clamp="2"] .present-idea { -webkit-line-clamp: 2; }
+/* a row the fitter took down: .ui-trow's display:grid would beat [hidden] */
+.present .present-tally .present-trow[hidden] { display: none; }
 .present .present-more { font-size: calc(var(--L-body) * var(--fit)); color: var(--muted); padding-left: calc(var(--L-secondary) * 1.4 * var(--fit) + 24px); margin: calc(22px * var(--fit)) 0 0; }
 
 /* ---- the response navigator ---- */

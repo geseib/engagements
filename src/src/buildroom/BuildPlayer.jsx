@@ -7,7 +7,7 @@ import RatingInput from '../components/survey/RatingInput';
 import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin, mintRemoteKey } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
 import { W } from './words';
-import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine } from './buildScreens';
+import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine, historyFromView } from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
@@ -961,7 +961,12 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
  */
 function HistoryTab({ view, api, onResult, now }) {
   const [filter, setFilter] = useState('all');
-  const story = roomStory({ log: view.log || [], decisions: view.decisions || [], images: view.images || [], myIdeas: view.myIdeas || [], doing: doingLine(view.doing, now) });
+  // The room's History with its marks (parity PLAN §2.8, H5); an older server sends no `history`.
+  const marked = historyFromView(view);
+  const story = roomStory({
+    log: marked ? marked.log : view.log || [], ...(marked ? { asks: marked.asks, gave: marked.gave, ended: marked.ended } : { decisions: view.decisions || [] }),
+    images: view.images || [], myIdeas: view.myIdeas || [], doing: doingLine(view.doing, now),
+  });
   const shown = filterStory(story, filter);
   const preview = latestPreview(view.log);
   const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
@@ -969,7 +974,14 @@ function HistoryTab({ view, api, onResult, now }) {
   const body = (it) => (
     <>
       <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
-      {it.mine ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
+      {/* Said once: the ideas list marks "yours" when the server sent it (H5). */}
+      {it.mine && !(it.ideas || []).some((x) => x.yours) ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
+      {it.ideas && it.ideas.length ? (
+        <ul className="bpl-story-ideas" aria-label="Ideas from the room">
+          {it.ideas.map((x) => <li key={x.ideaId}>{x.text} · {x.word}{x.yours ? <span className="bpl-yours"> · {W.storyYours}</span> : null}</li>)}
+        </ul>
+      ) : null}
+      {it.chain && it.chain.length ? <p className="plr-help bpl-story-chain">{it.chain.join(' \u2192 ')}</p> : null}
       {it.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={it.text} className="bpl-shot" />)}
       {isHttpUrl(it.link) ? <a className="bpl-link bpl-lnk" href={it.link} target="_blank" rel="noopener noreferrer">{linkText(it.link)}</a> : null}
       {preview && it.type === 'showed' && it.id === preview.logId && view.state !== 'ENDED' && (

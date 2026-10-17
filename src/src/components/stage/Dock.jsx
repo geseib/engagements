@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef } from 'react';
+import RoomWindowLink from './RoomWindowLink';
 import CompletionFlag from './CompletionFlag';
 
 /**
@@ -100,12 +101,30 @@ function useCrowded(ref, deps) {
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+/*
+  FIXED SLOTS (docs/design/parity/PLAN.md §2a; owner, 17 Oct 2026: "the bottom
+  row buttons jump all over the place"). The right-hand items are anchored at
+  the right edge, so only what sits to their RIGHT can move them. Two things
+  did: the SPACE cap, removed whenever Space did nothing (a disabled primary,
+  an open overlay), which slid the main button right and back; and the hint,
+  which sat after the buttons and pushed them by the width of its words.
+  So a `kbd` passed as '' keeps its slot, hidden (`data-off`, visibility in
+  styles/stage.css), and the hint comes before the buttons. A caller that
+  never passes `kbd` still gets none.
+
+  `home` is a type's way back to its own host screen (Build Room's HOST), a
+  fixed item just before SESSION; the two are always last. `setupCount` and
+  `setupOpen` let SESSION carry a count (someone asking to take a name) and
+  say whether its panel is open, without a second SESSION button;
+  `setupProps` are extra attributes for it (a data- attribute, say).
+*/
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
-  statusLink = '', onStatusLink = null, children, ...rest
+  statusLink = '', onStatusLink = null, home = null, setupCount = 0, setupCountLabel = '', setupOpen,
+  setupProps = null, children, ...rest
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, children]);
   // THE LATE COUNT AS A LINK (late items Task 4): `statusLink` is the last
   // part of the status ("1 late answer kept", or "Review" at the end), and
   // opens the host's late list. Only when the status really ends with it.
@@ -137,9 +156,11 @@ export default function Dock({
         </span>
       )}
       <span className="spacer" />
-      {children}
-      {kbd && <span className="kbd" aria-hidden="true">{kbd}</span>}
       {hint && <span className="hint">{hint}</span>}
+      {children}
+      {typeof kbd === 'string' && (
+        <span className="kbd" aria-hidden="true" data-off={kbd ? undefined : ''}>{kbd || 'SPACE'}</span>
+      )}
       {/*
         LAST IN THE DOCK, AND ON PURPOSE.
 
@@ -191,27 +212,30 @@ export default function Dock({
         door's `presenting`). Only where the two-surface switch is on.
       */}
       {present && present.href && (
-        <a
+        <RoomWindowLink
           className="dock-more dock-present"
           href={present.href}
-          target="_blank"
-          rel="noopener noreferrer"
           aria-label={present.presenting > 0 ? 'Presenting. Open another Presentation window' : 'Open the Presentation in a new window'}
           title="Drag it to the second screen and press F"
           data-presenting={present.presenting > 0 ? '' : undefined}
         >
           <span className="dock-more-lbl">{present.presenting > 0 ? 'PRESENTING' : 'PRESENT'}</span>
-        </a>
+        </RoomWindowLink>
       )}
+      {home}
       {onSetup && (
         <button
           type="button"
-          className="dock-more"
+          className={`dock-more${setupCount > 0 ? ' dock-more--lit' : ''}`}
           onClick={onSetup}
-          aria-label="Session panel"
+          aria-label={setupCount > 0 && setupCountLabel ? `Session panel, ${setupCount}${setupCountLabel}` : 'Session panel'}
+          aria-haspopup={setupOpen === undefined ? undefined : 'dialog'}
+          aria-expanded={setupOpen === undefined ? undefined : Boolean(setupOpen)}
           title="Session panel — backslash key"
+          {...(setupProps || {})}
         >
           <span className="dock-more-lbl">SESSION</span>
+          {setupCount > 0 && <span className="dock-more-n">{setupCount}{setupCountLabel && <span className="dock-sr">{setupCountLabel}</span>}</span>}
         </button>
       )}
     </footer>

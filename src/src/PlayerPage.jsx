@@ -360,6 +360,13 @@ function PlayerPage({ event = null } = {}) {
    *  2): the panel stays up, so the player sees the server's yes, until they
    *  press the way back themselves. */
   const [myFeedbackPostedLate, setMyFeedbackPostedLate] = useState(false);
+  /* COMMENTS AFTER THE END (review of test a76fda95, issue #34): a round once
+     shown takes comments until 24 hours after the session ends, but the end
+     screen offered no way back to one. `endedComments` is what /state says at
+     the end ({ open, lastRound }); `myFeedbackAfterEnd` marks a panel opened
+     from the end screen, which the room cannot move on from. */
+  const [endedComments, setEndedComments] = useState(null);
+  const [myFeedbackAfterEnd, setMyFeedbackAfterEnd] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -1650,7 +1657,14 @@ function PlayerPage({ event = null } = {}) {
       if (!res.ok) { setMyFeedbackAnswersStatus('error'); return; }
       const data = await res.json();
       const ranked = rankedResultsFrom(data);
-      setMyFeedbackSnapshot((current) => (current ? { ...current, answers: ranked } : current));
+      // An earlier round picked on the end screen is known only as "Round N";
+      // its stored read carries the question's title for the heading (#35).
+      const questionTitle = typeof data.questionTitle === 'string' ? data.questionTitle.trim() : '';
+      setMyFeedbackSnapshot((current) => (current ? {
+        ...current,
+        answers: ranked,
+        ...(current.roundLabel && questionTitle ? { title: questionTitle } : {}),
+      } : current));
       setMyFeedbackAnswersStatus(feedbackAnswersStatusFrom(data));
     } catch {
       setMyFeedbackAnswersStatus('error');
@@ -1663,14 +1677,21 @@ function PlayerPage({ event = null } = {}) {
    * question is snapshotted rather than read live; `loadMyFeedbackAnswers`
    * fills the responses in once they arrive.
    */
-  const openMyFeedback = () => {
+  const openMyFeedback = (pick = null) => {
+    // `pick` ({ padded, title }) is a round chosen on the end screen, known by
+    // number only; the results screen's button passes its click event, not one.
+    const chosen = pick && typeof pick.padded === 'string' ? pick : null;
     const match = String(gameState || '').match(/^RESULTS#(\d+)$/);
-    if (!match) return;
-    const padded = match[1];
-    const q = currentQuestion || {};
+    const padded = chosen ? chosen.padded : (match && match[1]);
+    if (!padded) return;
+    const q = chosen ? { title: chosen.title } : (currentQuestion || {});
+    setMyFeedbackAfterEnd(Boolean(chosen));
     setMyFeedbackNumber(padded);
     setMyFeedbackSnapshot({
       title: q.title || 'This round',
+      // The end screen's "Round N" stays the top line's name for the round
+      // once the heading becomes the question's title.
+      roundLabel: chosen ? chosen.title : '',
       detail: q.questionDetail || q.detail || '',
       options: ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF']
         .map((key) => q[key]).filter(Boolean),
@@ -1695,6 +1716,7 @@ function PlayerPage({ event = null } = {}) {
    *  when there was something to leave behind. */
   const closeMyFeedback = () => {
     setMyFeedbackOpen(false);
+    setMyFeedbackAfterEnd(false);
     setMyFeedbackNumber(null);
     setMyFeedbackSnapshot(null);
     setMyFeedbackComments([]);
@@ -1717,12 +1739,43 @@ function PlayerPage({ event = null } = {}) {
    * "go to the question" banner) up until the player acts.
    */
   useEffect(() => {
-    if (myFeedbackOpen && myFeedbackNumber
+    if (myFeedbackOpen && myFeedbackNumber && !myFeedbackAfterEnd
       && gameState !== `RESULTS#${myFeedbackNumber}` && !myFeedbackHasDraft && !myFeedbackPostedLate) {
       closeMyFeedback();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber]);
+  }, [gameState, myFeedbackOpen, myFeedbackHasDraft, myFeedbackPostedLate, myFeedbackNumber, myFeedbackAfterEnd]);
+
+  /* At the end, ask /state once whether comments are still open and how many
+     rounds there were; the end screen lists them while they are. */
+  useEffect(() => {
+    if (gameState !== 'ENDED' || !gameId) { setEndedComments(null); return undefined; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}games/${gameId}/state`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setEndedComments({
+          open: data.commentsOpen !== false,
+          lastRound: Number(data.currentQuestion) > 0 ? Number(data.currentQuestion) : 0,
+        });
+      } catch { /* no entry: the end screen is unchanged */ }
+    })();
+    return () => { cancelled = true; };
+  }, [gameState, gameId]);
+
+  /* At the end, read the final score and standing from /players. They were
+     only ever filled on RESULTS, so a player who reloaded or rejoined after
+     the end read "Final score 0" with no standing while the host and the
+     report said 6 (issue #35). Waits for the name, which a rejoin restores
+     after the state arrives. */
+  useEffect(() => {
+    if (gameState !== 'ENDED' || !gameId || !playerName) return;
+    loadPlayerScoreInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, gameId, playerName]);
 
   /** Post one comment from the player's OWN panel — the same shape as
    *  `submitComment` above, kept separate because it writes to
@@ -3405,7 +3458,7 @@ function PlayerPage({ event = null } = {}) {
      the host-triggered, whole-room switch and is unaffected by any of this. */
   const myFeedbackStillOpen = myFeedbackOpen && gameState === `RESULTS#${myFeedbackNumber}`;
   const myFeedbackShowing = myFeedbackOpen
-    && (myFeedbackStillOpen || myFeedbackHasDraft || myFeedbackPostedLate);
+    && (myFeedbackStillOpen || myFeedbackHasDraft || myFeedbackPostedLate || myFeedbackAfterEnd);
   /* THE SESSION HAS ENDED, NOT MERELY "THE NEXT QUESTION IS LIVE" (fix round
      2, item 3) — the exact wording matters when there is no next question to
      go to at all. `myFeedbackExitLabel` covers both the button and the top
@@ -3444,7 +3497,10 @@ function PlayerPage({ event = null } = {}) {
 
   if (myFeedbackShowing) {
     volume = 'act';
-    ctx = position ? `${position} · Feedback` : 'Feedback';
+    // The round the panel is about, not the one the session stopped on: from
+    // the end screen a player may open round 1 of 3.
+    const panelRound = myFeedbackAfterEnd && myFeedbackSnapshot ? (myFeedbackSnapshot.roundLabel || myFeedbackSnapshot.title) : position;
+    ctx = panelRound ? `${panelRound} · Feedback` : 'Feedback';
     body = (
       <>
         {/* A TOP EXIT, NOT ONLY A BOTTOM ONE (minor, fix round 1) — the report
@@ -3463,7 +3519,9 @@ function PlayerPage({ event = null } = {}) {
           <p className="plr-lede plr-muted" role="status">
             {myFeedbackPostedLate
               ? 'Posted. It is kept with this round.'
-              : myFeedbackEnded
+              : myFeedbackAfterEnd
+                ? 'The session has ended. Comments stay open for 24 hours, or until your host closes them. Yours is marked as added later.'
+                : myFeedbackEnded
                 ? 'The session has ended. You can still post what you have written.'
                 : 'The next question is live. You can still post what you have written. It is kept with this round.'}
           </p>
@@ -3510,6 +3568,28 @@ function PlayerPage({ event = null } = {}) {
             </span>
           </div>
         )}
+
+        {endedComments && endedComments.open && endedComments.lastRound > 0 ? (
+          <section className="plr-ended-comments" aria-labelledby="plr-ended-comments-h">
+            <p className="plr-lab" id="plr-ended-comments-h">Something to add?</p>
+            <p className="plr-help">
+              You can still comment on a round for 24 hours, or until your host closes comments.
+            </p>
+            <div className="plr-ended-rounds">
+              {Array.from({ length: endedComments.lastRound }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className="plr-btn plr-btn--ghost plr-ended-round"
+                  onClick={() => openMyFeedback({ padded: String(n).padStart(3, '0'), title: `${roundNoun} ${n}` })}
+                >
+                  <Icon name="ChatCircleText" size={18} />
+                  {` ${roundNoun} ${n}`}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <LookUpCue>
           The room summary — the top responses, and what the host wants everyone to take

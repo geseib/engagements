@@ -91,7 +91,7 @@ const server = http.createServer((req, res) => {
     if (apiDown) { res.statusCode = 500; return res.end('{"error":"down"}'); }
     if (req.url.endsWith('/build/share/report')) {
       reports.push(JSON.parse(body));
-      return res.end(JSON.stringify({ wanted, targets, ...(remoteWanted ? { remoteWanted, remoteKeys: [] } : {}) }));
+      return res.end(JSON.stringify({ wanted, targets, ...(remoteWanted ? { remoteWanted, remoteTarget: targets[targets.length - 1], remoteKeys: [] } : {}) }));
     }
     res.end('{}');
   });

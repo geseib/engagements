@@ -21,7 +21,6 @@
  * http(s) (`safeHref`).
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../components/Modal';
 import { getAuthToken } from '../auth/authFetch';
 import { rememberReturnPath } from '../auth/returnPath';
@@ -32,7 +31,7 @@ import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import { editableRows } from '../utils/questionRows';
 import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady } from './readyQuestions';
-import { OpeningPanel, BriefPath, WallBrief } from './BuildOpening';
+import { OpeningPanel, BriefPath } from './BuildOpening';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import AskDetail from './BuildAskDetail';
@@ -44,52 +43,60 @@ import { W } from './words';
 import InfoTip from './InfoTip';
 import BuildLaterPoints from './BuildLaterPoints';
 import BuildPointRequest from './BuildPointRequest';
-import { PointStage, ShownPointCard, TakeDownOffer } from './BuildPointStage';
+import { ShownPointCard, TakeDownOffer } from './BuildPointStage';
 import { AskPath } from './BuildAskPath';
 import BuildPointsVote from './BuildPointsVote';
 import BuildPointsResults from './BuildPointsResults';
-import { RunPanel, RunConfirm, RunStage } from './BuildRun';
+import { RunPanel, RunConfirm } from './BuildRun';
 import ActionRow from './BuildActionRow';
 import { WhatsNext, DecidedList, decidedAsks } from './BuildWhatsNext';
 import { isTypingTarget, dialogOpen } from './useNextFocus';
-import BuildStageDecide from './BuildStageDecide';
-import { useRosterMode, rosterRevealFor } from '../hooks/useRosterReveal';
-import { joinedRoster } from '../config/anonymity';
-import { ShareDemo, DemoNudge, WallCodes, BuildScreenQr, wifiLink, demoOnStage, shownAddress } from './BuildWifiShare';
-import { shouldOfferDemo, demoRunnable, wifiState } from './wifiShare';
+import { ShareDemo, DemoNudge, wifiLink, demoOnStage } from './BuildWifiShare';
+import { shouldOfferDemo, demoRunnable } from './wifiShare';
 import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
 import PendingInvites from '../components/PendingInvites';
 import useBuildPlayers, { askingOf } from './useBuildPlayers';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import {
-  pluginInstallCommand,
-  pluginConnectCommand, pluginSlash, projectSlug, cleanFolder, startCommand,
-  hostImageUrl,
-  apiBase, buildApi, createBuildSession, buildRoomPath, connectCommand, safeHref,
+  pluginInstallCommand, pluginConnectCommand, projectSlug, cleanFolder, startCommand, hostImageUrl, apiBase, buildApi,
+  createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
-  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
-  questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
-  doingLine, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
-  roomStory, filterStory, artifactsOf, pickVerdict, combineText,
-  defaultSubject, shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN,
-  isPointsVote, highlightOf, highlightedPointIds, rowIsLive, pointVoteRows, runOf, runRunning,
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, directionFor, defaultDirection,
+  decideBody, questionAnswer, claudeState, VOTE_IDEAS_MAX, mockupsReady, RATING_SCALE, ratingAnswer, ratingStep,
+  unheard, agentStopped, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind,
+  whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField, pickVerdict, combineText, defaultSubject,
+  shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN, isPointsVote, highlightOf, highlightedPointIds,
+  rowIsLive, pointVoteRows, runOf, runRunning,
 } from './buildScreens';
-import Stage from '../components/stage/Stage';
-import Rail from '../components/stage/Rail';
-import RoomMeter from '../components/stage/RoomMeter';
-import Dock from '../components/stage/Dock';
-import { loadProfile } from '../config/displayProfile';
 import {
-  CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLook, EarlyLookDialog, StageTabs, featuredShare,
+  CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLookDialog, StageTabs,
 } from './BuildCrew';
+// THE ROOM'S SCREENS AND WHAT THEY DRAW (parity PLAN §2.5, B6): display
+// components in screens/, which never import this page or the signed-in fetch.
+import BuildStageScreen from './screens/BuildStageScreen';
+import BuildBuildScreen from './screens/BuildBuildScreen';
+import BuildHistoryScreen, { StoryItem } from './screens/BuildHistoryScreen';
+import { AskStage } from './screens/AskStage';
+import { WrappedStage } from './screens/StageIdle';
+import { QrZoom } from './screens/QrZoom';
+import { Timeline, NOT_YOURS } from './screens/Timeline';
+import {
+  KIND_LABEL, pluginCommand, askNumber, askById, clockTime, agoText, byLabel, OpenLink,
+  continueCommand, liveBuildLink, WALL_COMMENT_MS, freshWallComment,
+} from './screens/common';
+
+// Moved to screens/ in B6; still exported from here, where their importers look.
+export {
+  KIND_LABEL, pluginCommand, clockTime, agoText, byLabel, OpenLink, continueCommand, WALL_COMMENT_MS, freshWallComment,
+  AskStage, QrZoom, StoryItem,
+};
 
 export const POLL_MS = 8000;
 
 // ── Words ───────────────────────────────────────────────────────────────────
 
-export const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate' };
 export const STATUS_LABEL = {
   proposed: 'Proposed',
   live: 'Live',
@@ -158,61 +165,12 @@ export const PROMPT_CARDS = [
   },
 ];
 export const slashCommand = (name) => `/mcp__engage__${name}`;
-/** With the Engage plugin the same prompts are the plugin's own commands. */
-export const pluginCommand = (name) => pluginSlash(name);
 
-const askNumber = (askId) => Number(askId) || askId;
 /** The row that told Claude about an ask: the newest that went to it (a sent-later direction), else the decision's own. */
 const toldEntry = (room, askId) => {
   const rows = ((room && room.log) || []).filter((l) => l.askId === askId);
   const sent = rows.filter((l) => l.forAgent);
   return sent.length ? sent[sent.length - 1] : rows.filter((l) => l.kind === 'decision').pop() || null;
-};
-const askById = (room, askId) => ((room && room.asks) || []).find((a) => a.askId === askId) || null;
-
-export function clockTime(iso) {
-  const t = Date.parse(iso || '');
-  if (!Number.isFinite(t)) return '';
-  return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-export function agoText(iso, now) {
-  const t = Date.parse(iso || '');
-  if (!Number.isFinite(t)) return '';
-  const s = Math.max(0, Math.round((now - t) / 1000));
-  if (s < 60) return `${s}s ago`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
-  return `${Math.round(m / 60)} h ago`;
-}
-
-/** Who wrote a timeline entry, in the wall's words. */
-export function byLabel(entry) {
-  if (entry.kind === 'base') return 'Base moved';
-  if (entry.by === 'builder') return entry.kind === 'help' ? 'Help' : 'Crew';
-  if (entry.by === 'agent') return entry.kind === 'showing' ? 'Showing' : 'Claude';
-  if (entry.by === 'system') return 'System';
-  if (entry.by === 'room' || entry.kind === 'idea') return 'Idea';
-  switch (entry.kind) {
-    case 'verbal': return 'Room said';
-    case 'decision': return 'Decided';
-    case 'direction': return 'To Claude';
-    case 'note': return 'Host note';
-    case 'milestone': return 'Milestone';
-    case 'step': return 'Step';
-    case 'outcome': return 'Wrap-up';
-    default: return 'Host';
-  }
-}
-
-/** One dot colour per family on the timeline. */
-const entryTone = (entry) => {
-  if (entry.by === 'agent') return 'claude';
-  if (entry.kind === 'decision' || entry.kind === 'direction') return 'decision';
-  if (entry.kind === 'verbal' || entry.kind === 'idea') return 'verbal';
-  if (entry.kind === 'note') return 'note';
-  if (entry.by === 'system') return 'ask';
-  return 'host';
 };
 
 /** What the host can fold into the direction with one click. */
@@ -261,28 +219,7 @@ function useNow(ms) {
   return now;
 }
 
-/** A link only when it is http(s); otherwise the text, inert. */
-function SafeLink({ href, children, className }) {
-  const url = safeHref(href);
-  if (!url) return children ? <span className={className}>{children}</span> : null;
-  return <a className={className} href={url} target="_blank" rel="noopener noreferrer">{children || url}</a>;
-}
-
 // ── Page ────────────────────────────────────────────────────────────────────
-
-/**
- * A link the HOST opens on this laptop — a mockup, the demo, something Claude
- * is showing. Local addresses work here because Claude runs on this laptop;
- * that is the point, so the button says where it goes.
- */
-export function OpenLink({ href, label, primary = false }) {
-  if (!safeHref(href)) return null;
-  return (
-    <a className={`brm-btn brm-openbtn${primary ? ' brm-btn--primary' : ''}`} href={href} target="_blank" rel="noopener noreferrer" title={href}>
-      <Icon name="ArrowSquareOut" size={16} /> {label}
-    </a>
-  );
-}
 
 export default function BuildRoomPage() {
   const params = new URLSearchParams(window.location.search);
@@ -382,6 +319,13 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
 
 // ── The room ────────────────────────────────────────────────────────────────
 
+/** Fire and forget: what the room's window shows (POST build/wall). A failure is healed by the next. */
+function sendWall(api, body) {
+  try {
+    Promise.resolve(api.wall(body)).catch(() => {});
+  } catch (e) { /* never in the host's way */ }
+}
+
 export function BuildRoom({ gameId, initialView = 'room' }) {
   const api = useMemo(() => buildApi(gameId), [gameId]);
   // Screenshots are private: fetched with the host's sign-in (buildHostApi).
@@ -398,6 +342,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (isProjected(next)) lastShown.current = next;
     setScreenState(next);
   }, []);
+  // Stage, Build or History, by any door (2/3/4, P, the header tabs): the room's window shows it too.
+  useEffect(() => {
+    if (isProjected(screen)) sendWall(api, { screen });
+  }, [screen, api]);
   const [view, setView] = useState(initialView);
   // THE HOST ALERT (owner, 2026-10-10): what this device has just marked seen (before the server answers), and the line to jump to.
   const [seenLocal, setSeenLocal] = useState({ ids: [], allAt: '' });
@@ -441,6 +389,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // saved), so a refetch keeps them. `composeFocus` counts the times the
   // cursor is sent to the Composer; `voteIdeas` is What's next's vote dialog.
   const [composeText, setComposeText] = useState('');
+  // WHAT THE COMPOSER WAS FILLED FROM (parity PLAN §2.8, H1): the decided asks
+  // Combine put in it. Sent with the direction; gone once the box is emptied.
+  const [composeFrom, setComposeFrom] = useState([]);
+  useEffect(() => { if (!String(composeText).trim()) setComposeFrom((f) => (f.length ? [] : f)); }, [composeText]);
   const [composeFocus, setComposeFocus] = useState(0);
   const [ticked, setTicked] = useState(() => new Set());
   const [used, setUsed] = useState({});
@@ -477,7 +429,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // when sharing stops or fails the demo half leaves and Join stays. Only the
   // host, or the session ending, takes it down.
   const [codesUp, setCodesUp] = useState(false);
-  const hideCodes = useCallback(() => setCodesUp(false), []);
+  // THE ROOM'S WINDOW FOLLOWS (parity PLAN §2.6, B7): what the room is shown
+  // goes to the server too, fire and forget, so a window on the projector
+  // (/present?type=build) draws the same. The laptop's own screen changes as
+  // it always did; a failed post is healed by the next one.
+  const postWall = useCallback((body) => { sendWall(api, body); }, [api]);
+  const hideCodes = useCallback(() => { setCodesUp(false); postWall({ codes: 'none' }); }, [postWall]);
   const now = useNow(5000);
   const endedNow = Boolean(room) && room.state === 'ENDED';
   useEffect(() => { if (endedNow) setCodesUp(false); }, [endedNow]);
@@ -604,6 +561,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       if (items) setRoom((r) => (r ? { ...r, activity: items } : r));
     });
     webSocketClient.onMessage('gameEnded', () => refresh());
+    // The room's window reported itself: its status is on the host's read (presentDetail).
+    webSocketClient.onMessage('presentChanged', () => refresh());
     // Somebody asked to take a name, or the host's other device removed or restored someone.
     webSocketClient.onMessage('handoverRequested', () => loadPlayers());
     // The host's OTHER device answered (grant, Not now, Lock again): the strip clears here too.
@@ -618,6 +577,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       webSocketClient.offMessage('buildChanged');
       webSocketClient.offMessage('buildActivity');
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('presentChanged');
       webSocketClient.offMessage('handoverRequested');
       webSocketClient.offMessage('playersChanged');
       webSocketClient.offMessage('playerRemoved');
@@ -834,7 +794,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
   // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
   const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
-  const showCodes = () => { setScreen('stage'); setCodesUp(true); };
+  const showCodes = () => { setScreen('stage'); setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
   // The chip's Show on the Stage opens the same card (ruling 3).
   const share = { busy, run, api, onShowWall: showCodes };
   // The header's join button: both codes while the demo is live, Join alone otherwise (ruling 4).
@@ -855,7 +815,6 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const crew = room.crew && room.crew.enabled ? room.crew : null;
   const onCrew = Boolean(crew) && stage === 'crew';
   const openShare = crew && openShareId ? (crew.shares || []).find((x) => x.shareId === openShareId) || null : null;
-  const onWall = onCrew && present ? featuredShare(crew) : null;
   // The ticks that still name a decided ask (a tick outlives a refetch, never the ask).
   const decidedNow = decidedAsks(asks);
   const tickedNow = new Set(decidedNow.filter((a) => ticked.has(a.askId)).map((a) => a.askId));
@@ -869,6 +828,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (!chosen.length) return;
     const lines = combineText(chosen);
     setComposeText((t) => (String(t).trim() ? `${String(t).replace(/\s+$/, '')}\n\n${lines}` : lines));
+    setComposeFrom((f) => [...new Set([...f, ...chosen.map((a) => a.askId)])]);
     const at = new Date().toISOString();
     setUsed((u) => ({ ...u, ...Object.fromEntries(chosen.map((a) => [a.askId, at])) }));
     setTicked(new Set());
@@ -998,35 +958,34 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     <ImageViewer.Provider value={openImage}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}${screen === 'host' ? ' brm-room--host' : ''}`} data-theme="dark">
       {screen === 'stage' ? (
-        <BuildStage
+        // ONE SCREEN: the room's Stage with the host's controls on it (parity PLAN §2.5).
+        <BuildStageScreen
           room={room}
-          current={current}
-          crewOn={onCrew}
-          crew={crew}
-          onWall={onWall}
-          busy={busy}
-          ended={ended}
-          run={run}
-          api={api}
           now={now}
-          codesUp={codesUp && !ended}
-          onHideCodes={hideCodes}
-          draft={current ? drafts[current.askId] || null : null}
-          onSent={(out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); }}
-          onHost={() => setScreen('host')}
-          alert={stageAlert} onAlertGo={alertGo} onAlertAll={alertAll}
-          onSession={() => (panel ? closePanel() : openPanel())}
-          panelOpen={Boolean(panel)}
-          askingCount={askingNow.length}
-          listNames={Boolean(room.settings && room.settings.listNames)}
-          onTakeDown={takePointDown}
-          onPointLater={savePointLater}
-          highlight={current ? highlights[current.askId] : undefined}
-          onPointsMove={moveForward}
-          onRunNext={() => nextItem(false)} onRunSkip={skipItem} onRunStop={stopList}
-          pickId={pick && current && pick.askId === current.askId ? pick.id : null}
-          onPick={(id) => {
-            if (current) setConfirmPick({ ask: current, id });
+          show={{ crewOn: onCrew, codesUp: codesUp && !ended, pickId: pick && current && pick.askId === current.askId ? pick.id : null }}
+          controls={{
+            busy,
+            run,
+            api,
+            draft: current ? drafts[current.askId] || null : null,
+            highlight: current ? highlights[current.askId] : undefined,
+            onSent: (out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); },
+            onPick: (id) => { if (current) setConfirmPick({ ask: current, id }); },
+            onHideCodes: hideCodes,
+            onTakeDown: takePointDown,
+            onPointLater: savePointLater,
+            onPointsMove: moveForward,
+            // Pressed twice before Claude reported (the bar armed it), Next goes anyway.
+            onRunNext: (force) => nextItem(Boolean(force)),
+            onRunSkip: skipItem,
+            onRunStop: stopList,
+            // HOST: home in one press, the count a badge (D2; the list is on the Host screen).
+            onHost: () => setScreen('host'),
+            alert: stageAlert,
+            onSession: () => (panel ? closePanel() : openPanel()),
+            panelOpen: Boolean(panel),
+            askingCount: askingNow.length,
+            overlayOpen: Boolean(panel || confirmPick || joinZoom || takeDown || detailAskId || viewer || (runConfirm && listRunning)),
           }}
         />
       ) : (
@@ -1090,8 +1049,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         </div>
       )}
 
-      {screen === 'build' && <BuildScreen room={room} now={now} ended={ended} busy={busy} run={run} api={api} />}
-      {screen === 'history' && <HistoryScreen room={room} now={now} onOpenAsk={setDetailAskId} />}
+      {screen === 'build' && <BuildBuildScreen room={room} now={now} controls={{ ended, busy, run, api }} />}
+      {screen === 'history' && <BuildHistoryScreen room={room} now={now} controls={{ onOpenAsk: setDetailAskId }} />}
       {screen === 'host' && (
       <div className="brm-host">
         {/* NOW: what Claude or the room is doing, with that moment's controls,
@@ -1148,7 +1107,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                 />
               )}
               {current ? (
-                <div className="brm-now">
+                <div className="brm-now" data-capability="ask-path">
                   {/* THE ASK AS FOUR STEPS (owner, 2026-10-07). "Go with B"
                       is the room's choice and goes straight on; a click on
                       another option still asks first. */}
@@ -1183,12 +1142,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           )}
 
-          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} focusKey={composeFocus} leadShows />}
+          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows />}
         </main>
 
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
             them), then the room's ideas (C1, C2). */}
-        <section className="brm-hostcol" aria-labelledby="brm-waiting-h">
+        <section className="brm-hostcol" aria-labelledby="brm-waiting-h" data-capability="queue">
           <h2 className="brm-h5" id="brm-waiting-h" tabIndex={-1}>
             Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
           </h2>
@@ -1222,12 +1181,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         {/* WHAT HAPPENED (owner, 2026-10-05): the timeline, the asks and the
             screenshots, one open at a time; the open one fills the column and
             scrolls inside itself, so the page never scrolls. */}
-        <aside className="brm-hostcol brm-hostcol--stack">
+        <aside className="brm-hostcol brm-hostcol--stack" data-capability="whats-next">
           {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
           <HistoryStack
             items={[
               ...(room.opening && room.opening.phase === 'opening' ? [{
-                key: 'opening', label: 'The opening',
+                key: 'opening', label: 'The opening', capability: 'opening',
                 count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
                 body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
               }] : []),
@@ -1486,10 +1445,6 @@ export function agentChipText(agent, now) {
   return `${name} not connected`;
 }
 
-/** What the host does when Claude Code has gone quiet (owner, 2026-10-05). */
-/** Worked out when used: the site's tier names the plugin (window.ENV). */
-export const continueCommand = () => pluginCommand('continue');
-
 /**
  * Claude's status in the header. When Claude Code was here and has stopped
  * ("last seen 4 min ago"), the chip is the fix: one click copies
@@ -1640,23 +1595,6 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
   );
 }
 
-/**
- * THE HEADER, the same on all four screens: the title, the screens, the open
- * ask, Claude's status, the join code. On the Host screen it adds the live
- * connection and the session menu; on a screen the room sees, nothing in it
- * is host-only (the Host tab's count is a number, never content).
- */
-/**
- * THE LIVE BUILD (owner, 2026-10-08: "no obvious link to the live demo"): the
- * address of what Claude is running. The Wi-Fi share's address when sharing is
- * on (it works on every phone and laptop in the room), else the newest link
- * Claude posted, else the wrap-up's demo.
- */
-function liveBuildLink(room, now) {
-  const sharing = ['on', 'quiet'].includes(wifiState(room.lan, now).state);
-  return (sharing && wifiLink(room)) || latestBuild(room).link || '';
-}
-
 /** One always-visible control: opens the build in a new tab, or says why it cannot yet. */
 function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild', onPick }) {
   const href = safeHref(link);
@@ -1711,22 +1649,29 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
           busy={share.busy} run={share.run} api={share.api} onShowWall={share.onShowWall} nudge={Boolean(share.nudge)}
         />
       )}
-      <span className="brm-agentwrap"><AgentChip room={room} now={now} /></span>
+      <span className="brm-agentwrap" data-capability="claude-status"><AgentChip room={room} now={now} /></span>
       {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
       <button
         type="button"
         className="brm-codewrap brm-codebtn"
+        data-capability="share-demo"
         title={bothCodes ? 'Show both codes on the Stage' : 'Show the QR code'}
         aria-label={bothCodes ? `Join code ${room.gameId}. Show both codes on the Stage` : `Join code ${room.gameId}. Show the QR code`}
         onClick={onQr}
       >
         <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
       </button>
-      <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers}>{room.playerCount || 0} joined</button>
+      <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers} data-capability="players">{room.playerCount || 0} joined</button>
     </>
   );
 }
 
+/**
+ * THE HEADER, the same on all four screens: the title, the screens, the open
+ * ask, Claude's status, the join code. On the Host screen it adds the live
+ * connection and the session menu; on a screen the room sees, nothing in it
+ * is host-only (the Host tab's count is a number, never content).
+ */
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
   onSession, panelOpen, askingCount, onPlayers, onQr, bothCodes = false, pluginOutdated = false,
@@ -1749,7 +1694,7 @@ function RoomHeader({
       <nav className="brm-screens" aria-label="Screens">
         {SCREENS.map((s) => (s.key === 'host' && screen !== 'host' && alert ? (
           // The Host tab carries the Host alert on Build and History (owner, 2026-10-10); on the Host screen Waiting for you does.
-          <HostAlert key={s.key} alert={alert} variant="header" onHost={() => onScreen('host')} onGo={onAlertGo} onMarkAll={onAlertAll} />
+          <HostAlert key={s.key} alert={alert} onHost={() => onScreen('host')} onGo={onAlertGo} onMarkAll={onAlertAll} />
         ) : (
           <button
             key={s.key}
@@ -1773,7 +1718,7 @@ function RoomHeader({
         {!tucked && <HeaderTools {...tools} />}
         {/* SESSION (owner, 2026-10-09): the same word and key as the other
             engagements, last on the right where the three-dot menu was. */}
-        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession}>
+        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
           SESSION <kbd>\</kbd>
           {askingCount > 0 && <span className="brm-sess-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
           {/* The plugin is out of date: a dot, on the Host screen only (never on the Stage, Build or History the room sees). */}
@@ -1860,7 +1805,7 @@ function HistoryStack({ items }) {
       {items.map((it) => {
         const isOpen = open === it.key;
         return (
-          <div key={it.key} className={`brm-stackitem${isOpen ? ' is-open' : ''}`}>
+          <div key={it.key} className={`brm-stackitem${isOpen ? ' is-open' : ''}`} data-capability={it.capability}>
             <button
               type="button"
               className="brm-stackhead"
@@ -1883,494 +1828,7 @@ function HistoryStack({ items }) {
 
 // ── The Stage screen ────────────────────────────────────────────────────────
 
-/** The dock hint's verb: what Space does for the move beside it. */
-function hintVerb(move) {
-  if (move.action === 'to-claude') return move.verb || 'send';
-  if (move.action === 'points-send') return 'send';
-  if (move.action === 'run-next') return `send ${move.k}`;
-  if (move.action === 'points-close') return 'close the vote';
-  if (move.action === 'close') return 'show results';
-  if (move.action === 'spin' || move.action === 'wheel') return 'spin';
-  if (move.action === 'open' || move.action === 'vote') return 'open voting';
-  if (move.action === 'edit') return 'change before sending';
-  if (move.action === 'reopen') return 'reopen it';
-  if (move.action === 'hide-codes') return move.label === W.hideCodes ? 'hide the codes' : 'hide the code';
-  return 'go';
-}
-
-/**
- * STAGE: what the room reads during an ask, drawn by the regular host stage's
- * own parts (components/stage/: Stage, Rail, RoomMeter, Dock), so a Build Room
- * ask looks and behaves like any other session on the projector: the same
- * display profiles and fitter, the phase chip and join code in the rail, the
- * count in the meter, one move in the dock on Space. The rail is this screen's
- * header; HOST at the dock's edge (or 1, or P) goes back, as SESSION does on
- * the regular stage. Everything on it is room-safe (stageModel). At results the
- * host decides here: Send B to Claude sends the room's choice, Change before sending opens the send
- * window (StageDecide), and a click on an option or a wheel slice opens that
- * window with the pick made (owner, 2026-10-08).
- */
-function BuildStage({ room, current, crewOn, crew, onWall, busy, ended, run, api, now, codesUp = false, onHideCodes = () => {}, onHost, alert, onAlertGo, onAlertAll, onSession = () => {}, panelOpen = false, askingCount = 0, listNames = false, pickId, onPick, draft = null, onSent = () => {}, onTakeDown = () => {}, onPointLater = () => {}, highlight = undefined, onPointsMove = () => undefined, onRunNext = () => undefined, onRunSkip = () => undefined, onRunStop = () => undefined }) {
-  const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
-  // One code enlarged alone: the rail's join code, or either code on the codes card.
-  const [zoom, setZoom] = useState(null); // 'join' | 'demo'
-  const demoLink = wifiLink(room);
-  // "Press Space to ..." is for the host at the dock: it shows only while the pointer is on the dock (copy pass 2026-10-10).
-  const [overDock, setOverDock] = useState(false);
-  // The picks wait for the wheel to stop (a wheel already still on arrival is settled).
-  const spinsOf = (current && current.wheel && current.wheel.spins) || [];
-  const lastSpinId = spinsOf.length ? spinsOf[spinsOf.length - 1].spinId : null;
-  const [settledSpin, setSettledSpin] = useState(lastSpinId);
-  const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
-  const m = stageModel(room, current, now, { crewOn, draft, turning: wheelTurning, highlight });
-  const [editing, setEditing] = useState(false);
-  const [editPick, setEditPick] = useState(null); // an option clicked on the board
-  // The window belongs to one ask at results: it goes when that ask moves on.
-  // A vote made from points settles by highlight (T6), not by the send window.
-  const pointsVote = Boolean(current && isPointsVote(current) && !current.wheel && !current.revotedAs);
-  const editable = Boolean(current && current.status === 'results' && !ended && !crewOn && !pointsVote);
-  const editKey = current ? `${current.askId}:${current.status}` : '';
-  useEffect(() => { setEditing(false); setEditPick(null); }, [editKey]);
-  const liveLink = liveBuildLink(room, now);
-  // A click on an option or a wheel slice at results opens the send window
-  // with that pick made; while the room is still answering it asks first, as before.
-  const boardPick = (id) => {
-    if (editable) { setEditPick(id); setEditing(true); return; }
-    onPick(id);
-  };
-  // THE CODES CARD: its one move is to take it down, so the dock's button and Space do that.
-  const both = codesUp && demoOnStage(room, now, demoLink);
-  const hideMove = useMemo(() => ({ action: 'hide-codes', label: both ? W.hideCodes : W.hideCode }), [both]);
-  const move = codesUp ? hideMove : (!ended && m.primary ? m.primary : null);
-  const doMove = useCallback((m) => {
-    if (!m || busy) return;
-    // The turning wheel offers nothing: a pick waits for it to stop, as the Host's button does.
-    if (m.action === 'noop' || m.disabled || (m.action === 'to-claude' && wheelTurning)) return;
-    if (m.action === 'hide-codes') { onHideCodes(); return; }
-    // A pick waits for the wheel to stop, as the Host's button does.
-    if (m.action === 'noop' || m.disabled || (m.action === 'to-claude' && wheelTurning)) return;
-    // EDIT opens the send window here; TO CLAUDE sends the room's choice with
-    // its own sentence, as the Host's panel would (owner, 2026-10-08).
-    if (m.action === 'edit') { if (editable) setEditing(true); return; }
-    // A TALKING POINT is up: Take it down (which may offer the ideas a vote) or save it for later.
-    if (m.action === 'take-down') { if (m.point) onTakeDown(m.point); return; }
-    if (m.action === 'point-later') { if (m.point) onPointLater(m.point); return; }
-    // THE HIGHLIGHT AND THE RUN LIST: the same moves as the Host's rows.
-    if (m.action === 'points-send') { onPointsMove(current, 'send'); return; }
-    if (m.action === 'points-run') { onPointsMove(current, 'run'); return; }
-    if (m.action === 'points-later') { onPointsMove(current, 'later-rest'); return; }
-    if (m.action === 'points-close') { onPointsMove(current, 'close'); return; }
-    if (m.action === 'run-next') { onRunNext(); return; }
-    if (m.action === 'run-skip') { onRunSkip(); return; }
-    if (m.action === 'run-stop') { onRunStop(); return; }
-    if (m.action === 'to-claude') {
-      // The same move as the Host's Settle press, including a direction the host already changed.
-      const go = settleMove(current, draft);
-      if (!go) return;
-      run(async () => {
-        const out = await api.askAction(current.askId, decideBody(current, { direction: go.direction, chosen: go.chosen, as: go.kind }));
-        onSent({ as: go.kind, send: true, direction: go.direction });
-        return out;
-      });
-      return;
-    }
-    run(() => api.askAction(m.askId || current.askId, { action: m.action }));
-  }, [busy, run, api, current, editable, wheelTurning, room, onTakeDown, onPointLater, onPointsMove, onRunNext, onRunSkip, onRunStop, onHideCodes]);
-  const act = useCallback(() => doMove(move), [doMove, move]);
-  // Escape takes the codes down too, as the card it replaced did; never while a dialog is up.
-  useEffect(() => {
-    if (!codesUp) return undefined;
-    const onKey = (e) => {
-      if (e.key !== 'Escape' || dialogOpen()) return;
-      onHideCodes();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [codesUp, onHideCodes]);
-  // Space fires the dock's move: never while typing, and never when a focused
-  // control would take the Space itself.
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
-      if (e.target && e.target.closest && e.target.closest('button, a, [role="button"], [role="dialog"]')) return;
-      if (dialogOpen()) return;
-      // Next before Claude has reported the item done is never one stray key away.
-      if (move && move.action === 'run-next' && !move.claudeDone) return;
-      e.preventDefault();
-      act();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [act, move]);
-  // WHO IS IN THE ROOM, on hover (owner, 2026-10-07): the regular stage's
-  // lobby list, the same hover, focus, pin and Escape. Only while no ask is
-  // up: the list is the joined set, and an ask phase names the waiting set.
-  const [rosterMode, setRosterMode] = useRosterMode();
-  const { reveal, handlers } = rosterRevealFor(rosterMode, setRosterMode, `IDLE#${room.currentAskId || (room.asks || []).length}`);
-  // A pinned list does not outlive the quiet moment it was asked for: when an
-  // ask is up it is put away, and it is not there when the ask ends.
-  const askUp = Boolean(m.phase);
-  useEffect(() => { if (askUp) setRosterMode(null); }, [askUp, setRosterMode]);
-  const joined = m.phase ? null : joinedRoster({ players: (room.players || []).map((name) => ({ name })) });
-  // OFF BY DEFAULT (owner, 2026-10-09): the meter lists who has joined only when
-  // the host turned "List names on the room meter" on in the Session panel.
-  const joinedWaiting = joined && listNames ? { names: joined, mode: reveal, ...handlers } : null;
-  const body = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
-  const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
-  let content;
-  if (codesUp) {
-    content = <WallCodes room={room} now={now} link={demoLink} onZoom={setZoom} />;
-  } else if (crewOn) {
-    content = (
-      <>
-        {onWall && <EarlyLook key={onWall.shareId} share={onWall} crew={crew} host={false} stage />}
-        <CrewBoard crew={crew} host={false} now={now} busy={busy} run={run} api={api} onOpen={() => undefined} playerCount={room.playerCount} />
-      </>
-    );
-  } else if (current && m.wheel) {
-    content = (
-      <section className="brm-stage brm-wheelstage" aria-label="The wheel">
-        <span className="brm-eyebrow"><b>The wheel</b> · Ask {Number(current.askId) || current.askId}</span>
-        <h2 className="brm-q">{current.prompt}</h2>
-        <BuildWheel wheel={current.wheel} size="lg" onSettled={setSettledSpin} />
-        {/* SAME GOES FOR SPIN (owner, 2026-10-06): after it lands, the host may
-            take the wheel's pick or an alternate, with the same question. */}
-        {!ended && current.wheel.landed && !wheelTurning && (
-          <div className="brm-wheelpicks" role="group" aria-label="Pick">
-            {(current.wheel.slices || []).map((sl) => (
-              <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' is-landed' : ''}`} onClick={() => boardPick(sl.id)}>
-                {sl.label ? `${sl.label} · ` : ''}{sl.text}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-    );
-  } else if (current) {
-    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={busy} ended={ended} run={run} api={api} pickId={editPick || pickId} onPick={pointsVote ? null : boardPick} />;
-  } else if (room.opening && room.opening.phase === 'opening') {
-    // THE OPENING (O3): between steps, the wall reads back the brief so far.
-    content = <WallBrief room={room} />;
-  } else if (m.point) {
-    content = <PointStage point={m.point} />;
-  } else if (m.run) {
-    content = <RunStage run={m.run} />;
-  } else {
-    content = <IdleStage room={room} now={now} host={false} />;
-  }
-  return (
-    <>
-      <Stage
-        profile={profile}
-        phase={m.phase || ''}
-        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : ''].join('|')}
-        rail={(
-          <Rail
-            phase={m.phase}
-            title={room.title || 'Build Room'}
-            context={m.context}
-            join={ended
-              ? { code: room.gameId, closed: true }
-              : { url: `${window.location.host}/play`, code: room.gameId, onPreview: () => undefined, onPreviewEnd: () => undefined, onPin: () => setZoom('join') }}
-          />
-        )}
-        meter={codesUp ? null : <RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={body} waiting={joinedWaiting} />}
-        dock={(
-          <Dock
-            onMouseEnter={() => setOverDock(true)}
-            onMouseLeave={() => setOverDock(false)}
-            onFocus={() => setOverDock(true)}
-            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOverDock(false); }}
-            status={liveLink ? (
-            <>
-              {m.status}
-              {/* A small link, not a button: it must never compete with the main button. */}
-              {safeHref(liveLink) && <a className="brm-dockbuild" href={safeHref(liveLink)} target="_blank" rel="noopener noreferrer" title="Opens in a new tab"><Icon name="ArrowSquareOut" size={14} /> {W.openBuildTab}</a>}
-            </>
-          ) : m.status}
-          >
-            {!ended && !codesUp && (m.extras || []).map((x) => <button key={x.action} type="button" className="btn ghost" disabled={busy || x.disabled} onClick={() => doMove(x)}>{x.label}</button>)}
-            {!ended && !codesUp && m.secondary && <button type="button" className="btn ghost" disabled={busy || m.secondary.disabled} onClick={() => doMove(m.secondary)}>{m.secondary.label}</button>}
-            {move && <button type="button" className="btn" disabled={busy || move.disabled || (move.action === 'to-claude' && wheelTurning)} onClick={act}>{move.label}</button>}
-            {/* The key sits beside the move it fires, as on the regular stage; HOST stays last. */}
-            {overDock && move && !move.disabled && !(move.action === 'run-next' && !move.claudeDone) && <span className="brm-dockhint">Press <b>Space</b> to {hintVerb(move)}</span>}
-            {/* HOST carries the Host alert (owner, 2026-10-10): a count, amber while Claude waits, a short list on click. */}
-            <HostAlert alert={alert} variant="stage" onHost={onHost} onGo={onAlertGo} onMarkAll={onAlertAll} />
-            {/* SESSION is last, so it is never the lead. The count lights it when someone
-                asks to take a name; nothing on the Stage names the person. */}
-            <button type="button" className={`dock-more${askingCount > 0 ? ' brm-dock-lit' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} title="Session (\)">
-              <span className="dock-more-lbl">SESSION</span>
-              {askingCount > 0 && <span className="brm-screen-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
-            </button>
-          </Dock>
-        )}
-      >
-        <div className="content"><div className="fitbox">{content}</div></div>
-      </Stage>
-      <WallComment comment={freshWallComment(room, now)} />
-      {editing && editable && (
-        <BuildStageDecide key={`${current.askId}:${editPick || ''}`} initialPick={editPick} draft={draft} onSent={onSent} ask={current} busy={busy} run={run} api={api} onClose={() => { setEditing(false); setEditPick(null); }} />
-      )}
-      {zoom === 'join' && <QrZoom playUrl={playUrl} gameId={room.gameId} onClose={() => setZoom(null)} />}
-      {zoom === 'demo' && demoLink && <QrZoom demoLink={demoLink} onClose={() => setZoom(null)} />}
-    </>
-  );
-}
-
 // ── The Build and History screens ───────────────────────────────────────────
-
-/**
- * BUILD: what Claude has built so far (owner, 2026-10-05: "present is really
- * switching to the local live view of the development server"). Showing the
- * running page inside Engage waits on a browser check (PLAN step 0: an https
- * page could not frame localhost in Chromium 152), so this screen shows the
- * newest screenshot and opens the running build in a new tab: the fallback
- * the design keeps anyway (C8).
- */
-function BuildScreen({ room, now, ended = false, busy = false, run, api }) {
-  const latest = latestBuild(room);
-  const { shot } = latest;
-  const openViewer = useContext(ViewerContext);
-  // A newest screenshot that is a choice ask's option opens the viewer (R2).
-  const shotAsk = shot && shot.askId ? askById(room, shot.askId) : null;
-  const shotOpt = shotAsk && shotAsk.kind === 'choice' ? (shotAsk.options || []).find((o) => o.label === shot.label) : null;
-  // SHARE DEMO (D3, D6): shared, the link is the address every device gets; not, it is this laptop's own.
-  const lan = room.lan || {};
-  const shareLink = ['on', 'quiet'].includes(wifiState(lan, now).state) ? wifiLink(room) : '';
-  const link = shareLink || latest.link;
-  const offerShare = !ended && !lan.wanted && demoRunnable(room) && Boolean(api);
-  let shown = link;
-  if (shareLink) { try { shown = new URL(shareLink).host; } catch (e) { shown = ''; } }
-  return (
-    <section className="brm-screenbody brm-buildscreen" aria-label="The build">
-      <WallComment comment={freshWallComment(room, now)} />
-      <div className="brm-row brm-buildrow">
-        <h2 className="brm-q">{W.buildSoFar}</h2>
-        {safeHref(link) && <span className="brm-push"><OpenLink href={link} label={W.openBuild} primary={!offerShare} /></span>}
-        {offerShare && (
-          <button type="button" className={`brm-btn brm-btn--primary${safeHref(link) ? '' : ' brm-push'}`} disabled={busy} onClick={() => run(() => api.share({ on: true }))}>{W.shareDemo}</button>
-        )}
-      </div>
-      {safeHref(link) && (
-        <p className="brm-buildurl">
-          <span className="brm-buildurl-u">{shown}</span>
-          <span className="brm-buildurl-who">{shareLink ? W.anyoneOnWifi : W.onlyThisLaptop}</span>
-        </p>
-      )}
-      {shot ? (
-        <BuildImage imageId={shot.imageId} caption={shot.caption} className="brm-shot brm-shot--build" onOpen={shotOpt && openViewer ? () => openViewer(shotAsk.askId, shotOpt.label, 'build') : null} />
-      ) : (
-        <div className="brm-empty">Nothing to show yet.</div>
-      )}
-      <BuildScreenQr link={shareLink} open={lan.open} />
-    </section>
-  );
-}
-
-/**
- * HISTORY: the room's story so far, to look back on together. The decisions,
- * the timeline as the wall shows it (no host notes, no idea authors), and
- * every screenshot. Nothing here edits; the Host screen does that.
- */
-/**
- * HISTORY (step 5, C9 and C10): the session's story for the room, on the
- * wall. Everything is what Claude showed, what was decided and how, and what
- * the room said, newest first, with the pictures at the moment they were
- * made; Decisions is the decisions alone; Artifacts is every picture, each
- * saying what it was for; Full timeline is the room's whole timeline. Nothing
- * here edits: that stays on the Host screen.
- */
-const HISTORY_FILTERS = [
-  { key: 'all', label: 'Everything' },
-  { key: 'decisions', label: 'Decisions' },
-  { key: 'artifacts', label: 'Artifacts' },
-  { key: 'timeline', label: 'Full timeline' },
-];
-
-/** What a step produced: a small row under it, oldest first. */
-function StoryKid({ kid, onOpen }) {
-  const openable = Boolean(onOpen) && kid.type === 'decided' && kid.askId;
-  return (
-    <li className={`brm-story-kid brm-story-kid--${kid.type}`}>
-      <span className="brm-story-kidh">{kid.type === 'decided' ? W.decided : kid.heading}</span>
-      {openable
-        ? <button type="button" className="brm-story-open brm-story-kidt" aria-label={`Open Ask ${askNumber(kid.askId)}`} onClick={() => onOpen(kid.askId)}>{kid.text}</button>
-        : <span className="brm-story-kidt">{kid.text}</span>}
-      <span className="brm-story-tm">{clockTime(kid.at)}</span>
-      {safeHref(kid.link) && <a className="brm-story-kidlink" href={safeHref(kid.link)} target="_blank" rel="noopener noreferrer">{kid.link}</a>}
-      {kid.imageIds.length > 0 && (
-        <span className="brm-story-pics">
-          {kid.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={kid.text} className="brm-shot brm-story-pic" />)}
-        </span>
-      )}
-    </li>
-  );
-}
-
-export function StoryItem({ item, onOpen = null }) {
-  // A decided item opens its ask's window (History, R1); a click anywhere on
-  // it does, except on a link or button of its own.
-  const openable = Boolean(onOpen) && item.type === 'decided' && item.askId;
-  const isStep = item.type === 'step';
-  return (
-    <li
-      className={`brm-story-it brm-story-it--${item.type}${openable ? ' is-openable' : ''}${item.now ? ' is-now' : ''}`}
-      onClick={openable ? (e) => { if (!(e.target.closest && e.target.closest('a, button'))) onOpen(item.askId); } : undefined}
-    >
-      <span className="brm-story-tm">{clockTime(item.at)}</span>
-      <span className="brm-story-dot" aria-hidden="true" />
-      <div className="brm-story-body">
-        {openable
-          ? <button type="button" className="brm-story-h brm-story-open" aria-label={`Open Ask ${askNumber(item.askId)}`} onClick={() => onOpen(item.askId)}>{item.heading}</button>
-          : <span className="brm-story-h">{item.heading}{isStep && item.dur && <span className="brm-muted">{` · ${item.dur}`}</span>}</span>}
-        {!isStep && <p className="brm-story-t">{item.text}</p>}
-        {isStep && item.kids.length > 0 && (
-          <ul className="brm-story-kids">
-            {item.kids.map((k) => <StoryKid key={k.id} kid={k} onOpen={onOpen} />)}
-          </ul>
-        )}
-        {item.chain.length > 0 && (
-          <p className="brm-story-chain" aria-label="How it was decided">
-            {item.chain.map((c, i) => (
-              <React.Fragment key={c}>
-                {i > 0 && <span className="brm-story-arrow" aria-hidden="true">→</span>}
-                <span className="brm-story-step">{c}</span>
-              </React.Fragment>
-            ))}
-          </p>
-        )}
-        {item.imageIds.length > 0 && (
-          <div className="brm-story-pics">
-            {item.imageIds.map((id) => (
-              <BuildImage key={id} imageId={id} alt={item.text} linked={!openable} className={`brm-shot brm-story-pic${(item.chosenLabels || []).length && item.imageIds[0] === id ? ' is-chosen' : ''}`} />
-            ))}
-          </div>
-        )}
-      </div>
-    </li>
-  );
-}
-
-function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
-  const [filter, setFilter] = useState('all');
-  const asks = room.asks || [];
-  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now) });
-  const arts = artifactsOf({ images: room.images || [], asks });
-  const shown = filterStory(story, filter === 'decisions' ? 'decisions' : 'all');
-  const decided = asks
-    .filter((a) => a.status === 'decided' && a.decision)
-    .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
-  const ideas = room.ideas || [];
-  const usedIdeas = ideas.filter((i) => i.status === 'promoted').length;
-  const noop = () => undefined;
-  return (
-    <div className="brm-screenbody brm-histscreen">
-      <div className="brm-histmain">
-        {filter === 'timeline' && <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />}
-        {filter === 'artifacts' && (arts.length ? (
-          <ul className="brm-arts" aria-label="Artifacts">
-            {arts.map((a) => (
-              <li key={a.imageId} className={`brm-art${a.chosen ? ' is-chosen' : ''}`}>
-                <BuildImage imageId={a.imageId} alt={a.title} className="brm-shot brm-art-img" />
-                <span className="brm-art-t">{a.title}</span>
-                <span className="brm-who">{a.meta} · {clockTime(a.createdAt)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="brm-empty">Claude&apos;s screenshots and mockups collect here as it works.</p>)}
-        {(filter === 'all' || filter === 'decisions') && (shown.length ? (
-          <ol className="brm-story" aria-label={filter === 'decisions' ? 'Decisions' : 'The story so far'}>
-            {shown.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} />)}
-          </ol>
-        ) : (
-          <p className="brm-empty">{filter === 'decisions' ? 'Nothing decided yet.' : W.nothingYet}</p>
-        ))}
-      </div>
-      <div className="brm-histside">
-        <div className="brm-qfilters" role="group" aria-label="Show">
-          {HISTORY_FILTERS.map((f) => (
-            <button key={f.key} type="button" className={`brm-qchip${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-              {f.label}{f.key === 'artifacts' ? ` · ${arts.length}` : ''}
-            </button>
-          ))}
-        </div>
-        <section className="brm-panel" aria-labelledby="brm-decided-h">
-          <h2 className="brm-h" id="brm-decided-h">Decided so far</h2>
-          {decided.length ? (
-            <ol className="brm-list brm-decided">
-              {decided.map((a) => (
-                <li key={a.askId}>
-                  <button type="button" className="brm-decided-open" onClick={() => onOpenAsk(a.askId)}>
-                    {a.decision.direction || a.prompt}
-                    {a.decision.method && <span className="brm-muted brm-small">{` · ${METHOD_WORDS[a.decision.method] || a.decision.method}`}</span>}
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="brm-hint">Nothing decided yet.</p>
-          )}
-        </section>
-        <section className="brm-panel" aria-labelledby="brm-made-h">
-          <h2 className="brm-h" id="brm-made-h">Made so far</h2>
-          <p className="brm-made">
-            {arts.length} {arts.length === 1 ? 'screenshot' : 'screenshots'} · {ideas.length} {ideas.length === 1 ? 'idea' : 'ideas'}{ideas.length ? `, ${usedIdeas} used` : ''}
-          </p>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-/** The full join link, copied with one click, so the host can paste it into a chat or an email. */
-function CopyLinkButton({ url, className, children }) {
-  const [said, setSaid] = useState('');
-  const copy = async (e) => {
-    e.stopPropagation(); // inside the enlarged QR, a click anywhere else closes it
-    const ok = await copyText(url);
-    setSaid(ok ? 'Link copied' : 'Press and hold to copy');
-    setTimeout(() => setSaid(''), 2500);
-  };
-  return (
-    <button type="button" className={className} onClick={copy} title={`Copy ${url}`} aria-label={`Copy the join link ${url}`}>
-      {children}
-      <span className="brm-copied" role="status">{said}</span>
-    </button>
-  );
-}
-
-/**
- * The QR, big enough to scan from the back of the room (owner, 2026-10-04).
- * A click anywhere puts it away; the link under it copies instead.
- */
-export function QrZoom({ playUrl, gameId, onClose, demoLink = '' }) {
-  if (demoLink) {
-    // The demo's code alone, for a long room (two codes, 2026-10-11). Its key
-    // is in the code, never in the words: the address shows host and port only.
-    return (
-      <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Demo QR code">
-        <div className="brm-qrzoom-body" onClick={onClose}>
-          <div className="brm-qrzoom-qr" role="img" aria-label="QR code to open the demo">
-            <QRCodeSVG value={demoLink} size={512} level="M" includeMargin={false} />
-          </div>
-          <div className="brm-qrzoom-url">{shownAddress(demoLink)}</div>
-          <div className="brm-qrzoom-code">{W.stageSameWifi}</div>
-        </div>
-      </Modal>
-    );
-  }
-  return (
-    <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Join QR code">
-      <div className="brm-qrzoom-body" onClick={onClose}>
-        <div className="brm-qrzoom-qr" role="img" aria-label={`QR code to join at ${playUrl}`}>
-          <QRCodeSVG value={playUrl} size={512} level="M" includeMargin={false} />
-        </div>
-        <CopyLinkButton url={playUrl} className="brm-qrzoom-url">{playUrl}</CopyLinkButton>
-        <div className="brm-qrzoom-code">Code <b>{gameId}</b></div>
-      </div>
-    </Modal>
-  );
-}
 
 // ── Review (proposed) ───────────────────────────────────────────────────────
 
@@ -2563,37 +2021,6 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
 // ── The current ask ─────────────────────────────────────────────────────────
 
 /**
- * THE CURRENT ASK'S BOARD: the options and their counts, the ideas, the
- * rating, the reasons. On the Stage it is the wall (host={false}). On the Host
- * screen it sits inside the four-step path with `pathMode` (owner,
- * 2026-10-07): the path (BuildAskPath.jsx) carries the question, Edit wording,
- * Discard, Close, Reopen, the wheel and the direction, so the board has no
- * eyebrow, heading or controls of its own; a click on an option still picks.
- */
-export function AskStage({ ask, host, busy, ended, run, api, pickId = null, onPick = null, pathMode = false }) {
-  return (
-    <section className={`brm-stage brm-stage--${ask.status}`} aria-label="Current ask">
-      {!pathMode && (
-        <>
-          <div className="brm-top">
-            <span className="brm-eyebrow">
-              <b>{ask.status === 'voting' ? 'Vote' : KIND_LABEL[ask.kind]}</b> · Ask {askNumber(ask.askId)}
-              {ask.status === 'results' && ' · Closed'}
-            </span>
-          </div>
-          <h2 className="brm-q">{ask.prompt}</h2>
-          {ask.detail && <p className="brm-detail">{ask.detail}</p>}
-        </>
-      )}
-      {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} viewFrom={pathMode ? 'host' : null} />}
-      {ask.kind === 'rating' && <RatingBoard ask={ask} />}
-      {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />}
-      {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
-    </section>
-  );
-}
-
-/**
  * THE WHEEL, OR A REVOTE (owner, 2026-10-05): "if a tie, it's either a wheel
  * spin or revote, host's choice", and the wheel any time at results. A random
  * person in the room spins it from their phone; the host can always spin;
@@ -2637,25 +2064,6 @@ export function WheelPanel({ ask, busy, run, api, primary = false, spinInRow = f
 }
 
 /**
- * "CHOOSE THIS INSTEAD" (owner, 2026-10-06), at results: the answer going to
- * Claude says so; every other one offers itself. On the Stage a click goes to
- * the Host with that answer's sentence in the direction; on the Host it swaps
- * the sentence in place, as often as the host changes their mind.
- */
-function PickButton({ id, current, onPick, idea = false, open = false }) {
-  if (open) return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>Pick this</button>;
-  if (current && id === current) return <span className="brm-pick is-on">Going to Claude</span>;
-  const label = `Choose this${idea ? ' idea' : ''}${current ? ' instead' : ''}`;
-  return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>{label}</button>;
-}
-
-/** A click on an option card picks it, unless the click was on a link or button inside it. */
-const cardPick = (onPick, id) => (e) => {
-  if (e.target && e.target.closest && e.target.closest('a, button, input, textarea')) return;
-  onPick(id);
-};
-
-/**
  * THE HOST'S PICK, CONFIRMED (owner, 2026-10-06: "it asks if you want to pick
  * the preferred choice of the room ... or an alternate one (not the room's
  * preference). same goes for spin. ask the host to confirm and let them know
@@ -2683,130 +2091,6 @@ export function PickConfirm({ ask, id, busy, onConfirm, onClose }) {
         </button>
       </div>
     </Modal>
-  );
-}
-
-function ChoiceBoard({ ask, pickId = null, onPick = null, viewFrom = null }) {
-  const openViewer = useContext(ViewerContext);
-  const open = ['live', 'voting'].includes(ask.status);
-  const picking = Boolean(onPick) && (open || ask.status === 'results');
-  const current = picking && !open ? pickId || winnerOf(ask) : null;
-  const opts = (ask.results && ask.results.options) || [];
-  const lead = Math.max(0, ...opts.map((o) => o.count));
-  return (
-    <div className="brm-choices">
-      {(ask.options || []).map((o, i) => {
-        const r = opts.find((x) => x.label === o.label) || { count: 0, pct: 0 };
-        return (
-          <div key={o.label} className={`brm-choice brm-choice--${i % 3}${lead && r.count === lead ? ' is-lead' : ''}${picking ? ' is-pickable' : ''}`} onClick={picking ? cardPick(onPick, o.label) : undefined} title={picking ? `Pick ${o.label}` : undefined}>
-            <div className="brm-choice-head">
-              <span className="brm-big" aria-hidden="true">{o.label}</span>
-              <div className="brm-choice-text">
-                <div className="brm-ct"><span className="brm-sr">Choice {o.label}: </span>{o.title}</div>
-                {o.detail && <div className="brm-cd">{o.detail}</div>}
-                <OpenLink href={o.url} label={`Open ${o.label}`} />
-              </div>
-            </div>
-            <BuildImage imageId={o.imageId} alt={`Choice ${o.label}: ${o.title}`} className="brm-shot brm-shot--opt" onOpen={viewFrom && openViewer ? () => openViewer(ask.askId, o.label, viewFrom) : null} />
-            <div className="brm-bar" aria-hidden="true"><span style={{ width: `${r.pct}%` }} /></div>
-            <div className="brm-count"><b>{r.count}</b> {r.pct}%</div>
-            {picking && <PickButton id={o.label} current={current} onPick={onPick} open={open} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function RatingBoard({ ask }) {
-  const rating = (ask.results && ask.results.rating) || { avg: null, count: 0, dist: [0, 0, 0, 0, 0] };
-  const max = Math.max(1, ...(rating.dist || []));
-  return (
-    <div className="brm-rating">
-      <div className="brm-rating-avg">
-        <b>{rating.avg === null || rating.avg === undefined ? '–' : rating.avg}</b>
-        <span>average of {rating.count || 0}</span>
-      </div>
-      <div className="brm-dist">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <div className="brm-distrow" key={n}>
-            <span className="brm-distn">{ratingStep(n)}</span>
-            <div className="brm-bar"><span style={{ width: `${((rating.dist || [])[n - 1] || 0) / max * 100}%` }} /></div>
-            <span className="brm-distc">{(rating.dist || [])[n - 1] || 0}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick = null }) {
-  const [said, setSaid] = useState('');
-  // Ideas are picked once the room votes on them (voting), or at results.
-  const open = ask.status === 'voting';
-  const picking = Boolean(onPick) && (open || ask.status === 'results');
-  const current = picking && !open ? pickId || winnerOf(ask) : null;
-  const all = ask.responses || [];
-  const shown = host ? all : all.filter((r) => !r.hidden);
-  const counting = ask.status !== 'live';
-  const sorted = counting ? [...shown].sort((a, b) => (b.votes || 0) - (a.votes || 0)) : shown;
-  const max = Math.max(1, ...sorted.map((r) => r.votes || 0));
-  const add = async (e) => {
-    e.preventDefault();
-    if (!said.trim()) return;
-    const ok = await run(() => api.addResponse(ask.askId, said.trim()));
-    if (ok !== undefined) setSaid('');
-  };
-  return (
-    <div className="brm-suggest">
-      {!sorted.length && <div className="brm-empty">{W.noSuggestions}</div>}
-      <ul className="brm-sugs">
-        {sorted.map((r) => (
-          <li key={r.respId} className={`brm-sug${r.hidden ? ' is-hidden' : ''}${picking && !r.hidden ? ' is-pickable' : ''}`} onClick={picking && !r.hidden ? cardPick(onPick, r.respId) : undefined}>
-            <span className="brm-sug-text">{r.text}</span>
-            {counting && (
-              <span className="brm-sug-votes">
-                <span className="brm-bar brm-bar--thin" aria-hidden="true"><span style={{ width: `${((r.votes || 0) / max) * 100}%` }} /></span>
-                <b>{r.votes || 0}</b> {(r.votes || 0) === 1 ? 'vote' : 'votes'}
-              </span>
-            )}
-            {host && <span className="brm-who">{r.source === 'host' ? 'from the room, out loud' : r.playerName}{r.hidden ? ' · hidden' : ''}</span>}
-            {picking && !r.hidden && <PickButton id={r.respId} current={current} onPick={onPick} idea open={open} />}
-            {host && !ended && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.responseAction(ask.askId, r.respId, { action: r.hidden ? 'show' : 'hide' }))}>
-                {r.hidden ? 'Show' : 'Hide'}
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {host && !ended && ask.status !== 'results' && (
-        <form className="brm-verbal" onSubmit={add}>
-          <Icon name="Microphone" size={16} color="var(--success)" />
-          <input className="brm-input" aria-label="Add what the room said" placeholder={W.addSaid} value={said} maxLength={280} onChange={(e) => setSaid(e.target.value)} />
-          <button type="submit" className="brm-btn brm-btn--sm" disabled={busy || !said.trim()}>Add</button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-function Whys({ ask, host }) {
-  const whys = (ask.results && ask.results.whys) || [];
-  if (!whys.length) return null;
-  return (
-    <div className="brm-whysbox">
-      <span className="brm-lbl">Reasons</span>
-      <ul className="brm-whys">
-        {whys.map((w, i) => (
-          <li key={i}>
-            <span className="brm-letter brm-letter--sm" aria-hidden="true">{w.label}</span>
-            <span className="brm-w">{w.text}</span>
-            {host && w.playerName && <span className="brm-who">{w.playerName}</span>}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -3014,118 +2298,6 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
 
 // ── Between asks ────────────────────────────────────────────────────────────
 
-
-/** Claude has wrapped up: the stage says so, and the demo is one click away. */
-function WrappedStage({ outcome, agent, images = [] }) {
-  const links = outcome.links || [];
-  const finals = images.filter((i) => i.kind === 'final');
-  return (
-    <section className="brm-stage brm-stage--wrapped" aria-label="What we built">
-      <div className="brm-building">
-        <span className="brm-donemark" aria-hidden="true"><Icon name="CheckCircle" size={30} weight="fill" /></span>
-        <h2 className="brm-q">What we built</h2>
-        {agent && agent.listening && <span className="brm-mins">Claude is listening</span>}
-      </div>
-      <p className="brm-wrapsum">{outcome.summary}</p>
-      {finals.length > 0 && (
-        <div className="brm-gallery">
-          {finals.map((im) => <BuildImage key={im.imageId} imageId={im.imageId} caption={im.caption} className="brm-shot brm-shot--final" />)}
-        </div>
-      )}
-      {links.length > 0 && (
-        <div className="brm-openrow">
-          {links.map((l, i) => (
-            <OpenLink key={`${l.url}:${i}`} href={l.url} label={l.label || (i === 0 ? 'Open the demo' : l.url)} primary={i === 0} />
-          ))}
-        </div>
-      )}
-      <div className="brm-two">
-        {outcome.built && outcome.built.length > 0 && (
-          <div>
-            <h3 className="brm-h5">Built</h3>
-            <ul className="brm-list">{outcome.built.map((b) => <li key={b}>{b}</li>)}</ul>
-          </div>
-        )}
-        {outcome.nextSteps && outcome.nextSteps.length > 0 && (
-          <div>
-            <h3 className="brm-h5">Next steps</h3>
-            <ul className="brm-list">{outcome.nextSteps.map((b) => <li key={b}>{b}</li>)}</ul>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function IdleStage({ room, now, host }) {
-  if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
-  const shots = (room.images || []).filter((i) => i.kind !== 'mockup');
-  const latestShot = shots[shots.length - 1] || null;
-  // ONE STATUS (owner, 2026-10-07): the same rule the dock, the host's Now
-  // card and the header chip read, so the wall never says two things.
-  const st = claudeState(room, now);
-  const decision = latestDecisionLine(room);
-  const looks = mockupsReady(room);
-  if (looks) {
-    const w = looksWords(looks.images);
-    return (
-      <section className="brm-stage brm-stage--idle brm-plain brm-looks" aria-label="Mockups to compare">
-        <div className="brm-plain-main">
-          <div className="brm-building" data-state="waiting">
-            <span className="brm-sdot brm-sdot--waiting" aria-hidden="true" />
-            <h2 className="brm-q">{w.headline}</h2>
-          </div>
-          <p className="brm-nowtext">{w.line}</p>
-          <div className="brm-looks-grid">
-            {looks.images.map((im) => (
-              <div className="brm-look" key={im.label}>
-                <BuildImage imageId={im.imageId} alt={`Mockup ${im.label}`} className="brm-shot brm-shot--look" />
-                <div className="brm-look-cap"><b>{im.label}</b> {im.title}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <aside className="brm-plain-side">
-          <div>
-            <div className="brm-kind">Next</div>
-            <div className="brm-tx">{w.next}</div>
-          </div>
-        </aside>
-      </section>
-    );
-  }
-  const sinceAt = st.since ? new Date(st.since) : null;
-  const sinceText = st.key === 'building' && sinceAt && Number.isFinite(sinceAt.getTime())
-    ? sinceAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-  return (
-    <section className="brm-stage brm-stage--idle brm-plain" aria-label="Claude">
-      <div className="brm-plain-main">
-        <div className="brm-building" data-state={st.key}>
-          <span className={`brm-sdot brm-sdot--${st.key}`} aria-hidden="true" />
-          <h2 className="brm-q">{st.headline}</h2>
-        </div>
-        {st.doing && !st.doing.stale && <p className="brm-nowtext brm-muted">{W.forDur(st.doing.dur)}</p>}
-        {st.helperLine && <p className="brm-nowtext brm-muted">{st.helperLine}</p>}
-        {st.line && (
-          <p className="brm-nowtext">
-            {st.line}{sinceText && !st.doing && <span className="brm-muted"> · since {sinceText}</span>}
-          </p>
-        )}
-        {host && st.key === 'none' && <p className="brm-stagehint">Connect Claude Code, then paste the Kick off prompt.</p>}
-        {latestShot && <BuildImage imageId={latestShot.imageId} caption={latestShot.caption} className="brm-shot brm-shot--latest" />}
-      </div>
-      {decision && (
-        <aside className="brm-plain-side">
-          <div>
-            <div className="brm-kind">We decided</div>
-            <div className="brm-tx">{decision}</div>
-          </div>
-        </aside>
-      )}
-    </section>
-  );
-}
-
 // ── Screenshots ─────────────────────────────────────────────────────────────
 
 const SHOT_KIND = { mockup: 'Mockup', final: 'Final', progress: 'Progress' };
@@ -3134,10 +2306,9 @@ const SHOT_KIND = { mockup: 'Mockup', final: 'Final', progress: 'Progress' };
 /*
   THE OWNER'S DELETE RULE (2026-10-04): GET build/state says the role this
   host would delete in (`deleteAs`). Engage staff give a reason in the same
-  inline confirm; '' means this caller may not remove anything here.
+  inline confirm; '' means this caller may not remove anything here
+  (NOT_YOURS, in screens/Timeline.jsx with the timeline's own Delete).
 */
-const NOT_YOURS = 'Only the host who created this room, or an owner or admin of its team, can delete from it.';
-
 function ShotsPanel({ images, busy, run, api, deleteAs }) {
   const [confirm, setConfirm] = useState(null);
   const [reason, setReason] = useState('');
@@ -3308,7 +2479,7 @@ export function SendToClaude({ onSend, busy, disabled = false, small = false, pr
  *                   a milestone; "Also tell Claude" sends it too
  *   Ask the room    Ideas, Choose or Rate (the Ask the room dialog)
  */
-function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 0, leadShows = true }) {
+function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds = [], focusKey = 0, leadShows = true }) {
   const [said, setSaid] = useState('');
   const box = useRef(null);
   // What's next's Combine and Write send the cursor here, at the end of the words.
@@ -3325,7 +2496,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 
   const words = text.trim();
   const tellAs = async (as) => {
     if (!words) return;
-    const ok = await run(() => api.postDirection(words, as));
+    const ok = await run(() => api.postDirection(words, as, { askIds: fromAskIds }));
     if (ok !== undefined) { setText(''); setSaid(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
   };
   const tell = (e) => { e.preventDefault(); tellAs('do-now'); };
@@ -3347,7 +2518,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 
     if (ok !== undefined) { setText(''); setAlsoTell(false); setSaid('Logged.'); }
   };
   return (
-    <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h">
+    <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h" data-capability="composer">
       <h2 className="brm-h5" id="brm-compose-h">Add something</h2>
       <form onSubmit={tell}>
         <label className="brm-sr" htmlFor="brm-compose">Tell Claude, or log what the room said</label>
@@ -3434,95 +2605,6 @@ function AskList({ asks, host, busy, ended, run, api, currentAskId }) {
 }
 
 // ── Timeline ────────────────────────────────────────────────────────────────
-
-function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, deleteAs }) {
-  const [editing, setEditing] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [reason, setReason] = useState('');
-  const asStaff = deleteAs === 'platform-admin';
-  const [text, setText] = useState(entry.text);
-  const save = async () => {
-    const ok = await run(() => api.logAction(entry.logId, { action: 'edit', text }));
-    if (ok !== undefined) setEditing(false);
-  };
-  return (
-    <li className={`brm-tl-${entryTone(entry)}`}>
-      <span className="brm-tm">{clockTime(entry.createdAt)}</span>
-      <span className="brm-dot" aria-hidden="true" />
-      <div className="brm-tl-body">
-        {editing ? (
-          <div className="brm-tl-edit">
-            <textarea className="brm-input brm-ta brm-ta--sm" aria-label="Edit entry" value={text} maxLength={500} onChange={(e) => setText(e.target.value)} />
-            <div className="brm-row brm-gap">
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => { setEditing(false); setText(entry.text); }}>Cancel</button>
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy || !text.trim()} onClick={save}>Save</button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <span className="brm-by">{byLabel(entry)}</span>
-            <span className="brm-tl-text">{entry.text}</span>
-            {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
-            {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
-            {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
-            {host && entry.held && <span className="brm-tl-flag">{W.laterHeld}</span>}
-            {host && entry.forAgent && <span className="brm-tl-flag">{entry.as && entry.as !== 'do-now' ? `${claudeKindLabel(entry.as)} · ` : ''}{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${continueCommand()}` : 'Waiting for Claude'}</span>}
-          </>
-        )}
-        {host && !editing && (
-          <span className="brm-tl-acts">
-            {confirming ? (
-              <>
-                <span className="brm-hint">Delete this entry?</span>
-                {asStaff && (
-                  <DeleteReasonField id={`brm-reason-${entry.logId}`} value={reason} onChange={setReason} scope="brm" labelClass="brm-lbl" inputClass="brm-input brm-ta brm-ta--sm" hintClass="brm-hint" />
-                )}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirming(false)}>Keep</button>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.logAction(entry.logId, { action: 'delete', ...(asStaff ? { reason: reason.trim() } : {}) }))}>Delete</button>
-              </>
-            ) : (
-              <>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--link" aria-label={`Edit "${entry.text}"`} onClick={() => setEditing(true)}>Edit</button>
-                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${entry.text}"`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirming(true); }}>Delete</button>}
-              </>
-            )}
-          </span>
-        )}
-      </div>
-    </li>
-  );
-}
-
-const WALL_HIDDEN_KINDS = ['note', 'ask', 'direction'];
-const WALL_DETAIL_HIDDEN_KINDS = ['decision', 'idea'];
-
-function Timeline({ log, host, stopped = false, busy, ended, run, api, deleteAs }) {
-  // The host logs from the one composer (Composer), not from a form here.
-  // Newest first: in a live room the latest thing Claude or the room did is
-  // what everyone looks for, and the panel scrolls.
-  // On the wall (Present) the timeline is the room's, as on the phones: no host
-  // notes, no system bookkeeping (the asks table says it), and no detail on a
-  // decision or an idea — that is the host's note or the idea's author.
-  const shown = (host ? log : log
-    .filter((l) => !WALL_HIDDEN_KINDS.includes(l.kind))
-    .map((l) => (WALL_DETAIL_HIDDEN_KINDS.includes(l.kind) ? { ...l, detail: '' } : l))
-    .map((l) => (l.kind === 'help' ? { ...l, text: `${l.name || 'A builder'} asked for help`, detail: '' } : l)))
-    .slice().reverse();
-  return (
-    <section className="brm-panel brm-tlpanel" aria-labelledby="brm-tl-h">
-      <h2 className="brm-h5" id="brm-tl-h">Timeline</h2>
-      {shown.length ? (
-        <ul className="brm-tl">
-          {shown.map((entry) => (
-            <TimelineEntry key={`${entry.logId}:${entry.editedAt || ''}`} entry={entry} host={host} stopped={stopped} busy={busy} ended={ended} run={run} api={api} deleteAs={deleteAs} />
-          ))}
-        </ul>
-      ) : (
-        <div className="brm-empty">Claude&apos;s progress, the room&apos;s decisions and what people say out loud collect here.</div>
-      )}
-    </section>
-  );
-}
 
 // ── The queue (host only, step 4) ───────────────────────────────────────────
 
@@ -3758,28 +2840,6 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
         )}
       </div>
     </Modal>
-  );
-}
-
-/**
- * THE ROOM COMMENT ON THE WALL: one at a time, no name, for WALL_COMMENT_MS
- * from when the host put it up (owner, 2026-10-05). Shown on the screens the
- * room sees (Stage, Build); the host can take it down early from the Host.
- */
-export const WALL_COMMENT_MS = 20 * 1000;
-export function freshWallComment(room, now) {
-  const w = room && room.wallComment;
-  if (!w || !w.text) return null;
-  const at = Date.parse(w.at || '');
-  return Number.isFinite(at) && now - at < WALL_COMMENT_MS ? w : null;
-}
-function WallComment({ comment }) {
-  if (!comment) return null;
-  return (
-    <div className="brm-wallcomment" role="status" key={comment.at}>
-      <span className="brm-wallcomment-k">{W.fromTheRoom}</span>
-      <q className="brm-wallcomment-t">{comment.text}</q>
-    </div>
   );
 }
 

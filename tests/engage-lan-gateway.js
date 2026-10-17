@@ -45,6 +45,14 @@ const app = http.createServer((req, res) => {
   if (req.headers.host !== expectHost(port)) { res.writeHead(403); return res.end('Blocked request. This host is not allowed.'); }
   if (req.url === '/near') { res.writeHead(302, { Location: 'http://localhost:' + port + '0/x' }); return res.end(); }
   if (req.url === '/go') { res.writeHead(302, { Location: 'http://localhost:' + port + '/there' }); return res.end(); }
+  if (req.url === '/demo/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end('<!DOCTYPE HTML><html><head><title>Directory listing for /demo/</title></head><body><a href="index.html">index.html</a></body></html>'); }
+  if (req.url === '/gz/') {
+    // npx serve compresses when the browser asks for it, and browsers always do.
+    const body = '<html><head><title>Index of /gz/</title></head></html>';
+    if (/gzip/.test(req.headers['accept-encoding'] || '')) { res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' }); return res.end(require('zlib').gzipSync(body)); }
+    res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(body);
+  }
+  if (req.url === '/served/') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end('<html><head><title>Index of /served/</title></head></html>'); }
   res.writeHead(200, { 'Content-Type': 'text/html' });
   res.end('<h1>Four in a row</h1>');
 });
@@ -62,18 +70,28 @@ let appPort = 0;
 let wanted = false;
 let apiDown = false;
 let targets = [];
+let scopes = null; // null: an older Engage that sends none
 let another = false;
+let roles = null; // null: an Engage before 1.20.0 that names no roles
 const reports = [];
+// A second session on this laptop (Share demo S3 d): its own room, its own reports.
+const SECOND = '4893';
+const second = { wanted: false, targets: [], reports: [] };
 const api = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     res.setHeader('Content-Type', 'application/json');
+    if (req.url.includes(`/games/${SECOND}/`)) {
+      if (req.url.endsWith('/build/state')) return res.end(JSON.stringify({ gameId: SECOND, title: 'Second room', inbox: [] }));
+      if (req.url.endsWith('/build/share/report')) { second.reports.push(JSON.parse(body)); return res.end(JSON.stringify({ wanted: second.wanted, targets: second.targets })); }
+      return res.end('{}');
+    }
     if (req.url.endsWith('/build/state')) return res.end(JSON.stringify({ gameId: '4821', title: 'Four in a row', inbox: [] }));
     if (req.url.endsWith('/build/share/report')) {
       if (apiDown) { res.statusCode = 500; return res.end('{"error":"down"}'); }
       reports.push(JSON.parse(body));
-      return res.end(JSON.stringify(another ? { wanted: false, targets: [], another: true } : { wanted, targets }));
+      return res.end(JSON.stringify(another ? { wanted: false, targets: [], another: true } : { wanted, targets, ...(scopes ? { scopes } : {}), ...(roles ? { roles } : {}) }));
     }
     res.end('{}');
   });
@@ -327,6 +345,174 @@ function get(url, headers = {}) {
     assert.match(r.body, /Four in a row/);
     targets = [appOrigin];
   });
+  console.log('\nWhat a shared server may show (Share demo S1, 1.19.0; dev game 1215)');
+  const scoped = async () => {
+    targets = [appOrigin];
+    scopes = { [appOrigin]: ['/demo/'] };
+    await sleep(400);
+    return (await get(`${gw}/?k=${lastReport().key}`)).headers['set-cookie'][0].split(';')[0];
+  };
+  await check('a page inside a linked folder opens', async () => {
+    const c = await scoped();
+    const r = await get(`${gw}/demo/index.html`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    assert.strictEqual(r.status, 200);
+    assert.match(r.body, /Four in a row/);
+  });
+  await check('a page outside every linked folder is "not found", and the app never sees it', async () => {
+    const c = await scoped();
+    const before = seen.length;
+    for (const p of ['/', '/secret.txt', '/demo', '/demox/a.html', '/%2e%2e/secret.txt']) {
+      const r = await get(`${gw}${p}`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+      assert.strictEqual(r.status, 404, `${p} gave ${r.status}`);
+    }
+    // A request without Sec-Fetch-Dest is treated as a page: the strict reading.
+    assert.strictEqual((await get(`${gw}/secret.txt`, { Cookie: c })).status, 404);
+    assert.strictEqual(seen.length, before, 'nothing out of scope reached the app');
+  });
+  await check('a linked page may load its own files and call its API from anywhere on its server', async () => {
+    const c = await scoped();
+    const from = `${gw}/demo/index.html`;
+    for (const [p, dest] of [['/assets/app.js', 'script'], ['/styles/site.css', 'style'], ['/api/scores', 'empty']]) {
+      const r = await get(`${gw}${p}`, { Cookie: c, 'Sec-Fetch-Dest': dest, Referer: from });
+      assert.strictEqual(r.status, 200, `${p} (${dest}) gave ${r.status}`);
+    }
+    // ...but not as a page, and not when the page asking is itself out of scope.
+    assert.strictEqual((await get(`${gw}/assets/app.js`, { Cookie: c, 'Sec-Fetch-Dest': 'document', Referer: from })).status, 404);
+    assert.strictEqual((await get(`${gw}/assets/app.js`, { Cookie: c, 'Sec-Fetch-Dest': 'script', Referer: `${gw}/other/page.html` })).status, 404);
+  });
+  await check('a folder listing is never shown, even inside a linked folder', async () => {
+    const c = await scoped();
+    const r = await get(`${gw}/demo/`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    assert.strictEqual(r.status, 404);
+    assert.ok(!/Directory listing|index\.html/.test(r.body), r.body);
+    scopes = { [appOrigin]: ['/'] };
+    await sleep(400);
+    const r2 = await get(`${gw}/served/`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    assert.strictEqual(r2.status, 404);
+    // A compressed listing too: a page is always asked for uncompressed, so it can be read.
+    const r3 = await get(`${gw}/gz/`, { Cookie: c, 'Sec-Fetch-Dest': 'document', 'Accept-Encoding': 'gzip, deflate, br' });
+    assert.strictEqual(r3.status, 404);
+  });
+  await check('an older Engage (no scopes) keeps the old behaviour: the whole app opens', async () => {
+    scopes = null;
+    await sleep(400);
+    const c = (await get(`${gw}/?k=${lastReport().key}`)).headers['set-cookie'][0].split(';')[0];
+    assert.strictEqual((await get(`${gw}/anything`, { Cookie: c, 'Sec-Fetch-Dest': 'document' })).status, 200);
+  });
+  console.log('\nWhich server is which, and which session (Share demo S3, 1.20.0)');
+  const shareFile = path.join(dir, '.engage', 'share.json');
+  const statusFile = path.join(dir, '.engage', 'share-status.json');
+  const freshCookie = async () => (await get(`${gw}/?k=${lastReport().key}`)).headers['set-cookie'][0].split(';')[0];
+  await check('every gateway answer names its session: X-Engage-Session', async () => {
+    const c = await freshCookie();
+    const locked = await get(`${gw}/`);
+    const redirect = await get(`${gw}/?k=${lastReport().key}`);
+    const page = await get(`${gw}/`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    scopes = { [appOrigin]: ['/demo/'] };
+    await sleep(400);
+    const notShared = await get(`${gw}/secret.txt`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    scopes = null;
+    await sleep(400);
+    for (const [what, r, status] of [['locked', locked, 403], ['redirect', redirect, 302], ['page', page, 200], ['not shared', notShared, 404]]) {
+      assert.strictEqual(r.status, status, `${what} gave ${r.status}`);
+      assert.strictEqual(r.headers['x-engage-session'], '4821', `${what} lacks the header`);
+    }
+  });
+  await check('the gateway\'s own pages name the session: its code and the room\'s title', async () => {
+    const locked = await get(`${gw}/`);
+    assert.match(locked.body, /Build Room 4821 \u00b7 Four in a row/);
+    scopes = { [appOrigin]: ['/demo/'] };
+    await sleep(400);
+    const nf = await get(`${gw}/secret.txt`, { Cookie: await freshCookie(), 'Sec-Fetch-Dest': 'document' });
+    assert.match(nf.body, /Not part of the shared build/);
+    assert.match(nf.body, /Build Room 4821 \u00b7 Four in a row/);
+    scopes = null;
+    await sleep(400);
+  });
+  await check('.engage/share.json is reported each round: the demo, the mockups and the label, checked', async () => {
+    fs.writeFileSync(shareFile, JSON.stringify({ demo: `${appOrigin}/demo/index.html`, mockups: `http://127.0.0.1:${appPort}/mockups/`, label: 'Blue <table> & co' }));
+    await until(() => (lastReport().declared || {}).label === 'Blue <table> & co');
+    assert.deepStrictEqual(lastReport().declared, { demo: `${appOrigin}/demo/index.html`, mockups: `http://127.0.0.1:${appPort}/mockups/`, label: 'Blue <table> & co' });
+    // The label names the session on the gateway's pages, escaped.
+    const locked = await get(`${gw}/`);
+    assert.match(locked.body, /Build Room 4821 \u00b7 Blue &lt;table&gt; &amp; co/);
+    assert.ok(!locked.body.includes('<table>'), locked.body);
+  });
+  await check('a share.json that is not JSON, or names another machine, declares nothing; the share carries on', async () => {
+    fs.writeFileSync(shareFile, '{ not json');
+    let n = reports.length;
+    await until(() => reports.length > n + 1);
+    assert.deepStrictEqual(lastReport().declared, {});
+    assert.strictEqual(lastReport().status, 'live');
+    fs.writeFileSync(shareFile, JSON.stringify({ demo: 'http://192.168.1.50:3000/', mockups: 'https://example.com/', label: 7 }));
+    n = reports.length;
+    await until(() => reports.length > n + 1);
+    assert.deepStrictEqual(lastReport().declared, {});
+    fs.writeFileSync(shareFile, JSON.stringify({ label: 'x'.repeat(5000) }));
+    n = reports.length;
+    await until(() => reports.length > n + 1);
+    assert.deepStrictEqual(lastReport().declared, {}, 'a file over 4 KB is not read');
+    fs.writeFileSync(shareFile, JSON.stringify({ label: 'y'.repeat(100) }));
+    n = reports.length;
+    await until(() => reports.length > n + 1);
+    assert.deepStrictEqual(lastReport().declared, { label: 'y'.repeat(60) });
+    fs.rmSync(shareFile);
+    n = reports.length;
+    await until(() => reports.length > n + 1);
+    assert.deepStrictEqual(lastReport().declared, {});
+  });
+  await check('.engage/share-status.json lists each server local, Wi-Fi and role, and never the key', async () => {
+    fs.writeFileSync(shareFile, JSON.stringify({ label: 'Blue table' }));
+    roles = { [appOrigin]: 'demo' };
+    const read = () => { try { return JSON.parse(fs.readFileSync(statusFile, 'utf8')); } catch { return null; } };
+    const st = await until(() => { const x = read(); return x && x.label === 'Blue table' && x.servers.length && x.servers[0].role === 'demo' ? x : null; });
+    assert.deepStrictEqual(Object.keys(st).sort(), ['gameId', 'label', 'servers', 'updatedAt']);
+    assert.strictEqual(st.gameId, '4821');
+    assert.deepStrictEqual(st.servers, [{ local: appOrigin, lan: gw, role: 'demo' }]);
+    assert.ok(Date.now() - Date.parse(st.updatedAt) < 5000, st.updatedAt);
+    const raw = fs.readFileSync(statusFile, 'utf8');
+    assert.ok(!raw.includes(lastReport().key), 'the Wi-Fi key is a secret');
+    assert.ok(!raw.includes('kkkkkkkk'), 'so is the session key');
+    // An Engage that names no roles: the servers are listed with none.
+    roles = null;
+    await until(() => { const x = read(); return x && x.servers.length && x.servers[0].role === null; });
+    // Turned off: nothing listed.
+    wanted = false;
+    await until(() => { const x = read(); return x && x.servers.length === 0; });
+    wanted = true;
+    await until(() => lastReport().status === 'live');
+    fs.rmSync(shareFile);
+  });
+  await check('a second session on this laptop opens in its own port block, 4900 + (code mod 100) x 10, skipping a port in use', async () => {
+    const block = 4900 + (Number(SECOND) % 100) * 10;
+    // Something else already holds the block's first port.
+    const squatter = net.createServer();
+    const squatted = await new Promise((r) => { squatter.once('error', () => r(false)); squatter.listen(block, '127.0.0.1', () => r(true)); });
+    const sub = path.join(dir, 'second');
+    fs.mkdirSync(path.join(sub, '.engage'), { recursive: true });
+    fs.writeFileSync(path.join(sub, '.engage', 'session.json'), JSON.stringify({ key: `eng_${SECOND}_${'q'.repeat(43)}`, tier: 'prod' }));
+    const env2 = { ...env, CLAUDE_PROJECT_DIR: sub };
+    delete env2.ENGAGE_LAN_PORT;
+    const child2 = spawn(process.execPath, [SCRIPT], { cwd: sub, env: env2, stdio: ['pipe', 'pipe', 'ignore'] });
+    procs.push(child2);
+    let out2 = '';
+    child2.stdout.on('data', (d) => { out2 += d.toString(); });
+    child2.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'connect', arguments: {} } }) + '\n');
+    await until(() => out2.includes('"id":1'));
+    second.targets = [appOrigin]; second.wanted = true;
+    const live = await until(() => { const r = second.reports[second.reports.length - 1]; return r && r.status === 'live' ? r : null; });
+    const port = Number(new URL(live.map[0].lan).port);
+    assert.ok(port > block && port < block + 10, `port ${port} is outside ${block + 1}..${block + 9}`);
+    if (!squatted) console.log('        (the block\'s first port was already taken by something else)');
+    const r = await get(`${live.map[0].lan}/`);
+    assert.strictEqual(r.headers['x-engage-session'], SECOND);
+    assert.match(r.body, /Build Room 4893 \u00b7 Second room/);
+    // Two sessions, two status files, each naming its own room.
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(sub, '.engage', 'share-status.json'), 'utf8')).gameId, SECOND);
+    child2.kill();
+    squatter.close();
+  });
+
   await check('the plugin wrote nothing to stdout but its one JSON-RPC reply (that is the MCP stream)', async () => {
     const lines = childOut.split('\n').filter(Boolean);
     assert.strictEqual(lines.length, 1, childOut);

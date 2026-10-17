@@ -143,6 +143,10 @@ function seed() {
     Ideas: [{ id: 'x1', text: 'The two agencies', at: '2026-08-27T10:10:00.000Z' }, { id: 'x2', text: 'Discount buyers', at: '2026-08-27T10:11:00.000Z' }],
     Suggested: { kind: 'ideas', question: 'Who pushes back first?', why: 'Names the risk.', answers: [1] }, Edits: [],
     SentFrom: 'laptop', RoomSize: 3, ClosedAt: '2026-08-27T10:12:00.000Z' });
+  // A Rate with the host's own ends (owner, 16 Oct), sent last.
+  put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#ASK#fed789abc', GameId: GAME, QuestionNumber: '001', AskId: 'fed789abc',
+    Kind: 'rate', Statement: 'Name the temperature out loud', Ends: { low: 'Cold', high: 'Hot' }, Origin: 'host', Status: 'closed',
+    SentAt: '2026-08-27T10:20:00.000Z', Tally: { n: 2, counts: [0, 0, 1, 1, 0], mean: 3.5 } });
   put({ PK: `GAME#${GAME}`, SK: 'FOLLOWUP#001#SUGGESTED', GameId: GAME, QuestionNumber: '001', Asks: [] });
 }
 
@@ -195,7 +199,10 @@ const build = () => handler({
 
   check('round 1 carries its questions for the room, in the order sent; counts and picked words only', () => {
     const fu = roundOf('001').followUps;
-    assert.deepStrictEqual(fu.map((f) => [f.kind, f.status]), [['choice', 'closed'], ['ideas', 'closed']]);
+    // The Rate with custom ends (16 Oct) was added third, so the list grew by one.
+    assert.deepStrictEqual(fu.map((f) => [f.kind, f.status]), [['choice', 'closed'], ['ideas', 'closed'], ['rate', 'closed']]);
+    assert.deepStrictEqual(fu[2].ends, { low: 'Cold', high: 'Hot' }, 'the report carries the ask\'s own ends');
+    assert.strictEqual(fu[0].ends, null, 'only a Rate has ends');
     assert.deepStrictEqual(fu[0].options, ['On-call logs', 'Shadow invoices']);
     assert.deepStrictEqual(fu[0].tally, { n: 3, counts: [2, 1] });
     assert.deepStrictEqual(fu[0].anchor, { section: 'Discussion topics', point: 2 });

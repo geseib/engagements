@@ -53,9 +53,9 @@ import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, presentHref } from './config/surfaces';
+import { twoSurfacesHere, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
 import {
-  pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
+  pageSizeFor, resultsPageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
 import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
@@ -90,7 +90,7 @@ import {
 } from './config/hostControls';
 import {
   stageAnswersKey, stageAnswersReady, askFetchStillCurrent,
-  stageAnswersStatus, stageGatheringNoun, answerText,
+  stageAnswersStatus, stageGatheringNoun, answerText, answersCatchUpDelay,
 } from './config/stageAnswers';
 import SurveyCollecting, { SurveyClosed } from './components/stage/SurveyCollecting';
 import useSurveyProgress, {
@@ -108,7 +108,8 @@ import {
   answeredCountFrom, waitingRoster, joinedRoster, answererIdsFrom,
 } from './config/anonymity';
 import { useAuth } from './auth/AuthContext';
-import { authFetch } from './auth/authFetch';
+import { authFetch, getActiveOrgId } from './auth/authFetch';
+import { pickSignedInOrg, remoteSignIn } from './config/remoteSignIn';
 import {
   fetchLate, reviewLateItem, closeComments as closeLateComments, lateStatusOf, lateItemsOf,
   setIncludeNotReviewed as saveIncludeNotReviewed,
@@ -282,6 +283,8 @@ function GameHostPage() {
      by any rows landing. */
   const [answersFailedFor, setAnswersFailedFor] = useState(null);
   const answersFetchSeqRef = useRef(0);
+  // The count-ahead-of-list refetches this ASK has spent (see the effect below).
+  const answersCatchUpRef = useRef({ key: null, tries: 0 });
   const showAnswersFor = (rows, forState) => {
     answersFetchSeqRef.current += 1;       // any ASK refetch still in flight is now stale
     setAnswers(rows);
@@ -388,6 +391,30 @@ function GameHostPage() {
    * handlers below close over it as well as the render does.
    */
   const answeredCount = answeredCountFrom(playersWhoAnswered, answers);
+
+  /*
+    THE LIST CATCHES UP WITH THE COUNT (review of test a76fda95, issue #34:
+    "3 of 4" answered while the list said "No responses yet", until a reload).
+    During ASK the list is fetched once per `playerAnswered` frame, and a fetch
+    that is refused, dropped or read before the row is visible was never tried
+    again. While the count is ahead of the rows, refetch on the schedule in
+    config/stageAnswers.js (answersCatchUpDelay). `fetchAnswersForQuestion` is declared further down;
+    the effect runs after render, by when it exists.
+  */
+  useEffect(() => {
+    const m = /^ASK#0*(\d+)$/.exec(String(gameState || ''));
+    if (!m || !gameId) return undefined;
+    const key = `${gameId}#${m[1]}`;
+    if (answersCatchUpRef.current.key !== key) answersCatchUpRef.current = { key, tries: 0 };
+    const delay = answersCatchUpDelay(answeredCount, answers.length, answersCatchUpRef.current.tries);
+    if (delay === null) return undefined;
+    const timer = setTimeout(() => {
+      answersCatchUpRef.current.tries += 1;
+      fetchAnswersForQuestion(m[1]);
+    }, delay);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, gameId, answeredCount, answers.length]);
 
   const [votes, setVotes] = useState([]);
   const [playersWhoVoted, setPlayersWhoVoted] = useState([]);
@@ -1157,6 +1184,29 @@ function GameHostPage() {
   // The room's window and the host's notes, from the host door (host console spec §4.2).
   const [presentDetail, setPresentDetail] = useState(null);
   const [hostNotes, setHostNotes] = useState(null);
+  /*
+    WHO IS SIGNED IN HERE, AND FOR WHICH TEAM (owner, 16 Oct: "tell them in the
+    help and on the setup remote box which team/person is logged in"). The
+    team is the one this browser acts for (X-Engage-Org, the switcher's
+    choice), read once from GET /orgs; a failed read leaves the remote box
+    saying who in general terms rather than naming a wrong team.
+  */
+  const [signedInOrg, setSignedInOrg] = useState(null);
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let live = true;
+    (async () => {
+      try {
+        const res = await authFetch(`${API_BASE}orgs`);
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        if (live) setSignedInOrg(pickSignedInOrg(data && data.orgs, getActiveOrgId()));
+      } catch (e) {
+        /* the box falls back to the general words */
+      }
+    })();
+    return () => { live = false; };
+  }, [currentUser]);
   // The read below, for the `presentChanged` frame (its handler is registered once).
   const readHostStateRef = useRef(() => {});
   /*
@@ -6111,6 +6161,18 @@ Focus on actionable business strategy insights.`;
   // The HOST's own phone, not a player's. The stage's rail carries the player
   // join QR (see Rail's join code); this one hands the operator the remote.
   const remoteUrl = `${window.location.origin}/remote?gameId=${gameId}`;
+  const remoteWho = currentUser ? remoteSignIn({ org: signedInOrg, user: currentUser, privateScreen: twoSurfaces && presenting > 0 }) : null;
+  /* The Screens group, for Setup in the loop (StepView) — the same group the
+     Session panel's Settings tab draws, with the lobby chooser's handler. */
+  const setupScreens = {
+    choice: twoSurfaces ? 'two' : 'classic',
+    offerChoice: TWO_SURFACE_TYPES.includes(currentGameType || 'call-and-answer'),
+    onChoose: chooseRoomScreen,
+    presentHref: gameId ? presentHref(gameId) : '',
+    presentDetail,
+    profile,
+    onProfileChange: setProfile,
+  };
 
   // State for copy confirmation messages
   const [sidebarCopyMessage, setSidebarCopyMessage] = useState(false);
@@ -6244,7 +6306,7 @@ Focus on actionable business strategy insights.`;
     let pageText = '';
     let notesReady = false;
     if (phase === 'RESULTS') {
-      const slice = pageSlice(answers, rawIndex, pageSizeFor(profile));
+      const slice = pageSlice(answers, rawIndex, resultsPageSizeFor(profile));
       page = slice.page;
       pages = slice.pages;
     } else if (phase === 'FIELD_NOTES') {
@@ -6843,7 +6905,7 @@ Focus on actionable business strategy insights.`;
     // ASK THE ROOM: the question on screen (live, then its results) and how
     // many asks wait beside the read.
     roomAsk: roundAsks.shown
-      ? { status: roundAsks.shown.status, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
+      ? { status: roundAsks.shown.status, kind: roundAsks.shown.kind || null, answered: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0, total: players.length }
       : null,
     asksReady: roundAsks.enabled ? roundAsks.unsent.length : 0,
     // The composer exists for this session: "Ask the room" replaces Request
@@ -7495,7 +7557,9 @@ Focus on actionable business strategy insights.`;
    * label page two's first card "Response 1" on the projector while twelve
    * phones called it "Response 4".
    */
-  const stagePageSize = pageSizeFor(profile);
+  // RESULTS cards are ideas first and taller (config/stagePaging.js
+  // RESULTS_PAGE_SIZE, measured): fewer per page there than when voting.
+  const stagePageSize = hostPhase === 'RESULTS' ? resultsPageSizeFor(profile) : pageSizeFor(profile);
   const pageKey = `${hostPhase}#${lessonNumber}`;
   /* ONE INDEX FOR THE WHOLE STAGE, because the states that page are mutually
      exclusive and the key already carries the phase. FIELD_NOTES pages prose
@@ -7944,6 +8008,7 @@ Focus on actionable business strategy insights.`;
             roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
           }}
           onAllSettings={() => setSetupPanelOpen(true)}
+          screens={setupScreens}
         />
       );
     }
@@ -8136,6 +8201,7 @@ Focus on actionable business strategy insights.`;
                 roundsPlayed: hostPhase === 'ASK' ? Math.max(0, lessonNumber - 1) : lessonNumber,
               }}
               onAllSettings={() => setSetupPanelOpen(true)}
+              screens={setupScreens}
             />
           )
           : null}
@@ -9053,6 +9119,11 @@ Focus on actionable business strategy insights.`;
           onShowJoinCode={() => setQrMode('pinned')}
           profile={profile}
           onProfileChange={setProfile}
+          roomScreen={twoSurfaces ? 'two' : 'classic'}
+          onRoomScreenChange={chooseRoomScreen}
+          presentHref={gameId ? presentHref(gameId) : ''}
+          presentDetail={presentDetail}
+          remoteWho={remoteWho}
           /* THE TWO NAME DECISIONS, both session-level, both the host's.
              `anonymousUntilReveal` is the SAME flag the create dialog set —
              not a second one — so the setter is the same setter; the effect

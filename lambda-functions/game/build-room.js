@@ -33,6 +33,8 @@ const S = require('./build-store');
 const C = require('./build-crew');
 const LAN = require('./build-lan');
 const { closeSeat } = require('./build-seat');
+// The room's window status for the host's console (PLAN §2.6, B4): C&A's own rule.
+const { presentingCount, presentingDetail } = require('./room-counts');
 // The usage stats (docs/design/usage-stats/SPEC.md §4, §5 E2/E6–E8): asks put
 // to the room, decisions, crew tasks and the kickoff. Counts only; never throws.
 const {
@@ -130,12 +132,16 @@ async function sessionState(ctx) {
   return (r && r.Item && r.Item.State) || null;
 }
 
-/** Bump the room's revision (and anything else on BUILD#STATE) atomically. */
-async function touchState(ctx, { set = {}, add = {} } = {}) {
-  const names = { '#rev': 'Rev', '#ttl': 'ttl' };
-  const values = { ':one': 1, ':ttl': ctx.ttl };
+/**
+ * Bump the room's revision (and anything else on BUILD#STATE) atomically.
+ * `bump: false` writes without moving Rev (nothing the room sees changed);
+ * `condition` is `{expr, names}` for a conditional write (the lazy wall key).
+ */
+async function touchState(ctx, { set = {}, add = {}, bump = true, condition = null } = {}) {
+  const names = { '#ttl': 'ttl', ...(bump ? { '#rev': 'Rev' } : {}), ...((condition && condition.names) || {}) };
+  const values = { ':ttl': ctx.ttl, ...(bump ? { ':one': 1 } : {}) };
   const sets = ['#ttl = :ttl'];
-  const adds = ['#rev :one'];
+  const adds = bump ? ['#rev :one'] : [];
   let i = 0;
   for (const [k, v] of Object.entries(set)) {
     i += 1;
@@ -152,7 +158,8 @@ async function touchState(ctx, { set = {}, add = {} } = {}) {
   const res = await db.send(new UpdateCommand({
     TableName: TABLE(),
     Key: { PK: ctx.pk, SK: S.SK.state },
-    UpdateExpression: `SET ${sets.join(', ')} ADD ${adds.join(', ')}`,
+    UpdateExpression: `SET ${sets.join(', ')}${adds.length ? ` ADD ${adds.join(', ')}` : ''}`,
+    ...(condition ? { ConditionExpression: condition.expr } : {}),
     ExpressionAttributeNames: names,
     ExpressionAttributeValues: values,
     ReturnValues: 'ALL_NEW',
@@ -160,12 +167,88 @@ async function touchState(ctx, { set = {}, add = {} } = {}) {
   return (res && res.Attributes) || {};
 }
 
+/**
+ * THE WALL KEY (PLAN §2.2, B1; owner Q1), minted the first time the host reads
+ * the room. Conditional, so two first reads racing agree on one key: the loser
+ * reads the winner's. No Rev bump and no announce: nothing the room sees moved.
+ */
+async function ensureWallKey(ctx, room) {
+  if (room.state && room.state.WallKey) return room.state.WallKey;
+  try {
+    const st = await touchState(ctx, {
+      set: { WallKey: S.mintWallKey() }, bump: false,
+      condition: { expr: 'attribute_not_exists(#wk)', names: { '#wk': 'WallKey' } },
+    });
+    return st.WallKey;
+  } catch (e) {
+    if (!(e && e.name === 'ConditionalCheckFailedException')) throw e;
+    const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state } }));
+    return (got && got.Item && got.Item.WallKey) || null;
+  }
+}
+
+/**
+ * THE ROOM'S WINDOW, FOR THE HOST (PLAN §2.6, B4): how many /present viewers
+ * are on this session and what the latest one reported (room-counts.js, the
+ * rule C&A's console uses). Fails soft: a status line is never worth a 500.
+ */
+async function windowStatus(ctx) {
+  try {
+    const [presenting, presentDetail] = await Promise.all([
+      presentingCount(db, TABLE(), ctx.gameId),
+      presentingDetail(db, TABLE(), ctx.gameId),
+    ]);
+    return { presenting, presentDetail };
+  } catch (e) {
+    console.error('BUILD ROOM: the window status read failed (continuing)', e);
+    return { presenting: 0, presentDetail: null };
+  }
+}
+
+/**
+ * POST build/wall (PLAN §2.3, B3): the host moves the room's window. Allowed
+ * after the end (the host may still put History up), except putting the codes
+ * up. `rotate` retires the wall key: every open window gets 403 on its next read.
+ */
+async function postWall(ctx, body) {
+  const norm = S.normalizeWall(body);
+  if (norm.error) return fail(400, norm.error);
+  const { set, rotate } = norm.value;
+  const state = await sessionState(ctx);
+  if (state === 'ENDED' && set.WallCodes && set.WallCodes !== 'none') return fail(409, 'This session has ended, so the codes stay down');
+  const wallKey = rotate ? S.mintWallKey() : null;
+  const st = await touchState(ctx, { set: { ...set, ...(wallKey ? { WallKey: wallKey } : {}) }, add: { WallRev: 1 } });
+  await announce(ctx, st.Rev);
+  return reply(200, { wall: S.wallStateOf(st, state), ...(wallKey ? { wallKey } : {}) });
+}
+
+/**
+ * THE WALL READ (PLAN §2.2, B2): GET build-play/wall?k= and
+ * build-play/wall/images/{imageId}?k=. No seat and no sign-in; the key is the
+ * whole check, read off BUILD#STATE before anything else is loaded.
+ */
+async function routeWall(ctx, method, parts, query) {
+  if (method !== 'GET') return fail(404, 'Not found');
+  const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: '#k', ExpressionAttributeNames: { '#k': 'WallKey' } }));
+  if (!S.wallKeyMatches(got && got.Item, query && query.k)) return fail(403, 'This window\'s link has changed. Open the room\'s window again from the laptop.', { code: 'wall-key' });
+  const isImage = parts[1] === 'images' && parts[2] && !parts[3];
+  if (parts.length > 1 && !isImage) return fail(404, 'Not found');
+  const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
+  const view = S.wallView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, now: new Date().toISOString(), crew: C.crewView(room, 'public', null) });
+  if (isImage) {
+    // Only a picture the wall itself lists: a mockup for an ask the room has not seen stays private.
+    if (!view.images.some((i) => i.imageId === parts[2])) return fail(404, 'No such image');
+    return getImage(ctx, parts[2]);
+  }
+  return reply(200, view);
+}
+
 async function announce(ctx, rev) {
   await toAll(db, TABLE(), ctx.gameId, { type: 'buildChanged', gameId: ctx.gameId, rev: rev || 0 });
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step }) {
+async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -179,6 +262,7 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     Text: text,
     ...(detail ? { Detail: detail } : {}),
     ...(link ? { Link: link } : {}),
+    ...(link && linkRole ? { Role: linkRole } : {}),
     By: by,
     ...(askId ? { AskId: askId } : {}),
     ...(forAgent && !held ? { ForAgent: true } : {}),
@@ -189,6 +273,10 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(runItem ? { RunItem: runItem } : {}),
     ...(runId ? { RunId: runId } : {}),
     ...(spoken ? { Spoken: true } : {}),
+    // PROVENANCE (docs/design/parity/PLAN.md §2.8, H1): what it was made from, stamped as it is sent.
+    ...(ideaId ? { IdeaId: ideaId } : {}),
+    ...(sources ? { From: { AskIds: sources.askIds, IdeaIds: sources.ideaIds } } : {}),
+    ...(typeof asWritten === 'boolean' ? { AsWritten: asWritten } : {}),
     // A finished step (kind 'step'): when it ran and for how long.
     ...(step ? { StartedAt: step.startedAt, EndedAt: step.endedAt, DurationMs: step.durationMs, Source: step.source } : {}),
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
@@ -341,7 +429,8 @@ async function makeCurrent(ctx, room, askId, role) {
       await put(ctx, { ...other, Status: 'results', ClosedAt: now });
     }
   }
-  await touchState(ctx, { set: { CurrentAskId: askId } });
+  // An ask opening takes the codes card down: it yields to the ask (PLAN §2.3; the server clears it, never a client).
+  await touchState(ctx, { set: { CurrentAskId: askId, WallCodes: 'none' }, add: { WallRev: 1 } });
   const ask = findAsk(await loadRoom(ctx), askId);
   await logEntry(ctx, {
     kind: 'ask',
@@ -423,7 +512,8 @@ async function reaskAction(ctx, room, ask, b) {
     ...(fromPoints.length ? { FromPoints: fromPoints } : {}),
   });
   if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, fromPoints, now);
-  await touchState(ctx, { set: { CurrentAskId: newId } });
+  // A new ask opens, as through makeCurrent: the codes card yields to it (PLAN §2.3).
+  await touchState(ctx, { set: { CurrentAskId: newId, WallCodes: 'none' }, add: { WallRev: 1 } });
   await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
   // A re-ask is a new ask put to the room (it writes its own live ask, not
   // through makeCurrent), so it is a second question for the stats.
@@ -485,7 +575,8 @@ async function askAction(ctx, role, askId, body) {
     if (action === 'discard') next.DiscardedAt = now;
     if (action === 'decide') {
       // A rating always carries its meaning: 5 is great, 1 needs work (owner, 2026-10-06).
-      const direction = S.withRatingMeaning(ask.Kind, S.cleanText(b.direction, S.LIMITS.direction) || S.defaultDirection(ask, room));
+      const typed = S.cleanText(b.direction, S.LIMITS.direction);
+      const direction = S.withRatingMeaning(ask.Kind, typed || S.defaultDirection(ask, room));
       if (!direction) return fail(400, 'Write the direction for Claude (nobody has answered yet)');
       let chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
       const note = S.cleanText(b.note, S.LIMITS.note);
@@ -504,6 +595,9 @@ async function askAction(ctx, role, askId, body) {
         : S.DECISION_METHODS.includes(b.method) ? b.method
           : landed && chosen.length === 1 && chosen[0] === landed.id ? 'wheel' : 'vote';
       next.Decision = { direction, chosen, note, sendToAgent, method, ...(spoken ? { spoken: true } : {}) };
+      // Did the host change the words the pick would have gone with (H1, Q14)? Null: nothing to compare.
+      const reworded = S.decisionReworded(ask, room, chosen, direction, Boolean(typed));
+      if (reworded !== null) next.Decision.reworded = reworded;
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
@@ -723,6 +817,9 @@ async function postLog(ctx, role, body) {
     if (res.busy) return fail(409, DOING_BUSY);
     doingChanged = res.changed;
   }
+  // What a link IS (Share demo S3, plugin 1.20.0): Claude marks its demo and its mockups.
+  const linkRole = role === 'agent' && b.role !== undefined && b.role !== null && b.role !== '' ? String(b.role) : '';
+  if (linkRole && !S.LINK_ROLES.includes(linkRole)) return fail(400, `role must be one of ${S.LINK_ROLES.join(', ')}`);
   if (!text) {
     if (doingPost) {
       if (doingChanged) { const st = await touchState(ctx); await announce(ctx, st.Rev); }
@@ -730,11 +827,14 @@ async function postLog(ctx, role, body) {
     }
     return fail(400, 'Write the update');
   }
+  const link = S.safeUrl(b.link);
   const row = await logEntry(ctx, {
     kind,
     text,
     detail: S.cleanText(b.detail, S.LIMITS.logDetail),
-    link: S.safeUrl(b.link),
+    link,
+    // A role names a link: none without one.
+    linkRole: link ? linkRole : '',
     by: role === 'agent' ? 'agent' : 'host',
     // What the room said can go straight to Claude; a host note never does.
     forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
@@ -807,10 +907,37 @@ async function editLog(ctx, logId, body) {
 async function postDirection(ctx, body) {
   const text = S.cleanText((body || {}).text, S.LIMITS.direction);
   if (!text) return fail(400, 'Write the direction');
-  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as });
+  const src = await directionSources(ctx, body || {}, text);
+  if (src.error) return fail(400, src.error);
+  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, ...src.value });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
+}
+
+/** Most sources one direction may name: Combine takes the decided asks the host ticked. */
+const DIRECTION_SOURCES_MAX = 20;
+
+/**
+ * WHAT A DIRECTION WAS WRITTEN FROM (H1): Combine's decided asks, or an idea the
+ * host opened in the composer. Every id must be real (a decided ask, an idea
+ * of this room), or nothing is sent. As written only when one idea's own words
+ * went unchanged; a combined direction never is (owner, Q14).
+ */
+async function directionSources(ctx, body, text) {
+  const listOf = (v) => (v === undefined || v === null ? [] : Array.isArray(v) ? [...new Set(v.map(String))] : null);
+  const askIds = listOf(body.fromAskIds);
+  const ideaIds = listOf(body.fromIdeaIds);
+  if (!askIds || !ideaIds) return { error: 'fromAskIds and fromIdeaIds are lists' };
+  if (!askIds.length && !ideaIds.length) return { value: {} };
+  if (askIds.length + ideaIds.length > DIRECTION_SOURCES_MAX) return { error: 'Too many sources for one direction' };
+  const room = await loadRoom(ctx);
+  const asks = askIds.map((id) => findAsk(room, id));
+  if (asks.some((a) => !a || a.Status !== 'decided')) return { error: 'A direction can only be written from decided asks' };
+  const ideas = ideaIds.map((id) => findIdea(room, id));
+  if (ideas.some((i) => !i)) return { error: 'One of those ideas is gone' };
+  const asWritten = !askIds.length && ideas.length === 1 && S.cleanText(ideas[0].Text, S.LIMITS.direction) === text;
+  return { value: { sources: { askIds, ideaIds }, asWritten } };
 }
 
 async function ideaAction(ctx, ideaId, body) {
@@ -828,7 +955,8 @@ async function ideaAction(ctx, ideaId, body) {
       return fail(409, 'There is no Ideas ask open to add it to');
     }
     const id = S.newId();
-    await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'idea', CreatedAt: now });
+    // IdeaId: a winning suggestion leads back to the room's idea (H1).
+    await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'idea', IdeaId: idea.IdeaId, CreatedAt: now });
     status = 'promoted';
   } else if (action === 'acknowledge' || action === 'wall') {
     // ACKNOWLEDGE (owner, 2026-10-05): a comment worth hearing that is not a
@@ -854,7 +982,8 @@ async function ideaAction(ctx, ideaId, body) {
     await touchState(ctx, { set: { WallComment: ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { WallComment: comment })).WallComment : comment } });
   }
   if (action === 'direct' || action === 'suggest') {
-    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as });
+    // A sent idea goes in the room's own words: as written (H1).
+    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true } : {}) });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -932,7 +1061,8 @@ async function openingAction(ctx, action, body) {
     // BACK TO THE OPENING (owner, 2026-10-06: Start building was pressed by
     // mistake and "the opening questioning was lost"). Nothing was lost: the
     // brief and its steps stay. Claude is told to pause.
-    await touchState(ctx, { set: { Phase: 'opening' } });
+    // The room frames the build again on the Stage (PLAN §2.3).
+    await touchState(ctx, { set: { Phase: 'opening', WallScreen: 'stage' }, add: { WallRev: 1 } });
     await logEntry(ctx, {
       kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
       text: 'The host has gone back to the opening to frame the build further. Pause building: finish or set aside what you are doing, write no new product code, and wait with wait_for_direction until the host presses Start building again.',
@@ -2068,7 +2198,7 @@ async function hostShare(ctx, body) {
   const room = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
-  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true }) });
+  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true, room }) });
 }
 
 /** Map entries compared field by field: a stored map's key order is not promised. */
@@ -2089,19 +2219,29 @@ async function shareReport(ctx, body) {
   await updateLan(ctx, set);
   const changed = ['Status', 'Key', 'Open', 'Error', 'RemoteStatus', 'RemoteAddress', 'RemoteTarget', 'RemoteSupported'].some((k) => before[k] !== v[k])
     || JSON.stringify(before.RemoteDevices || {}) !== JSON.stringify(v.RemoteDevices || {})
-    || !sameMap(before.Map || [], v.Map);
+    || !sameMap(before.Map || [], v.Map)
+    || JSON.stringify(before.Declared || {}) !== JSON.stringify(v.Declared);
   if (changed) {
     const rev = (await touchState(ctx)).Rev;
     await announce(ctx, rev);
   }
   const ended = (await sessionState(ctx)) === 'ENDED';
   // Targets matter only while sharing is wanted: skip reading the room otherwise.
-  const targets = before.Wanted ? LAN.lanTargets(await loadRoom(ctx)) : [];
-  // Remote share: the HASHES of the keys that open the gateway now, never a key.
-  // Absent unless remote is wanted, so the answer is unchanged when it is off.
+  const room = before.Wanted ? await loadRoom(ctx) : null;
+  const targets = room ? LAN.lanTargets(room) : [];
+  // What each may show (Share demo S1): the folders of the pages Claude linked. A 1.19.0+ plugin opens nothing else.
+  const scopes = room ? LAN.lanScopes(room) : {};
+  // Which shared server is the demo and which the mockups (S3): the 1.20.0 plugin
+  // writes it into .engage/share-status.json. An older plugin ignores it.
+  const roles = {};
+  for (const [origin, r] of Object.entries(room ? LAN.lanRoles(room) : {})) if (targets.includes(origin)) roles[origin] = r.role;
+  // Remote share: the one address the tunnel forwards to (the demo), and the
+  // HASHES of the keys that open it now, never a key. Absent unless remote is
+  // wanted, so the answer is unchanged when it is off. The plugin applies that
+  // address's Wi-Fi scopes to it: remote reaches no more than Wi-Fi.
   const remoteWanted = Boolean(before.Wanted && before.RemoteWanted) && !ended;
-  const remote = remoteWanted ? { remoteWanted, remoteKeys: await liveRemoteKeys(ctx) } : {};
-  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, ...remote });
+  const remote = remoteWanted ? { remoteWanted, remoteTarget: LAN.remoteTarget(room), remoteKeys: await liveRemoteKeys(ctx) } : {};
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes, roles, ...remote });
 }
 
 /**
@@ -2717,10 +2857,17 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
     // room_status with kickoff, so the Connect panel's step 4 can turn green.
     // The first time is kept.
     if (role === 'agent' && query && query.kickoff === '1') await markKickedOff(ctx);
-    const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
+    const { room, view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
     // The role the host's screen would delete a screenshot or an entry in
     // (the owner's delete rule, 2026-10-04): it asks staff for a reason.
-    if (role === 'host') view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+    if (role === 'host') {
+      view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+      // THE ROOM'S WINDOW (PLAN §2.2-§2.6, B1/B3/B4): the host's alone. Never
+      // Claude's (its key is not the host), never a phone's, never the wall's.
+      view.wallKey = await ensureWallKey(ctx, room);
+      view.wall = S.wallStateOf(room.state, view.state);
+      Object.assign(view, await windowStatus(ctx));
+    }
     return reply(200, view);
   }
   // Claude's cheapest call: nothing but its inbox (the wrapper below attaches
@@ -2747,6 +2894,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
 
   // Before the ended check: an ended session still answers the plugin (wanted: false).
   if (a === 'share' && b === 'report' && !c) return role === 'agent' ? shareReport(ctx, body) : fail(403, 'Only Claude Code reports the Wi-Fi share');
+  // Before the ended check too: after the end the host may still put History on the wall.
+  if (a === 'wall' && !b) return hostOnly() || postWall(ctx, body);
 
   if (a === 'share' && b === 'remote-check' && !c) return role === 'agent' ? shareRemoteCheck(ctx, body) : fail(403, 'Only Claude Code checks a remote key');
 
@@ -2848,6 +2997,8 @@ async function routePlayCrew(ctx, me, parts, input) {
 
 async function routePlay(ctx, method, parts, body, query) {
   const [a] = parts;
+  // The room's window: keyed, not seated, so ahead of the seat check (PLAN §2.2).
+  if (a === 'wall') return routeWall(ctx, method, parts, query);
   const input = method === 'GET' ? (query || {}) : (body || {});
   const why = {};
   const me = await playerFrom(ctx, input, why);

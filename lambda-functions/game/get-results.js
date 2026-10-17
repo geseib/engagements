@@ -16,6 +16,7 @@ const { readPollQuestion, pollTally } = require('./poll-round');
 const { displayOrder } = require('./answer-order');
 const { claimSummaryJob } = require('./summary-job');
 const { clearQuestionFocus } = require('./question-focus');
+const { answersCouldHaveExpired } = require('./report-merge');
 
 // @aws-sdk/client-lambda exists in the Lambda Node 22 runtime but is NOT in
 // lambda-functions/package.json (the standing landmine client-s3 already has).
@@ -426,6 +427,49 @@ const recordScoresCounted = async (event, gameId, paddedQuestionId) => {
   }
 };
 
+/**
+ * The question a round asked, decrypted, or null. Read from the round's REF
+ * row through the set version it was served from (pin > activeVersion >
+ * legacy), so a results read shows the same text ASK did. Decrypted from the
+ * SET's org, which is not necessarily the SESSION's — a host in org A may be
+ * running a platform set — and platform/public content passes through
+ * untouched because it was never encrypted.
+ */
+async function readRoundQuestion(gameId, paddedQuestionId) {
+  try {
+    const questionRef = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#REF` }
+    }));
+    if (!questionRef.Item) {
+      console.log(`❌ Question reference not found: QUESTION#${paddedQuestionId}#REF`);
+      return null;
+    }
+    const resolvedSet = await resolveSetPartition(
+      db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionRef.Item.SetId), questionRef.Item.SetVersion
+    );
+    const questionResponse = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: resolvedSet.pk, SK: questionRef.Item.SourceQuestionId }
+    }));
+    const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
+    return questionResponse.Item && setOrgId
+      ? await decryptItem(setOrgId, 'question', questionResponse.Item)
+      : (questionResponse.Item || null);
+  } catch (error) {
+    console.error('❌ Error fetching question data:', error);
+    return null;
+  }
+}
+
+/** The title a phone can head an earlier round with; '' when it cannot be read. */
+async function roundQuestionTitle(gameId, paddedQuestionId) {
+  const q = await readRoundQuestion(gameId, paddedQuestionId);
+  if (!q) return '';
+  const title = q.Title || q.title || q.Prompt || q.prompt || '';
+  return typeof title === 'string' ? title : '';
+}
+
 exports.handler = async (event) => {
   const response = await handle(event);
   await startRoundRead(event, response);
@@ -596,7 +640,75 @@ const handle = async (event) => {
       const readingTheResolvedRound = resolvedRound !== null
         && parseInt(resolvedRound, 10) === parseInt(String(targetQuestionId), 10);
 
+      // A ROUND ALREADY SHOWN, READ BACK AFTER THE ROOM MOVED ON (review of
+      // test a76fda95, issue #34: a phone commenting on round 1 after the
+      // end could not load its responses). Only what was stored when the
+      // host showed the round (QUESTION#nnn#RESULTS, written on the close and
+      // only then), only for a round before the one the session is on, or
+      // up to its last round once it has ENDED. A single read, returned as
+      // stored: nothing below this point runs, so nothing is scored, written
+      // or announced, and the tallies are the ones the room was shown.
       if (!readingTheResolvedRound) {
+        const askedRound = parseInt(String(targetQuestionId), 10);
+        const onRound = Number(gameState?.LessonNumber) || 0;
+        const ended = gameState?.State === 'ENDED';
+        const pastRound = askedRound >= 1 && (ended ? askedRound <= onRound : askedRound < onRound);
+        if (pastRound) {
+          const paddedPast = String(askedRound).padStart(3, '0');
+          const stored = await db.send(new GetCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedPast}#RESULTS` },
+          }));
+          const storedOrg = orgOf(gameMetadata.Item);
+          const row = stored.Item && storedOrg ? await decryptItem(storedOrg, 'results', stored.Item) : stored.Item;
+          if (row && row.VoteTallies && typeof row.VoteTallies === 'object') {
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                gameId,
+                questionId: paddedPast,
+                voteTallies: row.VoteTallies,
+                totalVotes: Number(row.TotalVotes) || 0,
+                maxScore: Number(row.MaxVotes) || 0,
+                timestamp: row.CompletedAt || null,
+                stored: true,
+                // Issue #35: the phone headed an earlier round "Round 1" only.
+                questionTitle: await roundQuestionTitle(gameId, paddedPast),
+              }),
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+          }
+          // A ROUND NOBODY ANSWERED (review of test 32ac4eb4, issue #35): never
+          // shown, so no RESULTS row, and the phone read "The responses could
+          // not be loaded". With no ANSWER rows there is no author to protect,
+          // so it reads back empty. Only while the round is younger than the
+          // answers' seven-day ttl: after that "none" could mean "expired",
+          // and the refusal below is the honest answer. A round that HAS
+          // answers and was never shown stays refused — its authors were never
+          // revealed to the room.
+          const anyAnswer = await db.send(new QueryCommand({
+            TableName: process.env.TABLE_NAME,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': `QUESTION#${paddedPast}#ANSWER#` },
+            Limit: 1,
+          }));
+          if (!(anyAnswer.Items || []).length) {
+            const ref = await db.send(new GetCommand({
+              TableName: process.env.TABLE_NAME,
+              Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedPast}#REF` },
+            }));
+            if (!answersCouldHaveExpired(ref.Item?.StartedAt)) {
+              return {
+                statusCode: 200,
+                body: JSON.stringify({
+                  gameId, questionId: paddedPast, answers: [], totalVotes: 0, stored: true, noAnswers: true,
+                  questionTitle: await roundQuestionTitle(gameId, paddedPast),
+                }),
+                headers: { 'Access-Control-Allow-Origin': '*' }
+              };
+            }
+          }
+        }
         console.log(`🔒 Refusing to close round ${targetQuestionId} of ${gameId}: not the host`);
         return {
           statusCode: 403,
@@ -1047,51 +1159,7 @@ async function handleTriviaResults(event, gameId, questionId) {
     
     // First, get the question data for trivia results using the proper lookup method
     console.log(`🔍 Fetching question data for trivia results using question reference`);
-    let question = null;
-    try {
-      // Get question reference record (same as get-question.js)
-      const questionRef = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#REF` }
-      }));
-
-      if (questionRef.Item) {
-        const sourceQuestionId = questionRef.Item.SourceQuestionId;
-        const questionSetId = questionRef.Item.SetId;
-        
-        console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
-
-        // Read the VERSION this round was served from (the REF row records it).
-        // RESULTS must show the same question text ASK did, so this resolves
-        // through the same pin > activeVersion > legacy order.
-        const resolvedSet = await resolveSetPartition(
-          db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
-        );
-
-        // Get the actual question from the question set (same as get-question.js)
-        const questionResponse = await db.send(new GetCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: {
-            PK: resolvedSet.pk,
-            SK: sourceQuestionId
-          }
-        }));
-
-        // Decrypted from the SET's org, which is not necessarily the SESSION's
-        // — a host in org A may be running a platform set — so the pinned pair
-        // resolved above is the authority, and platform/public content passes
-        // through untouched because it was never encrypted.
-        const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-        question = questionResponse.Item && setOrgId
-          ? await decryptItem(setOrgId, 'question', questionResponse.Item)
-          : questionResponse.Item;
-        console.log(`📋 Question data fetched from question set:`, question ? 'Success' : 'Not found');
-      } else {
-        console.log(`❌ Question reference not found: QUESTION#${paddedQuestionId}#REF`);
-      }
-    } catch (error) {
-      console.error(`❌ Error fetching question data:`, error);
-    }
+    const question = await readRoundQuestion(gameId, paddedQuestionId);
   
   // Get all answers for this trivia question (same location as call-and-answer)
   console.log(`🔍 TRIVIA QUERY DEBUG: Searching for answers with PK='GAME#${gameId}' and SK begins_with 'QUESTION#${paddedQuestionId}#ANSWER#'`);

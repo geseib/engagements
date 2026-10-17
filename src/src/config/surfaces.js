@@ -43,7 +43,14 @@ export function twoSurfacesHere(gameType) {
   return twoSurfacesOn({ env: window.ENV, search: window.location && window.location.search, storage, gameType });
 }
 
-/** The Presentation's address for a session. */
-export function presentHref(gameId) {
-  return `/present?gameId=${encodeURIComponent(String(gameId || ''))}`;
+/**
+ * The room's window for a session: the Presentation, or with
+ * `{ type: 'build', k }` the Build Room wall (parity PLAN §2.4), which needs
+ * the session's wall key. One URL family, so RoomWindowLink, the shared
+ * window name, `placed=1` and click-to-fill apply to both.
+ */
+export function presentHref(gameId, { type = '', k = '' } = {}) {
+  const base = `/present?gameId=${encodeURIComponent(String(gameId || ''))}`;
+  if (type !== 'build') return base;
+  return `${base}&type=build&k=${encodeURIComponent(String(k || ''))}`;
 }

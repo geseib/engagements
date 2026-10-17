@@ -178,6 +178,28 @@ check('remoteLink: origin, the path asked for, and the key; empty unless live', 
   assert.strictEqual(L.remoteLink(remoteRow({ RemoteStatus: 'failed' }), '/', 'KEY123', NOW), '');
 });
 
+console.log('\nremote share: one tunnel, aimed at the demo (Share demo S3)');
+check('the demo Claude marked wins over a newer link, for both the address and the path', () => {
+  const r = { lan: remoteRow(), asks: [], state: null, logs: [
+    { By: 'agent', Link: 'http://localhost:5173/demo/index.html', Role: 'demo' },
+    { By: 'agent', Link: 'http://localhost:6006/mockups/a.html', Role: 'mockup' },
+  ] };
+  assert.strictEqual(L.remoteTarget(r), 'http://localhost:5173');
+  assert.strictEqual(L.remotePath(r), '/demo/index.html');
+});
+check('nothing marked: the newest link Claude showed', () => {
+  const r = { lan: remoteRow(), asks: [], state: null, logs: [
+    { By: 'agent', Link: 'http://localhost:5173/old' }, { By: 'agent', Link: 'http://localhost:6006/new?x=1' },
+  ] };
+  assert.strictEqual(L.remoteTarget(r), 'http://localhost:6006');
+  assert.strictEqual(L.remotePath(r), '/new?x=1');
+});
+check('the remote target is always one of the Wi-Fi targets, or nothing', () => {
+  const r = { lan: remoteRow(), asks: [], state: null, logs: [{ By: 'agent', Link: 'https://example.com/' }] };
+  assert.strictEqual(L.remoteTarget(r), '');
+  assert.strictEqual(L.remotePath(r), '/');
+});
+
 console.log('\nremote share: the host\'s view');
 check('remote live: who opened it, most devices first, then by name', () => {
   const v = L.lanHostView(remoteRow({ RemoteDevices: { Jordan: 1, Sam: 2, Priya: 1 } }), NOW, { withKey: true });

@@ -203,7 +203,8 @@ describe('the codes on the Stage', () => {
     expect(document.querySelector('.main.solo')).not.toBeNull();
     expect(document.querySelector('aside.meter')).toBeNull();
     const hide = within(dock()).getByRole('button', { name: 'Hide the codes' });
-    expect(hide).toHaveClass('btn');
+    // The shared bar's one main button (parity PLAN §2a D1).
+    expect(hide).toHaveClass('host-action-bar__primary');
     fireEvent.click(hide);
     expect(card()).toBeNull();
     expect(document.querySelector('aside.meter')).not.toBeNull();
@@ -1091,7 +1092,7 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     const pill = screen.getByRole('button', { name: 'Ask 3 · 3 of 4' });
     fireEvent.click(pill);
     expect(screen.getByRole('region', { name: 'Current ask' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^HOST/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Host screen/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull();
   });
 
@@ -1220,13 +1221,27 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     expect(document.querySelector('.dock .status').textContent).toBe('3 of 4 answered');
   });
 
-  test('Space closes the ask from the dock', async () => {
+  test('Space closes the ask from the dock: with one still answering, the first press arms in place and the second closes', async () => {
     await openRoom(live());
     fireEvent.keyDown(window, { key: '2' });
-    expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Show results' })).toBeInTheDocument();
+    const dockEl = document.querySelector('footer.dock');
+    expect(within(dockEl).getByRole('button', { name: 'Show results' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: ' ' });
+    // Only the room's window heard about the Stage (B7): the ask was not touched.
+    expect(posts().filter((c) => !c.url.endsWith('/build/wall'))).toHaveLength(0);
+    expect(within(dockEl).getByRole('button', { name: 'Show results anyway' })).toHaveClass('is-armed');
+    expect(within(dockEl).getByRole('alert')).toHaveTextContent('1 of 4 still answering. Press again to show results.');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`));
     expect(lastPost().body).toEqual({ action: 'close' });
+  });
+
+  test('→ (a clicker) presses the same main button, as on Call & Answer', async () => {
+    await openRoom(live());
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'close' }));
   });
 
   test('Space does nothing while a dialog is open', async () => {
@@ -1250,6 +1265,16 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], direction: 'Which header should volunteers see first: Calm photo + calendar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Host screen' }));
+    expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('D2: with a count on HOST, one click shows the Host screen (no list on the Stage)', async () => {
+    await openRoom(hostState({ ideas: [{ PlayerName: 'Ana', Text: 'Show parking' }, { PlayerName: 'Dee', Text: 'Print a rota' }] }));
+    fireEvent.keyDown(window, { key: '2' });
+    const host = within(document.querySelector('footer.dock')).getByRole('button', { name: 'Host screen, 2 waiting' });
+    fireEvent.click(host);
+    expect(screen.queryByRole('group', { name: 'Waiting for the host' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'The queue' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -1700,6 +1725,73 @@ describe('the decision records how it was made; Claude gets the question and the
     // No screenshot rows in this room: Artifacts says where they will appear.
     fireEvent.click(screen.getByRole('button', { name: 'Artifacts · 0' }));
     expect(screen.getByText(/screenshots and mockups collect here/)).toBeInTheDocument();
+  });
+
+  test('History marks what the room gave and every ask the room saw, with no names (parity PLAN §2.8, H3)', async () => {
+    await openRoom(hostState({
+      asks: [
+        {
+          ...CHOICE, AskId: '002', Status: 'decided', DecidedAt: ago(60), FromIdeas: ['0-i0', '1-i1'], Prompt: 'Which should Claude build next?',
+          Options: [{ label: 'A', title: 'Text a reminder', ideaId: '0-i0' }, { label: 'B', title: 'A map at the top', ideaId: '1-i1' }],
+          Decision: { direction: 'Which should Claude build next: A map at the top', chosen: ['B'], method: 'vote', reworded: true, deliveredAt: ago(50) },
+        },
+        { ...CHOICE, AskId: '005', Status: 'live', OpenedAt: ago(30), Prompt: 'Which colour for the buttons?' },
+      ],
+      ideas: [
+        { PlayerName: 'Dee', Text: 'Text a reminder', Status: 'promoted', PromotedTo: '002' },
+        { PlayerName: 'Jo', Text: 'A map at the top', Status: 'promoted', PromotedTo: '002' },
+        { PlayerName: 'Dee', Text: 'Add a map of the parking', Status: 'promoted', PromotedVia: 'claude' },
+      ],
+      logs: [{ Kind: 'idea', Text: 'Add a map of the parking', Detail: 'from Dee', By: 'room', ForAgent: true, ForAgentAs: 'do-now', IdeaId: '2-i2', AsWritten: true }],
+    }));
+    fireEvent.keyDown(window, { key: '4' });
+    const story = screen.getByRole('list', { name: 'The story so far' });
+    // The vote: the host reworded the room's choice, and its two ideas hang under it.
+    const vote = within(story).getByText('Which should Claude build next: A map at the top').closest('li');
+    expect(within(vote).getByLabelText('How it was decided').textContent).toMatch(/→reworded by the host, Claude has it$/);
+    const ideas = within(vote).getByRole('list', { name: 'Ideas from the room' });
+    expect(within(ideas).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Text a reminder · not chosen', 'A map at the top · chosen by the room',
+    ]);
+    // An idea sent on its own.
+    const sent = within(story).getByText('Add a map of the parking').closest('li');
+    expect(sent.textContent).toMatch(/An idea from the room/);
+    expect(within(sent).getByLabelText('What happened to it').textContent).toBe('sent to Claude as written→waiting for Claude');
+    // The ask still with the room.
+    const live = within(story).getByText('Which colour for the buttons?').closest('li');
+    expect(live.textContent).toMatch(/Ask 5/);
+    expect(live.textContent).toMatch(/with the room/);
+    expect(story.textContent).not.toMatch(/Dee|Jo\b/);
+  });
+
+  test('"Made so far" counts the ideas History marks as used (parity PLAN §2.8, H4)', async () => {
+    await openRoom(hostState({
+      asks: [
+        { ...CHOICE, AskId: '002', Status: 'decided', DecidedAt: ago(60), FromIdeas: ['0-i0'], Prompt: 'Which first?',
+          Options: [{ label: 'A', title: 'Text a reminder', ideaId: '0-i0' }, { label: 'B', title: 'Something else' }],
+          Decision: { direction: 'Which first: Something else', chosen: ['B'], method: 'vote' } },
+        // Waiting for Claude's mockups: the room has not seen this vote.
+        { ...CHOICE, AskId: '003', Status: 'proposed', AskForMockups: true, FromIdeas: ['3-i3', '5-i5'], Prompt: 'Which look?',
+          Options: [{ label: 'A', title: 'Dark', ideaId: '3-i3' }, { label: 'B', title: 'Light', ideaId: '5-i5' }] },
+      ],
+      ideas: [
+        { PlayerName: 'Dee', Text: 'Text a reminder', Status: 'promoted', PromotedTo: '002' },
+        { PlayerName: 'Jo', Text: 'Add a map', Status: 'promoted', PromotedVia: 'claude' },
+        { PlayerName: 'Dee', Text: 'Show shifts as a calendar' },
+        { PlayerName: 'Jo', Text: 'Dark mode', Status: 'promoted', PromotedTo: '003' },
+        { PlayerName: 'Ana', Text: 'Nice buttons', Status: 'acknowledged', WalledAt: ago(10) },
+        { PlayerName: 'Ana', Text: 'Light mode', Status: 'promoted', PromotedTo: '003' },
+      ],
+      logs: [
+        { Kind: 'idea', Text: 'Add a map', By: 'room', ForAgent: true, IdeaId: '1-i1', AsWritten: true },
+        { Kind: 'direction', Text: 'Show the shifts as a weekly calendar', ForAgent: true, From: { AskIds: [], IdeaIds: ['2-i2'] }, AsWritten: false },
+      ],
+    }));
+    fireEvent.keyDown(window, { key: '4' });
+    const made = screen.getByRole('heading', { name: 'Made so far' }).closest('section');
+    // Used: the one in the decided vote (it lost, but the room voted on it), the one sent, the one
+    // written into a direction. Not: the one in a vote the room has not seen, the one only put on the wall.
+    expect(made.textContent).toMatch(/6 ideas, 3 used/);
   });
 
   test('History shows how each decision was made', async () => {
@@ -2406,6 +2498,29 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     expect(within(decidedSection()).getByRole('checkbox', { name: /What are we building/ })).not.toBeChecked();
   });
 
+  test('a combined direction tells the server which asks it was written from (parity PLAN §2.8, H1)', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /What are we building/ }));
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /Who is it for/ }));
+    fireEvent.click(within(decidedSection()).getByRole('button', { name: 'Add to the prompt' }));
+    fireEvent.change(composer(), { target: { value: `${composer().value}\nKeep it simple` } });
+    fireEvent.submit(composer().closest('form'));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body).toEqual({ text: 'What are we building? An app\nWho is it for? Everyone\nKeep it simple', fromAskIds: ['001', '002'] });
+  });
+
+  test('a direction the host only typed names no sources, and the sources go once the box is cleared', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /Who is it for/ }));
+    fireEvent.click(within(decidedSection()).getByRole('button', { name: 'Add to the prompt' }));
+    // The host empties the box and writes something else: it was not written from the ask.
+    fireEvent.change(composer(), { target: { value: '' } });
+    fireEvent.change(composer(), { target: { value: 'Make the header bigger' } });
+    fireEvent.submit(composer().closest('form'));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body).toEqual({ text: 'Make the header bigger' });
+  });
+
   test('Combine goes under what the host already typed, after a blank line', async () => {
     await openRoom(decidedRoom());
     fireEvent.change(composer(), { target: { value: 'Build this as our first version:' } });
@@ -2850,5 +2965,64 @@ describe('a helper alone, and what a step holds (docs/design/build-room-doing)',
     fireEvent.keyDown(window, { key: '4' });
     const story = screen.getByRole('list', { name: 'The story so far' });
     expect(within(story).getByRole('link', { name: /localhost/ })).toHaveAttribute('href', 'http://localhost:5173/');
+  });
+});
+
+describe('the room\'s window follows the laptop (parity PLAN §2.6, B7)', () => {
+  const wallPosts = () => posts().filter((c) => path(c) === `games/${GAME}/build/wall`).map((c) => c.body);
+
+  test('2, 3 and 4 post build/wall {screen}; 1 posts nothing; the laptop still changes screen', async () => {
+    await openRoom(hostState());
+    fireEvent.keyDown(window, { key: '3' });
+    expect(screen.getByRole('region', { name: 'The build' })).toBeInTheDocument();
+    await waitFor(() => expect(wallPosts()).toEqual([{ screen: 'build' }]));
+    fireEvent.keyDown(window, { key: '4' });
+    await waitFor(() => expect(wallPosts()).toEqual([{ screen: 'build' }, { screen: 'history' }]));
+    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.keyDown(window, { key: '2' });
+    await waitFor(() => expect(wallPosts()).toEqual([{ screen: 'build' }, { screen: 'history' }, { screen: 'stage' }]));
+  });
+
+  test('P back to the last screen posts it too', async () => {
+    await openRoom(hostState());
+    fireEvent.keyDown(window, { key: '3' });
+    fireEvent.keyDown(window, { key: 'p' });
+    fireEvent.keyDown(window, { key: 'p' });
+    await waitFor(() => expect(wallPosts()).toEqual([{ screen: 'build' }, { screen: 'build' }]));
+  });
+
+  test('the header tabs post too', async () => {
+    await openRoom(hostState());
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    await waitFor(() => expect(wallPosts()).toEqual([{ screen: 'history' }]));
+  });
+
+  test('Show codes posts the codes up (and the Stage); hiding them posts none', async () => {
+    await openRoom(hostState());
+    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('button', { name: 'Show on the Stage' }));
+    await waitFor(() => expect(wallPosts()).toEqual(expect.arrayContaining([{ screen: 'stage' }, { codes: 'join' }])));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(wallPosts()).toContainEqual({ codes: 'none' }));
+  });
+
+  test('a failed wall post says nothing and changes nothing on the laptop', async () => {
+    await openRoom(hostState());
+    const base = authFetch.getMockImplementation();
+    authFetch.mockImplementation(async (url, opts = {}) => (String(url).endsWith('/build/wall') ? res({ error: 'nope' }, false, 500) : base(url, opts)));
+    fireEvent.keyDown(window, { key: '3' });
+    expect(screen.getByRole('region', { name: 'The build' })).toBeInTheDocument();
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('presentChanged reads the host state again (the window\'s status)', async () => {
+    await openRoom(hostState());
+    const handler = webSocketClient.onMessage.mock.calls.filter(([type]) => type === 'presentChanged').pop();
+    expect(handler).toBeTruthy();
+    const before = calls.filter((c) => c.url.endsWith('/build/state')).length;
+    await act(async () => { handler[1]({ type: 'presentChanged', gameId: GAME }); });
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/build/state')).length).toBeGreaterThan(before));
   });
 });

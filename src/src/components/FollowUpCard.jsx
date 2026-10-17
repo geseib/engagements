@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import RatingInput from './survey/RatingInput';
 import ChoiceInput from './survey/ChoiceInput';
 import TextInput from './survey/TextInput';
-import FW, { KINDS } from '../config/followUpWords';
+import FW, { KINDS, endsOf } from '../config/followUpWords';
 import './FollowUpCard.css';
 
 /**
@@ -37,7 +37,11 @@ import './FollowUpCard.css';
  */
 export function surveyQuestionOf(ask) {
   if (!ask) return null;
-  if (ask.kind === 'rate') return { qid: `fu-${ask.askId}`, kind: 'rating', scale: '1-5', lowLabel: 'Disagree', highLabel: 'Agree' };
+  if (ask.kind === 'rate') {
+    // The ask's own ends (owner, 16 Oct), Disagree to Agree for an older ask.
+    const ends = endsOf(ask);
+    return { qid: `fu-${ask.askId}`, kind: 'rating', scale: '1-5', lowLabel: ends.low, highLabel: ends.high };
+  }
   if (ask.kind === 'ideas') return { qid: `fu-${ask.askId}`, kind: 'text', maxLength: 280 };
   return { qid: `fu-${ask.askId}`, kind: 'choice', options: ask.options || [], allowMultiple: false, allowOther: false, maxPicks: 1 };
 }

@@ -72,10 +72,20 @@ const RW = Object.freeze({
 
   // ── Arm texts: the first press of an early advance ────────────────────
   /** "1 of 3 still writing. Press again to start voting." (walk W3, 16 Oct 2026: said in place, not in a modal). */
-  armVote: (n, total) => (Number(total) > 0
-    ? `${n} of ${total} still writing. Press again to start voting.`
-    : `${n} still answering. Press again to start voting.`),
-  armResults: (n, kind = 'voting', total) => `${Number(total) > 0 ? `${n} of ${total}` : n} still ${kind === 'answering' ? 'answering' : 'voting'}. Press again to show results.`,
+  // Nobody yet (walk of dev 26af5fc8, F2): "Nobody has voted yet", never "6 of 6 still voting".
+  armVote: (n, total) => {
+    if (Number(total) > 0 && Number(n) >= Number(total)) return 'Nobody has answered yet. Press again to start voting.';
+    return Number(total) > 0
+      ? `${n} of ${total} still writing. Press again to start voting.`
+      : `${n} still answering. Press again to start voting.`;
+  },
+  armResults: (n, kind = 'voting', total) => {
+    const answering = kind === 'answering';
+    if (Number(total) > 0 && Number(n) >= Number(total)) {
+      return `Nobody has ${answering ? 'answered' : 'voted'} yet. Press again to show results.`;
+    }
+    return `${Number(total) > 0 ? `${n} of ${total}` : n} still ${answering ? 'answering' : 'voting'}. Press again to show results.`;
+  },
   armSkip: (noun) => `Press again to skip this ${nounOf(noun)}.`,
 
   // ── Status lines (the dock's left, the Remote's status card) ──────────
@@ -153,6 +163,8 @@ const RW = Object.freeze({
     FEEDBACK: (a) => `The room is commenting. Then ${a}.`,
     ROOM_QUESTION: (a) => `The room is answering. Then ${a}.`,
     ROOM_RESULTS: (a) => `Pick the ideas to show. Then ${a}, or ask another question.`,
+    /** A Choose or a Rate result (or a kind not known yet): nothing to pick. */
+    ROOM_RESULTS_ANSWER: (a) => `The room's answer is up. Talk it through, then ${a}, or ask another question.`,
     ENDED: (a) => `The session is over. ${a}.`,
   }),
   /** What each step is, for hover on the laptop and a long press on the Remote. */

@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.19.0';
+const VERSION = '1.21.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -255,8 +255,13 @@ async function api(method, path, body, signal, { background = false } = {}) {
   }
   if (data === null) throw new ApiError(res.status, 'Engage returned a response that is not JSON.');
   if (data.brief && !background) rememberBrief(data.brief);
+  // The room's title, for the Wi-Fi gateway's own pages (Share demo S3). Kept
+  // from a state read Claude made: the share loop never reads state, because
+  // an agent's state read hands over Claude's inbox.
+  if (!background && method === 'GET' && /^state(\?|$)/.test(path) && typeof data.title === 'string') ROOM_TITLE = { gameId: CONFIG.gameId, title: data.title.replace(/\s+/g, ' ').trim().slice(0, 80) };
   return data;
 }
+let ROOM_TITLE = { gameId: null, title: '' };
 
 // ---------------------------------------------------------------------------
 // The room brief (step 7c, C14): who it is for, Keep in mind, Later. Kept by
@@ -552,7 +557,7 @@ function renderState(st) {
   }
   if (st.outcome && st.outcome.summary) lines.push('', `Wrap-up already posted: ${trunc(st.outcome.summary, 200)}`);
   if (st.lan && st.lan.status === 'live') {
-    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths.');
+    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link. When you start the demo\'s or the mockups\' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person\'s name>"} (each field optional). The host may edit it, and it wins over your links: the room\'s Open the build goes to its demo. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.');
   }
   if (st.lan && st.lan.remote && st.lan.remote.wanted) {
     // Remote share (spec §4.5): one tunnel to the newest thing shown, and Cloudflare's quick-tunnel limits.
@@ -811,6 +816,7 @@ const TOOLS = [
         kind: { type: 'string', enum: ['progress', 'milestone', 'showing', 'answer'], description: 'Default "progress". "answer" answers a question the room asked you (THE ROOM ASKS YOU).' },
         detail: str('Optional extra detail shown when the entry is expanded.', { maxLength: 2000 }),
         link: str('Optional PUBLIC http(s) link (e.g. a deployed preview).'),
+        role: { type: 'string', enum: ['demo', 'mockup'], description: 'What the link is, when it is one of this project\'s pages: "demo" for the playable demo (the room\'s Open the build goes there), "mockup" for a mockup. Needs a link.' },
         doing: str('What you are doing as this piece of work starts: 4 to 7 words, present tense, starting with an -ing verb, e.g. "Scaffolding the site" or "Mocking up 3 graph options". Never people\'s names, file paths, commands or links. The room sees it as your headline.', { maxLength: 50 }),
         done: str('Past tense of the line that just ended, 2 to 7 words, e.g. "Scaffolded the site". Same rules as doing.', { maxLength: 50 }),
         runItem: { type: 'integer', minimum: 1, maximum: 1000, description: 'Only when the host\'s run list sent you an item (the direction says RUN LIST ITEM k): the k of the item you just finished. It tells the host this item is done so Next can move on.' },
@@ -1696,11 +1702,15 @@ const HANDLERS = {
     if (!['progress', 'milestone', 'showing', 'answer'].includes(kind)) throw new InputError('"kind" must be progress, milestone, showing or answer.');
     const link = optStr(args, 'link');
     if (link && !/^https?:\/\//i.test(link)) throw new InputError('"link" must be an http(s) URL.');
+    // Share demo S3 (1.20.0): which of the project's pages the link is.
+    const role = args.role === undefined || args.role === null || args.role === '' ? undefined : args.role;
+    if (role !== undefined && !['demo', 'mockup'].includes(role)) throw new InputError('"role" must be demo or mockup.');
+    if (role && !link) throw new InputError('A "role" needs a link: it says what that link is.');
     const doing = doingWords(args, 'doing', true);
     const done = doingWords(args, 'done', false);
     // A post with only doing and/or done is a headline change, not a timeline row.
     const text = doing || done ? optStr(args, 'text') : reqStr(args, 'text');
-    const body = clean({ kind, text, detail: optStr(args, 'detail'), link, doing, done });
+    const body = clean({ kind, text, detail: optStr(args, 'detail'), link, role, doing, done });
     await refuseForeignLinks([link]);
     const res = await api('POST', 'log', body, ctx.signal);
     if (body.text) rememberUpdate(body.text);
@@ -2265,7 +2275,7 @@ function promptText(name, args) {
       return [
         'Show the room the work so far, running.',
         '',
-        '1. Work out how this project runs. In order of preference: the project\'s own dev server (a "dev" or "start" script in package.json, or the framework\'s usual command); a build step and then a static server for its output folder; or, for plain HTML, a static server for the folder (npx serve, or python3 -m http.server).',
+        '1. Work out how this project runs. In order of preference: the project\'s own dev server (a "dev" or "start" script in package.json, or the framework\'s usual command); a build step and then a static server for its output folder; or, for plain HTML, a static server for the demo\'s own folder only (npx serve demo, or python3 -m http.server -d demo), never the project root.',
         '2. If it is already running from earlier in this session, reuse it. Otherwise install what is missing, start it in the background on a free port, and wait until the page answers (curl the URL).',
         '3. post_update with kind "showing", one line for the room saying what they are looking at, and link set to the local URL. The host gets an Open button for it on the big screen.',
         '4. Screenshot the main page (e.g. npx playwright screenshot --viewport-size=1280,800 <url> preview.png) and share_image it with kind "progress", so phones see it too.',
@@ -2389,7 +2399,8 @@ How to collaborate:
 - Text you send is shown to the room as plain text. Only include public http(s) links people can open; never secrets, keys or private paths.
 - Show, don't just tell: screenshot each mockup and share_image it onto its Choose option (askId + label), so phones see it too; before wrap_up, share_image one or two screenshots of the finished product with kind "final" for the report.
 - Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
-- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
+- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link.
+- When you start the demo's or the mockups' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person's name>"} (each field optional). The host may edit it, and it wins over your links: the room's Open the build goes to its demo. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.
 - The build is always something people open as a web page, even when the room is making a document or a plan: serve it from this project's folder on one local address. When the host also opens it to people who are not in the room, room_status says SHARING REMOTELY; then show a built copy rather than the dev server, and never use server-sent events.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here: the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too, on their laptops, tablets and phones.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
@@ -2502,12 +2513,27 @@ async function linkWarnings(urls, opts) {
 //     the app to a refused request (pages, redirects and upgrades alike);
 //   - tells the app it is being opened on localhost (Host, Origin), so a dev
 //     server that checks its host (Vite does) serves it;
-//   - pipes websocket upgrades, so hot reload reaches every device.
+//   - pipes websocket upgrades, so hot reload reaches every device;
+//   - opens a PAGE only inside the folders of the pages Claude linked on that
+//     server (Engage sends them as `scopes`, 1.19.0), lets those pages load
+//     their own files and call their API, and never shows a folder listing
+//     (dev game 1215: the room browsed a mockup folder and Claude's helpers).
 // Nothing here writes to stdout: that is the MCP stream. Log with log().
 
 const LAN_FAST_MS = Math.max(50, Number(process.env.ENGAGE_LAN_FAST_MS) || 4000);
 const LAN_IDLE_MS = Math.max(50, Number(process.env.ENGAGE_LAN_IDLE_MS) || 15000);
-const LAN_PORT = Math.max(1024, Number(process.env.ENGAGE_LAN_PORT) || 4900);
+/**
+ * WHICH PORTS (Share demo S3 d, 1.20.0). Each session has its own block of ten
+ * from 4900 + (code mod 100) x 10, so two rooms run from one laptop no longer
+ * interleave their ports (dev 1215 shared on :4904). ENGAGE_LAN_PORT still
+ * overrides, scanning twenty from it as before.
+ */
+const LAN_PORT_OVERRIDE = Number(process.env.ENGAGE_LAN_PORT) ? Math.max(1024, Number(process.env.ENGAGE_LAN_PORT)) : 0;
+function lanPorts() {
+  if (LAN_PORT_OVERRIDE) return { from: LAN_PORT_OVERRIDE, count: 20 };
+  const code = Number(CONFIG.gameId);
+  return { from: 4900 + (Number.isInteger(code) && code >= 0 ? code % 100 : 0) * 10, count: 10 };
+}
 const LAN_LOST_MS = Math.max(100, Number(process.env.ENGAGE_LAN_LOST_MS) || 30000);
 const LAN_MAX = 4;
 const LAN_COOKIE = 'engage_lan';
@@ -2523,7 +2549,55 @@ const lanTargetHost = (hostname) => /^(localhost|\[::1\])$/i.test(hostname) ||
 const bareHost = (hostname) => hostname.replace(/^\[|\]$/g, '');
 const PRIVATE_V4_RE = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
-const lan = { key: '', gateways: new Map(), seen: new Map(), error: '', lastAnswerAt: Date.now() };
+const lan = { key: '', gateways: new Map(), seen: new Map(), error: '', lastAnswerAt: Date.now(), scopes: null, declared: {}, roles: {} };
+
+// ── What a shared server may show (Share demo S1, 1.19.0) ───────────────────
+/** A browser's request for a page (or with no Sec-Fetch-Dest at all: the strict reading). */
+const PAGE_DESTS = ['document', 'iframe', 'frame', 'embed', 'object'];
+const isPageRequest = (req) => { const d = String(req.headers['sec-fetch-dest'] || ''); return !d || PAGE_DESTS.includes(d); };
+/** The folders Engage says this server may show, or null from an older Engage (everything, as before). */
+function scopesFor(local) {
+  if (!lan.scopes || typeof lan.scopes !== 'object') return null;
+  const list = lan.scopes[local];
+  return Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.startsWith('/')) : [];
+}
+const underScope = (pathname, scopes) => scopes.some((x) => pathname.startsWith(x));
+/**
+ * A page opens inside a linked folder. A page's own files and API calls (not a
+ * page) may come from anywhere on the server, when the page asking is itself
+ * inside a linked folder of this same gateway.
+ */
+function allowedByScope(req, url, scopes, lanOrigin) {
+  if (scopes === null) return true;
+  if (underScope(url.pathname, scopes)) return true;
+  if (isPageRequest(req)) return false;
+  let from = null;
+  try { from = new URL(String(req.headers.referer || '')); } catch { return false; }
+  return from.origin === lanOrigin && underScope(from.pathname, scopes);
+}
+/** A static server's folder listing (python3 -m http.server, npx serve, Apache-style). */
+const LISTING_RE = /<title>\s*(Directory listing for|Index of)\b/i;
+const escapeHtml = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+/**
+ * WHICH SESSION THIS IS (Share demo S3 c): "Build Room 1215 · <label or title>",
+ * on the gateway's own pages, so a host running two rooms can tell them apart.
+ * The label from .engage/share.json, else the room's title.
+ */
+function lanSessionName() {
+  const title = ROOM_TITLE.gameId === CONFIG.gameId ? ROOM_TITLE.title : '';
+  const name = (lan.declared && lan.declared.label) || title;
+  return `Build Room ${CONFIG.gameId || ''}${name ? ` \u00b7 ${name}` : ''}`;
+}
+const pageStart = (title) => '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+  `<title>${escapeHtml(title)}</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.5rem;color:#1B2942">` +
+  `<p style="margin:0 0 .5rem;font-size:.85rem;color:#5B6880">${escapeHtml(lanSessionName())}</p>`;
+const notFoundPage = () => `${pageStart('Not shared')}<h1 style="font-size:1.4rem">Not part of the shared build</h1><p>Go back to the Build Room and press Open the build.</p></body>`;
+/** Every answer the gateway gives names its session (S3 d), so a host can tell which room a port is. */
+const sessionHeader = () => ({ 'X-Engage-Session': String(CONFIG.gameId || '') });
+function notShared(res) {
+  res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...sessionHeader() });
+  res.end(notFoundPage());
+}
 /**
  * Who this process is, to Engage (1.18.0, owner 2026-10-16). Two copies on one
  * room (another tier's old plugin, a second window) each ran a gateway, and the
@@ -2574,9 +2648,7 @@ const wifiLock = Object.freeze({
   seen: (req, socket) => lan.seen.set(socket.remoteAddress || '', Date.now()),
 });
 
-const LOCKED_PAGE = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-  '<title>Engage Build Room</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.5rem;color:#1B2942">' +
-  '<h1 style="font-size:1.6rem">Open this from the Build Room</h1>' +
+const lockedPage = () => `${pageStart('Engage Build Room')}<h1 style="font-size:1.6rem">Open this from the Build Room</h1>` +
   '<p>This build is only for people in the room. Join the session on your laptop, tablet or phone and press Open the build.</p>' +
   '<p>If you were in the room, the host may have turned sharing off.</p></body>';
 
@@ -2611,33 +2683,61 @@ function openGateway(local, port, address, lock = wifiLock) {
         'Set-Cookie': setCookies.length === 1 ? setCookies[0] : setCookies,
         Location: `${url.pathname.replace(/^\/+/, '/')}${url.search}`,
         'Cache-Control': 'no-store',
+        ...sessionHeader(),
       });
       return res.end();
     }
     if (!lock.allowed(req, url)) {
-      res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      return res.end(LOCKED_PAGE);
+      res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...sessionHeader() });
+      return res.end(lockedPage());
     }
-    if (lock.blocked && lock.blocked(url)) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-      return res.end('Not shared.');
-    }
+    if (lock.blocked && lock.blocked(url)) return notShared(res);
     const target = targetOf();
     if (!target) {
-      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8', ...sessionHeader() });
       return res.end('The app is not answering on the host\'s laptop right now. Try again in a moment.');
     }
+    // Redirects and the Referer check speak the address the visitor used: a tunnel's, for remote.
     const publicOrigin = (lock.publicOrigin && lock.publicOrigin()) || lanOrigin;
+    const scopes = lock.scopes ? lock.scopes(target.origin) : scopesFor(local);
+    if (!allowedByScope(req, url, scopes, publicOrigin)) return notShared(res);
     lock.seen(req, req.socket);
-    const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target, lock) }, (upRes) => {
-      const headers = { ...upRes.headers };
+    const page = isPageRequest(req);
+    // Scoped: the app is asked for the path that was checked ("." and ".." already resolved).
+    const path = scopes === null ? req.url : `${url.pathname}${url.search}`;
+    const upHeaders = forwardHeaders(req, target, lock);
+    // A page is asked for uncompressed, so a folder listing can be recognised (npx serve gzips one).
+    if (page) delete upHeaders['accept-encoding'];
+    const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path, headers: upHeaders }, (upRes) => {
+      const headers = { ...upRes.headers, 'x-engage-session': String(CONFIG.gameId || '') };
       const loc = headers.location;
       if (loc && loc.startsWith(target.origin) && (loc.length === target.origin.length || /[/?#]/.test(loc[target.origin.length]))) headers.location = publicOrigin + loc.slice(target.origin.length);
-      res.writeHead(upRes.statusCode || 502, headers);
-      upRes.pipe(res);
+      const html = /^text\/html\b/i.test(String(headers['content-type'] || ''));
+      if (!(page && html && (upRes.statusCode || 0) === 200) || headers['content-encoding']) {
+        res.writeHead(upRes.statusCode || 502, headers);
+        upRes.pipe(res);
+        return;
+      }
+      // A page: look at its start before the room sees it. A folder listing is never shown.
+      const held = [];
+      let size = 0;
+      let decided = false;
+      const decide = (end) => {
+        if (decided) return;
+        decided = true;
+        upRes.removeListener('data', onData);
+        const start = Buffer.concat(held);
+        if (LISTING_RE.test(start.toString('utf8'))) { upRes.destroy(); notShared(res); return; }
+        res.writeHead(upRes.statusCode || 200, headers);
+        res.write(start);
+        if (end) res.end(); else upRes.pipe(res);
+      };
+      const onData = (chunk) => { held.push(chunk); size += chunk.length; if (size >= 4096) decide(false); };
+      upRes.on('data', onData);
+      upRes.once('end', () => decide(true));
     });
     up.on('error', () => {
-      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8', ...sessionHeader() });
       res.end('The app is not answering on the host\'s laptop right now. Try again in a moment.');
     });
     req.on('aborted', () => up.destroy());
@@ -2685,7 +2785,9 @@ function closeAllGateways() {
 }
 
 /** Bring the open gateways in line with what Engage asked for. */
-async function syncGateways(wanted, targets) {
+async function syncGateways(wanted, targets, scopes = null) {
+  // What each server may show (1.19.0). Absent from an older Engage: the whole app, as before.
+  lan.scopes = scopes && typeof scopes === 'object' && !Array.isArray(scopes) ? scopes : null;
   if (!wanted) { closeAllGateways(); lan.error = ''; return 'off'; }
   const address = lanAddress();
   if (!address) { closeAllGateways(); lan.error = 'No Wi-Fi address on this laptop. It may be on a wired network only, or offline.'; return 'failed'; }
@@ -2717,19 +2819,70 @@ async function syncGateways(wanted, targets) {
   }
   if (!lan.key) lan.key = randomBytes(16).toString('base64url');
   const used = new Set([...lan.gateways.values()].map((g) => Number(new URL(g.lan).port)));
+  const ports = lanPorts();
   for (const local of ours) {
     if (lan.gateways.has(local)) continue;
     let opened = null;
-    for (let port = LAN_PORT; port < LAN_PORT + 20 && !opened; port += 1) {
+    for (let port = ports.from; port < ports.from + ports.count && !opened; port += 1) {
       if (used.has(port)) continue;
       try { opened = await openGateway(local, port, address); used.add(port); } catch (e) { if (e && e.code !== 'EADDRINUSE') { lan.error = `Could not open a port on the Wi-Fi (${e.code || e.message}).`; break; } }
     }
     if (opened) lan.gateways.set(local, opened);
   }
-  if (!lan.gateways.size) { lan.key = ''; lan.error = lan.error || `Every port from ${LAN_PORT} is in use on this laptop.`; return 'failed'; }
+  if (!lan.gateways.size) { lan.key = ''; lan.error = lan.error || `Every port from ${ports.from} to ${ports.from + ports.count - 1} is in use on this laptop.`; return 'failed'; }
   lan.error = '';
   if (refused.length) log('wi-fi share left out:', refused.join('; '));
   return 'live';
+}
+
+/**
+ * WHAT THE PROJECT DECLARES (Share demo S3 a, 1.20.0). `.engage/share.json`:
+ * { "demo": "<loopback url>", "mockups": "<loopback url>", "label": "<short text>" },
+ * every field optional, edited by the host or Claude at any time and read each
+ * round. Engage lets it win over any guess. Only an http address that is
+ * certainly this laptop; a missing, oversized or broken file declares nothing.
+ */
+const SHARE_FILE_MAX = 4096;
+const declaredLink = (v) => {
+  if (typeof v !== 'string' || !v || v.length > 500) return '';
+  try { const u = new URL(v); return u.protocol === 'http:' && lanTargetHost(u.hostname) ? u.toString() : ''; } catch { return ''; }
+};
+function readShareFile(dir = projectDir()) {
+  if (!engageFolderSafe(dir)) return {};
+  const file = pathJoin(dir, '.engage', 'share.json');
+  try {
+    const st = lstatSync(file);
+    if (!st.isFile() || st.size > SHARE_FILE_MAX) return {};
+  } catch { return {}; }
+  const raw = readJson(file);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  const demo = declaredLink(raw.demo);
+  const mockups = declaredLink(raw.mockups);
+  // eslint-disable-next-line no-control-regex
+  const label = typeof raw.label === 'string' ? raw.label.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60).trim() : '';
+  if (demo) out.demo = demo;
+  if (mockups) out.mockups = mockups;
+  if (label) out.label = label;
+  return out;
+}
+/**
+ * `.engage/share-status.json` (S3 d), each round: which room this folder
+ * shares, and each server local -> Wi-Fi -> role, so a host running several
+ * sessions finds which port is whose. Never a key: both keys are secrets. Only
+ * values the plugin itself holds, and a role from a fixed list (F2).
+ */
+const LAN_ROLE_NAMES = ['demo', 'mockups'];
+function writeShareStatus(dir = projectDir()) {
+  if (!engageFolderSafe(dir)) return;
+  const title = ROOM_TITLE.gameId === CONFIG.gameId ? ROOM_TITLE.title : '';
+  const status = {
+    gameId: String(CONFIG.gameId || ''),
+    label: (lan.declared && lan.declared.label) || title,
+    updatedAt: new Date().toISOString(),
+    servers: [...lan.gateways.values()].map((g) => ({ local: g.local, lan: g.lan, role: LAN_ROLE_NAMES.includes(lan.roles[g.local]) ? lan.roles[g.local] : null })),
+  };
+  try { safeWrite(dir, pathJoin(dir, '.engage'), 'share-status.json', JSON.stringify(status, null, 2) + '\n'); } catch (e) { log('share-status.json:', e && e.message); }
 }
 
 function lanOpenCount() {
@@ -2765,7 +2918,7 @@ const REMOTE_WAIT_MS = Math.max(50, Number(process.env.ENGAGE_REMOTE_WAIT_MS) ||
 const REMOTE_WAITERS_MAX = 200;
 const remote = {
   gateway: null, target: '', keys: new Map(), wrong: new Set(), lastCheckAt: 0,
-  devices: new Map(), address: '', error: '', waiters: [],
+  devices: new Map(), address: '', error: '', waiters: [], scopes: null,
   // The tunnel (below): 'none' | 'starting' | 'live'; its own error, kept
   // apart from the target's; no new tunnel before retryAt (Cloudflare limits
   // how fast they are created: SPIKE.md).
@@ -2839,6 +2992,12 @@ const remoteLock = Object.freeze({
   },
   blocked: remoteBlocked,
   publicOrigin: () => remote.address,
+  // The Wi-Fi share's scopes for this address (1.19.0): remote reaches no more than Wi-Fi.
+  scopes(origin) {
+    if (!remote.scopes) return null;
+    const list = remote.scopes[origin];
+    return Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.startsWith('/')) : [];
+  },
 });
 
 /** Devices per person seen in the last few minutes, for the host's "Sam · 2 devices". */
@@ -2863,13 +3022,19 @@ function closeRemote() {
   remote.address = '';
 }
 
-/** Bring the remote gateway in line with what Engage asked for. */
-async function syncRemote(wanted, targets, keys) {
+/**
+ * Bring the remote gateway in line with what Engage asked for: `target` is the
+ * one address Engage chose (the demo; build-lan.js remoteTarget), `scopes` the
+ * Wi-Fi share's folders per address (1.19.0), applied to it the same way.
+ */
+async function syncRemote(wanted, target, keys, scopes) {
   if (!wanted) { closeRemote(); remote.error = ''; remote.tunnelError = ''; return; }
   remote.keys = new Map((keys || []).filter((k) => k && KEY_HASH_SHAPE.test(String(k.hash || ''))).map((k) => [k.hash, String(k.player || '')]));
+  remote.scopes = scopes && typeof scopes === 'object' && !Array.isArray(scopes) ? scopes : null;
   wakeRemoteWaiters();
-  // The newest address Claude showed, if it is a server in THIS project's folder (F4).
-  const newest = (targets || []).filter((t) => { try { return lanTargetHost(new URL(t).hostname); } catch { return false; } }).slice(-1)[0] || '';
+  // The address Engage chose, if it is a server in THIS project's folder (F4).
+  let newest = '';
+  try { const u = new URL(String(target || '')); if (lanTargetHost(u.hostname)) newest = u.origin; } catch { /* none */ }
   let next = '';
   if (!newest) remote.error = 'Claude has not shown anything running on this laptop yet.';
   else if (newest === remote.target) next = newest;
@@ -3132,7 +3297,9 @@ async function lanRound() {
       closeRemote(); remote.error = '';
       return;
     }
+    lan.declared = readShareFile();
     const report = {
+      declared: lan.declared,
       status: lanStatusNow,
       map: [...lan.gateways.values()].map((g) => ({ local: g.local, lan: g.lan })),
       key: lanStatusNow === 'live' ? lan.key : '',
@@ -3145,8 +3312,13 @@ async function lanRound() {
     lan.lastAnswerAt = Date.now();
     if (answer && answer.another && !lanToldAnother) log('wi-fi share: another Claude Code window shares this room; this one stays closed');
     lanToldAnother = Boolean(answer && answer.another);
-    lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || []);
-    await syncRemote(Boolean(answer && answer.remoteWanted), (answer && answer.targets) || [], (answer && answer.remoteKeys) || []);
+    lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || [], (answer && answer.scopes) || null);
+    // Which shared server is which (1.20.0); none from an older Engage.
+    const roles = answer && answer.roles && typeof answer.roles === 'object' && !Array.isArray(answer.roles) ? answer.roles : {};
+    lan.roles = Object.fromEntries(Object.entries(roles).filter(([, v]) => LAN_ROLE_NAMES.includes(v)));
+    writeShareStatus();
+    // Remote share (1.21.0): the one address Engage chose (the demo), with its Wi-Fi scopes.
+    await syncRemote(Boolean(answer && answer.remoteWanted), answer && answer.remoteTarget, (answer && answer.remoteKeys) || [], (answer && answer.scopes) || null);
   } catch (e) {
     log('wi-fi share round failed:', e && e.message);
     // Engage has not answered for too long: fail closed, not open.
@@ -3815,7 +3987,11 @@ skill is how you keep the project something they can open next week and understa
   \`.engage/servers.txt\`: the port, the command, and the process id if you have it.
 - Before starting another, check whether something is already listening on that port.
 - Do not stop servers you did not start.
-- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
+- When you start the demo's or the mockups' server, write \`.engage/share.json\`:
+  {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person's name>"}
+  (each field optional). The host may edit it, and it wins over your links. Mark each link
+  you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.
+- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link.
 - The build is always something people open as a web page, even when the room is making a document or a plan: serve it from this project's folder on one local address. When the host also opens it to people who are not in the room, room_status says SHARING REMOTELY; then show a built copy rather than the dev server, and never use server-sent events.
 
 ## The opening: frame it with the room, then build

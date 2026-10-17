@@ -48,7 +48,7 @@ app.listen(0, '127.0.0.1', () => console.log('PORT ' + app.address().port));
 `;
 
 const seen = [];
-let wanted = false; let remoteWanted = false; let targets = []; let remoteKeys = []; let apiDown = false;
+let wanted = false; let remoteWanted = false; let targets = []; let remoteKeys = []; let apiDown = false; let scopes = null;
 const checkOk = new Map(); // hash -> player, for keys minted "since the last round"
 const checks = [];
 const reports = [];
@@ -61,7 +61,7 @@ const api = http.createServer((req, res) => {
     if (apiDown) { res.statusCode = 500; return res.end('{"error":"down"}'); }
     if (req.url.endsWith('/build/share/report')) {
       reports.push(JSON.parse(body));
-      return res.end(JSON.stringify({ wanted, targets, ...(remoteWanted ? { remoteWanted, remoteKeys } : {}) }));
+      return res.end(JSON.stringify({ wanted, targets, ...(scopes ? { scopes } : {}), ...(remoteWanted ? { remoteWanted, remoteTarget: targets[targets.length - 1], remoteKeys } : {}) }));
     }
     if (req.url.endsWith('/build/share/remote-check')) {
       const { hash } = JSON.parse(body);
@@ -255,6 +255,19 @@ function upgrade(port, cookie) {
     const yes = await upgrade(rbase, phone.cookieHeader());
     assert.match(yes.head, /101/);
     yes.sock.destroy();
+  });
+  await check('the Wi-Fi share\'s folders (1.19.0) hold for remote too: outside them, Not shared, and the app never sees it', async () => {
+    scopes = { [firstOrigin]: ['/demo/'] };
+    await roundsAfter(2);
+    const n = seen.length;
+    const out = await phone.get('/secret.txt', { Accept: 'text/html' });
+    assert.strictEqual(out.status, 404);
+    await sleep(150);
+    assert.strictEqual(seen.length, n);
+    const inside = await phone.get('/demo/index.html', { Accept: 'text/html' });
+    assert.strictEqual(inside.status, 200);
+    scopes = null;
+    await roundsAfter(2);
   });
   await check('two devices on Priya\'s key: the report says Priya, 2', async () => {
     const laptop = device(rbase);

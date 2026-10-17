@@ -20,6 +20,16 @@ On two screens (the room watches a separate window on the projector), the host's
 shows a private console instead of a copy of the wall: the round's steps, who has
 answered, responses as they land, and whether the room's window is really up. Two screens
 is switched on per game type in `src/src/config/surfaces.js`; today that is Call & Answer.
+In Chrome or Edge with a second display attached, "Room's window" opens the window on that
+display and fills it (`src/src/present/roomWindow.js`); elsewhere it opens beside you to drag
+across.
+
+Call & Answer results show the ideas first, ranked by the room's votes, with the names as
+a small credit; the standings are on the scoreboard, on demand. Nothing that arrives late
+is lost: a late answer, a late answer to a question for the room, and a comment added after
+its round are kept, labelled and listed for the host to review ("Late & not reviewed"), and
+the report shows them under "Arrived late". Comments stay open until 24 hours after the
+session ends (`lambda-functions/game/late-window.js`; the words are `src/src/config/lateWords.js`).
 
 The first five are `src/src/config/gameTypes.js`, the single source of truth for types.
 Build Room and Event are named in `src/src/config/engagementKinds.js`. After each round
@@ -79,7 +89,15 @@ Each tier serves its own: `engage` on prod, `engage-test` on test, `engage-dev` 
 so a laptop can hold more than one. The host installs it from the room's Connect window,
 which shows the command to run in a terminal; the laptop needs Node 18 or later and git.
 The plugin's source is `src/public/engage-mcp.mjs`; `tests/engage-plugin.js` and
-`tests/engage-mcp.js` cover it.
+`tests/engage-mcp.js` cover it, and `tests/engage-lan-gateway.js` runs its Wi-Fi share
+against a real app. Share demo opens only the pages Claude linked (never a folder
+listing); a project can name its demo and mockups in `.engage/share.json`, and each
+session takes its Wi-Fi ports from a block set by its code (`ENGAGE_LAN_PORT` overrides).
+Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.js`).
+
+A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (the key comes from
+the host's Session › Settings › Screens): public, read-only, no names
+(`src/src/present/buildwall/`, read `GET …/build-play/wall`).
 
 ## Documentation
 

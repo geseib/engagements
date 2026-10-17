@@ -588,9 +588,13 @@ body {
   cursor: pointer;
 }
 
+/* Wraps: at 660px and below the panel is its 320px minimum and the four tabs
+   need ~430px, so SETTINGS sat past the screen's edge, unreachable (walk of
+   dev 92f8b24d, 16 Oct 2026). */
 .setup-panel__tabs {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 10px 20px 0;
   border-bottom: 1px solid rgba(155, 168, 190, 0.22);
@@ -699,7 +703,7 @@ body {
 /* `.setup-ask` (Ask next / Ask now) is exempt too: the two must read as two
    DIFFERENT actions, and this repaint would draw them as one navy button —
    which is how the Queue / Ask next pair looked the same for its whole life. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask) {
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
@@ -1475,6 +1479,28 @@ body {
   background: #1B2942;
 }
 .setup-remote svg { background: #fff; padding: 8px; border-radius: 8px; }
+
+/* --- Settings, grouped (owner, 16 Oct; docs/design/settings-consolidation) --
+   Four groups, most used first, each under a rule; a section inside a group
+   keeps its own heading and scope at the sub step. Session and Keys fold. */
+.setup-group { display: flex; flex-direction: column; gap: 10px; }
+.setup-group + .setup-group, .setup-group + .setup-fold { border-top: 1px solid rgb(var(--glow-rgb) / .16); padding-top: 12px; }
+.setup-group > .setup-h { margin-top: 0; font-size: 13px; color: var(--text); }
+.setup-h--sub { margin: 8px 0 0; }
+.setup-fold { border-top: 1px solid rgb(var(--glow-rgb) / .16); padding-top: 10px; }
+.setup-fold > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.setup-fold[open] > summary { margin-bottom: 10px; }
+.setup-remote__who {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(var(--info-rgb) / .12);
+  border: 1px solid rgb(var(--info-rgb) / .35);
+}
+.setup-remote__who p { margin: 0; }
+.setup-remote__who p + p { margin-top: 4px; color: var(--muted); }
 
 .setup-keys {
   list-style: none;

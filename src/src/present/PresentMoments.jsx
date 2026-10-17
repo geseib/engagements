@@ -22,7 +22,7 @@ import Pips from '../components/ui/Pips';
 import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
 import TallyRow from '../components/ui/TallyRow';
-import FW, { KINDS as ASK_KINDS, RATE_ENDS } from '../config/followUpWords';
+import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWords';
 
 /* ------------------------------------------------------------ shared parts */
 
@@ -199,7 +199,11 @@ export function PresentTally({ model }) {
             ))}
           </div>
         )}
-        {model.more > 0 ? <p className="present-more">{`and ${model.more} more ${model.more === 1 ? 'response' : 'responses'}`}</p> : null}
+        {/* Always drawn, so the fitter can count the rows it takes down
+            (PresentStage.jsx fitTally); data-more is the model's own count. */}
+        <p className="present-more" data-more={model.more || 0} hidden={!(model.more > 0)}>
+          {model.more > 0 ? `and ${model.more} more ${model.more === 1 ? 'idea' : 'ideas'}` : ''}
+        </p>
       </div>
       <div className="present-foot">
         <span><b>{model.total}</b>{` ${model.total === 1 ? 'response' : 'responses'} · `}<b>{model.voted}</b>{' voted'}</span>
@@ -360,7 +364,7 @@ export function PresentAsk({ model }) {
         {!closed && a.kind === 'rate' && (
           <div className="present-ask-scale">
             {[1, 2, 3, 4, 5].map((v) => <span key={v}>{v}</span>)}
-            <p><span>{RATE_ENDS.low}</span><span>{RATE_ENDS.high}</span></p>
+            <p><span>{scaleLabel(endsOf(a), 1)}</span><span>{scaleLabel(endsOf(a), 5)}</span></p>
           </div>
         )}
         {closed && a.kind === 'choice' && a.tally && (
@@ -383,7 +387,7 @@ export function PresentAsk({ model }) {
             <div className="present-tally">
               {[5, 4, 3, 2, 1].map((v) => {
                 const max = Math.max(1, ...a.tally.counts);
-                const label = v === 5 ? RATE_ENDS.high : v === 1 ? RATE_ENDS.low : String(v);
+                const label = scaleLabel(endsOf(a), v);
                 return <TallyRow key={v} className="present-trow" label={label} share={(a.tally.counts[v - 1] || 0) / max} points={a.tally.counts[v - 1] || 0} unit="" />;
               })}
             </div>

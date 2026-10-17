@@ -491,6 +491,43 @@ const followUpRows = () => table.prefix(PK, 'FOLLOWUP#');
     assert.strictEqual(res.statusCode, 400, res.body);
   });
 
+  say('\n12. the scale\'s two ends (owner, 16 Oct)');
+  await check('custom ends: sealed at rest, read back by the host, the phone and the report', async () => {
+    await seed();
+    const r = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'Name the temperature out loud', ends: { low: ' Cold ', high: 'Hot' } } });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.ask.ends, { low: 'Cold', high: 'Hot' });
+    const row = table.get(PK, `FOLLOWUP#003#ASK#${r.body.ask.askId}`);
+    assert.ok(isEnvelope(row.Ends), 'the ends are the room\'s words, sealed with the statement');
+    const opened = await C.decryptItem(ORG, 'followup', row);
+    assert.deepStrictEqual(opened.Ends, { low: 'Cold', high: 'Hot' });
+    const h = await host('GET', 'round/003');
+    assert.deepStrictEqual(h.body.asks.find((a) => a.askId === r.body.ask.askId).ends, { low: 'Cold', high: 'Hot' });
+    const p = await phone('GET', 'live', { query: { playerName: 'Ada', clientId: 'c-ada' } });
+    assert.deepStrictEqual(p.body.ask.ends, { low: 'Cold', high: 'Hot' });
+    assert.deepStrictEqual(p.body.ask.scale, { lowLabel: 'Cold', highLabel: 'Hot' });
+  });
+  await check('ends of 25 characters: 400, nothing written', async () => {
+    await seed();
+    const before = followUpRows().length;
+    const r = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'x', ends: { low: 'a'.repeat(25), high: 'b' } } });
+    assert.strictEqual(r.status, 400);
+    assert.match(r.body.error, /1 to 24 characters/);
+    assert.strictEqual(followUpRows().length, before);
+  });
+  await check('an old ask with no Ends reads as Disagree to Agree everywhere', async () => {
+    await seed();
+    const r = await host('POST', 'send', { body: { round: '003', kind: 'rate', statement: 'Old one' } });
+    const key = `FOLLOWUP#003#ASK#${r.body.ask.askId}`;
+    const row = table.get(PK, key);
+    delete row.Ends;
+    table.put(row);
+    const h = await host('GET', 'round/003');
+    assert.deepStrictEqual(h.body.asks.find((a) => a.askId === r.body.ask.askId).ends, { low: 'Disagree', high: 'Agree' });
+    const p = await phone('GET', 'live', { query: { playerName: 'Ada', clientId: 'c-ada' } });
+    assert.deepStrictEqual(p.body.ask.ends, { low: 'Disagree', high: 'Agree' });
+  });
+
   await check('billing: session-count.js is never loaded by any of it', () => {
     const loaded = Object.keys(require.cache).filter((p) => /session-count\.js$/.test(p));
     assert.deepStrictEqual(loaded, []);

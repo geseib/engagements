@@ -112,7 +112,7 @@ What makes them 1:1 rather than four copies of one prompt:
 | **The Transfer Reader** (apply) | Two lists the room made without noticing: *landing sites* and *resistance*. The resistance list is the thin one and the valuable one. | An answer that only judged the source material and never reached this organisation. |
 | **The Direction Advisor** (produce) | Proof vs intent; the asset exactly one person named; the gap between what the team is proudest of and what it would lead with. | Answers that could have been written by any team in any company — and it is told to say so. |
 | **The Redline Reader** (improve) | The winning wording, reproduced **verbatim**, plus the element every rewrite added that the original lacked. It is forbidden from composing any wording of its own. | An answer that gave a direction ("make it clearer") instead of words. |
-| **The Verdict Board** (judge) | The three-way count — clears / does not / no verdict — the reason behind each side, and the fact cited on *both* sides, which means the room disagrees about the bar and not about the thing. | An answer that skipped the verdict and proposed a repair. And the prompt itself is barred from casting the deciding vote. |
+| **The Verdict Board** (judge) | The four-way count — clears / clears only if / not shown to clear / no verdict, conditions quoted and never treated as met — the reason behind each side, and the fact cited on *both* sides, which means the room disagrees about the bar and not about the thing. | An answer that skipped the verdict and proposed a repair. And the prompt itself is barred from casting the deciding vote. |
 
 All four share the same nine variables, each used **once**, each in field
 position at the end of the prompt:

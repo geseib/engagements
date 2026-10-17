@@ -106,6 +106,10 @@ describe('roundWords', () => {
     expect(RW.armVote(1, 3)).toBe('1 of 3 still writing. Press again to start voting.');
     expect(RW.armResults(2, 'answering', 5)).toBe('2 of 5 still answering. Press again to show results.');
     expect(RW.armResults(1, 'voting', 3)).toBe('1 of 3 still voting. Press again to show results.');
+    // Nobody yet (walk of dev 26af5fc8, F2): never "6 of 6 still voting".
+    expect(RW.armResults(6, 'voting', 6)).toBe('Nobody has voted yet. Press again to show results.');
+    expect(RW.armVote(6, 6)).toBe('Nobody has answered yet. Press again to start voting.');
+    expect(RW.armResults(4, 'answering', 4)).toBe('Nobody has answered yet. Press again to show results.');
     expect(RW.armResults(1, 'voting')).toBe('1 still voting. Press again to show results.');
     expect(RW.armResults(2, 'answering')).toBe('2 still answering. Press again to show results.');
   });

@@ -12,11 +12,14 @@
  *           The wall shows only the answers the host picks, never a name.
  *   choice  a question and 2 to 4 options, one pick, no write-in ("Other" was
  *           ruled out: the options are the room's own). Shown as "Choose".
- *   rate    a statement from the room, rated 1 to 5. The ends are fixed,
- *           "1 · Disagree" and "5 · Agree", and nobody relabels them — as Build
- *           Room fixed its rating scale — so a 4 means the same thing in the
- *           room and in the report. It replaces the first build's agree /
- *           not sure / disagree.
+ *   rate    a statement from the room, rated 1 to 5. The two ends are the
+ *           ask's own (owner, 16 Oct 2026: "host should be able to change what
+ *           the high low says"): Disagree to Agree unless the host picks
+ *           another pair or types both, stored on the ask as `Ends` and read
+ *           back by every screen and the report, so a 4 means the same thing
+ *           in the room and in the report. An ask stored before then has no
+ *           `Ends` and reads as Disagree to Agree. It replaces the first
+ *           build's agree / not sure / disagree.
  *
  * An `agree` row from the first build (dev only, 30-day ttl) is not a kind any
  * more: it cannot be sent or answered, and reads as nothing.
@@ -33,8 +36,35 @@ const { checkAnswer } = require('./survey-answer');
 const KINDS = Object.freeze(['ideas', 'choice', 'rate']);
 const TOOL_KINDS = KINDS;
 
-/** The one rating scale. */
+/** The rating scale, and its default ends. */
 const RATE = Object.freeze({ scale: '1-5', lowLabel: 'Disagree', highLabel: 'Agree' });
+const DEFAULT_ENDS = Object.freeze({ low: RATE.lowLabel, high: RATE.highLabel });
+const ENDS_MAX = 24;
+
+/**
+ * The ends a host sent: `{value}` or `{error}`. Absent (undefined or null) is
+ * the default pair; anything present must be two strings, each 1 to 24
+ * characters once trimmed and folded.
+ */
+function normalizeEnds(raw) {
+  if (raw === undefined || raw === null) return { value: { ...DEFAULT_ENDS } };
+  const bad = { error: `Each end of the scale is 1 to ${ENDS_MAX} characters` };
+  if (typeof raw !== 'object' || Array.isArray(raw)) return bad;
+  const fold = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : null);
+  const low = fold(raw.low);
+  const high = fold(raw.high);
+  if (!low || !high || low.length > ENDS_MAX || high.length > ENDS_MAX) return bad;
+  return { value: { low, high } };
+}
+
+/** A stored or normalized ask's ends; an ask with none reads as the default. */
+function endsOf(ask) {
+  const a = ask || {};
+  const e = a.Ends || a.ends;
+  return e && typeof e.low === 'string' && typeof e.high === 'string' && e.low && e.high
+    ? { low: e.low, high: e.high }
+    : { ...DEFAULT_ENDS };
+}
 
 /** Where a sent ask came from: a suggestion as written, one the host edited, or the host's own. */
 const ORIGINS = Object.freeze(['suggested', 'edited', 'host']);
@@ -85,6 +115,9 @@ function normalizeFollowUp(body) {
     if (!raw) return { error: 'Write the statement the room will rate' };
     if (raw.length > LIMITS.statement) return { error: `A statement is at most ${LIMITS.statement} characters` };
     value.statement = raw;
+    const ends = normalizeEnds(b.ends);
+    if (ends.error) return { error: ends.error };
+    value.ends = ends.value;
     return { value };
   }
 
@@ -123,7 +156,8 @@ function toSurveyQuestion(ask) {
   const a = ask || {};
   const kind = a.Kind || a.kind;
   if (kind === 'rate') {
-    return { kind: 'rating', scale: RATE.scale, lowLabel: RATE.lowLabel, highLabel: RATE.highLabel, required: true };
+    const ends = endsOf(a);
+    return { kind: 'rating', scale: RATE.scale, lowLabel: ends.low, highLabel: ends.high, required: true };
   }
   if (kind === 'ideas') {
     return { kind: 'text', maxLength: LIMITS.idea, required: true };
@@ -269,6 +303,10 @@ module.exports = {
   KINDS,
   TOOL_KINDS,
   RATE,
+  DEFAULT_ENDS,
+  ENDS_MAX,
+  normalizeEnds,
+  endsOf,
   ORIGINS,
   LIMITS,
   normalizeFollowUp,

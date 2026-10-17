@@ -126,7 +126,7 @@ const quickStart = {
         },
         {
           t: 'p',
-          text: 'If you advance early, a dialog checks first — ← keeps the round where it is, → goes ahead anyway. The keys are printed on its buttons.',
+          text: 'If you advance early, the button asks in place instead of opening a dialog: the first press changes it to "Start voting anyway" (or "Show results anyway") and says who is still writing — "1 of 3 still writing", or "Nobody has answered yet". Press again within a few seconds to go ahead; wait and it settles back.',
         },
         {
           t: 'note',
@@ -143,8 +143,9 @@ const quickStart = {
         {
           t: 'list',
           items: [
-            { title: 'The answers', text: 'Ranked by the room\'s votes, with names attached once voting has closed.' },
-            { title: 'The scoreboard', text: 'Cumulative across the session.' },
+            { title: 'What the room backed', text: 'The ideas first, ranked by the room\'s votes: each idea in full as the headline, a bar for how much the room backed it compared with the top idea, and a small credit line with the points and the name (the name only while names show). Long ideas shrink to fit; if they still do not fit, the wall shows the top ones and says "and N more ideas".' },
+            { title: 'The scoreboard', text: 'Cumulative across the session, and no longer on the results screen: bring it up when you want it with S, or Show scoreboard in the People section on two screens.' },
+            { title: 'The question', text: 'Press the question line above the cards (or "The question" row in the console) to put it back up on the wall.' },
             { title: 'The AI summary', text: 'Themes, follow-up questions and suggested next steps, written from what the room actually said.' },
           ],
         },
@@ -230,10 +231,10 @@ const gameSetup = {
       title: 'Settings worth a look before you start',
       icon: 'Monitor',
       blocks: [
-        { t: 'h', text: 'Display profile' },
+        { t: 'h', text: 'Screens: where the room watches, and room screen size' },
         {
           t: 'p',
-          text: 'Sets the type size for the room you are actually in. Get this right before people arrive — it is the difference between a readable session and a squinting one.',
+          text: 'The Screens group, first in Settings and at the top of Setup on the step strip, says whether the room watches this laptop (one screen) or a separate window (two screens), opens the room\'s window, and sets the room screen size (it used to be called Display profile). You can switch between one and two screens mid-session from Setup. Get the size right before people arrive — it is the difference between a readable session and a squinting one.',
         },
         {
           t: 'table',
@@ -284,7 +285,7 @@ const running = {
             ['Players', 'Who is here, who has answered, and the two things you can do about a person.'],
             ['Questions', 'Categories, and choosing what to ask next instead of taking the next one in order.'],
             ['Rounds', 'Everything already played, plus the session report.'],
-            ['Settings', 'Display profile, names, join links, your phone remote, and the keyboard shortcuts.'],
+            ['Settings', 'Four groups, most used first: Screens (one or two screens, the room\'s window, room screen size), Your phone as a remote, The rounds (names, pace, feedback, scoreboard style), and Joining. Session details and the keyboard shortcuts fold away below.'],
           ],
         },
       ],
@@ -303,8 +304,8 @@ const running = {
           rows: [
             ['Top line', 'The join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
             ['The loop', 'The round\'s steps. Press one to look at it privately; the room stays where it is until you press Back to the room.'],
-            ['Left rail', 'Round queue, People, Late & not reviewed, Session tools. The one that matters for the step opens by itself.'],
-            ['Main area', 'Responses as they land, the ballot in the room\'s order, results, Workie\'s read with Ask the room beside it.'],
+            ['Left rail', 'Round queue, People (with Show scoreboard / Hide scoreboard), Late & not reviewed, Session tools. The one that matters for the step opens by itself.'],
+            ['Main area', 'Responses as they land, the ballot in the room\'s order, results, Workie\'s read with Ask the room beside it. The part of the read the wall is showing is marked "On the wall". During voting and results, the first row, "The question", puts the question back up.'],
             ['Footer', 'The one count for the step, Your part now, and the buttons.'],
           ],
         },
@@ -317,6 +318,12 @@ const running = {
             { title: 'Hidden', text: 'The window is minimised or behind another tab.' },
             { title: 'Not open', text: 'Press it to open one, then drag it onto the projector.' },
           ],
+        },
+        {
+          t: 'note',
+          tone: 'tip',
+          title: 'Chrome or Edge with a second display: it opens there for you',
+          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
         },
         {
           t: 'note',
@@ -348,7 +355,12 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Scan the "Controls on your phone" QR from the Settings tab. Your phone becomes the remote and the big screen stays on the room — so you can walk around instead of standing behind a laptop.',
+          text: 'Scan the QR under "Your phone as a remote" in the Settings tab. Your phone becomes the remote and the big screen stays on the room — so you can walk around instead of standing behind a laptop.',
+        },
+        { t: 'h', text: 'Who may sign in on the phone' },
+        {
+          t: 'p',
+          text: 'On a team session, sign in on the phone as any host or admin of that team: it does not have to be the account on this laptop. On a personal account, sign in as you. Only your account can drive this session. The "Your phone as a remote" box names the team and who is signed in on this laptop now. It shows your email only while the room\'s window is up on two screens; otherwise the room might be watching this laptop, so it shows your name.',
         },
         { t: 'h', text: 'What the phone gives you' },
         {
@@ -398,6 +410,63 @@ const running = {
           tone: 'tip',
           title: 'Why the arrows matter',
           text: 'There is no 10 key. Past nine responses the digits run out, so the arrows walk the whole list however long it is — and a digit past the end of a short round does nothing rather than closing the dialog on you.',
+        },
+      ],
+    },
+  ],
+};
+
+/*
+  LATE ITEMS (session flow v3 §4.4, phase 5): what arrives after its moment is
+  kept and labelled, never lost. Words from config/lateWords.js.
+*/
+const lateItems = {
+  id: 'host-late-items',
+  title: 'Late answers and comments',
+  icon: 'Clock',
+  summary: 'What arrives after the room has moved on, where you find it, and how it reaches the report.',
+  sections: [
+    {
+      title: 'What is kept',
+      icon: 'ChatCircleText',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Late answer', text: 'An answer to a round that arrived after the round moved on. Kept with its round; not in the vote if voting had started.' },
+            { title: 'Late answer to a question', text: 'An answer to a question for the room sent after you showed its results. Kept, but not in the count the room saw.' },
+            { title: 'Comment added later', text: 'Once a round\'s results have been shown, people can keep commenting on it, until 24 hours after the session ends. After the end, each phone\'s closing screen lists the rounds under "Something to add?" until you close comments.' },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Late & not reviewed',
+      icon: 'ListChecks',
+      blocks: [
+        {
+          t: 'p',
+          text: 'The list is in the Rounds tab and, on two screens, in the console\'s left rail. The status line counts what is waiting ("1 late answer kept", "3 late items not reviewed"). Each item says who and when, for example "during Round 3 · Voting".',
+        },
+        {
+          t: 'table',
+          head: ['Button or label', 'What it means'],
+          rows: [
+            ['Show on the wall', 'Puts it up for the room. Offered only for the round the wall is showing; it then reads "Reviewed with the room".'],
+            ['Mark reviewed', 'You have read it yourself; it reads "Reviewed by the host".'],
+            ['Not reviewed', 'Nobody has looked at it yet.'],
+            ['Close comments', 'After the session ends, stops new comments before the 24 hours are up.'],
+          ],
+        },
+      ],
+    },
+    {
+      title: 'In the report',
+      icon: 'FileText',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Each round in the report has an "Arrived late" part with the items and their labels. Settings › Report › "Include items not reviewed" is on by default; turn it off and the report leaves those out and says how many. Redoing Workie\'s read reads late answers in too, and says so.',
         },
       ],
     },
@@ -530,6 +599,10 @@ const reporting = {
         },
         {
           t: 'p',
+          text: 'Ask the room turns a follow-up into a question for the room: Ideas, Choose or Rate. For Rate you name the scale\'s two ends: pick a pair in "1 means" or "5 means" (Disagree to Agree, No to Yes, Low to High, Unlikely to Likely, Hard to Easy), or Custom to type your own. The phones, the wall and the report all show them.',
+        },
+        {
+          t: 'p',
           text: 'On rounds that withhold something — the real title, the actual number, what happened next — the AI is given the withheld detail so it can compare the room\'s answers against it and reveal it afterwards. That only works if the question set filled the field in; if the AI promises a reveal that never comes, that is the set to fix, not the session.',
         },
       ],
@@ -545,6 +618,10 @@ const reporting = {
         {
           t: 'p',
           text: 'You can generate it at any point, during the session or after it. It is not a final action and running it does not end anything.',
+        },
+        {
+          t: 'p',
+          text: 'Answers and comments that arrived late appear under "Arrived late" in each round, with their labels. See Late answers and comments.',
         },
         {
           t: 'p',
@@ -644,6 +721,10 @@ const plan = {
   installNote, shareWho, wrapUpSaved), buildroom/pluginTier.js (one plugin per
   tier) and buildroom/buildHostApi.js (the two commands the Connect window
   shows). Words the room sees on its own screens live in words.js, not here.
+  17 Oct: what the share opens (build-lan.js lanScopes, the plugin's gateway,
+  .engage/share.json, plugin 1.20.0), the room's window (BuildSessionPanel's
+  Screens group, present/buildwall/), the still dock (buildControls.js), and
+  History's marks (buildScreens.js contributionsOf, askOutcome).
 */
 const buildRoom = {
   id: 'host-build-room',
@@ -698,6 +779,10 @@ const buildRoom = {
           t: 'list',
           items: [
             { title: 'Share demo', text: 'When Claude first shows the app, the Build Room asks once whether to share it. Share demo lets people on this Wi-Fi open this laptop\'s app on their phones, laptops and tablets; no one else can. Nothing is shared until you press it. Guest Wi-Fi often blocks this; test it from another device first. Anyone who cannot reach it still sees the screenshots. Only one Claude Code window shares a room at a time; if the count jumps, update the plugin from Connect.' },
+            { title: 'What the share opens', text: 'Open the build and the QR go to the page Claude showed, not its folder. The room can open only the pages Claude linked and what those pages load; a folder\'s file list is never shown. The share panel names each server: Demo, Mockups, or App 1 and 2 when nothing says. To name them yourself, put a file .engage/share.json in the project folder with "demo", "mockups" and a "label"; it wins over Claude\'s guess. Each session takes its Wi-Fi ports from a block worked out from its code, and every page it serves names the session, so two rooms on one laptop are easy to tell apart. These need plugin 1.20.0: update it from Connect and restart Claude Code.' },
+            { title: 'The room\'s window', text: 'Session, then Settings, then Screens: Room\'s window opens Stage, Build or History in a window of its own for the projector, on the second display in Chrome. It follows the screen you pick with 2, 3 and 4, needs no sign-in, and never shows a name. New link cuts off every open window (press it twice).' },
+            { title: 'The Stage\'s buttons', text: 'The buttons along the bottom stay where they are. Space presses the main one; a move made early, such as Show results while people are still answering, asks you to press again. Host takes you back to the Host screen in one press; its number says how many things wait for you.' },
+            { title: 'History', text: 'History shows every idea from the room that was used, and every ask the room saw. Each says what happened: chosen by the room or not, sent to Claude as written, reworded by the host, kept for later, or not sent. It never shows who sent an idea; a phone marks its own ideas as yours. Made so far counts the ideas used by the same rule.' },
             { title: 'Wrap up', text: 'A summary, what was built, links and next steps, written by Claude or by you, saved into the report. Check the report, then end the session.' },
             { title: 'Save report', text: 'Keeps the report as a PDF, as for any session. The code stays in the project folder on your laptop.' },
           ],
@@ -712,5 +797,5 @@ export const HOST_ROLE = {
   title: 'For hosts',
   icon: 'GameController',
   blurb: 'Running a session in front of a room.',
-  guides: [quickStart, gameSetup, running, playerManagement, reporting, buildRoom, plan],
+  guides: [quickStart, gameSetup, running, lateItems, playerManagement, reporting, buildRoom, plan],
 };

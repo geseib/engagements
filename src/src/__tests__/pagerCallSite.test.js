@@ -141,7 +141,9 @@ describe('the stage pages its answer list, and the page keys obey the existing s
     // rejects: `pageSize={3}`. The owner's report names the large displays
     // specifically, and TV's ladder is the one that holds least — a literal is
     // the version that keeps cutting TV off.
-    expect(CODE).toMatch(/const stagePageSize = pageSizeFor\(profile\)/);
+    // RESULTS reads its own declared size since 16 Oct 2026 (ideas-first cards
+    // are taller; config/stagePaging.js RESULTS_PAGE_SIZE), still per profile.
+    expect(CODE).toMatch(/const stagePageSize = hostPhase === 'RESULTS' \? resultsPageSizeFor\(profile\) : pageSizeFor\(profile\)/);
     // Named imports, not the exact list: the page also imports the prose
     // pagers from this module now (the Workie page-turn keys), and pinning the
     // full literal made every new import from the same file read as a paging

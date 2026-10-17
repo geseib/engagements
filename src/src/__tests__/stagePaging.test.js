@@ -186,3 +186,30 @@ describe('the pager line says all three things', () => {
     expect(line).toContain('↑ ↓');
   });
 });
+
+/* THE RESULTS CARDS ARE IDEAS FIRST AND TALLER (walk of dev 26af5fc8, F3).
+   Measured on dev 92f8b24d at 1280x720, one screen, real dock, with 149- and
+   317-character ideas: the voting sizes ran 33-110px past the type floor on
+   every profile; Room 2, Call 2, TV 1, Table 3 fit at 1280x720, 1366x768 and
+   1440x900. RESULTS reads its own page size; every other phase is unchanged.
+   rejects: results back at the voting sizes; a phase other than RESULTS moved;
+   an unknown profile given more than Room's results budget. */
+describe('resultsPageSizeFor', () => {
+  // eslint-disable-next-line global-require
+  const { resultsPageSizeFor, pageSizeFor: base } = require('../config/stagePaging');
+  test('results show fewer per page than voting, on every profile', () => {
+    expect(resultsPageSizeFor('room')).toBe(2);
+    expect(resultsPageSizeFor('call')).toBe(2);
+    expect(resultsPageSizeFor('tv')).toBe(1);
+    expect(resultsPageSizeFor('table')).toBe(3);
+    for (const p of ['room', 'tv', 'call', 'table']) expect(resultsPageSizeFor(p)).toBeLessThan(base(p));
+    expect(resultsPageSizeFor('nonsense')).toBe(resultsPageSizeFor('room'));
+    expect(base('table')).toBe(5);
+  });
+  test('the host page pages RESULTS with it, and only RESULTS', () => {
+    // eslint-disable-next-line global-require
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    expect(src).toMatch(/const stagePageSize = hostPhase === 'RESULTS' \? resultsPageSizeFor\(profile\) : pageSizeFor\(profile\);/);
+    expect(src).toMatch(/pageSlice\(answers, rawIndex, resultsPageSizeFor\(profile\)\)/);
+  });
+});

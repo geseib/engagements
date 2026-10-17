@@ -22,6 +22,8 @@ import LateList from '../LateList';
 import LW from '../../config/lateWords';
 import BrandMark from '../BrandMark';
 import RW from '../../config/roundWords';
+import ScreensGroup from './ScreensGroup';
+import { TWO_SURFACE_TYPES } from '../../config/surfaces';
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -63,13 +65,6 @@ import RW from '../../config/roundWords';
  */
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]';
-
-const DISPLAY_PROFILES = [
-  ['room', 'Room — projector'],
-  ['tv', 'TV — large panel'],
-  ['call', 'Call — screen share'],
-  ['table', 'Table — laptop'],
-];
 
 /* Why an asked question's Queue and Ask next are held — see the browser row. */
 const ALREADY_ASKED = 'Already asked this session. The running order skips asked questions — use Ask again now.';
@@ -175,6 +170,17 @@ export default function SessionSetupPanel({
   onShowJoinCode = () => {},
   profile = 'room',
   onProfileChange = () => {},
+  /* THE SCREENS GROUP (owner, 16 Oct; docs/design/settings-consolidation):
+     the lobby chooser's stored choice ('two' | 'classic') and the page's
+     chooseRoomScreen, the room's window and whether it is up. Offered only
+     for the game types two screens cover, and only with a handler. */
+  roomScreen = 'classic',
+  onRoomScreenChange = null,
+  presentHref = '',
+  presentDetail = null,
+  /* WHO MAY SIGN IN ON THE PHONE: config/remoteSignIn.js's words, built by
+     the page (the only thing that can reach useAuth), or null until known. */
+  remoteWho = null,
 
   // Settings — the two name decisions the owner moved out of the code.
   //
@@ -269,6 +275,8 @@ export default function SessionSetupPanel({
      screen (the dock's count) and two (the rail's "Review them") reach it. */
   late = null,
 }) {
+  const screenChoiceOffered = typeof onRoomScreenChange === 'function'
+    && TWO_SURFACE_TYPES.includes(gameType || 'call-and-answer');
   const held = pendingSettings || {};
   const heldOr = (key, value) => (Object.prototype.hasOwnProperty.call(held, key) ? held[key] : value);
   const shownAnonymous = heldOr('anonymousUntilReveal', anonymousUntilReveal);
@@ -456,8 +464,13 @@ export default function SessionSetupPanel({
           The other two tabs are short rows that would sit in an empty column,
           and every pixel of panel is a pixel of projected stage the room
           loses. */}
+      {/* data-theme="dark": the panel is painted dusk (#111D33, styles.css),
+          so its tokens must be dusk too. Under a light page (data-theme=light)
+          the Screens group and the remote's sign-in words drew --text as dark
+          ink on navy (walk of dev 92f8b24d, 16 Oct 2026). */}
       <aside
         className={`setup-panel${tab === 'questions' ? ' setup-panel--wide' : ''}`}
+        data-theme="dark"
         ref={panelRef}
         role="dialog"
         aria-modal="true"
@@ -985,298 +998,328 @@ export default function SessionSetupPanel({
               aria-labelledby="setup-tab-settings"
             >
               {settingsRoundLive ? <p className="setup-note setup-scope-note">{RW.view.settingsScope}</p> : null}
-              {/* NAMES FIRST, ahead of Display and the join links, because it
-                  is the only thing in this tab that changes what the room can
-                  learn about a colleague. The rest of the tab is plumbing. */}
-              {anonymityApplies(gameType) && (
-                <>
-                  <h3 className="setup-h">Names{scope(['anonymousUntilReveal', 'nameWaiting'])}</h3>
 
-                  <label className="setup-toggle">
-                    <input
-                      type="checkbox"
-                      data-testid="attribute-authors"
-                      checked={shownAnonymous === false}
-                      onChange={(e) => onAnonymousUntilRevealChange(!e.target.checked)}
-                    />
-                    <span>Show who wrote each response from the start</span>
-                  </label>
-                  {/* WHAT OFF ACTUALLY DOES. This said "names nobody, all
-                      session", which was never true: closing the vote reveals
-                      the round (get-results.js enterResultsState) and the
-                      results show each author with the points they earned
-                      (anonymity.js authorsHiddenNow). The owner, 2026-09-23:
-                      "keep anonymous until after people vote … they get points
-                      for upvoting." */}
-                  <p className="setup-note">
-                    Off (the default), responses are labelled “Response 1”, “Response 2”
-                    while the room answers and votes. When voting closes, each one shows
-                    who wrote it and the points it earned. On, every response carries its
-                    author from the start.
-                  </p>
-                  {/* THE TRADE-OFF, STATED, NOT ENFORCED. The two directions are
-                      genuinely not symmetric — one crosses the wire and one does
-                      not — and a host standing in front of a room deserves to
-                      know which is which BEFORE they press it, rather than
-                      afterwards. */}
-                  <p className="setup-note">
-                    <b>Turning this on shows the names to everyone and cannot be taken back.</b>{' '}
-                    Turning it off again takes them off the stage; it does not un-send them.
-                  </p>
-
-                  {anonymityActive({ gameType, anonymousUntilReveal }) && (
-                    <>
-                      <label className="setup-toggle">
-                        <input
-                          type="checkbox"
-                          data-testid="name-waiting"
-                          checked={shownNameWaiting !== false}
-                          onChange={(e) => onNameWaitingChange(e.target.checked)}
-                        />
-                        <span>Name who is still waiting</span>
-                      </label>
-                      <p className="setup-note">
-                        The room meter can list who has not responded yet — only while you
-                        hover or click it, and never who has.
-                      </p>
-                      {(() => {
-                        const caution = waitingNamesCaution({
-                          answerCount, gameType, anonymousUntilReveal, authorsRevealed,
-                        });
-                        if (!caution) return null;
-                        return (
-                          <p
-                            className={`setup-note${caution.strong ? ' setup-note--warn' : ''}`}
-                            data-testid="waiting-caution"
-                            data-strong={String(caution.strong)}
-                          >
-                            {'Naming who is still waiting also names who has answered — the room '
-                              + 'can subtract one list from the other. '}
-                            {caution.text}
-                          </p>
-                        );
-                      })()}
-                    </>
-                  )}
-                </>
-              )}
-
-              <h3 className="setup-h">Feedback{scope(['wallComments'])}</h3>
-              <label className="setup-toggle">
-                <input
-                  type="checkbox"
-                  data-testid="wall-comments"
-                  checked={shownWallComments !== false}
-                  onChange={(e) => onWallCommentsChange(e.target.checked)}
+              {/* FOUR GROUPS, MOST USED FIRST (owner, 16 Oct;
+                  docs/design/settings-consolidation, tab 1): Screens, the
+                  phone as a remote, the rounds, joining. Session and Keys fold
+                  away. Every section keeps its own scope label. */}
+              <section className="setup-group setup-group--screens" aria-labelledby="setup-g-screens">
+                <h3 className="setup-h" id="setup-g-screens">Screens{scope(null)}</h3>
+                <ScreensGroup
+                  choice={roomScreen === 'two' ? 'two' : 'classic'}
+                  offerChoice={screenChoiceOffered}
+                  onChoose={(choice) => onRoomScreenChange && onRoomScreenChange(choice)}
+                  presentHref={presentHref}
+                  presentDetail={presentDetail}
+                  profile={profile}
+                  onProfileChange={onProfileChange}
                 />
-                <span>Show comments on the wall as they arrive</span>
-              </label>
-              <p className="setup-note">
-                In a feedback round the room meter shows the latest comments — what
-                they say and what they are about, never who wrote them. Press one to
-                put it up for everyone with its author. Off, the wall shows only the count.
-              </p>
-
-              <h3 className="setup-h">{LW.report.settingHeading}{scope(null)}</h3>
-              <label className="setup-toggle">
-                <input
-                  type="checkbox"
-                  data-testid="include-not-reviewed"
-                  checked={includeNotReviewed !== false}
-                  onChange={(e) => changeInclude(e.target.checked)}
-                />
-                <span>{LW.report.settingLabel}</span>
-              </label>
-              {includeFailed && <p className="setup-note" role="alert">{LW.report.settingFailed}</p>}
-              <p className="setup-note">{LW.report.settingNote}</p>
-
-              {workie && (
-                <WorkieSettings
-                  {...workie}
-                  showNextRound={nextRoundPickersApply({
-                    gameType,
-                    gameState,
-                    remaining: catRows.length ? remaining : null,
-                  })}
-                />
-              )}
-
-              {/* PACE, between Names and Display: it changes what the room
-                  experiences, not what a colleague can be identified by, so it
-                  ranks below Names — but it is not plumbing either. */}
-              <h3 className="setup-h">Pace{scope(null)}</h3>
-              <label className="setup-toggle">
-                <input
-                  type="checkbox"
-                  data-testid="auto-mode"
-                  checked={autoMode === true}
-                  onChange={(e) => onAutoModeChange(e.target.checked)}
-                />
-                <span>Auto-advance when everyone has responded</span>
-              </label>
-              <p className="setup-note">
-                Once every player has answered — and voted, on formats that vote — the
-                session moves forward on its own after a short beat. Responses and the
-                AI summary page through at reading pace before the next round starts.
-                Opening anything (a response, the QR, a dialog) pauses it, and your own
-                controls always work.
-              </p>
-
-              {/* THE SCOREBOARD'S LOOK. Owner: "for now the setting sits under
-                  'Scoreboard' and nothing else" — a later overall theme may
-                  take it over. Applied live if the board is up. */}
-              {scoreboardAvailability.show && (
-                <>
-                  <h3 className="setup-h">Scoreboard{scope(['scoreboardStyle'])}</h3>
-                  <label className="setup-field">
-                    <span>Scoreboard style</span>
-                    <select
-                      value={shownBoardStyle || 'departure'}
-                      onChange={(e) => onScoreboardStyle(e.target.value)}
-                    >
-                      {SCOREBOARD_STYLES.map((style) => (
-                        <option key={style} value={style}>{STYLE_LABELS[style]}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <p className="setup-note">
-                    How the standings look on the room&apos;s screen. Press V to change it
-                    while the board is up.
-                  </p>
-                </>
-              )}
-
-              <h3 className="setup-h">Display{scope(null)}</h3>
-              <label className="setup-field">
-                <span>Display profile</span>
-                <select value={profile} onChange={(e) => onProfileChange(e.target.value)}>
-                  {DISPLAY_PROFILES.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
-              {/* "Session report" moved to the top of the Rounds tab, above the
-                  list it summarises. It was filed here with the display profile
-                  and the join links — plumbing — which is not what it is. */}
-
-              <h3 className="setup-h">Players join at</h3>
-              <p className="setup-url">{playUrl}</p>
-              {gameId && <p className="setup-note">{`Session code ${gameId}`}</p>}
-              <div className="setup-row">
-                <button type="button" onClick={onCopyJoinLink}>
-                  {joinLinkCopied ? 'Copied!' : 'Copy join link'}
-                </button>
-                {/* A calendar-invite blob, not a url — distinct from the link
-                    above, and the mockup only drew the link. */}
-                <button type="button" onClick={onInvite}>
-                  {'Invite…'}
-                </button>
-                <button type="button" onClick={onShowJoinCode}>
-                  Put the join code back on the stage
-                </button>
-              </div>
+              </section>
 
               {/* THE HOST'S OWN PHONE. The word "join" must not appear in this
                   section: this QR is behind the host sign-in, and shipped once
                   under a "Join In" heading — so a host who told a latecomer to
                   "scan the QR in the panel" sent that player to a login for an
                   account they will never have. The room-facing join QR is the
-                  rail's, and has exactly one home. */}
-              <section className="setup-remote">
-                <h3 className="setup-h">Controls on your phone</h3>
+                  rail's, and has exactly one home.
+
+                  WHO MAY SIGN IN (owner, 16 Oct): the words come from
+                  config/remoteSignIn.js, which follows the server's
+                  callerMayDriveSession. */}
+              <section className="setup-group setup-remote" aria-labelledby="setup-g-remote">
+                <h3 className="setup-h" id="setup-g-remote">Your phone as a remote</h3>
                 <QRCodeSVG value={remoteUrl} size={180} />
                 <p className="setup-note">
-                  Scan with your own phone to run the session from it. You will be asked to sign in.
+                  Scan with your own phone to drive the room from it.
                 </p>
                 <p className="setup-url">{remoteUrl}</p>
+                {remoteWho ? (
+                  <div className="setup-remote__who">
+                    <p>{remoteWho.lead}<b>{remoteWho.who}</b>{remoteWho.tail}</p>
+                    {remoteWho.laptop ? <p>{remoteWho.laptop}</p> : null}
+                  </div>
+                ) : (
+                  <p className="setup-note">You will be asked to sign in.</p>
+                )}
               </section>
 
-              <h3 className="setup-h">Session</h3>
-              <div className="setup-row">
-                {/* The host guides used to be here, which is why nobody found
-                    them. They are in the panel header now, beside Close. This
-                    control is a different thing: it puts an explanation on the
-                    PROJECTOR, for the room. */}
-                <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
-                {/*
-                  "BACK TO MENU", NOT "EXIT", AND THE DIFFERENCE IS FACTUAL.
-
-                  The owner proposed Exit. The trouble is that this button does
-                  not end anything: `handleSwitchGame` resets this page's state
-                  and shows the welcome screen, while the SESSION STAYS LIVE on
-                  the server, keeps its game id, and is rejoinable through
-                  Continue. Nothing here writes ENDED.
-
-                  So Exit would claim a consequence the button does not have,
-                  and it would misfire in both directions — a host who wanted to
-                  step away might not press it for fear of killing the room's
-                  session, and a host who wanted to finish might press it and
-                  believe they had. "Back to Menu" names where you land and
-                  claims nothing about what happens to the session, which is
-                  exactly the amount this button knows.
-
-                  Same label on ENDED's new secondary and on the phone remote,
-                  because it is the same act on all three.
-                */}
-                <button type="button" onClick={onSwitchGame}>Back to Menu</button>
-                {/*
-                  "END SESSION", AND UNLIKE ITS NEIGHBOUR, THIS ONE DOES WRITE
-                  ENDED. Task 4, 2026-09-26 bug sweep: before this, a trivia,
-                  poll, call-and-answer or wavelength session reached ENDED
-                  only when the question pool ran dry — a host who wanted to
-                  stop after round 4 of 10 had no way to. `canEndSession`
-                  (config/hostControls.js) keeps this off a survey (its own
-                  CLOSED phase carries the equivalent control), the lobby
-                  (nothing running to stop), and an already-ENDED session (the
-                  stage's own primary is the way on). The confirm is on the
-                  action `onEndSession` builds, not here.
-                */}
-                {canEndSession(gameType, gameState) && (
-                  <button type="button" className="btn-danger" onClick={onEndSession}>End session</button>
-                )}
-                {/*
-                  ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
-
-                  `App.jsx` is a `window.location.pathname` switch with no
-                  client-side navigation, so navigating here in-place would be
-                  a full page load — which tears down the host's WebSocket and
-                  the entire in-memory session, mid-round, in front of a room.
-                  `target="_blank"` is the only safe shape for this link.
-
-                  `rel="noopener"` because the new tab must not get a handle on
-                  this one: `window.opener.location` from an admin tab pointed
-                  at the live projector is a foot-gun with no upside.
-
-                  Admins only — `admins` is the group AdminPage's own
-                  ProtectedRoute requires, so showing it to a host would be
-                  offering a door that opens onto Access Denied.
-                */}
-                {isAdmin && (
-                  <a
-                    className="setup-link"
-                    href="/admin"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Admin ↗
-                  </a>
-                )}
-                <button type="button" onClick={onSignOut}>Sign out</button>
-              </div>
-
-              <h3 className="setup-h">Keys</h3>
-              <ul className="setup-keys">
-                <li><kbd>Space</kbd> or <kbd>→</kbd> advance</li>
-                <li><kbd>←</kbd> step back a beat</li>
-                {hasScoreboard(gameType) && (
+              <section className="setup-group setup-group--rounds" aria-labelledby="setup-g-rounds">
+                <h3 className="setup-h" id="setup-g-rounds">The rounds</h3>
+                {/* NAMES FIRST, ahead of Display and the join links, because it
+                    is the only thing in this tab that changes what the room can
+                    learn about a colleague. The rest of the tab is plumbing. */}
+                {anonymityApplies(gameType) && (
                   <>
-                    <li><kbd>S</kbd> show or hide the scoreboard</li>
-                    <li><kbd>V</kbd> change the scoreboard&apos;s look, while it is up</li>
+                    <h4 className="setup-h setup-h--sub">Names{scope(['anonymousUntilReveal', 'nameWaiting'])}</h4>
+
+                    <label className="setup-toggle">
+                      <input
+                        type="checkbox"
+                        data-testid="attribute-authors"
+                        checked={shownAnonymous === false}
+                        onChange={(e) => onAnonymousUntilRevealChange(!e.target.checked)}
+                      />
+                      <span>Show who wrote each response from the start</span>
+                    </label>
+                    {/* WHAT OFF ACTUALLY DOES. This said "names nobody, all
+                        session", which was never true: closing the vote reveals
+                        the round (get-results.js enterResultsState) and the
+                        results show each author with the points they earned
+                        (anonymity.js authorsHiddenNow). The owner, 2026-09-23:
+                        "keep anonymous until after people vote … they get points
+                        for upvoting." */}
+                    <p className="setup-note">
+                      Off (the default), responses are labelled “Response 1”, “Response 2”
+                      while the room answers and votes. When voting closes, each one shows
+                      who wrote it and the points it earned. On, every response carries its
+                      author from the start.
+                    </p>
+                    {/* THE TRADE-OFF, STATED, NOT ENFORCED. The two directions are
+                        genuinely not symmetric — one crosses the wire and one does
+                        not — and a host standing in front of a room deserves to
+                        know which is which BEFORE they press it, rather than
+                        afterwards. */}
+                    <p className="setup-note">
+                      <b>Turning this on shows the names to everyone and cannot be taken back.</b>{' '}
+                      Turning it off again takes them off the stage; it does not un-send them.
+                    </p>
+
+                    {anonymityActive({ gameType, anonymousUntilReveal }) && (
+                      <>
+                        <label className="setup-toggle">
+                          <input
+                            type="checkbox"
+                            data-testid="name-waiting"
+                            checked={shownNameWaiting !== false}
+                            onChange={(e) => onNameWaitingChange(e.target.checked)}
+                          />
+                          <span>Name who is still waiting</span>
+                        </label>
+                        <p className="setup-note">
+                          The room meter can list who has not responded yet — only while you
+                          hover or click it, and never who has.
+                        </p>
+                        {(() => {
+                          const caution = waitingNamesCaution({
+                            answerCount, gameType, anonymousUntilReveal, authorsRevealed,
+                          });
+                          if (!caution) return null;
+                          return (
+                            <p
+                              className={`setup-note${caution.strong ? ' setup-note--warn' : ''}`}
+                              data-testid="waiting-caution"
+                              data-strong={String(caution.strong)}
+                            >
+                              {'Naming who is still waiting also names who has answered — the room '
+                                + 'can subtract one list from the other. '}
+                              {caution.text}
+                            </p>
+                          );
+                        })()}
+                      </>
+                    )}
                   </>
                 )}
-                <li><kbd>\</kbd> open and close this panel</li>
-                <li><kbd>Esc</kbd> close</li>
-              </ul>
+
+                <h4 className="setup-h setup-h--sub">Feedback{scope(['wallComments'])}</h4>
+                <label className="setup-toggle">
+                  <input
+                    type="checkbox"
+                    data-testid="wall-comments"
+                    checked={shownWallComments !== false}
+                    onChange={(e) => onWallCommentsChange(e.target.checked)}
+                  />
+                  <span>Show comments on the wall as they arrive</span>
+                </label>
+                <p className="setup-note">
+                  In a feedback round the room meter shows the latest comments — what
+                  they say and what they are about, never who wrote them. Press one to
+                  put it up for everyone with its author. Off, the wall shows only the count.
+                </p>
+
+                <h4 className="setup-h setup-h--sub">{LW.report.settingHeading}{scope(null)}</h4>
+                <label className="setup-toggle">
+                  <input
+                    type="checkbox"
+                    data-testid="include-not-reviewed"
+                    checked={includeNotReviewed !== false}
+                    onChange={(e) => changeInclude(e.target.checked)}
+                  />
+                  <span>{LW.report.settingLabel}</span>
+                </label>
+                {includeFailed && <p className="setup-note" role="alert">{LW.report.settingFailed}</p>}
+                <p className="setup-note">{LW.report.settingNote}</p>
+
+                {workie && (
+                  <WorkieSettings
+                    {...workie}
+                    showNextRound={nextRoundPickersApply({
+                      gameType,
+                      gameState,
+                      remaining: catRows.length ? remaining : null,
+                    })}
+                  />
+                )}
+
+                {/* PACE, between Names and Display: it changes what the room
+                    experiences, not what a colleague can be identified by, so it
+                    ranks below Names — but it is not plumbing either. */}
+                <h4 className="setup-h setup-h--sub">Pace{scope(null)}</h4>
+                <label className="setup-toggle">
+                  <input
+                    type="checkbox"
+                    data-testid="auto-mode"
+                    checked={autoMode === true}
+                    onChange={(e) => onAutoModeChange(e.target.checked)}
+                  />
+                  <span>Auto-advance when everyone has responded</span>
+                </label>
+                <p className="setup-note">
+                  Once every player has answered — and voted, on formats that vote — the
+                  session moves forward on its own after a short beat. Responses and the
+                  AI summary page through at reading pace before the next round starts.
+                  Opening anything (a response, the QR, a dialog) pauses it, and your own
+                  controls always work.
+                </p>
+
+                {/* THE SCOREBOARD'S LOOK. Owner: "for now the setting sits under
+                    'Scoreboard' and nothing else" — a later overall theme may
+                    take it over. Applied live if the board is up. */}
+                {scoreboardAvailability.show && (
+                  <>
+                    <h4 className="setup-h setup-h--sub">Scoreboard{scope(['scoreboardStyle'])}</h4>
+                    <label className="setup-field">
+                      <span>Scoreboard style</span>
+                      <select
+                        value={shownBoardStyle || 'departure'}
+                        onChange={(e) => onScoreboardStyle(e.target.value)}
+                      >
+                        {SCOREBOARD_STYLES.map((style) => (
+                          <option key={style} value={style}>{STYLE_LABELS[style]}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="setup-note">
+                      How the standings look on the room&apos;s screen. Press V to change it
+                      while the board is up.
+                    </p>
+                  </>
+                )}
+
+              </section>
+
+              <section className="setup-group setup-group--joining" aria-labelledby="setup-g-joining">
+                <h3 className="setup-h" id="setup-g-joining">Joining</h3>
+                <h4 className="setup-h setup-h--sub">Players join at</h4>
+                <p className="setup-url">{playUrl}</p>
+                {gameId && <p className="setup-note">{`Session code ${gameId}`}</p>}
+                <div className="setup-row">
+                  <button type="button" onClick={onCopyJoinLink}>
+                    {joinLinkCopied ? 'Copied!' : 'Copy join link'}
+                  </button>
+                  {/* A calendar-invite blob, not a url — distinct from the link
+                      above, and the mockup only drew the link. */}
+                  <button type="button" onClick={onInvite}>
+                    {'Invite…'}
+                  </button>
+                  <button type="button" onClick={onShowJoinCode}>
+                    Put the join code back on the stage
+                  </button>
+                </div>
+
+              </section>
+
+              <details className="setup-fold">
+                <summary>Session: back to menu, end it, sign out</summary>
+                <div className="setup-row">
+                  {/* The host guides used to be here, which is why nobody found
+                      them. They are in the panel header now, beside Close. This
+                      control is a different thing: it puts an explanation on the
+                      PROJECTOR, for the room. */}
+                  <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
+                  {/*
+                    "BACK TO MENU", NOT "EXIT", AND THE DIFFERENCE IS FACTUAL.
+
+                    The owner proposed Exit. The trouble is that this button does
+                    not end anything: `handleSwitchGame` resets this page's state
+                    and shows the welcome screen, while the SESSION STAYS LIVE on
+                    the server, keeps its game id, and is rejoinable through
+                    Continue. Nothing here writes ENDED.
+
+                    So Exit would claim a consequence the button does not have,
+                    and it would misfire in both directions — a host who wanted to
+                    step away might not press it for fear of killing the room's
+                    session, and a host who wanted to finish might press it and
+                    believe they had. "Back to Menu" names where you land and
+                    claims nothing about what happens to the session, which is
+                    exactly the amount this button knows.
+
+                    Same label on ENDED's new secondary and on the phone remote,
+                    because it is the same act on all three.
+                  */}
+                  <button type="button" onClick={onSwitchGame}>Back to Menu</button>
+                  {/*
+                    "END SESSION", AND UNLIKE ITS NEIGHBOUR, THIS ONE DOES WRITE
+                    ENDED. Task 4, 2026-09-26 bug sweep: before this, a trivia,
+                    poll, call-and-answer or wavelength session reached ENDED
+                    only when the question pool ran dry — a host who wanted to
+                    stop after round 4 of 10 had no way to. `canEndSession`
+                    (config/hostControls.js) keeps this off a survey (its own
+                    CLOSED phase carries the equivalent control), the lobby
+                    (nothing running to stop), and an already-ENDED session (the
+                    stage's own primary is the way on). The confirm is on the
+                    action `onEndSession` builds, not here.
+                  */}
+                  {canEndSession(gameType, gameState) && (
+                    <button type="button" className="btn-danger" onClick={onEndSession}>End session</button>
+                  )}
+                  {/*
+                    ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
+
+                    `App.jsx` is a `window.location.pathname` switch with no
+                    client-side navigation, so navigating here in-place would be
+                    a full page load — which tears down the host's WebSocket and
+                    the entire in-memory session, mid-round, in front of a room.
+                    `target="_blank"` is the only safe shape for this link.
+
+                    `rel="noopener"` because the new tab must not get a handle on
+                    this one: `window.opener.location` from an admin tab pointed
+                    at the live projector is a foot-gun with no upside.
+
+                    Admins only — `admins` is the group AdminPage's own
+                    ProtectedRoute requires, so showing it to a host would be
+                    offering a door that opens onto Access Denied.
+                  */}
+                  {isAdmin && (
+                    <a
+                      className="setup-link"
+                      href="/admin"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Admin ↗
+                    </a>
+                  )}
+                  <button type="button" onClick={onSignOut}>Sign out</button>
+                </div>
+
+              </details>
+
+              <details className="setup-fold">
+                <summary>Keyboard shortcuts</summary>
+                <ul className="setup-keys">
+                  <li><kbd>Space</kbd> or <kbd>→</kbd> advance</li>
+                  <li><kbd>←</kbd> step back a beat</li>
+                  {hasScoreboard(gameType) && (
+                    <>
+                      <li><kbd>S</kbd> show or hide the scoreboard</li>
+                      <li><kbd>V</kbd> change the scoreboard&apos;s look, while it is up</li>
+                    </>
+                  )}
+                  <li><kbd>\</kbd> open and close this panel</li>
+                  <li><kbd>Esc</kbd> close</li>
+                </ul>
+              </details>
             </section>
           )}
         </div>
