@@ -40,7 +40,8 @@ Entries name the dev commit that was merged, so the review can be matched to the
 - The room's window cannot page a long Build Room ask (no server fact carries the page yet); it shows the first page and how many more.
 - The Call & Answer one-screen stage was not measured in a browser (it needs a signed-in host); it reads the same rule as the room's window, which was.
 - Builder screenshots still go straight to the crew board, which the host controls as before.
-- The two-screen laptop console for Build Room still waits for the owner's review of its mockup; remote share is designed, not built.
+- The two-screen laptop console for Build Room still waits for the owner's review of its mockup.
+- Remote share (people off the Wi-Fi) is another session's work, merged here at plugin 1.22.0 with its switch off by default; its own notes and steps come from that work.
 
 ## 17 Oct 2026 (third push): Build Room's History marks, a share that opens only the demo, the room's window, and a dock that holds still
 

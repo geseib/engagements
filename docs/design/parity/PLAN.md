@@ -8,8 +8,9 @@ H1–H5 (History marks), the Share demo fixes (host link, plugin 1.19.0 scopes, 
 labels and per-session ports: §2b S1–S3), B1–B7 (the room's window and its server), D1–D2
 (the still dock on C&A's shared parts). The owner ruled on every open question through Q19.
 **Waiting on the owner:** the console mockup and its five questions
-(`docs/design/build-room-console/`, gates B8); the remote share design and its twelve
-questions (`docs/design/build-room-remote-share/DESIGN.md`); three small rulings (the label on
+(`docs/design/build-room-console/`, gates B8); (remote share is being built by another session from the design the owner approved on
+16 Oct, `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`; this plan's
+`DESIGN.md` is superseded); three small rulings (the label on
 the share's locked page, a cloned repo's `share.json`, a player's own "why" on the wall).
 **Ready without a ruling:** the two phone leaks the wall work found (an unseen ask named in
 the timeline, mockups of draft asks), paging long asks (B9m), the laptop's codes card
