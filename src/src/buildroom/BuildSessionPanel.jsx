@@ -9,9 +9,9 @@
  *             it, Lock again, Not now, Remove, Bring back. Only the right-hand
  *             column differs: ideas sent here, a lane for a builder.
  *   Settings  everything that used to hide in the header's three-dot menu, in
- *             four groups that answer one question each, in the order a host
- *             meets them: The room, Claude, Crew, This session. End session is
- *             last and alone.
+ *             groups that answer one question each, in the order a host
+ *             meets them: Screens (the room's window, parity PLAN §2.7), The
+ *             room, Claude, Crew, This session. End session is last and alone.
  *
  * It holds nothing of its own but which tab is up. The page owns the roster
  * (useBuildPlayers) and every action; this draws them. A button that opens a
@@ -31,6 +31,11 @@ import { RunCrewCodeSwitch } from './BuildCrew';
 import { CodeBox, DemoTile, AppList, QuietWarning, demoSlotOf, demoOnStage } from './BuildWifiShare';
 import { askingOf } from './useBuildPlayers';
 import { W } from './words';
+import RoomWindowLink from '../components/stage/RoomWindowLink';
+import { DISPLAY_PROFILES } from '../components/stage/ScreensGroup';
+import { SCREEN_WORDS } from '../config/roomScreen';
+import { presentStatusFrom } from '../config/presentStatus';
+import { presentHref } from '../config/surfaces';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -229,6 +234,76 @@ export function RoomCodes({ room, now, ended, busy, run, api, wifiLink = '', onS
   );
 }
 
+/* --------------------------------------------------------------- screens -- */
+
+/** How long the armed New link waits for its second press (standards §3). */
+export const ARM_MS = 6000;
+
+/**
+ * SCREENS (parity PLAN §2.7, B9 in part; standards §4: first, Applies now).
+ * The room's window: its link (with the session's wall key, so it opens on
+ * the other display where Chrome can place it), whether it is really up (the
+ * server's `presenting` and `presentDetail`, config/presentStatus.js), and
+ * the room screen size, which the server holds (`wall.profile`) so every
+ * window draws the same. New link retires every open window's link: it asks
+ * in place first, the second press within 6 s goes ahead. The parts are the
+ * shared Screens group's (ScreensGroup.css, RoomWindowLink, the profiles);
+ * the group itself offers one screen or two, which waits for B9's chooser.
+ */
+export function WallScreens({ room, busy, run, api, ended }) {
+  const [armed, setArmed] = useState(false);
+  const [said, setSaid] = useState('');
+  useEffect(() => {
+    if (!armed) return undefined;
+    const t = setTimeout(() => setArmed(false), ARM_MS);
+    return () => clearTimeout(t);
+  }, [armed]);
+  const key = room.wallKey || '';
+  const href = key ? presentHref(room.gameId, { type: 'build', k: key }) : '';
+  const status = presentStatusFrom(Number(room.presenting) > 0 ? room.presentDetail : null);
+  const profile = (room.wall && room.wall.profile) || 'room';
+  const rotate = async () => {
+    if (!armed) { setArmed(true); setSaid(''); return; }
+    setArmed(false);
+    const out = await run(() => api.wall({ rotate: true }));
+    if (out !== undefined) setSaid(W.wallNewLinkDone);
+  };
+  return (
+    <div className="brm-sp-grp" data-group="screens" data-capability="screens">
+      <div className="brm-sp-gh"><h3>{W.screensGroup}</h3><span>{W.screensScope}</span></div>
+      <div className="scr">
+        {href && (
+          <div className="scr-row">
+            <div className="scr-k">
+              <span className="scr-label">{SCREEN_WORDS.window}</span>
+              <span className={`scr-hint scr-stat is-${status.tone}`} role="status" title={status.hint}>{status.label}</span>
+            </div>
+            <RoomWindowLink className="scr-open" href={href} title={W.wallOpenHint} data-capability="room-window">{W.wallOpen}</RoomWindowLink>
+          </div>
+        )}
+        {href && <p className="scr-hint brm-sp-note">{W.wallFollows}</p>}
+        <div className="scr-row">
+          <div className="scr-k">
+            <label className="scr-label" htmlFor="brm-wall-size">{SCREEN_WORDS.size}</label>
+            <span className="scr-hint">{SCREEN_WORDS.sizeHint}</span>
+          </div>
+          <select id="brm-wall-size" className="scr-select" value={profile} disabled={busy} onChange={(e) => run(() => api.wall({ profile: e.target.value }))}>
+            {DISPLAY_PROFILES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </div>
+        {href && !ended && (
+          <div className="scr-row">
+            <div className="scr-k">
+              <span className="scr-hint" role={armed || said ? 'status' : undefined}>{armed ? W.wallNewLinkWhy : (said || W.wallNewLinkHint)}</span>
+            </div>
+            <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={rotate}>{armed ? W.wallNewLinkArmed : W.wallNewLink}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ panel -- */
 
 export default function BuildSessionPanel({
@@ -416,6 +491,8 @@ export default function BuildSessionPanel({
 
           {tab === 'settings' && (
             <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
+              <WallScreens room={room} busy={busy} run={run} api={api} ended={ended} />
+
               <div className="brm-sp-grp" data-group="room" data-capability="share-demo">
                 <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they can open</span></div>
                 <RoomCodes room={room} now={now} ended={ended} busy={busy} run={run} api={api} wifiLink={wifiLink} onShowCodes={pick(onShowCodes)} />

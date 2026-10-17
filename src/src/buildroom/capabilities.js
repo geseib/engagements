@@ -31,6 +31,9 @@ export const CAPABILITIES = Object.freeze([
   { id: 'history', name: 'History: filters, the ask window, the mockup viewer', oneScreen: 'History screen' },
   { id: 'build-screen', name: 'The Build screen: latest shot, open the build', oneScreen: 'Build screen' },
   { id: 'report', name: 'The report, wrap-up, end', oneScreen: 'Session, This session' },
+  // The room's window (parity PLAN §2.7, B7 and B9 in part): the Screens group, and the link that opens the wall.
+  { id: 'screens', name: "Screens: the room's window, its status, the room screen size, a new link", oneScreen: 'Session, Settings, Screens' },
+  { id: 'room-window', name: "The room's window (/present?type=build), following Stage, Build and History", oneScreen: "Session, Settings, Screens: Room's window" },
 ].map((c) => Object.freeze(c)));
 
 export const CAPABILITY_IDS = Object.freeze(CAPABILITIES.map((c) => c.id));

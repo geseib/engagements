@@ -319,6 +319,13 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
 
 // ── The room ────────────────────────────────────────────────────────────────
 
+/** Fire and forget: what the room's window shows (POST build/wall). A failure is healed by the next. */
+function sendWall(api, body) {
+  try {
+    Promise.resolve(api.wall(body)).catch(() => {});
+  } catch (e) { /* never in the host's way */ }
+}
+
 export function BuildRoom({ gameId, initialView = 'room' }) {
   const api = useMemo(() => buildApi(gameId), [gameId]);
   // Screenshots are private: fetched with the host's sign-in (buildHostApi).
@@ -335,6 +342,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (isProjected(next)) lastShown.current = next;
     setScreenState(next);
   }, []);
+  // Stage, Build or History, by any door (2/3/4, P, the header tabs): the room's window shows it too.
+  useEffect(() => {
+    if (isProjected(screen)) sendWall(api, { screen });
+  }, [screen, api]);
   const [view, setView] = useState(initialView);
   // THE HOST ALERT (owner, 2026-10-10): what this device has just marked seen (before the server answers), and the line to jump to.
   const [seenLocal, setSeenLocal] = useState({ ids: [], allAt: '' });
@@ -418,7 +429,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // when sharing stops or fails the demo half leaves and Join stays. Only the
   // host, or the session ending, takes it down.
   const [codesUp, setCodesUp] = useState(false);
-  const hideCodes = useCallback(() => setCodesUp(false), []);
+  // THE ROOM'S WINDOW FOLLOWS (parity PLAN §2.6, B7): what the room is shown
+  // goes to the server too, fire and forget, so a window on the projector
+  // (/present?type=build) draws the same. The laptop's own screen changes as
+  // it always did; a failed post is healed by the next one.
+  const postWall = useCallback((body) => { sendWall(api, body); }, [api]);
+  const hideCodes = useCallback(() => { setCodesUp(false); postWall({ codes: 'none' }); }, [postWall]);
   const now = useNow(5000);
   const endedNow = Boolean(room) && room.state === 'ENDED';
   useEffect(() => { if (endedNow) setCodesUp(false); }, [endedNow]);
@@ -545,6 +561,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       if (items) setRoom((r) => (r ? { ...r, activity: items } : r));
     });
     webSocketClient.onMessage('gameEnded', () => refresh());
+    // The room's window reported itself: its status is on the host's read (presentDetail).
+    webSocketClient.onMessage('presentChanged', () => refresh());
     // Somebody asked to take a name, or the host's other device removed or restored someone.
     webSocketClient.onMessage('handoverRequested', () => loadPlayers());
     // The host's OTHER device answered (grant, Not now, Lock again): the strip clears here too.
@@ -559,6 +577,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       webSocketClient.offMessage('buildChanged');
       webSocketClient.offMessage('buildActivity');
       webSocketClient.offMessage('gameEnded');
+      webSocketClient.offMessage('presentChanged');
       webSocketClient.offMessage('handoverRequested');
       webSocketClient.offMessage('playersChanged');
       webSocketClient.offMessage('playerRemoved');
@@ -775,7 +794,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
   // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
   const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
-  const showCodes = () => { setScreen('stage'); setCodesUp(true); };
+  const showCodes = () => { setScreen('stage'); setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
   // The chip's Show on the Stage opens the same card (ruling 3).
   const share = { busy, run, api, onShowWall: showCodes };
   // The header's join button: both codes while the demo is live, Join alone otherwise (ruling 4).
