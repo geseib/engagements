@@ -764,8 +764,13 @@ const STORY_GAP_MS = 2 * 60 * 1000;
 const t = (iso) => Date.parse(iso || '') || 0;
 const askNo = (askId) => Number(askId) || askId;
 
-/** How a decided ask came to be decided, in a few words each (host only). */
-export function decisionChain(ask) {
+/**
+ * How a decided ask came to be decided, in a few words each (host only). With
+ * its `outcome` (askOutcome, H3) the last step also says when the words that
+ * went were not the room's own: the host reworded them, or a decision kept
+ * back went later inside a combined direction.
+ */
+export function decisionChain(ask, outcome = null) {
   if (!ask || !ask.decision) return [];
   const d = ask.decision;
   const chain = [];
@@ -785,14 +790,43 @@ export function decisionChain(ask) {
     const pick = r.ranked.find((x) => (d.chosen || []).includes(x.respId));
     if (pick && pick.votes) chain.push(`${pick.votes} voted for it`);
   }
-  if (d.sentToAgent === false) chain.push('recorded only');
-  else if (d.heldForLater) chain.push('for Claude, later');
-  else chain.push(d.deliveredAt ? 'Claude has it' : 'waiting for Claude');
+  const delivery = d.deliveredAt ? 'Claude has it' : 'waiting for Claude';
+  const keptBack = d.sentToAgent === false || d.heldForLater;
+  if (outcome && outcome.mark === 'reworded' && keptBack) chain.push(W.sentInOtherWords);
+  else if (d.sentToAgent === false) chain.push('recorded only');
+  else if (d.heldForLater) chain.push(W.forClaudeLater);
+  else chain.push(outcome && outcome.mark === 'reworded' ? `${W.reworded}, ${delivery}` : delivery);
   return chain;
 }
 
-export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null } = {}) {
+/** What an idea under an ask came to: the room chose it, or not, or the vote is still on. */
+const IDEA_WORDS = Object.freeze({ chosen: W.ideaChosen, 'not-chosen': W.ideaNotChosen, pending: W.ideaInVote });
+const ideaWord = (c) => (c.chosen === true ? IDEA_WORDS.chosen : c.chosen === false ? IDEA_WORDS['not-chosen'] : IDEA_WORDS.pending);
+
+/** An idea that went on its own (sent, or written into a direction): its chain. */
+function gaveChain(c, entry) {
+  const delivery = entry && entry.deliveredAt ? 'Claude has it' : 'waiting for Claude';
+  if (c.mark === 'later') return [W.forClaudeLater];
+  if (c.mark === 'reworded') return [W.reworded, delivery];
+  return [c.asWritten === true ? W.sentAsWritten : W.sentToClaude, delivery];
+}
+
+/**
+ * `gave` (contributionsOf, H3) and `ended` come from the host's view: with them
+ * the story also carries every used idea, under the ask it went into or on its
+ * own when it was sent, and every ask the room saw, decided or not, each with
+ * its mark. A phone's story passes neither and is drawn as before.
+ */
+export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null, gave = null, ended = false } = {}) {
   const items = [];
+  const gaveByAsk = new Map();
+  for (const c of gave || []) {
+    if (!c.askId) continue;
+    if (!gaveByAsk.has(c.askId)) gaveByAsk.set(c.askId, []);
+    gaveByAsk.get(c.askId).push({ ideaId: c.ideaId, text: c.text, from: c.from, word: ideaWord(c) });
+  }
+  const stamped = Array.isArray(gave);
+  const outcomeOf = (a) => (stamped ? askOutcome(a, { log, state: ended ? 'ENDED' : '' }) : null);
   const imgById = new Map((images || []).map((im) => [im.imageId, im]));
   // A picture shared within two minutes after Claude showed something belongs to it.
   const showings = [];
@@ -821,15 +855,41 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     ? asks.filter((a) => a.status === 'decided' && a.decision).map((a) => ({ askId: a.askId, direction: a.decision.direction, at: a.decision.decidedAt || a.decidedAt, ask: a }))
     : (decisions || []).map((d) => ({ askId: d.askId, direction: d.direction, at: d.decidedAt }));
   for (const d of decided) {
+    const outcome = d.ask ? outcomeOf(d.ask) : null;
     const mockups = (images || []).filter((im) => im.askId === d.askId && im.label);
     const chosen = d.ask ? (d.ask.decision.chosen || []) : [];
     const shown = chosen.length ? mockups.filter((im) => chosen.includes(im.label)).concat(mockups.filter((im) => !chosen.includes(im.label))) : mockups;
     items.push({
       id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: `Decided · Ask ${askNo(d.askId)}`, text: d.direction || '',
       askId: d.askId, imageIds: shown.map((im) => im.imageId), chosenLabels: chosen,
-      chain: d.ask ? decisionChain(d.ask) : [],
+      chain: d.ask ? decisionChain(d.ask, outcome) : [],
       mine: (myIdeas || []).some((i) => i.promotedTo === d.askId),
+      ...(outcome ? { mark: outcome.mark } : {}),
+      ...(gaveByAsk.has(d.askId) ? { ideas: gaveByAsk.get(d.askId) } : {}),
     });
+  }
+  // EVERY ASK THE ROOM SAW (H3): one not decided yet, or closed without a decision.
+  if (stamped) {
+    for (const a of asks || []) {
+      if (a.status === 'decided' && a.decision) continue;
+      const o = outcomeOf(a);
+      if (!o) continue;
+      items.push({
+        id: `asked:${a.askId}`, at: a.openedAt || a.createdAt, type: 'asked', heading: W.storyAsk(askNo(a.askId)), text: a.prompt || '',
+        askId: a.askId, imageIds: [], chain: [o.mark === 'pending' ? W.withTheRoom : W.closedNothingSent], mark: o.mark,
+        ...(gaveByAsk.has(a.askId) ? { ideas: gaveByAsk.get(a.askId) } : {}),
+      });
+    }
+    // An idea that went on its own: when it was sent, never who sent it.
+    const entryOf = new Map((log || []).map((e) => [e.logId, e]));
+    for (const c of gave || []) {
+      if (c.askId) continue;
+      const entry = c.logId ? entryOf.get(c.logId) : null;
+      items.push({
+        id: `gave:${c.ideaId}`, at: (entry && entry.createdAt) || c.at, type: 'gave', heading: c.from === 'host' ? W.storyHostIdea : W.storyIdea,
+        text: c.text, imageIds: [], chain: gaveChain(c, entry), mark: c.mark,
+      });
+    }
   }
   // A FINISHED STEP (docs/design/build-room-doing D4) is one entry; what Claude
   // posted while it ran hangs under it, oldest first. Commands never come here.

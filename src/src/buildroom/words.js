@@ -274,6 +274,21 @@ export const W = Object.freeze({
   claudeReady: 'Claude is ready',
   chipWorking: 'Working.',
   nothingYet: 'Nothing yet.',
+  // HISTORY: what the room gave, and what reached Claude (parity PLAN §2.8, H3).
+  // Never a name (owner, Q15).
+  storyIdea: 'An idea from the room',
+  storyHostIdea: "The host's idea",
+  storyAsk: (n) => `Ask ${n}`,
+  sentAsWritten: 'sent to Claude as written',
+  sentToClaude: 'sent to Claude',
+  reworded: 'reworded by the host',
+  sentInOtherWords: 'sent later, in other words',
+  forClaudeLater: 'for Claude, later',
+  withTheRoom: 'with the room',
+  closedNothingSent: 'closed, nothing sent to Claude',
+  ideaChosen: 'chosen by the room',
+  ideaNotChosen: 'not chosen',
+  ideaInVote: 'in the vote',
   endedEdit: 'Session ended. You can still edit the report.',
   wrappedUp: 'Claude has wrapped up. Check the report, then end the session.',
   // When the host wrote or saved it (outcome.by), Revy review 2026-10-10.

@@ -317,6 +317,96 @@ describe('the room\'s story (step 5, C9 and C11)', () => {
   });
 });
 
+describe('History draws what the room gave, and every ask (parity PLAN §2.8, H3)', () => {
+  const { roomStory, contributionsOf } = require('../buildroom/buildScreens');
+  const at = (m) => `2026-10-16T10:${String(m).padStart(2, '0')}:00.000Z`;
+  const VOTE = {
+    askId: '002', kind: 'choice', status: 'decided', source: 'host', prompt: 'Which should Claude build next?', fromIdeas: ['i1', 'i2'],
+    options: [{ label: 'A', title: 'Text a reminder', ideaId: 'i1' }, { label: 'B', title: 'A map at the top', ideaId: 'i2' }],
+    results: { total: 2, options: [{ label: 'A', count: 0 }, { label: 'B', count: 2 }] },
+    decision: { direction: 'Which should Claude build next: A map at the top', chosen: ['B'], method: 'vote', sentToAgent: true, reworded: false, deliveredAt: at(21), decidedAt: at(20) },
+  };
+  const IDEAS = [
+    { ideaId: 'i1', text: 'Text a reminder', status: 'promoted', promotedTo: '002', source: 'room', createdAt: at(5) },
+    { ideaId: 'i2', text: 'A map at the top', status: 'promoted', promotedTo: '002', source: 'room', createdAt: at(6) },
+    { ideaId: 'i3', text: 'Add a map of the parking', status: 'promoted', promotedVia: 'claude', source: 'room', createdAt: at(7) },
+  ];
+  const SENT = { logId: 'l9', kind: 'idea', text: 'Add a map of the parking', ideaId: 'i3', asWritten: true, forAgent: true, deliveredAt: at(12), createdAt: at(11) };
+  const story = (room) => roomStory({ log: room.log, asks: room.asks, images: [], gave: contributionsOf(room), ended: room.state === 'ENDED' });
+
+  test('an idea sent on its own is on History, when it was sent, said to have gone as written', () => {
+    const room = { asks: [], ideas: IDEAS.slice(2), log: [SENT] };
+    const s = story(room);
+    expect(s).toHaveLength(1);
+    expect(s[0]).toMatchObject({ type: 'gave', heading: W.storyIdea, text: 'Add a map of the parking', at: at(11), mark: 'sent' });
+    expect(s[0].chain).toEqual([W.sentAsWritten, 'Claude has it']);
+  });
+
+  test('the ideas in a vote hang under it, the winner chosen, the other not', () => {
+    const room = { asks: [VOTE], ideas: IDEAS.slice(0, 2), log: [] };
+    const d = story(room).find((i) => i.type === 'decided');
+    expect(d.mark).toBe('sent');
+    expect(d.ideas.map((x) => [x.text, x.word])).toEqual([['Text a reminder', W.ideaNotChosen], ['A map at the top', W.ideaChosen]]);
+    // The chain is unchanged when the words were the room's own: no fact said twice.
+    expect(d.chain).toEqual(['2 ideas from the room', '2 of 2 picked it', 'Claude has it']);
+  });
+
+  test('a reworded decision says so where it says Claude has it', () => {
+    const room = { asks: [{ ...VOTE, decision: { ...VOTE.decision, reworded: true } }], ideas: IDEAS.slice(0, 2), log: [] };
+    const d = story(room).find((i) => i.type === 'decided');
+    expect([d.mark, d.chain[d.chain.length - 1]]).toEqual(['reworded', `${W.reworded}, Claude has it`]);
+  });
+
+  test('recorded only, then combined into a direction: a version went, in other words', () => {
+    const room = {
+      asks: [{ ...VOTE, decision: { ...VOTE.decision, sentToAgent: false, reworded: undefined } }],
+      ideas: IDEAS.slice(0, 2),
+      log: [{ logId: 'd1', kind: 'direction', text: 'Combined', forAgent: true, from: { askIds: ['002'], ideaIds: [] }, asWritten: false, createdAt: at(25) }],
+    };
+    const d = story(room).find((i) => i.type === 'decided');
+    expect([d.mark, d.chain[d.chain.length - 1]]).toEqual(['reworded', W.sentInOtherWords]);
+  });
+
+  test('an ask still with the room is on History, its ideas "in the vote"', () => {
+    const live = { ...VOTE, status: 'live', decision: null, openedAt: at(15) };
+    const s = story({ asks: [live], ideas: IDEAS.slice(0, 2), log: [] });
+    expect(s).toHaveLength(1);
+    expect(s[0]).toMatchObject({ type: 'asked', heading: W.storyAsk(2), text: 'Which should Claude build next?', at: at(15), mark: 'pending', chain: [W.withTheRoom] });
+    expect(s[0].ideas.map((x) => x.word)).toEqual([W.ideaInVote, W.ideaInVote]);
+  });
+
+  test('an ask closed with no decision, once the session ended: nothing sent', () => {
+    const closed = { ...VOTE, status: 'results', decision: null, openedAt: at(15) };
+    const s = story({ asks: [closed], ideas: [], log: [], state: 'ENDED' });
+    expect(s[0]).toMatchObject({ type: 'asked', mark: 'not-sent', chain: [W.closedNothingSent] });
+  });
+
+  test('a waiting ask the room never saw is not on History', () => {
+    expect(story({ asks: [{ ...VOTE, status: 'proposed', decision: null }], ideas: [], log: [] })).toEqual([]);
+  });
+
+  test('the host\'s own idea is said to be the host\'s; a reworded one says so; a held one waits', () => {
+    const mine = { ideaId: 'h1', text: 'Check it on a phone', status: 'promoted', promotedVia: 'claude', source: 'host', createdAt: at(3) };
+    const held = { ...SENT, logId: 'l8', ideaId: 'h1', text: 'Check it on a phone', forAgent: false, held: true, deliveredAt: null };
+    const s = story({ asks: [], ideas: [mine], log: [held] });
+    expect(s[0]).toMatchObject({ heading: W.storyHostIdea, mark: 'later', chain: [W.forClaudeLater] });
+    const idea = { ideaId: 'i5', text: 'A calendar', status: 'new', source: 'room', createdAt: at(4) };
+    const dir = { logId: 'd5', kind: 'direction', text: 'A weekly calendar', forAgent: true, from: { askIds: [], ideaIds: ['i5'] }, asWritten: false, createdAt: at(9) };
+    const r = story({ asks: [], ideas: [idea], log: [dir] });
+    expect(r[0]).toMatchObject({ type: 'gave', mark: 'reworded', at: at(9), chain: [W.reworded, 'waiting for Claude'] });
+  });
+
+  test('no name anywhere on the story', () => {
+    const room = { asks: [VOTE], ideas: IDEAS.map((i) => ({ ...i, playerName: 'Priya' })), log: [{ ...SENT, detail: 'from Priya' }] };
+    expect(JSON.stringify(story(room))).not.toMatch(/Priya/);
+  });
+
+  test('a phone\'s History (no stamps passed) is drawn as before', () => {
+    const s = roomStory({ log: [SENT], decisions: [{ askId: '002', direction: 'A map', decidedAt: at(20) }], myIdeas: [{ promotedTo: '002' }] });
+    expect(s.map((i) => i.type)).toEqual(['decided']);
+  });
+});
+
 describe('the host picks, and is told what that means (owner, 2026-10-06)', () => {
   const { pickVerdict } = require('../buildroom/buildScreens');
   const ask = (over = {}) => ({

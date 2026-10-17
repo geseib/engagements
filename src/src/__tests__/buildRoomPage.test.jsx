@@ -1702,6 +1702,43 @@ describe('the decision records how it was made; Claude gets the question and the
     expect(screen.getByText(/screenshots and mockups collect here/)).toBeInTheDocument();
   });
 
+  test('History marks what the room gave and every ask the room saw, with no names (parity PLAN §2.8, H3)', async () => {
+    await openRoom(hostState({
+      asks: [
+        {
+          ...CHOICE, AskId: '002', Status: 'decided', DecidedAt: ago(60), FromIdeas: ['0-i0', '1-i1'], Prompt: 'Which should Claude build next?',
+          Options: [{ label: 'A', title: 'Text a reminder', ideaId: '0-i0' }, { label: 'B', title: 'A map at the top', ideaId: '1-i1' }],
+          Decision: { direction: 'Which should Claude build next: A map at the top', chosen: ['B'], method: 'vote', reworded: true, deliveredAt: ago(50) },
+        },
+        { ...CHOICE, AskId: '005', Status: 'live', OpenedAt: ago(30), Prompt: 'Which colour for the buttons?' },
+      ],
+      ideas: [
+        { PlayerName: 'Dee', Text: 'Text a reminder', Status: 'promoted', PromotedTo: '002' },
+        { PlayerName: 'Jo', Text: 'A map at the top', Status: 'promoted', PromotedTo: '002' },
+        { PlayerName: 'Dee', Text: 'Add a map of the parking', Status: 'promoted', PromotedVia: 'claude' },
+      ],
+      logs: [{ Kind: 'idea', Text: 'Add a map of the parking', Detail: 'from Dee', By: 'room', ForAgent: true, ForAgentAs: 'do-now', IdeaId: '2-i2', AsWritten: true }],
+    }));
+    fireEvent.keyDown(window, { key: '4' });
+    const story = screen.getByRole('list', { name: 'The story so far' });
+    // The vote: the host reworded the room's choice, and its two ideas hang under it.
+    const vote = within(story).getByText('Which should Claude build next: A map at the top').closest('li');
+    expect(within(vote).getByLabelText('How it was decided').textContent).toMatch(/→reworded by the host, Claude has it$/);
+    const ideas = within(vote).getByRole('list', { name: 'Ideas from the room' });
+    expect(within(ideas).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Text a reminder · not chosen', 'A map at the top · chosen by the room',
+    ]);
+    // An idea sent on its own.
+    const sent = within(story).getByText('Add a map of the parking').closest('li');
+    expect(sent.textContent).toMatch(/An idea from the room/);
+    expect(within(sent).getByLabelText('What happened to it').textContent).toBe('sent to Claude as written→waiting for Claude');
+    // The ask still with the room.
+    const live = within(story).getByText('Which colour for the buttons?').closest('li');
+    expect(live.textContent).toMatch(/Ask 5/);
+    expect(live.textContent).toMatch(/with the room/);
+    expect(story.textContent).not.toMatch(/Dee|Jo\b/);
+  });
+
   test('History shows how each decision was made', async () => {
     await openRoom(hostState({ asks: [
       { ...CHOICE, Status: 'decided', DecidedAt: ago(60), Decision: { direction: 'Which header should volunteers see first: Bold banner', chosen: ['A'], method: 'wheel' } },

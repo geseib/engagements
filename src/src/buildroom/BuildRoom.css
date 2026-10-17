@@ -1577,6 +1577,11 @@
 .brm .brm-story-kidt { min-width: 0; overflow-wrap: anywhere; }
 .brm .brm-story-kid .brm-story-tm { min-width: 0; padding-top: 0; }
 .brm .brm-story-kid .brm-story-open { text-transform: none; letter-spacing: 0; font-size: var(--brm-t-body); color: var(--text); }
+/* What the room gave (parity PLAN §2.8, H3): its ideas under an ask, and an idea or open ask's own mark. */
+.brm .brm-story-ideas { list-style: none; margin: 0; padding: 0 0 0 12px; border-left: 2px solid var(--brm-rule); display: grid; gap: 2px; font-size: var(--brm-t-body); color: var(--muted); }
+.brm .brm-story-idea { overflow-wrap: anywhere; }
+.brm .brm-story-it--gave .brm-story-dot, .brm .brm-story-it--asked .brm-story-dot { background: transparent; border: 2px solid var(--muted); }
+.brm .brm-story-kidmark { color: var(--muted); font-size: var(--brm-st-meta); }
 
 /* ---- THE HOST ALERT (docs/design/build-room-host-alert, owner 2026-10-10) ----
    A count on the Stage dock's HOST and on the Build / History header's Host.

@@ -69,7 +69,7 @@ import {
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
-  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove, contributionsOf,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   doingLine, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
@@ -2192,6 +2192,19 @@ const HISTORY_FILTERS = [
   { key: 'timeline', label: 'Full timeline' },
 ];
 
+/** The room's ideas that went into an ask, each with what came of it; never who sent it (H3). */
+function StoryIdeas({ ideas }) {
+  if (!ideas || !ideas.length) return null;
+  return (
+    <ul className="brm-story-ideas" aria-label="Ideas from the room">
+      {ideas.map((x) => <li key={x.ideaId} className="brm-story-idea">{x.text} · {x.word}</li>)}
+    </ul>
+  );
+}
+
+/** "How it was decided" for a decision; "What happened to it" for an idea or an ask still open. */
+const chainLabel = (type) => (type === 'decided' ? 'How it was decided' : 'What happened to it');
+
 /** What a step produced: a small row under it, oldest first. */
 function StoryKid({ kid, onOpen }) {
   const openable = Boolean(onOpen) && kid.type === 'decided' && kid.askId;
@@ -2203,6 +2216,8 @@ function StoryKid({ kid, onOpen }) {
         : <span className="brm-story-kidt">{kid.text}</span>}
       <span className="brm-story-tm">{clockTime(kid.at)}</span>
       {safeHref(kid.link) && <a className="brm-story-kidlink" href={safeHref(kid.link)} target="_blank" rel="noopener noreferrer">{kid.link}</a>}
+      {kid.type !== 'decided' && kid.chain && kid.chain.length > 0 && <span className="brm-story-kidmark" aria-label={chainLabel(kid.type)}>{kid.chain.join(' \u2192 ')}</span>}
+      <StoryIdeas ideas={kid.ideas} />
       {kid.imageIds.length > 0 && (
         <span className="brm-story-pics">
           {kid.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={kid.text} className="brm-shot brm-story-pic" />)}
@@ -2234,8 +2249,9 @@ export function StoryItem({ item, onOpen = null }) {
             {item.kids.map((k) => <StoryKid key={k.id} kid={k} onOpen={onOpen} />)}
           </ul>
         )}
+        <StoryIdeas ideas={item.ideas} />
         {item.chain.length > 0 && (
-          <p className="brm-story-chain" aria-label="How it was decided">
+          <p className="brm-story-chain" aria-label={chainLabel(item.type)}>
             {item.chain.map((c, i) => (
               <React.Fragment key={c}>
                 {i > 0 && <span className="brm-story-arrow" aria-hidden="true">→</span>}
@@ -2259,7 +2275,8 @@ export function StoryItem({ item, onOpen = null }) {
 function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
   const [filter, setFilter] = useState('all');
   const asks = room.asks || [];
-  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now) });
+  // What the room gave and every ask it saw, each marked (parity PLAN §2.8, H3).
+  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now), gave: contributionsOf(room), ended: room.state === 'ENDED' });
   const arts = artifactsOf({ images: room.images || [], asks });
   const shown = filterStory(story, filter === 'decisions' ? 'decisions' : 'all');
   const decided = asks
