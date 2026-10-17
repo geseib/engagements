@@ -561,6 +561,17 @@ export const W = Object.freeze({
   wallNewLinkWhy: 'Every open window stops until it is opened again from here. Press again to make a new link.',
   wallNewLinkHint: 'Stops every window opened with the old link.',
   wallNewLinkDone: 'New link made. Open the room’s window again.',
+  // THE RELEASE GATE (owner, 17 Oct 2026, parity PLAN §2c): Claude's posts wait in the queue for the host.
+  postWants: 'Claude wants to show the room',
+  postRelease: 'Release to the room',
+  postKeep: 'Keep to myself',
+  postReleaseAll: (n) => `Release all ${n}`,
+  postsWaiting: (n) => (n === 1 ? '1 post from Claude waits' : `${n} posts from Claude wait`),
+  postNotShown: 'Not shown to the room',
+  postKept: 'Kept to yourself',
+  postsSwitch: "Check Claude's posts before the room sees them",
+  postsNote: "On: Claude's updates and screenshots wait in Waiting for you until you release them.",
+  alertPosts: (n) => (n === 1 ? 'Claude wants to show 1 thing' : `Claude wants to show ${n} things`),
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */

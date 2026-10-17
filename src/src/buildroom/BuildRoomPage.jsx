@@ -68,8 +68,9 @@ import {
   unheard, agentStopped, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind,
   whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField, pickVerdict, combineText, defaultSubject,
   shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN, isPointsVote, highlightOf, highlightedPointIds,
-  rowIsLive, pointVoteRows, runOf, runRunning,
+  rowIsLive, pointVoteRows, runOf, runRunning, roomSees, heldPosts,
 } from './buildScreens';
+import { QueuePost, ReleaseAll } from './BuildHeldPosts';
 import {
   CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLookDialog, StageTabs,
 } from './BuildCrew';
@@ -438,6 +439,20 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const now = useNow(5000);
   const endedNow = Boolean(room) && room.state === 'ENDED';
   useEffect(() => { if (endedNow) setCodesUp(false); }, [endedNow]);
+  // THE CODES CARD FOLLOWS THE SERVER (§2c): when the server takes the codes down
+  // (an ask opened, PLAN §2.3), the laptop's card comes down too. Until the server
+  // has heard this laptop put them up, an older read saying "none" is not a take-down.
+  const codesAsked = useRef(false);
+  const serverCodes = room && room.wall ? room.wall.codes || '' : '';
+  const serverWallRev = room && room.wall ? Number(room.wall.rev) || 0 : 0;
+  useEffect(() => {
+    if (!serverCodes) return;
+    if (serverCodes !== 'none') codesAsked.current = false;
+    else if (!codesAsked.current) setCodesUp(false);
+  }, [serverCodes, serverWallRev]);
+  // THE ROOM'S COPY (§2c): the laptop's own Stage, Build and History are projected, so
+  // they never draw a post or screenshot the host has not released.
+  const roomView = useMemo(() => roomSees(room), [room]);
 
   // ── THE SESSION PANEL (owner, 2026-10-09) ───────────────────────────────
   // The roster is read here, not in the panel, because the count on SESSION
@@ -794,7 +809,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
   // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
   const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
-  const showCodes = () => { setScreen('stage'); setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
+  const showCodes = () => { setScreen('stage'); codesAsked.current = true; setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
   // The chip's Show on the Stage opens the same card (ruling 3).
   const share = { busy, run, api, onShowWall: showCodes };
   // The header's join button: both codes while the demo is live, Join alone otherwise (ruling 4).
@@ -960,7 +975,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {screen === 'stage' ? (
         // ONE SCREEN: the room's Stage with the host's controls on it (parity PLAN §2.5).
         <BuildStageScreen
-          room={room}
+          room={roomView}
           now={now}
           show={{ crewOn: onCrew, codesUp: codesUp && !ended, pickId: pick && current && pick.askId === current.askId ? pick.id : null }}
           controls={{
@@ -1049,8 +1064,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         </div>
       )}
 
-      {screen === 'build' && <BuildBuildScreen room={room} now={now} controls={{ ended, busy, run, api }} />}
-      {screen === 'history' && <BuildHistoryScreen room={room} now={now} controls={{ onOpenAsk: setDetailAskId }} />}
+      {screen === 'build' && <BuildBuildScreen room={roomView} now={now} controls={{ ended, busy, run, api }} />}
+      {screen === 'history' && <BuildHistoryScreen room={roomView} now={now} controls={{ onOpenAsk: setDetailAskId }} />}
       {screen === 'host' && (
       <div className="brm-host">
         {/* NOW: what Claude or the room is doing, with that moment's controls,
@@ -2683,11 +2698,16 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
         </div>
       )}
 
+      {/* THE RELEASE GATE (§2c): Claude's posts, all at once. */}
+      <ReleaseAll posts={heldPosts(room)} busy={busy} ended={ended} run={run} api={api} />
+
       {!items.length && <p className="brm-empty">{W.nothingWaiting}</p>}
       {items.length > 0 && !shown.length && <p className="brm-hint">Nothing from {QUEUE_FILTERS.find((f) => f.key === filter).label.toLowerCase()} right now.</p>}
 
       {shown.map((x) => (x.type === 'ask' ? (
         <ReviewCard key={`${x.ask.askId}:${x.ask.status}`} ask={x.ask} openAsk={openAsk} busy={busy} ended={ended} run={run} api={api} connected={connected} />
+      ) : x.type === 'post' ? (
+        <QueuePost key={x.id} entry={x.entry} busy={busy} ended={ended} run={run} api={api} />
       ) : (
         <QueueIdea
           key={x.idea.ideaId} idea={x.idea} busy={busy} ended={ended}
