@@ -2557,6 +2557,9 @@ const whenReady = (v, f) => (v && typeof v.then === 'function' ? v.then(f) : f(v
  *             or null; may return a promise
  *   allowed(req, url) whether a request without ?k= is let through
  *   seen(req, socket) record a device that was let through
+ *   blocked(url)      optional: a path refused even with a key (404)
+ *   publicOrigin()    optional: the origin redirects are rewritten to, when
+ *             it is not this gateway's own address (a tunnel's)
  */
 const wifiLock = Object.freeze({
   cookies: [LAN_COOKIE],
@@ -2581,8 +2584,12 @@ function forwardHeaders(req, target, lock = wifiLock) {
   return h;
 }
 
+/**
+ * `local` is the app's address, or a function giving the current one (the
+ * remote gateway follows the newest thing Claude showed; '' = nowhere yet).
+ */
 function openGateway(local, port, address, lock = wifiLock) {
-  const target = new URL(local);
+  const targetOf = typeof local === 'function' ? () => { const t = local(); return t ? new URL(t) : null; } : (() => { const t = new URL(local); return () => t; })();
   const lanOrigin = `http://${address}:${port}`;
   const sockets = new Set();
   const server = http.createServer((req, res) => {
@@ -2605,11 +2612,21 @@ function openGateway(local, port, address, lock = wifiLock) {
       res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(LOCKED_PAGE);
     }
+    if (lock.blocked && lock.blocked(url)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end('Not shared.');
+    }
+    const target = targetOf();
+    if (!target) {
+      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('The app is not answering on the host\'s laptop right now. Try again in a moment.');
+    }
+    const publicOrigin = (lock.publicOrigin && lock.publicOrigin()) || lanOrigin;
     lock.seen(req, req.socket);
     const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target, lock) }, (upRes) => {
       const headers = { ...upRes.headers };
       const loc = headers.location;
-      if (loc && loc.startsWith(target.origin) && (loc.length === target.origin.length || /[/?#]/.test(loc[target.origin.length]))) headers.location = lanOrigin + loc.slice(target.origin.length);
+      if (loc && loc.startsWith(target.origin) && (loc.length === target.origin.length || /[/?#]/.test(loc[target.origin.length]))) headers.location = publicOrigin + loc.slice(target.origin.length);
       res.writeHead(upRes.statusCode || 502, headers);
       upRes.pipe(res);
     });
@@ -2624,6 +2641,8 @@ function openGateway(local, port, address, lock = wifiLock) {
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url.replace(/^\/+/, '/'), lanOrigin);
     if (!lock.allowed(req, url)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+    const target = targetOf();
+    if ((lock.blocked && lock.blocked(url)) || !target) { socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); return; }
     lock.seen(req, socket);
     const upstream = net.connect({ ...lanFamily(target), port: Number(target.port), host: bareHost(target.hostname) }, () => {
       const h = forwardHeaders(req, target, lock);
@@ -2713,6 +2732,165 @@ function lanOpenCount() {
   return lan.seen.size;
 }
 
+// ---------------------------------------------------------------------------
+// THE REMOTE SHARE (owner, 2026-10-16;
+// docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md)
+// ---------------------------------------------------------------------------
+//
+// For people who are not on the host's Wi-Fi. ONE gateway per session, on
+// 127.0.0.1 only, forwarding to the newest thing Claude showed; a Cloudflare
+// quick tunnel in front of it (Task 5). It is the Wi-Fi gateway's proxy behind
+// a different lock: a key per PERSON. Engage sends the SHA-256 hashes of the
+// live keys each round, never a key; a key minted since then is checked with
+// Engage once (at most one check a second; a wrong one is never re-asked).
+// Everything arrives from the tunnel at 127.0.0.1, so devices are counted by a
+// cookie of their own, never by socket address.
+
+const REMOTE_PORT = Math.max(1024, Number(process.env.ENGAGE_REMOTE_PORT) || 4950);
+const REMOTE_KEY_COOKIE = 'engage_rk';
+const REMOTE_DEVICE_COOKIE = 'engage_dev';
+const REMOTE_CHECK_EVERY_MS = 1000;
+const REMOTE_WRONG_MAX = 5000;
+const KEY_HASH_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+// A room pressing Open the demo together, keys minted moments ago: the one
+// check a second goes to the first; the rest wait for the next round's keys
+// rather than meeting the locked page. Bounded, so waiting is no lever either.
+const REMOTE_WAIT_MS = Math.max(50, Number(process.env.ENGAGE_REMOTE_WAIT_MS) || 6000);
+const REMOTE_WAITERS_MAX = 200;
+const remote = {
+  gateway: null, target: '', keys: new Map(), wrong: new Set(), lastCheckAt: 0,
+  devices: new Map(), address: '', error: '', waiters: [],
+};
+/**
+ * Resolves true once a round brings this hash among Engage's keys, false after
+ * REMOTE_WAIT_MS (or when the gateway closes). A round already on its way when
+ * the key was minted does not end the wait: the next one may bring it.
+ */
+function waitForRemoteKey(hash) {
+  if (remote.waiters.length >= REMOTE_WAITERS_MAX) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const t = setTimeout(() => finish(false), REMOTE_WAIT_MS);
+    function finish(ok) { clearTimeout(t); remote.waiters = remote.waiters.filter((w) => w !== waiter); resolve(ok); }
+    function waiter(closing) { if (closing) finish(false); else if (remote.keys.has(hash)) finish(true); }
+    remote.waiters.push(waiter);
+  });
+}
+function wakeRemoteWaiters(closing = false) { for (const w of [...remote.waiters]) w(closing); }
+const hashOf = (key) => createHash('sha256').update(String(key)).digest('base64url');
+const cookieValue = (req, name) => {
+  const c = cookiesOf(req.headers.cookie).find((x) => x.startsWith(`${name}=`));
+  return c ? c.slice(name.length + 1) : '';
+};
+/** Vite serves the disk under /@fs/ and modules by id under /@id/; source maps show the source. */
+function remoteBlocked(url) {
+  let p = url.pathname;
+  try { p = decodeURIComponent(p); } catch { /* keep it encoded */ }
+  p = p.toLowerCase();
+  return p.startsWith('/@fs/') || p.startsWith('/@id/') || p.endsWith('.map');
+}
+
+function remoteCookies(req, key) {
+  const attrs = 'HttpOnly; Secure; SameSite=Lax; Path=/';
+  const out = [`${REMOTE_KEY_COOKIE}=${key}; ${attrs}`];
+  if (!cookieValue(req, REMOTE_DEVICE_COOKIE)) out.push(`${REMOTE_DEVICE_COOKIE}=${randomBytes(12).toString('base64url')}; ${attrs}; Max-Age=86400`);
+  return out;
+}
+
+const remoteLock = Object.freeze({
+  cookies: [REMOTE_KEY_COOKIE, REMOTE_DEVICE_COOKIE],
+  admit(url, req) {
+    const key = url.searchParams.get('k') || '';
+    const hash = hashOf(key);
+    if (remote.keys.has(hash)) return remoteCookies(req, key);
+    if (remote.wrong.has(hash)) return null;
+    if (Date.now() - remote.lastCheckAt < REMOTE_CHECK_EVERY_MS) {
+      return waitForRemoteKey(hash).then((ok) => (ok ? remoteCookies(req, key) : null));
+    }
+    remote.lastCheckAt = Date.now();
+    return api('POST', 'share/remote-check', { hash }, AbortSignal.timeout(5000), { background: true })
+      .then((a) => {
+        if (a && a.ok && a.player) { remote.keys.set(hash, String(a.player)); return remoteCookies(req, key); }
+        if (remote.wrong.size >= REMOTE_WRONG_MAX) remote.wrong.clear();
+        remote.wrong.add(hash);
+        return null;
+      })
+      .catch(() => null); // Engage unreachable: refuse now, ask again next time
+  },
+  allowed: (req) => {
+    const key = cookieValue(req, REMOTE_KEY_COOKIE);
+    return Boolean(key) && remote.keys.has(hashOf(key));
+  },
+  seen(req) {
+    const player = remote.keys.get(hashOf(cookieValue(req, REMOTE_KEY_COOKIE)));
+    if (!player) return;
+    const device = cookieValue(req, REMOTE_DEVICE_COOKIE) || 'no-device-cookie';
+    if (!remote.devices.has(player)) remote.devices.set(player, new Map());
+    remote.devices.get(player).set(device, Date.now());
+  },
+  blocked: remoteBlocked,
+  publicOrigin: () => remote.address,
+});
+
+/** Devices per person seen in the last few minutes, for the host's "Sam · 2 devices". */
+function remoteDeviceCounts() {
+  const now = Date.now();
+  const out = {};
+  for (const [player, devices] of remote.devices) {
+    for (const [d, at] of devices) if (now - at > LAN_SEEN_MS) devices.delete(d);
+    if (devices.size) out[player] = Math.min(devices.size, 50); else remote.devices.delete(player);
+  }
+  return out;
+}
+
+function closeRemote() {
+  wakeRemoteWaiters(true);
+  if (remote.gateway) closeGateway(remote.gateway);
+  remote.gateway = null;
+  remote.target = '';
+  remote.keys = new Map();
+  remote.devices.clear();
+  remote.address = '';
+}
+
+/** Bring the remote gateway in line with what Engage asked for. */
+async function syncRemote(wanted, targets, keys) {
+  if (!wanted) { closeRemote(); remote.error = ''; return; }
+  remote.keys = new Map((keys || []).filter((k) => k && KEY_HASH_SHAPE.test(String(k.hash || ''))).map((k) => [k.hash, String(k.player || '')]));
+  wakeRemoteWaiters();
+  // The newest address Claude showed, if it is a server in THIS project's folder (F4).
+  const newest = (targets || []).filter((t) => { try { return lanTargetHost(new URL(t).hostname); } catch { return false; } }).slice(-1)[0] || '';
+  let next = '';
+  if (!newest) remote.error = 'Claude has not shown anything running on this laptop yet.';
+  else if (newest === remote.target) next = newest;
+  else {
+    const port = Number(new URL(newest).port);
+    const owner = listenerDir(port);
+    if (owner && owner !== '/' && (within(owner, projectDir()) || within(projectDir(), owner))) next = newest;
+    else remote.error = owner && owner !== '/' ? `Not shared: port ${port} is another folder's server.` : `Not shared: could not confirm port ${port} is this project's server.`;
+  }
+  if (next) remote.error = '';
+  if (next !== remote.target && remote.gateway) {
+    // A new target: the tunnel stays; what it reaches changes. Open sockets
+    // (hot reload) belong to the old app, so they go.
+    for (const sock of remote.gateway.sockets) sock.destroy();
+  }
+  remote.target = next;
+  if (!remote.gateway) {
+    for (let port = REMOTE_PORT; port < REMOTE_PORT + 20 && !remote.gateway; port += 1) {
+      try { remote.gateway = await openGateway(() => remote.target, port, '127.0.0.1', remoteLock); } catch (e) {
+        if (e && e.code !== 'EADDRINUSE') { remote.error = `Could not open a port on this laptop (${e.code || e.message}).`; break; }
+      }
+    }
+    if (!remote.gateway && !remote.error) remote.error = `Every port from ${REMOTE_PORT} is in use on this laptop.`;
+  }
+}
+
+/** The report's remote block. 'live' only with a reachable tunnel address (Task 5). */
+function remoteReport() {
+  const status = !remote.gateway && !remote.error ? 'off' : (remote.error ? 'failed' : (remote.address ? 'live' : 'off'));
+  return { status, address: status === 'live' ? remote.address : '', target: remote.target, error: remote.error, devices: remote.gateway ? remoteDeviceCounts() : {} };
+}
+
 /** One round: report what is open, read back what the host wants. */
 let lanStatusNow = 'off';
 async function lanRound() {
@@ -2721,6 +2899,7 @@ async function lanRound() {
     if (!BACKGROUND || CONFIG.problems.length || !existsSync(sessionFile())) {
       // No way to hear the host press Off: the door must not stay open.
       closeAllGateways(); lan.error = ''; lanStatusNow = 'off';
+      closeRemote(); remote.error = '';
       return;
     }
     const report = {
@@ -2730,17 +2909,20 @@ async function lanRound() {
       open: lanOpenCount(),
       error: lan.error,
       reporter: LAN_REPORTER,
+      remote: remoteReport(),
     };
     const answer = await api('POST', 'share/report', report, AbortSignal.timeout(8000), { background: true });
     lan.lastAnswerAt = Date.now();
     if (answer && answer.another && !lanToldAnother) log('wi-fi share: another Claude Code window shares this room; this one stays closed');
     lanToldAnother = Boolean(answer && answer.another);
     lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || []);
+    await syncRemote(Boolean(answer && answer.remoteWanted), (answer && answer.targets) || [], (answer && answer.remoteKeys) || []);
   } catch (e) {
     log('wi-fi share round failed:', e && e.message);
     // Engage has not answered for too long: fail closed, not open.
-    if (Date.now() - lan.lastAnswerAt > LAN_LOST_MS && (lan.gateways.size || lan.key)) {
+    if (Date.now() - lan.lastAnswerAt > LAN_LOST_MS && (lan.gateways.size || lan.key || remote.gateway)) {
       closeAllGateways(); lan.error = ''; lanStatusNow = 'off';
+      closeRemote(); remote.error = '';
       log('wi-fi share closed: no answer from Engage');
     }
   }

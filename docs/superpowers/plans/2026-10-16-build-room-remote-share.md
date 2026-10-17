@@ -138,7 +138,7 @@ function remoteLink(row, localUrl, key)   // RemoteAddress + localUrl's path/sea
 
 The remote lock:
 - `admit`: `?k=` whose `hashKey` is in the current set → set `engage_rk=<key>` and `engage_dev=<random 12 bytes>` (if absent), both `HttpOnly; Secure; SameSite=Lax; Path=/`, 302 to the same URL without `k`.
-- unknown `?k=`: if not in the "wrong" set and the last check was ≥ 1 s ago, `POST share/remote-check`; a yes adds it to the set; a no adds it to "wrong". Otherwise the locked page.
+- unknown `?k=`: if not in the "wrong" set and the last check was ≥ 1 s ago, `POST share/remote-check`; a yes adds it to the set; a no adds it to "wrong". **Within that second, the request waits** for a round that brings the key (up to `ENGAGE_REMOTE_WAIT_MS`, 6 s; at most 200 waiting) instead of meeting the locked page: a room pressing together right after remote goes live is the ordinary case, not an attack. A key still unknown after the wait gets the locked page and is not marked wrong.
 - `allowed`: the `engage_rk` cookie's hash is in the set, and the path does not start with `/@fs/` or `/@id/` and does not end in `.map`. Refused requests get the locked page (403), upgrades a 403 line, exactly as Wi-Fi.
 - `seen`: `devices[player].add(engage_dev)` with the same 5-minute window as `lan.seen`. The report sends counts per player.
 - Neither cookie is forwarded to the app (as `withoutOurCookie` does for `engage_lan`).
