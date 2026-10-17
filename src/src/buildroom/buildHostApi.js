@@ -103,8 +103,17 @@ export function buildApi(gameId) {
     postLog: (body) => post('log', body),
     /** `{action:'edit'|'delete', text?, detail?}` → `{entry}` */
     logAction: (logId, body) => post(`log/${seg(logId)}`, body),
-    /** A direction; `as` is keep, later or ask (step 7c), else Do now. */
-    postDirection: (text, as) => post('directions', { text, ...(as && as !== 'do-now' ? { as } : {}) }),
+    /**
+     * A direction; `as` is keep, later or ask (step 7c), else Do now. `from` names
+     * what it was written from (`{ askIds, ideaIds }`, parity PLAN §2.8 H1), so
+     * History can mark those as sent to Claude.
+     */
+    postDirection: (text, as, from = null) => post('directions', {
+      text,
+      ...(as && as !== 'do-now' ? { as } : {}),
+      ...(from && from.askIds && from.askIds.length ? { fromAskIds: from.askIds } : {}),
+      ...(from && from.ideaIds && from.ideaIds.length ? { fromIdeaIds: from.ideaIds } : {}),
+    }),
     /** The host removes a screenshot. */
     /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
     deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),

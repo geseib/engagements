@@ -752,6 +752,39 @@ describe('Now · Ideas · History, on a phone or a laptop (step 7, C11)', () => 
     expect(within(h).getAllByRole('listitem')).toHaveLength(1);
   });
 
+  test('History marks what the room gave and every ask, says which idea was mine, and names nobody (parity PLAN §2.8, H5)', async () => {
+    // Built by the REAL server (roomFromRows, publicView): the shape GET build-play/state answers with.
+    const S = require('../../../lambda-functions/game/build-store');
+    const rows = [
+      { SK: 'BUILD#STATE', Rev: 3, Phase: 'building' },
+      {
+        SK: 'BUILD#ASK#002', AskId: '002', Kind: 'choice', Prompt: 'Which should Claude build next?', Status: 'decided', Source: 'host',
+        CreatedAt: at(10), OpenedAt: at(10), DecidedAt: at(20), FromIdeas: ['i1', 'i2'],
+        Options: [{ label: 'A', title: 'Text a reminder', ideaId: 'i1' }, { label: 'B', title: 'A map at the top', ideaId: 'i2' }],
+        Decision: { direction: 'A big map, top right', chosen: ['B'], sendToAgent: true, method: 'vote', reworded: true, deliveredAt: at(21) },
+      },
+      { SK: 'BUILD#ANS#002#Sam', AskId: '002', PlayerName: 'Sam', Choice: ['B'], CreatedAt: at(12) },
+      { SK: 'BUILD#IDEA#0000000000001#i1', IdeaId: 'i1', Text: 'Text a reminder', PlayerName: 'Priya', Status: 'promoted', PromotedTo: '002', CreatedAt: at(5) },
+      { SK: 'BUILD#IDEA#0000000000002#i2', IdeaId: 'i2', Text: 'A map at the top', PlayerName: 'Sam', Status: 'promoted', PromotedTo: '002', CreatedAt: at(6) },
+      { SK: 'BUILD#IDEA#0000000000003#i3', IdeaId: 'i3', Text: 'Add a map of the parking', PlayerName: 'Sam', Status: 'promoted', PromotedVia: 'claude', CreatedAt: at(7) },
+      { SK: 'BUILD#LOG#0000000000030#a', LogId: '30-a', Kind: 'idea', Text: 'Add a map of the parking', Detail: 'from Sam', By: 'room', ForAgent: true, ForAgentAs: 'do-now', IdeaId: 'i3', AsWritten: true, DeliveredAt: at(31), CreatedAt: at(30) },
+    ];
+    const view = S.publicView({ gameId: GAME, meta: { Title: 'Food bank sign-up' }, sessionState: 'STARTED', room: S.roomFromRows(rows), players: ['Priya', 'Sam'], me: { playerName: ME }, now: at(40) });
+    serve(view);
+    await mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    const h = screen.getByRole('region', { name: 'History' });
+    const item = (t) => within(h).getByText((_, el) => el.tagName === 'P' && el.textContent.includes(t)).closest('li');
+    // The vote, reworded by the host, with its two ideas: mine lost, the other won.
+    const vote = item('Decided · Ask 2');
+    expect(vote.textContent).toMatch('reworded by the host, Claude has it');
+    expect(within(vote).getByText(/Text a reminder · not chosen/).textContent).toMatch('yours');
+    expect(within(vote).getByText(/A map at the top · chosen by the room/).textContent).not.toMatch('yours');
+    // Someone else's idea, sent as written.
+    expect(item('An idea from the room · Add a map of the parking').textContent).toMatch('sent to Claude as written → Claude has it');
+    expect(h.textContent).not.toMatch(/Sam/);
+  });
+
   test('my ideas say what happened: in a vote now, put to a vote, sent to Claude, in the room\'s ideas', async () => {
     serve(baseView({
       currentAskId: '004',

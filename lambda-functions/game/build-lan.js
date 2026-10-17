@@ -55,13 +55,19 @@ function isPrivateLanUrl(url) {
  * distinct ones, oldest first. "Shown" order is the agent's log links, then ask
  * options, then outcome links; an address shown again counts as newest.
  */
-function lanTargets(room) {
+/** Every address Claude linked, in "shown" order: its posts, then ask options, then the wrap-up. */
+function shownUrls(room) {
   const r = room || {};
   const urls = [];
   for (const l of r.logs || []) if (l.By === 'agent' && l.Link) urls.push(l.Link);
   for (const a of r.asks || []) for (const o of a.Options || []) if (o && o.url) urls.push(o.url);
   const outcome = r.state && r.state.Outcome;
   for (const l of (outcome && outcome.links) || []) if (l && l.url) urls.push(l.url);
+  return urls;
+}
+
+function lanTargets(room) {
+  const urls = shownUrls(room);
   const kept = [];
   for (let i = urls.length - 1; i >= 0 && kept.length < MAX_TARGETS; i -= 1) {
     if (!isLoopbackUrl(urls[i])) continue;
@@ -69,6 +75,44 @@ function lanTargets(room) {
     if (!kept.includes(origin)) kept.push(origin);
   }
   return kept.reverse();
+}
+
+/**
+ * WHAT A SHARED SERVER MAY SHOW (Share demo S1, dev game 1215, owner
+ * 2026-10-17). A link's scope is its folder: a page's own folder, or the folder
+ * a link names. The URL parser has already resolved any "..".
+ */
+function scopeOf(url) {
+  const u = hostOf(url);
+  if (!u) return '';
+  const p = u.pathname || '/';
+  return p.endsWith('/') ? p : p.slice(0, p.lastIndexOf('/') + 1);
+}
+
+/**
+ * For each server being shared (the same ones as lanTargets), the folders of
+ * the pages Claude linked on it. The plugin's gateway opens a page only inside
+ * one of them, so the room never browses the rest of a served folder (Claude's
+ * helper files, a project root). A folder inside another is dropped.
+ * @returns {Object<string, string[]>} origin -> sorted scopes
+ */
+function lanScopes(room) {
+  const targets = new Set(lanTargets(room));
+  const by = {};
+  for (const url of shownUrls(room)) {
+    if (!isLoopbackUrl(url)) continue;
+    const origin = hostOf(url).origin;
+    if (!targets.has(origin)) continue;
+    const scope = scopeOf(url);
+    if (!scope) continue;
+    (by[origin] = by[origin] || new Set()).add(scope);
+  }
+  const out = {};
+  for (const [origin, set] of Object.entries(by)) {
+    const all = [...set].sort();
+    out[origin] = all.filter((x) => !all.some((y) => y !== x && x.startsWith(y)));
+  }
+  return out;
 }
 
 function normalizeReport(body) {
@@ -153,10 +197,14 @@ function lanPublicView(room, now) {
   return lanTargets(room).length ? { state: 'off' } : null;
 }
 
-function lanHostView(row, now, { withKey: showKey = false } = {}) {
+function lanHostView(row, now, { withKey: showKey = false, room = null } = {}) {
   const r = row || {};
   const status = lanStatus(r, now);
   return {
+    // THE DEMO ITSELF (dev 1215, owner 2026-10-17): the page Claude showed, with its
+    // path, the address the phones open (lanPublicView). The map's links are each
+    // server's root, which is a directory listing when Claude serves a folder.
+    ...(showKey && room ? { demo: (lanPublicView({ ...room, lan: r }, now) || {}).open || '' } : {}),
     wanted: Boolean(r.Wanted),
     status,
     map: status === 'off' ? [] : (r.Map || []).map((m) => ({
@@ -173,5 +221,5 @@ function lanHostView(row, now, { withKey: showKey = false } = {}) {
 
 module.exports = {
   SK_LAN, REPORT_FRESH_MS, QUIET_AFTER_MS, MAX_TARGETS,
-  isLoopbackUrl, isPrivateLanUrl, lanTargets, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
+  isLoopbackUrl, isPrivateLanUrl, lanTargets, scopeOf, lanScopes, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
 };

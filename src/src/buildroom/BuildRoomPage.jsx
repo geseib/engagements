@@ -69,7 +69,7 @@ import {
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
-  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove,
+  SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, winnerOf, directionFor, defaultDirection, decideBody, settleMove, contributionsOf,
   questionAnswer, claudeState, VOTE_IDEAS_MAX, latestDecisionLine, mockupsReady, looksWords, decisionMethod, METHOD_WORDS, RATING_SCALE, ratingAnswer, ratingStep, unheard, agentStopped,
   doingLine, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind, whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField,
   roomStory, filterStory, artifactsOf, pickVerdict, combineText,
@@ -441,6 +441,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // saved), so a refetch keeps them. `composeFocus` counts the times the
   // cursor is sent to the Composer; `voteIdeas` is What's next's vote dialog.
   const [composeText, setComposeText] = useState('');
+  // WHAT THE COMPOSER WAS FILLED FROM (parity PLAN §2.8, H1): the decided asks
+  // Combine put in it. Sent with the direction; gone once the box is emptied.
+  const [composeFrom, setComposeFrom] = useState([]);
+  useEffect(() => { if (!String(composeText).trim()) setComposeFrom((f) => (f.length ? [] : f)); }, [composeText]);
   const [composeFocus, setComposeFocus] = useState(0);
   const [ticked, setTicked] = useState(() => new Set());
   const [used, setUsed] = useState({});
@@ -869,6 +873,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (!chosen.length) return;
     const lines = combineText(chosen);
     setComposeText((t) => (String(t).trim() ? `${String(t).replace(/\s+$/, '')}\n\n${lines}` : lines));
+    setComposeFrom((f) => [...new Set([...f, ...chosen.map((a) => a.askId)])]);
     const at = new Date().toISOString();
     setUsed((u) => ({ ...u, ...Object.fromEntries(chosen.map((a) => [a.askId, at])) }));
     setTicked(new Set());
@@ -1183,7 +1188,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           )}
 
-          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} focusKey={composeFocus} leadShows />}
+          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows />}
         </main>
 
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
@@ -2187,6 +2192,19 @@ const HISTORY_FILTERS = [
   { key: 'timeline', label: 'Full timeline' },
 ];
 
+/** The room's ideas that went into an ask, each with what came of it; never who sent it (H3). */
+function StoryIdeas({ ideas }) {
+  if (!ideas || !ideas.length) return null;
+  return (
+    <ul className="brm-story-ideas" aria-label="Ideas from the room">
+      {ideas.map((x) => <li key={x.ideaId} className="brm-story-idea">{x.text} · {x.word}</li>)}
+    </ul>
+  );
+}
+
+/** "How it was decided" for a decision; "What happened to it" for an idea or an ask still open. */
+const chainLabel = (type) => (type === 'decided' ? 'How it was decided' : 'What happened to it');
+
 /** What a step produced: a small row under it, oldest first. */
 function StoryKid({ kid, onOpen }) {
   const openable = Boolean(onOpen) && kid.type === 'decided' && kid.askId;
@@ -2198,6 +2216,8 @@ function StoryKid({ kid, onOpen }) {
         : <span className="brm-story-kidt">{kid.text}</span>}
       <span className="brm-story-tm">{clockTime(kid.at)}</span>
       {safeHref(kid.link) && <a className="brm-story-kidlink" href={safeHref(kid.link)} target="_blank" rel="noopener noreferrer">{kid.link}</a>}
+      {kid.type !== 'decided' && kid.chain && kid.chain.length > 0 && <span className="brm-story-kidmark" aria-label={chainLabel(kid.type)}>{kid.chain.join(' \u2192 ')}</span>}
+      <StoryIdeas ideas={kid.ideas} />
       {kid.imageIds.length > 0 && (
         <span className="brm-story-pics">
           {kid.imageIds.map((id) => <BuildImage key={id} imageId={id} alt={kid.text} className="brm-shot brm-story-pic" />)}
@@ -2229,8 +2249,9 @@ export function StoryItem({ item, onOpen = null }) {
             {item.kids.map((k) => <StoryKid key={k.id} kid={k} onOpen={onOpen} />)}
           </ul>
         )}
+        <StoryIdeas ideas={item.ideas} />
         {item.chain.length > 0 && (
-          <p className="brm-story-chain" aria-label="How it was decided">
+          <p className="brm-story-chain" aria-label={chainLabel(item.type)}>
             {item.chain.map((c, i) => (
               <React.Fragment key={c}>
                 {i > 0 && <span className="brm-story-arrow" aria-hidden="true">→</span>}
@@ -2254,14 +2275,18 @@ export function StoryItem({ item, onOpen = null }) {
 function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
   const [filter, setFilter] = useState('all');
   const asks = room.asks || [];
-  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now) });
+  // What the room gave, each marked (parity PLAN §2.8, H3). "Used" in Made so far is the same list
+  // (H4): an idea the room voted on, sent, or written into a direction; not one in a vote the room
+  // has not seen, nor one only put on the wall (Q13).
+  const gave = contributionsOf(room);
+  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now), gave, ended: room.state === 'ENDED' });
   const arts = artifactsOf({ images: room.images || [], asks });
   const shown = filterStory(story, filter === 'decisions' ? 'decisions' : 'all');
   const decided = asks
     .filter((a) => a.status === 'decided' && a.decision)
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
   const ideas = room.ideas || [];
-  const usedIdeas = ideas.filter((i) => i.status === 'promoted').length;
+  const usedIdeas = gave.length;
   const noop = () => undefined;
   return (
     <div className="brm-screenbody brm-histscreen">
@@ -2314,7 +2339,7 @@ function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
         <section className="brm-panel" aria-labelledby="brm-made-h">
           <h2 className="brm-h" id="brm-made-h">Made so far</h2>
           <p className="brm-made">
-            {arts.length} {arts.length === 1 ? 'screenshot' : 'screenshots'} · {ideas.length} {ideas.length === 1 ? 'idea' : 'ideas'}{ideas.length ? `, ${usedIdeas} used` : ''}
+            {W.madeSoFar(arts.length, ideas.length, usedIdeas)}
           </p>
         </section>
       </div>
@@ -3308,7 +3333,7 @@ export function SendToClaude({ onSend, busy, disabled = false, small = false, pr
  *                   a milestone; "Also tell Claude" sends it too
  *   Ask the room    Ideas, Choose or Rate (the Ask the room dialog)
  */
-function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 0, leadShows = true }) {
+function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds = [], focusKey = 0, leadShows = true }) {
   const [said, setSaid] = useState('');
   const box = useRef(null);
   // What's next's Combine and Write send the cursor here, at the end of the words.
@@ -3325,7 +3350,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 
   const words = text.trim();
   const tellAs = async (as) => {
     if (!words) return;
-    const ok = await run(() => api.postDirection(words, as));
+    const ok = await run(() => api.postDirection(words, as, { askIds: fromAskIds }));
     if (ok !== undefined) { setText(''); setSaid(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
   };
   const tell = (e) => { e.preventDefault(); tellAs('do-now'); };

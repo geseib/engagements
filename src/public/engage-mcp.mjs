@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.18.0';
+const VERSION = '1.19.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -551,7 +551,7 @@ function renderState(st) {
   }
   if (st.outcome && st.outcome.summary) lines.push('', `Wrap-up already posted: ${trunc(st.outcome.summary, 200)}`);
   if (st.lan && st.lan.status === 'live') {
-    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths.');
+    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link.');
   }
   if (st.opening && st.opening.phase === 'opening') {
     const steps = st.opening.steps || [];
@@ -2260,7 +2260,7 @@ function promptText(name, args) {
       return [
         'Show the room the work so far, running.',
         '',
-        '1. Work out how this project runs. In order of preference: the project\'s own dev server (a "dev" or "start" script in package.json, or the framework\'s usual command); a build step and then a static server for its output folder; or, for plain HTML, a static server for the folder (npx serve, or python3 -m http.server).',
+        '1. Work out how this project runs. In order of preference: the project\'s own dev server (a "dev" or "start" script in package.json, or the framework\'s usual command); a build step and then a static server for its output folder; or, for plain HTML, a static server for the demo\'s own folder only (npx serve demo, or python3 -m http.server -d demo), never the project root.',
         '2. If it is already running from earlier in this session, reuse it. Otherwise install what is missing, start it in the background on a free port, and wait until the page answers (curl the URL).',
         '3. post_update with kind "showing", one line for the room saying what they are looking at, and link set to the local URL. The host gets an Open button for it on the big screen.',
         '4. Screenshot the main page (e.g. npx playwright screenshot --viewport-size=1280,800 <url> preview.png) and share_image it with kind "progress", so phones see it too.',
@@ -2384,7 +2384,7 @@ How to collaborate:
 - Text you send is shown to the room as plain text. Only include public http(s) links people can open; never secrets, keys or private paths.
 - Show, don't just tell: screenshot each mockup and share_image it onto its Choose option (askId + label), so phones see it too; before wrap_up, share_image one or two screenshots of the finished product with kind "final" for the report.
 - Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
-- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
+- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here: the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too, on their laptops, tablets and phones.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
 - After you implement each decision, call commit with a plain first line ("Add the calm header") and the decision's askId; it goes into DECISIONS.md and the room's timeline. Not after every edit: each turn is already kept as a hidden snapshot. The ${SKILL_NAME} skill has the rules.
@@ -2496,7 +2496,11 @@ async function linkWarnings(urls, opts) {
 //     the app to a refused request (pages, redirects and upgrades alike);
 //   - tells the app it is being opened on localhost (Host, Origin), so a dev
 //     server that checks its host (Vite does) serves it;
-//   - pipes websocket upgrades, so hot reload reaches every device.
+//   - pipes websocket upgrades, so hot reload reaches every device;
+//   - opens a PAGE only inside the folders of the pages Claude linked on that
+//     server (Engage sends them as `scopes`, 1.19.0), lets those pages load
+//     their own files and call their API, and never shows a folder listing
+//     (dev game 1215: the room browsed a mockup folder and Claude's helpers).
 // Nothing here writes to stdout: that is the MCP stream. Log with log().
 
 const LAN_FAST_MS = Math.max(50, Number(process.env.ENGAGE_LAN_FAST_MS) || 4000);
@@ -2517,7 +2521,41 @@ const lanTargetHost = (hostname) => /^(localhost|\[::1\])$/i.test(hostname) ||
 const bareHost = (hostname) => hostname.replace(/^\[|\]$/g, '');
 const PRIVATE_V4_RE = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
-const lan = { key: '', gateways: new Map(), seen: new Map(), error: '', lastAnswerAt: Date.now() };
+const lan = { key: '', gateways: new Map(), seen: new Map(), error: '', lastAnswerAt: Date.now(), scopes: null };
+
+// ── What a shared server may show (Share demo S1, 1.19.0) ───────────────────
+/** A browser's request for a page (or with no Sec-Fetch-Dest at all: the strict reading). */
+const PAGE_DESTS = ['document', 'iframe', 'frame', 'embed', 'object'];
+const isPageRequest = (req) => { const d = String(req.headers['sec-fetch-dest'] || ''); return !d || PAGE_DESTS.includes(d); };
+/** The folders Engage says this server may show, or null from an older Engage (everything, as before). */
+function scopesFor(local) {
+  if (!lan.scopes || typeof lan.scopes !== 'object') return null;
+  const list = lan.scopes[local];
+  return Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.startsWith('/')) : [];
+}
+const underScope = (pathname, scopes) => scopes.some((x) => pathname.startsWith(x));
+/**
+ * A page opens inside a linked folder. A page's own files and API calls (not a
+ * page) may come from anywhere on the server, when the page asking is itself
+ * inside a linked folder of this same gateway.
+ */
+function allowedByScope(req, url, scopes, lanOrigin) {
+  if (scopes === null) return true;
+  if (underScope(url.pathname, scopes)) return true;
+  if (isPageRequest(req)) return false;
+  let from = null;
+  try { from = new URL(String(req.headers.referer || '')); } catch { return false; }
+  return from.origin === lanOrigin && underScope(from.pathname, scopes);
+}
+/** A static server's folder listing (python3 -m http.server, npx serve, Apache-style). */
+const LISTING_RE = /<title>\s*(Directory listing for|Index of)\b/i;
+const NOT_FOUND_PAGE = '<!doctype html><meta charset="utf-8"><title>Not shared</title>' +
+  '<body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.5rem;color:#1B2942">' +
+  '<h1 style="font-size:1.4rem">Not part of the shared build</h1><p>Go back to the Build Room and press Open the build.</p></body>';
+function notShared(res) {
+  res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(NOT_FOUND_PAGE);
+}
 /**
  * Who this process is, to Engage (1.18.0, owner 2026-10-16). Two copies on one
  * room (another tier's old plugin, a second window) each ran a gateway, and the
@@ -2581,13 +2619,42 @@ function openGateway(local, port, address) {
       res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(LOCKED_PAGE);
     }
+    const scopes = scopesFor(local);
+    if (!allowedByScope(req, url, scopes, lanOrigin)) return notShared(res);
     lan.seen.set(req.socket.remoteAddress || '', Date.now());
-    const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target) }, (upRes) => {
+    const page = isPageRequest(req);
+    // Scoped: the app is asked for the path that was checked ("." and ".." already resolved).
+    const path = scopes === null ? req.url : `${url.pathname}${url.search}`;
+    const upHeaders = forwardHeaders(req, target);
+    // A page is asked for uncompressed, so a folder listing can be recognised (npx serve gzips one).
+    if (page) delete upHeaders['accept-encoding'];
+    const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path, headers: upHeaders }, (upRes) => {
       const headers = { ...upRes.headers };
       const loc = headers.location;
       if (loc && loc.startsWith(target.origin) && (loc.length === target.origin.length || /[/?#]/.test(loc[target.origin.length]))) headers.location = lanOrigin + loc.slice(target.origin.length);
-      res.writeHead(upRes.statusCode || 502, headers);
-      upRes.pipe(res);
+      const html = /^text\/html\b/i.test(String(headers['content-type'] || ''));
+      if (!(page && html && (upRes.statusCode || 0) === 200) || headers['content-encoding']) {
+        res.writeHead(upRes.statusCode || 502, headers);
+        upRes.pipe(res);
+        return;
+      }
+      // A page: look at its start before the room sees it. A folder listing is never shown.
+      const held = [];
+      let size = 0;
+      let decided = false;
+      const decide = (end) => {
+        if (decided) return;
+        decided = true;
+        upRes.removeListener('data', onData);
+        const start = Buffer.concat(held);
+        if (LISTING_RE.test(start.toString('utf8'))) { upRes.destroy(); notShared(res); return; }
+        res.writeHead(upRes.statusCode || 200, headers);
+        res.write(start);
+        if (end) res.end(); else upRes.pipe(res);
+      };
+      const onData = (chunk) => { held.push(chunk); size += chunk.length; if (size >= 4096) decide(false); };
+      upRes.on('data', onData);
+      upRes.once('end', () => decide(true));
     });
     up.on('error', () => {
       if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -2635,7 +2702,9 @@ function closeAllGateways() {
 }
 
 /** Bring the open gateways in line with what Engage asked for. */
-async function syncGateways(wanted, targets) {
+async function syncGateways(wanted, targets, scopes = null) {
+  // What each server may show (1.19.0). Absent from an older Engage: the whole app, as before.
+  lan.scopes = scopes && typeof scopes === 'object' && !Array.isArray(scopes) ? scopes : null;
   if (!wanted) { closeAllGateways(); lan.error = ''; return 'off'; }
   const address = lanAddress();
   if (!address) { closeAllGateways(); lan.error = 'No Wi-Fi address on this laptop. It may be on a wired network only, or offline.'; return 'failed'; }
@@ -2710,7 +2779,7 @@ async function lanRound() {
     lan.lastAnswerAt = Date.now();
     if (answer && answer.another && !lanToldAnother) log('wi-fi share: another Claude Code window shares this room; this one stays closed');
     lanToldAnother = Boolean(answer && answer.another);
-    lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || []);
+    lanStatusNow = await syncGateways(Boolean(answer && answer.wanted), (answer && answer.targets) || [], (answer && answer.scopes) || null);
   } catch (e) {
     log('wi-fi share round failed:', e && e.message);
     // Engage has not answered for too long: fail closed, not open.
@@ -3378,7 +3447,7 @@ skill is how you keep the project something they can open next week and understa
   \`.engage/servers.txt\`: the port, the command, and the process id if you have it.
 - Before starting another, check whether something is already listening on that port.
 - Do not stop servers you did not start.
-- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths.
+- Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link.
 
 ## The opening: frame it with the room, then build
 

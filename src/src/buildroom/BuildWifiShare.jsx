@@ -24,6 +24,9 @@ const originOf = (u) => {
 
 /** The link the QR opens: the newest app Claude showed, else the first one shared. */
 export function wifiLink(room) {
+  // The server's demo address (dev 1215): the page Claude showed, as the phones open it.
+  if (room && room.lan && room.lan.demo) return room.lan.demo;
+  // An older server: the root of the newest app Claude showed.
   const map = (room && room.lan && room.lan.map) || [];
   const log = (room && room.log) || [];
   for (let i = log.length - 1; i >= 0; i -= 1) {

@@ -153,7 +153,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step }) {
+async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -177,6 +177,10 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     ...(runItem ? { RunItem: runItem } : {}),
     ...(runId ? { RunId: runId } : {}),
     ...(spoken ? { Spoken: true } : {}),
+    // PROVENANCE (docs/design/parity/PLAN.md §2.8, H1): what it was made from, stamped as it is sent.
+    ...(ideaId ? { IdeaId: ideaId } : {}),
+    ...(sources ? { From: { AskIds: sources.askIds, IdeaIds: sources.ideaIds } } : {}),
+    ...(typeof asWritten === 'boolean' ? { AsWritten: asWritten } : {}),
     // A finished step (kind 'step'): when it ran and for how long.
     ...(step ? { StartedAt: step.startedAt, EndedAt: step.endedAt, DurationMs: step.durationMs, Source: step.source } : {}),
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
@@ -473,7 +477,8 @@ async function askAction(ctx, role, askId, body) {
     if (action === 'discard') next.DiscardedAt = now;
     if (action === 'decide') {
       // A rating always carries its meaning: 5 is great, 1 needs work (owner, 2026-10-06).
-      const direction = S.withRatingMeaning(ask.Kind, S.cleanText(b.direction, S.LIMITS.direction) || S.defaultDirection(ask, room));
+      const typed = S.cleanText(b.direction, S.LIMITS.direction);
+      const direction = S.withRatingMeaning(ask.Kind, typed || S.defaultDirection(ask, room));
       if (!direction) return fail(400, 'Write the direction for Claude (nobody has answered yet)');
       let chosen = (Array.isArray(b.chosen) ? b.chosen : []).map((c) => S.cleanText(c, 40)).filter(Boolean).slice(0, 20);
       const note = S.cleanText(b.note, S.LIMITS.note);
@@ -492,6 +497,9 @@ async function askAction(ctx, role, askId, body) {
         : S.DECISION_METHODS.includes(b.method) ? b.method
           : landed && chosen.length === 1 && chosen[0] === landed.id ? 'wheel' : 'vote';
       next.Decision = { direction, chosen, note, sendToAgent, method, ...(spoken ? { spoken: true } : {}) };
+      // Did the host change the words the pick would have gone with (H1, Q14)? Null: nothing to compare.
+      const reworded = S.decisionReworded(ask, room, chosen, direction, Boolean(typed));
+      if (reworded !== null) next.Decision.reworded = reworded;
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
@@ -795,10 +803,37 @@ async function editLog(ctx, logId, body) {
 async function postDirection(ctx, body) {
   const text = S.cleanText((body || {}).text, S.LIMITS.direction);
   if (!text) return fail(400, 'Write the direction');
-  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as });
+  const src = await directionSources(ctx, body || {}, text);
+  if (src.error) return fail(400, src.error);
+  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, ...src.value });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
+}
+
+/** Most sources one direction may name: Combine takes the decided asks the host ticked. */
+const DIRECTION_SOURCES_MAX = 20;
+
+/**
+ * WHAT A DIRECTION WAS WRITTEN FROM (H1): Combine's decided asks, or an idea the
+ * host opened in the composer. Every id must be real (a decided ask, an idea
+ * of this room), or nothing is sent. As written only when one idea's own words
+ * went unchanged; a combined direction never is (owner, Q14).
+ */
+async function directionSources(ctx, body, text) {
+  const listOf = (v) => (v === undefined || v === null ? [] : Array.isArray(v) ? [...new Set(v.map(String))] : null);
+  const askIds = listOf(body.fromAskIds);
+  const ideaIds = listOf(body.fromIdeaIds);
+  if (!askIds || !ideaIds) return { error: 'fromAskIds and fromIdeaIds are lists' };
+  if (!askIds.length && !ideaIds.length) return { value: {} };
+  if (askIds.length + ideaIds.length > DIRECTION_SOURCES_MAX) return { error: 'Too many sources for one direction' };
+  const room = await loadRoom(ctx);
+  const asks = askIds.map((id) => findAsk(room, id));
+  if (asks.some((a) => !a || a.Status !== 'decided')) return { error: 'A direction can only be written from decided asks' };
+  const ideas = ideaIds.map((id) => findIdea(room, id));
+  if (ideas.some((i) => !i)) return { error: 'One of those ideas is gone' };
+  const asWritten = !askIds.length && ideas.length === 1 && S.cleanText(ideas[0].Text, S.LIMITS.direction) === text;
+  return { value: { sources: { askIds, ideaIds }, asWritten } };
 }
 
 async function ideaAction(ctx, ideaId, body) {
@@ -816,7 +851,8 @@ async function ideaAction(ctx, ideaId, body) {
       return fail(409, 'There is no Ideas ask open to add it to');
     }
     const id = S.newId();
-    await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'idea', CreatedAt: now });
+    // IdeaId: a winning suggestion leads back to the room's idea (H1).
+    await put(ctx, { SK: S.SK.resp(current.AskId, id), AskId: current.AskId, RespId: id, Text: idea.Text, PlayerName: idea.PlayerName, Source: 'idea', IdeaId: idea.IdeaId, CreatedAt: now });
     status = 'promoted';
   } else if (action === 'acknowledge' || action === 'wall') {
     // ACKNOWLEDGE (owner, 2026-10-05): a comment worth hearing that is not a
@@ -842,7 +878,8 @@ async function ideaAction(ctx, ideaId, body) {
     await touchState(ctx, { set: { WallComment: ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { WallComment: comment })).WallComment : comment } });
   }
   if (action === 'direct' || action === 'suggest') {
-    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as });
+    // A sent idea goes in the room's own words: as written (H1).
+    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true } : {}) });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -2035,7 +2072,7 @@ async function hostShare(ctx, body) {
   const room = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
-  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true }) });
+  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true, room }) });
 }
 
 /** Map entries compared field by field: a stored map's key order is not promised. */
@@ -2062,8 +2099,11 @@ async function shareReport(ctx, body) {
   }
   const ended = (await sessionState(ctx)) === 'ENDED';
   // Targets matter only while sharing is wanted: skip reading the room otherwise.
-  const targets = before.Wanted ? LAN.lanTargets(await loadRoom(ctx)) : [];
-  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets });
+  const room = before.Wanted ? await loadRoom(ctx) : null;
+  const targets = room ? LAN.lanTargets(room) : [];
+  // What each may show (Share demo S1): the folders of the pages Claude linked. A 1.19.0+ plugin opens nothing else.
+  const scopes = room ? LAN.lanScopes(room) : {};
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes });
 }
 
 // ── Talking points, research and ideas ──────────────────────────────────────

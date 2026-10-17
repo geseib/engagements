@@ -587,6 +587,10 @@ function tally(ask, room) {
 function askView(ask, room, audience, me) {
   const t = tally(ask, room);
   const isHost = audience === 'host' || audience === 'agent';
+  // THE ROOM'S HISTORY (parity PLAN §2.8, H5): the public copy plus the provenance
+  // stamps (which idea each option or suggestion came from, reworded, held), never a name.
+  const isWall = audience === 'wall';
+  const stamps = isHost || isWall;
   const showResults = isHost || ['results', 'decided'].includes(ask.Status);
   const out = {
     askId: ask.AskId,
@@ -595,7 +599,7 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}) })),
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}), ...(stamps && o.ideaId ? { ideaId: o.ideaId } : {}) })),
     scale: ask.Kind === 'rating' ? RATING_SCALE : null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
@@ -614,7 +618,7 @@ function askView(ask, room, audience, me) {
     const resps = forAsk(room.resps, ask.AskId);
     if (isHost) {
       out.responses = resps.map((r) => ({
-        respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player',
+        respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player', ...(r.IdeaId ? { ideaId: r.IdeaId } : {}),
         hidden: Boolean(r.Hidden), createdAt: r.CreatedAt || null, votes: t.count.get(r.RespId) || 0,
       }));
     } else if (['voting', 'results', 'decided'].includes(ask.Status)) {
@@ -622,6 +626,7 @@ function askView(ask, room, audience, me) {
       // cannot vote for itself.
       out.responses = resps.filter((r) => !r.Hidden).map((r) => ({
         respId: r.RespId, text: r.Text, mine: Boolean(me && r.PlayerName === me.playerName && (r.Source || 'player') === 'player'),
+        ...(isWall && r.IdeaId ? { ideaId: r.IdeaId } : {}),
         ...(showResults ? { votes: t.count.get(r.RespId) || 0 } : {}),
       }));
     }
@@ -673,9 +678,11 @@ function askView(ask, room, audience, me) {
       chosen: ask.Decision.chosen || [],
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
       sentToAgent: ask.Decision.sendToAgent !== false,
-      ...(isHost && ask.Decision.heldForLater ? { heldForLater: true } : {}),
+      ...(stamps && ask.Decision.heldForLater ? { heldForLater: true } : {}),
       spoken: Boolean(ask.Decision.spoken),
       method: ask.Decision.method || (ask.Decision.spoken ? 'spoken' : 'vote'),
+      // The host changed the words the server would have sent (H1); the room sees it once History draws it (H5).
+      ...(stamps && typeof ask.Decision.reworded === 'boolean' ? { reworded: ask.Decision.reworded } : {}),
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -698,6 +705,11 @@ function logView(r) {
     forAgent: Boolean(r.ForAgent),
     name: r.Name || null,
     shareId: r.ShareId || null,
+    // PROVENANCE (docs/design/parity/PLAN.md §2.8, H1): what this entry was made
+    // from, stamped when it was sent. `asWritten` is null when nothing says.
+    ideaId: r.IdeaId || null,
+    from: r.From ? { askIds: r.From.AskIds || [], ideaIds: r.From.IdeaIds || [] } : null,
+    asWritten: typeof r.AsWritten === 'boolean' ? r.AsWritten : null,
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
@@ -761,7 +773,8 @@ function voteFromIdeas(ideas, body) {
   const options = ideas.map((i, n) => {
     const text = cleanText(i.Text, LIMITS.idea);
     const title = text.length > LIMITS.optionTitle ? `${text.slice(0, LIMITS.optionTitle - 1).trimEnd()}…` : text;
-    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '' };
+    // An option made from a room idea names it, so History can say which idea won (H1).
+    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '', ...(i.IdeaId ? { ideaId: i.IdeaId } : {}) };
   });
   const mp = Number(b.maxPicks);
   const maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, options.length) : 1;
@@ -827,7 +840,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.18.0';
+const LATEST_PLUGIN = '1.19.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1503,7 +1516,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     ...(isAgent ? {} : { plugin: pluginView(room.state) }),
     activity: activityView(room.activity),
     ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
-    lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent }),
+    lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent, room }),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
     // Host notes are the host's own; Claude never sees them.
@@ -1559,13 +1572,15 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, as, held, step, ...rest }) => ({
+      // An idea entry keeps its stamp (H5); `from` is a direction's, and phones never get directions.
+      .map(({ forAgent, deliveredAt, as, held, step, from, ...rest }) => ({
         ...(DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest),
         // A phone sees when a step ran, not where Claude took it from.
         ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
       }))
       .map((l) => ({ ...l, link: forRoom(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
+    history: roomHistory(room, visibleAsks),
     images: room.images.map(imageView),
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forRoom),
     doing: doingPublicView(room.activity, now),
@@ -1578,6 +1593,34 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     agentListening: agentStatus(room.state, [], now || new Date().toISOString()).listening,
     mine,
     rev: (room.state && room.state.Rev) || 0,
+  };
+}
+
+/**
+ * THE ROOM'S HISTORY, AS THE ROOM MAY SEE IT (parity PLAN §2.8, H5): what the
+ * History screen needs to mark what the room gave and every ask it saw, with
+ * no name, no host note, and no direction's words (those are the host's).
+ *   asks   every ask the room saw, with the stamps (askView 'wall')
+ *   ideas  only the ideas that were used: put to the room, sent, or written
+ *          into a direction (a new, set-aside or acknowledged one is not)
+ *   sent   the entries that carried them to Claude: a sent idea in its own
+ *          words, a direction as its stamps only (text '')
+ */
+function roomHistory(room, visibleAsks) {
+  const seen = visibleAsks.filter((a) => a.Status !== 'discarded' || a.OpenedAt);
+  const entries = room.logs.filter((l) => (l.Kind === 'idea' && l.IdeaId) || (l.Kind === 'direction' && l.From));
+  const written = new Set(entries.filter((l) => l.From).flatMap((l) => l.From.IdeaIds || []));
+  const used = room.ideas.filter((i) => i.Status === 'promoted' || written.has(i.IdeaId));
+  return {
+    asks: seen.map((a) => askView(a, room, 'wall')),
+    ideas: used.map((i) => ({
+      ideaId: i.IdeaId, text: i.Text || '', status: i.Status || 'new', source: i.Source || 'room', createdAt: i.CreatedAt || null,
+      promotedTo: i.PromotedTo || null, promotedVia: i.PromotedVia || null,
+    })),
+    sent: entries.map(logView).map((l) => ({
+      logId: l.logId, kind: l.kind, text: l.kind === 'idea' ? l.text : '', ideaId: l.ideaId, from: l.from, asWritten: l.asWritten,
+      forAgent: l.forAgent, held: l.held, deliveredAt: l.deliveredAt, createdAt: l.createdAt,
+    })),
   };
 }
 
@@ -1716,6 +1759,43 @@ function defaultDirection(ask, room) {
   return top ? questionAnswer(ask.Prompt, top.text) : '';
 }
 
+/**
+ * REWORDED (docs/design/parity/PLAN.md §2.8, H1; owner, Q14): did the host
+ * change the words the room's pick would have gone with? Any change counts, a
+ * fixed typo included. The defaults are every sentence a screen offers for the
+ * picks (`directionFor`, `spokenDirection` and `defaultDirection` in
+ * src/src/buildroom), so a press that sends what was offered is never
+ * "reworded". `typed` false: the server wrote the words itself.
+ * @returns {boolean|null} null when there is nothing to compare with.
+ */
+function decisionReworded(ask, room, chosen, direction, typed) {
+  if (!typed) return false;
+  const qa = (answer) => withRatingMeaning(ask.Kind, questionAnswer(ask.Prompt, answer));
+  const withDetail = (title, detail) => (detail ? `${title} (${detail})` : title);
+  const defaults = new Set();
+  const add = (s) => { if (s) defaults.add(s); };
+  add(withRatingMeaning(ask.Kind, defaultDirection(ask, room)));
+  const picks = Array.isArray(chosen) ? chosen : [];
+  const landed = wheelLanded(ask);
+  if (ask.Kind === 'choice') {
+    const options = ask.Options || [];
+    const picked = options.filter((o) => picks.includes(o.label));
+    for (const o of picked) { add(qa(o.title)); add(qa(withDetail(o.title, o.detail))); }
+    if (picked.length > 1) add(qa(picked.map((o) => o.title).join(' and ')));
+    if (landed) {
+      const o = options.find((x) => x.label === landed.id || x.title === landed.text);
+      add(qa(landed.text));
+      if (o) add(qa(withDetail(landed.text, o.detail)));
+    }
+  } else if (ask.Kind === 'suggest') {
+    for (const r of tally(ask, room).ranked) if (picks.includes(r.respId)) add(qa(r.text));
+    if (landed) add(qa(landed.text));
+  } else if (ask.Kind === 'rating') {
+    for (const n of picks) add(qa(ratingAnswer(n)));
+  }
+  return defaults.size ? !defaults.has(direction) : null;
+}
+
 module.exports = {
   GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
   LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, AGENT_LISTENING_MS, KEY_PREFIX,
@@ -1734,5 +1814,5 @@ module.exports = {
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
-  hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
+  hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection, decisionReworded,
 };

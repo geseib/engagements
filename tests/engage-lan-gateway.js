@@ -45,6 +45,14 @@ const app = http.createServer((req, res) => {
   if (req.headers.host !== expectHost(port)) { res.writeHead(403); return res.end('Blocked request. This host is not allowed.'); }
   if (req.url === '/near') { res.writeHead(302, { Location: 'http://localhost:' + port + '0/x' }); return res.end(); }
   if (req.url === '/go') { res.writeHead(302, { Location: 'http://localhost:' + port + '/there' }); return res.end(); }
+  if (req.url === '/demo/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end('<!DOCTYPE HTML><html><head><title>Directory listing for /demo/</title></head><body><a href="index.html">index.html</a></body></html>'); }
+  if (req.url === '/gz/') {
+    // npx serve compresses when the browser asks for it, and browsers always do.
+    const body = '<html><head><title>Index of /gz/</title></head></html>';
+    if (/gzip/.test(req.headers['accept-encoding'] || '')) { res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' }); return res.end(require('zlib').gzipSync(body)); }
+    res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(body);
+  }
+  if (req.url === '/served/') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end('<html><head><title>Index of /served/</title></head></html>'); }
   res.writeHead(200, { 'Content-Type': 'text/html' });
   res.end('<h1>Four in a row</h1>');
 });
@@ -62,6 +70,7 @@ let appPort = 0;
 let wanted = false;
 let apiDown = false;
 let targets = [];
+let scopes = null; // null: an older Engage that sends none
 let another = false;
 const reports = [];
 const api = http.createServer((req, res) => {
@@ -73,7 +82,7 @@ const api = http.createServer((req, res) => {
     if (req.url.endsWith('/build/share/report')) {
       if (apiDown) { res.statusCode = 500; return res.end('{"error":"down"}'); }
       reports.push(JSON.parse(body));
-      return res.end(JSON.stringify(another ? { wanted: false, targets: [], another: true } : { wanted, targets }));
+      return res.end(JSON.stringify(another ? { wanted: false, targets: [], another: true } : { wanted, targets, ...(scopes ? { scopes } : {}) }));
     }
     res.end('{}');
   });
@@ -326,6 +335,60 @@ function get(url, headers = {}) {
     assert.strictEqual(r.status, 200);
     assert.match(r.body, /Four in a row/);
     targets = [appOrigin];
+  });
+  console.log('\nWhat a shared server may show (Share demo S1, 1.19.0; dev game 1215)');
+  const scoped = async () => {
+    targets = [appOrigin];
+    scopes = { [appOrigin]: ['/demo/'] };
+    await sleep(400);
+    return (await get(`${gw}/?k=${lastReport().key}`)).headers['set-cookie'][0].split(';')[0];
+  };
+  await check('a page inside a linked folder opens', async () => {
+    const c = await scoped();
+    const r = await get(`${gw}/demo/index.html`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    assert.strictEqual(r.status, 200);
+    assert.match(r.body, /Four in a row/);
+  });
+  await check('a page outside every linked folder is "not found", and the app never sees it', async () => {
+    const c = await scoped();
+    const before = seen.length;
+    for (const p of ['/', '/secret.txt', '/demo', '/demox/a.html', '/%2e%2e/secret.txt']) {
+      const r = await get(`${gw}${p}`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+      assert.strictEqual(r.status, 404, `${p} gave ${r.status}`);
+    }
+    // A request without Sec-Fetch-Dest is treated as a page: the strict reading.
+    assert.strictEqual((await get(`${gw}/secret.txt`, { Cookie: c })).status, 404);
+    assert.strictEqual(seen.length, before, 'nothing out of scope reached the app');
+  });
+  await check('a linked page may load its own files and call its API from anywhere on its server', async () => {
+    const c = await scoped();
+    const from = `${gw}/demo/index.html`;
+    for (const [p, dest] of [['/assets/app.js', 'script'], ['/styles/site.css', 'style'], ['/api/scores', 'empty']]) {
+      const r = await get(`${gw}${p}`, { Cookie: c, 'Sec-Fetch-Dest': dest, Referer: from });
+      assert.strictEqual(r.status, 200, `${p} (${dest}) gave ${r.status}`);
+    }
+    // ...but not as a page, and not when the page asking is itself out of scope.
+    assert.strictEqual((await get(`${gw}/assets/app.js`, { Cookie: c, 'Sec-Fetch-Dest': 'document', Referer: from })).status, 404);
+    assert.strictEqual((await get(`${gw}/assets/app.js`, { Cookie: c, 'Sec-Fetch-Dest': 'script', Referer: `${gw}/other/page.html` })).status, 404);
+  });
+  await check('a folder listing is never shown, even inside a linked folder', async () => {
+    const c = await scoped();
+    const r = await get(`${gw}/demo/`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    assert.strictEqual(r.status, 404);
+    assert.ok(!/Directory listing|index\.html/.test(r.body), r.body);
+    scopes = { [appOrigin]: ['/'] };
+    await sleep(400);
+    const r2 = await get(`${gw}/served/`, { Cookie: c, 'Sec-Fetch-Dest': 'document' });
+    assert.strictEqual(r2.status, 404);
+    // A compressed listing too: a page is always asked for uncompressed, so it can be read.
+    const r3 = await get(`${gw}/gz/`, { Cookie: c, 'Sec-Fetch-Dest': 'document', 'Accept-Encoding': 'gzip, deflate, br' });
+    assert.strictEqual(r3.status, 404);
+  });
+  await check('an older Engage (no scopes) keeps the old behaviour: the whole app opens', async () => {
+    scopes = null;
+    await sleep(400);
+    const c = (await get(`${gw}/?k=${lastReport().key}`)).headers['set-cookie'][0].split(';')[0];
+    assert.strictEqual((await get(`${gw}/anything`, { Cookie: c, 'Sec-Fetch-Dest': 'document' })).status, 200);
   });
   await check('the plugin wrote nothing to stdout but its one JSON-RPC reply (that is the MCP stream)', async () => {
     const lines = childOut.split('\n').filter(Boolean);

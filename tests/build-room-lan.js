@@ -173,6 +173,51 @@ check('the host sees the links with the key; Claude\'s copy has no key', () => {
   assert.ok(!JSON.stringify(agent).includes('KEYkey'));
 });
 
+check('the host\'s Share demo opens the same page the phones do: the demo\'s own path, never the server\'s root (dev 1215, owner 17 Oct)', () => {
+  // Claude serves a folder: the root is a directory listing of mockups and the demo.
+  const room = { lan: liveRow(), logs: [{ By: 'agent', Link: 'http://localhost:5173/demo/index.html' }], asks: [], state: null };
+  const host = L.lanHostView(room.lan, NOW, { withKey: true, room });
+  assert.strictEqual(host.demo, 'http://192.168.1.20:4900/demo/index.html?k=KEYkeyKEYkeyKEYkey1234');
+  assert.strictEqual(host.demo, L.lanPublicView(room, NOW).open, 'the host and the phones open one address');
+  // Claude's copy never carries the key, so no demo link either.
+  const agent = L.lanHostView(room.lan, NOW, { withKey: false, room });
+  assert.strictEqual(agent.demo, undefined);
+  // Not shared: nothing to open.
+  assert.strictEqual(L.lanHostView(liveRow({ Wanted: false }), NOW, { withKey: true, room }).demo, '');
+});
+
+console.log('\nbuild-lan: what each shared server may show (Share demo S1, owner 17 Oct)');
+check('each server is scoped to the folders of the pages Claude linked on it, never more', () => {
+  const room = {
+    logs: [
+      { By: 'agent', Link: 'http://localhost:4000/demo/index.html' },
+      { By: 'agent', Link: 'http://localhost:4000/demo/' },
+      { By: 'agent', Link: 'http://localhost:5173/' },
+      { By: 'host', Link: 'http://localhost:4000/secret/' },
+      { By: 'agent', Link: 'https://example.com/x' },
+    ],
+    asks: [{ Options: [{ url: 'http://localhost:8080/mockups/a.html' }, { url: 'http://localhost:8080/mockups/b.html' }, { url: '' }] }],
+    state: { Outcome: { links: [{ url: 'http://localhost:4000/demo/play.html?level=1' }] } },
+  };
+  assert.deepStrictEqual(L.lanScopes(room), {
+    'http://localhost:4000': ['/demo/'],
+    'http://localhost:5173': ['/'],
+    'http://localhost:8080': ['/mockups/'],
+  });
+});
+check('a scope is a folder: a page\'s own folder, a link to a folder itself, and no ".." ever widens it', () => {
+  assert.strictEqual(L.scopeOf('http://localhost:1/a/b/page.html'), '/a/b/');
+  assert.strictEqual(L.scopeOf('http://localhost:1/a/b/'), '/a/b/');
+  assert.strictEqual(L.scopeOf('http://localhost:1/b'), '/');
+  assert.strictEqual(L.scopeOf('http://localhost:1/a/../../etc/x'), '/etc/'); // resolved, never '..'
+  assert.strictEqual(L.scopeOf('not a url'), '');
+});
+check('only the servers being shared carry scopes (the same four as the targets)', () => {
+  const logs = ['http://localhost:4001/', 'http://localhost:4002/', 'http://localhost:4003/', 'http://localhost:4004/', 'http://localhost:4005/x/'].map((Link) => ({ By: 'agent', Link }));
+  const room = { logs, asks: [], state: null };
+  assert.deepStrictEqual(Object.keys(L.lanScopes(room)).sort(), L.lanTargets(room).slice().sort());
+});
+
 console.log(`\n${pass} passed, ${failed} failed`);
 suiteFinished();
 process.exit(failed ? 1 : 0);
