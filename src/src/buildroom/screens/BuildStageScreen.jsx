@@ -8,7 +8,8 @@
  * A DISPLAY COMPONENT (parity PLAN §2.5, B6): `room`, `now`, what the room is
  * shown (`show`: the crew board, the codes card, the host's pick) and, on one
  * screen only, the host's `controls`. With none (the room's window, B7) it
- * renders no button and nothing pressable.
+ * renders no button and nothing pressable. `profile` is the room's window's:
+ * the server's `wall.profile`; without it the browser's stored choice.
  *
  * THE DOCK IS CALL & ANSWER'S (§2.6, §2a D1-D2): the shared Dock with the
  * shared HostActionBar reading buildControls, so Space, →, the clicker and
@@ -110,14 +111,18 @@ function HostHome({ alert, onHost }) {
   );
 }
 
-export default function BuildStageScreen({ room, now, show = {}, controls = null }) {
+export default function BuildStageScreen({
+  room, now, show = {}, controls = null, profile: wallProfile = null,
+}) {
   const c = controls;
   const { crewOn = false, codesUp = false, pickId = null } = show;
   const ended = room.state === 'ENDED';
   const current = stageAsk(room);
   const crew = room.crew && room.crew.enabled ? room.crew : null;
   const onWall = crewOn && crew ? featuredShare(crew) : null;
-  const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
+  // The host's page sizes the Stage per browser; the room's window takes the server's (§2.3).
+  const [storedProfile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
+  const profile = wallProfile || storedProfile;
   // One code enlarged alone: the rail's join code, or either code on the codes card.
   const [zoom, setZoom] = useState(null); // 'join' | 'demo'
   const demoLink = wifiLink(room);

@@ -216,6 +216,8 @@ describe('the route and its imports', () => {
   it('nothing the wall draws imports authFetch or reads a host door', () => {
     const files = [
       ...fs.readdirSync(path.join(SRC, 'present')).map((f) => path.join(SRC, 'present', f)),
+      // The Build Room's window (B7); buildWallImports.test.js walks its imports.
+      ...fs.readdirSync(path.join(SRC, 'present', 'buildwall')).map((f) => path.join(SRC, 'present', 'buildwall', f)),
       path.join(SRC, 'PresentPage.jsx'),
     ].filter((f) => /\.(js|jsx)$/.test(f) && !/presentControls\.js$/.test(f));
     for (const file of files) {

@@ -9,7 +9,7 @@
  * Holds no state of its own: a reload, a dropped network or a second copy on
  * another computer lands on the same moment.
  */
-import React, { useEffect, useMemo } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import PresentStage from './present/PresentStage';
 import { PresentMoment, PhaseWipe } from './present/PresentMoments';
 import usePresentation from './present/usePresentation';
@@ -22,6 +22,10 @@ import usePresentControls from './present/presentControls';
 import Button from './components/ui/Button';
 import Eyebrow from './components/ui/Eyebrow';
 import './present/present.css';
+
+// THE BUILD ROOM'S WINDOW (parity PLAN §2.4): its own chunk, reached before
+// usePresentation starts, whose reads and frames are Call & Answer's.
+const BuildWall = lazy(() => import('./present/buildwall/BuildWall'));
 
 function gameIdFromUrl() {
   try {
@@ -79,7 +83,33 @@ export function presentFitKey(model) {
     .map((x) => (x === undefined ? '' : String(x))).join('|');
 }
 
+function paramFromUrl(name) {
+  try {
+    return new URLSearchParams(window.location.search).get(name) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/** The Build Room's window: the wall, placed and filled as the Presentation is. */
+function BuildWallPage({ gameId, k }) {
+  useFullscreenKey();
+  useClickToFill(useMemo(placedFromUrl, []));
+  return (
+    <Suspense fallback={null}>
+      <BuildWall gameId={gameId} k={k} />
+    </Suspense>
+  );
+}
+
+/** `type=build` is the Build Room's wall; anything else, the Presentation. */
 export default function PresentPage() {
+  const route = useMemo(() => ({ gameId: gameIdFromUrl(), type: paramFromUrl('type'), k: paramFromUrl('k') }), []);
+  if (route.type === 'build') return <BuildWallPage gameId={route.gameId} k={route.k} />;
+  return <CallPresentPage />;
+}
+
+function CallPresentPage() {
   const gameId = useMemo(gameIdFromUrl, []);
   const { snapshot, reads, refetch } = usePresentation(gameId);
   const model = gameId ? presentModel(snapshot, reads) : { moment: 'NOT_FOUND', profile: 'room' };
