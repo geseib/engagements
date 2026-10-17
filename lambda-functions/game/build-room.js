@@ -33,6 +33,8 @@ const S = require('./build-store');
 const C = require('./build-crew');
 const LAN = require('./build-lan');
 const { closeSeat } = require('./build-seat');
+// The room's window status for the host's console (PLAN §2.6, B4): C&A's own rule.
+const { presentingCount, presentingDetail } = require('./room-counts');
 // The usage stats (docs/design/usage-stats/SPEC.md §4, §5 E2/E6–E8): asks put
 // to the room, decisions, crew tasks and the kickoff. Counts only; never throws.
 const {
@@ -118,12 +120,16 @@ async function sessionState(ctx) {
   return (r && r.Item && r.Item.State) || null;
 }
 
-/** Bump the room's revision (and anything else on BUILD#STATE) atomically. */
-async function touchState(ctx, { set = {}, add = {} } = {}) {
-  const names = { '#rev': 'Rev', '#ttl': 'ttl' };
-  const values = { ':one': 1, ':ttl': ctx.ttl };
+/**
+ * Bump the room's revision (and anything else on BUILD#STATE) atomically.
+ * `bump: false` writes without moving Rev (nothing the room sees changed);
+ * `condition` is `{expr, names}` for a conditional write (the lazy wall key).
+ */
+async function touchState(ctx, { set = {}, add = {}, bump = true, condition = null } = {}) {
+  const names = { '#ttl': 'ttl', ...(bump ? { '#rev': 'Rev' } : {}), ...((condition && condition.names) || {}) };
+  const values = { ':ttl': ctx.ttl, ...(bump ? { ':one': 1 } : {}) };
   const sets = ['#ttl = :ttl'];
-  const adds = ['#rev :one'];
+  const adds = bump ? ['#rev :one'] : [];
   let i = 0;
   for (const [k, v] of Object.entries(set)) {
     i += 1;
@@ -140,12 +146,89 @@ async function touchState(ctx, { set = {}, add = {} } = {}) {
   const res = await db.send(new UpdateCommand({
     TableName: TABLE(),
     Key: { PK: ctx.pk, SK: S.SK.state },
-    UpdateExpression: `SET ${sets.join(', ')} ADD ${adds.join(', ')}`,
+    UpdateExpression: `SET ${sets.join(', ')}${adds.length ? ` ADD ${adds.join(', ')}` : ''}`,
+    ...(condition ? { ConditionExpression: condition.expr } : {}),
     ExpressionAttributeNames: names,
     ExpressionAttributeValues: values,
     ReturnValues: 'ALL_NEW',
   }));
   return (res && res.Attributes) || {};
+}
+
+/**
+ * THE WALL KEY (PLAN §2.2, B1; owner Q1), minted the first time the host reads
+ * the room. Conditional, so two first reads racing agree on one key: the loser
+ * reads the winner's. No Rev bump and no announce: nothing the room sees moved.
+ */
+async function ensureWallKey(ctx, room) {
+  if (room.state && room.state.WallKey) return room.state.WallKey;
+  try {
+    const st = await touchState(ctx, {
+      set: { WallKey: S.mintWallKey() }, bump: false,
+      condition: { expr: 'attribute_not_exists(#wk)', names: { '#wk': 'WallKey' } },
+    });
+    return st.WallKey;
+  } catch (e) {
+    if (!(e && e.name === 'ConditionalCheckFailedException')) throw e;
+    const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state } }));
+    return (got && got.Item && got.Item.WallKey) || null;
+  }
+}
+
+/**
+ * THE ROOM'S WINDOW, FOR THE HOST (PLAN §2.6, B4): how many /present viewers
+ * are on this session and what the latest one reported (room-counts.js, the
+ * rule C&A's console uses). Fails soft: a status line is never worth a 500.
+ */
+async function windowStatus(ctx) {
+  try {
+    const [presenting, presentDetail] = await Promise.all([
+      presentingCount(db, TABLE(), ctx.gameId),
+      presentingDetail(db, TABLE(), ctx.gameId),
+    ]);
+    return { presenting, presentDetail };
+  } catch (e) {
+    console.error('BUILD ROOM: the window status read failed (continuing)', e);
+    return { presenting: 0, presentDetail: null };
+  }
+}
+
+/**
+ * POST build/wall (PLAN §2.3, B3): the host moves the room's window. Allowed
+ * after the end (the host may still put History up), except putting the codes
+ * up. `rotate` retires the wall key: every open window gets 403 on its next read.
+ */
+async function postWall(ctx, body) {
+  const norm = S.normalizeWall(body);
+  if (norm.error) return fail(400, norm.error);
+  const { set, rotate } = norm.value;
+  const state = await sessionState(ctx);
+  if (state === 'ENDED' && set.WallCodes && set.WallCodes !== 'none') return fail(409, 'This session has ended, so the codes stay down');
+  const wallKey = rotate ? S.mintWallKey() : null;
+  const st = await touchState(ctx, { set: { ...set, ...(wallKey ? { WallKey: wallKey } : {}) }, add: { WallRev: 1 } });
+  await announce(ctx, st.Rev);
+  return reply(200, { wall: S.wallStateOf(st, state), ...(wallKey ? { wallKey } : {}) });
+}
+
+/**
+ * THE WALL READ (PLAN §2.2, B2): GET build-play/wall?k= and
+ * build-play/wall/images/{imageId}?k=. No seat and no sign-in; the key is the
+ * whole check, read off BUILD#STATE before anything else is loaded.
+ */
+async function routeWall(ctx, method, parts, query) {
+  if (method !== 'GET') return fail(404, 'Not found');
+  const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: '#k', ExpressionAttributeNames: { '#k': 'WallKey' } }));
+  if (!S.wallKeyMatches(got && got.Item, query && query.k)) return fail(403, 'This window\'s link has changed. Open the room\'s window again from the laptop.', { code: 'wall-key' });
+  const isImage = parts[1] === 'images' && parts[2] && !parts[3];
+  if (parts.length > 1 && !isImage) return fail(404, 'Not found');
+  const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
+  const view = S.wallView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, now: new Date().toISOString(), crew: C.crewView(room, 'public', null) });
+  if (isImage) {
+    // Only a picture the wall itself lists: a mockup for an ask the room has not seen stays private.
+    if (!view.images.some((i) => i.imageId === parts[2])) return fail(404, 'No such image');
+    return getImage(ctx, parts[2]);
+  }
+  return reply(200, view);
 }
 
 async function announce(ctx, rev) {
@@ -334,7 +417,8 @@ async function makeCurrent(ctx, room, askId, role) {
       await put(ctx, { ...other, Status: 'results', ClosedAt: now });
     }
   }
-  await touchState(ctx, { set: { CurrentAskId: askId } });
+  // An ask opening takes the codes card down: it yields to the ask (PLAN §2.3; the server clears it, never a client).
+  await touchState(ctx, { set: { CurrentAskId: askId, WallCodes: 'none' }, add: { WallRev: 1 } });
   const ask = findAsk(await loadRoom(ctx), askId);
   await logEntry(ctx, {
     kind: 'ask',
@@ -416,7 +500,8 @@ async function reaskAction(ctx, room, ask, b) {
     ...(fromPoints.length ? { FromPoints: fromPoints } : {}),
   });
   if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, fromPoints, now);
-  await touchState(ctx, { set: { CurrentAskId: newId } });
+  // A new ask opens, as through makeCurrent: the codes card yields to it (PLAN §2.3).
+  await touchState(ctx, { set: { CurrentAskId: newId, WallCodes: 'none' }, add: { WallRev: 1 } });
   await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
   // A re-ask is a new ask put to the room (it writes its own live ask, not
   // through makeCurrent), so it is a second question for the stats.
@@ -964,7 +1049,8 @@ async function openingAction(ctx, action, body) {
     // BACK TO THE OPENING (owner, 2026-10-06: Start building was pressed by
     // mistake and "the opening questioning was lost"). Nothing was lost: the
     // brief and its steps stay. Claude is told to pause.
-    await touchState(ctx, { set: { Phase: 'opening' } });
+    // The room frames the build again on the Stage (PLAN §2.3).
+    await touchState(ctx, { set: { Phase: 'opening', WallScreen: 'stage' }, add: { WallRev: 1 } });
     await logEntry(ctx, {
       kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
       text: 'The host has gone back to the opening to frame the build further. Pause building: finish or set aside what you are doing, write no new product code, and wait with wait_for_direction until the host presses Start building again.',
@@ -2701,10 +2787,17 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
     // room_status with kickoff, so the Connect panel's step 4 can turn green.
     // The first time is kept.
     if (role === 'agent' && query && query.kickoff === '1') await markKickedOff(ctx);
-    const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
+    const { room, view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
     // The role the host's screen would delete a screenshot or an entry in
     // (the owner's delete rule, 2026-10-04): it asks staff for a reason.
-    if (role === 'host') view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+    if (role === 'host') {
+      view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+      // THE ROOM'S WINDOW (PLAN §2.2-§2.6, B1/B3/B4): the host's alone. Never
+      // Claude's (its key is not the host), never a phone's, never the wall's.
+      view.wallKey = await ensureWallKey(ctx, room);
+      view.wall = S.wallStateOf(room.state, view.state);
+      Object.assign(view, await windowStatus(ctx));
+    }
     return reply(200, view);
   }
   // Claude's cheapest call: nothing but its inbox (the wrapper below attaches
@@ -2731,6 +2824,8 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
 
   // Before the ended check: an ended session still answers the plugin (wanted: false).
   if (a === 'share' && b === 'report' && !c) return role === 'agent' ? shareReport(ctx, body) : fail(403, 'Only Claude Code reports the Wi-Fi share');
+  // Before the ended check too: after the end the host may still put History on the wall.
+  if (a === 'wall' && !b) return hostOnly() || postWall(ctx, body);
 
   const ended = (await sessionState(ctx)) === 'ENDED';
   if (ended && !(a === 'outcome' || (a === 'log' && b))) return fail(409, 'This session has ended');
@@ -2830,6 +2925,8 @@ async function routePlayCrew(ctx, me, parts, input) {
 
 async function routePlay(ctx, method, parts, body, query) {
   const [a] = parts;
+  // The room's window: keyed, not seated, so ahead of the seat check (PLAN §2.2).
+  if (a === 'wall') return routeWall(ctx, method, parts, query);
   const input = method === 'GET' ? (query || {}) : (body || {});
   const why = {};
   const me = await playerFrom(ctx, input, why);
