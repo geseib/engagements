@@ -15,6 +15,7 @@ code carries a `file:line` read on this branch.
 
 | Phase | What | Template resources | Owner can test on dev |
 |---|---|---|---|
+| **D1–D3** | **The Build Room dock holds still; HOST always goes back to Host** (§2a, owner 17 Oct) | 0 | Hover the dock and change moments: no button moves; one click on HOST from the Stage |
 | **H1–H5** | **Build Room History: every used contribution and every ask, marked when a version went to Claude** (§2.8) | 0 | Send an idea, vote on ideas, combine two decisions: History shows each with its mark |
 | **B1–B9** | **Build Room two-screen mode** (§2) | **0** (both build routes are `{proxy+}`) | Open the room's window on the projector; 2/3/4 on the laptop move it; the laptop stays on Host |
 | B10 | Build Room's other standards: in-place confirms, scope labels, late answers, theme already done (§3) | 0 | Press twice instead of dialogs; Settings say when a change applies |
@@ -354,6 +355,54 @@ look identical to today.
 
 ---
 
+## 2a. The dock that holds still, and the way back to Host (owner, 17 Oct)
+
+Owner, 17 Oct: *"right now the bottom row buttons jump all over the place as you move the
+cursor or things adjust. not good UX ... for 1 screen mode clicking into the stage screen
+it is unclear on how to get back to host."* (with a screenshot of the HOST · 1 list open
+over the Stage, "Host screen · 1" small at its foot).
+
+**Why the buttons move.** Read in the code on `f0d6aa17`:
+
+| Cause | Where | Effect |
+|---|---|---|
+| The **"Press Space to …" hint is added on hover**, between the main button and HOST, and removed on leave | `BuildRoomPage.jsx:2101` (`overDock && … brm-dockhint`), `.brm-dockhint { flex: none }` (`BuildRoom.css:1239`) | The pointer entering the dock pushes HOST and SESSION sideways; reaching for HOST moves it |
+| The dock is a plain flex row whose **status text sets the width** of everything after it | `.dock { display: flex }` (`styles/stage.css:537`); status "3 of 18 answered", the "Open the build" link appearing (`BuildRoomPage.jsx`, `liveLink`) | Every count change and the build link shift the buttons |
+| **Buttons come and go** per moment, with labels of different widths | `stageModel` extras / secondary (`buildScreens.js:370-508`), the codes card's own move | "Send B to Claude", "Spin the wheel", "Take it down" never sit in one place |
+
+**Why the way back is unclear.** On one screen the Stage has no header; the only way back
+is the dock's HOST. With a count, HOST opens the alert list instead of going to Host
+(`BuildHostAlert.jsx:47` `press`), and the way back is the small "Host screen · 1" at the
+list's foot. The 1 and P keys work but nothing on the Stage says so.
+
+**The rule** (it becomes host standard §2's dock rule for every type):
+
+1. **Fixed slots, fixed order.** The dock is a grid: status (one line, ellipsis, the full
+   words in `title`; the build link on a second line whose height is always reserved) ·
+   the moment's secondary · the main button · then **HOST and SESSION pinned at the right
+   edge**. A slot with nothing in it keeps its width; the main button has a min-width per
+   profile.
+2. **Nothing appears or disappears on hover.** The Space hint becomes part of the main
+   button (a small `Space` key cap inside it, always there when Space works) and its
+   `aria-keyshortcuts`; the hover state only changes colour.
+3. **Extras never push.** A third move (the run list's Stop, Save the rest) goes into a
+   fixed "More" slot, not a new button.
+4. **HOST always goes to Host, in one press.** The count stays on it as a badge. The list
+   of what waits is on the Host screen itself ("Waiting for you" already lists it), so
+   the Stage needs no pop-up. The button reads "← Host", with the key in its title
+   ("Host screen (1 or P)").
+
+On two screens the laptop never leaves Host (§2.6), so the way-back problem does not arise
+there; the Room's dock (B8) uses the same fixed slots.
+
+| # | Task | Files | Tests (first) |
+|---|---|---|---|
+| D1 | The dock's fixed grid; the hint into the main button; extras into More | `BuildRoomPage.jsx` (`BuildStage` dock), `BuildRoom.css`, `buildroom/words.js` | `__tests__/buildDockStill.test.jsx`: nothing in the dock renders on hover (source scan: no `overDock &&`); every moment fixture renders the same slots in the same order, HOST and SESSION last; the Space key cap is inside the main button |
+| D2 | HOST goes to Host in one press, with its badge; the Stage's alert pop-up removed (the header's list on Build and History stays, or goes by the same rule: Q16) | `BuildHostAlert.jsx`, `BuildRoomPage.jsx` | `buildRoomPage` case: on the Stage with a count, one click on HOST shows the Host screen; the count is on the button |
+| D3 | **Measure** in Chromium (standards §5): the x of HOST, SESSION and the main button's right edge across every Stage moment, with the pointer on and off the dock, at the four sizes | a Playwright script beside `docs/handoff/tools/` | the numbers in the commit: zero movement for HOST and SESSION |
+
+Order: **D1–D3 before B1**: they fix one screen today, and B8's Room's dock reuses them.
+
 ## 3. Build Room's other standards (B10, after two screens)
 
 | Standard | Task | Notes |
@@ -430,4 +479,5 @@ recommendations, start with H1"). The Recommended column is now the decision.
 | Q13 | Does an idea the host **put on the wall** (`wall`, acknowledged, not sent) count as "used" on History? | **No**: History's "used" means it fed an ask or reached Claude. The wall moment is already brief by design | If wrong: those ideas need one more mark, "Shown to the room" |
 | Q14 | When is a version "reworded"? | **Any change to the words** the server would have sent by default, including combining. No similarity threshold | If too strict: a fixed typo reads as "reworded". Cheap to loosen later; a guessed threshold is not |
 | Q15 | Names on History contributions on the laptop's own History (one screen, Host only)? | **No names on History anywhere** (it is a projected screen); the queue and the report keep names | If hosts want them: a host-only toggle |
+| Q16 | The Host alert list: keep it on Build and History's header tab (where it opens downward and moves nothing), or drop it everywhere and rely on the Host screen's "Waiting for you"? | **Keep it on the header tab**, drop it only from the Stage dock: the header list was liked; the dock pop-up is the one that blocks the way back | If wrong: one more click to see what waits from Build or History |
 | Q12 | Builders' names on the wall's crew board (and the wheel's "Ada spins the wheel", `buildScreens.js:452`): fine, or only with "List names" on? | **Follow "List names"**: one rule for every name on the wall | If wrong: a name on the projector the host did not choose to show |
