@@ -82,6 +82,8 @@ const img = (caption, extra = {}) => agentCall('POST', 'images', { data: PNG.toS
   await check('the host releases one: present everywhere, at its original time', async () => {
     H.seed();
     const first = (await agentCall('POST', 'log', { kind: 'progress', text: 'FIRST-POST' })).body.entry;
+    // A later millisecond: two rows in one millisecond order by their random suffix (timeKey), not by when they were made.
+    await new Promise((r) => setTimeout(r, 5));
     await hostCall('POST', 'log', { kind: 'verbal', text: 'Then the room said hello' });
     const r = await hostCall('POST', 'posts', { action: 'release', ids: [first.logId] });
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
