@@ -15,7 +15,7 @@ code carries a `file:line` read on this branch.
 
 | Phase | What | Template resources | Owner can test on dev |
 |---|---|---|---|
-| **D1–D3** | **The Build Room dock holds still; HOST always goes back to Host** (§2a, owner 17 Oct) | 0 | Hover the dock and change moments: no button moves; one click on HOST from the Stage |
+| **D1–D3** | **The dock holds still; HOST always goes back to Host**, by Build Room taking C&A's shared dock and console (§2a, §2.6; owner 17 Oct). Lands with B6–B9 | 0 | Hover the dock and change moments: no button moves; one click on HOST from the Stage |
 | **H1–H5** | **Build Room History: every used contribution and every ask, marked when a version went to Claude** (§2.8) | 0 | Send an idea, vote on ideas, combine two decisions: History shows each with its mark |
 | **B1–B9** | **Build Room two-screen mode** (§2) | **0** (both build routes are `{proxy+}`) | Open the room's window on the projector; 2/3/4 on the laptop move it; the laptop stays on Host |
 | B10 | Build Room's other standards: in-place confirms, scope labels, late answers, theme already done (§3) | 0 | Press twice instead of dialogs; Settings say when a change applies |
@@ -99,12 +99,12 @@ the session panel (`SessionSetupPanel.jsx:473`), survey panels (`SurveyResultsPa
 ### 2.1 What it is
 
 ```
-LAPTOP (Host screen, private)                         PROJECTOR (/present?type=build…)
+LAPTOP (the shared host console, private)             PROJECTOR (/present?type=build…)
 ┌───────────────────────────────────────────────┐     ┌──────────────────────────────────┐
 │ Join 7924 · Room's window ↗ · ● on, full screen│     │ Stage / Build / History,          │
 │ The room sees: [Stage] [Build] [History]  2 3 4│ ──▶ │ drawn from a public wall read,    │
-│ … the Host screen as today …                   │     │ following the server's choice.    │
-│ Room's dock: status · [secondary] [MAIN]       │     │ No buttons. Reload lands on the   │
+│ rail │ Build Room's panels (Now, the ask path…) │     │ following the server's choice.    │
+│ footer: status · Your part now · [2nd] [MAIN]  │     │ No buttons. Reload lands on the   │
 └───────────────────────────────────────────────┘     │ same screen.                      │
                                                       └──────────────────────────────────┘
 ```
@@ -113,9 +113,9 @@ LAPTOP (Host screen, private)                         PROJECTOR (/present?type=b
   today, the Stage's dock on the Stage.
 - **Two screens:** the laptop stays on Host. 2 / 3 / 4 (and the "room sees" chips) write the
   wall's screen to the server; the window follows. P is not needed (Q4).
-- The Stage dock's moves (`stageModel`'s primary, secondary and extras) are drawn on the
-  Host screen as **Room's dock**, from the same function, so the Stage on one screen and
-  Host on two can never disagree.
+- The laptop is C&A's shared host console with Build Room's panels (§2.6). Its footer's
+  buttons and the one-screen Stage dock's come from one function, `buildControls`, so the
+  two can never disagree. Nothing the Host screen does today is lost (§2.6b).
 
 ### 2.2 The wall read (public, stateless, no host data)
 
@@ -226,25 +226,71 @@ Drop from the wall: the Host alert (computed from host-only `seen` and proposed 
 `buildScreens.js:97-129`), "Press Space to…" hints, the wheel's pick buttons
 (`BuildRoomPage.jsx:2039-2045`), History's clickable decided items (`:2303`).
 
-### 2.6 The laptop on two screens
+### 2.6 One app: Build Room on Call & Answer's parts (owner, 17 Oct)
 
-In `BuildRoomPage.jsx`, behind `twoSurfacesOn({ …, gameType: 'build' })`:
+Owner, 17 Oct: *"this depends on the 1 screen 2 screen work that should make the look and
+feel similar to call and answer ... be mindful of the cross room type integration work. we
+want these to feel like the same app, just different use case experiences."*
 
-- **Top line** gains Join, `RoomWindowLink` to `presentHref(gameId, { type: 'build', k })`
-  and the window status from `presentStatusFrom(detail)` (`config/presentStatus.js:14-36`).
-- **"The room sees"** chips (Stage, Build, History) with 2/3/4, posting `build/wall`;
-  the pressed chip follows the server's `wall.screen`, not local state. The header's
-  screen tabs (`BuildRoomPage.jsx:1749-1765`) become these chips; Host is the laptop's only
-  screen.
-- **Room's dock** at the foot of Host: `stageModel(room, current, now, …)`'s status,
-  secondary, extras and primary, with Space, wired to the same `doMove` logic the Stage uses
-  today (`BuildRoomPage.jsx:1945-1978`, lifted into a hook `useStageMoves`). The decide
-  window (`BuildStageDecide`) opens on the laptop.
-- **Show codes** posts `codes`; Escape posts `codes: none`.
-- The window status needs `presenting` / `presentDetail`: add them to the build host read
-  (`hostView`, host audience only), computed by the existing `room-counts.js`
-  `presentingDetail` (`room-counts.js:101-121`), same `CodeUri` so no packaging change. The
-  page refetches on the existing `presentChanged` frame (`message.js:748-749`).
+So Build Room does not grow its own dock or its own two-screen laptop. It takes the shared
+parts C&A uses and supplies only what is its own: its panels, its words, and one function
+that decides its main button.
+
+| Surface | Shared part (as C&A uses it) | What Build Room supplies |
+|---|---|---|
+| The decision of what the main button does | `roundStep` → `controls` read by every surface | **`buildControls(room, current, now, …)`**: `stageModel`'s moves in the `controls` shape (`primary`, `secondary`, `arm: { inPlace: true }`), so `HostActionBar` reads it unchanged. One function, as `roundStep` is for rounds |
+| One screen: the Stage's dock | `components/stage/Dock` + `HostActionBar` (Space, →, ←, the clicker, press twice in place) | the controls; the dock's fixed right-hand items are **Host** and **Session** |
+| Two screens: the laptop | `components/console/HostConsole`: `ConsoleTop` (name, Join, Room's window ↗, window status), `ConsoleRail` (sections), main area, `ConsoleFooter` (status, "Your part now", `HostActionBar`) | **panels** for the main area (the Host screen's Now column, the ask path, What's next, the decide window inline); **rail sections** mapped onto `CONSOLE_SECTIONS` (`config/consoleRail.js:7`): queue → Waiting for you, people → People, late → Later, tools → Session; "The room sees: Stage · Build · History" in `ConsoleTop` with 2/3/4 |
+| The loop line | `WorkflowStrip` | the ask path: Ask › Collect › Settle › Send to Claude (`askPathStep`, `buildScreens.js:894-901`) as its steps: Q17 |
+| Screens and the room's window | `ScreensGroup`, `RoomWindowLink`, `presentStatus`, `roomScreen` | nothing new |
+| Words | one module per area | `buildroom/words.js` (as today) |
+
+What stays Build Room's own because the use case is different: Claude's one status line
+and the doing line, the queue of Claude's questions and mockups, the Build screen, History
+and the Later list. They live inside the shared shell's panels, not beside it.
+
+The two-screen laptop also needs, as before: "The room sees" posting `build/wall` (the chip
+follows the server's `wall.screen`); Show codes posting `codes`; `presenting` /
+`presentDetail` on the build host read (host audience only, from `room-counts.js`
+`presentingDetail`, `:101-121`, same `CodeUri`), refetched on the existing
+`presentChanged` frame (`message.js:748-749`).
+
+**Design first.** C&A's console was approved from a mockup
+(`docs/design/host-console/index.html`). Build Room's gets the same: a mockup of the
+two-screen laptop and the one-screen Stage dock in the console's visual system, for the
+owner's review before B8 (task B7a).
+
+### 2.6b Nothing Build Room does today is lost (owner, 17 Oct)
+
+Owner, 17 Oct: *"just makes sure as we integrate, we dont lose capabilities in the build
+room."* Every capability below keeps a way in on **both** setups. Where a capability's
+place changes, the table says where it goes; nothing is dropped to fit the shared shell.
+
+| Capability today | Where it is today | One screen, after | Two screens (laptop console), after |
+|---|---|---|---|
+| The ask's moves: Open voting, Show results, Spin / Spin again, Send B to Claude, Change before sending, Reopen, Take it down, Save for later, the points vote (Send highlighted, Work in turn, Save the rest, Close this vote), the run list (Next, Skip, Stop), Hide the codes | Stage dock (`stageModel`, `buildScreens.js:370-508`) and the Host screen's path | Stage dock: the shared bar on `buildControls`; a third move under the bar's secondary or Session, never dropped | Console footer: the same `buildControls` |
+| The ask path: Ask › Collect › Settle › Send, the decide panel, the host's pick (PickConfirm), answering for the room, kept drafts per ask | Host screen (`BuildAskPath`, `BuildStageDecide`, `PickConfirm`) | Host screen, unchanged | Main-area panel for the ask; the strip shows the path (Q17) |
+| Picking on the board (an option or a wheel slice opens the send window) | Stage (`boardPick`, `BuildRoomPage.jsx`) | Stage, unchanged | The board is on the wall, which has no controls: the pick moves to the console's ask panel (the same options, pressable) |
+| The Composer: Send to Claude as Do now / Keep in mind / Ask Claude, Save for later, Log it (with Also tell Claude), Ask the room (Ideas, Choose, Rate), Combine's lines and their sources | Host screen (`Composer`, `NowBuilding`) | unchanged | Main area, always present between asks (as C&A's Ask the room composer sits inline) |
+| What's next moves, Decided (tick to combine), Timeline (edit, delete), Asks list, Screenshots (remove), Room brief | Host screen stack (`BuildRoomPage.jsx:1240-1246`, `BuildWhatsNext`) | unchanged | Main area and rail: What's next in the panel; Decided, Timeline, Asks, Screenshots, Room brief as rail sections or the panel's folds |
+| The queue: Claude's asks (open, open next, edit, discard, ask for mockups), the room's ideas (send, add to the Ideas ask, acknowledge, put on the wall, later, dismiss, to a vote), filters | Host screen (`Queue`, `QueueIdea`, `ReviewCard`) | unchanged | Rail section "Waiting for you" (the `queue` slot), opening into the main area |
+| The Later list (send, to a vote, remove) | Host screen (`BuildLater`) | unchanged | Rail section (the `late` slot is Build Room's Later) |
+| Talking points and research or ideas requests; the run list | Host screen (`BuildPoints`, `BuildRun`, `BuildPointStage`) | unchanged | Main-area panel and the footer's run moves |
+| The opening: the brief, its steps, Start building | Host screen (`BuildOpening`, `OpeningPanel`) | unchanged | Main-area panel while the room frames the build |
+| The crew: builders, early looks (put on the wall), run crew code | Host screen and Stage (`BuildCrew`, `CrewBoard`, `EarlyLook`) | unchanged | Rail section and panel; the board itself on the wall |
+| Share demo on this Wi-Fi, the codes card, the enlarged QR | Build screen, header chip, Stage (`BuildWifiShare`, `WallCodes`, `QrZoom`) | unchanged | `ConsoleTop`'s Join and a Share demo item; the codes go on the wall by `codes` |
+| Claude's status, the doing line and steps, the plugin's update dot, Continue prompt, Connect Claude (session key) | Header chip, Now column (`AgentChip`, `StepsFold`, `ConnectPanel`) | unchanged | `ConsoleTop` (status) and the Session rail section (Connect) |
+| The Host alert (what waits, Mark all seen) | Header tab and the Stage dock's HOST | Header tab only; HOST on the Stage goes home in one press (Q16) | Rail section "Waiting for you" and its count |
+| Players: handover requests (grant, refuse), remove, Away, Builders; team invitations | Session panel, `HandoverStrip`, `PendingInvites` | unchanged | Rail "People" and the Session section; the request strip above the footer, as C&A's |
+| Settings: codes, List names on the room meter, Claude, Crew, Back to the opening, Wrap up, Report, End session | `BuildSessionPanel.jsx:419-489` | unchanged, plus Screens first | the same panel from the Session rail section |
+| History (filters, the ask window, the mockup viewer), the Build screen (latest shot, open the build) | Build / History screens | unchanged | on the wall (read-only); the laptop opens the same views privately from the rail |
+| The report, wrap-up, end | Session panel, wrapped bar | unchanged | Session section; the footer's ended moment |
+
+**How it is held.** A list, `buildroom/capabilities.js`, names every row above with an id.
+Each entry point carries `data-capability="<id>"`. A test renders the page on one screen
+and the console on two (B8) with a fixture that switches every capability on, and fails if
+any id has no entry point on either. A capability is removed only by the owner, by taking
+its id off the list in the same commit.
 
 ### 2.7 Choosing, and the Screens group
 
@@ -331,9 +377,10 @@ standards §10. **No task touches `template-clean.yaml`; if one seems to, stop a
 | B3 | `WallScreen/WallCodes/WallProfile/WallRev` + `POST build/wall` + server clears (§2.3) | `build-room.js`, `build-store.js` | `tests/build-wall-screen.js`: host may write, agent key and player may not (404/403); enum junk refused; rev monotonic; ttl kept; opening an ask clears codes; announce sent |
 | B4 | `presenting` / `presentDetail` on the build host read | `build-store.js` (`hostView`), `build-room.js` | extend B2's file: host read carries them; wall and phone reads do not; a viewer row is not counted in `playerCount` |
 | B5 | `safeHref` to `buildroom/links.js`; transitive import test | `buildroom/links.js`, `buildHostApi.js`, `buildScreens.js` | `__tests__/buildWallImports.test.js`: walking imports from `present/build/BuildWall.jsx` reaches no `authFetch`, `hostTicketClient`, `/build/state` |
-| B6 | Split the three screens into `buildroom/screens/` with optional `controls`; lift `doMove` into `useStageMoves` | `BuildRoomPage.jsx`, `buildroom/screens/{BuildStageScreen,BuildBuildScreen,BuildHistoryScreen}.jsx`, `buildroom/useStageMoves.js` | existing Build Room suites unchanged and green; `__tests__/buildScreensDisplay.test.jsx`: each screen with a `wallView` fixture and no controls renders no `button`/`role=button` and no name |
+| B6 | Split the three screens into `buildroom/screens/` with optional `controls`; lift `doMove` into `useStageMoves`; **with D1 and D2** (the shared dock on `buildControls`, Host in one press); `capabilities.js` and its one-screen half of the test land here, so the refactor is checked against the list before anything moves | `BuildRoomPage.jsx`, `buildroom/screens/{BuildStageScreen,BuildBuildScreen,BuildHistoryScreen}.jsx`, `buildroom/useStageMoves.js` | existing Build Room suites unchanged and green; `__tests__/buildScreensDisplay.test.jsx`: each screen with a `wallView` fixture and no controls renders no `button`/`role=button` and no name |
 | B7 | `BuildWall` + `useBuildWall` + `present/presentStatusReporter.js`; `PresentPage` dispatch on `type=build` | `present/build/*`, `PresentPage.jsx`, `usePresentation.js` | `__tests__/buildWall.test.jsx`: follows `wall.screen`; a `buildChanged` frame refetches and its payload is ignored; stale rev dropped; 403 copy; PRESENT_STATUS sent on fullscreen change; `presentRoute` test still public |
-| B8 | Laptop two-screen mode: top line, "room sees" chips + 2/3/4 → server, Room's dock, codes → server, `presentChanged` refetch | `BuildRoomPage.jsx`, `buildroom/words.js` | `__tests__/buildTwoScreen.test.jsx`: on two screens 2/3/4 post `build/wall` and the laptop stays on Host; Room's dock shows `stageModel`'s primary label for each moment fixture (parity with the one-screen Stage); one screen unchanged (source scan, as `workflowStripView.test.jsx` does) |
+| B7a | **Mockup** of the two-screen laptop (the shared console with Build Room's panels and rail) and the one-screen Stage dock, in the console's visual system, beside `docs/design/host-console/`; owner's review before B8 | `docs/design/build-room-console/index.html` | the owner's approval, recorded in the plan |
+| B8 | Laptop two-screen mode **on the shared `HostConsole`** (§2.6), **with every capability of §2.6b reachable**: `ConsoleTop` with Join, Room's window, status and "The room sees" + 2/3/4 → server; `ConsoleRail` with Build Room's sections; Build Room panels in the main area; `ConsoleFooter` + `HostActionBar` on `buildControls`; codes → server; `presentChanged` refetch | `BuildRoomPage.jsx`, `buildroom/panels/*.jsx`, `buildroom/consoleRail.js` (the section mapping), `buildroom/words.js` | `__tests__/buildTwoScreen.test.jsx`: on two screens the page renders `HostConsole`; 2/3/4 post `build/wall`; the footer's labels equal `buildControls`' for each moment fixture (parity with the one-screen dock); one screen unchanged; `__tests__/buildCapabilities.test.jsx`: every id in `capabilities.js` has an entry point on one screen and on two |
 | B9 | Screens group in `BuildSessionPanel`, the chooser, `'build'` added to `TWO_SURFACE_TYPES`; words, help (`config/help/`), release notes | `BuildSessionPanel.jsx`, `config/surfaces.js`, `config/roomScreen.js` (href with type), help | `surfaces.test.js` (build on dev, off on test/prod by default); `buildSessionPanel` Screens test; panel measured at 660/375 |
 | B9m | **Measure** (standards §5): the wall at 1280×720, 1366×768, 1440×900, 1920×1080 × Room/TV/Call/Table, with long asks (six options of 130–320 chars), a 40-entry History, a tall screenshot. History on the wall shows the newest entries that fit and "and N earlier" (fit lever 3); never scrolls | `buildroom/screens/*`, `BuildRoom.css` | numbers in the commit; `data-fit="miss"` count zero |
 
@@ -347,7 +394,7 @@ look identical to today.
    two screens; Room's window ↗ opens on the projector; click once: full screen; the laptop
    says "on, full screen".
 2. Press 3: the wall shows Build, the laptop stays on Host. 4: History. 2: Stage.
-3. Open an ask from Host; the wall shows it. Room's dock says what the Stage's dock said.
+3. Open an ask from the laptop; the wall shows it. The console's footer says what the Stage's dock said on one screen.
 4. Reload the wall; it comes back on the same screen. Open a second copy on another
    computer; both follow.
 5. Nothing on the wall names anyone (with "List names" off), and nothing on it is pressable.
@@ -375,7 +422,7 @@ is the dock's HOST. With a count, HOST opens the alert list instead of going to 
 (`BuildHostAlert.jsx:47` `press`), and the way back is the small "Host screen · 1" at the
 list's foot. The 1 and P keys work but nothing on the Stage says so.
 
-**The rule** (it becomes host standard §2's dock rule for every type):
+**The rule** (owner, 17 Oct: delivered by the shared parts of §2.6, not a Build Room dock; it becomes host standard §2's dock rule for every type, so it is fixed in the shared `Dock` / `HostActionBar` where they have the same fault):
 
 1. **Fixed slots, fixed order.** The dock is a grid: status (one line, ellipsis, the full
    words in `title`; the build link on a second line whose height is always reserved) ·
@@ -393,15 +440,17 @@ list's foot. The 1 and P keys work but nothing on the Stage says so.
    ("Host screen (1 or P)").
 
 On two screens the laptop never leaves Host (§2.6), so the way-back problem does not arise
-there; the Room's dock (B8) uses the same fixed slots.
+there; the console's footer (B8) is the same shared bar.
 
 | # | Task | Files | Tests (first) |
 |---|---|---|---|
-| D1 | The dock's fixed grid; the hint into the main button; extras into More | `BuildRoomPage.jsx` (`BuildStage` dock), `BuildRoom.css`, `buildroom/words.js` | `__tests__/buildDockStill.test.jsx`: nothing in the dock renders on hover (source scan: no `overDock &&`); every moment fixture renders the same slots in the same order, HOST and SESSION last; the Space key cap is inside the main button |
-| D2 | HOST goes to Host in one press, with its badge; the Stage's alert pop-up removed (the header's list on Build and History stays, or goes by the same rule: Q16) | `BuildHostAlert.jsx`, `BuildRoomPage.jsx` | `buildRoomPage` case: on the Stage with a count, one click on HOST shows the Host screen; the count is on the button |
-| D3 | **Measure** in Chromium (standards §5): the x of HOST, SESSION and the main button's right edge across every Stage moment, with the pointer on and off the dock, at the four sizes | a Playwright script beside `docs/handoff/tools/` | the numbers in the commit: zero movement for HOST and SESSION |
+| D1 | `buildControls` (the controls shape from `stageModel`); the Stage's dock becomes the shared `Dock` + `HostActionBar` reading it; the hover hint goes (the shared bar's key cap replaces it); extras into the shared bar's secondary or Session. If the shared dock also moves when its status text changes, fix it there (fixed slots), for every type | `buildroom/buildControls.js` (new), `BuildRoomPage.jsx` (`BuildStage`), shared `components/stage/Dock.jsx`, `components/HostActionBar.jsx` and their CSS if they move | `__tests__/buildControls.test.js`: one primary, at most one secondary, per moment fixture; labels from `words.js`; `arm.inPlace` on the early advances. `__tests__/dockStill.test.jsx`: no element in the dock renders on hover; Host and Session last in every moment |
+| D2 | HOST goes to Host in one press, its count a badge; the Stage's alert pop-up removed; the header tab's list on Build and History stays (Q16, ruled) | `BuildHostAlert.jsx`, `BuildRoomPage.jsx` | `buildRoomPage` case: on the Stage with a count, one click on HOST shows the Host screen |
+| D3 | **Measure** in Chromium (standards §5): the x of Host, Session and the main button's right edge across every moment, pointer on and off the dock, four sizes, **for Build Room and C&A both** | a Playwright script beside `docs/handoff/tools/` | the numbers in the commit: zero movement |
 
-Order: **D1–D3 before B1**: they fix one screen today, and B8's Room's dock reuses them.
+Order (owner, 17 Oct): **D1–D3 go with the one-screen/two-screen work**, not before it: D1
+lands with B6 (the screens split from their controls), D2 with it, D3 with B9m. The
+mockup (B7a) shows the dock as it will be.
 
 ## 3. Build Room's other standards (B10, after two screens)
 
@@ -479,5 +528,6 @@ recommendations, start with H1"). The Recommended column is now the decision.
 | Q13 | Does an idea the host **put on the wall** (`wall`, acknowledged, not sent) count as "used" on History? | **No**: History's "used" means it fed an ask or reached Claude. The wall moment is already brief by design | If wrong: those ideas need one more mark, "Shown to the room" |
 | Q14 | When is a version "reworded"? | **Any change to the words** the server would have sent by default, including combining. No similarity threshold | If too strict: a fixed typo reads as "reworded". Cheap to loosen later; a guessed threshold is not |
 | Q15 | Names on History contributions on the laptop's own History (one screen, Host only)? | **No names on History anywhere** (it is a projected screen); the queue and the report keep names | If hosts want them: a host-only toggle |
-| Q16 | The Host alert list: keep it on Build and History's header tab (where it opens downward and moves nothing), or drop it everywhere and rely on the Host screen's "Waiting for you"? | **Keep it on the header tab**, drop it only from the Stage dock: the header list was liked; the dock pop-up is the one that blocks the way back | If wrong: one more click to see what waits from Build or History |
+| Q16 | **Ruled 17 Oct: keep it on the header tab, never block the Host button.** The Host alert list: keep it on Build and History's header tab (where it opens downward and moves nothing), or drop it everywhere and rely on the Host screen's "Waiting for you"? | **Keep it on the header tab**, drop it only from the Stage dock: the header list was liked; the dock pop-up is the one that blocks the way back | If wrong: one more click to see what waits from Build or History |
+| Q17 | Build Room's loop line: show the ask path (Ask › Collect › Settle › Send to Claude) in the shared strip, or no strip? | **The ask path in the shared strip**: it is the loop a host works through on every ask, and the strip is how every other type says "where am I" | If it confuses: drop the strip for Build Room; the panels already show the path |
 | Q12 | Builders' names on the wall's crew board (and the wheel's "Ada spins the wheel", `buildScreens.js:452`): fine, or only with "List names" on? | **Follow "List names"**: one rule for every name on the wall | If wrong: a name on the projector the host did not choose to show |

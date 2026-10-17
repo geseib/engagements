@@ -37,6 +37,11 @@ screen (one screen), everything on it is treated as public.
   so a host can switch mid-session.
 - **Which types have it** is one list: `TWO_SURFACE_TYPES` in `config/surfaces.js`.
   Adding a type there is the last step, not the first.
+- **One app, different use cases** (owner, 17 Oct). A type joins by taking the shared
+  parts (the console, the dock and action bar, the strip, the Screens group, the room's
+  window) and supplying its own panels, words and the one function that decides its main
+  button. It keeps every capability it had: what is its own lives inside the shared shell's
+  panels, never beside it and never dropped to fit (`docs/design/parity/PLAN.md` §2.6, §2.6b).
 
 **What a type needs before it joins `TWO_SURFACE_TYPES`:** a public state read for each
 of its moments; a moment model the wall can render (`present/presentModel.js`,
