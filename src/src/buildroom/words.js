@@ -431,6 +431,12 @@ export const W = Object.freeze({
   stopSharing: 'Stop sharing',
   keepSharing: 'Keep sharing',
   shareShowOnStage: 'Show on the Stage',
+  // Each shared server by what it is (Share demo S3, plugin 1.20.0): the role
+  // the project declared or Claude gave its link; App N when nothing says.
+  shareServerDemo: 'Demo',
+  shareServerMockups: 'Mockups',
+  shareServerMockupsAsk: (n) => `Mockups · Ask ${n}`,
+  shareServerApp: (n) => `App ${n}`,
   onlyThisLaptop: 'Only this laptop can open it.',
   anyoneOnWifi: 'Anyone on this Wi-Fi',
   /** The Stage's HOST list (option B): one grey line, never a pop-up on the wall. */
