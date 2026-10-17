@@ -112,6 +112,48 @@ export const RESULTS_PAGE_SIZE = {
   table: 3,
 };
 
+/**
+ * A BUILD ROOM ASK'S OPTIONS (owner, 17 Oct 2026: what the room sees is large
+ * and readable; parity B9m). Six long options (130-320 characters) were cut at
+ * 1280x720 and marked data-clamped on the Stage and the room's window. The
+ * option titles now read at the secondary step, so a long ask pages them:
+ * "Options 1-3 of 6 · page 1 of 2 · ↑ ↓ to page" on the host's Stage, the
+ * first page and "and 3 more options on your phone" on the room's window
+ * (no server fact carries the page; standards §5 lever 3). Measured: see
+ * docs/design/room-content/README.md. Short options never page: the size is
+ * only reached when the titles are long (OPTION_LONG).
+ */
+export const OPTION_PAGE_SIZE = {
+  room: 3,
+  tv: 2,
+  call: 3,
+  table: 4,
+};
+
+/**
+ * Where the measure said the declared size does not hold (17 Oct 2026, six
+ * options of 130-206 characters, the room's window, Claude's line under them):
+ * TV under 900px tall fits one option (two clamped at 1280x720 and 1366x768),
+ * and Call at results, which adds the room's reasons, fits two.
+ */
+export const OPTION_SHORT_TV_H = 900;
+export const OPTION_PAGE_SIZE_SHORT_TV = 1;
+export const OPTION_PAGE_SIZE_CALL_RESULTS = 2;
+
+/** Titles this long, summed, make an ask "long": below it every option fits whole. */
+export const OPTION_LONG = 360;
+
+export function optionPageSizeFor(profile, options, { height = Infinity, results = false } = {}) {
+  const list = Array.isArray(options) ? options : [];
+  const chars = list.reduce((n, o) => n + String((o && (o.title || o.text)) || '').length, 0);
+  if (chars < OPTION_LONG) return Math.max(1, list.length);
+  const p = String(profile ?? '').toLowerCase();
+  if (p === 'tv' && height < OPTION_SHORT_TV_H) return OPTION_PAGE_SIZE_SHORT_TV;
+  if (p === 'call' && results) return OPTION_PAGE_SIZE_CALL_RESULTS;
+  const size = OPTION_PAGE_SIZE[p];
+  return Number.isFinite(size) && size > 0 ? size : OPTION_PAGE_SIZE.room;
+}
+
 export function resultsPageSizeFor(profile) {
   const size = RESULTS_PAGE_SIZE[String(profile ?? '').toLowerCase()];
   // Unknown profile: Room's budget, as pageSizeFor falls back to Room's.

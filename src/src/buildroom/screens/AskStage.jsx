@@ -10,6 +10,9 @@ import { ViewerContext } from '../MockupViewer';
 import { W } from '../words';
 import { winnerOf, ratingStep } from '../buildScreens';
 import { KIND_LABEL, askNumber, OpenLink } from './common';
+import Pager from '../../components/stage/Pager';
+import { shows } from '../../config/roomContent';
+import { pageSlice } from '../../config/stagePaging';
 
 /**
  * THE CURRENT ASK'S BOARD: the options and their counts, the ideas, the
@@ -19,9 +22,26 @@ import { KIND_LABEL, askNumber, OpenLink } from './common';
  * Discard, Close, Reopen, the wheel and the direction, so the board has no
  * eyebrow, heading or controls of its own; a click on an option still picks.
  */
-export function AskStage({ ask, host, busy, ended, run, api, pickId = null, onPick = null, pathMode = false }) {
+/*
+ * WHAT THE ROOM SEES (owner, 17 Oct 2026; config/roomContent.js). With `rc`
+ * (the Stage, on one screen and on the room's window) the board draws what
+ * the room content names: the prompt and the option titles lead, the option
+ * titles at the secondary step; the ask's detail, each option's detail and the
+ * room's reasons only on Call. `paging` ({ size, page, onPage, enabled }) cuts
+ * a long ask's options into pages: with `onPage` (the host's Stage) the shared
+ * Pager prints "Options 1-3 of 6 · page 1 of 2 · ↑ ↓ to page"; without (the
+ * room's window, which no server fact pages) the first page shows and "and 3
+ * more options on your phone" says what is not on the wall.
+ */
+export function AskStage({
+  ask, host, busy, ended, run, api, pickId = null, onPick = null, pathMode = false, rc = null, paging = null,
+}) {
+  const roomView = Boolean(rc) && !host && !pathMode;
+  const showDetail = !roomView || shows(rc, 'detail');
+  const showOptionDetail = !roomView || shows(rc, 'optionDetail');
+  const showWhys = !roomView || shows(rc, 'whys');
   return (
-    <section className={`brm-stage brm-stage--${ask.status}`} aria-label="Current ask">
+    <section className={`brm-stage brm-stage--${ask.status}`} aria-label="Current ask" data-room-view={roomView ? '' : undefined}>
       {!pathMode && (
         <>
           <div className="brm-top">
@@ -30,14 +50,14 @@ export function AskStage({ ask, host, busy, ended, run, api, pickId = null, onPi
               {ask.status === 'results' && ' · Closed'}
             </span>
           </div>
-          <h2 className="brm-q">{ask.prompt}</h2>
-          {ask.detail && <p className="brm-detail">{ask.detail}</p>}
+          <h2 className="brm-q" data-rc-part={roomView ? 'prompt' : undefined} data-rc={roomView ? 'lead' : undefined}>{ask.prompt}</h2>
+          {ask.detail && showDetail && <p className="brm-detail" data-drop={roomView ? '4' : undefined} data-drop-note={roomView ? 'Detail' : undefined}>{ask.detail}</p>}
         </>
       )}
-      {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} viewFrom={pathMode ? 'host' : null} />}
+      {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} viewFrom={pathMode ? 'host' : null} showDetail={showOptionDetail} paging={roomView ? paging : null} />}
       {ask.kind === 'rating' && <RatingBoard ask={ask} />}
       {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} />}
-      {ask.status === 'results' && ask.kind !== 'suggest' && <Whys ask={ask} host={host} />}
+      {ask.status === 'results' && ask.kind !== 'suggest' && showWhys && <Whys ask={ask} host={host} drop={roomView} />}
     </section>
   );
 }
@@ -61,16 +81,23 @@ const cardPick = (onPick, id) => (e) => {
   onPick(id);
 };
 
-function ChoiceBoard({ ask, pickId = null, onPick = null, viewFrom = null }) {
+function ChoiceBoard({
+  ask, pickId = null, onPick = null, viewFrom = null, showDetail = true, paging = null,
+}) {
   const openViewer = useContext(ViewerContext);
   const open = ['live', 'voting'].includes(ask.status);
   const picking = Boolean(onPick) && (open || ask.status === 'results');
   const current = picking && !open ? pickId || winnerOf(ask) : null;
   const opts = (ask.results && ask.results.options) || [];
   const lead = Math.max(0, ...opts.map((o) => o.count));
-  return (
+  const all = ask.options || [];
+  // A long ask pages (room content): the wall, with no page from the server, shows the first.
+  const size = paging && paging.size > 0 ? paging.size : all.length || 1;
+  const slice = pageSlice(all, paging && paging.onPage ? paging.page : 0, size);
+  const board = (
     <div className="brm-choices">
-      {(ask.options || []).map((o, i) => {
+      {slice.items.map((o, j) => {
+        const i = slice.offset + j;
         const r = opts.find((x) => x.label === o.label) || { count: 0, pct: 0 };
         return (
           <div key={o.label} className={`brm-choice brm-choice--${i % 3}${lead && r.count === lead ? ' is-lead' : ''}${picking ? ' is-pickable' : ''}`} onClick={picking ? cardPick(onPick, o.label) : undefined} title={picking ? `Pick ${o.label}` : undefined}>
@@ -78,7 +105,7 @@ function ChoiceBoard({ ask, pickId = null, onPick = null, viewFrom = null }) {
               <span className="brm-big" aria-hidden="true">{o.label}</span>
               <div className="brm-choice-text">
                 <div className="brm-ct"><span className="brm-sr">Choice {o.label}: </span>{o.title}</div>
-                {o.detail && <div className="brm-cd">{o.detail}</div>}
+                {o.detail && showDetail && <div className="brm-cd">{o.detail}</div>}
                 <OpenLink href={o.url} label={`Open ${o.label}`} />
               </div>
             </div>
@@ -90,6 +117,16 @@ function ChoiceBoard({ ask, pickId = null, onPick = null, viewFrom = null }) {
         );
       })}
     </div>
+  );
+  if (slice.pages <= 1) return board;
+  const more = all.length - slice.items.length;
+  return (
+    <>
+      {board}
+      {paging.onPage
+        ? <Pager total={all.length} page={slice.page} pageSize={size} noun={W.optionsNoun} onPage={paging.onPage} enabled={paging.enabled !== false} />
+        : <p className="brm-moreopts" data-more-options={more}>{W.moreOptions(more)}</p>}
+    </>
   );
 }
 
@@ -166,11 +203,12 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
   );
 }
 
-function Whys({ ask, host }) {
+function Whys({ ask, host, drop = false }) {
   const whys = (ask.results && ask.results.whys) || [];
   if (!whys.length) return null;
+  // On the Stage (Call only) the reasons are support that gives way first for space.
   return (
-    <div className="brm-whysbox">
+    <div className="brm-whysbox" data-drop={drop ? '3' : undefined} data-drop-note={drop ? 'Reasons' : undefined}>
       <span className="brm-lbl">Reasons</span>
       <ul className="brm-whys">
         {whys.map((w, i) => (
