@@ -289,6 +289,9 @@ export const W = Object.freeze({
   ideaChosen: 'chosen by the room',
   ideaNotChosen: 'not chosen',
   ideaInVote: 'in the vote',
+  // A phone's own History (H5): its own ideas, never anyone else's name.
+  storyYourIdea: 'Your idea',
+  storyYours: 'yours',
   // History's headings and how a decision was made (H4: out of buildScreens.js).
   storyShowed: 'Claude showed',
   storySaid: 'The room said',

@@ -587,6 +587,10 @@ function tally(ask, room) {
 function askView(ask, room, audience, me) {
   const t = tally(ask, room);
   const isHost = audience === 'host' || audience === 'agent';
+  // THE ROOM'S HISTORY (parity PLAN §2.8, H5): the public copy plus the provenance
+  // stamps (which idea each option or suggestion came from, reworded, held), never a name.
+  const isWall = audience === 'wall';
+  const stamps = isHost || isWall;
   const showResults = isHost || ['results', 'decided'].includes(ask.Status);
   const out = {
     askId: ask.AskId,
@@ -595,7 +599,7 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}), ...(isHost && o.ideaId ? { ideaId: o.ideaId } : {}) })),
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}), ...(stamps && o.ideaId ? { ideaId: o.ideaId } : {}) })),
     scale: ask.Kind === 'rating' ? RATING_SCALE : null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
@@ -622,6 +626,7 @@ function askView(ask, room, audience, me) {
       // cannot vote for itself.
       out.responses = resps.filter((r) => !r.Hidden).map((r) => ({
         respId: r.RespId, text: r.Text, mine: Boolean(me && r.PlayerName === me.playerName && (r.Source || 'player') === 'player'),
+        ...(isWall && r.IdeaId ? { ideaId: r.IdeaId } : {}),
         ...(showResults ? { votes: t.count.get(r.RespId) || 0 } : {}),
       }));
     }
@@ -673,11 +678,11 @@ function askView(ask, room, audience, me) {
       chosen: ask.Decision.chosen || [],
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
       sentToAgent: ask.Decision.sendToAgent !== false,
-      ...(isHost && ask.Decision.heldForLater ? { heldForLater: true } : {}),
+      ...(stamps && ask.Decision.heldForLater ? { heldForLater: true } : {}),
       spoken: Boolean(ask.Decision.spoken),
       method: ask.Decision.method || (ask.Decision.spoken ? 'spoken' : 'vote'),
       // The host changed the words the server would have sent (H1); the room sees it once History draws it (H5).
-      ...(isHost && typeof ask.Decision.reworded === 'boolean' ? { reworded: ask.Decision.reworded } : {}),
+      ...(stamps && typeof ask.Decision.reworded === 'boolean' ? { reworded: ask.Decision.reworded } : {}),
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -1567,14 +1572,15 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      // Provenance waits for History to draw it (PLAN §2.8, H5).
-      .map(({ forAgent, deliveredAt, as, held, step, ideaId, from, asWritten, ...rest }) => ({
+      // An idea entry keeps its stamp (H5); `from` is a direction's, and phones never get directions.
+      .map(({ forAgent, deliveredAt, as, held, step, from, ...rest }) => ({
         ...(DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest),
         // A phone sees when a step ran, not where Claude took it from.
         ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
       }))
       .map((l) => ({ ...l, link: forRoom(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
+    history: roomHistory(room, visibleAsks),
     images: room.images.map(imageView),
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forRoom),
     doing: doingPublicView(room.activity, now),
@@ -1587,6 +1593,34 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     agentListening: agentStatus(room.state, [], now || new Date().toISOString()).listening,
     mine,
     rev: (room.state && room.state.Rev) || 0,
+  };
+}
+
+/**
+ * THE ROOM'S HISTORY, AS THE ROOM MAY SEE IT (parity PLAN §2.8, H5): what the
+ * History screen needs to mark what the room gave and every ask it saw, with
+ * no name, no host note, and no direction's words (those are the host's).
+ *   asks   every ask the room saw, with the stamps (askView 'wall')
+ *   ideas  only the ideas that were used: put to the room, sent, or written
+ *          into a direction (a new, set-aside or acknowledged one is not)
+ *   sent   the entries that carried them to Claude: a sent idea in its own
+ *          words, a direction as its stamps only (text '')
+ */
+function roomHistory(room, visibleAsks) {
+  const seen = visibleAsks.filter((a) => a.Status !== 'discarded' || a.OpenedAt);
+  const entries = room.logs.filter((l) => (l.Kind === 'idea' && l.IdeaId) || (l.Kind === 'direction' && l.From));
+  const written = new Set(entries.filter((l) => l.From).flatMap((l) => l.From.IdeaIds || []));
+  const used = room.ideas.filter((i) => i.Status === 'promoted' || written.has(i.IdeaId));
+  return {
+    asks: seen.map((a) => askView(a, room, 'wall')),
+    ideas: used.map((i) => ({
+      ideaId: i.IdeaId, text: i.Text || '', status: i.Status || 'new', source: i.Source || 'room', createdAt: i.CreatedAt || null,
+      promotedTo: i.PromotedTo || null, promotedVia: i.PromotedVia || null,
+    })),
+    sent: entries.map(logView).map((l) => ({
+      logId: l.logId, kind: l.kind, text: l.kind === 'idea' ? l.text : '', ideaId: l.ideaId, from: l.from, asWritten: l.asWritten,
+      forAgent: l.forAgent, held: l.held, deliveredAt: l.deliveredAt, createdAt: l.createdAt,
+    })),
   };
 }
 

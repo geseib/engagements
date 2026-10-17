@@ -356,16 +356,61 @@ async function closedChoice(prompt, options, picks) {
     const d = await hostCall('POST', `asks/${ask.askId}`, { action: 'decide', direction: 'How close is this: 4 out of 5 (5 is great, 1 needs work)', chosen: [] });
     assert.strictEqual(d.body.ask.decision.reworded, false);
   });
-  await check('phones see the decision without the mark until History draws it (H5); the row keeps it', async () => {
+  await check('the live ask on a phone is as before (the marks travel in history, H5); the row keeps the mark', async () => {
     const id = await closedChoice('Which sign-up button?', ['Big', 'Small'], ['A', 'A']);
     await hostCall('POST', `asks/${id}`, { action: 'decide', direction: 'Which sign-up button: Big and orange', chosen: ['A'] });
     const p = await playCall('GET', 'state', priya);
     assert.strictEqual(p.body.current.askId, id);
     assert.ok(p.body.current.decision, JSON.stringify(p.body.current));
     assert.ok(!('reworded' in p.body.current.decision));
-    assert.ok(!JSON.stringify(p.body.log).includes('asWritten'));
     const row = rows('BUILD#ASK#').find((r) => r.AskId === id);
     assert.strictEqual(row.Decision.reworded, true);
+  });
+
+  console.log('\nH5: the room\'s own History carries the marks, never a name');
+  seed();
+  const history = async (who = priya) => (await playCall('GET', 'state', who)).body.history;
+  await check('a phone gets the used ideas, the asks the room saw, and the sent entries, stamped', async () => {
+    // A sent idea, a vote from two ideas (B wins, the host rewords it), a waiting ask, an unused idea.
+    await sendIdea(marcus, 'Add a map of the parking');
+    await sendIdea(priya, 'Text a reminder the day before');
+    await sendIdea(marcus, 'Put the address at the top');
+    await sendIdea(priya, 'Nice buttons');
+    const ideas = (await state()).ideas;
+    const id = (t) => ideas.find((i) => i.text === t).ideaId;
+    await hostCall('POST', `ideas/${id('Add a map of the parking')}`, { action: 'direct' });
+    const vote = (await hostCall('POST', 'asks-from-ideas', { ideaIds: [id('Text a reminder the day before'), id('Put the address at the top')] })).body.ask;
+    await playCall('POST', 'respond', { ...priya, askId: vote.askId, choice: ['B'] });
+    await hostCall('POST', `asks/${vote.askId}`, { action: 'close' });
+    await hostCall('POST', `asks/${vote.askId}`, { action: 'decide', direction: 'The address, big, at the very top', chosen: ['B'] });
+    const waiting = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Waiting, never opened', draft: true });
+    assert.strictEqual(waiting.body.ask.status, 'proposed', JSON.stringify(waiting.body));
+    await hostCall('POST', 'directions', { text: 'Make the address bold and orange', fromAskIds: [vote.askId] });
+
+    const h = await history();
+    assert.ok(h, 'history is on the phone view');
+    assert.deepStrictEqual(h.ideas.map((i) => i.text).sort(), ['Add a map of the parking', 'Put the address at the top', 'Text a reminder the day before']);
+    const a = h.asks.find((x) => x.askId === vote.askId);
+    assert.deepStrictEqual(a.options.map((o) => [o.label, o.ideaId]), [['A', id('Text a reminder the day before')], ['B', id('Put the address at the top')]]);
+    assert.strictEqual(a.decision.reworded, true);
+    assert.ok(!h.asks.some((x) => x.prompt === 'Waiting, never opened'), 'an ask the room never saw is not there');
+    const sent = h.sent.find((l) => l.kind === 'idea');
+    assert.deepStrictEqual([sent.ideaId, sent.asWritten, sent.forAgent], [id('Add a map of the parking'), true, true]);
+    const dir = h.sent.find((l) => l.kind === 'direction');
+    assert.deepStrictEqual(dir.from, { askIds: [vote.askId], ideaIds: [] });
+    assert.strictEqual(dir.text, '', 'a direction is the host\'s words: never on a phone');
+  });
+  await check('no name, no note, no direction\'s words, no idea that was not used', async () => {
+    const body = JSON.stringify(await history(marcus));
+    for (const s of ['Priya', 'Marcus', 'Make the address bold and orange', 'Nice buttons', 'from ']) assert.ok(!body.includes(s), `history carries "${s}"`);
+    assert.ok(!/playerName|voters|note"/.test(body), body);
+  });
+  await check('the room\'s timeline entries for a sent idea carry its stamp too', async () => {
+    const p = await playCall('GET', 'state', priya);
+    const entry = p.body.log.find((l) => l.kind === 'idea');
+    assert.strictEqual(entry.asWritten, true);
+    assert.ok(entry.ideaId);
+    assert.strictEqual(entry.detail, '', 'the author stays off the phone');
   });
 
   console.log(`\n${pass} passed, ${failed} failed`);

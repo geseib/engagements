@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SRC = fs.readFileSync(path.join(__dirname, '../buildroom/buildScreens.js'), 'utf8');
-const HISTORY_FUNCTIONS = ['decisionChain', 'gaveChain', 'roomStory', 'askOutcome', 'contributionsOf', 'placeInAsk'];
+const HISTORY_FUNCTIONS = ['decisionChain', 'gaveChain', 'roomStory', 'askOutcome', 'contributionsOf', 'placeInAsk', 'historyFromView'];
 
 /** The body of a top-level function, from its declaration to the closing brace at column 0. */
 function bodyOf(name) {

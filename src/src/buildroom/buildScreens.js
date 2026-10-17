@@ -823,7 +823,7 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
   for (const c of gave || []) {
     if (!c.askId) continue;
     if (!gaveByAsk.has(c.askId)) gaveByAsk.set(c.askId, []);
-    gaveByAsk.get(c.askId).push({ ideaId: c.ideaId, text: c.text, from: c.from, word: ideaWord(c) });
+    gaveByAsk.get(c.askId).push({ ideaId: c.ideaId, text: c.text, from: c.from, word: ideaWord(c), ...(c.yours ? { yours: true } : {}) });
   }
   const stamped = Array.isArray(gave);
   const outcomeOf = (a) => (stamped ? askOutcome(a, { log, state: ended ? 'ENDED' : '' }) : null);
@@ -886,8 +886,9 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
       if (c.askId) continue;
       const entry = c.logId ? entryOf.get(c.logId) : null;
       items.push({
-        id: `gave:${c.ideaId}`, at: (entry && entry.createdAt) || c.at, type: 'gave', heading: c.from === 'host' ? W.storyHostIdea : W.storyIdea,
-        text: c.text, imageIds: [], chain: gaveChain(c, entry), mark: c.mark,
+        id: `gave:${c.ideaId}`, at: (entry && entry.createdAt) || c.at, type: 'gave',
+        heading: c.yours ? W.storyYourIdea : c.from === 'host' ? W.storyHostIdea : W.storyIdea,
+        text: c.text, imageIds: [], chain: gaveChain(c, entry), mark: c.mark, ...(c.yours ? { yours: true } : {}),
       });
     }
   }
@@ -1044,6 +1045,23 @@ export function contributionsOf(room) {
     if (c.mark) out.push(c);
   }
   return out.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+
+/**
+ * A PHONE'S HISTORY (H5): the story's inputs from GET build-play/state, which
+ * carries `history` (build-store.js roomHistory: the asks the room saw, the
+ * used ideas, the entries that carried them, no names). The phone's own ideas
+ * are marked `yours` from `myIdeas`. Null from an older server: the phone then
+ * draws History as before, from `decisions`.
+ */
+export function historyFromView(view) {
+  const h = view && view.history;
+  if (!h) return null;
+  const log = (view.log || []).filter((l) => l.kind !== 'idea' && l.kind !== 'direction').concat(h.sent || []);
+  const mine = new Set((view.myIdeas || []).map((i) => i.ideaId));
+  const gave = contributionsOf({ ideas: h.ideas || [], asks: h.asks || [], log, state: view.state })
+    .map((c) => (mine.has(c.ideaId) ? { ...c, yours: true } : c));
+  return { log, asks: h.asks || [], gave, ended: view.state === 'ENDED' };
 }
 
 // ── THE HOST'S PATH (owner, 2026-10-07; docs/design/build-room-host-flow) ──

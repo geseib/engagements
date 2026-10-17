@@ -316,7 +316,7 @@ claims "as written" without the stamp.
 | H2 | **Built.** `contributionsOf(room)`, and `askOutcome(ask, room)` for every ask the room saw: every used idea, with its mark and where it went (ask n, direction, later) | `buildScreens.js` (pure) | `__tests__/buildContributions.test.js`: one fixture per row of the first table; old rows with no stamps never read as "as written" |
 | H3 | **Built.** `roomStory` draws contributions (a `gave` item: the idea and its mark, under the ask or step it fed) and every ask that reached the room, decided or not, with its mark | `buildScreens.js`, `BuildRoomPage.jsx` (`StoryItem`) | extend the `roomStory` tests: sent idea present; losing option "In a vote, not chosen"; combined direction marks each source ask "reworded"; no name anywhere in the wall's story |
 | H4 | **Built.** The marks' words; "Made so far" counts used by the same rule | `buildroom/words.js`, `HistoryScreen` | words parity test; count matches `contributionsOf` |
-| H5 | The public and wall views carry the stamps with no names (ids and marks only) | `build-store.js` (`publicView`, later `wallView`) | B2's no-names scan covers the new fields |
+| H5 | **Built** (phones; the wall reuses `roomHistory` in B2). The public and wall views carry the stamps with no names (ids and marks only) | `build-store.js` (`publicView`, later `wallView`) | B2's no-names scan covers the new fields |
 
 ### 2.9 Tasks
 
