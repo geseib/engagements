@@ -97,7 +97,12 @@ Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.
 
 A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (the key comes from
 the host's Session › Settings › Screens): public, read-only, no names
-(`src/src/present/buildwall/`, read `GET …/build-play/wall`).
+(`src/src/present/buildwall/`, read `GET …/build-play/wall`). Claude's posts and
+screenshots reach the room only after the host releases them from the queue
+(`POST …/build/posts`; the `reviewAgentPosts` setting, on by default).
+
+What every room screen shows, per moment and room screen size, is decided in one place:
+`src/src/config/roomContent.js` (the task leads on Room, TV and Table; Call says more).
 
 ## Documentation
 
