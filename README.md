@@ -20,6 +20,9 @@ On two screens (the room watches a separate window on the projector), the host's
 shows a private console instead of a copy of the wall: the round's steps, who has
 answered, responses as they land, and whether the room's window is really up. Two screens
 is switched on per game type in `src/src/config/surfaces.js`; today that is Call & Answer.
+In Chrome or Edge with a second display attached, "Room's window" opens the window on that
+display and fills it (`src/src/present/roomWindow.js`); elsewhere it opens beside you to drag
+across.
 
 Call & Answer results show the ideas first, ranked by the room's votes, with the names as
 a small credit; the standings are on the scoreboard, on demand. Nothing that arrives late
