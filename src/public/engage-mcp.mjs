@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.18.0';
+const VERSION = '1.19.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -2543,7 +2543,27 @@ function lanAddress() {
 
 const cookiesOf = (header) => String(header || '').split(';').map((s) => s.trim()).filter(Boolean);
 const hasKey = (req) => Boolean(lan.key) && cookiesOf(req.headers.cookie).includes(`${LAN_COOKIE}=${lan.key}`);
-const withoutOurCookie = (header) => cookiesOf(header).filter((c) => !c.startsWith(`${LAN_COOKIE}=`)).join('; ');
+/** The request's cookies without the gateway's own: the app never sees them. */
+const withoutCookies = (header, names) => cookiesOf(header).filter((c) => !names.some((n) => c.startsWith(`${n}=`))).join('; ');
+/** Run `f` on a value now, or once it settles if it is a promise (a lock may ask Engage). */
+const whenReady = (v, f) => (v && typeof v.then === 'function' ? v.then(f) : f(v));
+
+/**
+ * WHAT A GATEWAY LETS IN, as one object, so the Wi-Fi share and the remote
+ * share run the same proxy behind different locks (remote share, 2026-10-16).
+ *   cookies   names of the gateway's own cookies, stripped before the app
+ *   admit(url, req)  the Set-Cookie values for a request carrying a key in
+ *             ?k= that opens the door (it is then redirected without ?k=),
+ *             or null; may return a promise
+ *   allowed(req, url) whether a request without ?k= is let through
+ *   seen(req, socket) record a device that was let through
+ */
+const wifiLock = Object.freeze({
+  cookies: [LAN_COOKIE],
+  admit: (url) => (lan.key && url.searchParams.get('k') === lan.key ? [`${LAN_COOKIE}=${lan.key}; HttpOnly; SameSite=Lax; Path=/`] : null),
+  allowed: (req) => hasKey(req),
+  seen: (req, socket) => lan.seen.set(socket.remoteAddress || '', Date.now()),
+});
 
 const LOCKED_PAGE = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
   '<title>Engage Build Room</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.5rem;color:#1B2942">' +
@@ -2552,37 +2572,41 @@ const LOCKED_PAGE = '<!doctype html><meta charset="utf-8"><meta name="viewport" 
   '<p>If you were in the room, the host may have turned sharing off.</p></body>';
 
 /** Headers for the app: it is being opened on localhost. */
-function forwardHeaders(req, target) {
+function forwardHeaders(req, target, lock = wifiLock) {
   const h = { ...req.headers, host: target.host };
   if (h.origin) h.origin = target.origin;
   if (h.referer) h.referer = h.referer.replace(/^https?:\/\/[^/]+/, target.origin);
-  const cookie = withoutOurCookie(h.cookie);
+  const cookie = withoutCookies(h.cookie, lock.cookies);
   if (cookie) h.cookie = cookie; else delete h.cookie;
   return h;
 }
 
-function openGateway(local, port, address) {
+function openGateway(local, port, address, lock = wifiLock) {
   const target = new URL(local);
   const lanOrigin = `http://${address}:${port}`;
   const sockets = new Set();
   const server = http.createServer((req, res) => {
     // '//evil.com/x' must read as a path, not as another host.
     const url = new URL(req.url.replace(/^\/+/, '/'), lanOrigin);
-    if (lan.key && url.searchParams.get('k') === lan.key) {
+    const cookies = url.searchParams.has('k') ? lock.admit(url, req) : null;
+    whenReady(cookies, (setCookies) => serve(req, res, url, setCookies));
+  });
+  function serve(req, res, url, setCookies) {
+    if (setCookies) {
       url.searchParams.delete('k');
       res.writeHead(302, {
-        'Set-Cookie': `${LAN_COOKIE}=${lan.key}; HttpOnly; SameSite=Lax; Path=/`,
+        'Set-Cookie': setCookies.length === 1 ? setCookies[0] : setCookies,
         Location: `${url.pathname.replace(/^\/+/, '/')}${url.search}`,
         'Cache-Control': 'no-store',
       });
       return res.end();
     }
-    if (!hasKey(req)) {
+    if (!lock.allowed(req, url)) {
       res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(LOCKED_PAGE);
     }
-    lan.seen.set(req.socket.remoteAddress || '', Date.now());
-    const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target) }, (upRes) => {
+    lock.seen(req, req.socket);
+    const up = http.request({ ...lanFamily(target), host: bareHost(target.hostname), port: target.port, method: req.method, path: req.url, headers: forwardHeaders(req, target, lock) }, (upRes) => {
       const headers = { ...upRes.headers };
       const loc = headers.location;
       if (loc && loc.startsWith(target.origin) && (loc.length === target.origin.length || /[/?#]/.test(loc[target.origin.length]))) headers.location = lanOrigin + loc.slice(target.origin.length);
@@ -2595,13 +2619,14 @@ function openGateway(local, port, address) {
     });
     req.on('aborted', () => up.destroy());
     req.pipe(up);
-  });
+  }
   server.on('connection', (s) => { sockets.add(s); s.on('close', () => sockets.delete(s)); s.on('error', () => {}); });
   server.on('upgrade', (req, socket, head) => {
-    if (!hasKey(req)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
-    lan.seen.set(socket.remoteAddress || '', Date.now());
+    const url = new URL(req.url.replace(/^\/+/, '/'), lanOrigin);
+    if (!lock.allowed(req, url)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+    lock.seen(req, socket);
     const upstream = net.connect({ ...lanFamily(target), port: Number(target.port), host: bareHost(target.hostname) }, () => {
-      const h = forwardHeaders(req, target);
+      const h = forwardHeaders(req, target, lock);
       const lines = [`${req.method} ${req.url} HTTP/1.1`, ...Object.entries(h).map(([k, v]) => `${k}: ${v}`), '', ''];
       upstream.write(lines.join('\r\n'));
       if (head && head.length) upstream.write(head);

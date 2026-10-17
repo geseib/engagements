@@ -19,7 +19,7 @@
 - **One tunnel per session** (owner, 16 Oct, after the spike), forwarding to the newest of `lanTargets`, with the Wi-Fi share's folder check (F4). Never reopened without need: quick-tunnel creation is rate-limited (`SPIKE.md`).
 - **Fail closed:** switch off, session ended, or 30 s without an Engage answer closes the remote gateway and kills `cloudflared`.
 - **No network in tests.** A fake `cloudflared` (a node script printing a `trycloudflare.com` line) and a local download server stand in.
-- **Plugin version:** one bump for the whole piece, `1.18.0` → `1.19.0`, and `tests/engage-plugin-version.js`'s PIN updated once, in the last plugin task.
+- **Plugin version:** one bump for the whole piece, `1.18.0` → `1.19.0`, made in Task 3 (with `LATEST_PLUGIN` in `build-store.js`) so no commit leaves `tests/engage-plugin-version.js` red. Every later plugin task refreshes its PIN to what the test prints; the version stays 1.19.0 until this piece ships.
 - **Words:** plain English, sentence case, "phone, laptop or tablet", never "tunnel" on screen. All new strings in `src/src/buildroom/words.js`.
 - **Gates before every push:** every `node tests/*.js` (skip `tests/verify-question-set-ui.spec.js`; clear `.aws-sam` first), `cd src && CI=true npx jest`, `npm run lint` (0 errors), `npm run build`. A push to `dev` is the deploy; never also push a tag.
 - **Before the push to `test`:** release notes, in-app help, README (CLAUDE.md, "Before every push to test"). Task 9.
@@ -171,7 +171,7 @@ The remote lock:
 **Files:** modify `engage-mcp.mjs` (the Wi-Fi share instruction at `:554`, `:2387`, `:3381`); `tests/engage-plugin-version.js`.
 
 - [ ] **Step 1:** Add, where the Wi-Fi sharing instruction is given, the remote lines: when the host opens the demo to people who are not here, show a **built copy** (`vite build` then `vite preview`, or the project's equivalent) rather than the dev server; use websockets or polling, **never server-sent events**. Extend the existing test that asserts the instruction text (find it with `grep -rn "SHARING ON WI-FI" tests`).
-- [ ] **Step 2:** `VERSION = '1.19.0'`; run `node tests/engage-plugin-version.js`, set PIN to what it prints.
+- [ ] **Step 2:** (`VERSION` is already 1.19.0, since Task 3.) Run `node tests/engage-plugin-version.js`, set PIN to what it prints.
 - [ ] **Step 3:** Run every plugin suite (`tests/engage-*.js`).
 - [ ] **Step 4:** Commit: `Plugin 1.19.0: remote share`.
 
