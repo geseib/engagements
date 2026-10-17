@@ -248,17 +248,8 @@ export const buildReportPath = (gameId) => `${buildRoomPath(gameId)}&view=report
 
 // ── Untrusted text ──────────────────────────────────────────────────────────
 
-/** An http(s) URL as a string, or '' — anything Claude or a phone sent is untrusted. */
-export function safeHref(value) {
-  const s = String(value || '').trim();
-  if (!s) return '';
-  try {
-    const u = new URL(s);
-    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : '';
-  } catch (e) {
-    return '';
-  }
-}
+// Pure, in links.js so the room's window can use it without this module (B5).
+export { safeHref } from './links';
 
 /**
  * The one command the host pastes (PLAN §7): fetch the MCP server from this
