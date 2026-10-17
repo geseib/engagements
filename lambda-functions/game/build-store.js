@@ -1516,7 +1516,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     ...(isAgent ? {} : { plugin: pluginView(room.state) }),
     activity: activityView(room.activity),
     ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
-    lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent }),
+    lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent, room }),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
     // Host notes are the host's own; Claude never sees them.

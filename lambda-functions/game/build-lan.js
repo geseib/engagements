@@ -153,10 +153,14 @@ function lanPublicView(room, now) {
   return lanTargets(room).length ? { state: 'off' } : null;
 }
 
-function lanHostView(row, now, { withKey: showKey = false } = {}) {
+function lanHostView(row, now, { withKey: showKey = false, room = null } = {}) {
   const r = row || {};
   const status = lanStatus(r, now);
   return {
+    // THE DEMO ITSELF (dev 1215, owner 2026-10-17): the page Claude showed, with its
+    // path, the address the phones open (lanPublicView). The map's links are each
+    // server's root, which is a directory listing when Claude serves a folder.
+    ...(showKey && room ? { demo: (lanPublicView({ ...room, lan: r }, now) || {}).open || '' } : {}),
     wanted: Boolean(r.Wanted),
     status,
     map: status === 'off' ? [] : (r.Map || []).map((m) => ({

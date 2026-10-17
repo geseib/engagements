@@ -2072,7 +2072,7 @@ async function hostShare(ctx, body) {
   const room = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
-  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true }) });
+  return reply(200, { lan: LAN.lanHostView(room.lan, now, { withKey: true, room }) });
 }
 
 /** Map entries compared field by field: a stored map's key order is not promised. */

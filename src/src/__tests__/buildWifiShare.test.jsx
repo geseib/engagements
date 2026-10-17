@@ -329,7 +329,12 @@ test('the Build screen card while shared (D6): the QR and the count', () => {
   expect(screen.getByText('Same Wi-Fi only · 11 have opened it')).toBeInTheDocument();
 });
 
-test('the QR encodes the address for the newest app Claude showed', () => {
+test('the QR and Open the build use the server\'s demo address: the page Claude showed, never the server\'s root (dev 1215)', () => {
+  const room = { lan: { ...LIVE, demo: 'http://192.168.1.20:4900/demo/index.html?k=KEY' }, log: [{ by: 'agent', link: 'http://localhost:5173/demo/index.html' }] };
+  expect(wifiLink(room)).toBe('http://192.168.1.20:4900/demo/index.html?k=KEY');
+});
+
+test('an older server (no demo address): the QR encodes the root of the newest app Claude showed', () => {
   const two = { ...LIVE, map: [...LIVE.map, { local: 'http://localhost:5174', lan: 'http://192.168.1.20:4901', link: 'http://192.168.1.20:4901/?k=KEY' }] };
   const room = { lan: two, log: [{ by: 'agent', link: 'http://localhost:5173/' }, { by: 'agent', link: 'http://localhost:5174/b' }] };
   expect(wifiLink(room)).toBe('http://192.168.1.20:4901/?k=KEY');

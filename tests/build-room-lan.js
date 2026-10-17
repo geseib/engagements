@@ -173,6 +173,19 @@ check('the host sees the links with the key; Claude\'s copy has no key', () => {
   assert.ok(!JSON.stringify(agent).includes('KEYkey'));
 });
 
+check('the host\'s Share demo opens the same page the phones do: the demo\'s own path, never the server\'s root (dev 1215, owner 17 Oct)', () => {
+  // Claude serves a folder: the root is a directory listing of mockups and the demo.
+  const room = { lan: liveRow(), logs: [{ By: 'agent', Link: 'http://localhost:5173/demo/index.html' }], asks: [], state: null };
+  const host = L.lanHostView(room.lan, NOW, { withKey: true, room });
+  assert.strictEqual(host.demo, 'http://192.168.1.20:4900/demo/index.html?k=KEYkeyKEYkeyKEYkey1234');
+  assert.strictEqual(host.demo, L.lanPublicView(room, NOW).open, 'the host and the phones open one address');
+  // Claude's copy never carries the key, so no demo link either.
+  const agent = L.lanHostView(room.lan, NOW, { withKey: false, room });
+  assert.strictEqual(agent.demo, undefined);
+  // Not shared: nothing to open.
+  assert.strictEqual(L.lanHostView(liveRow({ Wanted: false }), NOW, { withKey: true, room }).demo, '');
+});
+
 console.log(`\n${pass} passed, ${failed} failed`);
 suiteFinished();
 process.exit(failed ? 1 : 0);
