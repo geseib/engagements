@@ -1739,6 +1739,36 @@ describe('the decision records how it was made; Claude gets the question and the
     expect(story.textContent).not.toMatch(/Dee|Jo\b/);
   });
 
+  test('"Made so far" counts the ideas History marks as used (parity PLAN §2.8, H4)', async () => {
+    await openRoom(hostState({
+      asks: [
+        { ...CHOICE, AskId: '002', Status: 'decided', DecidedAt: ago(60), FromIdeas: ['0-i0'], Prompt: 'Which first?',
+          Options: [{ label: 'A', title: 'Text a reminder', ideaId: '0-i0' }, { label: 'B', title: 'Something else' }],
+          Decision: { direction: 'Which first: Something else', chosen: ['B'], method: 'vote' } },
+        // Waiting for Claude's mockups: the room has not seen this vote.
+        { ...CHOICE, AskId: '003', Status: 'proposed', AskForMockups: true, FromIdeas: ['3-i3', '5-i5'], Prompt: 'Which look?',
+          Options: [{ label: 'A', title: 'Dark', ideaId: '3-i3' }, { label: 'B', title: 'Light', ideaId: '5-i5' }] },
+      ],
+      ideas: [
+        { PlayerName: 'Dee', Text: 'Text a reminder', Status: 'promoted', PromotedTo: '002' },
+        { PlayerName: 'Jo', Text: 'Add a map', Status: 'promoted', PromotedVia: 'claude' },
+        { PlayerName: 'Dee', Text: 'Show shifts as a calendar' },
+        { PlayerName: 'Jo', Text: 'Dark mode', Status: 'promoted', PromotedTo: '003' },
+        { PlayerName: 'Ana', Text: 'Nice buttons', Status: 'acknowledged', WalledAt: ago(10) },
+        { PlayerName: 'Ana', Text: 'Light mode', Status: 'promoted', PromotedTo: '003' },
+      ],
+      logs: [
+        { Kind: 'idea', Text: 'Add a map', By: 'room', ForAgent: true, IdeaId: '1-i1', AsWritten: true },
+        { Kind: 'direction', Text: 'Show the shifts as a weekly calendar', ForAgent: true, From: { AskIds: [], IdeaIds: ['2-i2'] }, AsWritten: false },
+      ],
+    }));
+    fireEvent.keyDown(window, { key: '4' });
+    const made = screen.getByRole('heading', { name: 'Made so far' }).closest('section');
+    // Used: the one in the decided vote (it lost, but the room voted on it), the one sent, the one
+    // written into a direction. Not: the one in a vote the room has not seen, the one only put on the wall.
+    expect(made.textContent).toMatch(/6 ideas, 3 used/);
+  });
+
   test('History shows how each decision was made', async () => {
     await openRoom(hostState({ asks: [
       { ...CHOICE, Status: 'decided', DecidedAt: ago(60), Decision: { direction: 'Which header should volunteers see first: Bold banner', chosen: ['A'], method: 'wheel' } },

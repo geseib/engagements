@@ -774,26 +774,26 @@ export function decisionChain(ask, outcome = null) {
   if (!ask || !ask.decision) return [];
   const d = ask.decision;
   const chain = [];
-  if (ask.fromIdeas && ask.fromIdeas.length) chain.push(ask.fromIdeas.length === 1 ? 'an idea from the room' : `${ask.fromIdeas.length} ideas from the room`);
-  else if (ask.fromQuestion) chain.push('a ready question');
-  else if (ask.source === 'agent') chain.push('Claude asked');
+  if (ask.fromIdeas && ask.fromIdeas.length) chain.push(W.fromIdeas(ask.fromIdeas.length));
+  else if (ask.fromQuestion) chain.push(W.fromReadyQuestion);
+  else if (ask.source === 'agent') chain.push(W.claudeAsked);
   const r = ask.results || {};
   const method = d.method || (d.spoken ? 'spoken' : 'vote');
-  if (method === 'wheel') chain.push('the wheel picked it');
-  else if (method === 'spoken') chain.push('said out loud');
-  else if (method === 'host') chain.push("the host's pick");
-  else if (ask.kind === 'rating' && r.rating && r.rating.avg !== null && r.rating.avg !== undefined) chain.push(`rated ${r.rating.avg} of 5 by ${r.rating.count}`);
+  if (method === 'wheel') chain.push(W.byWheel);
+  else if (method === 'spoken') chain.push(W.bySpoken);
+  else if (method === 'host') chain.push(W.hostsPick);
+  else if (ask.kind === 'rating' && r.rating && r.rating.avg !== null && r.rating.avg !== undefined) chain.push(W.ratedBy(r.rating.avg, r.rating.count));
   else if (ask.kind === 'choice' && Array.isArray(r.options)) {
     const pick = r.options.find((o) => (d.chosen || []).includes(o.label));
-    if (pick && r.total) chain.push(`${pick.count} of ${r.total} picked it`);
+    if (pick && r.total) chain.push(W.pickedBy(pick.count, r.total));
   } else if (ask.kind === 'suggest' && Array.isArray(r.ranked)) {
     const pick = r.ranked.find((x) => (d.chosen || []).includes(x.respId));
-    if (pick && pick.votes) chain.push(`${pick.votes} voted for it`);
+    if (pick && pick.votes) chain.push(W.votedFor(pick.votes));
   }
-  const delivery = d.deliveredAt ? 'Claude has it' : 'waiting for Claude';
+  const delivery = d.deliveredAt ? W.claudeHasIt : W.claudeWaiting;
   const keptBack = d.sentToAgent === false || d.heldForLater;
   if (outcome && outcome.mark === 'reworded' && keptBack) chain.push(W.sentInOtherWords);
-  else if (d.sentToAgent === false) chain.push('recorded only');
+  else if (d.sentToAgent === false) chain.push(W.recordedOnly);
   else if (d.heldForLater) chain.push(W.forClaudeLater);
   else chain.push(outcome && outcome.mark === 'reworded' ? `${W.reworded}, ${delivery}` : delivery);
   return chain;
@@ -805,7 +805,7 @@ const ideaWord = (c) => (c.chosen === true ? IDEA_WORDS.chosen : c.chosen === fa
 
 /** An idea that went on its own (sent, or written into a direction): its chain. */
 function gaveChain(c, entry) {
-  const delivery = entry && entry.deliveredAt ? 'Claude has it' : 'waiting for Claude';
+  const delivery = entry && entry.deliveredAt ? W.claudeHasIt : W.claudeWaiting;
   if (c.mark === 'later') return [W.forClaudeLater];
   if (c.mark === 'reworded') return [W.reworded, delivery];
   return [c.asWritten === true ? W.sentAsWritten : W.sentToClaude, delivery];
@@ -832,15 +832,15 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
   const showings = [];
   for (const e of log || []) {
     if (e.kind === 'showing') {
-      const it = { id: e.logId, at: e.createdAt, type: 'showed', heading: 'Claude showed', text: e.text, link: e.link || '', imageIds: [], chain: [] };
+      const it = { id: e.logId, at: e.createdAt, type: 'showed', heading: W.storyShowed, text: e.text, link: e.link || '', imageIds: [], chain: [] };
       items.push(it);
       showings.push(it);
     } else if (e.kind === 'verbal') {
-      items.push({ id: e.logId, at: e.createdAt, type: 'said', heading: 'The room said', text: e.text, imageIds: [], chain: [] });
+      items.push({ id: e.logId, at: e.createdAt, type: 'said', heading: W.storySaid, text: e.text, imageIds: [], chain: [] });
     } else if (e.kind === 'milestone') {
-      items.push({ id: e.logId, at: e.createdAt, type: 'milestone', heading: 'Milestone', text: e.text, imageIds: [], chain: [] });
+      items.push({ id: e.logId, at: e.createdAt, type: 'milestone', heading: W.storyMilestone, text: e.text, imageIds: [], chain: [] });
     } else if (e.kind === 'outcome') {
-      items.push({ id: e.logId, at: e.createdAt, type: 'wrapped', heading: 'Wrapped up', text: e.detail || e.text, imageIds: [], chain: [] });
+      items.push({ id: e.logId, at: e.createdAt, type: 'wrapped', heading: W.storyWrapped, text: e.detail || e.text, imageIds: [], chain: [] });
     }
   }
   for (const e of log || []) {
@@ -849,7 +849,7 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     if (im && im.askId) continue; // a mockup belongs to its ask's decision
     const near = showings.filter((s) => t(e.createdAt) >= t(s.at) && t(e.createdAt) - t(s.at) <= STORY_GAP_MS).pop();
     if (near) near.imageIds.push(e.detail);
-    else items.push({ id: e.logId, at: e.createdAt, type: 'picture', heading: im && im.kind === 'final' ? 'The finished product' : 'Picture', text: e.text, imageIds: [e.detail], chain: [] });
+    else items.push({ id: e.logId, at: e.createdAt, type: 'picture', heading: im && im.kind === 'final' ? W.storyFinal : W.storyPicture, text: e.text, imageIds: [e.detail], chain: [] });
   }
   const decided = asks
     ? asks.filter((a) => a.status === 'decided' && a.decision).map((a) => ({ askId: a.askId, direction: a.decision.direction, at: a.decision.decidedAt || a.decidedAt, ask: a }))
@@ -860,7 +860,7 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     const chosen = d.ask ? (d.ask.decision.chosen || []) : [];
     const shown = chosen.length ? mockups.filter((im) => chosen.includes(im.label)).concat(mockups.filter((im) => !chosen.includes(im.label))) : mockups;
     items.push({
-      id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: `Decided · Ask ${askNo(d.askId)}`, text: d.direction || '',
+      id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: W.storyDecided(askNo(d.askId)), text: d.direction || '',
       askId: d.askId, imageIds: shown.map((im) => im.imageId), chosenLabels: chosen,
       chain: d.ask ? decisionChain(d.ask, outcome) : [],
       mine: (myIdeas || []).some((i) => i.promotedTo === d.askId),

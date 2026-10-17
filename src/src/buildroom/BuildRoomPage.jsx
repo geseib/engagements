@@ -2275,15 +2275,18 @@ export function StoryItem({ item, onOpen = null }) {
 function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
   const [filter, setFilter] = useState('all');
   const asks = room.asks || [];
-  // What the room gave and every ask it saw, each marked (parity PLAN §2.8, H3).
-  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now), gave: contributionsOf(room), ended: room.state === 'ENDED' });
+  // What the room gave, each marked (parity PLAN §2.8, H3). "Used" in Made so far is the same list
+  // (H4): an idea the room voted on, sent, or written into a direction; not one in a vote the room
+  // has not seen, nor one only put on the wall (Q13).
+  const gave = contributionsOf(room);
+  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now), gave, ended: room.state === 'ENDED' });
   const arts = artifactsOf({ images: room.images || [], asks });
   const shown = filterStory(story, filter === 'decisions' ? 'decisions' : 'all');
   const decided = asks
     .filter((a) => a.status === 'decided' && a.decision)
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
   const ideas = room.ideas || [];
-  const usedIdeas = ideas.filter((i) => i.status === 'promoted').length;
+  const usedIdeas = gave.length;
   const noop = () => undefined;
   return (
     <div className="brm-screenbody brm-histscreen">
@@ -2336,7 +2339,7 @@ function HistoryScreen({ room, now = Date.now(), onOpenAsk }) {
         <section className="brm-panel" aria-labelledby="brm-made-h">
           <h2 className="brm-h" id="brm-made-h">Made so far</h2>
           <p className="brm-made">
-            {arts.length} {arts.length === 1 ? 'screenshot' : 'screenshots'} · {ideas.length} {ideas.length === 1 ? 'idea' : 'ideas'}{ideas.length ? `, ${usedIdeas} used` : ''}
+            {W.madeSoFar(arts.length, ideas.length, usedIdeas)}
           </p>
         </section>
       </div>
