@@ -1365,14 +1365,15 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/' });
     const r = await report({ status: 'off' });
     assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual(r.body, { wanted: false, targets: [] });
+    assert.deepStrictEqual(r.body, { wanted: false, targets: [], scopes: {} });
   });
   await check('once the host wants it, the plugin is given the local addresses Claude showed', async () => {
     seed();
     await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/' });
     await hostCall('POST', 'share', { on: true });
     const r = await report({ status: 'off' });
-    assert.deepStrictEqual(r.body, { wanted: true, targets: ['http://localhost:5173'] });
+    // Claude linked the app's root, so the whole app is in scope (Share demo S1).
+    assert.deepStrictEqual(r.body, { wanted: true, targets: ['http://localhost:5173'], scopes: { 'http://localhost:5173': ['/'] } });
   });
   await check('off then quickly on: participants are never handed the old key', async () => {
     seed();
@@ -1398,7 +1399,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
     await hostCall('POST', 'share', { on: true });
     const a = await report(LIVE({ reporter: 'copyAAAAAAAAAAAA', open: 1 }));
-    assert.deepStrictEqual(a.body, { wanted: true, targets: ['http://localhost:5173'] });
+    assert.deepStrictEqual(a.body, { wanted: true, targets: ['http://localhost:5173'], scopes: { 'http://localhost:5173': ['/'] } });
     const b = await report(LIVE({ reporter: 'copyBBBBBBBBBBBB', open: 0, key: 'bbbbbbbbbbbbbbbbbbbbbb', map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4901' }] }));
     assert.deepStrictEqual(b.body, { wanted: false, targets: [], another: true }, 'the second copy closes its gateway');
     const host = (await hostCall('GET', 'state')).body.lan;

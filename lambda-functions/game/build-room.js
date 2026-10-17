@@ -2099,8 +2099,11 @@ async function shareReport(ctx, body) {
   }
   const ended = (await sessionState(ctx)) === 'ENDED';
   // Targets matter only while sharing is wanted: skip reading the room otherwise.
-  const targets = before.Wanted ? LAN.lanTargets(await loadRoom(ctx)) : [];
-  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets });
+  const room = before.Wanted ? await loadRoom(ctx) : null;
+  const targets = room ? LAN.lanTargets(room) : [];
+  // What each may show (Share demo S1): the folders of the pages Claude linked. A 1.19.0+ plugin opens nothing else.
+  const scopes = room ? LAN.lanScopes(room) : {};
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes });
 }
 
 // ── Talking points, research and ideas ──────────────────────────────────────
