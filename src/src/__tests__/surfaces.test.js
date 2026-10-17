@@ -36,3 +36,17 @@ describe('twoSurfacesOn (two-surface D6)', () => {
     expect(twoSurfacesOn({ env: 'development', search: '', storage: memory() })).toBe(true);
   });
 });
+
+describe('presentHref: the room\'s window', () => {
+  // eslint-disable-next-line global-require
+  const { presentHref: href } = require('../config/surfaces');
+  it('the Presentation for a session', () => {
+    expect(href('5479')).toBe('/present?gameId=5479');
+  });
+  it('the Build Room wall carries its type and the wall key', () => {
+    expect(href('4821', { type: 'build', k: 'ab_C-9/+' })).toBe('/present?gameId=4821&type=build&k=ab_C-9%2F%2B');
+  });
+  it('another type is the plain Presentation', () => {
+    expect(href('4821', { type: 'poll', k: 'x' })).toBe('/present?gameId=4821');
+  });
+});

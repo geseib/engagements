@@ -154,7 +154,7 @@ export function RunPanel({
   }
 
   return (
-    <section className="brm-panel brm-runpanel" aria-label={W.runLabel} ref={ref}>
+    <section className="brm-panel brm-runpanel" aria-label={W.runLabel} ref={ref} data-capability="points">
       <h2 className="brm-h5">
         {W.workingThrough}
         <span className="brm-hint"> {'·'} {running ? (done ? W.runDoneOf(doneN, run.total) : W.runStarted(started, run.total)) : run.status === 'finished' ? W.listFinished(run.total) : W.listStopped(doneN, run.total)}</span>

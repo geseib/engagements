@@ -32,7 +32,7 @@ export default function BuildLater({ room, ticked, setTicked, busy, ended, run, 
   const send = (x) => run(() => (x.type === 'idea' ? api.ideaAction(x.id, 'direct') : api.sendLater(x.id)));
 
   return (
-    <section className="brm-later" aria-label={W.later}>
+    <section className="brm-later" aria-label={W.later} data-capability="later">
       <h3 className="brm-h5">{W.later} · {items.length} <span className="brm-hint">{W.laterNote}</span></h3>
       {!ended && on.length > 0 && (
         <div className="brm-qbulk" role="group" aria-label="Ticked in Later">

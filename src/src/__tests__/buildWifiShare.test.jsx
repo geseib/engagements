@@ -7,7 +7,7 @@
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import {
-  WifiChip, SharePanel, ShareDemo, DemoNudge, DemoTile, WallCodes, BuildScreenQr, wifiLink, demoSlotOf,
+  WifiChip, SharePanel, ShareDemo, DemoNudge, DemoTile, WallCodes, BuildScreenQr, wifiLink, demoSlotOf, AppList,
 } from '../buildroom/BuildWifiShare';
 
 const NOW = '2026-10-07T12:00:00.000Z';
@@ -329,8 +329,35 @@ test('the Build screen card while shared (D6): the QR and the count', () => {
   expect(screen.getByText('Same Wi-Fi only · 11 have opened it')).toBeInTheDocument();
 });
 
-test('the QR encodes the address for the newest app Claude showed', () => {
+test('the QR and Open the build use the server\'s demo address: the page Claude showed, never the server\'s root (dev 1215)', () => {
+  const room = { lan: { ...LIVE, demo: 'http://192.168.1.20:4900/demo/index.html?k=KEY' }, log: [{ by: 'agent', link: 'http://localhost:5173/demo/index.html' }] };
+  expect(wifiLink(room)).toBe('http://192.168.1.20:4900/demo/index.html?k=KEY');
+});
+
+test('an older server (no demo address): the QR encodes the root of the newest app Claude showed', () => {
   const two = { ...LIVE, map: [...LIVE.map, { local: 'http://localhost:5174', lan: 'http://192.168.1.20:4901', link: 'http://192.168.1.20:4901/?k=KEY' }] };
   const room = { lan: two, log: [{ by: 'agent', link: 'http://localhost:5173/' }, { by: 'agent', link: 'http://localhost:5174/b' }] };
   expect(wifiLink(room)).toBe('http://192.168.1.20:4901/?k=KEY');
+});
+
+describe('each shared server is named by what it is (Share demo S3, plugin 1.20.0)', () => {
+  const entry = (port, lanPort, over = {}) => ({ local: `http://localhost:${port}`, lan: `http://192.168.1.20:${lanPort}`, link: `http://192.168.1.20:${lanPort}/?k=KEY`, ...over });
+  test('Demo, Mockups, Mockups · Ask N, else App N; each with where it runs here and on the Wi-Fi', () => {
+    render(<AppList map={[
+      entry(5173, 4900, { role: 'demo' }),
+      entry(8080, 4901, { role: 'mockups', ask: 3 }),
+      entry(8081, 4902, { role: 'mockups' }),
+      entry(7000, 4903, { role: null }),
+    ]} />);
+    const rows = screen.getAllByRole('listitem');
+    expect(rows.map((r) => r.querySelector('.brm-wifipanel-k').textContent)).toEqual(['Demo', 'Mockups · Ask 3', 'Mockups', 'App 4']);
+    expect(rows[0].querySelector('.brm-wifipanel-u').textContent).toBe('localhost:5173 → :4900');
+    expect(rows[0].querySelector('.brm-wifipanel-u').title).toBe('localhost:5173 → 192.168.1.20:4900');
+    // The key is copied, never shown.
+    expect(rows.map((r) => r.textContent).join(' ')).not.toMatch(/k=/);
+  });
+  test('an older server sends no roles: App 1, App 2', () => {
+    render(<AppList map={[entry(5173, 4900), entry(5174, 4901)]} />);
+    expect(screen.getAllByRole('listitem').map((r) => r.querySelector('.brm-wifipanel-k').textContent)).toEqual(['App 1', 'App 2']);
+  });
 });

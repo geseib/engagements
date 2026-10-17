@@ -1024,6 +1024,9 @@
 .bpl .bpl-story-h { color: var(--text); }
 .bpl .bpl-story-it--decided .bpl-story-h { color: var(--bpl-success-text); }
 .bpl .bpl-story-mine { margin: 4px 0 0; }
+/* What the room gave, and what reached Claude (parity PLAN §2.8, H5). */
+.bpl .bpl-story-ideas { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--bpl-muted); display: grid; gap: 2px; color: var(--bpl-muted); overflow-wrap: anywhere; }
+.bpl .bpl-story-chain { margin: 4px 0 0; }
 .bpl .bpl-shot { margin: 10px 0 0; }
 .bpl .bpl-story .bpl-pvfb { margin-top: 12px; }
 .bpl .bpl-pvnote .bpl-send { margin-top: 8px; }

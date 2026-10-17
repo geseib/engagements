@@ -38,6 +38,8 @@ const LOG_KINDS = Object.freeze([
 ]);
 /** What Claude may post. Decisions and directions are the host's to write. `answer` answers an Ask Claude. */
 const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint', 'answer']);
+/** What Claude may say a link it posts is (Share demo S3, plugin 1.20.0). */
+const LINK_ROLES = Object.freeze(['demo', 'mockup']);
 
 /**
  * WHAT CLAUDE GETS (step 7c, C14; owner, 2026-10-05: "yes, four kinds and the
@@ -587,6 +589,10 @@ function tally(ask, room) {
 function askView(ask, room, audience, me) {
   const t = tally(ask, room);
   const isHost = audience === 'host' || audience === 'agent';
+  // THE ROOM'S HISTORY (parity PLAN §2.8, H5): the public copy plus the provenance
+  // stamps (which idea each option or suggestion came from, reworded, held), never a name.
+  const isWall = audience === 'wall';
+  const stamps = isHost || isWall;
   const showResults = isHost || ['results', 'decided'].includes(ask.Status);
   const out = {
     askId: ask.AskId,
@@ -595,7 +601,7 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}) })),
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}), ...(stamps && o.ideaId ? { ideaId: o.ideaId } : {}) })),
     scale: ask.Kind === 'rating' ? RATING_SCALE : null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
@@ -614,7 +620,7 @@ function askView(ask, room, audience, me) {
     const resps = forAsk(room.resps, ask.AskId);
     if (isHost) {
       out.responses = resps.map((r) => ({
-        respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player',
+        respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player', ...(r.IdeaId ? { ideaId: r.IdeaId } : {}),
         hidden: Boolean(r.Hidden), createdAt: r.CreatedAt || null, votes: t.count.get(r.RespId) || 0,
       }));
     } else if (['voting', 'results', 'decided'].includes(ask.Status)) {
@@ -622,6 +628,7 @@ function askView(ask, room, audience, me) {
       // cannot vote for itself.
       out.responses = resps.filter((r) => !r.Hidden).map((r) => ({
         respId: r.RespId, text: r.Text, mine: Boolean(me && r.PlayerName === me.playerName && (r.Source || 'player') === 'player'),
+        ...(isWall && r.IdeaId ? { ideaId: r.IdeaId } : {}),
         ...(showResults ? { votes: t.count.get(r.RespId) || 0 } : {}),
       }));
     }
@@ -673,9 +680,11 @@ function askView(ask, room, audience, me) {
       chosen: ask.Decision.chosen || [],
       ...(isHost ? { note: ask.Decision.note || '' } : {}),
       sentToAgent: ask.Decision.sendToAgent !== false,
-      ...(isHost && ask.Decision.heldForLater ? { heldForLater: true } : {}),
+      ...(stamps && ask.Decision.heldForLater ? { heldForLater: true } : {}),
       spoken: Boolean(ask.Decision.spoken),
       method: ask.Decision.method || (ask.Decision.spoken ? 'spoken' : 'vote'),
+      // The host changed the words the server would have sent (H1); the room sees it once History draws it (H5).
+      ...(stamps && typeof ask.Decision.reworded === 'boolean' ? { reworded: ask.Decision.reworded } : {}),
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -693,11 +702,18 @@ function logView(r) {
     text: r.Text || '',
     detail: r.Detail || '',
     link: r.Link || '',
+    // What Claude said the link is (Share demo S3): 'demo', 'mockup' or null.
+    role: LINK_ROLES.includes(r.Role) ? r.Role : null,
     by: r.By || 'host',
     askId: r.AskId || null,
     forAgent: Boolean(r.ForAgent),
     name: r.Name || null,
     shareId: r.ShareId || null,
+    // PROVENANCE (docs/design/parity/PLAN.md §2.8, H1): what this entry was made
+    // from, stamped when it was sent. `asWritten` is null when nothing says.
+    ideaId: r.IdeaId || null,
+    from: r.From ? { askIds: r.From.AskIds || [], ideaIds: r.From.IdeaIds || [] } : null,
+    asWritten: typeof r.AsWritten === 'boolean' ? r.AsWritten : null,
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
@@ -761,7 +777,8 @@ function voteFromIdeas(ideas, body) {
   const options = ideas.map((i, n) => {
     const text = cleanText(i.Text, LIMITS.idea);
     const title = text.length > LIMITS.optionTitle ? `${text.slice(0, LIMITS.optionTitle - 1).trimEnd()}…` : text;
-    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '' };
+    // An option made from a room idea names it, so History can say which idea won (H1).
+    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '', ...(i.IdeaId ? { ideaId: i.IdeaId } : {}) };
   });
   const mp = Number(b.maxPicks);
   const maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, options.length) : 1;
@@ -827,7 +844,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.18.0';
+const LATEST_PLUGIN = '1.20.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1503,7 +1520,7 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     ...(isAgent ? {} : { plugin: pluginView(room.state) }),
     activity: activityView(room.activity),
     ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
-    lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent }),
+    lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent, room }),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
     // Host notes are the host's own; Claude never sees them.
@@ -1559,13 +1576,15 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, as, held, step, ...rest }) => ({
+      // An idea entry keeps its stamp (H5); `from` is a direction's, and phones never get directions.
+      .map(({ forAgent, deliveredAt, as, held, step, from, ...rest }) => ({
         ...(DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest),
         // A phone sees when a step ran, not where Claude took it from.
         ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
       }))
       .map((l) => ({ ...l, link: forRoom(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
+    history: roomHistory(room, visibleAsks),
     images: room.images.map(imageView),
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forRoom),
     doing: doingPublicView(room.activity, now),
@@ -1578,6 +1597,240 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     agentListening: agentStatus(room.state, [], now || new Date().toISOString()).listening,
     mine,
     rev: (room.state && room.state.Rev) || 0,
+  };
+}
+
+/**
+ * THE ROOM'S HISTORY, AS THE ROOM MAY SEE IT (parity PLAN §2.8, H5): what the
+ * History screen needs to mark what the room gave and every ask it saw, with
+ * no name, no host note, and no direction's words (those are the host's).
+ *   asks   every ask the room saw, with the stamps (askView 'wall')
+ *   ideas  only the ideas that were used: put to the room, sent, or written
+ *          into a direction (a new, set-aside or acknowledged one is not)
+ *   sent   the entries that carried them to Claude: a sent idea in its own
+ *          words, a direction as its stamps only (text '')
+ */
+function roomHistory(room, visibleAsks) {
+  const seen = visibleAsks.filter((a) => a.Status !== 'discarded' || a.OpenedAt);
+  const entries = room.logs.filter((l) => (l.Kind === 'idea' && l.IdeaId) || (l.Kind === 'direction' && l.From));
+  const written = new Set(entries.filter((l) => l.From).flatMap((l) => l.From.IdeaIds || []));
+  const used = room.ideas.filter((i) => i.Status === 'promoted' || written.has(i.IdeaId));
+  return {
+    asks: seen.map((a) => askView(a, room, 'wall')),
+    ideas: used.map((i) => ({
+      ideaId: i.IdeaId, text: i.Text || '', status: i.Status || 'new', source: i.Source || 'room', createdAt: i.CreatedAt || null,
+      promotedTo: i.PromotedTo || null, promotedVia: i.PromotedVia || null,
+    })),
+    sent: entries.map(logView).map((l) => ({
+      logId: l.logId, kind: l.kind, text: l.kind === 'idea' ? l.text : '', ideaId: l.ideaId, from: l.from, asWritten: l.asWritten,
+      forAgent: l.forAgent, held: l.held, deliveredAt: l.deliveredAt, createdAt: l.createdAt,
+    })),
+  };
+}
+
+// ── The room's window (docs/design/parity/PLAN.md §2.2-§2.3, B1-B3) ─────────
+//
+// THE WALL KEY (owner, Q1): the window's URL carries a per-session key, so the
+// four-digit code alone never opens a wall that shows an org's product work.
+// 32 random bytes, base64url, on BUILD#STATE (`WallKey`). Not sealed: it is a
+// key, not the org's words, and the host's read hands it back. Only the host's
+// own read returns it; rotating it retires every window opened with the old one.
+const WALL_KEY_BYTES = 32;
+const mintWallKey = () => crypto.randomBytes(WALL_KEY_BYTES).toString('base64url');
+/** Whether `k` opens this room's wall. No key on the row opens nothing. Constant time. */
+function wallKeyMatches(stateRow, k) {
+  const have = stateRow && typeof stateRow.WallKey === 'string' ? stateRow.WallKey : '';
+  const got = typeof k === 'string' ? k : '';
+  if (!have || !got) return false;
+  const a = Buffer.from(have);
+  const b = Buffer.from(got);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// THE SERVER OWNS WHAT THE WALL SHOWS (standards §6): which screen, whether
+// the codes card is up, the display profile, and a revision that only rises,
+// so a window drops an older answer. Keys and enums only: nothing to seal.
+const WALL_SCREENS = Object.freeze(['stage', 'build', 'history']);
+const WALL_CODES = Object.freeze(['none', 'join', 'both']);
+const WALL_PROFILES = Object.freeze(['room', 'tv', 'call', 'table']);
+const WALL_FIELDS = Object.freeze([['screen', 'WallScreen', WALL_SCREENS], ['codes', 'WallCodes', WALL_CODES], ['profile', 'WallProfile', WALL_PROFILES]]);
+
+/** `{screen, codes, profile, rev}`. An ended session reads as codes down, whatever was stored. */
+function wallStateOf(stateRow, sessionState) {
+  const s = stateRow || {};
+  const pick = (v, list) => (list.includes(v) ? v : list[0]);
+  return {
+    screen: pick(s.WallScreen, WALL_SCREENS),
+    codes: sessionState === 'ENDED' ? 'none' : pick(s.WallCodes, WALL_CODES),
+    profile: pick(s.WallProfile, WALL_PROFILES),
+    rev: Number(s.WallRev) || 0,
+  };
+}
+
+/** The body of POST build/wall → `{value: {set, rotate}}` (set: BUILD#STATE attributes) or `{error}`. */
+function normalizeWall(body) {
+  const b = body || {};
+  const set = {};
+  for (const [field, attr, list] of WALL_FIELDS) {
+    if (b[field] === undefined) continue;
+    if (!list.includes(b[field])) return { error: `${field} must be one of ${list.join(', ')}` };
+    set[attr] = b[field];
+  }
+  if (b.rotate !== undefined && typeof b.rotate !== 'boolean') return { error: 'rotate must be true or false' };
+  const rotate = b.rotate === true;
+  if (!Object.keys(set).length && !rotate) return { error: 'Say what the wall shows (screen, codes or profile), or rotate: true' };
+  return { value: { set, rotate } };
+}
+
+/** Log kinds whose words name a builder ("Ada took: …", "Base moved: Ada's …"): never on the wall. */
+const WALL_HIDDEN_LOG_KINDS = Object.freeze(['crew', 'base', 'help']);
+const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Everyone the room's rows name: players, builders, idea authors, voters, the wheel's spinners. */
+function namesIn(room, players) {
+  const out = new Set((players || []).filter(Boolean));
+  const add = (n) => { if (n && typeof n === 'string' && n !== 'host') out.add(n); };
+  for (const r of room.builders || []) add(r.PlayerName);
+  for (const r of room.ideas || []) add(r.PlayerName);
+  for (const r of (room.resps || []).concat(room.answers || [], room.votes || [], room.comments || [])) add(r.PlayerName || r.Name);
+  for (const a of room.asks || []) {
+    const w = a.Wheel;
+    if (w) { add(w.Spinner); for (const s of w.Spins || []) add(s.By); }
+  }
+  return [...out];
+}
+
+/** The early-look board as the wall draws it: the phones' crew read, less what names or locates anyone. */
+function crewWallView(crew, nameOf) {
+  if (!crew || !crew.enabled) return { enabled: false };
+  return {
+    enabled: true,
+    baseBranch: crew.baseBranch || '',
+    baseCommit: crew.baseCommit || '',
+    baseMovedAt: crew.baseMovedAt || null,
+    builders: (crew.builders || []).filter((b) => !b.closed).map((b) => ({
+      name: nameOf(b.name), mode: b.mode, status: b.status, closed: false, taskId: b.taskId || null,
+      checkpointAt: b.checkpointAt || null, latestImageId: b.latestImageId || null, shareIds: b.shareIds || [],
+    })),
+    tasks: (crew.tasks || []).map((t) => ({
+      taskId: t.taskId, text: t.text, detail: t.detail, source: t.source, state: t.state, createdAt: t.createdAt,
+      claimedBy: (t.claimedBy || []).map(nameOf),
+    })),
+    shares: (crew.shares || []).map((s) => ({
+      shareId: s.shareId, builder: nameOf(s.builder), taskId: s.taskId, title: s.title, lane: s.lane, featured: s.featured,
+      mergedCommit: s.mergedCommit,
+      versions: (s.versions || []).map((v) => ({
+        v: v.v, summary: v.summary, unsure: v.unsure, feedbackWanted: v.feedbackWanted, commit: v.commit,
+        diffstat: v.diffstat, imageIds: v.imageIds || [], createdAt: v.createdAt,
+      })),
+      reactions: s.reactions,
+      // The room's own words, never who said them; a builder by their wall label; Claude and the host as themselves.
+      comments: (s.comments || []).map((c) => ({ kind: c.kind, text: c.text, by: c.by, name: c.by === 'builder' ? nameOf(c.name) : '', version: c.version, createdAt: c.createdAt })),
+      reviews: (s.reviews || []).map((r) => ({
+        version: r.version, does: r.does, fits: r.fits, risk: r.risk, suggestions: r.suggestions, recommendation: r.recommendation, createdAt: r.createdAt,
+      })),
+      createdAt: s.createdAt, updatedAt: s.updatedAt,
+    })),
+    pipeline: crew.pipeline,
+  };
+}
+
+/**
+ * THE WALL READ (PLAN §2.2, B2): what the projected Stage, Build and History
+ * screens draw, as an ALLOWLIST: every field is chosen here, none is copied
+ * wholesale from another view. Nameless unless the host turned "List names on
+ * the room meter" on (Q12, Q15), and then names only where the room meter and
+ * the crew board show them. Links are the ones a projector may show: never a
+ * laptop address, never the Wi-Fi demo's keyed link (the phones carry that).
+ * `crew` is the phones' crew read (build-crew.js crewView 'public', no seat);
+ * build-crew requires this file, so the caller passes it in.
+ */
+function wallView({ gameId, meta, sessionState, room, players, now, crew }) {
+  const listNames = settingsOf(room.state).listNames;
+  const nowIso = now || new Date().toISOString();
+  const forWall = publicUrl;
+  const visibleAsks = room.asks.filter((a) => !['proposed', 'discarded'].includes(a.Status));
+  const seenAsks = new Set(visibleAsks.map((a) => a.AskId));
+  const currentAskId = (room.state && room.state.CurrentAskId) || null;
+  const current = currentAskId ? visibleAsks.find((a) => a.AskId === currentAskId && OPEN_STATUSES.concat(['results', 'decided']).includes(a.Status)) : null;
+
+  // Builders keep a stable label on the wall ("Builder 1"), so a lane and its early look still match.
+  const aliases = new Map((room.builders || []).map((b, i) => [b.PlayerName, `Builder ${i + 1}`]));
+  const nameOf = (n) => (listNames ? n || '' : aliases.get(n) || '');
+  const known = listNames ? [] : namesIn(room, players);
+  const nameRe = known.length ? new RegExp(`(^|[^\\p{L}\\p{N}])(${known.map(escapeRe).join('|')})(?=$|[^\\p{L}\\p{N}])`, 'iu') : null;
+  const names = (text) => Boolean(nameRe && nameRe.test(String(text || '')));
+  const spinnerOf = (n) => (n === 'host' || listNames ? n : (n ? '' : n));
+  const wallAsk = (view) => {
+    const a = publicAsk(view, forWall);
+    return a.wheel ? { ...a, wheel: { ...a.wheel, spinner: spinnerOf(a.wheel.spinner), spins: a.wheel.spins.map((s) => ({ ...s, by: spinnerOf(s.by) })), mine: false } } : a;
+  };
+
+  const crewView = crewWallView(crew, nameOf);
+  const crewImages = new Set();
+  for (const b of crewView.builders || []) if (b.latestImageId) crewImages.add(b.latestImageId);
+  for (const s of crewView.shares || []) for (const v of s.versions) for (const id of v.imageIds) crewImages.add(id);
+  // A picture for an ask the room has not seen (a mockup Claude is still making) stays off the wall,
+  // as does a builder's picture the board does not show.
+  const images = room.images
+    .filter((r) => (!r.AskId || seenAsks.has(r.AskId)) && (r.By !== 'builder' || crewImages.has(r.ImageId)))
+    .map((r) => ({ imageId: r.ImageId, caption: r.Caption || '', kind: r.Kind || 'progress', askId: r.AskId || null, label: r.Label || null, contentType: r.ContentType, createdAt: r.CreatedAt || null }));
+  const imageIds = new Set(images.map((i) => i.imageId));
+
+  const log = room.logs
+    .filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind) && !WALL_HIDDEN_LOG_KINDS.includes(l.Kind))
+    .filter((l) => l.Kind !== 'image' || imageIds.has(l.Detail))
+    // "Claude proposed a question: …" names an ask the room has not seen.
+    .filter((l) => !l.AskId || seenAsks.has(l.AskId))
+    .map(logView)
+    .filter((l) => !names(l.text))
+    .map(({ forAgent, deliveredAt, as, held, step, from, name, link, ...rest }) => ({
+      ...(DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest),
+      ...(names(rest.detail) ? { detail: '' } : {}),
+      link: forWall(link),
+      ...(listNames && name ? { name } : {}),
+      ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
+    }));
+
+  const history = roomHistory(room, visibleAsks);
+  history.asks = history.asks.map(wallAsk);
+  // "Made so far" counts used ideas by History's own rule: one in a vote the room has not seen is not used yet.
+  const written = new Set(history.sent.filter((l) => l.from).flatMap((l) => l.from.ideaIds || []));
+  const used = history.ideas.filter((i) => written.has(i.ideaId) || !i.promotedTo || seenAsks.has(i.promotedTo)).length;
+
+  const wc = wallCommentView(room.state);
+  const fresh = wc && Date.parse(nowIso) - Date.parse(wc.at) < WALL_COMMENT_MS;
+  const brief = briefView(room.state);
+  const shown = shownPointView(room);
+  const lan = LAN.lanPublicView(room, nowIso);
+  const agent = agentStatus(room.state, [], nowIso);
+
+  return {
+    gameId,
+    title: meta.Title || '',
+    goal: meta.Details || meta.EngagementInfo || '',
+    state: sessionState || null,
+    playerCount: players.length,
+    players: listNames ? players.slice() : [],
+    rev: (room.state && room.state.Rev) || 0,
+    current: current ? wallAsk(askView(current, room, 'public')) : null,
+    history,
+    ideaCounts: { total: room.ideas.length, used },
+    log,
+    images,
+    outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forWall),
+    doing: doingPublicView(room.activity, nowIso),
+    agent: { connected: agent.connected, listening: agent.listening, name: agent.name },
+    shownPoint: shown ? { ...shown, from: shown.from === 'claude' ? 'claude' : nameOf(shown.from) } : null,
+    run: room.run && room.run.Status === 'running' ? runView(room.run, 'public') : null,
+    // That the demo is on this Wi-Fi, never its link: the link carries the gateway's key (phones have it).
+    lan: lan && lan.open ? { live: true } : lan,
+    opening: openingView(room.state, room),
+    // The brief the room agreed: never Claude's draft, never the Later list.
+    brief: { forWhom: brief.forWhom, keep: brief.keep, lines: brief.lines, steps: brief.steps, headline: brief.headline, summary: brief.summary },
+    wallComment: fresh ? { ideaId: wc.ideaId, text: wc.text, at: wc.at } : null,
+    crew: crewView,
+    wall: wallStateOf(room.state, sessionState),
   };
 }
 
@@ -1716,8 +1969,45 @@ function defaultDirection(ask, room) {
   return top ? questionAnswer(ask.Prompt, top.text) : '';
 }
 
+/**
+ * REWORDED (docs/design/parity/PLAN.md §2.8, H1; owner, Q14): did the host
+ * change the words the room's pick would have gone with? Any change counts, a
+ * fixed typo included. The defaults are every sentence a screen offers for the
+ * picks (`directionFor`, `spokenDirection` and `defaultDirection` in
+ * src/src/buildroom), so a press that sends what was offered is never
+ * "reworded". `typed` false: the server wrote the words itself.
+ * @returns {boolean|null} null when there is nothing to compare with.
+ */
+function decisionReworded(ask, room, chosen, direction, typed) {
+  if (!typed) return false;
+  const qa = (answer) => withRatingMeaning(ask.Kind, questionAnswer(ask.Prompt, answer));
+  const withDetail = (title, detail) => (detail ? `${title} (${detail})` : title);
+  const defaults = new Set();
+  const add = (s) => { if (s) defaults.add(s); };
+  add(withRatingMeaning(ask.Kind, defaultDirection(ask, room)));
+  const picks = Array.isArray(chosen) ? chosen : [];
+  const landed = wheelLanded(ask);
+  if (ask.Kind === 'choice') {
+    const options = ask.Options || [];
+    const picked = options.filter((o) => picks.includes(o.label));
+    for (const o of picked) { add(qa(o.title)); add(qa(withDetail(o.title, o.detail))); }
+    if (picked.length > 1) add(qa(picked.map((o) => o.title).join(' and ')));
+    if (landed) {
+      const o = options.find((x) => x.label === landed.id || x.title === landed.text);
+      add(qa(landed.text));
+      if (o) add(qa(withDetail(landed.text, o.detail)));
+    }
+  } else if (ask.Kind === 'suggest') {
+    for (const r of tally(ask, room).ranked) if (picks.includes(r.respId)) add(qa(r.text));
+    if (landed) add(qa(landed.text));
+  } else if (ask.Kind === 'rating') {
+    for (const n of picks) add(qa(ratingAnswer(n)));
+  }
+  return defaults.size ? !defaults.has(direction) : null;
+}
+
 module.exports = {
-  GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
+  GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, LINK_ROLES, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
   LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, AGENT_LISTENING_MS, KEY_PREFIX,
   SK, TRANSITIONS,
   cleanText, safeUrl, isLocalUrl, publicUrl, pad3,
@@ -1734,5 +2024,6 @@ module.exports = {
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
-  hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
+  hostView, publicView, roomHistory, wallView, crewWallView, WALL_KEY_BYTES, mintWallKey, wallKeyMatches,
+  WALL_SCREENS, WALL_CODES, WALL_PROFILES, wallStateOf, normalizeWall, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection, decisionReworded,
 };

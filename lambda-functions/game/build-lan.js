@@ -55,20 +55,151 @@ function isPrivateLanUrl(url) {
  * distinct ones, oldest first. "Shown" order is the agent's log links, then ask
  * options, then outcome links; an address shown again counts as newest.
  */
-function lanTargets(room) {
+/** Every address Claude linked, in "shown" order: its posts, then ask options, then the wrap-up. */
+function shownUrls(room) {
   const r = room || {};
   const urls = [];
   for (const l of r.logs || []) if (l.By === 'agent' && l.Link) urls.push(l.Link);
   for (const a of r.asks || []) for (const o of a.Options || []) if (o && o.url) urls.push(o.url);
   const outcome = r.state && r.state.Outcome;
   for (const l of (outcome && outcome.links) || []) if (l && l.url) urls.push(l.url);
+  return urls;
+}
+
+/**
+ * WHAT THE PROJECT DECLARES (Share demo S3, plugin 1.20.0, owner 2026-10-17).
+ * `.engage/share.json` in the project names the demo page, the mockups page and
+ * a short label for this session; the plugin reports it each round and it wins
+ * over any guess. Only a loopback http address that is certainly this laptop.
+ */
+const DECLARED_URL_MAX = 500;
+const DECLARED_LABEL_MAX = 60;
+function declaredUrl(v) {
+  if (typeof v !== 'string' || !v || v.length > DECLARED_URL_MAX) return '';
+  const u = hostOf(v);
+  if (!u || u.protocol !== 'http:') return '';
+  const h = u.hostname.toLowerCase();
+  const sure = h === 'localhost' || h === '[::1]' || (/^127\./.test(h) && isValidIpv4(h));
+  return sure ? u.toString() : '';
+}
+function normalizeDeclared(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return {};
+  const out = {};
+  const demo = declaredUrl(d.demo);
+  const mockups = declaredUrl(d.mockups);
+  // eslint-disable-next-line no-control-regex
+  const label = typeof d.label === 'string' ? d.label.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, DECLARED_LABEL_MAX).trim() : '';
+  if (demo) out.demo = demo;
+  if (mockups) out.mockups = mockups;
+  if (label) out.label = label;
+  return out;
+}
+const declaredOf = (room) => {
+  const d = room && room.lan && room.lan.Declared;
+  return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+};
+const originOf = (url) => (isLoopbackUrl(url) ? hostOf(url).origin : '');
+
+/**
+ * THE DEMO (S3): the declared demo page, else the newest link Claude posted
+ * with role "demo", else the newest link it posted (before 1.20.0, the only rule).
+ * @returns {string[]} candidates, best first
+ */
+function demoCandidates(room) {
+  const logs = ((room && room.logs) || []).filter((l) => l.By === 'agent' && l.Link);
+  const out = [];
+  const d = declaredOf(room).demo;
+  if (d) out.push(d);
+  for (let i = logs.length - 1; i >= 0; i -= 1) if (logs[i].Role === 'demo') out.push(logs[i].Link);
+  for (let i = logs.length - 1; i >= 0; i -= 1) out.push(logs[i].Link);
+  return out;
+}
+function lanDemoUrl(room) {
+  return demoCandidates(room)[0] || '';
+}
+
+function lanTargets(room) {
+  const d = declaredOf(room);
   const kept = [];
-  for (let i = urls.length - 1; i >= 0 && kept.length < MAX_TARGETS; i -= 1) {
-    if (!isLoopbackUrl(urls[i])) continue;
-    const origin = hostOf(urls[i]).origin;
-    if (!kept.includes(origin)) kept.push(origin);
+  for (const url of [d.demo, d.mockups]) {
+    const origin = url ? originOf(url) : '';
+    if (origin && !kept.includes(origin)) kept.push(origin);
   }
-  return kept.reverse();
+  const first = kept.length;
+  const urls = shownUrls(room);
+  const rest = [];
+  for (let i = urls.length - 1; i >= 0 && first + rest.length < MAX_TARGETS; i -= 1) {
+    const origin = originOf(urls[i]);
+    if (origin && !kept.includes(origin) && !rest.includes(origin)) rest.push(origin);
+  }
+  return [...kept, ...rest.reverse()];
+}
+
+/**
+ * WHICH SERVER IS WHICH (S3 c): origin -> { role, ask }. "demo" is the server
+ * of the declared demo, else of the newest link Claude marked demo; never a
+ * guess. "mockups" is the declared mockups server, any server Claude marked
+ * mockup, and any serving a Choose ask's options (`ask`: the newest such ask).
+ */
+function lanRoles(room) {
+  const r = room || {};
+  const d = declaredOf(r);
+  const logs = (r.logs || []).filter((l) => l.By === 'agent' && l.Link);
+  let demo = d.demo ? originOf(d.demo) : '';
+  for (let i = logs.length - 1; i >= 0 && !demo; i -= 1) if (logs[i].Role === 'demo') demo = originOf(logs[i].Link);
+  const out = {};
+  if (demo) out[demo] = { role: 'demo', ask: null };
+  const mock = (origin, ask = null) => {
+    if (!origin || origin === demo) return;
+    const had = out[origin] || { role: 'mockups', ask: null };
+    out[origin] = { role: 'mockups', ask: ask !== null && (had.ask === null || ask > had.ask) ? ask : had.ask };
+  };
+  if (d.mockups) mock(originOf(d.mockups));
+  for (const l of logs) if (l.Role === 'mockup') mock(originOf(l.Link));
+  for (const a of r.asks || []) {
+    const n = Number(a.AskId);
+    for (const o of a.Options || []) if (o && o.url) mock(originOf(o.url), Number.isInteger(n) && n > 0 ? n : null);
+  }
+  return out;
+}
+
+/**
+ * WHAT A SHARED SERVER MAY SHOW (Share demo S1, dev game 1215, owner
+ * 2026-10-17). A link's scope is its folder: a page's own folder, or the folder
+ * a link names. The URL parser has already resolved any "..".
+ */
+function scopeOf(url) {
+  const u = hostOf(url);
+  if (!u) return '';
+  const p = u.pathname || '/';
+  return p.endsWith('/') ? p : p.slice(0, p.lastIndexOf('/') + 1);
+}
+
+/**
+ * For each server being shared (the same ones as lanTargets), the folders of
+ * the pages Claude linked on it. The plugin's gateway opens a page only inside
+ * one of them, so the room never browses the rest of a served folder (Claude's
+ * helper files, a project root). A folder inside another is dropped.
+ * @returns {Object<string, string[]>} origin -> sorted scopes
+ */
+function lanScopes(room) {
+  const targets = new Set(lanTargets(room));
+  const by = {};
+  const d = declaredOf(room);
+  for (const url of [...shownUrls(room), d.demo, d.mockups].filter(Boolean)) {
+    if (!isLoopbackUrl(url)) continue;
+    const origin = hostOf(url).origin;
+    if (!targets.has(origin)) continue;
+    const scope = scopeOf(url);
+    if (!scope) continue;
+    (by[origin] = by[origin] || new Set()).add(scope);
+  }
+  const out = {};
+  for (const [origin, set] of Object.entries(by)) {
+    const all = [...set].sort();
+    out[origin] = all.filter((x) => !all.some((y) => y !== x && x.startsWith(y)));
+  }
+  return out;
 }
 
 function normalizeReport(body) {
@@ -86,7 +217,9 @@ function normalizeReport(body) {
   const error = String(b.error || '').replace(/\s+/g, ' ').trim().slice(0, 200);
   const validKey = status === 'off' ? '' : (KEY_RE.test(key) ? key : '');
   const reporter = REPORTER_RE.test(String(b.reporter || '')) ? String(b.reporter) : '';
-  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error, Reporter: reporter } };
+  // 1.20.0+: what .engage/share.json declares. An older plugin sends none: nothing declared.
+  const declared = normalizeDeclared(b.declared);
+  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error, Reporter: reporter, Declared: declared } };
 }
 
 /**
@@ -135,13 +268,10 @@ function lanTranslator(row, now) {
 
 function lanPublicView(room, now) {
   const t = lanTranslator(room && room.lan, now);
-  const logs = (room && room.logs) || [];
-  for (let i = logs.length - 1; i >= 0; i -= 1) {
-    const l = logs[i];
-    if (l.By === 'agent' && l.Link) {
-      const open = t(l.Link);
-      if (open) return { open };
-    }
+  // The demo first (S3): declared, then marked, then the newest link; the first one shared wins.
+  for (const url of demoCandidates(room)) {
+    const open = t(url);
+    if (open) return { open };
   }
   const first = room && room.lan && (room.lan.Map || [])[0];
   const open = first ? t(first.local) : '';
@@ -153,15 +283,25 @@ function lanPublicView(room, now) {
   return lanTargets(room).length ? { state: 'off' } : null;
 }
 
-function lanHostView(row, now, { withKey: showKey = false } = {}) {
+function lanHostView(row, now, { withKey: showKey = false, room = null } = {}) {
   const r = row || {};
   const status = lanStatus(r, now);
+  // Which server is which (S3 c), so the host can tell the demo from the mockups.
+  const roles = room ? lanRoles({ ...room, lan: r }) : {};
   return {
+    // THE DEMO ITSELF (dev 1215, owner 2026-10-17): the page Claude showed, with its
+    // path, the address the phones open (lanPublicView). The map's links are each
+    // server's root, which is a directory listing when Claude serves a folder.
+    ...(showKey && room ? { demo: (lanPublicView({ ...room, lan: r }, now) || {}).open || '' } : {}),
     wanted: Boolean(r.Wanted),
     status,
     map: status === 'off' ? [] : (r.Map || []).map((m) => ({
       local: m.local, lan: m.lan, ...(showKey && r.Key ? { link: withKey(m.lan, '/', r.Key) } : {}),
+      role: (roles[m.local] && roles[m.local].role) || null,
+      ask: (roles[m.local] && roles[m.local].ask) || null,
     })),
+    // The session's own name on this laptop, from .engage/share.json (S3 c).
+    label: (r.Declared && typeof r.Declared.label === 'string' && r.Declared.label) || '',
     open: status === 'live' ? Number(r.Open) || 0 : 0,
     error: status === 'failed' ? r.Error || '' : '',
     liveSince: status === 'live' ? r.LiveSince || null : null,
@@ -173,5 +313,5 @@ function lanHostView(row, now, { withKey: showKey = false } = {}) {
 
 module.exports = {
   SK_LAN, REPORT_FRESH_MS, QUIET_AFTER_MS, MAX_TARGETS,
-  isLoopbackUrl, isPrivateLanUrl, lanTargets, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
+  isLoopbackUrl, isPrivateLanUrl, lanTargets, lanRoles, lanDemoUrl, normalizeDeclared, scopeOf, lanScopes, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
 };

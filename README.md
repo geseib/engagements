@@ -89,7 +89,15 @@ Each tier serves its own: `engage` on prod, `engage-test` on test, `engage-dev` 
 so a laptop can hold more than one. The host installs it from the room's Connect window,
 which shows the command to run in a terminal; the laptop needs Node 18 or later and git.
 The plugin's source is `src/public/engage-mcp.mjs`; `tests/engage-plugin.js` and
-`tests/engage-mcp.js` cover it.
+`tests/engage-mcp.js` cover it, and `tests/engage-lan-gateway.js` runs its Wi-Fi share
+against a real app. Share demo opens only the pages Claude linked (never a folder
+listing); a project can name its demo and mockups in `.engage/share.json`, and each
+session takes its Wi-Fi ports from a block set by its code (`ENGAGE_LAN_PORT` overrides).
+Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.js`).
+
+A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (the key comes from
+the host's Session › Settings › Screens): public, read-only, no names
+(`src/src/present/buildwall/`, read `GET …/build-play/wall`).
 
 ## Documentation
 

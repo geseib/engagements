@@ -382,7 +382,8 @@ describe('T6 results: highlight what moves forward', () => {
     expect(m.secondary).toMatchObject({ action: 'points-run', label: 'Work through in turn' });
     expect(m.extras.map((x) => x.label)).toEqual(['Save the rest for later']);
     const dockButtons = await screen.findAllByRole('button', { name: /Save the rest for later|Work through in turn|Send these 3 to Claude/ });
-    expect(dockButtons.map((b) => b.textContent)).toEqual(['Save the rest for later', 'Work through in turn', 'Send these 3 to Claude']);
+    // The shared bar's order (parity PLAN §2a D1): the secondary, the third slot, the main button last.
+    expect(dockButtons.map((b) => b.textContent)).toEqual(['Work through in turn', 'Save the rest for later', 'Send these 3 to Claude']);
     fireEvent.click(screen.getByRole('button', { name: 'Work through in turn' }));
     await waitFor(() => expect(postsTo('asks/005')).toHaveLength(1));
     expect(postsTo('asks/005')[0].body).toEqual({ action: 'forward', pointIds: ['p2', 'p1', 'p4'], then: 'run' });
@@ -603,7 +604,7 @@ describe('T7b the Stage and room safety', () => {
     expect(stageModel(RUNNING(true), null, Date.now()).primary.claudeDone).toBe(true);
   });
 
-  test('the Stage shows the list, Claude is on 2 / 4, no names; Space does nothing until Claude reports', async () => {
+  test('the Stage shows the list, Claude is on 2 / 4, no names; Space sends nothing until Claude reports', async () => {
     await openRoom(RUNNING(false));
     fireEvent.keyDown(window, { key: '2' });
     const stage = await screen.findByRole('region', { name: 'Working through' });
@@ -620,22 +621,39 @@ describe('T7b the Stage and room safety', () => {
     expect(postsTo('run/next')).toHaveLength(0);
   });
 
-  test('the Stage: Claude has reported, Space sends the next; Next early asks the same question', async () => {
+  test('the Stage: Claude has reported, Space sends the next in one press', async () => {
     await openRoom(RUNNING(true));
     fireEvent.keyDown(window, { key: '2' });
     await screen.findByRole('region', { name: 'Working through' });
-    fireEvent.mouseEnter(document.querySelector('footer.dock'));
-    expect(screen.getByText(/Press/).textContent).toMatch('send 3');
+    expect(document.querySelector('.dock .kbd').textContent).toBe('SPACE');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
+    expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1' });
   });
 
-  test('the Stage: Next before Claude reports opens the confirm there', async () => {
+  test('the Stage: Next before Claude reports asks twice, in place (no dialog), then sends anyway', async () => {
+    // Press twice, in place (host standards §3; parity PLAN §2a D1): the Stage's
+    // dock is the shared bar, which says it on the button rather than in a modal.
     await openRoom(RUNNING(false));
     fireEvent.keyDown(window, { key: '2' });
     await screen.findByRole('region', { name: 'Working through' });
-    fireEvent.click(screen.getByRole('button', { name: 'Next: 3' }));
-    expect(await screen.findByRole('dialog', { name: "Claude hasn't finished 2. Send 3 anyway?" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    const dockEl = document.querySelector('footer.dock');
+    fireEvent.click(within(dockEl).getByRole('button', { name: 'Next: 3' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(postsTo('run/next')).toHaveLength(0);
+    expect(within(dockEl).getByRole('alert')).toHaveTextContent("Claude hasn't finished 2. Press again to send 3.");
+    fireEvent.click(within(dockEl).getByRole('button', { name: 'Next: 3 anyway' }));
+    await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
+    expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1', force: true });
+  });
+
+  test('the Stage: Stop is in the dock\'s third slot, never dropped', async () => {
+    await openRoom(RUNNING(false));
+    fireEvent.keyDown(window, { key: '2' });
+    await screen.findByRole('region', { name: 'Working through' });
+    const stop = within(document.querySelector('footer.dock')).getByRole('button', { name: 'Stop' });
+    expect(stop).toHaveClass('host-action-bar__tertiary');
+    fireEvent.click(stop);
+    await waitFor(() => expect(postsTo('run/stop')).toHaveLength(1));
   });
 });

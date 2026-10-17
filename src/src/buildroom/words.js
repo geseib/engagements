@@ -274,6 +274,46 @@ export const W = Object.freeze({
   claudeReady: 'Claude is ready',
   chipWorking: 'Working.',
   nothingYet: 'Nothing yet.',
+  // HISTORY: what the room gave, and what reached Claude (parity PLAN §2.8, H3).
+  // Never a name (owner, Q15).
+  storyIdea: 'An idea from the room',
+  storyHostIdea: "The host's idea",
+  storyAsk: (n) => `Ask ${n}`,
+  sentAsWritten: 'sent to Claude as written',
+  sentToClaude: 'sent to Claude',
+  reworded: 'reworded by the host',
+  sentInOtherWords: 'sent later, in other words',
+  forClaudeLater: 'for Claude, later',
+  withTheRoom: 'with the room',
+  closedNothingSent: 'closed, nothing sent to Claude',
+  ideaChosen: 'chosen by the room',
+  ideaNotChosen: 'not chosen',
+  ideaInVote: 'in the vote',
+  // A phone's own History (H5): its own ideas, never anyone else's name.
+  storyYourIdea: 'Your idea',
+  storyYours: 'yours',
+  // History's headings and how a decision was made (H4: out of buildScreens.js).
+  storyShowed: 'Claude showed',
+  storySaid: 'The room said',
+  storyMilestone: 'Milestone',
+  storyWrapped: 'Wrapped up',
+  storyFinal: 'The finished product',
+  storyPicture: 'Picture',
+  storyDecided: (n) => `Decided · Ask ${n}`,
+  fromIdeas: (n) => (n === 1 ? 'an idea from the room' : `${n} ideas from the room`),
+  fromReadyQuestion: 'a ready question',
+  claudeAsked: 'Claude asked',
+  byWheel: 'the wheel picked it',
+  bySpoken: 'said out loud',
+  hostsPick: "the host's pick",
+  ratedBy: (avg, n) => `rated ${avg} of 5 by ${n}`,
+  pickedBy: (n, of) => `${n} of ${of} picked it`,
+  votedFor: (n) => `${n} voted for it`,
+  recordedOnly: 'recorded only',
+  claudeHasIt: 'Claude has it',
+  claudeWaiting: 'waiting for Claude',
+  // "Made so far" on History: counted by History's own rule (contributionsOf).
+  madeSoFar: (shots, ideas, used) => `${shots} ${shots === 1 ? 'screenshot' : 'screenshots'} · ${ideas} ${ideas === 1 ? 'idea' : 'ideas'}${ideas ? `, ${used} used` : ''}`,
   endedEdit: 'Session ended. You can still edit the report.',
   wrappedUp: 'Claude has wrapped up. Check the report, then end the session.',
   // When the host wrote or saved it (outcome.by), Revy review 2026-10-10.
@@ -391,6 +431,12 @@ export const W = Object.freeze({
   stopSharing: 'Stop sharing',
   keepSharing: 'Keep sharing',
   shareShowOnStage: 'Show on the Stage',
+  // Each shared server by what it is (Share demo S3, plugin 1.20.0): the role
+  // the project declared or Claude gave its link; App N when nothing says.
+  shareServerDemo: 'Demo',
+  shareServerMockups: 'Mockups',
+  shareServerMockupsAsk: (n) => `Mockups · Ask ${n}`,
+  shareServerApp: (n) => `App ${n}`,
   onlyThisLaptop: 'Only this laptop can open it.',
   anyoneOnWifi: 'Anyone on this Wi-Fi',
   /** The Stage's HOST list (option B): one grey line, never a pop-up on the wall. */
@@ -480,6 +526,41 @@ export const W = Object.freeze({
   // Before you start 2026-10-10: the New Build Room page (owner: option A)
   needLine: 'The laptop that runs Claude Code needs Node 18 or later and git.',
   beforeYouStart: 'Before you start',
+  // The Stage dock on the shared bar (parity PLAN §2a, D1-D2, 17 Oct 2026)
+  /** The armed button's own label, as C&A's: "Show results anyway". */
+  armedLabel: (label) => `${label} anyway`,
+  /** The first press of an early Show results; counts handle nobody, as roundWords' armResults does. */
+  armStill: (n, total, kind) => {
+    const doing = kind === 'voting' ? 'voting' : 'answering';
+    if (Number(total) > 0 && Number(n) >= Number(total)) return `Nobody has ${kind === 'voting' ? 'voted' : 'answered'} yet. Press again to show results.`;
+    return `${Number(total) > 0 ? `${n} of ${total}` : n} still ${doing}. Press again to show results.`;
+  },
+  armRunEarly: (k, j) => `Claude hasn't finished ${k}. Press again to send ${j}.`,
+  armStop: 'Press again to stop the list.',
+  /** HOST on the Stage: always home, in one press (D2). */
+  hostBack: '← Host',
+  hostKeys: 'Host screen (1 or P)',
+  hostWaitingSr: (n) => ` ${n} waiting`,
+  sessionKeys: 'Session (\\)',
+  askingSr: ' asking to take a name',
+  // The room's window (parity PLAN §2.4, B7): the wall on the projector, no sign-in, no buttons
+  wallLinkChanged: "This window's link has changed. Open the room's window again from the laptop.",
+  wallNotFound: 'This session has ended or the code is wrong.',
+  wallConnecting: 'Connecting to the room…',
+  wallEnded: 'Session ended',
+  /** History on the wall: the newest entries that fit, then how many are not shown. */
+  wallEarlier: (n) => `and ${n} earlier`,
+  // The Screens group in Settings (parity PLAN §2.7, B9 in part)
+  screensGroup: 'Screens',
+  screensScope: 'Applies now',
+  wallOpen: "Room's window ↗",
+  wallOpenHint: 'Opens the room’s own window: the Stage, Build or History you pick here, with nothing to press and no names.',
+  wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History.',
+  wallNewLink: 'New link',
+  wallNewLinkArmed: 'New link anyway',
+  wallNewLinkWhy: 'Every open window stops until it is opened again from here. Press again to make a new link.',
+  wallNewLinkHint: 'Stops every window opened with the old link.',
+  wallNewLinkDone: 'New link made. Open the room’s window again.',
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */

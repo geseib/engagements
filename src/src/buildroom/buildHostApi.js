@@ -89,6 +89,11 @@ export function buildApi(gameId) {
   return {
     /** HostState. */
     state: () => call(`${root}state`),
+    /**
+     * What the room's window shows (parity PLAN §2.9a): `{screen?, codes?, profile?, rotate?}`
+     * → `{wall}`, plus `{wallKey}` when it rotated.
+     */
+    wall: (body) => post('wall', body),
     /** `{kind, prompt, detail?, options?, lowLabel?, highLabel?, maxPicks?, draft?}` → `{ask}` */
     createAsk: (body) => post('asks', body),
     getAsk: (askId) => call(`${root}asks/${seg(askId)}`),
@@ -103,8 +108,17 @@ export function buildApi(gameId) {
     postLog: (body) => post('log', body),
     /** `{action:'edit'|'delete', text?, detail?}` → `{entry}` */
     logAction: (logId, body) => post(`log/${seg(logId)}`, body),
-    /** A direction; `as` is keep, later or ask (step 7c), else Do now. */
-    postDirection: (text, as) => post('directions', { text, ...(as && as !== 'do-now' ? { as } : {}) }),
+    /**
+     * A direction; `as` is keep, later or ask (step 7c), else Do now. `from` names
+     * what it was written from (`{ askIds, ideaIds }`, parity PLAN §2.8 H1), so
+     * History can mark those as sent to Claude.
+     */
+    postDirection: (text, as, from = null) => post('directions', {
+      text,
+      ...(as && as !== 'do-now' ? { as } : {}),
+      ...(from && from.askIds && from.askIds.length ? { fromAskIds: from.askIds } : {}),
+      ...(from && from.ideaIds && from.ideaIds.length ? { fromIdeaIds: from.ideaIds } : {}),
+    }),
     /** The host removes a screenshot. */
     /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
     deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
@@ -239,17 +253,8 @@ export const buildReportPath = (gameId) => `${buildRoomPath(gameId)}&view=report
 
 // ── Untrusted text ──────────────────────────────────────────────────────────
 
-/** An http(s) URL as a string, or '' — anything Claude or a phone sent is untrusted. */
-export function safeHref(value) {
-  const s = String(value || '').trim();
-  if (!s) return '';
-  try {
-    const u = new URL(s);
-    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : '';
-  } catch (e) {
-    return '';
-  }
-}
+// Pure, in links.js so the room's window can use it without this module (B5).
+export { safeHref } from './links';
 
 /**
  * The one command the host pastes (PLAN §7): fetch the MCP server from this

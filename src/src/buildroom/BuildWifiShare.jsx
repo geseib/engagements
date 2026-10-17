@@ -22,8 +22,15 @@ const originOf = (u) => {
   try { const x = new URL(String(u)); return LOOPBACK.test(x.hostname) ? x.origin : ''; } catch (e) { return ''; }
 };
 
-/** The link the QR opens: the newest app Claude showed, else the first one shared. */
+/**
+ * The link the QR opens: the server's demo (the declared demo page, else the
+ * link Claude marked demo, else its newest; Share demo S3), else from an older
+ * server the newest app Claude showed, else the first one shared.
+ */
 export function wifiLink(room) {
+  // The server's demo address (dev 1215): the page Claude showed, as the phones open it.
+  if (room && room.lan && room.lan.demo) return room.lan.demo;
+  // An older server: the root of the newest app Claude showed.
   const map = (room && room.lan && room.lan.map) || [];
   const log = (room && room.log) || [];
   for (let i = log.length - 1; i >= 0; i -= 1) {
@@ -43,10 +50,20 @@ export function WifiChip({ lan, now, onOpen, open }) {
   );
 }
 
-const APP_NAMES = ['Latest build', 'Second app', 'Third app', 'Fourth app'];
-
 /** What a person reads of a Wi-Fi link: its host and port. The key is never shown, only copied. */
 export const shownAddress = (link) => { try { return new URL(String(link)).host; } catch (e) { return ''; } };
+/** A gateway's port alone: every shared server is on the same Wi-Fi address. */
+const lanPort = (link) => { try { return new URL(String(link)).port; } catch (e) { return ''; } };
+
+/**
+ * A shared server's name (Share demo S3): Demo, Mockups (with the Choose ask
+ * it serves), else App N by its place. The server says which is which.
+ */
+export function serverName(m, i) {
+  if (m && m.role === 'demo') return W.shareServerDemo;
+  if (m && m.role === 'mockups') return m.ask ? W.shareServerMockupsAsk(m.ask) : W.shareServerMockups;
+  return W.shareServerApp(i + 1);
+}
 
 function CopyLink({ link }) {
   const [said, setSaid] = useState('');
@@ -175,15 +192,18 @@ export function QuietWarning() {
   );
 }
 
-/** More than one app shared: each, by name, with Copy. The QR is the newest (wifiLink). */
+/**
+ * More than one app shared: each by what it is, where it runs on this laptop
+ * and on the Wi-Fi, with Copy. The QR is the demo (wifiLink).
+ */
 export function AppList({ map }) {
   if (!map || map.length < 2) return null;
   return (
     <ul className="brm-wifipanel-apps">
       {map.map((m, i) => (
         <li key={m.lan}>
-          <span className="brm-wifipanel-k">{APP_NAMES[i] || `App ${i + 1}`}</span>
-          <span className="brm-wifipanel-u" title={m.local}>{shownAddress(m.lan)}</span>
+          <span className="brm-wifipanel-k">{serverName(m, i)}</span>
+          <span className="brm-wifipanel-u" title={`${shownAddress(m.local)} → ${shownAddress(m.lan)}`}>{`${shownAddress(m.local)} → :${lanPort(m.lan)}`}</span>
           {m.link && <CopyLink link={m.link} />}
         </li>
       ))}
@@ -371,25 +391,25 @@ export function DemoTile({ room, now, link, here = 0, busy, run, api }) {
  * alone, never an empty slot. Room ladder; every line 12 words or fewer, and
  * a count only once someone has opened it. A click on a code enlarges it alone.
  */
-export function WallCodes({ room, now, link, onZoom }) {
+export function WallCodes({ room, now, link, onZoom = null }) {
   const demo = demoOnStage(room, now, link);
+  // On the room's window nothing enlarges a code (no onZoom): the codes are plain boxes.
+  const qr = (which, label, box) => (onZoom
+    ? <button type="button" className="brm-wallcodes-qr" aria-label={label} onClick={() => onZoom(which)}>{box}</button>
+    : <div className="brm-wallcodes-qr">{box}</div>);
   const open = Number(room && room.lan && room.lan.open) || 0;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   return (
     <section className={`brm-wallcodes${demo ? '' : ' is-one'}`} aria-label={demo ? 'The join and demo codes' : 'The join code'} data-testid="brm-wallcodes">
       <div className="brm-wallcodes-c">
-        <button type="button" className="brm-wallcodes-qr" aria-label="Enlarge the join code" onClick={() => onZoom('join')}>
-          <CodeBox value={playUrl} label={`QR code to join at ${playUrl}`} />
-        </button>
+        {qr('join', 'Enlarge the join code', <CodeBox value={playUrl} label={`QR code to join at ${playUrl}`} />)}
         <span className="brm-wallcodes-eb">{W.stageJoinEyebrow}</span>
         <h2 className="brm-wallcodes-h">{W.stageJoinHead}</h2>
         <p className="brm-wallcodes-l">{`${window.location.host}/play \u00b7 code `}<b>{room.gameId}</b></p>
       </div>
       {demo && (
         <div className="brm-wallcodes-c">
-          <button type="button" className="brm-wallcodes-qr" aria-label="Enlarge the demo code" onClick={() => onZoom('demo')}>
-            <CodeBox value={link} label="QR code to open the demo" />
-          </button>
+          {qr('demo', 'Enlarge the demo code', <CodeBox value={link} label="QR code to open the demo" />)}
           <span className="brm-wallcodes-eb is-live">{W.stageDemoLive}</span>
           <h2 className="brm-wallcodes-h">{W.stageDemoHead}</h2>
           <p className="brm-wallcodes-l">{W.stageSameWifi}</p>

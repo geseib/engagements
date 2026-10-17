@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Room console</title>
+<style>
+/* Build Room console mockup (B7a, parity PLAN §2.6, §2.6b, §2a, Q17), 17 Oct.
+   The same visual system as docs/design/host-console/index.html (the approved
+   C&A console): dusk palette, the laptop ladder 12 / 13 / 15 / 19 / 24px, the
+   same top / loop / rail / main / footer grid. Words from buildroom/words.js
+   and buildScreens.js; the session itself (a food bank sign-up) is invented. */
+:root{--bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;--rule:rgba(244,237,228,.12);--rule-2:rgba(244,237,228,.22);--primary:#F6A94C;--primary-text:#F6A94C;--info:#7CA7E6;--success:#4FB286;--success-text:#6FD0A4;--warn:#F6A94C;--page:#0b1424;--paper:#EDE7DC;--paper-ink:#56627a;--paper-ink-2:#9aa3b3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.page{max-width:1440px;margin:0 auto;padding:16px}
+.intro{color:var(--muted);font-size:13px;margin:0 0 10px;max-width:110ch}
+.intro b{color:var(--text)}
+.views,.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.views button,.tabs button,.mini button{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:var(--surface);border:1px solid var(--rule-2);border-radius:999px;padding:6px 12px;cursor:pointer}
+.views button{border-radius:8px;font-size:15px;padding:7px 14px}
+.views button[aria-pressed=true]{border-color:var(--primary);background:var(--surface-2)}
+.tabs button[aria-pressed=true],.mini button[aria-pressed=true]{border-color:var(--info);background:var(--surface-2)}
+.mini{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted);margin:0 0 10px}
+[hidden]{display:none!important}
+
+/* ---------- the console (C&A's grid, unchanged) ---------- */
+.frame{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.console{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto;grid-template-columns:280px minmax(0,1fr);grid-template-areas:"top top" "loop loop" "rail main" "req req" "foot foot";height:800px;min-width:1240px;background:var(--bg);border:1px solid var(--rule-2);border-radius:12px;overflow:hidden}
+.top{grid-area:top;display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--rule);min-width:0}
+.brand{font-weight:800;font-size:15px}
+.name{color:var(--muted);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spacer{margin-left:auto}
+.code{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--rule-2);border-radius:8px;padding:4px 10px;background:transparent;color:var(--text);white-space:nowrap}
+.code b{color:var(--primary-text);letter-spacing:.06em;margin-left:4px}
+.btn{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:8px;padding:5px 12px;cursor:pointer;white-space:nowrap}
+.btn .sub{font-weight:600;color:var(--success-text)}
+.winstat{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:rgba(79,178,134,.14);border:1px solid var(--success);border-radius:999px;padding:4px 12px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;flex:none}
+.sees{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);white-space:nowrap;padding-left:12px;border-left:1px solid var(--rule)}
+.sees button{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:8px;padding:4px 8px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.sees button[aria-pressed=true]{border-color:var(--info);background:rgba(124,167,230,.22)}
+kbd{font:inherit;font-size:12px;font-weight:600;color:var(--muted);border:1px solid rgba(155,168,190,.5);border-radius:4px;padding:0 5px;line-height:16px}
+
+/* line 2: the ask path in the shared strip (Q17) */
+.loop{grid-area:loop;display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--rule);font-size:13px;color:var(--muted);min-height:41px}
+.loop .round{font-weight:800;color:var(--text);padding-right:4px}
+.loop ol{display:flex;gap:6px;margin:0;padding:3px 6px;list-style:none;border:1px solid var(--rule-2);border-radius:10px;align-items:center}
+.step{padding:2px 10px;border-radius:7px;border:1px solid var(--rule-2);color:var(--muted);white-space:nowrap}
+.step.done{color:var(--text)} .step.done::before{content:"✓ ";color:var(--success-text);font-weight:800}
+.step.live{color:var(--text);background:rgba(124,167,230,.28);border-color:var(--info);font-weight:800}
+.step.live::after{content:" ● live";font-size:12px;color:var(--success-text)}
+.step.idle{opacity:.55}
+.sep{opacity:.6}
+.loop .aside{margin-left:auto;color:var(--muted);font-size:12px}
+
+/* rail */
+.rail{grid-area:rail;border-right:1px solid var(--rule);overflow:auto;padding:8px 0}
+details{border-bottom:1px solid var(--rule)}
+summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:13px;font-weight:700}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸";color:var(--muted)} details[open] summary::before{content:"▾"}
+summary .count{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600}
+summary .count.alert{color:var(--primary-text)}
+.rail ul{list-style:none;margin:0;padding:0 14px 10px;display:grid;gap:8px;font-size:13px}
+.rail li{display:flex;gap:8px;align-items:baseline;min-width:0}
+.rail li > span:last-child{min-width:0}
+.rail .meta{color:var(--muted);font-size:12px}
+.rail .tick{color:var(--success-text);font-weight:800;flex:none;width:12px}
+.rail .wait{color:var(--muted);flex:none;width:12px}
+.rail .open-all{font-size:12px;font-weight:700;color:var(--info);padding:0 14px 10px;display:block;cursor:pointer}
+.from{display:inline-block;font-size:12px;font-weight:700;border-radius:6px;padding:0 6px;margin-right:4px;border:1px solid var(--rule-2);color:var(--muted)}
+.from.cl{border-color:var(--primary);color:var(--primary-text)}
+.acts-s{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:3px}
+.acts-s a{font-size:12px;font-weight:700;color:var(--info);cursor:pointer}
+.filters{display:flex;gap:4px;padding:0 14px 8px;flex-wrap:wrap}
+.filters span{font-size:12px;font-weight:700;border:1px solid var(--rule-2);border-radius:999px;padding:1px 8px;color:var(--muted)}
+.filters span.on{border-color:var(--info);color:var(--text)}
+.subtabs{display:flex;gap:4px;padding:0 14px 8px}
+.subtabs span{font-size:12px;font-weight:700;border-bottom:2px solid transparent;padding:2px 4px;color:var(--muted)}
+.subtabs span.on{border-color:var(--info);color:var(--text)}
+.tag{font-size:12px;color:var(--muted);border:1px solid var(--rule);border-radius:6px;padding:0 5px;margin-left:4px}
+.rail .group{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:2px 14px 4px}
+
+/* main */
+.main{grid-area:main;overflow:auto;padding:14px 20px 18px;display:grid;gap:14px;align-content:start}
+.kicker{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+h2{margin:2px 0 0;font-size:24px;line-height:1.2}
+h3.ph{margin:0 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.claude{display:flex;align-items:baseline;gap:10px;padding:8px 12px;border:1px solid var(--rule);border-radius:10px;background:var(--surface);font-size:15px}
+.claude .dot{background:var(--success);transform:translateY(-1px)}
+.claude b{font-weight:700}
+.claude .meta{font-size:12px;color:var(--muted)}
+.claude .r{margin-left:auto;font-size:12px;color:var(--info);font-weight:700;white-space:nowrap}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start}
+.cols.decide{grid-template-columns:minmax(0,1fr) 410px}
+.stack{display:grid;gap:14px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:10px 12px}
+.task{border-left:3px solid var(--primary);padding:6px 10px;background:var(--surface);border-radius:0 8px 8px 0;font-size:15px}
+.task small{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.note{font-size:13px;color:var(--muted);margin:0}
+.tiny{font-size:12px;color:var(--muted)}
+.moves{display:grid;gap:6px}
+.move{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 12px}
+.move b{display:block;font-size:15px}
+.move span{font-size:13px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.move.lead{border-color:var(--primary)}
+.sbtn{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:8px;padding:5px 12px;white-space:nowrap}
+.sbtn.lead{background:var(--primary);border-color:var(--primary);color:#2A1B08}
+.composer{border:2px solid var(--info);border-radius:12px;padding:12px;background:var(--surface);display:grid;gap:10px}
+.composer .hd{display:flex;align-items:baseline;gap:8px}
+.field{border:1px solid var(--rule-2);border-radius:8px;padding:8px 10px;font-size:15px;background:var(--bg);min-height:40px}
+.field.ph{color:var(--muted)}
+.field.ta{min-height:76px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row .push{margin-left:auto;display:flex;gap:8px;align-items:center}
+.sel{font-size:13px;border:1px solid var(--rule-2);border-radius:8px;padding:4px 10px;color:var(--text)}
+.chk{font-size:13px;color:var(--muted);display:inline-flex;gap:6px;align-items:center}
+.chk i{width:14px;height:14px;border:1px solid var(--rule-2);border-radius:3px;display:inline-block}
+.kinds{display:flex;gap:6px;flex-wrap:wrap}
+.kinds span{font-size:13px;font-weight:700;border:1px solid var(--rule-2);border-radius:8px;padding:4px 10px}
+.kinds .on{border:2px solid var(--info);background:var(--surface-2)}
+.lbl{font-size:13px;font-weight:700;color:var(--muted)}
+.folds{display:grid;gap:0;background:var(--surface);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.folds details:last-child{border-bottom:0}
+.folds summary{padding:9px 12px}
+.folds .body{padding:0 12px 10px;font-size:13px;display:grid;gap:6px}
+.folds .body p{margin:0}
+.dec{display:flex;gap:8px;align-items:baseline}
+.dec i{width:14px;height:14px;border:1px solid var(--rule-2);border-radius:3px;display:inline-block;flex:none;transform:translateY(2px)}
+.dec i.on{background:var(--info);border-color:var(--info)}
+
+/* options: the board, pressable on the laptop (the wall's board has no controls) */
+.opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.opt{font:inherit;text-align:left;color:var(--text);background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px;display:grid;gap:6px;cursor:pointer;min-width:0}
+.opt .ol{display:flex;gap:8px;align-items:baseline;min-width:0}
+.opt .ol b{font-size:15px}
+.opt .ol span{font-size:13px;min-width:0}
+.opt .cnt{font-size:13px;color:var(--muted);white-space:nowrap}
+.barrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.barrow .bar{display:block}
+.opt.win{border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
+.opt .mark{font-size:12px;font-weight:700;color:var(--info);text-transform:uppercase;letter-spacing:.06em}
+.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--info)}
+.decidep{border:2px solid var(--info);border-radius:12px;padding:12px;background:var(--surface);display:grid;gap:10px}
+.told{font-size:13px;color:var(--text);border-left:3px solid var(--info);padding:4px 10px;background:var(--bg);border-radius:0 8px 8px 0}
+.runlist{display:grid;gap:6px;counter-reset:r}
+.runi{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:baseline;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 12px}
+.runi .k{font-weight:800}
+.runi .st{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap}
+.runi.done .st{color:var(--success-text)}
+.runi.on{border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
+.runi.on .st{color:var(--info)}
+.idea{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 12px;font-size:15px}
+.idea small{display:block;font-size:12px;color:var(--muted)}
+.idea.new{border-color:var(--success)}
+
+/* the request strip above the footer, as C&A's */
+.req{grid-area:req;display:flex;gap:12px;align-items:center;padding:6px 16px;border-top:1px solid var(--rule);background:rgba(246,169,76,.08);font-size:13px}
+.req b{font-weight:700}
+.req .acts-s{margin:0 0 0 auto}
+
+/* footer: status · Your part now · [More] [secondary] [MAIN] */
+.foot{grid-area:foot;display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr) auto;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--surface)}
+.foot .status{font-size:13px;min-width:0}
+.foot .status b{display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foot .part{font-size:13px;color:var(--muted);margin:0;min-width:0}
+.foot .part em{font-style:normal;color:var(--primary-text);font-weight:700}
+.foot .part .k{font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin-right:.6em}
+.foot .acts{display:flex;gap:10px;align-items:center}
+.armed{font-size:13px;font-weight:700;max-width:30ch;line-height:1.3;padding-left:.6em;border-left:3px solid var(--warn)}
+.go{font:inherit;font-size:15px;font-weight:800;background:var(--primary);color:#2A1B08;border:0;border-radius:10px;padding:10px 18px;display:inline-flex;gap:8px;align-items:center;cursor:pointer;white-space:nowrap}
+.go kbd{color:#2A1B08;border-color:rgba(42,27,8,.45)}
+.go.is-armed{color:var(--text);background:rgba(246,169,76,.22);box-shadow:0 0 0 2px rgba(246,169,76,.45);border:1px solid var(--warn)}
+.go.is-armed kbd{color:var(--muted);border-color:rgba(155,168,190,.5)}
+.alt{font:inherit;font-size:15px;font-weight:700;background:transparent;color:var(--text);border:1px solid var(--rule-2);border-radius:10px;padding:10px 16px;white-space:nowrap}
+.more{font:inherit;font-size:13px;font-weight:700;background:transparent;color:var(--muted);border:1px dashed var(--rule-2);border-radius:10px;padding:10px 12px;white-space:nowrap}
+.empty-slot{font-size:13px;color:var(--muted);border:1px dashed var(--rule-2);border-radius:10px;padding:10px 16px;white-space:nowrap}
+
+/* annotations */
+.ann{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;margin:14px 0 0;padding:0;list-style:none;color:var(--muted);font-size:13px;max-width:1240px}
+.ann li{padding-left:12px;border-left:2px solid var(--rule-2)}
+.ann b{color:var(--text);font-weight:700}
+.pin{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--info);color:var(--page);font-size:12px;font-weight:800;margin-right:6px;vertical-align:1px}
+
+/* ---------- the room's window (projector) ---------- */
+.wall{position:relative;width:100%;max-width:1200px;aspect-ratio:16/9;background:#0a1220;border:1px solid var(--rule-2);border-radius:12px;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 230px;min-width:900px}
+.wall .sm{padding:34px 40px;display:flex;flex-direction:column;gap:18px;min-width:0;overflow:hidden}
+.wall .sr{border-left:1px solid var(--rule);padding:28px 22px;display:flex;flex-direction:column;gap:16px;align-items:flex-start}
+.wk{font-size:20px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.wq{font-size:40px;font-weight:800;line-height:1.15;margin:0}
+.wl{font-size:24px;color:var(--text);margin:0}
+.wl.m{color:var(--muted)}
+.meter b{display:block;font-size:64px;line-height:1;font-weight:800}
+.meter span{font-size:20px;color:var(--muted)}
+.wopts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.wopt{border:1px solid var(--rule-2);border-radius:14px;padding:10px;display:grid;gap:8px;background:var(--surface)}
+.wopt .ol{display:flex;gap:10px;align-items:baseline;font-size:22px}
+.wopt .ol b{font-size:26px}
+.wopt .cnt{margin-left:auto;color:var(--muted)}
+.wopt.win{border-color:var(--info);box-shadow:0 0 0 2px var(--info)}
+.wbars{display:grid;gap:12px}
+.wbar{display:grid;grid-template-columns:44px minmax(0,1fr) 60px;gap:14px;align-items:center;font-size:24px}
+.wbar .bar{height:22px;border-radius:8px}
+.wrun{display:grid;gap:10px}
+.wrun div{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:14px;align-items:baseline;font-size:24px;border:1px solid var(--rule);border-radius:12px;padding:10px 16px;background:var(--surface)}
+.wrun div em{font-style:normal;font-size:18px;color:var(--muted)}
+.wrun div.on{border-color:var(--info);box-shadow:0 0 0 2px var(--info)}
+.wrun div.on em{color:var(--info)}
+.wrun div.done em{color:var(--success-text)}
+.wjoin{font-size:16px;color:var(--muted)}
+.wjoin b{display:block;font-size:30px;color:var(--primary-text);letter-spacing:.08em}
+.qr{display:grid;grid-template-columns:repeat(21,1fr);width:120px;height:120px;background:#fff;padding:6px;gap:0;border-radius:6px}
+.qr i{background:#0a1220}
+.qr i.o{background:transparent}
+.hist{display:grid;gap:12px;overflow:hidden}
+.hi{display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:baseline;border-bottom:1px solid var(--rule);padding-bottom:10px}
+.hi .h{font-size:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.hi .t{font-size:22px;line-height:1.3}
+.hi .t small{display:block;font-size:17px;color:var(--muted);margin-top:2px}
+.hi.gave{padding-left:22px}
+.hi.gave .h{color:var(--info)}
+.markw{display:inline-block;font-size:16px;font-weight:700;border-radius:999px;padding:1px 10px;margin:2px 6px 0 0;border:1px solid var(--rule-2);color:var(--text)}
+.markw.chosen{border-color:var(--info);color:var(--info)}
+.markw.written{border-color:var(--success);color:var(--success-text)}
+.markw.reword{border-color:var(--warn);color:var(--primary-text)}
+.wfoot{position:absolute;left:40px;bottom:18px;font-size:18px;color:var(--muted)}
+
+/* screenshots and mockups: the product's own page, so drawn light */
+.wf{background:var(--paper);border-radius:6px;padding:8px;display:grid;gap:5px;aspect-ratio:4/3;overflow:hidden;align-content:start}
+.wf i{display:block;height:7px;border-radius:3px;background:var(--paper-ink-2)}
+.wf i.h{height:10px;width:55%;background:var(--paper-ink)}
+.wf .r{display:grid;grid-template-columns:1fr 26%;gap:6px;align-items:center}
+.wf .r b{display:block;height:9px;border-radius:5px;background:#c9935a}
+.wf .g{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.wf .g i{height:16px;background:#d9d2c5}
+.wf .g i.f{background:#7ca7e6}
+.wf .c{display:flex;gap:4px}
+.wf .c i{height:12px;width:26%;border-radius:6px;background:#c9935a}
+.wf.big{aspect-ratio:16/10;padding:16px;gap:9px}
+.wf.big i{height:12px}
+.wf.big i.h{height:18px}
+.wf.big .g i{height:38px}
+
+/* ---------- one screen: the Stage and its dock ---------- */
+.onebox{min-width:1000px;max-width:1200px}
+.stage1{position:relative;aspect-ratio:16/9;width:100%;background:#0a1220;border:1px solid var(--rule-2);border-radius:12px 12px 0 0;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 230px}
+.stage1 .sm{padding:28px 34px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.stage1 .sr{border-left:1px solid var(--rule);padding:24px 20px;display:flex;flex-direction:column;gap:14px}
+.dock{display:grid;grid-template-columns:minmax(0,1fr) 120px 210px 240px 130px 120px;gap:10px;align-items:center;padding:10px 14px;background:var(--surface);border:1px solid var(--rule-2);border-top:0;border-radius:0 0 12px 12px}
+.dock .st{min-width:0}
+.dock .st b{display:block;font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dock .st span{display:block;font-size:13px;color:var(--info);height:18px;white-space:nowrap}
+.dock .slot{min-width:0;display:flex}
+.dock .slot > *{width:100%;justify-content:center;text-align:center}
+.dock .host{font:inherit;font-size:15px;font-weight:800;color:var(--text);background:var(--surface-2);border:1px solid var(--rule-2);border-radius:10px;padding:10px 12px;display:inline-flex;gap:8px;align-items:center;justify-content:center;position:relative;width:100%}
+.badge{background:var(--primary);color:#2A1B08;font-size:12px;font-weight:800;border-radius:999px;min-width:20px;height:20px;padding:0 6px;display:inline-grid;place-items:center}
+.dock .ses{font:inherit;font-size:15px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:10px;padding:10px 12px;width:100%}
+.dock .holdslot{border:1px dashed var(--rule);border-radius:10px;height:42px;width:100%}
+.olddock{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--rule-2);border-radius:12px;margin-top:8px;flex-wrap:nowrap;overflow:hidden}
+.olddock .st{font-size:19px;font-weight:700;white-space:nowrap}
+.olddock .lnk{font-size:13px;color:var(--info);white-space:nowrap}
+.olddock .hint{font-size:13px;color:var(--muted);background:rgba(246,169,76,.12);border:1px dashed var(--warn);border-radius:6px;padding:4px 8px;white-space:nowrap}
+.olddock .oh{font:inherit;font-size:15px;font-weight:800;color:var(--text);background:var(--surface-2);border:1px solid var(--rule-2);border-radius:10px;padding:10px 12px;white-space:nowrap}
+.olddock .os{font:inherit;font-size:15px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:10px;padding:10px 12px;white-space:nowrap}
+.cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px;max-width:1200px}
+.cmp h3{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.cmp ul{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}
+.cmp li{margin:0 0 6px}
+.cmp b{color:var(--text)}
+.ruler{position:relative;height:16px;margin-top:4px;max-width:1200px;min-width:1000px}
+.ruler span{position:absolute;top:0;font-size:12px;color:var(--success-text);border-left:1px solid var(--success);padding-left:4px;height:16px}
+
+/* ---------- where everything went ---------- */
+.map{width:100%;max-width:1240px;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.map th{text-align:left;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:8px 10px;border-bottom:1px solid var(--rule-2)}
+.map td{padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+.map td:first-child{color:var(--text);font-weight:700}
+.map td a{color:var(--info);font-weight:700;cursor:pointer}
+.map .same{color:var(--muted)}
+.qs{margin:22px 0 0;max-width:1240px}
+.qs h3{font-size:19px;margin:0 0 8px}
+.qs ol{margin:0;padding-left:22px;display:grid;gap:10px;font-size:15px}
+.qs li span{display:block;font-size:13px;color:var(--muted)}
+.qs li b{color:var(--text)}
+@media (max-width:700px){.ann,.cmp{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="intro"><b>Build Room, two screens and one.</b> The same console as Call &amp; Answer (approved 15 Oct), with Build Room's panels in it. The laptop is private; the room watches its window on the projector. Mockup for the owner's review before B8; words are the app's own, the session is invented.</p>
+  <div class="views" role="group" aria-label="View">
+    <button data-v="laptop" aria-pressed="true">1 · Laptop, two screens</button>
+    <button data-v="wall" aria-pressed="false">2 · The room's window</button>
+    <button data-v="one" aria-pressed="false">3 · One screen</button>
+    <button data-v="map" aria-pressed="false">4 · Where everything went</button>
+  </div>
+
+  <!-- ===================================================== 1 LAPTOP -->
+  <section data-view="laptop">
+    <div class="tabs" role="group" aria-label="Moment">
+      <button data-m="between" aria-pressed="true">a · Between asks</button>
+      <button data-m="collect" aria-pressed="false">b · An ask collecting</button>
+      <button data-m="settle" aria-pressed="false">c · Results, settle</button>
+      <button data-m="run" aria-pressed="false">d · The run list</button>
+      <button data-m="point" aria-pressed="false">e · A talking point</button>
+    </div>
+    <p class="intro leanhint" data-armhint hidden>Press <b>Show results</b> in the footer to see the second press said in place.</p>
+    <div class="frame"><div class="console">
+      <header class="top">
+        <span class="brand">Engagements</span>
+        <span class="name" title="Volunteer sign-up for the food bank">Volunteer sign-up for the food bank</span>
+        <span class="spacer"></span>
+        <button class="code" title="Show the join code on the wall">Join <b>7924</b></button>
+        <button class="btn" title="Demo shared on this Wi-Fi">Share demo · <span class="sub">6 opened</span></button>
+        <button class="btn">Room's window ↗</button>
+        <span class="winstat" role="status" title="The room's window is connected, visible and full screen"><span class="dot"></span>On, full screen</span>
+        <span class="sees" role="group" aria-label="The room sees">The room sees:
+          <button data-ws="stage" aria-pressed="true">Stage <kbd>2</kbd></button>
+          <button data-ws="build" aria-pressed="false">Build <kbd>3</kbd></button>
+          <button data-ws="history" aria-pressed="false">History <kbd>4</kbd></button>
+        </span>
+      </header>
+
+      <nav class="loop" aria-label="Where the ask is" data-loop></nav>
+
+      <aside class="rail" aria-label="Session">
+        <details data-r="queue"><summary>Waiting for you <span class="count alert" data-wcount>2</span></summary>
+          <div class="filters"><span class="on">All 2</span><span>Claude 1</span><span>Room 1</span><span>You 0</span></div>
+          <ul>
+            <li><span><span class="from cl">Claude</span>Should each shift show how many spots are left?<span class="meta"> · Claude is waiting</span>
+              <span class="acts-s"><a>Open next</a><a>Edit</a><a>Ask Claude for mockups</a><a>Discard</a></span></span></li>
+            <li><span><span class="from">Room</span><b>Maya</b> · Let people swap shifts with each other<span class="meta"> · 2 min</span>
+              <span class="acts-s"><a>Send to Claude</a><a>Add to the open Ideas ask</a><a>Show on the wall</a><a>Later</a><a>Acknowledge</a><a>Dismiss</a></span></span></li>
+          </ul><a class="open-all">Open the queue in the main area</a></details>
+        <details data-r="people"><summary>People <span class="count" data-pcount>14 here</span></summary>
+          <ul data-people></ul>
+          <a class="open-all">All players · Away · Builders</a></details>
+        <details data-r="late"><summary>Later <span class="count">3</span></summary>
+          <div class="subtabs"><span class="on">Later 3</span><span>Points 4 new</span></div>
+          <ul>
+            <li><span><span class="tag" style="margin:0 4px 0 0">Idea from the room</span>A reminder text the day before<span class="acts-s"><a>Send to Claude now</a><a>Put to a vote</a><a>Remove</a></span></span></li>
+            <li><span><span class="tag" style="margin:0 4px 0 0">Direction for Claude</span>Use the food bank's green<span class="acts-s"><a>Send to Claude now</a><a>Remove</a></span></span></li>
+            <li><span><span class="tag" style="margin:0 4px 0 0">Idea from the room</span>Print a paper rota for the door</span></li>
+          </ul><p class="note" style="padding:0 14px 8px">Claude has not heard these.</p><a class="open-all">Open Later and Points</a></details>
+        <details data-r="tools"><summary>Session <span class="count"><span class="dot" style="width:6px;height:6px"></span> Claude connected</span></summary>
+          <ul>
+            <li><span>Connect Claude <span class="meta">· key minted 10:02, used 10:04</span></span></li>
+            <li><span>Claude's plugin <span class="meta">· the latest</span></span></li>
+            <li><span>Crew <span class="meta">· 2 builders, 1 early look</span></span></li>
+            <li><span>Look here, privately: <a style="color:var(--info);font-weight:700">Build</a> · <a style="color:var(--info);font-weight:700">History</a></span></li>
+          </ul>
+          <div class="group">Session panel</div>
+          <ul>
+            <li><span>Screens · Players · Settings</span></li>
+            <li><span>Back to the opening · Wrap up · Report · End session</span></li>
+          </ul><a class="open-all">Open the Session panel</a></details>
+      </aside>
+
+      <main class="main">
+        <!-- shared: Claude's one status line -->
+        <div class="claude" data-claude></div>
+
+        <!-- a BETWEEN ASKS -->
+        <section data-show="between" class="stack">
+          <div class="cols">
+            <div class="stack">
+              <div>
+                <h3 class="ph">What's next</h3>
+                <div class="moves">
+                  <div class="move lead"><div><b>Open Claude's question</b><span>Should each shift show how many spots are left?</span></div><button class="sbtn lead">Open it</button></div>
+                  <div class="move"><div><b>Put 2 ideas to a vote</b><span>&nbsp;</span></div><button class="sbtn">To a vote</button></div>
+                  <div class="move"><div><b>Ask the room</b><span>A starter, or your own</span></div><button class="sbtn">Ask</button></div>
+                  <div class="move"><div><b>Tell Claude</b><span>Do now, keep in mind, or ask Claude</span></div><button class="sbtn">Write</button></div>
+                </div>
+              </div>
+              <div class="composer" aria-label="Add something">
+                <div class="hd"><b>Add something</b><span class="spacer"></span><span class="tiny">Ctrl Enter sends</span></div>
+                <div class="field ph">An idea, a note, or what the room said</div>
+                <p class="tiny" style="margin:-4px 0 0">Claude acts on this now.</p>
+                <div class="row">
+                  <button class="sbtn">Send to Claude ▾</button>
+                  <button class="sbtn">Save for later</button>
+                  <span class="push"><span class="sel">Room said ▾</span><span class="chk"><i></i>Also tell Claude</span><button class="sbtn">Log it</button></span>
+                </div>
+                <div class="row"><span class="lbl">Ask the room</span><button class="sbtn">Ideas</button><button class="sbtn">Choose</button><button class="sbtn">Rate</button></div>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="card"><h3 class="ph">Now</h3><p style="margin:0 0 4px">Last decided, ask 2: <b>a week calendar</b>.</p><p class="note">Claude has it. 6 screenshots so far.</p></div>
+              <div class="folds" aria-label="What happened">
+                <details open><summary>Decided <span class="count">2 · tick to combine</span></summary>
+                  <div class="body"><div class="dec"><i class="on"></i><span>Ask 2 · Which layout should Claude build first? <span class="tiny">A week calendar</span></span></div><div class="dec"><i></i><span>Ask 1 · Who is it for? <span class="tiny">Busy volunteers, often on an old phone</span></span></div></div></details>
+                <details><summary>Timeline <span class="count">18</span></summary></details>
+                <details><summary>Asks <span class="count">2</span></summary></details>
+                <details><summary>Screenshots <span class="count">6</span></summary></details>
+                <details><summary>Room brief <span class="count">5</span></summary></details>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- b COLLECTING -->
+        <section data-show="collect" class="stack" hidden>
+          <div><p class="kicker">Ask 3 · Choose · Collect</p><h2>Which sign-up page should Claude build first?</h2></div>
+          <div class="cols">
+            <div class="stack">
+              <div class="opts" data-opts="collect"></div>
+              <p class="tiny">The room sees these options and the count, no names. Opened 10:42 · Choose · Editable until someone answers.</p>
+            </div>
+            <div class="stack">
+              <div class="card"><h3 class="ph">For you · note for Claude</h3><p class="note">Claude asked this. "I'll build the winner first and keep the others as tabs."</p></div>
+              <div class="folds"><details><summary>Decided <span class="count">2</span></summary></details><details><summary>Timeline <span class="count">19</span></summary></details><details><summary>Asks <span class="count">3</span></summary></details><details><summary>Screenshots <span class="count">9</span></summary></details><details><summary>Room brief <span class="count">5</span></summary></details></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- c SETTLE -->
+        <section data-show="settle" class="stack" hidden>
+          <div><p class="kicker">Ask 3 · Choose · Settle</p><h2>Which sign-up page should Claude build first?</h2></div>
+          <div class="cols decide">
+            <div class="stack">
+              <div class="opts" data-opts="settle"></div>
+              <p class="tiny">Click another option to pick it. The board on the wall has no controls, so the pick happens here.</p>
+              <div class="folds"><details><summary>Decided <span class="count">2</span></summary></details><details><summary>Timeline <span class="count">19</span></summary></details><details><summary>Asks <span class="count">3</span></summary></details><details><summary>Screenshots <span class="count">9</span></summary></details><details><summary>Room brief <span class="count">5</span></summary></details></div>
+            </div>
+            <div class="decidep" aria-label="Change before sending">
+              <div class="hd" style="display:flex;align-items:baseline"><b>Change before sending</b><span class="spacer"></span><span class="tiny">B · the room's choice, 7 to 4</span></div>
+              <div><span class="tiny">Claude gets it as</span><div class="kinds" style="margin-top:4px"><span class="on">Do now</span><span>Keep in mind</span><span>Ask Claude</span></div></div>
+              <div><span class="tiny">Direction for Claude</span><div class="field ta">Which sign-up page should Claude build first: B, a week calendar. Each day shows its shifts; tap one to sign up.</div></div>
+              <div><span class="tiny">Note for Claude (private)</span><div class="field ph">e.g. "show how many spots are left"</div></div>
+              <p class="told">Claude will be told, as Do now: "Which sign-up page should Claude build first: B, a week calendar…"</p>
+              <div class="row"><button class="sbtn">Save for later</button><button class="sbtn">Record only</button><span class="push"><button class="sbtn">Answer for the room</button></span></div>
+              <p class="tiny" style="margin:0">Send is the footer's main button. Your draft is kept per ask.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- d RUN LIST -->
+        <section data-show="run" class="stack" hidden>
+          <div><p class="kicker">Working through · the room chose 4</p><h2>The run list</h2></div>
+          <div class="cols">
+            <div class="stack">
+              <div class="runlist">
+                <div class="runi done"><span class="k">1</span><span>Show spots left on each shift</span><span class="st">Done</span></div>
+                <div class="runi done"><span class="k">2</span><span>A reminder text the day before</span><span class="st">Done</span></div>
+                <div class="runi on"><span class="k">3</span><span>Let people swap shifts with each other</span><span class="st">Claude is on it</span></div>
+                <div class="runi"><span class="k">4</span><span>A page for the shift leader</span><span class="st">Next</span></div>
+              </div>
+              <p class="tiny">Drag or use the arrow keys to reorder. Skipped items go to Later.</p>
+            </div>
+            <div class="stack">
+              <div class="card"><h3 class="ph">Claude said</h3><p class="note">Claude: "Swaps need both people to confirm; adding that now."</p></div>
+              <div class="folds"><details><summary>Decided <span class="count">4</span></summary></details><details><summary>Timeline <span class="count">27</span></summary></details><details><summary>Asks <span class="count">4</span></summary></details><details><summary>Screenshots <span class="count">11</span></summary></details><details><summary>Room brief <span class="count">5</span></summary></details></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- e TALKING POINT -->
+        <section data-show="point" class="stack" hidden>
+          <div><p class="kicker">Talk it over · a point from Claude's research</p><h2>Most volunteers sign up on a phone, in under a minute, or not at all</h2></div>
+          <div class="cols">
+            <div class="stack">
+              <p class="kicker">Ideas on this, as they land</p>
+              <div class="idea new"><small>Grace · just now</small>One tap from the text message straight to the shift.</div>
+              <div class="idea"><small>Hugo</small>No account. A name and a phone number.</div>
+              <div class="idea"><small>Imani</small>Big buttons; half our volunteers are over 70.</div>
+              <p class="tiny">Each idea joins Waiting for you. Taking the point down offers to put them to a vote.</p>
+            </div>
+            <div class="stack">
+              <div class="card"><h3 class="ph">For you · the source</h3><p class="note">Finding · Source: volunteer-sector survey, 2025. The room sees the point, never the source line.</p></div>
+              <div class="folds"><details><summary>Decided <span class="count">4</span></summary></details><details><summary>Timeline <span class="count">31</span></summary></details><details><summary>Asks <span class="count">4</span></summary></details><details><summary>Screenshots <span class="count">12</span></summary></details><details><summary>Room brief <span class="count">5</span></summary></details></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <div class="req" data-req><b>Another device wants the name Ben.</b><span class="tiny">The name keeps its ideas and votes.</span><span class="acts-s"><a>Let them take it</a><a>Not now</a></span></div>
+
+      <footer class="foot">
+        <div class="status"><b data-status></b><span class="tiny" data-next></span></div>
+        <p class="part" data-part></p>
+        <div class="acts" data-acts></div>
+      </footer>
+    </div></div>
+
+    <ul class="ann">
+      <li><b>Top line:</b> name, Join (press: the code on the wall), Share demo with its count, Room's window ↗ and its status (a status, not a picture, as C&amp;A), then <b>The room sees</b> with 2, 3, 4. The chip follows the server's choice, so a second laptop agrees.</li>
+      <li><b>Line 2, the loop:</b> Build Room's ask path in the shared strip (Q17): Opening › [Ask n · kind: Ask, Collect, Settle, Send to Claude] › Wrap up. With no ask open it says what is on the Stage instead.</li>
+      <li><b>Rail:</b> C&amp;A's four slots with Build Room's sections: Waiting for you (the queue), People, Later (with Points beside it), Session. The one that matters opens by itself; a header's count is the only count it shows.</li>
+      <li><b>Main:</b> Claude's one status line on top in every moment, then the moment's work: What's next and the Composer between asks; the ask and its options while collecting; the board and the decide panel, inline, at settle; the run list; the point and the ideas on it.</li>
+      <li><b>What happened:</b> Decided (tick to combine), Timeline, Asks, Screenshots and Room brief stay as folds in the main area's side column, as they are on the Host screen today.</li>
+      <li><b>Footer:</b> status, "Your part now", and the shared action bar on <code>buildControls</code>: the same labels as the Stage's dock, Space and the clicker, the second press said in place. Extras go in a fixed More slot.</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== 2 THE ROOM'S WINDOW -->
+  <section data-view="wall" hidden>
+    <p class="intro">What the projector shows. Read-only: no buttons, no names (with List names off). It follows the laptop's <b>The room sees</b> and the moment picked on view 1. The build link and the codes stay, because they are for the room.</p>
+    <div class="mini" role="group" aria-label="Screen">Screen:
+      <button data-wv="stage" aria-pressed="true">Stage</button>
+      <button data-wv="build" aria-pressed="false">Build</button>
+      <button data-wv="history" aria-pressed="false">History</button>
+      <span style="margin-left:12px">Moment: <span data-wallmoment style="color:var(--text)"></span></span>
+    </div>
+    <div class="frame"><div class="wall" data-wall></div></div>
+    <ul class="ann">
+      <li><b>Stage:</b> the moment's own picture, at the projector's sizes. The board's options and the wheel are drawn without their pick buttons; the Host alert and "Press Space to" hints are gone.</li>
+      <li><b>Build:</b> the latest screenshot large, Claude's status, and the demo card when the demo is shared on this Wi-Fi.</li>
+      <li><b>History:</b> every ask that reached the room and every idea that was used, each with one mark. A contribution is "An idea from the room", never a name.</li>
+      <li><b>Never on the wall:</b> notes for Claude, drafts, the queue, who voted for what, the brief's Later list, the session key.</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== 3 ONE SCREEN -->
+  <section data-view="one" hidden>
+    <p class="intro">One screen: the laptop is projected, so the Stage is what the room sees and the dock is the host's only control on it. The new dock holds still: fixed slots, nothing on hover, and Host goes home in one press.</p>
+    <div class="mini" role="group" aria-label="Moment">Moment:
+      <button data-om="between" aria-pressed="false">Between asks</button>
+      <button data-om="collect" aria-pressed="true">Collecting</button>
+      <button data-om="settle" aria-pressed="false">Settle</button>
+      <button data-om="run" aria-pressed="false">Run list</button>
+      <button data-om="point" aria-pressed="false">Talking point</button>
+      <label class="chk" style="margin-left:14px;color:var(--text)"><input type="checkbox" data-pointer> Pointer on the dock</label>
+    </div>
+    <div class="frame"><div class="onebox">
+      <div class="stage1" data-stage1></div>
+      <div class="dock" data-dock aria-label="The dock, after"></div>
+      <div class="ruler" data-ruler></div>
+      <p class="tiny" style="margin:2px 0 14px">Green marks: the left edge of More, the secondary, the main button, Host and Session. Change the moment or the pointer: they do not move.</p>
+      <p class="kicker" style="margin-bottom:4px">Today, for comparison</p>
+      <div class="olddock" data-olddock></div>
+    </div></div>
+    <div class="cmp">
+      <div class="card"><h3>What changed</h3><ul>
+        <li><b>Fixed slots, fixed order:</b> status · More · secondary · main · Host · Session. An empty slot keeps its width.</li>
+        <li><b>Status on one line</b>, ellipsis, the full words in its title; the build link has a second line whose height is always kept.</li>
+        <li><b>Nothing on hover.</b> The Space key cap sits inside the main button and is always there when Space works.</li>
+        <li><b>← Host goes to Host in one press.</b> Its count is a badge; what waits is listed on the Host screen ("Waiting for you"). Title: "Host screen (1 or P)".</li>
+        <li><b>Extras never push:</b> Stop, Save the rest and the like go into More.</li>
+      </ul></div>
+      <div class="card"><h3>Why (the owner, 17 Oct)</h3><ul>
+        <li>"The bottom row buttons jump all over the place as you move the cursor or things adjust."</li>
+        <li>"Clicking into the stage screen it is unclear on how to get back to host."</li>
+        <li>Today the hover hint is inserted before HOST, the status text sets everyone's position, and HOST · 1 opens a list over the Stage instead of going home.</li>
+        <li>The same bar is the console's footer on two screens, so both setups say the same words.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== 4 WHERE EVERYTHING WENT -->
+  <section data-view="map" hidden>
+    <p class="intro">Every capability in parity PLAN §2.6b, and where it is after the change. Nothing is dropped; "the same" means one screen is unchanged. "See it" opens the moment on view 1.</p>
+    <table class="map">
+      <colgroup><col style="width:24%"><col style="width:22%"><col style="width:42%"><col style="width:12%"></colgroup>
+      <thead><tr><th>Capability</th><th>One screen, after</th><th>Two screens, on the laptop</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>The ask's moves: Open voting, Show results, Spin, Send B to Claude, Change before sending, Reopen, Take it down, Save for later, the points vote, the run list, Hide the codes</td><td>Stage dock, on <code>buildControls</code>; a third move in More</td><td>Footer, the same <code>buildControls</code>; a third move in More</td><td><a data-go="collect">See it</a></td></tr>
+        <tr><td>The ask path, the decide panel, the host's pick, answering for the room, drafts kept per ask</td><td class="same">The same (Host screen)</td><td>The ask's main-area panel; the strip shows Ask › Collect › Settle › Send to Claude; the decide panel inline at settle</td><td><a data-go="settle">See it</a></td></tr>
+        <tr><td>Picking on the board (an option or a wheel slice)</td><td class="same">The same (Stage)</td><td>The wall has no controls, so the options are pressable in the settle panel</td><td><a data-go="settle">See it</a></td></tr>
+        <tr><td>The Composer: Send to Claude as Do now, Keep in mind, Ask Claude; Save for later; Log it, Also tell Claude; Ask the room; Combine</td><td class="same">The same</td><td>Main area, always there between asks, inline as C&amp;A's Ask the room</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>What's next, Decided (tick to combine), Timeline, Asks, Screenshots, Room brief</td><td class="same">The same</td><td>What's next in the panel; the other five as folds in the side column</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>The queue: Claude's asks and the room's ideas, every action, the filters</td><td class="same">The same</td><td>Rail: Waiting for you, with the filters and each item's actions; opens into the main area</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>The Later list (send, to a vote, remove)</td><td class="same">The same</td><td>Rail: Later (the C&amp;A "late" slot)</td><td><a data-go="run">See it</a></td></tr>
+        <tr><td>Talking points, research and ideas requests; the run list</td><td class="same">The same</td><td>Points beside Later in the rail; the point and the run list as main-area panels; their moves in the footer</td><td><a data-go="point">See it</a></td></tr>
+        <tr><td>The opening: the brief, its steps, Start building</td><td class="same">The same</td><td>Main-area panel while the room frames the build; the strip's Opening step</td><td></td></tr>
+        <tr><td>The crew: builders, early looks, run crew code</td><td class="same">The same</td><td>Session section (Crew) and People (builders); the board itself on the wall</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>Share demo, the codes card, the enlarged QR</td><td class="same">The same</td><td>Top line: Join and Share demo; the codes go on the wall from there</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>Claude's status, the doing line and steps, the plugin's update dot, Continue prompt, Connect Claude</td><td class="same">The same</td><td>Claude's status line at the top of the main area; Connect and the plugin in Session</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>The Host alert (what waits, Mark all seen)</td><td>Header tab only; Host on the Stage goes home in one press, count as a badge</td><td>Rail: Waiting for you and its count</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>Players: handover requests, remove, Away, Builders; team invitations</td><td class="same">The same</td><td>Rail: People; the request strip above the footer, as C&amp;A's</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>Settings: codes, List names, Claude, Crew, Back to the opening, Wrap up, Report, End session</td><td>The same, with Screens first</td><td>The same Session panel, from the Session section</td><td><a data-go="between">See it</a></td></tr>
+        <tr><td>History (filters, the ask window, the mockup viewer), the Build screen</td><td class="same">The same</td><td>On the wall, read-only; the laptop opens them privately from Session ("Look here, privately")</td><td></td></tr>
+        <tr><td>The report, wrap-up, end</td><td class="same">The same</td><td>Session section; the footer's ended moment</td><td></td></tr>
+      </tbody>
+    </table>
+
+    <div class="qs">
+      <h3>For the owner to answer before B8</h3>
+      <ol>
+        <li><b>Settle's second button.</b> On one screen the dock's second button is "Change before sending" (it opens the send window). On two screens the decide panel is already open, so the footer shows "Spin the wheel" there instead.
+          <span>Recommended: the console's footer uses Spin the wheel, and <code>buildControls</code> says which second button applies when the decide panel is inline, so the parity test still holds. If you would rather both say the same, the dock moves to Spin the wheel too.</span></li>
+        <li><b>Between asks, the main button.</b> The Stage has no main move between asks (unless mockups are ready). The footer shows an empty, held slot, and What's next's lead ("Open it") stays orange in the panel.
+          <span>Recommended: keep it empty, so the footer and the dock never disagree. The alternative is the footer leading with What's next's first move.</span></li>
+        <li><b>The strip with no ask open.</b> Between asks, during the run list and a talking point, the ask path has nothing live. The mockup keeps the strip, dimmed, with a plain label on the left ("Between asks", "The run list · 2 of 4 done").
+          <span>Recommended: as drawn. The alternative is hiding the strip until an ask opens, which makes line 2 come and go.</span></li>
+        <li><b>The rail's slots.</b> C&amp;A's rail has four slots. Build Room's Decided, Timeline, Asks, Screenshots and Room brief go to folds in the main area's side column, not to more rail sections; Points sits as a tab inside Later.
+          <span>Recommended: as drawn (the rail stays four, as C&amp;A's). The alternative is a fifth rail section, "What happened".</span></li>
+        <li><b>Names in People while the room votes.</b> The laptop is private, so People ticks who has answered, by name, as C&amp;A's does. It never shows what anyone chose.
+          <span>Recommended: as drawn. If you want Build Room's votes to feel more anonymous, People shows only the count while an ask is open.</span></li>
+      </ol>
+    </div>
+  </section>
+</div>
+
+<script>
+const PEOPLE = ['Ada','Ben','Cleo','Dev','Esther','Farid','Grace','Hugo','Imani','Jonas','Kai','Lena','Maya','Omar'];
+const VOTED = new Set(['Ada','Cleo','Dev','Farid','Grace','Imani','Kai','Lena','Maya']);
+const BUILDERS = new Set(['Kai','Maya']);
+const OPTS = [
+  { l:'A', t:'One long list of shifts', wf:'A', n:3 },
+  { l:'B', t:'A week calendar', wf:'B', n:7 },
+  { l:'C', t:'Pick a role, then a time', wf:'C', n:4 },
+];
+function wf(k, big){
+  const c = big ? 'wf big' : 'wf';
+  if (k === 'A') return `<div class="${c}"><i class="h"></i>${[1,2,3,4,5].map(()=>'<div class="r"><i></i><b></b></div>').join('')}</div>`;
+  if (k === 'B') return `<div class="${c}"><i class="h"></i><div class="g">${Array.from({length:21},(_,i)=>`<i class="${[2,5,9,10,15,19].includes(i)?'f':''}"></i>`).join('')}</div><i style="width:40%"></i></div>`;
+  return `<div class="${c}"><i class="h"></i><div class="c"><i></i><i></i><i></i></div>${[1,2,3].map(()=>'<div class="r"><i></i><b></b></div>').join('')}</div>`;
+}
+/* Every moment: the loop, the rail section that opens by itself, Claude's line, the footer. */
+const M = {
+  between: {
+    label:'Between asks',
+    loop:{ round:'Between asks', steps:{}, idle:true, aside:'Ask 3 opens from What\'s next or Waiting for you' },
+    rail:'queue', pc:'14 here', people:'here',
+    claude:{ head:'Claude is building the shift list for Saturday', meta:'for 4 min · Steps, last: added the calendar grid', r:'Steps ▾' },
+    status:'Send an idea any time. Open the demo on this Wi-Fi.', next:'The Stage shows Claude\'s status and the latest screenshot',
+    part:'Open Claude\'s question, or <em>Tell Claude</em> what is next.',
+    acts:{ more:false, alt:null, go:null },
+    req:true,
+  },
+  collect: {
+    label:'An ask collecting',
+    loop:{ round:'Ask 3 · Choose', steps:{ask:'done',collect:'live'} },
+    rail:'people', pc:'9 of 14 answered', people:'vote',
+    claude:{ head:'Claude is ready', meta:'Done: added the calendar grid. Waiting for the room.', r:'' },
+    status:'9 of 14 answered', next:'Next on the wall: the results',
+    part:'<em>Show results</em> when answers stop.',
+    acts:{ more:false, alt:'Spin the wheel', go:'Show results', arm:{ label:'Show results anyway', text:'5 of 14 have not answered. Press again to show results.' } },
+  },
+  settle: {
+    label:'Results, settle',
+    loop:{ round:'Ask 3 · Choose', steps:{ask:'done',collect:'done',settle:'live'} },
+    rail:'people', pc:'14 here', people:'here',
+    claude:{ head:'Claude is ready', meta:'Ready for your direction.', r:'' },
+    status:'B leads, 7 to 4', next:'The wall shows the results',
+    part:'Check the words, then <em>Send B to Claude</em>.',
+    acts:{ more:false, alt:'Spin the wheel', go:'Send B to Claude' },
+  },
+  run: {
+    label:'The run list',
+    loop:{ round:'The run list · 2 of 4 done', steps:{}, idle:true, aside:'No ask open while the room\'s picks run' },
+    rail:'late', pc:'14 here', people:'here',
+    claude:{ head:'Claude is letting people swap shifts', meta:'for 3 min · item 3 of 4', r:'Steps ▾' },
+    status:'Claude is on 3 of 4', next:'Next waits until Claude reports 3 done',
+    part:'Watch the big screen. <em>Next: 4</em> when Claude reports 3 done.',
+    acts:{ more:'Stop', alt:'Skip 4', go:'Next: 4' },
+  },
+  point: {
+    label:'A talking point',
+    loop:{ round:'A talking point is up', steps:{}, idle:true, aside:'The room talks it over; ideas join the queue' },
+    rail:'queue', pc:'14 here', people:'here',
+    claude:{ head:'Claude is building the swap screen', meta:'for 6 min', r:'Steps ▾' },
+    status:'3 ideas on this', next:'Taking it down offers a vote on the ideas',
+    part:'Let the room talk it over, then <em>Take it down</em>.',
+    acts:{ more:false, alt:'Save for later', go:'Take it down' },
+  },
+};
+let state = { view:'laptop', moment:'between', ws:'stage', armed:false };
+
+function renderLoop(d){
+  const L = d.loop;
+  const s = (k, t) => `<li class="step ${L.idle?'idle':''} ${L.steps[k]||''}">${t}</li>`;
+  return `<span class="step done">Opening</span><span class="sep">›</span>
+    <ol><li class="round">${L.round}</li>${s('ask','Ask')}${s('collect','Collect')}${s('settle','Settle')}${s('send','Send to Claude')}</ol>
+    <span class="sep">›</span><span class="step">Wrap up</span>${L.aside?`<span class="aside">${L.aside}</span>`:''}`;
+}
+function renderPeople(kind){
+  return PEOPLE.map(n=>{
+    const b = BUILDERS.has(n) ? '<span class="tag">Builder</span>' : '';
+    if (kind==='vote') { const v = VOTED.has(n); return `<li><span class="${v?'tick':'wait'}">${v?'✓':'…'}</span><span>${n}${b} <span class="meta">· ${v?'answered':'not yet'}</span></span></li>`; }
+    return `<li><span class="tick">✓</span><span>${n}${b}${n==='Ben'&&M[state.moment].req?' <span class="meta">· asking to take a name</span>':''}</span></li>`;
+  }).join('');
+}
+function renderOpts(which){
+  return OPTS.map(o=>{
+    const win = which==='settle' && o.l==='B';
+    const bar = which==='settle' ? `<span class="barrow"><span class="bar"><i style="width:${o.n/14*100}%"></i></span><span class="cnt">${o.n} ${o.n===1?'vote':'votes'}</span></span>` : '';
+    return `<button class="opt ${win?'win':''}">${wf(o.wf)}<span class="ol"><b>${o.l}</b><span>${o.t}</span></span>${bar}${win?'<span class="mark">The room\'s choice</span>':''}</button>`;
+  }).join('');
+}
+function renderActs(d){
+  const a = d.acts; let h = '';
+  if (state.armed && a.arm) h += `<span class="armed" role="alert">${a.arm.text}</span>`;
+  // The More slot is always there; it holds an extra (Stop) or stays empty at its width.
+  h += a.more ? `<button class="more" title="${a.more}">More ▾</button>` : '<span class="more" style="visibility:hidden" aria-hidden="true">More ▾</span>';
+  h += a.alt ? `<button class="alt">${a.alt}</button>` : '';
+  if (a.go) {
+    const armed = state.armed && a.arm;
+    h += `<button class="go ${armed?'is-armed':''}" data-gobtn aria-keyshortcuts="Space">${armed?a.arm.label:a.go} <kbd>Space</kbd></button>`;
+  } else h += `<span class="empty-slot" title="No main move between asks; What's next leads in the panel">No main move now</span>`;
+  return h;
+}
+function renderLaptop(){
+  const d = M[state.moment];
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.m===state.moment)));
+  document.querySelectorAll('[data-show]').forEach(s=>s.hidden = s.dataset.show!==state.moment);
+  document.querySelector('[data-loop]').innerHTML = renderLoop(d);
+  document.querySelectorAll('.rail details').forEach(x=>x.open = x.dataset.r===d.rail);
+  document.querySelector('[data-pcount]').textContent = d.pc;
+  document.querySelector('[data-people]').innerHTML = renderPeople(d.people);
+  document.querySelector('[data-claude]').innerHTML = `<span class="dot"></span><b>${d.claude.head}</b><span class="meta">${d.claude.meta}</span>${d.claude.r?`<span class="r">${d.claude.r}</span>`:''}`;
+  const stEl = document.querySelector('[data-status]');
+  stEl.textContent = d.status; stEl.title = d.status;
+  document.querySelector('[data-next]').textContent = d.next;
+  document.querySelector('[data-part]').innerHTML = `<span class="k">Your part now</span>${d.part}`;
+  document.querySelector('[data-acts]').innerHTML = renderActs(d);
+  document.querySelector('[data-req]').hidden = !d.req;
+  document.querySelector('[data-armhint]').hidden = !(d.acts.arm);
+  document.querySelector('[data-opts=collect]').innerHTML = renderOpts('collect');
+  document.querySelector('[data-opts=settle]').innerHTML = renderOpts('settle');
+  document.querySelectorAll('.sees button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.ws===state.ws)));
+  const go = document.querySelector('[data-gobtn]');
+  if (go && d.acts.arm) go.addEventListener('click', ()=>{ state.armed = !state.armed; renderLaptop(); });
+}
+
+/* ---------- the room's window ---------- */
+function qr(){
+  let h=''; let x=7;
+  for (let r=0;r<21;r++) for (let c=0;c<21;c++){
+    const finder = (r<7&&c<7)||(r<7&&c>13)||(r>13&&c<7);
+    let on;
+    if (finder){ const R = r>13 ? r-14 : r, C = c>13 ? c-14 : c; on = R===0||R===6||C===0||C===6||(R>=2&&R<=4&&C>=2&&C<=4); }
+    else { x = (x*1103515245+12345)&0x7fffffff; on = (x>>16)&1; }
+    h += `<i class="${on?'':'o'}"></i>`;
+  }
+  return `<div class="qr">${h}</div>`;
+}
+function stageSide(m){
+  const meters = { between:['14','In the room'], collect:['9','Answered · of 14'], settle:['14','Answered · of 14'], run:['2','The run list · of 4'], point:['3','Ideas on this'] };
+  const [n, t] = meters[m];
+  return `<div class="meter"><b>${n}</b><span>${t}</span></div><div class="wjoin">Join at engage.seibtribe.us<b>7924</b></div>${qr()}`;
+}
+function stageMain(m){
+  if (m==='between') return `<p class="wk">Build Room</p><p class="wq">Claude is building the shift list for Saturday</p><div style="max-width:560px">${wf('B',true)}</div><p class="wl m">Send an idea any time. Open the demo on this Wi-Fi.</p>`;
+  if (m==='collect') return `<p class="wk">Ask 3 · Choose</p><p class="wq">Which sign-up page should Claude build first?</p><div class="wopts">${OPTS.map(o=>`<div class="wopt">${wf(o.wf)}<span class="ol"><b>${o.l}</b><span>${o.t}</span></span></div>`).join('')}</div><p class="wl m">Pick one on your phone. No names on the wall.</p>`;
+  if (m==='settle') return `<p class="wk">Ask 3 · Choose · Results</p><p class="wq">Which sign-up page should Claude build first?</p><div class="wbars">${OPTS.map(o=>`<div class="wbar"><b>${o.l}</b><div class="bar"><i style="width:${o.n/14*100}%"></i></div><span>${o.n}</span></div>`).join('')}</div><p class="wl">B leads, 7 to 4: a week calendar.</p>`;
+  if (m==='run') return `<p class="wk">Working through</p><p class="wq" style="font-size:34px">The room chose 4. Claude is on 3 of 4.</p><div class="wrun"><div class="done"><b>1</b><span>Show spots left on each shift</span><em>Done</em></div><div class="done"><b>2</b><span>A reminder text the day before</span><em>Done</em></div><div class="on"><b>3</b><span>Let people swap shifts with each other</span><em>Claude is on it</em></div><div><b>4</b><span>A page for the shift leader</span><em>Next</em></div></div>`;
+  return `<p class="wk">Talk it over</p><p class="wq">Most volunteers sign up on a phone, in under a minute, or not at all</p><p class="wl">Talk it over. Send an idea.</p><p class="wl m">3 ideas on this so far</p>`;
+}
+function wallBuild(){
+  return `<div class="sm"><p class="wk">The build so far</p><div style="max-width:680px">${wf('B',true)}</div><p class="wl">Claude is building the shift list for Saturday</p><p class="wl m">Screenshot 6 · 10:51</p></div>
+    <div class="sr"><p class="wk" style="font-size:18px">Try the demo yourself</p>${qr()}<p class="wl m" style="font-size:18px">Same Wi-Fi as this laptop.<br>6 have opened it</p><div class="wjoin">Join<b>7924</b></div></div>`;
+}
+function wallHistory(){
+  return `<div class="sm" style="gap:14px"><p class="wk">History · Everything</p><div class="hist">
+    <div class="hi"><span class="h">Decided · Ask 2</span><span class="t">Which layout should Claude build first? <b>A week calendar</b><small>7 voted for it · Claude has it</small></span></div>
+    <div class="hi gave"><span class="h">An idea from the room</span><span class="t">"A week view, like a church rota"<br><span class="markw chosen">chosen by the room</span><span class="markw written">sent to Claude as written</span></span></div>
+    <div class="hi"><span class="h">Claude showed</span><span class="t">The calendar, first pass<small>Screenshot 5</small></span></div>
+    <div class="hi gave"><span class="h">An idea from the room</span><span class="t">"Let people swap shifts with each other"<br><span class="markw reword">sent to Claude, reworded by the host</span></span></div>
+    <div class="hi gave"><span class="h">An idea from the room</span><span class="t">"Show spots left on each shift"<br><span class="markw written">sent to Claude as written</span></span></div>
+    </div><p class="wl m" style="font-size:18px">and 9 earlier</p></div>
+    <div class="sr"><div class="meter"><b>6</b><span>screenshots</span></div><p class="wl m" style="font-size:20px">9 ideas, 4 used</p><div class="wjoin">Join<b>7924</b></div></div>`;
+}
+function renderWall(){
+  document.querySelectorAll('[data-wv]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.wv===state.ws)));
+  document.querySelector('[data-wallmoment]').textContent = M[state.moment].label;
+  const w = document.querySelector('[data-wall]');
+  if (state.ws==='stage') w.innerHTML = `<div class="sm">${stageMain(state.moment)}</div><div class="sr">${stageSide(state.moment)}</div>`;
+  else if (state.ws==='build') w.innerHTML = wallBuild();
+  else w.innerHTML = wallHistory();
+}
+
+/* ---------- one screen ---------- */
+const DOCK = {
+  between:{ st:'Send an idea any time. Open the demo on this Wi-Fi.', link:'Open the build ↗', more:false, alt:null, go:null, old:[] },
+  collect:{ st:'9 of 14 answered', link:'Open the build ↗', more:false, alt:'Spin the wheel', go:'Show results', hint:'Press Space to show results' },
+  settle:{ st:'B leads, 7 to 4', link:'Open the build ↗', more:false, alt:'Change before sending', go:'Send B to Claude', hint:'Press Space to send B' },
+  run:{ st:'Claude is on 3 of 4', link:'', more:'Stop', alt:'Skip 4', go:'Next: 4', hint:'Press Space to send 4' },
+  point:{ st:'', link:'Open the build ↗', more:false, alt:'Save for later', go:'Take it down', hint:'Press Space to take it down' },
+};
+let pointer = false;
+function renderOne(){
+  document.querySelectorAll('[data-om]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.om===state.moment)));
+  document.querySelector('[data-stage1]').innerHTML = `<div class="sm">${stageMain(state.moment).replace(/font-size:34px/,'font-size:30px')}</div><div class="sr">${stageSide(state.moment)}</div>`;
+  const k = DOCK[state.moment];
+  const st = k.st || '3 ideas on this';
+  document.querySelector('[data-dock]').innerHTML =
+    `<div class="st"><b title="${st}">${st}</b><span>${k.link}</span></div>`+
+    `<div class="slot">${k.more?`<button class="more">More ▾</button>`:'<span class="holdslot"></span>'}</div>`+
+    `<div class="slot">${k.alt?`<button class="alt">${k.alt}</button>`:'<span class="holdslot"></span>'}</div>`+
+    `<div class="slot">${k.go?`<button class="go" aria-keyshortcuts="Space">${k.go} <kbd>Space</kbd></button>`:'<span class="holdslot"></span>'}</div>`+
+    `<div class="slot"><button class="host" title="Host screen (1 or P)">← Host <span class="badge">2</span></button></div>`+
+    `<div class="slot"><button class="ses">Session</button></div>`;
+  // the old dock: a flex row; the hover hint pushes HOST and SESSION
+  document.querySelector('[data-olddock]').innerHTML =
+    `<span class="st">${k.st || '3 ideas on this'}</span>${k.link?`<span class="lnk">${k.link}</span>`:''}`+
+    `${k.alt?`<button class="alt">${k.alt}</button>`:''}${k.more?`<button class="alt">${k.more}</button>`:''}${k.go?`<button class="go">${k.go}</button>`:''}`+
+    `${pointer && k.hint?`<span class="hint">${k.hint}</span>`:''}<button class="oh">HOST · 2</button><button class="os">SESSION</button>`;
+  // the ruler: measured, not drawn by hand
+  requestAnimationFrame(()=>{
+    const dock = document.querySelector('[data-dock]'); if (!dock.offsetParent) return;
+    const x0 = dock.getBoundingClientRect().left;
+    const slots = [...dock.children].slice(1);
+    document.querySelector('[data-ruler]').innerHTML = slots.map(s=>`<span style="left:${Math.round(s.getBoundingClientRect().left-x0)}px">${Math.round(s.getBoundingClientRect().left-x0)}</span>`).join('');
+  });
+}
+
+/* ---------- wiring ---------- */
+function show(){
+  document.querySelectorAll('.views button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.v===state.view)));
+  document.querySelectorAll('[data-view]').forEach(s=>s.hidden = s.dataset.view!==state.view);
+  renderLaptop(); renderWall(); renderOne();
+}
+document.querySelectorAll('.views button').forEach(b=>b.addEventListener('click',()=>{ state.view=b.dataset.v; show(); }));
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{ state.moment=b.dataset.m; state.armed=false; show(); }));
+document.querySelectorAll('[data-om]').forEach(b=>b.addEventListener('click',()=>{ state.moment=b.dataset.om; state.armed=false; show(); }));
+document.querySelectorAll('.sees button').forEach(b=>b.addEventListener('click',()=>{ state.ws=b.dataset.ws; show(); }));
+document.querySelectorAll('[data-wv]').forEach(b=>b.addEventListener('click',()=>{ state.ws=b.dataset.wv; show(); }));
+document.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',()=>{ state.view='laptop'; state.moment=a.dataset.go; state.armed=false; show(); window.scrollTo(0,0); }));
+document.querySelector('[data-pointer]').addEventListener('change',e=>{ pointer=e.target.checked; renderOne(); });
+document.addEventListener('keydown',e=>{ if (e.target.tagName==='INPUT') return; const ws={'2':'stage','3':'build','4':'history'}[e.key]; if (ws){ state.ws=ws; show(); } });
+// Deep links for screenshots and review: #view=laptop&m=collect&ws=stage&armed=1
+function fromHash(){
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (q.get('view')) state.view=q.get('view');
+  if (q.get('m')) state.moment=q.get('m');
+  if (q.get('ws')) state.ws=q.get('ws');
+  state.armed = Boolean(q.get('armed'));
+  if (q.get('pointer')) { pointer=true; document.querySelector('[data-pointer]').checked=true; }
+  show();
+}
+window.addEventListener('hashchange', fromHash);
+fromHash();
+</script>
+</body>
+</html>

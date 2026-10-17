@@ -12,8 +12,11 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO = path.join(__dirname, '..');
+// Every file under buildroom/, its subfolders too (screens/ since parity B6).
+const filesUnder = (rel) => fs.readdirSync(path.join(REPO, rel), { withFileTypes: true })
+  .flatMap((d) => (d.isDirectory() ? filesUnder(`${rel}/${d.name}`) : [`${rel}/${d.name}`]));
 const FILES = [
-  ...fs.readdirSync(path.join(REPO, 'src/src/buildroom')).map((f) => `src/src/buildroom/${f}`),
+  ...filesUnder('src/src/buildroom'),
   'src/public/engage-mcp.mjs',
   'lambda-functions/game/build-room.js',
   'lambda-functions/game/build-store.js',

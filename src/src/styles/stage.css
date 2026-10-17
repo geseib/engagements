@@ -594,6 +594,14 @@ a.dock-more{text-decoration:none}
 .btn[disabled]{background:rgba(155,168,190,.18);color:var(--muted);cursor:not-allowed}
 .dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.75;letter-spacing:.07em;
   border:var(--hair) solid var(--rule);border-radius:6px;padding:.2em .5em;font-weight:700;white-space:nowrap}
+/* FIXED SLOTS (Dock.jsx; parity PLAN §2a). With Space off the cap keeps its
+   width, so the main button beside it never slides; it only goes invisible. */
+.dock .kbd[data-off]{visibility:hidden}
+/* SESSION's count (someone asking to take a name) and its lit edge; a type
+   may paint the edge in its own colour. Never the one orange. */
+.dock-more--lit{color:var(--text);border-color:var(--text)}
+.dock-more-n{font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:0}
+.dock-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 /* The SPACE hint used to be hidden in Room and TV — the two profiles where the
    operator is furthest from the machine and most dependent on knowing a key
    exists. That was exactly backwards, and a first-look reviewer caught it. */
