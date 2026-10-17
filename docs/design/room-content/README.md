@@ -56,7 +56,8 @@ lesson, six options of 130–206 characters).
 ## Measured
 
 Chromium against the built bundle, the room's window (C&A and Build Room) with a fake public
-API, 1280×720, 1366×768, 1440×900, 1920×1080 × Room, TV, Call, Table, 11 cases: 176 renders.
+API, 1280×720, 1366×768, 1440×900, 1920×1080 × Room, TV, Call, Table, 12 cases: 192 renders
+(the before bundle: 11 cases, 176).
 
 **The lead's computed size** (the wall's 1920×1080 canvas px; on screen it scales with the
 window, so ×0.67 at 1280×720):
@@ -69,6 +70,8 @@ window, so ×0.67 at 1280×720):
 | Table | 28 → **43** | 25.1 → 43.2 (before 17.6 → 41.2) | 17.3–28.1 (before 16–20.6) |
 
 The C&A task never shrank (fit 1) in any render: 60 / 80 / 60 / 43.
+A question for the room (six options) leads at 60 / 70.4 / 60 / 43 (TV shrinks to fit .88), its
+options now at the secondary step on the wall and the stage.
 
 | Check | Before | After |
 |---|---|---|

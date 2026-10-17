@@ -585,7 +585,8 @@ html.present-locked body {
 
 /* ---- a question for the room (PresentAsk) ---- */
 .present .present-ask-options { list-style: none; margin: calc(28px * var(--fit, 1)) 0 0; padding: 0; display: flex; flex-direction: column; gap: calc(16px * var(--fit, 1)); }
-.present .present-ask-options li { display: flex; align-items: center; gap: calc(18px * var(--fit, 1)); font-size: calc(var(--L-body) * var(--fit, 1)); color: var(--text); }
+/* The options lead with the question (config/roomContent.js): the secondary step. */
+.present .present-ask-options li { display: flex; align-items: center; gap: calc(18px * var(--fit, 1)); font-size: calc(var(--L-secondary) * var(--fit, 1)); color: var(--text); }
 .present .present-ask-scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: calc(16px * var(--fit, 1)); max-width: 1100px; margin-top: calc(32px * var(--fit, 1)); }
 .present .present-ask-scale > span { display: grid; place-items: center; min-height: calc(var(--L-secondary) * 2); font-family: var(--font-display); font-size: calc(var(--L-secondary) * var(--fit, 1)); font-weight: 800; color: var(--text); border: calc(var(--hair) * 2) solid var(--present-line); border-radius: 16px; }
 .present .present-ask-scale > p { grid-column: 1 / -1; display: flex; justify-content: space-between; margin: 0; font-size: calc(var(--L-meta) * var(--fit, 1)); color: var(--muted); }

@@ -57,6 +57,12 @@ describe('the wall (present.css)', () => {
     expect(PRESENT_LADDERS.tv.primary * PRESENT_LADDERS.tv.fitMin).toBeGreaterThanOrEqual(PRESENT_LADDERS.room.primary * PRESENT_LADDERS.room.fitMin);
   });
 
+  it('a question for the room: its options lead at the secondary step, on the wall and the stage', () => {
+    expect(fontSize(rule(PRESENT, '.present .present-ask-options li'))).toBe('calc(var(--L-secondary) * var(--fit, 1))');
+    const ask = read('components', 'stage', 'AskStage.css');
+    expect(fontSize(rule(ask, '.askstage .askstage-options li'))).toBe('var(--t-secondary)');
+  });
+
   it('the new rules carry no colour literal and no pixel font size', () => {
     const start = PRESENT.indexOf('WHAT THE ROOM SEES, AND HOW LARGE');
     const block = PRESENT.slice(start, PRESENT.indexOf('/* the progress meter', start));

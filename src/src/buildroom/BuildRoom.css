@@ -688,7 +688,7 @@
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
   margin: 0; font-size: var(--brm-st-body); line-height: 1.25; color: var(--text); min-width: 0;
 }
-.brm .stage .brm-roomclaude { font-size: var(--t-body); }
+.brm .stage .brm-roomclaude { font-size: var(--t-body); padding-bottom: .25em; } /* the fitter counts the descenders' room */
 .brm .brm-roomclaude .brm-sdot { width: .7em; height: .7em; align-self: center; box-shadow: none; animation: none; }
 .brm .brm-roomclaude-h { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
 .brm .brm-roomclaude-m { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
