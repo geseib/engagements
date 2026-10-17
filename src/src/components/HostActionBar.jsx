@@ -89,6 +89,15 @@ export default function HostActionBar({
      "visual queue on what to press". Changes with the phase, so it is the
      caller's sentence, not this component's guess. */
   keyHint = '',
+  /*
+    A KEY THE PAGE KEEPS (Build Room's Stage, parity PLAN §2a D1). Called
+    with the keydown before the bar takes it, and before preventDefault: a
+    `true` leaves the key alone, so a focused button inside a dialog, or a
+    focused control on the page, still gets its own Space. `shortcutsEnabled`
+    is decided at render; this is decided at the press, where an overlay the
+    page does not track (a dialog of a child component) can still be seen.
+  */
+  ignoreKey = null,
 }) {
   const primary = controls?.primary || null;
   const secondary = controls?.secondary || null;
@@ -154,6 +163,7 @@ export default function HostActionBar({
       // them is something you do twice by holding a button down.
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
+      if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
       // THE SETUP PANEL IS NOT A TYPING TARGET, AND THAT IS THE PROBLEM.
       // `preventDefault()` below suppresses the browser's own space-activation
       // of any FOCUSED BUTTON, so a host who tabs to `Ask next` inside the
@@ -180,7 +190,7 @@ export default function HostActionBar({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [shortcutsEnabled, primaryId, primaryDisabled, onAction, primary, interceptAdvance, armedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shortcutsEnabled, primaryId, primaryDisabled, onAction, primary, interceptAdvance, armedId, ignoreKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ← — the backwards key, with the exact guard set the advance keys carry.
   // Registered only while the caller has somewhere to go back TO; when
@@ -193,6 +203,7 @@ export default function HostActionBar({
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
+      if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
       if (event.target?.closest?.('.setup-panel')) return;
       // preventDefault only when the press was actually taken: an unconsumed
       // ← (nothing to go back to) must keep scrolling a scrollable rail.
@@ -201,7 +212,7 @@ export default function HostActionBar({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [shortcutsEnabled, onBackKey]);
+  }, [shortcutsEnabled, onBackKey, ignoreKey]);
 
   if (!primary) return null;
 
@@ -232,6 +243,7 @@ export default function HostActionBar({
               type="button"
               className={`btn-secondary host-action-bar__secondary${armClass(secondary)}`}
               onClick={() => press(secondary)}
+              disabled={Boolean(secondary.disabled)}
             >
               <Icon name={secondary.icon} weight="bold" size={18} />
               <span>{labelOf(secondary)}</span>
@@ -242,9 +254,10 @@ export default function HostActionBar({
               type="button"
               className={`btn-secondary host-action-bar__tertiary${armClass(tertiary)}`}
               onClick={() => press(tertiary)}
+              disabled={Boolean(tertiary.disabled)}
             >
               <Icon name={tertiary.icon} weight="bold" size={18} />
-              <span>{tertiary.label}</span>
+              <span>{labelOf(tertiary)}</span>
             </button>
           )}
           <button
@@ -253,6 +266,7 @@ export default function HostActionBar({
             onClick={() => press(primary)}
             disabled={primary.disabled}
             title={primary.disabled ? primary.hint : 'Space or → also advances'}
+            aria-keyshortcuts={!primary.disabled && shortcutsEnabled ? 'Space ArrowRight' : undefined}
           >
             <Icon name={primary.icon} weight="bold" size={20} />
             <span>{labelOf(primary)}</span>

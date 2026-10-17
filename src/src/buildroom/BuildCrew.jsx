@@ -32,7 +32,8 @@ import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import { copyText } from '../utils/copyText';
 import BuildImage from './BuildImage';
-import { safeHref, pluginSlash } from './buildHostApi';
+import { safeHref } from './links';
+import { pluginSlash } from './pluginTier';
 import './BuildCrew.css';
 
 // ── Words ───────────────────────────────────────────────────────────────────

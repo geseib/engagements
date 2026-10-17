@@ -526,6 +526,23 @@ export const W = Object.freeze({
   // Before you start 2026-10-10: the New Build Room page (owner: option A)
   needLine: 'The laptop that runs Claude Code needs Node 18 or later and git.',
   beforeYouStart: 'Before you start',
+  // The Stage dock on the shared bar (parity PLAN §2a, D1-D2, 17 Oct 2026)
+  /** The armed button's own label, as C&A's: "Show results anyway". */
+  armedLabel: (label) => `${label} anyway`,
+  /** The first press of an early Show results; counts handle nobody, as roundWords' armResults does. */
+  armStill: (n, total, kind) => {
+    const doing = kind === 'voting' ? 'voting' : 'answering';
+    if (Number(total) > 0 && Number(n) >= Number(total)) return `Nobody has ${kind === 'voting' ? 'voted' : 'answered'} yet. Press again to show results.`;
+    return `${Number(total) > 0 ? `${n} of ${total}` : n} still ${doing}. Press again to show results.`;
+  },
+  armRunEarly: (k, j) => `Claude hasn't finished ${k}. Press again to send ${j}.`,
+  armStop: 'Press again to stop the list.',
+  /** HOST on the Stage: always home, in one press (D2). */
+  hostBack: '← Host',
+  hostKeys: 'Host screen (1 or P)',
+  hostWaitingSr: (n) => ` ${n} waiting`,
+  sessionKeys: 'Session (\\)',
+  askingSr: ' asking to take a name',
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */

@@ -10,7 +10,7 @@
  *
  * Pure: no React, no fetch. The page and its tests share these.
  */
-import { safeHref } from './buildHostApi';
+import { safeHref } from './links';
 import { wifiState } from './wifiShare';
 import { W } from './words';
 

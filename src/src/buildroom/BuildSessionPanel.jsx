@@ -357,7 +357,7 @@ export default function BuildSessionPanel({
   return (
     <div className="brm-sp-root" ref={rootRef}>
       <div className="brm-sp-scrim" onClick={onClose} aria-hidden="true" />
-      <aside className="brm-sp" ref={panelRef} role="dialog" aria-modal="true" aria-label="Session" tabIndex={-1} onKeyDown={trapFocus}>
+      <aside className="brm-sp" ref={panelRef} role="dialog" aria-modal="true" aria-label="Session" tabIndex={-1} onKeyDown={trapFocus} data-capability="settings">
         <div className="brm-sp-head">
           <h2 className="brm-sp-title">Session</h2>
           <span className={`brm-sp-ws${connected ? ' is-up' : ''}`} aria-live="polite">{connected ? 'Connected' : 'Connecting…'}</span>
@@ -389,7 +389,7 @@ export default function BuildSessionPanel({
 
         <div className="brm-sp-body">
           {tab === 'players' && (
-            <section id="brm-sp-pane-players" role="tabpanel" aria-labelledby="brm-sp-tab-players" className="brm-sp-pane">
+            <section id="brm-sp-pane-players" role="tabpanel" aria-labelledby="brm-sp-tab-players" className="brm-sp-pane" data-capability="players">
               <PlayersList
                 rows={rows}
                 departed={departed}
@@ -416,7 +416,7 @@ export default function BuildSessionPanel({
 
           {tab === 'settings' && (
             <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
-              <div className="brm-sp-grp" data-group="room">
+              <div className="brm-sp-grp" data-group="room" data-capability="share-demo">
                 <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they can open</span></div>
                 <RoomCodes room={room} now={now} ended={ended} busy={busy} run={run} api={api} wifiLink={wifiLink} onShowCodes={pick(onShowCodes)} />
                 <Switch
@@ -428,7 +428,7 @@ export default function BuildSessionPanel({
                 />
               </div>
 
-              <div className="brm-sp-grp" data-group="claude">
+              <div className="brm-sp-grp" data-group="claude" data-capability="claude-status">
                 <div className="brm-sp-gh"><h3>Claude</h3></div>
                 <div className="brm-sp-row">
                   {slots.agentChip}
@@ -449,7 +449,7 @@ export default function BuildSessionPanel({
                 {!ended && <p className="brm-hint brm-sp-note">{W.autoNote}</p>}
               </div>
 
-              <div className="brm-sp-grp" data-group="crew">
+              <div className="brm-sp-grp" data-group="crew" data-capability="crew">
                 <div className="brm-sp-gh"><h3>Crew</h3></div>
                 {crew ? (
                   <>
@@ -468,10 +468,10 @@ export default function BuildSessionPanel({
                 )}
               </div>
 
-              <div className="brm-sp-grp" data-group="session">
+              <div className="brm-sp-grp" data-group="session" data-capability="report">
                 <div className="brm-sp-gh"><h3>This session</h3><span>Going back, finishing, stopping</span></div>
                 {!ended && opening && (
-                  <div className="brm-sp-row">
+                  <div className="brm-sp-row" data-capability="opening">
                     <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
                     <span className="brm-hint">{W.startUndoNote}</span>
                   </div>
