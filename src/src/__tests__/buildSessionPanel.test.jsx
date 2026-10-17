@@ -358,7 +358,7 @@ describe('the panel\'s controls', () => {
   test('the Stage dock\'s SESSION opens and closes it, and says which', async () => {
     await openRoom(hostState());
     fireEvent.keyDown(window, { key: '2' });
-    const dockButton = () => within(document.querySelector('.dock')).getByRole('button', { name: /SESSION/ });
+    const dockButton = () => within(document.querySelector('.dock')).getByRole('button', { name: /^Session panel/ });
     expect(dockButton()).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(dockButton());
     expect(panel()).toBeInTheDocument();
@@ -391,7 +391,7 @@ describe('the panel\'s controls', () => {
   test('on the Stage the top line carries the Wi-Fi and connection chips, which the Stage has no header for', async () => {
     await openRoom(hostState({ logs: SHOWN }));
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(within(document.querySelector('.dock')).getByRole('button', { name: /SESSION/ }));
+    fireEvent.click(within(document.querySelector('.dock')).getByRole('button', { name: /^Session panel/ }));
     const top = within(panel()).getByTestId('brm-sp-top');
     expect(top.querySelector('.brm-wifi')).not.toBeNull();
     expect(within(top).getByTestId('brm-conn')).toBeInTheDocument();
@@ -488,7 +488,7 @@ describe('someone asks to take a name (S6)', () => {
       fireEvent.keyDown(document, { key: 'Escape' });
     }
     fireEvent.keyDown(window, { key: '2' });
-    expect(within(document.querySelector('.dock')).getByRole('button', { name: /SESSION/ }).textContent).toMatch(/1/);
+    expect(within(document.querySelector('.dock')).getByRole('button', { name: /^Session panel/ }).textContent).toMatch(/1/);
     expect(document.body.textContent).not.toMatch(/\bDee\b/);
   });
 });

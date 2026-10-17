@@ -115,12 +115,13 @@ function useCrowded(ref, deps) {
   `home` is a type's way back to its own host screen (Build Room's HOST), a
   fixed item just before SESSION; the two are always last. `setupCount` and
   `setupOpen` let SESSION carry a count (someone asking to take a name) and
-  say whether its panel is open, without a second SESSION button.
+  say whether its panel is open, without a second SESSION button;
+  `setupProps` are extra attributes for it (a data- attribute, say).
 */
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
   statusLink = '', onStatusLink = null, home = null, setupCount = 0, setupCountLabel = '', setupOpen,
-  children, ...rest
+  setupProps = null, children, ...rest
 }) {
   const ref = useRef(null);
   useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, children]);
@@ -231,6 +232,7 @@ export default function Dock({
           aria-haspopup={setupOpen === undefined ? undefined : 'dialog'}
           aria-expanded={setupOpen === undefined ? undefined : Boolean(setupOpen)}
           title="Session panel — backslash key"
+          {...(setupProps || {})}
         >
           <span className="dock-more-lbl">SESSION</span>
           {setupCount > 0 && <span className="dock-more-n">{setupCount}{setupCountLabel && <span className="dock-sr">{setupCountLabel}</span>}</span>}

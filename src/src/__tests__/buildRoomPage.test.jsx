@@ -203,7 +203,8 @@ describe('the codes on the Stage', () => {
     expect(document.querySelector('.main.solo')).not.toBeNull();
     expect(document.querySelector('aside.meter')).toBeNull();
     const hide = within(dock()).getByRole('button', { name: 'Hide the codes' });
-    expect(hide).toHaveClass('btn');
+    // The shared bar's one main button (parity PLAN §2a D1).
+    expect(hide).toHaveClass('host-action-bar__primary');
     fireEvent.click(hide);
     expect(card()).toBeNull();
     expect(document.querySelector('aside.meter')).not.toBeNull();
@@ -1091,7 +1092,7 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     const pill = screen.getByRole('button', { name: 'Ask 3 · 3 of 4' });
     fireEvent.click(pill);
     expect(screen.getByRole('region', { name: 'Current ask' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^HOST/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Host screen/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull();
   });
 
@@ -1220,13 +1221,26 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     expect(document.querySelector('.dock .status').textContent).toBe('3 of 4 answered');
   });
 
-  test('Space closes the ask from the dock', async () => {
+  test('Space closes the ask from the dock: with one still answering, the first press arms in place and the second closes', async () => {
     await openRoom(live());
     fireEvent.keyDown(window, { key: '2' });
-    expect(within(document.querySelector('footer.dock')).getByRole('button', { name: 'Show results' })).toBeInTheDocument();
+    const dockEl = document.querySelector('footer.dock');
+    expect(within(dockEl).getByRole('button', { name: 'Show results' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(posts()).toHaveLength(0);
+    expect(within(dockEl).getByRole('button', { name: 'Show results anyway' })).toHaveClass('is-armed');
+    expect(within(dockEl).getByRole('alert')).toHaveTextContent('1 of 4 still answering. Press again to show results.');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks/003`));
     expect(lastPost().body).toEqual({ action: 'close' });
+  });
+
+  test('→ (a clicker) presses the same main button, as on Call & Answer', async () => {
+    await openRoom(live());
+    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'close' }));
   });
 
   test('Space does nothing while a dialog is open', async () => {
@@ -1250,6 +1264,16 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: ['B'], direction: 'Which header should volunteers see first: Calm photo + calendar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Host screen' }));
+    expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('D2: with a count on HOST, one click shows the Host screen (no list on the Stage)', async () => {
+    await openRoom(hostState({ ideas: [{ PlayerName: 'Ana', Text: 'Show parking' }, { PlayerName: 'Dee', Text: 'Print a rota' }] }));
+    fireEvent.keyDown(window, { key: '2' });
+    const host = within(document.querySelector('footer.dock')).getByRole('button', { name: 'Host screen, 2 waiting' });
+    fireEvent.click(host);
+    expect(screen.queryByRole('group', { name: 'Waiting for the host' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'The queue' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
   });
 

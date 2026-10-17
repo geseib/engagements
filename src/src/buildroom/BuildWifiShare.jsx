@@ -374,25 +374,25 @@ export function DemoTile({ room, now, link, here = 0, busy, run, api }) {
  * alone, never an empty slot. Room ladder; every line 12 words or fewer, and
  * a count only once someone has opened it. A click on a code enlarges it alone.
  */
-export function WallCodes({ room, now, link, onZoom }) {
+export function WallCodes({ room, now, link, onZoom = null }) {
   const demo = demoOnStage(room, now, link);
+  // On the room's window nothing enlarges a code (no onZoom): the codes are plain boxes.
+  const qr = (which, label, box) => (onZoom
+    ? <button type="button" className="brm-wallcodes-qr" aria-label={label} onClick={() => onZoom(which)}>{box}</button>
+    : <div className="brm-wallcodes-qr">{box}</div>);
   const open = Number(room && room.lan && room.lan.open) || 0;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   return (
     <section className={`brm-wallcodes${demo ? '' : ' is-one'}`} aria-label={demo ? 'The join and demo codes' : 'The join code'} data-testid="brm-wallcodes">
       <div className="brm-wallcodes-c">
-        <button type="button" className="brm-wallcodes-qr" aria-label="Enlarge the join code" onClick={() => onZoom('join')}>
-          <CodeBox value={playUrl} label={`QR code to join at ${playUrl}`} />
-        </button>
+        {qr('join', 'Enlarge the join code', <CodeBox value={playUrl} label={`QR code to join at ${playUrl}`} />)}
         <span className="brm-wallcodes-eb">{W.stageJoinEyebrow}</span>
         <h2 className="brm-wallcodes-h">{W.stageJoinHead}</h2>
         <p className="brm-wallcodes-l">{`${window.location.host}/play \u00b7 code `}<b>{room.gameId}</b></p>
       </div>
       {demo && (
         <div className="brm-wallcodes-c">
-          <button type="button" className="brm-wallcodes-qr" aria-label="Enlarge the demo code" onClick={() => onZoom('demo')}>
-            <CodeBox value={link} label="QR code to open the demo" />
-          </button>
+          {qr('demo', 'Enlarge the demo code', <CodeBox value={link} label="QR code to open the demo" />)}
           <span className="brm-wallcodes-eb is-live">{W.stageDemoLive}</span>
           <h2 className="brm-wallcodes-h">{W.stageDemoHead}</h2>
           <p className="brm-wallcodes-l">{W.stageSameWifi}</p>
