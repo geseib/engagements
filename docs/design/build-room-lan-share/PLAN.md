@@ -60,6 +60,13 @@ the install gains no new dependencies.
 4901, and so on, up to 4 ports. If a port is taken, the next free one is used. Paths are kept, so
 `/a` and `/b` on one server need no extra port. The mapping lasts for the session.
 
+Since plugin 1.20.0 (Share demo S3, `docs/design/parity/PLAN.md` §2b) each session has its own
+block of ten ports, `4900 + (code mod 100) × 10` (room 1215 starts at 5050), so two rooms on one
+laptop no longer interleave. `ENGAGE_LAN_PORT` overrides it. Every gateway answer carries
+`X-Engage-Session: <code>`, and `.engage/share-status.json` in the project lists each server
+local → Wi-Fi → role. `.engage/share.json` (`demo`, `mockups`, `label`) names the demo and the
+mockups and wins over Claude's links.
+
 **Which address.** The laptop's Wi-Fi interface: the first non-internal private IPv4 address,
 `en0` first on macOS. The gateway binds that address only, never `0.0.0.0`, and never forwards
 to anything but `localhost` / `127.0.0.1` on a port Claude has shown and `checkLocalLink` did not
