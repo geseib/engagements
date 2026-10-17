@@ -212,5 +212,14 @@ The remote lock:
 - [ ] **Step 1:** Full gates (Global Constraints). Fix anything red.
 - [ ] **Step 2:** Push to `dev` (the deploy). Name the commit and tier in the reply.
 - [ ] **Step 3: Walk on dev with the owner** (Claude cannot run the plugin on the owner's laptop): update the plugin from Connect; share; turn remote on; a phone on mobile data opens the demo; the same link pasted into a second browser shows "2 devices"; Remove ends it within a round; a handover gives the new device a working button and the old one the locked page; remote off closes the address within one round. Note anything off and fix before test.
+**Every change this piece makes, for the release notes (owner, 17 Oct: "make sure that all info of changes are in release notes when going to test"). Keep it current task by task:**
+- Host, Share demo panel: the remote switch (off by default), who opened it by name and devices with Remove, starting and failed states, one count across Wi-Fi and remote; the chip counts remote people too (Task 7).
+- Phone: Open the demo goes the remote way while remote is live; "Not here? Opening soon." while starting; the Didn't open? words for remote (Task 8).
+- Plugin 1.19.0 (update from Connect): one remote gateway on 127.0.0.1 behind a key per person; downloads cloudflared 2026.10.1 on first use, hash-checked; one tunnel per session, live only once reachable; plain words for a Cloudflare refusal; never left running (Tasks 3-5).
+- What Claude is told: SHARING REMOTELY (built copy, no server-sent events) while remote is on; and, always, that the build is a web page even for a document (Task 6).
+- Server: the share switch takes remote; the plugin's report and answer carry remote fields only while remote is wanted; new routes for a phone's own link and the plugin's key check; keys stored as hashes, ending on removal, handover or a newer key; the tunnel address, its error and who opened it are encrypted for organisations (Tasks 1-2).
+- Wording: the plugin's download failures say "remote-link tool"; nothing on screen says "tunnel".
+- Known gaps: spec §6 (200 requests at once, no server-sent events, no uptime promise, some company firewalls block trycloudflare.com, creation rate limit), History links stay Wi-Fi links, the macOS unpack and a system proxy untested in CI, Windows orphans not cleaned.
+
 - [ ] **Step 4:** Release notes entry (date, dev commit, New, Fixed, **What to look at** = the walk above, numbered, **Known gaps** = spec §6); in-app help (`src/src/config/help/*.js`) for hosts and players, `helpContent.test.js` green; README if a newcomer would now be wrong. `node tests/release-notes.js`.
 - [ ] **Step 5:** Merge into `test` and push (the deploy). Not prod: prod waits for the owner's look at test.
