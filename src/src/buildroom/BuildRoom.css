@@ -989,7 +989,8 @@
 .brm .brm-wifipanel-say { margin: 0; font-size: var(--brm-t-label); color: var(--muted); line-height: 1.45; }
 .brm .brm-wifipanel-apps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .brm .brm-wifipanel-apps li {
-  display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  /* 120px: "Mockups · Ask 12" on one line (Share demo S3). */
+  display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 10px; align-items: center;
   font-size: var(--brm-t-label); padding: 8px 10px; border: 1px solid var(--brm-rule); border-radius: 9px; background: var(--bg);
 }
 .brm .brm-wifipanel-k { font-weight: 700; color: var(--text); }

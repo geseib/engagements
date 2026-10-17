@@ -38,6 +38,8 @@ const LOG_KINDS = Object.freeze([
 ]);
 /** What Claude may post. Decisions and directions are the host's to write. `answer` answers an Ask Claude. */
 const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint', 'answer']);
+/** What Claude may say a link it posts is (Share demo S3, plugin 1.20.0). */
+const LINK_ROLES = Object.freeze(['demo', 'mockup']);
 
 /**
  * WHAT CLAUDE GETS (step 7c, C14; owner, 2026-10-05: "yes, four kinds and the
@@ -700,6 +702,8 @@ function logView(r) {
     text: r.Text || '',
     detail: r.Detail || '',
     link: r.Link || '',
+    // What Claude said the link is (Share demo S3): 'demo', 'mockup' or null.
+    role: LINK_ROLES.includes(r.Role) ? r.Role : null,
     by: r.By || 'host',
     askId: r.AskId || null,
     forAgent: Boolean(r.ForAgent),
@@ -840,7 +844,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.19.0';
+const LATEST_PLUGIN = '1.20.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1797,7 +1801,7 @@ function decisionReworded(ask, room, chosen, direction, typed) {
 }
 
 module.exports = {
-  GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
+  GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, LINK_ROLES, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
   LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, AGENT_LISTENING_MS, KEY_PREFIX,
   SK, TRANSITIONS,
   cleanText, safeUrl, isLocalUrl, publicUrl, pad3,

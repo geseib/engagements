@@ -153,7 +153,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten }) {
+async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -167,6 +167,7 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     Text: text,
     ...(detail ? { Detail: detail } : {}),
     ...(link ? { Link: link } : {}),
+    ...(link && linkRole ? { Role: linkRole } : {}),
     By: by,
     ...(askId ? { AskId: askId } : {}),
     ...(forAgent && !held ? { ForAgent: true } : {}),
@@ -719,6 +720,9 @@ async function postLog(ctx, role, body) {
     if (res.busy) return fail(409, DOING_BUSY);
     doingChanged = res.changed;
   }
+  // What a link IS (Share demo S3, plugin 1.20.0): Claude marks its demo and its mockups.
+  const linkRole = role === 'agent' && b.role !== undefined && b.role !== null && b.role !== '' ? String(b.role) : '';
+  if (linkRole && !S.LINK_ROLES.includes(linkRole)) return fail(400, `role must be one of ${S.LINK_ROLES.join(', ')}`);
   if (!text) {
     if (doingPost) {
       if (doingChanged) { const st = await touchState(ctx); await announce(ctx, st.Rev); }
@@ -726,11 +730,14 @@ async function postLog(ctx, role, body) {
     }
     return fail(400, 'Write the update');
   }
+  const link = S.safeUrl(b.link);
   const row = await logEntry(ctx, {
     kind,
     text,
     detail: S.cleanText(b.detail, S.LIMITS.logDetail),
-    link: S.safeUrl(b.link),
+    link,
+    // A role names a link: none without one.
+    linkRole: link ? linkRole : '',
     by: role === 'agent' ? 'agent' : 'host',
     // What the room said can go straight to Claude; a host note never does.
     forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
@@ -2092,7 +2099,8 @@ async function shareReport(ctx, body) {
   if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
   await updateLan(ctx, set);
   const changed = ['Status', 'Key', 'Open', 'Error'].some((k) => before[k] !== v[k])
-    || !sameMap(before.Map || [], v.Map);
+    || !sameMap(before.Map || [], v.Map)
+    || JSON.stringify(before.Declared || {}) !== JSON.stringify(v.Declared);
   if (changed) {
     const rev = (await touchState(ctx)).Rev;
     await announce(ctx, rev);
@@ -2103,7 +2111,11 @@ async function shareReport(ctx, body) {
   const targets = room ? LAN.lanTargets(room) : [];
   // What each may show (Share demo S1): the folders of the pages Claude linked. A 1.19.0+ plugin opens nothing else.
   const scopes = room ? LAN.lanScopes(room) : {};
-  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes });
+  // Which shared server is the demo and which the mockups (S3): the 1.20.0 plugin
+  // writes it into .engage/share-status.json. An older plugin ignores it.
+  const roles = {};
+  for (const [origin, r] of Object.entries(room ? LAN.lanRoles(room) : {})) if (targets.includes(origin)) roles[origin] = r.role;
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes, roles });
 }
 
 // ── Talking points, research and ideas ──────────────────────────────────────
