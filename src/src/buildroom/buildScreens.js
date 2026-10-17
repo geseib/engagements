@@ -879,6 +879,113 @@ export function artifactsOf({ images = [], asks = [] } = {}) {
   });
 }
 
+// ── WHAT THE ROOM GAVE, AND WHAT REACHED CLAUDE (parity PLAN §2.8, H2) ─────
+//
+// Owner, 2026-10-16: "history needs to include user contributions that are
+// used. same for any asks. we need to mark them if we send some version to
+// claude." One mark per thing, read from what the server stamped when it was
+// sent (H1), never guessed from text:
+//   sent      its words went (as written, when the stamp says so)
+//   reworded  a version went: the host changed the words, or combined it (Q14)
+//   later     held for Claude, not sent yet
+//   not-sent  recorded only, or closed without a decision
+//   not-chosen  in a vote, and another won
+//   pending   still with the room
+// An idea only put on the wall is not "used" (Q13). No names, ever (Q15).
+
+const directionsFrom = (log, key, id) => (log || [])
+  .filter((l) => l.kind === 'direction' && l.from && (l.from[key] || []).includes(id));
+
+/**
+ * The outcome of an ask that went to the room, or null for one the room never
+ * saw (still proposed, or cancelled before it opened).
+ * @returns {{ mark: string, reworded: boolean|null, alsoIn: string[] }|null}
+ */
+export function askOutcome(ask, room) {
+  if (!ask || ask.status === 'proposed' || (ask.status === 'discarded' && !ask.openedAt)) return null;
+  const alsoIn = directionsFrom(room && room.log, 'askIds', ask.askId).map((l) => l.logId);
+  const d = ask.status === 'decided' ? ask.decision : null;
+  if (!d) {
+    const ended = Boolean(room && room.state === 'ENDED');
+    return { mark: ask.status === 'discarded' || ended ? 'not-sent' : 'pending', reworded: null, alsoIn };
+  }
+  const reworded = typeof d.reworded === 'boolean' ? d.reworded : null;
+  const base = d.sentToAgent === false ? 'not-sent' : d.heldForLater ? 'later' : reworded ? 'reworded' : 'sent';
+  // Recorded only or held, then combined into a direction: a version did go.
+  if (alsoIn.length && (base === 'not-sent' || base === 'later')) return { mark: 'reworded', reworded: true, alsoIn };
+  return { mark: base, reworded, alsoIn };
+}
+
+/** As written follows the decision's stamp: unchanged words are as written; no stamp says nothing. */
+const writtenOf = (reworded) => (reworded === true ? false : reworded === false ? true : null);
+
+/** Where an idea went into an ask: the ask and the pick that stands for it (an option's label, or a suggestion's id). */
+function placeInAsk(idea, asks) {
+  if (idea.promotedTo) {
+    const ask = asks.find((a) => a.askId === idea.promotedTo);
+    if (!ask) return null;
+    const opts = ask.options || [];
+    // An option names its idea (H1); an older vote is matched by the order its ideas went in.
+    const opt = opts.find((o) => o.ideaId === idea.ideaId) || opts[(ask.fromIdeas || []).indexOf(idea.ideaId)] || null;
+    return opt ? { ask, pick: opt.label } : null;
+  }
+  for (const ask of asks) {
+    if (ask.kind !== 'suggest') continue;
+    const resp = (ask.responses || []).find((r) => r.ideaId === idea.ideaId)
+      || (idea.promotedVia === 'ideas' ? (ask.responses || []).find((r) => !r.ideaId && r.source === 'idea' && r.text === idea.text) : null);
+    if (resp) return { ask, pick: resp.respId };
+  }
+  return null;
+}
+
+/**
+ * Every room idea that was used, oldest first: what happened to it and where
+ * it went. Item: `{ ideaId, text, from: 'room'|'host', at, mark, chosen:
+ * true|false|null, asWritten: true|false|null, askId, logId, alsoIn: [logId] }`.
+ */
+export function contributionsOf(room) {
+  if (!room) return [];
+  const log = room.log || [];
+  const asks = room.asks || [];
+  const out = [];
+  for (const idea of room.ideas || []) {
+    const dirs = directionsFrom(log, 'ideaIds', idea.ideaId);
+    if (idea.status !== 'promoted' && !dirs.length) continue;
+    const c = {
+      ideaId: idea.ideaId, text: idea.text || '', from: idea.source === 'host' ? 'host' : 'room', at: idea.createdAt || '',
+      mark: null, chosen: null, asWritten: null, askId: null, logId: null, alsoIn: [],
+    };
+    const place = idea.status === 'promoted' ? placeInAsk(idea, asks) : null;
+    if (place) {
+      const o = askOutcome(place.ask, room);
+      c.askId = place.ask.askId;
+      if (o && (o.mark === 'pending' || !place.ask.decision)) c.mark = o ? o.mark : 'pending';
+      else if (o) {
+        c.chosen = (place.ask.decision.chosen || []).includes(place.pick);
+        if (c.chosen) { c.mark = o.mark; c.asWritten = writtenOf(o.reworded); c.alsoIn = o.alsoIn; } else c.mark = 'not-chosen';
+      }
+    } else if (idea.status === 'promoted' && idea.promotedVia !== 'ideas' && !idea.promotedTo) {
+      // Sent on its own. The entry names its idea (H1); an older one is matched by its words.
+      const entry = log.find((l) => l.kind === 'idea' && l.ideaId === idea.ideaId)
+        || log.find((l) => l.kind === 'idea' && !l.ideaId && (l.forAgent || l.held) && l.text === idea.text);
+      c.mark = entry && entry.held ? 'later' : 'sent';
+      c.asWritten = entry && entry.asWritten === true ? true : null;
+      c.logId = entry ? entry.logId : null;
+    }
+    for (const dir of dirs) {
+      const mark = dir.held ? 'later' : dir.asWritten === true ? 'sent' : 'reworded';
+      if (!c.mark || c.mark === 'pending') {
+        c.mark = mark; c.logId = dir.logId; c.asWritten = dir.asWritten;
+      } else {
+        c.alsoIn.push(dir.logId);
+        if (['not-sent', 'later', 'not-chosen'].includes(c.mark) && mark !== 'later') { c.mark = mark; c.asWritten = dir.asWritten; }
+      }
+    }
+    if (c.mark) out.push(c);
+  }
+  return out.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+
 // ── THE HOST'S PATH (owner, 2026-10-07; docs/design/build-room-host-flow) ──
 // Every ask runs Ask, Collect, Settle, Send to Claude. The step decides which
 // button has focus; the summaries are what a folded step says.
