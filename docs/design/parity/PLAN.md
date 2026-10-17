@@ -372,10 +372,10 @@ standards §10. **No task touches `template-clean.yaml`; if one seems to, stop a
 
 | # | Task | Files | Tests (write first) |
 |---|---|---|---|
-| B1 | Wall key: minted lazily on `BUILD#STATE` (`WallKey`, 32 random bytes, base64url), returned only on the host read; `rotate` action on `build/wall` | `build-store.js`, `build-room.js` | `tests/build-wall-key.js`: host read carries it; public and agent reads never do; rotate retires the old key |
-| B2 | `wallView` + `askView(…, 'wall')` + the two `build-play/wall` routes ahead of the seat check | `build-store.js`, `build-room.js` | `tests/build-wall-read.js`: no key → 403, wrong key → 403, non-build → 404; a fixture with named players, voters, why names, notes, `claudeNote`, `briefDraft`, `brief.later`, idea authors, LAN key: **none of those strings** appears in `JSON.stringify(body)`; names appear only with `listNames` on; an image id not in `wallView` → 404; no `IdSecret`, no `@` |
-| B3 | `WallScreen/WallCodes/WallProfile/WallRev` + `POST build/wall` + server clears (§2.3) | `build-room.js`, `build-store.js` | `tests/build-wall-screen.js`: host may write, agent key and player may not (404/403); enum junk refused; rev monotonic; ttl kept; opening an ask clears codes; announce sent |
-| B4 | `presenting` / `presentDetail` on the build host read | `build-store.js` (`hostView`), `build-room.js` | extend B2's file: host read carries them; wall and phone reads do not; a viewer row is not counted in `playerCount` |
+| B1 | **Built.** `WallKey` minted on the host's first `GET build/state` by a conditional write through `touchState` (ttl kept, no Rev bump); on that read only; `POST build/wall {rotate:true}` mints a new one. API in §2.9a | `build-store.js`, `build-room.js` | `tests/build-wall-key.js` (12): host read carries it; agent, builder, phone and wall reads never do; a racing mint keeps the winner's; rotate retires the old key |
+| B2 | **Built.** `wallView` (allowlist) + `build-play/wall` and `wall/images/{id}` ahead of the seat check; History is `roomHistory`'s asks with the existing `'wall'` audience. Fields in §2.9a | `build-store.js`, `build-room.js` | `tests/build-wall-read.js` (28): 403/404 cases; the fixture's private strings and names absent; names only with `listNames`; unlisted image → 404; no `IdSecret`, no `@` |
+| B3 | **Built.** `WallScreen/WallCodes/WallProfile/WallRev` on `BUILD#STATE`, `POST build/wall` behind `hostOnly()`, cleared by the server on opening an ask (`makeCurrent`, re-ask), back to the opening, and (read-side) on the end | `build-room.js`, `build-store.js` | `tests/build-wall-screen.js` (15): host writes, Claude/builder 403, phone 404; junk 400; rev monotonic; ttl kept; clears; `buildChanged` reaches the `/present` row |
+| B4 | **Built.** `presenting` / `presentDetail` on the host's `GET build/state` only, from `room-counts.js`, failing soft to `0`/`null` | `build-room.js` (`windowStatus`) | in `tests/build-wall-read.js`: host read carries them; agent, phone and wall do not; fails soft; a viewer row is not in `playerCount` |
 | B5 | `safeHref` to `buildroom/links.js`; transitive import test | `buildroom/links.js`, `buildHostApi.js`, `buildScreens.js` | `__tests__/buildWallImports.test.js`: walking imports from `present/build/BuildWall.jsx` reaches no `authFetch`, `hostTicketClient`, `/build/state` |
 | B6 | Split the three screens into `buildroom/screens/` with optional `controls`; lift `doMove` into `useStageMoves`; **with D1 and D2** (the shared dock on `buildControls`, Host in one press); `capabilities.js` and its one-screen half of the test land here, so the refactor is checked against the list before anything moves | `BuildRoomPage.jsx`, `buildroom/screens/{BuildStageScreen,BuildBuildScreen,BuildHistoryScreen}.jsx`, `buildroom/useStageMoves.js` | existing Build Room suites unchanged and green; `__tests__/buildScreensDisplay.test.jsx`: each screen with a `wallView` fixture and no controls renders no `button`/`role=button` and no name |
 | B7 | `BuildWall` + `useBuildWall` + `present/presentStatusReporter.js`; `PresentPage` dispatch on `type=build` | `present/build/*`, `PresentPage.jsx`, `usePresentation.js` | `__tests__/buildWall.test.jsx`: follows `wall.screen`; a `buildChanged` frame refetches and its payload is ignored; stale rev dropped; 403 copy; PRESENT_STATUS sent on fullscreen change; `presentRoute` test still public |
@@ -387,6 +387,72 @@ standards §10. **No task touches `template-clean.yaml`; if one seems to, stop a
 Order: H1→H5 (History, §2.8; useful on one screen at once), then B1→B2→B3→B4 (server,
 one deploy), B5→B6 (refactor, no behaviour change, one deploy), B7→B8→B9→B9m. Each arrow is a dev push the owner can look at; B6's push must
 look identical to today.
+
+### 2.9a The wall's API as built (B1–B4, 17 Oct)
+
+What the frontend (B5–B9) builds to. All four ride the existing `build/{proxy+}` and
+`build-play/{proxy+}` events: **resource impact 0**, `template-clean.yaml` untouched.
+
+**`GET /games/{id}/build/state`** (host, signed in): the existing body plus, **for the host
+only** (never Claude's key, a builder's key, a phone or the wall):
+
+| Field | Shape |
+|---|---|
+| `wallKey` | 43-char base64url string (32 bytes). Minted on the first host read; stable until rotated |
+| `wall` | `{ screen: 'stage'\|'build'\|'history', codes: 'none'\|'join'\|'both', profile: 'room'\|'tv'\|'call'\|'table', rev: n }` |
+| `presenting` | integer: `/present` viewer rows on the session (`0` if the read fails) |
+| `presentDetail` | `{ open, fullscreen, visible, statusAt, ageMs }` as C&A's (`room-counts.js presentingDetail`), or `null` if the read fails |
+
+**`POST /games/{id}/build/wall`** (host only) `{ screen?, codes?, profile?, rotate? }`: at
+least one. Each field is one of the enums above; `rotate` is a boolean. Junk → **400**;
+Claude's key or a builder's → **403**; codes other than `none` after the end → **409** (the
+screen and profile may still move after the end). Writes through `touchState` (ttl kept,
+`Rev` +1, `WallRev` +1 on every write, the same value again included) and announces
+`buildChanged {type, gameId, rev}` to every connection, `/present` rows included. Reply:
+`{ wall }`, plus `{ wallKey }` (the new one) when it rotated. A rotate makes every open
+window's next read 403.
+
+**Cleared by the server:** opening an ask (`makeCurrent`: create live, open, open next,
+from ideas, from Later, from points, the revote; and the re-ask) sets `WallCodes = none`
+and `WallRev +1`; back to the opening (`POST build/opening/resume`) sets `WallScreen = stage`
+and `WallRev +1`; an ENDED session **reads** as `codes: 'none'` on every read (the end is
+written by the shared `session-end.js`, which this task did not touch; the stored value is
+left, the read decides).
+
+**`GET /games/{id}/build-play/wall?k=<wallKey>`** (no seat, no sign-in): `k` must equal
+`BUILD#STATE.WallKey`, compared in constant time; missing, wrong, or no key minted yet →
+**403** `{ error, code: 'wall-key' }`; not a build session → **404**. Any other method →
+404. The body (`build-store.js wallView`, an allowlist):
+
+| Field | What it is |
+|---|---|
+| `gameId, title, goal, state, playerCount, rev` | as the phones' read (`goal` is the session's details, which the header shows; added because the projected screens read it) |
+| `players` | `[]`, or the joined names when **List names on the room meter** is on |
+| `current` | the open/results/decided ask as `askView(…, 'public')`; wheel `spinner` and `spins[].by` are `''` unless List names is on (`'host'` stays); option `url`s only if not a laptop address |
+| `history` | `roomHistory`: `{ asks (audience 'wall', with stamps, same url and wheel rule), ideas (used ones, text only), sent }` |
+| `ideaCounts` | `{ total, used }`: every idea; used by History's rule (an idea in a vote the room has not seen is not used) |
+| `log` | the phones' filtered log, less: `crew`, `base`, `help` entries; any entry about an ask the room has not seen; image entries whose picture is not in `images`; and, with List names off, any entry whose text names a player, builder, idea author, voter or spinner. Never `name` (unless List names), `forAgent`, `as`, `held`, `deliveredAt`, `from`; links never a laptop address or keyed |
+| `images` | `{ imageId, caption, kind, askId, label, contentType, createdAt }`: not for an ask the room has not seen; a builder's only if the crew board shows it |
+| `outcome, doing, run, shownPoint` | as the phones' (`shownPoint.from` a builder's wall label unless List names) |
+| `agent` | `{ connected, listening, name }`: Claude's status line on the Stage and Build screen |
+| `lan` | `{ live: true }` when the demo is on this Wi-Fi, `{ state: 'off' }`, or `null`. **Never the link**: it carries the gateway's key |
+| `opening` | `openingView` (phase, steps, current, kinds, readyForDraft, drafted) |
+| `brief` | the agreed brief: `{ forWhom, keep, lines, steps, headline, summary }`. Never `briefDraft`, never `later` |
+| `wallComment` | `{ ideaId, text, at }` while fresh (`WALL_COMMENT_MS`), else `null` |
+| `crew` | `{ enabled: false }`, or the phones' crew read less `repoUrl`, `modes`, `runCrewCode`, `me`, branches, fork URLs, builders' notes, PR links, tests summaries: builders are `Builder 1…n` (stable, so a lane and its early look match) unless List names is on; room comments carry no name |
+| `wall` | `{ screen, codes, profile, rev }` |
+
+Never in it: `seen`, raw `ideas`, `activity`, `points`, `settings`, `plugin`, any email,
+`IdSecret`, the agent key, the wall key.
+
+**`GET /games/{id}/build-play/wall/images/{imageId}?k=<wallKey>`**: the same key check;
+the image bytes (as `build/images`) only if `wallView.images` lists it, else **404**.
+
+**Changed from §2.2 by the code:** `asks` is `history.asks` (H5's `roomHistory` already had
+the `'wall'` audience); `agent` and `goal` were added (the Stage's Claude line and the header
+read them); `lan` never carries a link, so the Build screen's demo QR and the `both` codes
+card cannot show the demo's link on the wall. If the owner wants the demo's QR on the
+projector, the wall would need the keyed link while `codes === 'both'`: an owner's call.
 
 ### 2.10 Owner's checks on dev after B9
 
