@@ -441,6 +441,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // saved), so a refetch keeps them. `composeFocus` counts the times the
   // cursor is sent to the Composer; `voteIdeas` is What's next's vote dialog.
   const [composeText, setComposeText] = useState('');
+  // WHAT THE COMPOSER WAS FILLED FROM (parity PLAN §2.8, H1): the decided asks
+  // Combine put in it. Sent with the direction; gone once the box is emptied.
+  const [composeFrom, setComposeFrom] = useState([]);
+  useEffect(() => { if (!String(composeText).trim()) setComposeFrom((f) => (f.length ? [] : f)); }, [composeText]);
   const [composeFocus, setComposeFocus] = useState(0);
   const [ticked, setTicked] = useState(() => new Set());
   const [used, setUsed] = useState({});
@@ -869,6 +873,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (!chosen.length) return;
     const lines = combineText(chosen);
     setComposeText((t) => (String(t).trim() ? `${String(t).replace(/\s+$/, '')}\n\n${lines}` : lines));
+    setComposeFrom((f) => [...new Set([...f, ...chosen.map((a) => a.askId)])]);
     const at = new Date().toISOString();
     setUsed((u) => ({ ...u, ...Object.fromEntries(chosen.map((a) => [a.askId, at])) }));
     setTicked(new Set());
@@ -1183,7 +1188,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           )}
 
-          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} focusKey={composeFocus} leadShows />}
+          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows />}
         </main>
 
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
@@ -3308,7 +3313,7 @@ export function SendToClaude({ onSend, busy, disabled = false, small = false, pr
  *                   a milestone; "Also tell Claude" sends it too
  *   Ask the room    Ideas, Choose or Rate (the Ask the room dialog)
  */
-function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 0, leadShows = true }) {
+function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds = [], focusKey = 0, leadShows = true }) {
   const [said, setSaid] = useState('');
   const box = useRef(null);
   // What's next's Combine and Write send the cursor here, at the end of the words.
@@ -3325,7 +3330,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, focusKey = 
   const words = text.trim();
   const tellAs = async (as) => {
     if (!words) return;
-    const ok = await run(() => api.postDirection(words, as));
+    const ok = await run(() => api.postDirection(words, as, { askIds: fromAskIds }));
     if (ok !== undefined) { setText(''); setSaid(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
   };
   const tell = (e) => { e.preventDefault(); tellAs('do-now'); };

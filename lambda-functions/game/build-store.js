@@ -595,7 +595,7 @@ function askView(ask, room, audience, me) {
     detail: ask.Detail || '',
     status: ask.Status,
     source: ask.Source || 'host',
-    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}) })),
+    options: (ask.Options || []).map((o) => ({ label: o.label, title: o.title, detail: o.detail || '', url: o.url || '', imageId: o.imageId || optionImages(room, ask.AskId)[o.label] || null, ...(isHost && o.pointId ? { pointId: o.pointId } : {}), ...(isHost && o.ideaId ? { ideaId: o.ideaId } : {}) })),
     scale: ask.Kind === 'rating' ? RATING_SCALE : null,
     maxPicks: ask.MaxPicks || null,
     createdAt: ask.CreatedAt || null,
@@ -614,7 +614,7 @@ function askView(ask, room, audience, me) {
     const resps = forAsk(room.resps, ask.AskId);
     if (isHost) {
       out.responses = resps.map((r) => ({
-        respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player',
+        respId: r.RespId, text: r.Text, playerName: r.PlayerName || '', source: r.Source || 'player', ...(r.IdeaId ? { ideaId: r.IdeaId } : {}),
         hidden: Boolean(r.Hidden), createdAt: r.CreatedAt || null, votes: t.count.get(r.RespId) || 0,
       }));
     } else if (['voting', 'results', 'decided'].includes(ask.Status)) {
@@ -676,6 +676,8 @@ function askView(ask, room, audience, me) {
       ...(isHost && ask.Decision.heldForLater ? { heldForLater: true } : {}),
       spoken: Boolean(ask.Decision.spoken),
       method: ask.Decision.method || (ask.Decision.spoken ? 'spoken' : 'vote'),
+      // The host changed the words the server would have sent (H1); the room sees it once History draws it (H5).
+      ...(isHost && typeof ask.Decision.reworded === 'boolean' ? { reworded: ask.Decision.reworded } : {}),
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
@@ -698,6 +700,11 @@ function logView(r) {
     forAgent: Boolean(r.ForAgent),
     name: r.Name || null,
     shareId: r.ShareId || null,
+    // PROVENANCE (docs/design/parity/PLAN.md §2.8, H1): what this entry was made
+    // from, stamped when it was sent. `asWritten` is null when nothing says.
+    ideaId: r.IdeaId || null,
+    from: r.From ? { askIds: r.From.AskIds || [], ideaIds: r.From.IdeaIds || [] } : null,
+    asWritten: typeof r.AsWritten === 'boolean' ? r.AsWritten : null,
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
@@ -761,7 +768,8 @@ function voteFromIdeas(ideas, body) {
   const options = ideas.map((i, n) => {
     const text = cleanText(i.Text, LIMITS.idea);
     const title = text.length > LIMITS.optionTitle ? `${text.slice(0, LIMITS.optionTitle - 1).trimEnd()}…` : text;
-    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '' };
+    // An option made from a room idea names it, so History can say which idea won (H1).
+    return { label: labelFor(n), title, detail: text.length > LIMITS.optionTitle ? text : '', url: '', ...(i.IdeaId ? { ideaId: i.IdeaId } : {}) };
   });
   const mp = Number(b.maxPicks);
   const maxPicks = Number.isInteger(mp) && mp >= 1 ? Math.min(mp, options.length) : 1;
@@ -1559,7 +1567,8 @@ function publicView({ gameId, meta, sessionState, room, players, me, now }) {
     // carry the host's note), and a decision's or idea's detail is the host's
     // note or the idea's author.
     log: room.logs.filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind)).map(logView)
-      .map(({ forAgent, deliveredAt, as, held, step, ...rest }) => ({
+      // Provenance waits for History to draw it (PLAN §2.8, H5).
+      .map(({ forAgent, deliveredAt, as, held, step, ideaId, from, asWritten, ...rest }) => ({
         ...(DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest),
         // A phone sees when a step ran, not where Claude took it from.
         ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
@@ -1716,6 +1725,43 @@ function defaultDirection(ask, room) {
   return top ? questionAnswer(ask.Prompt, top.text) : '';
 }
 
+/**
+ * REWORDED (docs/design/parity/PLAN.md §2.8, H1; owner, Q14): did the host
+ * change the words the room's pick would have gone with? Any change counts, a
+ * fixed typo included. The defaults are every sentence a screen offers for the
+ * picks (`directionFor`, `spokenDirection` and `defaultDirection` in
+ * src/src/buildroom), so a press that sends what was offered is never
+ * "reworded". `typed` false: the server wrote the words itself.
+ * @returns {boolean|null} null when there is nothing to compare with.
+ */
+function decisionReworded(ask, room, chosen, direction, typed) {
+  if (!typed) return false;
+  const qa = (answer) => withRatingMeaning(ask.Kind, questionAnswer(ask.Prompt, answer));
+  const withDetail = (title, detail) => (detail ? `${title} (${detail})` : title);
+  const defaults = new Set();
+  const add = (s) => { if (s) defaults.add(s); };
+  add(withRatingMeaning(ask.Kind, defaultDirection(ask, room)));
+  const picks = Array.isArray(chosen) ? chosen : [];
+  const landed = wheelLanded(ask);
+  if (ask.Kind === 'choice') {
+    const options = ask.Options || [];
+    const picked = options.filter((o) => picks.includes(o.label));
+    for (const o of picked) { add(qa(o.title)); add(qa(withDetail(o.title, o.detail))); }
+    if (picked.length > 1) add(qa(picked.map((o) => o.title).join(' and ')));
+    if (landed) {
+      const o = options.find((x) => x.label === landed.id || x.title === landed.text);
+      add(qa(landed.text));
+      if (o) add(qa(withDetail(landed.text, o.detail)));
+    }
+  } else if (ask.Kind === 'suggest') {
+    for (const r of tally(ask, room).ranked) if (picks.includes(r.respId)) add(qa(r.text));
+    if (landed) add(qa(landed.text));
+  } else if (ask.Kind === 'rating') {
+    for (const n of picks) add(qa(ratingAnswer(n)));
+  }
+  return defaults.size ? !defaults.has(direction) : null;
+}
+
 module.exports = {
   GAME_TYPE_BUILD, KINDS, STATUSES, OPEN_STATUSES, LOG_KINDS, AGENT_LOG_KINDS, HOST_LOG_KINDS, PRIVATE_LOG_KINDS, PHONE_HIDDEN_LOG_KINDS, DETAIL_PRIVATE_LOG_KINDS,
   LIMITS, MIN_OPTIONS, MAX_OPTIONS, MAX_SUGGESTIONS_PER_PLAYER, DEFAULT_MAX_PICKS, AGENT_ACTIVE_MS, AGENT_LISTENING_MS, KEY_PREFIX,
@@ -1734,5 +1780,5 @@ module.exports = {
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
-  hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection,
+  hostView, publicView, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection, decisionReworded,
 };

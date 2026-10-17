@@ -312,7 +312,7 @@ claims "as written" without the stamp.
 
 | # | Task | Files | Tests (first) |
 |---|---|---|---|
-| H1 | Stamp provenance (the five bullets above) | `build-room.js`, `build-store.js` (`voteFromIdeas`, `logView`, `askView`) | `tests/build-provenance.js`: each route stamps its ids; a forged `fromIdeaIds` → 400; `AsWritten` true only for identical text; `Reworded` set when the host changed a decision |
+| H1 | **Built** (`working/parity-plan`). Stamp provenance (the five bullets above) | `build-room.js`, `build-store.js` (`voteFromIdeas`, `logView`, `askView`) | `tests/build-provenance.js`: each route stamps its ids; a forged `fromIdeaIds` → 400; `AsWritten` true only for identical text; `Reworded` set when the host changed a decision |
 | H2 | `contributionsOf(room)`: every used idea, with its mark and where it went (ask n, direction, later) | `buildScreens.js` (pure) | `__tests__/buildContributions.test.js`: one fixture per row of the first table; old rows with no stamps never read as "as written" |
 | H3 | `roomStory` draws contributions (a `gave` item: the idea and its mark, under the ask or step it fed) and every ask that reached the room, decided or not, with its mark | `buildScreens.js`, `BuildRoomPage.jsx` (`StoryItem`) | extend the `roomStory` tests: sent idea present; losing option "In a vote, not chosen"; combined direction marks each source ask "reworded"; no name anywhere in the wall's story |
 | H4 | The marks' words; "Made so far" counts used by the same rule | `buildroom/words.js`, `HistoryScreen` | words parity test; count matches `contributionsOf` |
@@ -410,6 +410,9 @@ scope labels, late answers kept server-side.
 ## 5. Open questions for the owner
 
 Each with a recommendation and the cost of getting it wrong.
+
+**Ruled 16 Oct 2026: the owner agreed with every recommendation below** ("agree with your
+recommendations, start with H1"). The Recommended column is now the decision.
 
 | # | Question | Recommended | If wrong |
 |---|---|---|---|

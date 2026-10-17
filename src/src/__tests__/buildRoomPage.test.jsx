@@ -2406,6 +2406,29 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     expect(within(decidedSection()).getByRole('checkbox', { name: /What are we building/ })).not.toBeChecked();
   });
 
+  test('a combined direction tells the server which asks it was written from (parity PLAN §2.8, H1)', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /What are we building/ }));
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /Who is it for/ }));
+    fireEvent.click(within(decidedSection()).getByRole('button', { name: 'Add to the prompt' }));
+    fireEvent.change(composer(), { target: { value: `${composer().value}\nKeep it simple` } });
+    fireEvent.submit(composer().closest('form'));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body).toEqual({ text: 'What are we building? An app\nWho is it for? Everyone\nKeep it simple', fromAskIds: ['001', '002'] });
+  });
+
+  test('a direction the host only typed names no sources, and the sources go once the box is cleared', async () => {
+    await openRoom(decidedRoom());
+    fireEvent.click(within(decidedSection()).getByRole('checkbox', { name: /Who is it for/ }));
+    fireEvent.click(within(decidedSection()).getByRole('button', { name: 'Add to the prompt' }));
+    // The host empties the box and writes something else: it was not written from the ask.
+    fireEvent.change(composer(), { target: { value: '' } });
+    fireEvent.change(composer(), { target: { value: 'Make the header bigger' } });
+    fireEvent.submit(composer().closest('form'));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(lastPost().body).toEqual({ text: 'Make the header bigger' });
+  });
+
   test('Combine goes under what the host already typed, after a blank line', async () => {
     await openRoom(decidedRoom());
     fireEvent.change(composer(), { target: { value: 'Build this as our first version:' } });
