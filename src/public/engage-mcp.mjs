@@ -2931,8 +2931,8 @@ const TUNNEL_RETRY_MS = Math.max(50, Number(process.env.ENGAGE_TUNNEL_RETRY_MS) 
 const DOH_URL = process.env.ENGAGE_DOH_URL || 'https://cloudflare-dns.com/dns-query';
 const TUNNEL_WORDS = Object.freeze({
   platform: 'Remote share does not run on this kind of laptop yet.',
-  download: "Couldn't download Cloudflare's tunnel tool. Check this laptop is online, then turn this off and on.",
-  mismatch: "Couldn't download Cloudflare's tunnel tool (it did not match the expected file).",
+  download: "Couldn't download Cloudflare's remote-link tool. Check this laptop is online, then turn this off and on.",
+  mismatch: "Couldn't download Cloudflare's remote-link tool (it did not match the expected file).",
   refused: 'Cloudflare is not giving out new remote links from this network right now. Try again in a few minutes.',
   noAddress: 'Cloudflare did not give this laptop a remote link.',
   notReady: 'Cloudflare did not finish setting up the remote link.',

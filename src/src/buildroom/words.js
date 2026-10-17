@@ -391,6 +391,22 @@ export const W = Object.freeze({
   stopSharing: 'Stop sharing',
   keepSharing: 'Keep sharing',
   shareShowOnStage: 'Show on the Stage',
+  // REMOTE SHARE (owner 2026-10-16; docs/design/build-room-remote-share R1-R4).
+  // One switch in the Share demo panel. Never the word "tunnel" on screen.
+  remoteSwitch: 'Also open it to people who are not here',
+  remoteOffBody: 'People who joined from a link, on Zoom or another network, get the same Open the demo button.',
+  remoteOffSmall: "Everyone, here too, then opens it through Cloudflare, who can see it. Each person's button carries their own key. It closes when you turn this off or the session ends.",
+  remoteStarting: 'Starting\u2026 The first time, this laptop downloads a tool from Cloudflare. Remote people see \u201cOpening soon\u201d until it is ready.',
+  remoteLiveHead: 'Demo shared, here and remote',
+  remoteLiveBody: 'On. Remote people open it from their Open the demo button.',
+  remoteLiveSmall: 'Each link belongs to one person. A passed-on link shows up here as their extra device.',
+  remoteFailedHead: "Didn't start.",
+  remoteWifiFine: 'People here on the Wi-Fi are not affected.',
+  remoteOpenedOf: (n, joined) => `${n} opened it \u00b7 ${joined} joined`,
+  remoteDevices: (n) => (n === 1 ? '1 device' : `${n} devices`),
+  remoteMore: (n) => `and ${n} more`,
+  remoteRemove: 'Remove',
+  remoteRemoveSure: (name) => `Remove ${name}?`,
   onlyThisLaptop: 'Only this laptop can open it.',
   anyoneOnWifi: 'Anyone on this Wi-Fi',
   /** The Stage's HOST list (option B): one grey line, never a pop-up on the wall. */

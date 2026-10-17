@@ -1009,6 +1009,30 @@
 .brm .brm-wifipanel-addr .brm-wifipanel-u small { display: block; margin-top: 4px; font-family: var(--font-ui); font-size: var(--brm-t-floor); color: var(--muted); line-height: 1.4; }
 .brm .brm-wifipanel-warn ul { margin: 6px 0 0; padding-left: 18px; }
 .brm .brm-wifipanel-stat { font-size: var(--brm-t-body); font-weight: 700; color: var(--brm-success-text); }
+/* REMOTE SHARE (owner 2026-10-16; docs/design/build-room-remote-share R1-R3): one switch
+   under the address, and who opened it remotely. Tokens only; the track's "on" is the
+   success tint, its thumb the success colour (a mark, never text). */
+.brm .brm-wifipanel-sw { display: flex; gap: 12px; align-items: flex-start; padding-top: 12px; border-top: 1px solid var(--brm-rule); }
+.brm .brm-wifipanel-tg {
+  flex: none; position: relative; width: 42px; height: 24px; margin-top: 2px; padding: 0; border-radius: 12px;
+  border: 1px solid var(--brm-rule); background: var(--surface-2); cursor: pointer;
+}
+.brm .brm-wifipanel-tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); }
+.brm .brm-wifipanel-tg.is-on { background: var(--brm-tint-green); border-color: var(--brm-line-green); }
+.brm .brm-wifipanel-tg.is-on::after { left: 20px; background: var(--success); }
+.brm .brm-wifipanel-tg:focus-visible { outline: 2px solid rgb(var(--info-rgb)); outline-offset: 2px; }
+.brm .brm-wifipanel-tg:disabled { cursor: default; opacity: 0.6; }
+.brm .brm-wifipanel-swtx { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: var(--brm-t-label); line-height: 1.45; color: var(--text); }
+.brm .brm-wifipanel-swtx b { font-size: var(--brm-t-body); }
+.brm .brm-wifipanel-swtx small { font-size: var(--brm-t-floor); color: var(--muted); }
+.brm .brm-wifipanel-bad { color: var(--danger-text); }
+.brm .brm-wifipanel-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--brm-t-label); }
+.brm .brm-wifipanel-people li { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.brm .brm-wifipanel-who { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.brm .brm-wifipanel-dev { color: var(--muted); white-space: nowrap; }
+.brm .brm-wifipanel-people li.is-many .brm-wifipanel-dev { color: var(--accent-text); font-weight: 700; }
+.brm .brm-wifipanel-people li > .brm-btn { margin-left: auto; }
+.brm .brm-wifipanel-more { color: var(--muted); }
 
 .brm .brm-wifioffer {
   display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 12px;
