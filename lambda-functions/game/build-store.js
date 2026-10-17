@@ -38,6 +38,45 @@ const LOG_KINDS = Object.freeze([
 ]);
 /** What Claude may post. Decisions and directions are the host's to write. `answer` answers an Ask Claude. */
 const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint', 'answer']);
+/**
+ * THE RELEASE GATE (owner, 17 Oct 2026: "Have thing get to host queue to
+ * release to room"; docs/design/parity/PLAN.md §2c). With the room's
+ * `reviewAgentPosts` on (the default), Claude's posts (AGENT_LOG_KINDS, from
+ * the host's Claude or a builder's) and its screenshots are written HELD:
+ * `Released: false` on the log or image row. Absent means released, so every
+ * row written before the gate stays visible. A held row is on the host's read
+ * and Claude's, never on a phone, the wall, the wall's image route or the
+ * room's Open the build, until the host releases it (`ReleasedAt`) or keeps
+ * it to themselves (`KeptAt`: private for good, off the queue). A mockup (an
+ * image on an ask) is never held: it follows its ask. Claude's live status
+ * (the doing line, its steps, connected, listening) is never held (owner, 17 Oct).
+ */
+const isHeld = (r) => Boolean(r) && r.Released === false;
+/** 'held' (on the host's queue), 'kept' (the host's for good) or null (the room may see it). */
+const roomHoldOf = (r) => (isHeld(r) ? (r.KeptAt ? 'kept' : 'held') : null);
+/** On the host's queue: held, not kept. */
+const awaitingRelease = (r) => isHeld(r) && !r.KeptAt;
+/** "Claude proposed a question: …" (flagged HostOnly since the gate; an older row by its words). */
+const isProposalEntry = (l) => Boolean(l) && (l.HostOnly === true || (l.Kind === 'ask' && l.By === 'system' && /^Claude proposed a question/.test(String(l.Text || ''))));
+/** The asks the room has seen: everything but a proposed or discarded one. */
+const roomSeenAskIds = (room) => new Set((room.asks || []).filter((a) => !['proposed', 'discarded'].includes(a.Status)).map((a) => a.AskId));
+
+/**
+ * The room's rows: what a phone, the wall and the room's Open the build are
+ * made from. Held posts and screenshots out; a picture or an entry about an
+ * ask the room has not seen out; Claude's proposals out; a screenshot entry
+ * whose picture is not the room's out.
+ */
+function roomRowsForRoom(room) {
+  const seen = roomSeenAskIds(room);
+  const images = (room.images || []).filter((r) => !isHeld(r) && (!r.AskId || seen.has(r.AskId)));
+  const imageIds = new Set(images.map((r) => r.ImageId));
+  const logs = (room.logs || []).filter((l) => !isHeld(l) && !isProposalEntry(l)
+    && (!l.AskId || seen.has(l.AskId))
+    && (l.Kind !== 'image' || imageIds.has(l.Detail)));
+  return { ...room, logs, images };
+}
+
 /** What Claude may say a link it posts is (Share demo S3, plugin 1.20.0). */
 const LINK_ROLES = Object.freeze(['demo', 'mockup']);
 
@@ -717,6 +756,9 @@ function logView(r) {
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
+    // THE RELEASE GATE (§2c): held for the host, or kept; released ones carry when.
+    ...(roomHoldOf(r) ? { roomHold: roomHoldOf(r) } : {}),
+    ...(r.ReleasedAt ? { releasedAt: r.ReleasedAt } : {}),
     // A finished step carries when it ran; no other entry has this key.
     ...(r.Kind === 'step' ? { step: { startedAt: r.StartedAt || null, endedAt: r.EndedAt || null, durationMs: Number(r.DurationMs) || 0, source: r.Source || 'claude' } } : {}),
   };
@@ -733,6 +775,7 @@ function imageView(r) {
     bytes: r.Bytes || 0,
     by: r.By || 'agent',
     createdAt: r.CreatedAt || null,
+    ...(roomHoldOf(r) ? { roomHold: roomHoldOf(r) } : {}),
   };
 }
 
@@ -898,6 +941,8 @@ function agentStatus(stateRow, keys, now) {
 
 const settingsOf = (stateRow) => ({
   reviewAgentAsks: !(stateRow && stateRow.Settings && stateRow.Settings.reviewAgentAsks === false),
+  // THE RELEASE GATE (§2c): Claude's posts and screenshots wait for the host. On unless the host turned it off.
+  reviewAgentPosts: !(stateRow && stateRow.Settings && stateRow.Settings.reviewAgentPosts === false),
   // Whether the Stage's room meter may list who has joined (owner, 2026-10-09). Off until the host says so.
   listNames: Boolean(stateRow && stateRow.Settings && stateRow.Settings.listNames === true),
 });
@@ -907,7 +952,7 @@ const settingsOf = (stateRow) => ({
 // host opened, and the time of the last Mark all seen. Ids only: no text, no names.
 const SEEN_MAX_IDS = 200;
 const SEEN_MAX_PER_POST = 50;
-const SEEN_ID = /^(?:ask|idea|share):[A-Za-z0-9_.#-]{1,80}$/;
+const SEEN_ID = /^(?:ask|idea|share|post):[A-Za-z0-9_.#-]{1,80}$/;
 
 const seenOf = (row) => ({
   ids: Array.isArray(row && row.Ids) ? row.Ids.filter((x) => typeof x === 'string') : [],
@@ -1544,7 +1589,9 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
 }
 
 /** What a phone sees. */
-function publicView({ gameId, meta, sessionState, room, players, me, now }) {
+function publicView({ gameId, meta, sessionState, room: whole, players, me, now }) {
+  // The room's rows only (§2c): nothing held, nothing about an ask it has not seen.
+  const room = roomRowsForRoom(whole);
   const lanLink = LAN.lanTranslator(room.lan, now);
   const forRoom = (u) => (u && !isLocalUrl(u) ? u : (u ? lanLink(u) : ''));
   const currentAskId = (room.state && room.state.CurrentAskId) || null;
@@ -1745,7 +1792,8 @@ function crewWallView(crew, nameOf) {
  * `crew` is the phones' crew read (build-crew.js crewView 'public', no seat);
  * build-crew requires this file, so the caller passes it in.
  */
-function wallView({ gameId, meta, sessionState, room, players, now, crew }) {
+function wallView({ gameId, meta, sessionState, room: whole, players, now, crew }) {
+  const room = roomRowsForRoom(whole);
   const listNames = settingsOf(room.state).listNames;
   const nowIso = now || new Date().toISOString();
   const forWall = publicUrl;
@@ -1780,7 +1828,7 @@ function wallView({ gameId, meta, sessionState, room, players, now, crew }) {
   const log = room.logs
     .filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind) && !WALL_HIDDEN_LOG_KINDS.includes(l.Kind))
     .filter((l) => l.Kind !== 'image' || imageIds.has(l.Detail))
-    // "Claude proposed a question: …" names an ask the room has not seen.
+    // "Claude proposed a question: …" names an ask the room has not seen (roomRowsForRoom drops it too).
     .filter((l) => !l.AskId || seenAsks.has(l.AskId))
     .map(logView)
     .filter((l) => !names(l.text))
@@ -2024,6 +2072,6 @@ module.exports = {
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
-  hostView, publicView, roomHistory, wallView, crewWallView, WALL_KEY_BYTES, mintWallKey, wallKeyMatches,
+  hostView, publicView, roomHistory, wallView, isHeld, roomHoldOf, awaitingRelease, isProposalEntry, roomRowsForRoom, crewWallView, WALL_KEY_BYTES, mintWallKey, wallKeyMatches,
   WALL_SCREENS, WALL_CODES, WALL_PROFILES, wallStateOf, normalizeWall, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection, decisionReworded,
 };

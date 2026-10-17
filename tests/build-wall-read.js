@@ -104,6 +104,9 @@ async function buildFixture() {
   // The demo on this Wi-Fi: live, with its key; Claude showed it at a laptop address.
   put({ PK, SK: 'BUILD#LAN', Wanted: true, Status: 'live', ReportedAt: new Date().toISOString(), LiveSince: new Date().toISOString(), Open: 1, Key: SECRETS.lanKey, Map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }], ttl: H.TTL });
   await agentCall('POST', 'log', { kind: 'showing', text: 'The form, running', link: 'http://localhost:5173/signup' });
+  // The release gate (§2c, tests/build-release.js): the host releases Claude's posts and screenshot to the room.
+  const held = (await hostCall('GET', 'state')).body.log.filter((l) => l.roomHold === 'held').map((l) => l.logId);
+  assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: held })).status, 200);
 
   // A crew: a builder whose branch and lane carry her name, an early look on the wall, a room reaction.
   await hostCall('POST', 'crew/settings', { enabled: true });
