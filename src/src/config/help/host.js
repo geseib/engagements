@@ -725,6 +725,8 @@ const plan = {
   .engage/share.json, plugin 1.20.0), the room's window (BuildSessionPanel's
   Screens group, present/buildwall/), the still dock (buildControls.js), and
   History's marks (buildScreens.js contributionsOf, askOutcome).
+  17 Oct: releasing Claude's posts (build-store.js reviewAgentPosts, the
+  queue's BuildHeldPosts.jsx, BuildSessionPanel's Claude group, plugin 1.21.0).
 */
 const buildRoom = {
   id: 'host-build-room',
@@ -783,6 +785,7 @@ const buildRoom = {
             { title: 'The room\'s window', text: 'Session, then Settings, then Screens: Room\'s window opens Stage, Build or History in a window of its own for the projector, on the second display in Chrome. It follows the screen you pick with 2, 3 and 4, needs no sign-in, and never shows a name. New link cuts off every open window (press it twice).' },
             { title: 'The Stage\'s buttons', text: 'The buttons along the bottom stay where they are. Space presses the main one; a move made early, such as Show results while people are still answering, asks you to press again. Host takes you back to the Host screen in one press; its number says how many things wait for you.' },
             { title: 'History', text: 'History shows every idea from the room that was used, and every ask the room saw. Each says what happened: chosen by the room or not, sent to Claude as written, reworded by the host, kept for later, or not sent. It never shows who sent an idea; a phone marks its own ideas as yours. Made so far counts the ideas used by the same rule.' },
+            { title: 'Releasing Claude\'s posts', text: 'Claude\'s updates, answers and screenshots wait in Waiting for you before the room sees them: Release to the room puts one on the phones and the room\'s screens at the time it happened, Keep to myself keeps it off them for good, and Release all lets several through at once. Your Timeline marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live "Claude is" line always shows. To let posts straight through, turn off Check Claude\'s posts before the room sees them in Session, Settings, Claude. Claude learns of this with plugin 1.21.0.' },
             { title: 'Wrap up', text: 'A summary, what was built, links and next steps, written by Claude or by you, saved into the report. Check the report, then end the session.' },
             { title: 'Save report', text: 'Keeps the report as a PDF, as for any session. The code stays in the project folder on your laptop.' },
           ],

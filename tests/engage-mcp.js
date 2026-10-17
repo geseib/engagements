@@ -107,7 +107,8 @@ const server = http.createServer((req, res) => {
       return send(200, { ask: choiceAsk(askPolls >= 3 ? 'decided' : 'live'), inbox: [] });
     }
     if (req.method === 'POST' && p === 'images') {
-      return send(201, { image: { imageId: 'img1', contentType: 'image/png', bytes: 20, kind: rec.body.kind, askId: rec.body.askId, label: rec.body.label }, inbox: [] });
+      // The release gate (§2c): a caption saying HOLD comes back held, as the server does with the setting on.
+      return send(201, { image: { imageId: 'img1', contentType: 'image/png', bytes: 20, kind: rec.body.kind, askId: rec.body.askId, label: rec.body.label, ...(/HOLD/.test(rec.body.caption || '') ? { held: true } : {}) }, inbox: [] });
     }
     if (req.method === 'GET' && p === 'inbox?listening=1') {
       inboxPolls++;
@@ -123,7 +124,7 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && p === 'run/done') return send(200, { run: { current: rec.body.runItem }, inbox: [] });
     if (req.method === 'POST' && p === 'log') {
       return send(200, {
-        entry: { logId: 'l9', kind: rec.body.kind, text: rec.body.text },
+        entry: { logId: 'l9', kind: rec.body.kind, text: rec.body.text, ...(/HOLD/.test(rec.body.text || '') ? { roomHold: 'held' } : {}) },
         inbox: [{ id: 'd1', text: 'The room says the colours are too dark', from: 'host', askId: null, createdAt: 'now' }],
       });
     }
@@ -355,6 +356,15 @@ const hardStop = setTimeout(() => {
     const props = tools.find((t) => t.name === 'post_update').inputSchema.properties;
     assert.deepStrictEqual(props.role.enum, ['demo', 'mockup']);
   });
+  await check('a held post says it went to the host\'s queue, not the room (the release gate, 1.21.0)', async () => {
+    const held = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'HOLD the form is up' } });
+    assert.ok(/host's queue/.test(textOf(held)) && /once the host releases it/.test(textOf(held)) && !/Posted to the room's timeline/.test(textOf(held)), textOf(held));
+    const open = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'The form is up' } });
+    assert.ok(/Posted to the room's timeline/.test(textOf(open)), textOf(open));
+    const tools = (await mcp.request('tools/list', {})).result.tools;
+    assert.ok(/only after the host releases it/.test(tools.find((t) => t.name === 'post_update').description));
+    assert.ok(/once the ask opens/.test(tools.find((t) => t.name === 'share_image').description));
+  });
   await check('a bad doing or done is refused in plain words before any API call', async () => {
     for (const [args, re] of [
       [{ doing: 'Scaffolding' }, /4 to 7 words/],
@@ -420,6 +430,9 @@ const hardStop = setTimeout(() => {
     assert.ok(bad.result.isError && /not a PNG, JPEG or WebP/.test(bad.result.content[0].text));
     const missing = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'nope.png') } });
     assert.ok(missing.result.isError && /Take the screenshot first/.test(missing.result.content[0].text));
+    // The release gate (1.21.0): a held screenshot is on the host's queue, not yet the room's.
+    const held = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'a.png'), caption: 'HOLD progress' } });
+    assert.ok(/host's queue/.test(held.result.content[0].text) && /once the host releases it/.test(held.result.content[0].text), held.result.content[0].text);
   });
   await check('the four kinds read as four kinds, and the brief comes with them and lands in .engage/brief.md', async () => {
     stateInbox = [

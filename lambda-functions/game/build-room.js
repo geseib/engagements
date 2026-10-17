@@ -1567,7 +1567,7 @@ async function postImage(ctx, role, body) {
   });
   const st = await touchState(ctx);
   await announce(ctx, st.Rev);
-  return reply(201, { image: { imageId, contentType: type, bytes: buf.length, kind, askId, label, caption } });
+  return reply(201, { image: { imageId, contentType: type, bytes: buf.length, kind, askId, label, caption, ...(hold ? { held: true } : {}) } });
 }
 
 /** One image's bytes, as the browser wants them. */
