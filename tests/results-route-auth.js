@@ -473,6 +473,40 @@ const withoutTimestamps = (body) => {
     await check('mid-session: the round being voted on is still refused', () => assert.strictEqual(r4.statusCode, 403, r4.body));
   }
 
+  // A ROUND NOBODY ANSWERED (review of test 32ac4eb4, issue #35). rejects: an
+  // empty, never-shown round refused after the end, so the phone read "The
+  // responses could not be loaded"; an answered, never-shown round handed out;
+  // an empty round past the answers' 7-day ttl called empty when it may have
+  // expired.
+  {
+    const id = '9303';
+    const recent = new Date(Date.now() - 5 * 60000).toISOString();
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    seedGame(id, 'call-and-answer', 'ENDED');
+    put({ PK: `GAME#${id}`, SK: 'STATE', State: 'ENDED', LessonNumber: 3, CurrentQuestionId: '003' });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#001#REF', StartedAt: recent });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#002#REF', StartedAt: recent });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#002#ANSWER#Ada', PlayerName: 'Ada', AnswerText: 'never shown' });
+    put({ PK: `GAME#${id}`, SK: 'QUESTION#003#REF', StartedAt: old });
+    const before = JSON.stringify([...store.entries()]);
+    const e1 = await handler(publicEvent(id, '001'));
+    await check('after the end: a fresh round nobody answered reads back empty', () => {
+      assert.strictEqual(e1.statusCode, 200, e1.body);
+      const b = JSON.parse(e1.body);
+      assert.deepStrictEqual(b.answers, []);
+      assert.strictEqual(b.noAnswers, true);
+      assert.strictEqual(b.voteTallies, undefined);
+    });
+    const e2 = await handler(publicEvent(id, '002'));
+    await check('a never-shown round WITH answers is still refused', () => assert.strictEqual(e2.statusCode, 403, e2.body));
+    const e3 = await handler(publicEvent(id, '003'));
+    await check('an empty round older than the answer ttl is still refused', () => assert.strictEqual(e3.statusCode, 403, e3.body));
+    await check('none of those reads wrote, scored or announced anything', () => {
+      assert.strictEqual(JSON.stringify([...store.entries()]), before);
+      assert.strictEqual(sent.length, 0);
+    });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

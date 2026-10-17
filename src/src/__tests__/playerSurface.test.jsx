@@ -90,6 +90,7 @@ function makeServer(overrides = {}) {
       }
       return { ok: true, body };
     }
+    if (url.includes('games/get-results') && server.pastResults) return { ok: true, body: server.pastResults };
     if (url.includes(`games/${GAME}/question`)) return { ok: true, body: server.question };
     if (url.includes(`games/${GAME}/answers`)) {
       const body = { gameId: GAME, questionId: '001', answerCount: server.ballot.length };
@@ -820,6 +821,40 @@ describe('the states that did not exist', () => {
     expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Download Report/i })).toBeNull();
     expect(shell()).toHaveAttribute('data-volume', 'watch');
+  });
+
+  // rejects: a final score read only from memory filled during RESULTS, so a
+  //          player who reloads or rejoins after the end sees "Final score 0"
+  //          and no standing while the host and the report say 6 (review of
+  //          test 32ac4eb4, issue #35).
+  test('a player arriving at the end is shown their stored final score and standing', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+
+    await waitFor(() => expect(screen.getByText(/Final standing/i)).toBeInTheDocument());
+    const score = screen.getByText(/Final score/i).nextSibling;
+    expect(score).toHaveTextContent('12');
+  });
+
+  // rejects: an earlier round opened from the end screen headed "Round 1"
+  //          alone, with no question title (review of test 32ac4eb4, issue
+  //          #35); a round nobody answered reading "The responses could not
+  //          be loaded" once the server answers it empty.
+  test('at the end, an earlier round is headed by its question and an empty one says so', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    server.pastResults = { gameId: GAME, questionId: '001', answers: [], noAnswers: true, stored: true, questionTitle: 'Is the demo ready for Tuesday?' };
+    installFetch(server);
+    await join();
+    server.state = 'ENDED';
+    await resync();
+    await waitFor(() => expect(screen.getByText(/Something to add\?/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Is the demo ready for Tuesday?' })).toBeInTheDocument());
+    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    expect(screen.queryByText(/could not be loaded/i)).toBeNull();
   });
 
   // rejects: an end screen with no way back to a round's comments while they
