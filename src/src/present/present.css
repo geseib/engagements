@@ -203,6 +203,34 @@ html.present-locked body {
 }
 .present .present-task.is-slim .present-task-ey { display: inline; margin: 0 .6em 0 0; }
 
+/* ---- WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026) ----
+   config/roomContent.js names each part's role; these are the sizes. The LEAD
+   (the task while a question is up, the vote cue, the feedback ask) is drawn at
+   the profile's hero step when short, its primary step otherwise, and shrinks
+   only as far as --fit-min: never below the primary rung of the profile beneath
+   it. A kicker is the meta step; support is the secondary step. Pinned by
+   __tests__/roomContentPalette.test.js. */
+.present .present-rc-lead {
+  margin: 0 0 .45em;
+  font-weight: 700;
+  line-height: 1.16;
+  color: var(--text);
+  max-width: 34ch;
+  text-wrap: pretty;
+}
+.present .present-rc-lead.is-primary { font-size: calc(var(--L-primary) * var(--fit)); }
+.present .present-rc-lead.is-hero {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--L-hero) * var(--fit));
+  line-height: 1.04;
+  max-width: 22ch;
+}
+.present .present-rc-kicker { color: var(--muted); }
+/* Call's title above the task: a heading at the secondary step. */
+.present .present-rc-title { --ui-t-primary: calc(var(--L-secondary) * var(--fit)); }
+.present .present-rc-support { font-size: calc(var(--L-secondary) * var(--fit)); max-width: 44ch; }
+
 /* the progress meter, the navigator's track and the read's pages are
    components/ui/Pips, whose default sizes are the wall's own */
 

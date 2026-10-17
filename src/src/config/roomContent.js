@@ -87,6 +87,15 @@
  *                  essential
  *  BUILD_BUILD     LEAD the newest screenshot; the link     same
  *                  support; Claude essential
+ *  BUILD_SHOWING   LEAD what the host put up (the codes,    same
+ *                  the crew board, the brief); Claude
+ *                  essential
+ *
+ *  Claude's status (every BUILD_ moment, every profile, one screen and the
+ *  room's window, Stage, Build and History): the headline ("Claude is
+ *  building / is ready / has paused"), the doing line with its duration, the
+ *  helper line, and in a run the current step. Essential: never dropped,
+ *  drawn at the body step or larger, and never the lead while an ask is open.
  */
 import { PROFILES, DEFAULT_PROFILE } from './displayProfile';
 
@@ -103,7 +112,7 @@ export const CA_MOMENTS = Object.freeze([
 ]);
 export const BUILD_MOMENTS = Object.freeze([
   'BUILD_ASK', 'BUILD_RESULTS', 'BUILD_WHEEL', 'BUILD_IDLE', 'BUILD_POINT',
-  'BUILD_RUN', 'BUILD_HISTORY', 'BUILD_BUILD',
+  'BUILD_RUN', 'BUILD_HISTORY', 'BUILD_BUILD', 'BUILD_SHOWING',
 ]);
 
 export const VERBOSE_PROFILES = Object.freeze(['call']);
@@ -118,6 +127,29 @@ const norm = (s) => str(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 export function taskIsOwn(question) {
   const q = question || {};
   return Boolean(str(q.customInstructions || q.CustomInstructions));
+}
+
+/**
+ * A question's words for roomContentFor, from the question record and the task
+ * as the caller resolved it (config/instructions.js resolveInstruction). The
+ * stage (GameHostPage) and the wall (presentModel) both build their data here,
+ * so the same question gives the same content on both. Whitelisted: the
+ * question's Workie-only Background never passes.
+ */
+export function questionRoomData(question, {
+  task = '', sessionTitle = '', roundLabel = '', cue = '',
+} = {}) {
+  const q = question || {};
+  return {
+    title: str(q.title || q.question),
+    task: str(task),
+    taskOwn: taskIsOwn(q),
+    story: str(q.detail || q.questionDetail),
+    category: str(q.category),
+    sessionTitle: str(sessionTitle),
+    roundLabel: str(roundLabel),
+    cue: str(cue),
+  };
 }
 
 export const leadSize = (text) => (str(text).length <= HERO_MAX ? 'hero' : 'primary');
@@ -300,6 +332,10 @@ function build(p, moment, verbose, d) {
       p.part('decided', ROLE.SUPPORT, 'body');
       claudePart(ROLE.SUPPORT);
       return 'story';
+    case 'BUILD_SHOWING':
+      p.part('shown', ROLE.LEAD, 'primary');
+      claudePart(ROLE.SUPPORT);
+      return 'shown';
     case 'BUILD_BUILD':
     default:
       p.part('picture', ROLE.LEAD, 'primary');
