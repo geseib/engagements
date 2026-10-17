@@ -1,7 +1,20 @@
 # Parity: bringing Trivia, Poll, Survey and Build Room up to the host standards
 
 Written 16 Oct 2026 on `working/parity-plan`, branched from `working/build-room-host-redesign`
-at `3f07c0e4`. **A plan, not code.** Nothing here is built.
+at `3f07c0e4`.
+
+**Status, 17 Oct 2026.** On test at `50c2fe45` (dev `448d260a`), with release notes:
+H1–H5 (History marks), the Share demo fixes (host link, plugin 1.19.0 scopes, 1.20.0
+labels and per-session ports: §2b S1–S3), B1–B7 (the room's window and its server), D1–D2
+(the still dock on C&A's shared parts). The owner ruled on every open question through Q19.
+**Waiting on the owner:** the console mockup and its five questions
+(`docs/design/build-room-console/`, gates B8); the remote share design and its twelve
+questions (`docs/design/build-room-remote-share/DESIGN.md`); three small rulings (the label on
+the share's locked page, a cloned repo's `share.json`, a player's own "why" on the wall).
+**Ready without a ruling:** the two phone leaks the wall work found (an unseen ask named in
+the timeline, mockups of draft asks), paging long asks (B9m), the laptop's codes card
+following the server, D3 on the signed-in page, and the demo QR and Copy carrying a join
+link instead of the share key. **Not started:** B8–B10, Trivia, Poll, Survey (§4).
 
 Inputs: `docs/design/host-standards/README.md` (the standards, and the table this plan
 corrected), `docs/design/two-surface/PLAN.md`, `docs/superpowers/specs/2026-10-15-host-console-design.md`.
