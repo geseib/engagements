@@ -112,6 +112,13 @@ bundle with long content (six entries of 130–320 characters) at **1280×720, 1
 
 ## 6. What the room is shown
 
+- **Only what the room needs now, large and readable** (owner, 17 Oct). One function
+  decides it for every room screen, one screen and two, C&A and Build Room:
+  `config/roomContent.js` `roomContentFor(moment, profile, data)`. While a question or
+  lesson is up the task leads at the profile's primary step; Call may carry more (the
+  title as a heading, the lesson, an ask's detail); in a Build Room Claude's status is on
+  every screen and never dropped. The decisions table is in the module's header and
+  `docs/design/parity/PLAN.md` §2d.
 - **Content before people.** Results lead with the ideas: the idea in full as the
   headline, a share bar relative to the top idea (a proportion, never a score, so it
   holds in hidden-name rounds), and a small credit line. Standings belong to the
@@ -167,7 +174,7 @@ bundle with long content (six entries of 130–320 characters) at **1280×720, 1
 | Strip + one main button (`roundStep`) | yes | yes | yes | **no strip**; one primary per phase, but Closed and Ended carry two secondaries; words inline | no strip yet (Q17: the ask path); **one function (`buildControls`) feeds C&A's shared action bar** on the Stage |
 | Press twice, in place | yes, except Skip | partly: Skip, Ask now, next question use dialogs | partly, as Trivia | no: Close the survey is a dialog (irreversible, allowed by §3) | **partly:** the Stage's early moves arm in place (shared bar); `window.confirm` and modal confirms elsewhere remain (B10) |
 | Settings scope labels | yes | yes | yes | shown, but says "From the next round" with no rounds | the new Screens group says Applies now; the rest none (B10) |
-| Fit order + measured paging | yes | stage only | stage only; **open answers cut at 6 silently** | walk-through fitted and paged | Stage on the fitter; the room's window measured (144 renders, nothing scrolls); long six-option asks still cut at 1280×720 (B9m) |
+| Fit order + measured paging | yes | stage only | stage only; **open answers cut at 6 silently** | walk-through fitted and paged | Stage on the fitter; the room's window measured (144 renders, nothing scrolls); long six-option asks page (17 Oct: ↑ ↓ on the Stage, "and N more options" on the window; 0 of 32 clamped) |
 | Late items kept | yes | **kept on the server, unscored**; no rule for what they count | **kept on the server, unvalidated**; no rule | no (refused by design) | no: answers and votes refused; ideas always kept |
 | Per-session id secret | Ideas, late refs; answer order is a plain hash (Q9) | late refs | late refs | n/a | not used: ids are random |
 | Dusk theme declared (§9) | console and wall yes; one-screen `Stage` no | no (`Stage`) | no (`Stage`) | panels yes; `Stage` no | yes (page root) |

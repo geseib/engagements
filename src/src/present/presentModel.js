@@ -31,6 +31,7 @@ import { tallyOrder } from '../config/navigatorOrder';
 import { authorsHiddenNow } from '../config/anonymity';
 import { PROFILES, DEFAULT_PROFILE } from '../config/displayProfile';
 import { resolveInstruction } from '../config/instructions';
+import { roomContentFor, questionRoomData } from '../config/roomContent';
 
 /*
   THE TEAM'S TASK, the line the room is answering (session 7924, finding #4).
@@ -201,7 +202,7 @@ function joinFacts(snapshot, reads, code) {
   };
 }
 
-export function presentModel(snapshot, reads = {}) {
+function momentModel(snapshot, reads = {}) {
   if (!snapshot || typeof snapshot !== 'object') return { moment: 'WAITING', profile: DEFAULT_PROFILE };
   if (snapshot.notFound) return { moment: 'NOT_FOUND', profile: DEFAULT_PROFILE };
 
@@ -332,6 +333,28 @@ export function presentModel(snapshot, reads = {}) {
     default:
       return { moment: 'WAITING', ...common };
   }
+}
+
+/*
+  WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026; config/roomContent.js).
+  Every model carries `room`: the parts of its moment the wall shows and their
+  emphasis, from the one function the one-screen stage reads too. The question's
+  words go through questionRoomData, as GameHostPage's do.
+*/
+const ROOM_MOMENT = { JOIN: 'LOBBY', READ_WAIT: 'READ' };
+
+export function presentModel(snapshot, reads = {}) {
+  const model = momentModel(snapshot, reads);
+  if (!snapshot || typeof snapshot !== 'object' || snapshot.notFound) return model;
+  const q = snapshot.currentQuestionData || {};
+  const cue = model.moment === 'VOTING' ? model.lead : RW.voteOnDevice;
+  const room = roomContentFor(ROOM_MOMENT[model.moment] || model.moment, model.profile, questionRoomData(q, {
+    task: taskOf(q, snapshot),
+    sessionTitle: model.sessionTitle,
+    roundLabel: model.roundLabel,
+    cue,
+  }));
+  return { ...model, room };
 }
 
 export default presentModel;

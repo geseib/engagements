@@ -204,6 +204,7 @@ const RW = Object.freeze({
 
   // ── The room's devices and the wall ───────────────────────────────────
   answersOnDevices: (n) => `${n} ${plural(n, 'answer is', 'answers are')} on your ${deviceWords}.`,
+  voteOnDevice: `Vote on your ${deviceWords}`,
   responseNameHidden: (i) => `Response ${i} · name hidden`,
   responseOf: (i, n) => `Response ${i} of ${n}`,
 });

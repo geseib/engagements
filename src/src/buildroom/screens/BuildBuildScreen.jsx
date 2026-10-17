@@ -24,8 +24,12 @@ import { safeHref } from '../links';
 import {
   askById, OpenLink, WallComment, freshWallComment,
 } from './common';
+import ClaudeStatus from './ClaudeStatus';
+import { buildRoomContent } from '../roomContentData';
 
-export default function BuildBuildScreen({ room, now, controls = null }) {
+export default function BuildBuildScreen({
+  room, now, controls = null, profile = 'room',
+}) {
   const latest = latestBuild(room);
   const { shot } = latest;
   const openViewer = useContext(ViewerContext);
@@ -49,6 +53,8 @@ export default function BuildBuildScreen({ room, now, controls = null }) {
           <button type="button" className={`brm-btn brm-btn--primary${safeHref(link) ? '' : ' brm-push'}`} disabled={controls.busy} onClick={() => controls.run(() => controls.api.share({ on: true }))}>{W.shareDemo}</button>
         )}
       </div>
+      {/* Claude's status, essential on every screen the room sees (owner, 17 Oct 2026). */}
+      <ClaudeStatus rc={buildRoomContent('BUILD_BUILD', profile, room, null, now)} />
       {safeHref(link) && (
         <p className="brm-buildurl">
           <span className="brm-buildurl-u">{shown}</span>

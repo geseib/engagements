@@ -1,5 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/questionCard';
+import {
+  shows, roleOf, sizeOf, textOf, ROLE,
+} from '../config/roomContent';
 
 /**
  * THE QUESTION AS THE ROOM SEES IT — one component for the stage and the
@@ -42,6 +45,15 @@ import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/que
  *
  * `instruction` IS A PROP. The stage passes getHostInstructionText(…) and the
  * preview resolveInstruction(…); the card never decides what the room is told.
+ *
+ * `room` IS WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026): the
+ * stage passes roomContentFor('ANSWERING', profile, questionRoomData(…)) for
+ * a Call & Answer round, the same call the room's window makes
+ * (present/presentModel.js). With it, ASK draws the parts that content names:
+ * the task as the lead (h1.q, the expand recovery on it, never dropped), the
+ * title as a kicker above it on Room, TV and Table or a heading on Call, the
+ * lesson as support that may give way ("The lesson"). Without it (the set
+ * editor's preview, the other types) ASK draws the frozen DOM below.
  */
 export default function QuestionCard({
   phase = 'ASK',
@@ -51,6 +63,7 @@ export default function QuestionCard({
   answers,
   onExpand,
   withQuestion = false,
+  room = null,
 }) {
   if (phase === 'REVEAL') {
     if (gameType !== 'trivia') return null;
@@ -113,6 +126,8 @@ export default function QuestionCard({
 
   if (!question) return null;
 
+  if (room) return <RoomLines question={question} room={room} onExpand={onExpand} />;
+
   return (
     <>
       <QuestionLines question={question} gameType={gameType} onExpand={onExpand} />
@@ -129,6 +144,45 @@ export default function QuestionCard({
       <p className="qdetail" data-drop="3" data-drop-note="How to answer">
         {instruction}
       </p>
+    </>
+  );
+}
+
+/** The data attributes a room-content part carries: which part, which role. */
+const rcAttrs = (rc, key) => ({ 'data-rc-part': key, 'data-rc': roleOf(rc, key) });
+
+/**
+ * ASK, AS THE ROOM CONTENT SAYS (config/roomContent.js). The DOM stays the
+ * stage's vocabulary — .kicker, h1.q, .qdetail — so the fitter's CONTENT list
+ * and drop polarity hold: the lesson is room-facing content, "4" with its note.
+ */
+function RoomLines({ question, room, onExpand }) {
+  const expand = typeof onExpand === 'function'
+    ? { 'data-expandable': '1', title: 'Show the full question', onClick: onExpand }
+    : {};
+  const titleRole = roleOf(room, 'title');
+  const leadKey = room.lead;
+  return (
+    <>
+      {shows(room, 'category') && <div className="kicker" {...rcAttrs(room, 'category')}>{textOf(room, 'category')}</div>}
+      {titleRole === ROLE.KICKER && <div className="kicker q-kicker" {...rcAttrs(room, 'title')}>{textOf(room, 'title')}</div>}
+      {titleRole === ROLE.SUPPORT && <h2 className="q-sub" {...rcAttrs(room, 'title')}>{textOf(room, 'title')}</h2>}
+      <h1 className={`q q-lead is-${sizeOf(room, leadKey)}`} data-rc-size={sizeOf(room, leadKey)} {...rcAttrs(room, leadKey)} {...expand}>
+        {textOf(room, leadKey)}
+      </h1>
+      {question.image && (
+        <img
+          className="stage-art"
+          src={question.image}
+          alt={question.title || 'Artwork'}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      )}
+      {shows(room, 'story') && (
+        <p className="qdetail" data-drop="4" data-drop-note="The lesson" {...rcAttrs(room, 'story')}>
+          {textOf(room, 'story')}
+        </p>
+      )}
     </>
   );
 }

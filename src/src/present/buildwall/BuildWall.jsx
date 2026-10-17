@@ -156,8 +156,8 @@ export default function BuildWall({ gameId, k }) {
         </header>
         <div className="bwall-body">
           {screen === 'build'
-            ? <BuildBuildScreen room={room} now={now} />
-            : <BuildHistoryScreen room={room} now={now} fit={fit} />}
+            ? <BuildBuildScreen room={room} now={now} profile={ws.profile} />
+            : <BuildHistoryScreen room={room} now={now} fit={fit} profile={ws.profile} />}
         </div>
       </div>
     );

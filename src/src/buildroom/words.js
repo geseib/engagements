@@ -550,6 +550,11 @@ export const W = Object.freeze({
   wallEnded: 'Session ended',
   /** History on the wall: the newest entries that fit, then how many are not shown. */
   wallEarlier: (n) => `and ${n} earlier`,
+  // What the room sees (owner, 17 Oct 2026; config/roomContent.js): a long ask pages its options.
+  optionsNoun: 'Options',
+  moreOptions: (n) => `and ${n} more ${n === 1 ? 'option' : 'options'} on your phone`,
+  claudeNow: 'Claude now',
+  claudeStep: (k, text) => `Step ${k}: ${text}`,
   // The Screens group in Settings (parity PLAN §2.7, B9 in part)
   screensGroup: 'Screens',
   screensScope: 'Applies now',
