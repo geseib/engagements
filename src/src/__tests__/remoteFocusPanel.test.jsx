@@ -229,7 +229,8 @@ describe('the remote is wired to it', () => {
   });
 
   test('a press that changes nothing sends nothing', () => {
-    expect(remote).toMatch(/if \(sameFocus\(next, stageFocus\)\) return;/);
+    // A QR press compares the join fact; any other press, the focus (18 Oct).
+    expect(remote).toMatch(/if \(isJoin \? next\.join === joinShown\(stageFocus\) : sameFocus\(next, stageFocus\)\) return;/);
   });
 
   test('it re-reads rather than patching its own copy', () => {
