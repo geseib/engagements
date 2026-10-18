@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { render, cleanup } from '@testing-library/react';
 import PresentStage, { fitCanvas, PRESENT_LADDERS } from '../present/PresentStage';
-import { PresentMoment } from '../present/PresentMoments';
+import { PresentMoment, PhaseWipe } from '../present/PresentMoments';
 import { presentModel } from '../present/presentModel';
 
 jest.mock('qrcode.react', () => ({ QRCodeSVG: ({ value }) => <svg data-qr={value} /> }));
@@ -258,5 +258,38 @@ describe('the route and its imports', () => {
       expect(`${path.basename(file)}: ${/authFetch|\/host-state|\/answers\/host|ai-summary\/host/.test(text)}`)
         .toBe(`${path.basename(file)}: false`);
     }
+  });
+});
+
+/* WHAT THE RESPONSES ANSWER (walk of dev eed66685, owner 18 Oct 2026): while the
+   room votes on or reads the responses, the wall's context line is the lesson
+   ("The question"), not the instructions; the task only when there is no lesson. */
+describe('the context line while voting and at the results', () => {
+  it.each([[2, 'VOTING'], [3, 'VOTE_RESPONSE'], [4, 'RESULTS']])('%s %s: the lesson as "The question"', (i) => {
+    const { container } = drawn(...EVERY[i].slice(1));
+    const line = container.querySelector('.present-task');
+    if (!line) return; // a profile may give the line way for space
+    expect(line.textContent).toBe(`The question${Q.detail}`);
+  });
+  it('with no lesson the task stays, as "The task"', () => {
+    const s = snap({ state: 'VOTE#005', currentQuestionData: { ...Q, detail: '', customInstructions: 'Use STAR.' } });
+    const model = presentModel(s, {});
+    expect(model.taskLabel).toBe('The task');
+    expect(model.task).toBe('Use STAR.');
+  });
+});
+
+/* rejects (walk of dev eed66685): the "Results · Look up" wipe replayed over
+   Workie's first page when the read landed after "Workie is writing". */
+describe('the phase wipe', () => {
+  it('plays into the results once, and not again for the read', () => {
+    const { container, rerender } = render(<PhaseWipe moment="VOTING" />);
+    rerender(<PhaseWipe moment="RESULTS" />);
+    expect(container.querySelector('.present-wipe')).not.toBeNull();
+    const fresh = render(<PhaseWipe moment="RESULTS" />);
+    fresh.rerender(<PhaseWipe moment="READ_WAIT" />);
+    fresh.rerender(<PhaseWipe moment="READ" />);
+    fresh.rerender(<PhaseWipe moment="FEEDBACK" />);
+    expect(fresh.container.querySelector('.present-wipe')).toBeNull();
   });
 });

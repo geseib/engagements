@@ -96,6 +96,9 @@ button.wfs-step:focus-visible { outline: 2px solid var(--accent); outline-offset
   font-weight: 800;
 }
 .wfs-sub { font-weight: 600; opacity: .9; }
+/* "What we heard · results", as the module's header draws it: without the dot
+   the live pill read "What we heard results" (walk of dev eed66685). */
+.wfs-sub::before { content: '\00B7'; margin-right: .35em; font-weight: 400; }
 .wfs-live {
   display: inline-flex;
   align-items: center;

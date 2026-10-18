@@ -82,8 +82,12 @@ const WIPE = {
   VOTING: { word: 'Voting', line: `Vote on your ${deviceWords}`, tone: 'live' },
   RESULTS: { word: 'Results', line: 'Look up', tone: 'results' },
 };
+const AFTER_RESULTS = ['RESPONSES', 'READ', 'READ_WAIT', 'FEEDBACK', 'ROOM_QUESTION', 'ROOM_RESULTS'];
 export function PhaseWipe({ moment }) {
-  const phase = moment === 'VOTE_RESPONSE' ? 'VOTING' : moment === 'RESPONSES' || moment === 'READ' ? 'RESULTS' : moment;
+  // Everything the round does after its results is still the results phase: a
+  // read that lands after "Workie is writing" (READ_WAIT → READ) replayed the
+  // "Results · Look up" wipe over Workie's first page (walk of dev eed66685).
+  const phase = moment === 'VOTE_RESPONSE' ? 'VOTING' : AFTER_RESULTS.includes(moment) ? 'RESULTS' : moment;
   const previous = useRef(phase);
   const [wipe, setWipe] = useState(null);
   useEffect(() => {
@@ -102,16 +106,16 @@ export function PhaseWipe({ moment }) {
 }
 
 /**
- * The team's task as one slim line, while the room votes on or reads what it
- * answered. While the question is up the task is the LEAD instead
+ * What the responses answer, as one slim line, while the room votes on or
+ * reads them: the lesson as "The question" (owner, 18 Oct 2026), else the task. While the question is up the task is the LEAD instead
  * (RoomQuestion). Here it is support: on Room, TV and Table it may give way
  * for space (config/roomContent.js); on Call it stays.
  */
-function TaskLine({ task, rc = null }) {
+function TaskLine({ task, label = RW.theTaskLabel, rc = null }) {
   if (!task) return null;
   if (rc && !shows(rc, 'task')) return null;
   const extra = rc ? { ...rcAttrs(rc, 'task'), ...(dropRank(rc, 'task') ? { 'data-drop': String(dropRank(rc, 'task')) } : {}) } : {};
-  return <p className="present-task is-slim" {...extra}><span className="present-task-ey">The task</span>{task}</p>;
+  return <p className="present-task is-slim" {...extra}><span className="present-task-ey">{label}</span>{task}</p>;
 }
 
 /* ------------------------------------------------------------ the moments */
@@ -203,7 +207,7 @@ export function PresentVoting({ model }) {
       <div className="present-main">
         <Eyebrow className="present-eyebrow">Vote</Eyebrow>
         {shows(model.room, 'title') ? <Heading level={1} size="primary" balance className="present-h2" {...rcAttrs(model.room, 'title')}>{model.title}</Heading> : null}
-        <TaskLine task={model.task} rc={model.room} />
+        <TaskLine task={model.task} label={model.taskLabel} rc={model.room} />
         <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(model.room, 'cue')}>{model.lead}</p>
       </div>
       <CountsFoot counts={model.counts} />
@@ -225,7 +229,7 @@ export function PresentTally({ model }) {
     <div className="present-moment present-frame">
       <Top model={model} right={model.heading || 'Results'} />
       <div className="present-main">
-        <TaskLine task={model.task} rc={model.room} />
+        <TaskLine task={model.task} label={model.taskLabel} rc={model.room} />
         {model.loading && !model.rows.length ? (
           <p className="present-lead">Counting the votes</p>
         ) : (
@@ -286,7 +290,7 @@ export function ResponseNavigator({ model, vote = false }) {
       <Top model={model} right={vote ? 'Voting' : 'Responses'} />
       <div className="present-main present-main-nav">
         {vote ? <Eyebrow className="present-eyebrow present-vote-cue">{`Vote on your ${deviceWords}`}</Eyebrow> : null}
-        {vote ? <TaskLine task={model.task} rc={model.room} /> : null}
+        {vote ? <TaskLine task={model.task} label={model.taskLabel} rc={model.room} /> : null}
         <div className="present-nav">
           <div className="present-flank">{flank(win.left)}</div>
           <Card selected className="present-card">

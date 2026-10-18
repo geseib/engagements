@@ -145,3 +145,13 @@ test('answering: the lesson shows above the task', () => {
   expect(lesson.textContent).toBe('Give an example of how precision paid off.');
   expect(lesson.compareDocumentPosition(container.querySelector('.hc-task')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
+
+// rejects (walk of dev eed66685): "The question · On the wall now" showing the
+// instructions while the wall showed the ranked results.
+test('the first row carries the lesson; at the results it is "The results"', () => {
+  const { container, rerender } = render(<ResponsesPanel kicker="k" title="t" phase="VOTE" lesson="Describe a time." task="Use STAR." responses={R} authorsHidden onQuestionToWall={() => {}} />);
+  const row = () => container.querySelector('[data-testid="hc-question"]');
+  expect(row().textContent).toBe('The questionDescribe a time.');
+  rerender(<ResponsesPanel kicker="k" title="t" phase="RESULTS" lesson="Describe a time." task="Use STAR." responses={R} authorsHidden questionOnWall onQuestionToWall={() => {}} />);
+  expect(row().textContent).toBe('The results · On the wall nowDescribe a time.');
+});
