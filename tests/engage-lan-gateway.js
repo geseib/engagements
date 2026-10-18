@@ -175,6 +175,7 @@ function get(url, headers = {}) {
     const r = await get(`${gw}/`);
     assert.strictEqual(r.status, 403);
     assert.match(r.body, /Open this from the Build Room/);
+    assert.match(r.body, /press Open the demo/);
     await sleep(150);
     assert.strictEqual(seen.length, n);
   });
@@ -424,7 +425,7 @@ function get(url, headers = {}) {
     scopes = { [appOrigin]: ['/demo/'] };
     await sleep(400);
     const nf = await get(`${gw}/secret.txt`, { Cookie: await freshCookie(), 'Sec-Fetch-Dest': 'document' });
-    assert.match(nf.body, /Not part of the shared build/);
+    assert.match(nf.body, /Not part of the shared demo/);
     assert.match(nf.body, /Build Room 4821 \u00b7 Four in a row/);
     scopes = null;
     await sleep(400);

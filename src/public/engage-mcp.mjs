@@ -573,7 +573,7 @@ function renderState(st) {
   }
   if (st.outcome && st.outcome.summary) lines.push('', `Wrap-up already posted: ${trunc(st.outcome.summary, 200)}`);
   if (st.lan && st.lan.status === 'live') {
-    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link. When you start the demo\'s or the mockups\' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person\'s name>"} (each field optional). The host may edit it, and it wins over your links: the room\'s Open the build goes to its demo. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.');
+    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link. When you start the demo\'s or the mockups\' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person\'s name>"} (each field optional). The host may edit it, and it wins over your links: the room\'s Open the demo goes to it. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.');
   }
   if (st.lan && st.lan.remote && st.lan.remote.wanted) {
     // Remote share (spec §4.5): one tunnel to the newest thing shown, and Cloudflare's quick-tunnel limits.
@@ -832,7 +832,7 @@ const TOOLS = [
         kind: { type: 'string', enum: ['progress', 'milestone', 'showing', 'answer'], description: 'Default "progress". "answer" answers a question the room asked you (THE ROOM ASKS YOU).' },
         detail: str('Optional extra detail shown when the entry is expanded.', { maxLength: 2000 }),
         link: str('Optional PUBLIC http(s) link (e.g. a deployed preview).'),
-        role: { type: 'string', enum: ['demo', 'mockup'], description: 'What the link is, when it is one of this project\'s pages: "demo" for the playable demo (the room\'s Open the build goes there), "mockup" for a mockup. Needs a link.' },
+        role: { type: 'string', enum: ['demo', 'mockup'], description: 'What the link is, when it is one of this project\'s pages: "demo" for the playable demo (the room\'s Open the demo goes there), "mockup" for a mockup. Needs a link.' },
         doing: str('What you are doing as this piece of work starts: 4 to 7 words, present tense, starting with an -ing verb, e.g. "Scaffolding the site" or "Mocking up 3 graph options". Never people\'s names, file paths, commands or links. The room sees it as your headline.', { maxLength: 50 }),
         done: str('Past tense of the line that just ended, 2 to 7 words, e.g. "Scaffolded the site". Same rules as doing.', { maxLength: 50 }),
         runItem: { type: 'integer', minimum: 1, maximum: 1000, description: 'Only when the host\'s run list sent you an item (the direction says RUN LIST ITEM k): the k of the item you just finished. It tells the host this item is done so Next can move on.' },
@@ -2422,7 +2422,7 @@ How to collaborate:
 - Show, don't just tell: screenshot each mockup and share_image it onto its Choose option (askId + label), so phones see it too; before wrap_up, share_image one or two screenshots of the finished product with kind "final" for the report.
 - Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
 - Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link.
-- When you start the demo's or the mockups' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person's name>"} (each field optional). The host may edit it, and it wins over your links: the room's Open the build goes to its demo. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.
+- When you start the demo's or the mockups' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person's name>"} (each field optional). The host may edit it, and it wins over your links: the room's Open the demo goes to it. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.
 - The build is always something people open as a web page, even when the room is making a document or a plan: serve it from this project's folder on one local address. When the host also opens it to people who are not in the room, room_status says SHARING REMOTELY; then show a built copy rather than the dev server, and never use server-sent events.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here: the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too, on their laptops, tablets and phones.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
@@ -2613,7 +2613,7 @@ function lanSessionName() {
 const pageStart = (title) => '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
   `<title>${escapeHtml(title)}</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.5rem;color:#1B2942">` +
   `<p style="margin:0 0 .5rem;font-size:.85rem;color:#5B6880">${escapeHtml(lanSessionName())}</p>`;
-const notFoundPage = () => `${pageStart('Not shared')}<h1 style="font-size:1.4rem">Not part of the shared build</h1><p>Go back to the Build Room and press Open the build.</p></body>`;
+const notFoundPage = () => `${pageStart('Not shared')}<h1 style="font-size:1.4rem">Not part of the shared demo</h1><p>Go back to the Build Room and press Open the demo.</p></body>`;
 /** Every answer the gateway gives names its session (S3 d), so a host can tell which room a port is. */
 const sessionHeader = () => ({ 'X-Engage-Session': String(CONFIG.gameId || '') });
 function notShared(res) {
@@ -2671,8 +2671,8 @@ const wifiLock = Object.freeze({
 });
 
 const lockedPage = () => `${pageStart('Engage Build Room')}<h1 style="font-size:1.6rem">Open this from the Build Room</h1>` +
-  '<p>This build is only for people in the room. Join the session on your laptop, tablet or phone and press Open the build.</p>' +
-  '<p>If you were in the room, the host may have turned sharing off.</p></body>';
+  '<p>This demo is only for people in this session. Join the session on your laptop, tablet or phone and press Open the demo.</p>' +
+  '<p>If you joined, the host may have turned sharing off.</p></body>';
 
 /** Headers for the app: it is being opened on localhost. */
 function forwardHeaders(req, target, lock = wifiLock) {
