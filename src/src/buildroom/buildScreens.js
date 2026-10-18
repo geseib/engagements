@@ -323,9 +323,46 @@ export function sentOf(room) {
   return {
     verb: ['decided', 'asked', 'told'].includes(s.verb) ? s.verb : 'told',
     text: typeof s.text === 'string' ? s.text.trim() : '',
+    askId: typeof s.askId === 'string' && s.askId ? s.askId : null,
     at: s.at,
     pickedAt: Number.isFinite(timeOf(s.pickedAt)) ? s.pickedAt : null,
   };
+}
+
+/**
+ * THE RESULT STAYS UP WHILE IT IS "SENT TO CLAUDE" (docs/design/room-content-v2
+ * frame 8, owner 18 Oct 2026): once the host sends the room's decision, the
+ * Stage keeps that ask's result on the wall, with the direction in a "Sent to
+ * Claude" band, for exactly as long as the one Sent to Claude state lasts
+ * (claudeState key 'sent', I9). When Claude says what it is doing, the Stage
+ * moves on to Claude's status and the work row (I10), as before. Null when
+ * nothing qualifies: the current ask must be the decided one that was sent.
+ */
+export function sentStageAsk(room, now) {
+  const sent = sentOf(room);
+  if (!sent || sent.verb !== 'decided' || !sent.askId || !room || room.currentAskId !== sent.askId) return null;
+  const ask = (room.asks || []).find((a) => a.askId === sent.askId && a.status === 'decided');
+  if (!ask || ask.wheel || !['choice', 'rating', 'suggest'].includes(ask.kind)) return null;
+  if (ask.decision && ask.decision.sentToAgent === false) return null;
+  return claudeState(room, now).key === 'sent' ? ask : null;
+}
+
+/** Longest reason the room's best is allowed to be, in characters, before a shorter one is preferred. */
+export const BEST_WHY_MAX = 180;
+
+/**
+ * THE ROOM'S BEST REASON FOR ITS PICK (frame 8): of the reasons given for the
+ * winning option, the fullest one that still reads at a glance (≤ BEST_WHY_MAX),
+ * else the shortest. Words only: a reason never carries its author here.
+ */
+export function bestWhy(whys, label) {
+  const mine = (Array.isArray(whys) ? whys : [])
+    .filter((w) => w && w.label === label && typeof w.text === 'string' && w.text.trim())
+    .map((w) => w.text.trim());
+  if (!mine.length) return '';
+  const fits = mine.filter((t) => t.length <= BEST_WHY_MAX);
+  if (fits.length) return fits.reduce((a, b) => (b.length > a.length ? b : a));
+  return mine.reduce((a, b) => (b.length < a.length ? b : a));
 }
 
 /** The headline while Claude has not yet said what it is doing with what was sent. Null otherwise. */

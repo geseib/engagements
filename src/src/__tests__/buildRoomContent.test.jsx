@@ -3,8 +3,10 @@
  * parity PLAN §2d). The Stage, Build and History are the same components on
  * the host's one screen and on the room's window, so these hold both:
  *
- *   - the ask's prompt and option titles lead; its detail, each option's
- *     detail and the room's reasons only on Call;
+ *   - the ask's prompt and option titles lead; each option's detail on every
+ *     profile (18 Oct 2026), the pick's best reason on the result; the ask's
+ *     own detail and the full reasons list only on Call (frames 7-8 in
+ *     buildRoomVoteResult.test.jsx);
  *   - six long options page: ↑ ↓ and "Options 1–3 of 6 · page 1 of 2" on the
  *     host's Stage, the first page and "and 3 more options on your phone" on
  *     the room's window (no button there);
@@ -45,12 +47,14 @@ function wall(opts = {}) {
 const now = Date.now();
 
 describe('the ask on the Stage', () => {
-  it.each(['room', 'tv', 'table'])('%s: the prompt and option titles only; no detail, no option detail, no reasons', (profile) => {
+  it.each(['room', 'tv', 'table'])('%s: the prompt, each option\'s title and detail, the pick\'s best reason; no ask detail, no reasons list', (profile) => {
     const { container } = render(<BuildStageScreen room={wall({ ask: 'results' })} now={now} profile={profile} />);
     expect(container.querySelector('.brm-q[data-rc="lead"]').textContent).toBe('Which header should volunteers see first?');
     expect(container.textContent).not.toContain('ASK-DETAIL-77');
-    expect(container.textContent).not.toContain('OPT-DETAIL');
+    // 18 Oct 2026: the room sees what it voted on, on every profile.
+    expect([...container.querySelectorAll('.brm-cd')].map((e) => e.textContent)).toEqual(['OPT-DETAIL-A', 'OPT-DETAIL-B']);
     expect(container.querySelector('.brm-whysbox')).toBeNull();
+    expect(container.querySelector('.brm-pickwhy').textContent).toBe('“Because it reads well”');
     expect(container.querySelectorAll('.brm-ct').length).toBe(2);
   });
 

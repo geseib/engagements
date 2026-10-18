@@ -126,6 +126,38 @@ describe.each(H.SKINS)('the room (dusk, %s): tinted composites', (skin) => {
   });
 });
 
+/* THE ROOM'S RESULT (docs/design/room-content-v2 frame 8): the votes rise inside
+   each option card as a fill, so every word on a card is composited over the
+   fill at its full height (a 100% option); the pick's card, badge, count and
+   quote take the gold role; the "Sent to Claude" band sits on a panel. */
+describe.each(H.SKINS)("the room's result (dusk, %s)", (skin) => {
+  const D = dusk(skin);   // eslint-disable-line no-shadow
+  const rt = (name) => H.scopeVar(ROOM_CSS, ROOM, name, { skin, theme: 'dark' });
+  const gold = H.role('--gold', { skin, theme: 'dark' });
+  const accentText = H.role('--accent-text', { skin, theme: 'dark' });
+  const FILL = [D.bg, D.surface, rt('--brm-fill')];
+  const PICK = [D.bg, D.surface, rt('--brm-fill-pick')];
+  const cases = [
+    ['an option title over the fill', D.text, FILL],
+    ['an option detail over the fill', D.muted, FILL],
+    ['the count and its words over the fill', D.muted, FILL],
+    ['the pick\'s title over its fill', D.text, PICK],
+    ['the pick\'s detail over its fill', D.muted, PICK],
+    ['the pick\'s count in gold over its fill', gold, PICK],
+    ['the pick\'s quoted reason over its fill', D.text, PICK],
+    ['an option\'s detail before the fill reaches it', D.muted, [D.bg, D.surface]],
+    ['the badge: --bg on --gold', D.bg, [gold]],
+    ['the Sent to Claude label on the band', accentText, [D.bg, D.surface]],
+    ['the direction on the band', D.text, [D.bg, D.surface]],
+    ['the pickup line on the band', D.muted, [D.bg, D.surface]],
+    ['the cue on the field', D.muted, [D.bg]],
+    ['a rating step while the room rates', D.text, [D.bg, D.surface]],
+  ];
+  test.each(cases)('%s clears AA', (_l, fg, layers) => {
+    expect(on(fg, layers)).toBeGreaterThanOrEqual(AA);
+  });
+});
+
 describe.each(H.SKINS)('the report (paper, %s)', (skin) => {
   const P = paper(skin);
   const SHEET = [P.surface];

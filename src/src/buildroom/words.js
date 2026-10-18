@@ -585,6 +585,16 @@ export const W = Object.freeze({
   // What the room sees (owner, 17 Oct 2026; config/roomContent.js): a long ask pages its options.
   optionsNoun: 'Options',
   moreOptions: (n) => `and ${n} more ${n === 1 ? 'option' : 'options'} on your phone`,
+  // Room screens, 18 Oct 2026 (docs/design/room-content-v2 frames 7-8): no
+  // tally while an ask is open, one small line on where to answer; on the
+  // result the room's pick, its best reason, and the votes inside each option.
+  cueChoose: 'Choose on your phone, and say why if you like: Claude reads the reasons.',
+  cueRate: 'Rate it on your phone, and say why if you like: Claude reads the reasons.',
+  cueSuggest: 'Add your ideas on your phone: Claude reads every one.',
+  cueIdeasVote: 'Vote on your phone for the ideas you want built.',
+  roomsPick: "The room's pick",
+  votesTally: (n, pct) => `${n === 1 ? 'vote' : 'votes'} · ${pct}%`,
+  ratingScaleSr: 'The scale',
   claudeNow: 'Claude now',
   claudeStep: (k, text) => `Step ${k}: ${text}`,
   // The Screens group in Settings (parity PLAN §2.7, B9 in part)
