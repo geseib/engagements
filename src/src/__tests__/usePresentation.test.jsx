@@ -6,7 +6,7 @@
  * by a newer one is dropped. A game that is not there says so.
  */
 import { renderHook, act, waitFor } from '@testing-library/react';
-import usePresentation, { REFETCH_DEBOUNCE_MS, FIRST_REPORT_EVERY_MS, FIRST_REPORT_TRIES } from '../present/usePresentation';
+import usePresentation, { eventDetailsOf, REFETCH_DEBOUNCE_MS, FIRST_REPORT_EVERY_MS, FIRST_REPORT_TRIES } from '../present/usePresentation';
 import webSocketClient from '../WebSocketClient';
 
 jest.mock('../WebSocketClient', () => {
@@ -190,4 +190,24 @@ describe('the first PRESENT_STATUS', () => {
     act(() => { jest.advanceTimersByTime(FIRST_REPORT_EVERY_MS * 10); });
     expect(statusSends()).toBe(2);
   });
+});
+
+// THE EVENT DETAILS for the lobby (owner, 18 Oct 2026): once, from the public
+// read the join screen uses; Quick start's filler is left off.
+test('reads the event details once, from the public session read', async () => {
+  global.fetch = jest.fn((url) => {
+    if (String(url).includes('/state')) return json(stateBody());
+    if (/games\/5479\?role=player$/.test(String(url))) return json({ engagementInfo: '  Two hours on the roadmap. ' });
+    return json({});
+  });
+  const { result } = renderHook(() => usePresentation('5479'));
+  await waitFor(() => expect(result.current.reads.details).toBe('Two hours on the roadmap.'));
+  const briefCalls = global.fetch.mock.calls.filter(([u]) => /\?role=player$/.test(String(u)));
+  expect(briefCalls).toHaveLength(1);
+});
+
+test('the event details: the host\'s words only', () => {
+  expect(eventDetailsOf('Quick start session using Amazon Leadership Principles')).toBe('');
+  expect(eventDetailsOf(null)).toBe('');
+  expect(eventDetailsOf('  Offsite, day two ')).toBe('Offsite, day two');
 });

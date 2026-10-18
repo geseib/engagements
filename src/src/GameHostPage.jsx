@@ -8033,16 +8033,16 @@ Focus on actionable business strategy insights.`;
       case 'LOBBY':
         return <LobbyPanel code={gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
       case 'ANSWERING':
-        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} task={consoleTask} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={consoleTask} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
       case 'VOTING':
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
         // The stage's readiness guard: no rows (and no press) until this vote's own have landed.
-        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} onWallIndex={wallFocus === 'question' ? null : (spotlightIndex === null ? 0 : spotlightIndex)} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} onWallIndex={wallFocus === 'question' ? null : (spotlightIndex === null ? 0 : spotlightIndex)} onPutOnWall={openSpotlight} />;
       case 'RESULTS':
       case 'RESPONSES':
         // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
-        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
         return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} />;

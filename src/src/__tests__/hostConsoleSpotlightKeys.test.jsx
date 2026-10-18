@@ -105,7 +105,7 @@ afterEach(() => {
 test('a response put on the wall from the console: → → still drives the footer', async () => {
   const { container } = render(<GameHostPage />);
   await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
-  const bar = container.querySelector('.hc-foot .host-action-bar');
+  const bar = container.querySelector('.hc-now .host-action-bar');
   expect(bar).toBeTruthy();
 
   // Put the second response on the wall from the console.

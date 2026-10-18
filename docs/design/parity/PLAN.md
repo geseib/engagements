@@ -633,8 +633,8 @@ read it. Call is the one verbose profile; Room, TV and Table carry only what is 
 
 | Moment | Room / TV / Table | Call |
 |---|---|---|
-| Lobby | **Lead:** join (address, code, QR). Session title, count | same |
-| A question or lesson is up (answering, the question put back) | **Lead: the task**, primary step (hero when short), never dropped. Title as a small kicker (not when it repeats the task). The lesson only when the instruction is generic ("adapt this lesson"), as support that may give way. Category dropped. Count | Category kicker, title as a heading, **lead: the task**, the lesson (first to give way), count |
+| Lobby | **Lead:** the session title, large, with the event details under it; the QR at the right with the address and code under it. Count | same |
+| A question or lesson is up (answering, the question put back) | **Lead: the lesson** (the task when there is none), primary step (hero when short), never dropped. The task under it at the secondary step, labelled "The task", never dropped. Title as a small kicker (not when it repeats the lead). Category dropped. Count | Category kicker, title as a heading, **lead: the lesson**, the task, count |
 | Voting | **Lead:** "N answers are on your phone…". The task as one slim line (may give way). Title dropped. Count | + the title |
 | A response on the wall (voting) | **Lead:** the response. "Vote on your …" kicker, the task slim (may give way), count | the task kept |
 | Results | **Lead:** the ideas. The task slim (first to give way). Counts | + the title kicker, the task kept |
@@ -650,6 +650,8 @@ read it. Call is the one verbose profile; Room, TV and Table carry only what is 
 | Build Room: a talking point, the run list | **Lead:** the point; the run list and its current step (essential). Claude's status | same |
 | Build Room: History, Build | **Lead:** the story (newest that fit, "and N earlier"); the newest screenshot. Claude's status at the top | same |
 | Build Room: codes, crew board, the brief | **Lead:** what the host put up. Claude's status | same |
+
+**Changed 18 Oct** (owner: "for the rounds for the answer phase neither the host nor the room sees the actual lesson instead we tell them what to do"): the lesson leads and the task sits under it, on every profile; until then the task led and a question with its own instruction dropped the lesson. The lobby leads with the session title and its details ("why is the title of the session tiny").
 
 **Claude's status** is essential on every Build Room moment and profile, on one screen
 and on the room's window, on Stage, Build and History (`screens/ClaudeStatus.jsx`): never

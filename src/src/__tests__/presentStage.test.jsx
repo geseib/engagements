@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { render, cleanup } from '@testing-library/react';
 import PresentStage, { fitCanvas, PRESENT_LADDERS } from '../present/PresentStage';
-import { PresentMoment } from '../present/PresentMoments';
+import { PresentMoment, PhaseWipe } from '../present/PresentMoments';
 import { presentModel } from '../present/presentModel';
 
 jest.mock('qrcode.react', () => ({ QRCodeSVG: ({ value }) => <svg data-qr={value} /> }));
@@ -127,11 +127,31 @@ describe('every moment', () => {
   });
   it('the lobby shows the code, the join address, the QR and the room count', () => {
     const { container } = drawn(...EVERY[0].slice(1));
-    expect(container.textContent).toMatch(/Scan to join · no app, no account/);
+    expect(container.textContent).toMatch(/Scan to join/);
+    expect(container.textContent).toMatch(/no app, no account/);
     expect(container.textContent).toMatch(/engage\.dev\.seibtribe\.us\/play/);
     expect(container.textContent).toMatch(/5479/);
     expect(container.textContent).toMatch(/5 in the room/);
     expect(container.querySelector('[data-qr]').getAttribute('data-qr')).toBe('https://engage.dev.seibtribe.us/play?gameId=5479');
+  });
+  // rejects (owner, 18 Oct 2026): "why is the title of the session tiny. the
+  // link and room id can be under the QR code".
+  it('the lobby leads with the session title and the event details; the address and code sit under the QR', () => {
+    const [s0, r0] = EVERY[0].slice(1);
+    const { container } = drawn({ ...s0, gameMetadata: { ...(s0.gameMetadata || {}), title: 'Q4 offsite' } }, { ...(r0 || {}), details: 'Two hours on the roadmap.' });
+    const title = container.querySelector('h1.present-lobby-title');
+    expect(title.textContent).toBe('Q4 offsite');
+    expect(title.className).toMatch(/ui-heading--hero/);
+    expect(container.querySelector('.present-lobby-details').textContent).toBe('Two hours on the roadmap.');
+    // the title is the page: not repeated on the top line
+    expect(container.querySelector('.present-top').textContent).not.toMatch('Q4 offsite');
+    const join = container.querySelector('.present-lobby-join');
+    const order = [...join.children].map((el) => el.className.split(' ').find((c) => /^present-(qr|join-url|code)$/.test(c))).filter(Boolean);
+    expect(order).toEqual(['present-qr', 'present-join-url', 'present-code']);
+  });
+  it('the lobby draws no details line when there are none', () => {
+    const { container } = drawn(...EVERY[0].slice(1));
+    expect(container.querySelector('.present-lobby-details')).toBeNull();
   });
   it('answering and voting use the round\'s words and counts only', () => {
     expect(drawn(...EVERY[1].slice(1)).container.textContent).toMatch(/3 of 5 answered/);
@@ -183,8 +203,8 @@ describe('every moment', () => {
     expect(canvasOf(answering).classList.contains('ui-ground--wall')).toBe(true);
     expect(answering.querySelector('.present-top').classList.contains('ui-top-line')).toBe(true);
     expect(answering.querySelector('.present-eyebrow').classList.contains('ui-eyebrow')).toBe(true);
-    // The task leads on Room (owner, 17 Oct 2026); the title is the muted eyebrow above it.
-    expect(answering.querySelector('[data-rc-part="task"]').className).toMatch(/present-rc-lead/);
+    // The lesson leads (owner, 18 Oct 2026), else the task; the title is the muted eyebrow above it.
+    expect(answering.querySelector('[data-rc="lead"]').className).toMatch(/present-rc-lead/);
     expect(answering.querySelector('[data-rc-part="title"]').className).toMatch(/ui-eyebrow--muted/);
     expect(answering.querySelector('.present-meter').className).toMatch(/ui-pips--meter/);
     // Call carries the title: as a heading above the task, and on the voting screen.
@@ -238,5 +258,38 @@ describe('the route and its imports', () => {
       expect(`${path.basename(file)}: ${/authFetch|\/host-state|\/answers\/host|ai-summary\/host/.test(text)}`)
         .toBe(`${path.basename(file)}: false`);
     }
+  });
+});
+
+/* WHAT THE RESPONSES ANSWER (walk of dev eed66685, owner 18 Oct 2026): while the
+   room votes on or reads the responses, the wall's context line is the lesson
+   ("The question"), not the instructions; the task only when there is no lesson. */
+describe('the context line while voting and at the results', () => {
+  it.each([[2, 'VOTING'], [3, 'VOTE_RESPONSE'], [4, 'RESULTS']])('%s %s: the lesson as "The question"', (i) => {
+    const { container } = drawn(...EVERY[i].slice(1));
+    const line = container.querySelector('.present-task');
+    if (!line) return; // a profile may give the line way for space
+    expect(line.textContent).toBe(`The question${Q.detail}`);
+  });
+  it('with no lesson the task stays, as "The task"', () => {
+    const s = snap({ state: 'VOTE#005', currentQuestionData: { ...Q, detail: '', customInstructions: 'Use STAR.' } });
+    const model = presentModel(s, {});
+    expect(model.taskLabel).toBe('The task');
+    expect(model.task).toBe('Use STAR.');
+  });
+});
+
+/* rejects (walk of dev eed66685): the "Results · Look up" wipe replayed over
+   Workie's first page when the read landed after "Workie is writing". */
+describe('the phase wipe', () => {
+  it('plays into the results once, and not again for the read', () => {
+    const { container, rerender } = render(<PhaseWipe moment="VOTING" />);
+    rerender(<PhaseWipe moment="RESULTS" />);
+    expect(container.querySelector('.present-wipe')).not.toBeNull();
+    const fresh = render(<PhaseWipe moment="RESULTS" />);
+    fresh.rerender(<PhaseWipe moment="READ_WAIT" />);
+    fresh.rerender(<PhaseWipe moment="READ" />);
+    fresh.rerender(<PhaseWipe moment="FEEDBACK" />);
+    expect(fresh.container.querySelector('.present-wipe')).toBeNull();
   });
 });

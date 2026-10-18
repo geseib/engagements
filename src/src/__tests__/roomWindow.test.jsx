@@ -154,6 +154,8 @@ describe('the one-click cue', () => {
   test('placed and not full screen: the cue shows, then goes once it is full screen', () => {
     const { queryByText } = render(<FillCue placed />);
     expect(queryByText(FILL_CUE)).not.toBeNull();
+    // rejects: the cue drawn with a light page's tokens (white on the wall).
+    expect(queryByText(FILL_CUE).getAttribute('data-theme')).toBe('dark');
     act(() => {
       Object.defineProperty(document, 'fullscreenElement', { value: document.documentElement, configurable: true, writable: true });
       document.dispatchEvent(new Event('fullscreenchange'));

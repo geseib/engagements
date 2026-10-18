@@ -3,6 +3,7 @@ import ConsoleTop from './ConsoleTop';
 import ConsoleRail from './ConsoleRail';
 import ConsoleFooter from './ConsoleFooter';
 import WorkflowStrip from '../stage/WorkflowStrip';
+import { HOST_INTENTS } from '../../config/hostControls';
 import './HostConsole.css';
 
 /**
@@ -33,14 +34,39 @@ export function releasePointerFocus(event) {
   if (typeof ctl.blur === 'function') ctl.blur();
 }
 
+/*
+  THE WAY OUT IS NOT A ROUND CONTROL (owner, 18 Oct 2026: "the back to menu
+  (which menu? this game menu, thats cool. oops it took us out of the game").
+  A LEAVE control (the lobby's and the end's secondary) comes off the action
+  bar and becomes the top line's "All sessions", where it says where it goes
+  and never sits beside Start round 1. A LEAVE primary (a finished survey,
+  "Back to the agenda") stays the primary: there it is the next step.
+*/
+export function splitLeave(controls) {
+  if (!controls) return { controls, leave: null };
+  const isLeave = (c) => Boolean(c && c.intent === HOST_INTENTS.LEAVE);
+  const leave = isLeave(controls.secondary) ? controls.secondary : isLeave(controls.tertiary) ? controls.tertiary : null;
+  if (!leave) return { controls, leave: null };
+  return {
+    controls: {
+      ...controls,
+      secondary: isLeave(controls.secondary) ? null : controls.secondary,
+      tertiary: isLeave(controls.tertiary) ? null : controls.tertiary,
+    },
+    leave,
+  };
+}
+
 export default function HostConsole({ top, strip, rail, footer, children }) {
+  const { controls, leave } = splitLeave(footer && footer.controls);
+  const onLeave = leave && footer && typeof footer.onAction === 'function' ? () => footer.onAction(leave) : null;
   return (
     <div className="hc" data-theme="dark" onClick={releasePointerFocus}>
-      <ConsoleTop {...top} />
+      <ConsoleTop {...top} onLeave={onLeave} />
       <div className="hc-loop">{strip && strip.strip ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
       <ConsoleRail {...rail} />
+      <ConsoleFooter {...footer} controls={controls} />
       <main className="hc-main">{children}</main>
-      <ConsoleFooter {...footer} />
     </div>
   );
 }

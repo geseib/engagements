@@ -89,7 +89,9 @@ async function buildFixture() {
   // The host's own words: a private note, a direction, a brief with a Later item.
   await hostCall('POST', 'log', { kind: 'note', text: SECRETS.privateLog });
   await hostCall('POST', 'directions', { text: SECRETS.olderDirection });
-  await new Promise((r) => setTimeout(r, 5)); // older by the clock, not by a coin toss
+  // Log rows sort by millisecond, then a random id: two posts in one millisecond
+  // come back in either order, and "newest" would be a coin toss.
+  await new Promise((r) => setTimeout(r, 3));
   await hostCall('POST', 'directions', { text: SHOWN.direction });
   await hostCall('POST', 'brief', { forWhom: 'Volunteers on a Saturday', keep: ['Keep it to one page'], later: [SECRETS.later] });
   // Claude's draft of the brief, not yet used.

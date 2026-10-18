@@ -29,6 +29,9 @@ const CW = Object.freeze({
   namesHidden: 'Names hidden',
   forYou: 'For you',
   theTask: 'The task',
+  // The console's way out (owner, 18 Oct 2026): where it goes, not "Back to menu".
+  allSessions: 'All sessions',
+  allSessionsHint: 'Back to your sessions. This one keeps running. Continue brings you back to it.',
   theQuestion: 'The question',
   onTheWall: 'On the wall now',
   onTheWallShort: 'On the wall',
