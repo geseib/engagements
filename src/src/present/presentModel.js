@@ -199,6 +199,8 @@ function joinFacts(snapshot, reads, code) {
     joinUrl: `${origin}/play?gameId=${encodeURIComponent(code)}`,
     joinHost: `${String(origin).replace(/^https?:\/\//, '')}/play`,
     joined: int(snapshot.roomCounts && snapshot.roomCounts.joined),
+    // The host's Event Details, under the title (owner, 18 Oct 2026).
+    details: typeof reads.details === 'string' ? reads.details : '',
   };
 }
 

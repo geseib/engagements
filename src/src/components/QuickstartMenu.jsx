@@ -143,7 +143,10 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           eventTitle: quickTitle,
-          engagementInfo: `Quick start session using ${questionSet.name}`,
+          // The set's own description, which the room's window shows under the
+          // title in the lobby (owner, 18 Oct 2026). It was "Quick start
+          // session using <set>", which told a room nothing.
+          engagementInfo: String(questionSet.description || '').trim(),
           aiContext: null,
           gameType: questionSet.engagementType,
           questionSetId: questionSet.id,

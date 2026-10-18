@@ -236,18 +236,26 @@ html.present-locked body {
 /* the progress meter, the navigator's track and the read's pages are
    components/ui/Pips, whose default sizes are the wall's own */
 
-/* ---- lobby ---- */
-.present .present-lobby { display: grid; grid-template-columns: 1fr auto; gap: 96px; align-items: center; }
-.present .present-code {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: calc(var(--L-hero) * 2 * var(--fit));
-  letter-spacing: .08em;
-  line-height: 1;
-  margin: .1em 0 .25em;
+/* ---- lobby (owner, 18 Oct 2026): the title and the event on the left, the
+   QR with its address and code under it on the right ---- */
+.present .present-lobby { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: calc(96px * var(--fit)); align-items: center; }
+.present .present-lobby-about { min-width: 0; }
+.present .present-lobby-title { --ui-t-hero: calc(var(--L-hero) * var(--fit)); margin: 0 0 .35em; max-width: 18ch; line-height: 1.04; }
+.present .present-lobby-details {
+  margin: 0 0 1em;
+  font-size: calc(var(--L-secondary) * var(--fit));
+  line-height: 1.3;
+  color: var(--muted);
+  max-width: 40ch;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
 }
+.present .present-lobby-count { margin: 0; }
+.present .present-lobby-join { display: flex; flex-direction: column; align-items: center; text-align: center; width: calc(440px * var(--fit)); }
 .present .present-qr {
-  width: calc(380px * var(--fit));
+  width: 100%;
   aspect-ratio: 1;
   background: var(--text);
   padding: 18px;
@@ -255,9 +263,17 @@ html.present-locked body {
   box-sizing: border-box;
 }
 .present .present-qr svg { display: block; width: 100%; height: 100%; }
-
-.present .present-code-label { margin: 1.2em 0 0; }
-.present .present-join-url { max-width: none; }
+.present .present-join-ey { margin: 1em 0 .3em; text-wrap: balance; }
+.present .present-join-url { margin: 0; font-size: calc(var(--L-body) * var(--fit)); color: var(--text); overflow-wrap: anywhere; }
+.present .present-code-label { margin: .9em 0 0; }
+.present .present-code {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--L-hero) * 1.35 * var(--fit));
+  letter-spacing: .06em;
+  line-height: 1;
+  margin: .05em 0 0;
+}
 
 /* ---- results tally: components/ui/TallyRow, its sizes pinned to the wall's px ---- */
 .present .present-tally { display: flex; flex-direction: column; gap: calc(22px * var(--fit)); }

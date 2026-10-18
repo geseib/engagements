@@ -127,11 +127,31 @@ describe('every moment', () => {
   });
   it('the lobby shows the code, the join address, the QR and the room count', () => {
     const { container } = drawn(...EVERY[0].slice(1));
-    expect(container.textContent).toMatch(/Scan to join · no app, no account/);
+    expect(container.textContent).toMatch(/Scan to join/);
+    expect(container.textContent).toMatch(/no app, no account/);
     expect(container.textContent).toMatch(/engage\.dev\.seibtribe\.us\/play/);
     expect(container.textContent).toMatch(/5479/);
     expect(container.textContent).toMatch(/5 in the room/);
     expect(container.querySelector('[data-qr]').getAttribute('data-qr')).toBe('https://engage.dev.seibtribe.us/play?gameId=5479');
+  });
+  // rejects (owner, 18 Oct 2026): "why is the title of the session tiny. the
+  // link and room id can be under the QR code".
+  it('the lobby leads with the session title and the event details; the address and code sit under the QR', () => {
+    const [s0, r0] = EVERY[0].slice(1);
+    const { container } = drawn({ ...s0, gameMetadata: { ...(s0.gameMetadata || {}), title: 'Q4 offsite' } }, { ...(r0 || {}), details: 'Two hours on the roadmap.' });
+    const title = container.querySelector('h1.present-lobby-title');
+    expect(title.textContent).toBe('Q4 offsite');
+    expect(title.className).toMatch(/ui-heading--hero/);
+    expect(container.querySelector('.present-lobby-details').textContent).toBe('Two hours on the roadmap.');
+    // the title is the page: not repeated on the top line
+    expect(container.querySelector('.present-top').textContent).not.toMatch('Q4 offsite');
+    const join = container.querySelector('.present-lobby-join');
+    const order = [...join.children].map((el) => el.className.split(' ').find((c) => /^present-(qr|join-url|code)$/.test(c))).filter(Boolean);
+    expect(order).toEqual(['present-qr', 'present-join-url', 'present-code']);
+  });
+  it('the lobby draws no details line when there are none', () => {
+    const { container } = drawn(...EVERY[0].slice(1));
+    expect(container.querySelector('.present-lobby-details')).toBeNull();
   });
   it('answering and voting use the round\'s words and counts only', () => {
     expect(drawn(...EVERY[1].slice(1)).container.textContent).toMatch(/3 of 5 answered/);
