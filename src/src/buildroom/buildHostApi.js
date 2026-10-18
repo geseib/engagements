@@ -89,6 +89,11 @@ export function buildApi(gameId) {
   return {
     /** HostState. */
     state: () => call(`${root}state`),
+    /**
+     * What the room's window shows (parity PLAN §2.9a): `{screen?, codes?, profile?, rotate?}`
+     * → `{wall}`, plus `{wallKey}` when it rotated.
+     */
+    wall: (body) => post('wall', body),
     /** `{kind, prompt, detail?, options?, lowLabel?, highLabel?, maxPicks?, draft?}` → `{ask}` */
     createAsk: (body) => post('asks', body),
     getAsk: (askId) => call(`${root}asks/${seg(askId)}`),
@@ -148,7 +153,12 @@ export function buildApi(gameId) {
     clearWall: () => post('ideas/wall/clear'),
     /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */
     saveOutcome: (body) => post('outcome', body),
-    /** `{reviewAgentAsks?, agentName?}` → `{settings}` */
+    /**
+     * THE RELEASE GATE (parity PLAN §2c): Claude's held posts to the room
+     * (`release`), or the host's for good (`keep`). → `{released}` | `{kept}`
+     */
+    postsAction: (action, ids) => post('posts', { action, ids }),
+    /** `{reviewAgentAsks?, reviewAgentPosts?, listNames?, agentName?}` → `{settings}` */
     saveSettings: (body) => post('settings', body),
     // ── Talking points (docs/design/build-room-talking-points; build-room.js) ──
     /** `{kind:'research'|'ideas', subject}` → `{request}`: Claude (or a helper) starts when it next listens. */
@@ -248,17 +258,8 @@ export const buildReportPath = (gameId) => `${buildRoomPath(gameId)}&view=report
 
 // ── Untrusted text ──────────────────────────────────────────────────────────
 
-/** An http(s) URL as a string, or '' — anything Claude or a phone sent is untrusted. */
-export function safeHref(value) {
-  const s = String(value || '').trim();
-  if (!s) return '';
-  try {
-    const u = new URL(s);
-    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : '';
-  } catch (e) {
-    return '';
-  }
-}
+// Pure, in links.js so the room's window can use it without this module (B5).
+export { safeHref } from './links';
 
 /**
  * The one command the host pastes (PLAN §7): fetch the MCP server from this

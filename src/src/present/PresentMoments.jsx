@@ -23,6 +23,9 @@ import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
 import TallyRow from '../components/ui/TallyRow';
 import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWords';
+import {
+  shows, roleOf, sizeOf, textOf, dropRank, ROLE,
+} from '../config/roomContent';
 
 /* ------------------------------------------------------------ shared parts */
 
@@ -31,14 +34,20 @@ import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWo
    present-* classes stay on each so present.css can pass the wall's ladder to
    them; the colours and the treatment are the skin's. */
 
+/** The data attributes every room-content part carries: which part, which role. */
+export const rcAttrs = (rc, key) => ({ 'data-rc-part': key, 'data-rc': roleOf(rc, key) });
+
 function Top({ model, right }) {
+  // The session title rides the top line only where the room content keeps it
+  // (Call; the lobby and the end everywhere): config/roomContent.js.
+  const title = model.sessionTitle && (!model.room || shows(model.room, 'sessionTitle')) ? model.sessionTitle : '';
   return (
     <TopLine
       className="present-top"
       left={(
         <>
-          {model.sessionTitle ? <b>{model.sessionTitle}</b> : null}
-          {model.sessionTitle && model.roundLabel ? ' · ' : null}
+          {title ? <b>{title}</b> : null}
+          {title && model.roundLabel ? ' · ' : null}
           {model.roundLabel || null}
         </>
       )}
@@ -93,20 +102,16 @@ export function PhaseWipe({ moment }) {
 }
 
 /**
- * The team's task: what the room is answering. Never dropped for space (the
- * background story is the line that goes). Slim during voting, as one line
- * under the title, so the ballot keeps the room.
+ * The team's task as one slim line, while the room votes on or reads what it
+ * answered. While the question is up the task is the LEAD instead
+ * (RoomQuestion). Here it is support: on Room, TV and Table it may give way
+ * for space (config/roomContent.js); on Call it stays.
  */
-function TaskLine({ task, slim = false }) {
+function TaskLine({ task, rc = null }) {
   if (!task) return null;
-  return slim
-    ? <p className="present-task is-slim"><span className="present-task-ey">The task</span>{task}</p>
-    : (
-      <div className="present-task">
-        <span className="present-task-ey">The task</span>
-        <p>{task}</p>
-      </div>
-    );
+  if (rc && !shows(rc, 'task')) return null;
+  const extra = rc ? { ...rcAttrs(rc, 'task'), ...(dropRank(rc, 'task') ? { 'data-drop': String(dropRank(rc, 'task')) } : {}) } : {};
+  return <p className="present-task is-slim" {...extra}><span className="present-task-ey">The task</span>{task}</p>;
 }
 
 /* ------------------------------------------------------------ the moments */
@@ -137,15 +142,40 @@ export function PresentLobby({ model }) {
   );
 }
 
+/**
+ * A QUESTION OR A LESSON IS UP (owner, 17 Oct 2026: "the most important thing
+ * is the lesson [and] the instructions"). What shows and how large is
+ * config/roomContent.js's: on Room, TV and Table the task leads at the hero or
+ * primary step and the title is a small kicker above it; the lesson shows when
+ * the instruction is generic and needs it, and may give way for space. Call
+ * adds the category, the title as a heading and the lesson.
+ */
+export function RoomQuestion({ model }) {
+  const rc = model.room;
+  const titleRole = roleOf(rc, 'title');
+  const lead = (key) => (
+    <p className={`present-rc-lead is-${sizeOf(rc, key)}`} data-rc-size={sizeOf(rc, key)} {...rcAttrs(rc, key)}>{textOf(rc, key)}</p>
+  );
+  return (
+    <>
+      {shows(rc, 'category') ? <Eyebrow className="present-eyebrow" {...rcAttrs(rc, 'category')}>{textOf(rc, 'category')}</Eyebrow> : null}
+      {titleRole === ROLE.KICKER ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Eyebrow> : null}
+      {titleRole === ROLE.SUPPORT ? <Heading level={2} size="primary" balance className="present-h2 present-rc-title" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Heading> : null}
+      {titleRole === ROLE.LEAD ? lead('title') : null}
+      {shows(rc, 'task') ? lead('task') : null}
+      {shows(rc, 'story') ? (
+        <p className="present-lead present-rc-support" data-drop={String(dropRank(rc, 'story') || 1)} {...rcAttrs(rc, 'story')}>{textOf(rc, 'story')}</p>
+      ) : null}
+    </>
+  );
+}
+
 export function PresentAnswering({ model }) {
   return (
     <div className="present-moment present-frame">
       <Top model={model} right="Answering" />
       <div className="present-main">
-        {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
-        <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
-        <TaskLine task={model.task} />
-        {model.story ? <p className="present-lead" data-drop="1">{model.story}</p> : null}
+        <RoomQuestion model={model} />
       </div>
       <CountsFoot counts={model.counts} />
     </div>
@@ -158,9 +188,9 @@ export function PresentVoting({ model }) {
       <Top model={model} right="Voting" />
       <div className="present-main">
         <Eyebrow className="present-eyebrow">Vote</Eyebrow>
-        <Heading level={1} size="primary" balance className="present-h2">{model.title}</Heading>
-        <TaskLine task={model.task} slim />
-        <p className="present-lead">{model.lead}</p>
+        {shows(model.room, 'title') ? <Heading level={1} size="primary" balance className="present-h2" {...rcAttrs(model.room, 'title')}>{model.title}</Heading> : null}
+        <TaskLine task={model.task} rc={model.room} />
+        <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(model.room, 'cue')}>{model.lead}</p>
       </div>
       <CountsFoot counts={model.counts} />
     </div>
@@ -181,7 +211,7 @@ export function PresentTally({ model }) {
     <div className="present-moment present-frame">
       <Top model={model} right={model.heading || 'Results'} />
       <div className="present-main">
-        <TaskLine task={model.task} slim />
+        <TaskLine task={model.task} rc={model.room} />
         {model.loading && !model.rows.length ? (
           <p className="present-lead">Counting the votes</p>
         ) : (
@@ -242,7 +272,7 @@ export function ResponseNavigator({ model, vote = false }) {
       <Top model={model} right={vote ? 'Voting' : 'Responses'} />
       <div className="present-main present-main-nav">
         {vote ? <Eyebrow className="present-eyebrow present-vote-cue">{`Vote on your ${deviceWords}`}</Eyebrow> : null}
-        {vote ? <TaskLine task={model.task} slim /> : null}
+        {vote ? <TaskLine task={model.task} rc={model.room} /> : null}
         <div className="present-nav">
           <div className="present-flank">{flank(win.left)}</div>
           <Card selected className="present-card">
@@ -291,10 +321,7 @@ export function PresentQuestionFocus({ model }) {
     <div className="present-moment present-frame">
       <Top model={model} right="The question" />
       <div className="present-main">
-        {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
-        <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
-        <TaskLine task={model.task} />
-        {model.story ? <p className="present-lead" data-drop="1">{model.story}</p> : null}
+        <RoomQuestion model={model} />
       </div>
       <div className="present-foot"><span>{model.roundLabel}</span></div>
     </div>
@@ -313,7 +340,7 @@ export function PresentFeedback({ model }) {
         <Eyebrow className="present-eyebrow">{model.roundLabel ? `${model.roundLabel} · Feedback` : 'Feedback'}</Eyebrow>
         {/* The round's title as a reminder, not the question again (owner,
             2026-10-13: "too much like the original question"). */}
-        {model.title ? <Heading level={2} size="primary" balance className="present-h2">{model.title}</Heading> : null}
+        {model.title ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(model.room, 'title')}>{model.title}</Eyebrow> : null}
         {model.featured ? (
           // The comment the host put up, as the laptop shows it.
           <figure className="present-quote">
@@ -327,7 +354,7 @@ export function PresentFeedback({ model }) {
             ) : null}
           </figure>
         ) : (
-          <p className="present-lead">{`Provide feedback on the round from your ${deviceWords}.`}</p>
+          <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(model.room, 'ask')}>{`Provide feedback on the round from your ${deviceWords}.`}</p>
         )}
       </div>
       <div className="present-foot"><span>{model.roundLabel || ''}</span></div>

@@ -196,13 +196,14 @@ describe('Share demo', () => {
     expect(within(d).getByText('Let everyone try it.')).toBeInTheDocument();
   });
 
-  test('on the Stage: one grey line in the HOST list, never a pop-up; it goes to the Host screen', async () => {
+  test('on the Stage: a grey count on HOST, never a pop-up; one press goes to the Host screen, where the nudge leads', async () => {
+    // HOST goes home in one press (parity PLAN §2a D2); the list it used to open is gone from the Stage.
     await open([base, SHOWING, SHOT], '2');
     expect(screen.queryByRole('dialog', { name: 'Share demo' })).toBeNull();
-    const hostBtn = within(document.querySelector('footer.dock')).getByRole('button', { name: /HOST/ });
+    const hostBtn = within(document.querySelector('footer.dock')).getByRole('button', { name: 'Host screen, 1 waiting' });
+    expect(hostBtn).toHaveClass('brm-hostalert--grey');
     expect(hostBtn).not.toHaveClass('brm-hostalert--amber');
     fireEvent.click(hostBtn);
-    fireEvent.click(screen.getByRole('button', { name: /The demo is ready to share/ }));
     expect(await screen.findByRole('region', { name: 'Share demo' })).toBeInTheDocument();
   });
 });

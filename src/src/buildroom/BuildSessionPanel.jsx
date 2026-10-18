@@ -9,9 +9,9 @@
  *             it, Lock again, Not now, Remove, Bring back. Only the right-hand
  *             column differs: ideas sent here, a lane for a builder.
  *   Settings  everything that used to hide in the header's three-dot menu, in
- *             four groups that answer one question each, in the order a host
- *             meets them: The room, Claude, Crew, This session. End session is
- *             last and alone.
+ *             groups that answer one question each, in the order a host
+ *             meets them: Screens (the room's window, parity PLAN §2.7), The
+ *             room, Claude, Crew, This session. End session is last and alone.
  *
  * It holds nothing of its own but which tab is up. The page owns the roster
  * (useBuildPlayers) and every action; this draws them. A button that opens a
@@ -31,12 +31,35 @@ import { RunCrewCodeSwitch } from './BuildCrew';
 import { CodeBox, DemoTile, AppList, QuietWarning, demoSlotOf, demoOnStage } from './BuildWifiShare';
 import { askingOf } from './useBuildPlayers';
 import { W } from './words';
+import RoomWindowLink from '../components/stage/RoomWindowLink';
+import { DISPLAY_PROFILES } from '../components/stage/ScreensGroup';
+import { SCREEN_WORDS } from '../config/roomScreen';
+import { presentStatusFrom } from '../config/presentStatus';
+import { presentHref } from '../config/surfaces';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const plural = (n, one, many) => (n === 1 ? one : many);
 
 /** "2:31", in the host's own clock. Empty for a missing or unreadable time. */
+/** Settings > Claude: which plugin Claude runs and whether it is the latest. Here only, never a room screen. */
+function PluginVersion({ plugin }) {
+  const latest = plugin.latest || '';
+  // Connected, but too old to say its version (before the header): older than the latest.
+  if (!plugin.running && plugin.outdated) {
+    return <p className="brm-hint brm-sp-note brm-ver" data-testid="brm-plugin-ver"><span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{W.pluginOlder(latest)}</b></span></p>;
+  }
+  if (!plugin.running) return <p className="brm-hint brm-sp-note" data-testid="brm-plugin-ver">{W.pluginUnknown}</p>;
+  return (
+    <p className="brm-hint brm-sp-note brm-ver" data-testid="brm-plugin-ver">
+      <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className={plugin.outdated ? 'brm-ver-old' : ''}>{plugin.running}</b></span>
+      {plugin.outdated
+        ? <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
+        : <span className="brm-ver-ok">{W.pluginCurrent}</span>}
+    </p>
+  );
+}
+
 export function timeOf(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -229,6 +252,76 @@ export function RoomCodes({ room, now, ended, busy, run, api, wifiLink = '', onS
   );
 }
 
+/* --------------------------------------------------------------- screens -- */
+
+/** How long the armed New link waits for its second press (standards §3). */
+export const ARM_MS = 6000;
+
+/**
+ * SCREENS (parity PLAN §2.7, B9 in part; standards §4: first, Applies now).
+ * The room's window: its link (with the session's wall key, so it opens on
+ * the other display where Chrome can place it), whether it is really up (the
+ * server's `presenting` and `presentDetail`, config/presentStatus.js), and
+ * the room screen size, which the server holds (`wall.profile`) so every
+ * window draws the same. New link retires every open window's link: it asks
+ * in place first, the second press within 6 s goes ahead. The parts are the
+ * shared Screens group's (ScreensGroup.css, RoomWindowLink, the profiles);
+ * the group itself offers one screen or two, which waits for B9's chooser.
+ */
+export function WallScreens({ room, busy, run, api, ended }) {
+  const [armed, setArmed] = useState(false);
+  const [said, setSaid] = useState('');
+  useEffect(() => {
+    if (!armed) return undefined;
+    const t = setTimeout(() => setArmed(false), ARM_MS);
+    return () => clearTimeout(t);
+  }, [armed]);
+  const key = room.wallKey || '';
+  const href = key ? presentHref(room.gameId, { type: 'build', k: key }) : '';
+  const status = presentStatusFrom(Number(room.presenting) > 0 ? room.presentDetail : null);
+  const profile = (room.wall && room.wall.profile) || 'room';
+  const rotate = async () => {
+    if (!armed) { setArmed(true); setSaid(''); return; }
+    setArmed(false);
+    const out = await run(() => api.wall({ rotate: true }));
+    if (out !== undefined) setSaid(W.wallNewLinkDone);
+  };
+  return (
+    <div className="brm-sp-grp" data-group="screens" data-capability="screens">
+      <div className="brm-sp-gh"><h3>{W.screensGroup}</h3><span>{W.screensScope}</span></div>
+      <div className="scr">
+        {href && (
+          <div className="scr-row">
+            <div className="scr-k">
+              <span className="scr-label">{SCREEN_WORDS.window}</span>
+              <span className={`scr-hint scr-stat is-${status.tone}`} role="status" title={status.hint}>{status.label}</span>
+            </div>
+            <RoomWindowLink className="scr-open" href={href} title={W.wallOpenHint} data-capability="room-window">{W.wallOpen}</RoomWindowLink>
+          </div>
+        )}
+        {href && <p className="scr-hint brm-sp-note">{W.wallFollows}</p>}
+        <div className="scr-row">
+          <div className="scr-k">
+            <label className="scr-label" htmlFor="brm-wall-size">{SCREEN_WORDS.size}</label>
+            <span className="scr-hint">{SCREEN_WORDS.sizeHint}</span>
+          </div>
+          <select id="brm-wall-size" className="scr-select" value={profile} disabled={busy} onChange={(e) => run(() => api.wall({ profile: e.target.value }))}>
+            {DISPLAY_PROFILES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </div>
+        {href && !ended && (
+          <div className="scr-row">
+            <div className="scr-k">
+              <span className="scr-hint" role={armed || said ? 'status' : undefined}>{armed ? W.wallNewLinkWhy : (said || W.wallNewLinkHint)}</span>
+            </div>
+            <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={rotate}>{armed ? W.wallNewLinkArmed : W.wallNewLink}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ panel -- */
 
 export default function BuildSessionPanel({
@@ -357,7 +450,7 @@ export default function BuildSessionPanel({
   return (
     <div className="brm-sp-root" ref={rootRef}>
       <div className="brm-sp-scrim" onClick={onClose} aria-hidden="true" />
-      <aside className="brm-sp" ref={panelRef} role="dialog" aria-modal="true" aria-label="Session" tabIndex={-1} onKeyDown={trapFocus}>
+      <aside className="brm-sp" ref={panelRef} role="dialog" aria-modal="true" aria-label="Session" tabIndex={-1} onKeyDown={trapFocus} data-capability="settings">
         <div className="brm-sp-head">
           <h2 className="brm-sp-title">Session</h2>
           <span className={`brm-sp-ws${connected ? ' is-up' : ''}`} aria-live="polite">{connected ? 'Connected' : 'Connecting…'}</span>
@@ -389,7 +482,7 @@ export default function BuildSessionPanel({
 
         <div className="brm-sp-body">
           {tab === 'players' && (
-            <section id="brm-sp-pane-players" role="tabpanel" aria-labelledby="brm-sp-tab-players" className="brm-sp-pane">
+            <section id="brm-sp-pane-players" role="tabpanel" aria-labelledby="brm-sp-tab-players" className="brm-sp-pane" data-capability="players">
               <PlayersList
                 rows={rows}
                 departed={departed}
@@ -416,7 +509,9 @@ export default function BuildSessionPanel({
 
           {tab === 'settings' && (
             <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
-              <div className="brm-sp-grp" data-group="room">
+              <WallScreens room={room} busy={busy} run={run} api={api} ended={ended} />
+
+              <div className="brm-sp-grp" data-group="room" data-capability="share-demo">
                 <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they can open</span></div>
                 <RoomCodes room={room} now={now} ended={ended} busy={busy} run={run} api={api} wifiLink={wifiLink} onShowCodes={pick(onShowCodes)} />
                 <Switch
@@ -428,7 +523,7 @@ export default function BuildSessionPanel({
                 />
               </div>
 
-              <div className="brm-sp-grp" data-group="claude">
+              <div className="brm-sp-grp" data-group="claude" data-capability="claude-status">
                 <div className="brm-sp-gh"><h3>Claude</h3></div>
                 <div className="brm-sp-row">
                   {slots.agentChip}
@@ -438,6 +533,8 @@ export default function BuildSessionPanel({
                     </button>
                   )}
                 </div>
+                {/* Which plugin Claude runs, always (owner, 18 Oct): the version, and whether it is the latest. */}
+                {!ended && room.plugin && <PluginVersion plugin={room.plugin} />}
                 {/* The plugin is older than the current one: one line, here only (never the Stage or a device). */}
                 {!ended && room.plugin && room.plugin.outdated && (
                   <p className="brm-hint brm-sp-note" data-testid="brm-plugin-out">
@@ -447,9 +544,21 @@ export default function BuildSessionPanel({
                 )}
                 {!ended && slots.autoSwitch}
                 {!ended && <p className="brm-hint brm-sp-note">{W.autoNote}</p>}
+                {/* THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts and screenshots wait for the host. */}
+                {!ended && (
+                  <div data-capability="release-posts">
+                    <Switch
+                      label={W.postsSwitch}
+                      checked={room.settings ? room.settings.reviewAgentPosts !== false : true}
+                      disabled={busy}
+                      onChange={(on) => run(() => api.saveSettings({ reviewAgentPosts: on }))}
+                      note={W.postsNote}
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="brm-sp-grp" data-group="crew">
+              <div className="brm-sp-grp" data-group="crew" data-capability="crew">
                 <div className="brm-sp-gh"><h3>Crew</h3></div>
                 {crew ? (
                   <>
@@ -468,10 +577,10 @@ export default function BuildSessionPanel({
                 )}
               </div>
 
-              <div className="brm-sp-grp" data-group="session">
+              <div className="brm-sp-grp" data-group="session" data-capability="report">
                 <div className="brm-sp-gh"><h3>This session</h3><span>Going back, finishing, stopping</span></div>
                 {!ended && opening && (
-                  <div className="brm-sp-row">
+                  <div className="brm-sp-row" data-capability="opening">
                     <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
                     <span className="brm-hint">{W.startUndoNote}</span>
                   </div>

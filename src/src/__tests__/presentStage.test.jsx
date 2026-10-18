@@ -162,10 +162,17 @@ describe('every moment', () => {
   });
   it('feedback names its round and the title, not the question again (owner, 2026-10-13)', () => {
     const { container } = drawn(...EVERY.find(([m]) => m === 'FEEDBACK').slice(1));
-    expect(container.querySelector('.ui-top-line').textContent).toMatch(/Q4 Wrap up · Round 5\s*Feedback/);
+    // WHAT THE ROOM SEES (owner, 17 Oct 2026, config/roomContent.js): on Room the
+    // top line carries the round only; the session title rides it on Call.
+    expect(container.querySelector('.ui-top-line').textContent).toMatch(/^Round 5\s*Feedback/);
     expect(container.querySelector('.present-eyebrow').textContent).toBe('Round 5 · Feedback');
     expect(container.querySelector('h1.present-hero')).toBeNull();
-    expect(container.querySelector('.present-h2').textContent).toBe('What should we stop doing');
+    // The round's title stays as the reminder, now a kicker; the ask leads.
+    expect(container.querySelector('[data-rc-part="title"]').textContent).toBe('What should we stop doing');
+    expect(container.querySelector('[data-rc-part="ask"][data-rc="lead"]')).not.toBeNull();
+    const [, callSnap, callReads] = EVERY.find(([m]) => m === 'FEEDBACK');
+    const call = drawn({ ...callSnap, stageProfile: 'call' }, callReads).container;
+    expect(call.querySelector('.ui-top-line').textContent).toMatch(/Q4 Wrap up · Round 5\s*Feedback/);
     expect(container.textContent).not.toMatch(/Name one habit/);
     expect(container.textContent).toMatch(/Provide feedback on the round from your phone, laptop or tablet\./);
     expect(container.querySelector('.present-foot').textContent).toBe('Round 5');
@@ -176,9 +183,15 @@ describe('every moment', () => {
     expect(canvasOf(answering).classList.contains('ui-ground--wall')).toBe(true);
     expect(answering.querySelector('.present-top').classList.contains('ui-top-line')).toBe(true);
     expect(answering.querySelector('.present-eyebrow').classList.contains('ui-eyebrow')).toBe(true);
-    expect(answering.querySelector('h1.present-hero').className).toMatch(/ui-heading--hero/);
+    // The task leads on Room (owner, 17 Oct 2026); the title is the muted eyebrow above it.
+    expect(answering.querySelector('[data-rc-part="task"]').className).toMatch(/present-rc-lead/);
+    expect(answering.querySelector('[data-rc-part="title"]').className).toMatch(/ui-eyebrow--muted/);
     expect(answering.querySelector('.present-meter').className).toMatch(/ui-pips--meter/);
-    const voting = drawn(...EVERY[2].slice(1)).container;
+    // Call carries the title: as a heading above the task, and on the voting screen.
+    const [, aSnap, aReads] = EVERY[1];
+    expect(drawn({ ...aSnap, stageProfile: 'call' }, aReads).container.querySelector('.present-rc-title').className).toMatch(/ui-heading--primary/);
+    const [, vSnap, vReads] = EVERY[2];
+    const voting = drawn({ ...vSnap, stageProfile: 'call' }, vReads).container;
     expect(voting.querySelector('h1.present-h2').className).toMatch(/ui-heading--primary/);
     const nav = drawn(...EVERY[5].slice(1)).container;
     expect(nav.querySelector('.present-card').className).toMatch(/ui-card is-selected/);
@@ -216,6 +229,8 @@ describe('the route and its imports', () => {
   it('nothing the wall draws imports authFetch or reads a host door', () => {
     const files = [
       ...fs.readdirSync(path.join(SRC, 'present')).map((f) => path.join(SRC, 'present', f)),
+      // The Build Room's window (B7); buildWallImports.test.js walks its imports.
+      ...fs.readdirSync(path.join(SRC, 'present', 'buildwall')).map((f) => path.join(SRC, 'present', 'buildwall', f)),
       path.join(SRC, 'PresentPage.jsx'),
     ].filter((f) => /\.(js|jsx)$/.test(f) && !/presentControls\.js$/.test(f));
     for (const file of files) {

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=12 font=7 primary=143 */
+/* skin-allowance: colour=11 font=7 primary=143 */
 /* ==========================================================================
    BUILD ROOM — the host's page and the wall (buildroom/BuildRoomPage.jsx).
 
@@ -667,6 +667,37 @@
 }
 .brm .stage .brm-screen-n { margin-left: 6px; }
 
+/* WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026; config/roomContent.js).
+   On the Stage an ask's option titles LEAD with its prompt: the secondary step,
+   not the body step. A long ask pages them (stagePaging OPTION_PAGE_SIZE); the
+   room's window counts the rest on .brm-moreopts. Pinned by
+   __tests__/roomContentPalette.test.js. */
+.brm .stage .brm-stage[data-room-view] .brm-ct { font-size: var(--t-secondary); line-height: 1.18; }
+.brm .stage .brm-moreopts { margin: 0; font-size: var(--t-body); color: var(--muted); }
+/* Call's extra (detail, reasons) on the Stage reads the profile's ladder, never
+   the laptop's 12-15px steps the Host screen uses. */
+.brm .stage .brm-cd,
+.brm .stage .brm-whys li { font-size: var(--t-body); }
+.brm .stage .brm-letter--sm { font-size: var(--t-meta); min-width: 1.6em; height: 1.6em; }
+
+/* CLAUDE'S STATUS on every screen the room sees (owner, 17 Oct 2026):
+   screens/ClaudeStatus.jsx. Essential, never dropped: the body step on the
+   Stage (the profile's ladder) and on Build and History (--brm-st-body), the
+   headline at weight 700, the duration, helper and step muted beside it. */
+.brm .brm-roomclaude {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+  margin: 0; font-size: var(--brm-st-body); line-height: 1.25; color: var(--text); min-width: 0;
+}
+.brm .stage .brm-roomclaude { font-size: var(--t-body); padding-bottom: .25em; } /* the fitter counts the descenders' room */
+.brm .brm-roomclaude .brm-sdot { width: .7em; height: .7em; align-self: center; box-shadow: none; animation: none; }
+.brm .brm-roomclaude-h { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-roomclaude-m { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.brm .brm-histmain > .brm-roomclaude { margin-bottom: 12px; }
+/* The wheel on the Stage scales with the fitter (--fit, styles/stage.css), so a
+   short screen keeps the prompt, the wheel and Claude's line together instead
+   of clamping (measured 17 Oct 2026: 50vh clamped at 1280x720 to 1440x900). */
+.brm .stage .brm-wheelstage .bwh--lg { --bwh-size: min(calc(44vh * var(--fit, 1)), 500px); }
+
 /* The Host screen (C1): Now and the composer, Waiting for you, What happened.
    Three columns on a laptop, two on a small one, one on a phone. */
 .brm .brm-host {
@@ -989,7 +1020,8 @@
 .brm .brm-wifipanel-say { margin: 0; font-size: var(--brm-t-label); color: var(--muted); line-height: 1.45; }
 .brm .brm-wifipanel-apps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .brm .brm-wifipanel-apps li {
-  display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  /* 120px: "Mockups · Ask 12" on one line (Share demo S3). */
+  display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 10px; align-items: center;
   font-size: var(--brm-t-label); padding: 8px 10px; border: 1px solid var(--brm-rule); border-radius: 9px; background: var(--bg);
 }
 .brm .brm-wifipanel-k { font-weight: 700; color: var(--text); }
@@ -1009,6 +1041,30 @@
 .brm .brm-wifipanel-addr .brm-wifipanel-u small { display: block; margin-top: 4px; font-family: var(--font-ui); font-size: var(--brm-t-floor); color: var(--muted); line-height: 1.4; }
 .brm .brm-wifipanel-warn ul { margin: 6px 0 0; padding-left: 18px; }
 .brm .brm-wifipanel-stat { font-size: var(--brm-t-body); font-weight: 700; color: var(--brm-success-text); }
+/* REMOTE SHARE (owner 2026-10-16; docs/design/build-room-remote-share R1-R3): one switch
+   under the address, and who opened it remotely. Tokens only; the track's "on" is the
+   success tint, its thumb the success colour (a mark, never text). */
+.brm .brm-wifipanel-sw { display: flex; gap: 12px; align-items: flex-start; padding-top: 12px; border-top: 1px solid var(--brm-rule); }
+.brm .brm-wifipanel-tg {
+  flex: none; position: relative; width: 42px; height: 24px; margin-top: 2px; padding: 0; border-radius: 12px;
+  border: 1px solid var(--brm-rule); background: var(--surface-2); cursor: pointer;
+}
+.brm .brm-wifipanel-tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); }
+.brm .brm-wifipanel-tg.is-on { background: var(--brm-tint-green); border-color: var(--brm-line-green); }
+.brm .brm-wifipanel-tg.is-on::after { left: 20px; background: var(--success); }
+.brm .brm-wifipanel-tg:focus-visible { outline: 2px solid rgb(var(--info-rgb)); outline-offset: 2px; }
+.brm .brm-wifipanel-tg:disabled { cursor: default; opacity: 0.6; }
+.brm .brm-wifipanel-swtx { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: var(--brm-t-label); line-height: 1.45; color: var(--text); }
+.brm .brm-wifipanel-swtx b { font-size: var(--brm-t-body); }
+.brm .brm-wifipanel-swtx small { font-size: var(--brm-t-floor); color: var(--muted); }
+.brm .brm-wifipanel-bad { color: var(--danger-text); }
+.brm .brm-wifipanel-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--brm-t-label); }
+.brm .brm-wifipanel-people li { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.brm .brm-wifipanel-who { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.brm .brm-wifipanel-dev { color: var(--muted); white-space: nowrap; }
+.brm .brm-wifipanel-people li.is-many .brm-wifipanel-dev { color: var(--accent-text); font-weight: 700; }
+.brm .brm-wifipanel-people li > .brm-btn { margin-left: auto; }
+.brm .brm-wifipanel-more { color: var(--muted); }
 
 .brm .brm-wifioffer {
   display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 12px;
@@ -1235,9 +1291,14 @@
 }
 
 /* ---- deciding on the Stage (R3 hint, R4 window, R5 re-ask) -------------- */
-/* The dock's Space hint is words, not a key cap: muted, no box. Build Room only. */
-.brm .brm-dockhint { flex: none; color: var(--muted); font-size: max(var(--floor, 12px), calc(var(--t-body, 16px) * .8)); font-weight: 600; background: none; border: 0; padding: 0; white-space: nowrap; }
-.brm .brm-dockhint b { color: var(--text); font-weight: 800; }
+/* The Stage dock is the shared Dock + HostActionBar (parity PLAN §2a D1): the
+   "Press Space to …" hint that came and went on hover is gone; the shared
+   SPACE cap is the key's cue. The status is one line, its words in the title,
+   with the build's link on a second line whose height is always kept, so
+   neither a count nor the link moves anything (§2a rule 1). */
+.brm .dock .status .brm-dockstat { display: flex; flex-direction: column; min-width: 0; }
+.brm .dock .status .brm-dockstat-t { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brm .dock .status .brm-dockstat-link { display: block; min-height: 1.35em; }
 .brm .brm-modal--sd { width: min(720px, 100%); display: grid; gap: 14px; max-height: calc(100vh - 32px); overflow: auto; }
 .brm .brm-sd-body { display: grid; gap: 14px; min-width: 0; }
 .brm .brm-sd-q { margin: 0; font-size: var(--brm-t-body); font-weight: 700; overflow-wrap: anywhere; }
@@ -1422,7 +1483,9 @@
 .brm .brm-sess-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--primary); }
 .brm .brm-chip--btn { cursor: pointer; font-family: var(--font-ui); color: inherit; }
 .brm .brm-chip--btn:hover, .brm .brm-chip--btn:focus-visible { border-color: var(--primary); }
-.brm .dock-more.brm-dock-lit { box-shadow: inset 0 0 0 2px var(--brm-alert-amber); }
+/* SESSION lit while someone asks to take a name: the shared dock's lit edge, in the alert amber. */
+.brm .dock-more.dock-more--lit { border-color: var(--rule); box-shadow: inset 0 0 0 2px var(--brm-alert-amber); }
+.brm .dock-more .dock-more-n { margin-left: 6px; }
 .brm .brm-btn--solid { background: var(--secondary); border-color: var(--secondary); color: var(--bg); font-weight: 700; }
 
 /* The request strip (S6a). */
@@ -1586,14 +1649,17 @@
 /* ---- THE HOST ALERT (docs/design/build-room-host-alert, owner 2026-10-10) ----
    A count on the Stage dock's HOST and on the Build / History header's Host.
    Amber (text and outline, never a fill that competes with the one orange)
-   while Claude waits on the host, grey otherwise. The list opens in place. */
+   while Claude waits on the host, grey otherwise. The header's list opens in
+   place; the Stage has none (D2: HOST goes home in one press). */
 .brm .brm-hostalert-wrap { position: relative; flex: none; display: inline-flex; }
 .brm .brm-hostalert .c { letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .brm .brm-hostalert--stage { gap: 0; letter-spacing: .12em; }
-.brm .brm-hostalert--stage .brm-hostalert-n { letter-spacing: 0; font-size: var(--t-meta); font-weight: 800; }
+/* HOST on the Stage (D2): home in one press; the count is a badge whose slot
+   is kept when empty, so the main button beside it never moves. */
+.brm .brm-hostalert--stage .brm-hostalert-n { letter-spacing: 0; font-size: var(--t-meta); font-weight: 800; display: inline-block; min-width: 2.2ch; margin-left: 8px; text-align: center; }
+.brm .brm-hostalert--stage .brm-hostalert-n[data-off] { visibility: hidden; }
 .brm .brm-hostalert--grey { color: var(--text); border-color: rgba(155, 168, 190, .55); background: var(--surface); }
 .brm .brm-hostalert--amber { color: var(--brm-alert-amber); border: 2px solid var(--brm-alert-amber); background: var(--brm-tint-amber); }
-.brm .brm-hostalert--stage.is-open { box-shadow: 0 0 0 4px rgba(124, 167, 230, .35); }
 .brm .brm-screen.brm-hostalert--amber { border: 0; box-shadow: inset 0 0 0 1px var(--brm-alert-amber); }
 .brm .brm-screen.brm-hostalert--grey { border: 0; box-shadow: inset 0 0 0 1px rgba(155, 168, 190, .55); }
 .brm .brm-screen.brm-hostalert.is-open { outline: 3px solid rgba(124, 167, 230, .45); outline-offset: 1px; }
@@ -1619,10 +1685,6 @@
 .brm .brm-halist-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--secondary); font-weight: 700; cursor: pointer; }
 .brm .brm-halist-btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
 .brm .brm-halist-push { margin-left: auto; color: var(--muted); font-weight: 600; }
-/* on the Stage: Room ladder, read from the back; opens above the dock */
-.brm .brm-halist--stage { right: 0; bottom: calc(100% + 12px); width: min(720px, calc(100vw - 32px)); }
-.brm .brm-halist--stage .brm-halist-line { min-height: 64px; padding: 0 24px; font-size: var(--L-body); }
-.brm .brm-halist--stage .brm-halist-ft { padding: 14px 24px; font-size: var(--L-meta); }
 /* under the header: laptop ladder; drops under the Host tab */
 .brm .brm-halist--header { top: calc(100% + 8px); left: 0; width: min(500px, calc(100vw - 32px)); }
 .brm .brm-halist--header .brm-halist-line { min-height: 44px; padding: 0 16px; font-size: var(--brm-t-head); }

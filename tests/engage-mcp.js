@@ -60,6 +60,7 @@ let stateInbox = [];
 let stateBrief;
 let stateOpening;
 let stateLan;
+let statePluginLatest;
 let stateYou;
 let statePoints;
 let postedIds = 0;
@@ -97,6 +98,7 @@ const server = http.createServer((req, res) => {
         ...(stateYou ? { you: stateYou } : {}),
         ...(statePoints ? { points: statePoints } : {}),
         ...(statePluginNote ? { pluginNote: statePluginNote } : {}),
+        ...(statePluginLatest ? { pluginLatest: statePluginLatest } : {}),
       });
     }
     if (req.method === 'POST' && p === 'asks') {
@@ -107,7 +109,8 @@ const server = http.createServer((req, res) => {
       return send(200, { ask: choiceAsk(askPolls >= 3 ? 'decided' : 'live'), inbox: [] });
     }
     if (req.method === 'POST' && p === 'images') {
-      return send(201, { image: { imageId: 'img1', contentType: 'image/png', bytes: 20, kind: rec.body.kind, askId: rec.body.askId, label: rec.body.label }, inbox: [] });
+      // The release gate (§2c): a caption saying HOLD comes back held, as the server does with the setting on.
+      return send(201, { image: { imageId: 'img1', contentType: 'image/png', bytes: 20, kind: rec.body.kind, askId: rec.body.askId, label: rec.body.label, ...(/HOLD/.test(rec.body.caption || '') ? { held: true } : {}) }, inbox: [] });
     }
     if (req.method === 'GET' && p === 'inbox?listening=1') {
       inboxPolls++;
@@ -123,7 +126,7 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && p === 'run/done') return send(200, { run: { current: rec.body.runItem }, inbox: [] });
     if (req.method === 'POST' && p === 'log') {
       return send(200, {
-        entry: { logId: 'l9', kind: rec.body.kind, text: rec.body.text },
+        entry: { logId: 'l9', kind: rec.body.kind, text: rec.body.text, ...(/HOLD/.test(rec.body.text || '') ? { roomHold: 'held' } : {}) },
         inbox: [{ id: 'd1', text: 'The room says the colours are too dark', from: 'host', askId: null, createdAt: 'now' }],
       });
     }
@@ -195,6 +198,8 @@ const hardStop = setTimeout(() => {
     // Owner, 2026-10-06: a question asked in the terminal stalled room 6717.
     assert.ok(/NEVER ask a question in this terminal/.test(r.result.instructions) && /ask_room_to_choose with the readings/.test(r.result.instructions));
     assert.ok(/call commit/.test(r.result.instructions), 'the instructions name the commit tool');
+    // Share demo S3: the file that names the demo and the mockups, and the role on each link.
+    assert.ok(/\.engage\/share\.json/.test(r.result.instructions) && /role "demo"/.test(r.result.instructions), 'the instructions name share.json and the link role');
   });
   await check('an unknown protocol version falls back to 2025-06-18', async () => {
     const r = await mcp.request('initialize', { protocolVersion: '1999-01-01' });
@@ -335,6 +340,33 @@ const hardStop = setTimeout(() => {
     assert.ok(!r.result.isError, textOf(r));
     assert.deepStrictEqual(requests[0].body, { kind: 'progress', text: 'Site is up', doing: 'Mocking up 3 graph options', done: 'Scaffolded the site' });
   });
+  await check('post_update marks its link demo or mockup (Share demo S3, 1.20.0); a role needs a link and is one of the two', async () => {
+    requests.length = 0;
+    const r = await mcp.request('tools/call', { name: 'post_update', arguments: { kind: 'showing', text: 'The playable demo', link: 'https://example.com/demo/', role: 'demo' } });
+    assert.ok(!r.result.isError, textOf(r));
+    assert.deepStrictEqual(requests[0].body, { kind: 'showing', text: 'The playable demo', link: 'https://example.com/demo/', role: 'demo' });
+    for (const [args, re] of [
+      [{ text: 'x', role: 'demo' }, /role.*needs a link/i],
+      [{ text: 'x', link: 'https://example.com/', role: 'hero' }, /"role" must be demo or mockup/],
+    ]) {
+      requests.length = 0;
+      const bad = await mcp.request('tools/call', { name: 'post_update', arguments: args });
+      assert.ok(bad.result.isError && re.test(textOf(bad)), JSON.stringify(args) + ' -> ' + textOf(bad));
+      assert.strictEqual(requests.length, 0, 'no API call');
+    }
+    const tools = (await mcp.request('tools/list', {})).result.tools;
+    const props = tools.find((t) => t.name === 'post_update').inputSchema.properties;
+    assert.deepStrictEqual(props.role.enum, ['demo', 'mockup']);
+  });
+  await check('a held post says it went to the host\'s queue, not the room (the release gate, 1.21.0)', async () => {
+    const held = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'HOLD the form is up' } });
+    assert.ok(/host's queue/.test(textOf(held)) && /once the host releases it/.test(textOf(held)) && !/Posted to the room's timeline/.test(textOf(held)), textOf(held));
+    const open = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'The form is up' } });
+    assert.ok(/Posted to the room's timeline/.test(textOf(open)), textOf(open));
+    const tools = (await mcp.request('tools/list', {})).result.tools;
+    assert.ok(/only after the host releases it/.test(tools.find((t) => t.name === 'post_update').description));
+    assert.ok(/once the ask opens/.test(tools.find((t) => t.name === 'share_image').description));
+  });
   await check('a bad doing or done is refused in plain words before any API call', async () => {
     for (const [args, re] of [
       [{ doing: 'Scaffolding' }, /4 to 7 words/],
@@ -400,6 +432,9 @@ const hardStop = setTimeout(() => {
     assert.ok(bad.result.isError && /not a PNG, JPEG or WebP/.test(bad.result.content[0].text));
     const missing = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'nope.png') } });
     assert.ok(missing.result.isError && /Take the screenshot first/.test(missing.result.content[0].text));
+    // The release gate (1.21.0): a held screenshot is on the host's queue, not yet the room's.
+    const held = await mcp.request('tools/call', { name: 'share_image', arguments: { path: pth.join(dir, 'a.png'), caption: 'HOLD progress' } });
+    assert.ok(/host's queue/.test(held.result.content[0].text) && /once the host releases it/.test(held.result.content[0].text), held.result.content[0].text);
   });
   await check('the four kinds read as four kinds, and the brief comes with them and lands in .engage/brief.md', async () => {
     stateInbox = [
@@ -444,8 +479,44 @@ const hardStop = setTimeout(() => {
     try {
       const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
       assert.ok(/SHARING ON WI-FI/.test(t) && /laptops, tablets and phones/.test(t) && /never --host 0\.0\.0\.0/.test(t), t);
+      // Share demo S3: Claude names the demo and the mockups, in the file and on each link.
+      assert.ok(/\.engage\/share\.json/.test(t) && /role "demo"/.test(t) && /role "mockup"/.test(t), t);
     } finally {
       stateLan = undefined;
+    }
+  });
+  await check('room_status tells Claude about the remote share only while the host wants it: a built copy, no server-sent events', async () => {
+    stateLan = { status: 'live', map: [], open: 2, remote: { wanted: false, status: 'off', error: '', people: [] } };
+    try {
+      const off = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(!/SHARING REMOTELY/.test(off), off);
+      stateLan = { status: 'live', map: [], open: 2, remote: { wanted: true, status: 'starting', error: '', people: [] } };
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/SHARING REMOTELY/.test(t) && /BUILT copy/.test(t) && /never server-sent events/.test(t) && /200 requests/.test(t), t);
+    } finally {
+      stateLan = undefined;
+    }
+  });
+  await check('both standing instruction blocks say the build is always a web page, and what remote sharing asks', async () => {
+    // Owner, 16 Oct: "the build is always a web page, even a document; Claude is told so at the start".
+    const src = fs.readFileSync(SCRIPT, 'utf8');
+    const line = /^- The build is always something people open as a web page, even when the room is making a document[^\n]*SHARING REMOTELY[^\n]*built copy[^\n]*server-sent events/gm;
+    assert.strictEqual((src.match(line) || []).length, 2);
+  });
+  await check('room_status says which plugin runs and whether it is the latest (owner, 18 Oct)', async () => {
+    const VERSION = (fs.readFileSync(SCRIPT, 'utf8').match(/const VERSION = '([^']+)';/) || [])[1];
+    const line = async () => textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} })).split('\n')[1];
+    try {
+      statePluginLatest = undefined;
+      assert.strictEqual(await line(), `Engage plugin ${VERSION}.`);
+      statePluginLatest = VERSION;
+      assert.strictEqual(await line(), `Engage plugin ${VERSION}: the latest.`);
+      statePluginLatest = '99.0.0';
+      assert.match(await line(), new RegExp(`^Engage plugin ${VERSION.replace(/\./g, '\\.')} is older than the latest, 99\\.0\\.0\\. Tell the host`));
+      statePluginLatest = '0.0.1';
+      assert.strictEqual(await line(), `Engage plugin ${VERSION} (this Engage knows 0.0.1 as its latest).`);
+    } finally {
+      statePluginLatest = undefined;
     }
   });
   await check('room_status with kickoff tells Engage (Connect step 4); without it, it does not', async () => {

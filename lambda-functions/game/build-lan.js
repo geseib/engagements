@@ -8,7 +8,18 @@
  * A participant is given a Wi-Fi link only while the host wants sharing on
  * AND the plugin said "live" in the last 30 seconds. Otherwise local links are
  * dropped from their view exactly as before this existed.
+ *
+ * REMOTE SHARE (owner, 2026-10-16; docs/superpowers/specs/
+ * 2026-10-16-build-room-remote-share-design.md). One more switch on the same
+ * row: one Cloudflare quick tunnel per session, forwarding to the newest thing
+ * Claude showed, behind a key per PERSON. While it is live everyone's Open the
+ * demo goes that way. The shared view carries only its status, when it went
+ * live and the newest path: never the tunnel's address, never a key. Each
+ * person gets their own link from their own phone route; keys are stored and
+ * sent to the laptop as SHA-256 hashes only.
  */
+const crypto = require('crypto');
+
 const SK_LAN = 'BUILD#LAN';
 const REPORT_FRESH_MS = 30 * 1000;
 const QUIET_AFTER_MS = 2 * 60 * 1000;
@@ -17,6 +28,13 @@ const STATUSES = Object.freeze(['off', 'live', 'failed']);
 const KEY_RE = /^[A-Za-z0-9_-]{20,64}$/;
 /** One plugin process (1.18.0+): random at its start, so two copies on one room differ. */
 const REPORTER_RE = /^[A-Za-z0-9_-]{12,64}$/;
+/** SHA-256, base64url, no padding. */
+const KEY_HASH_RE = /^[A-Za-z0-9_-]{43}$/;
+/** The only remote address there is: a quick tunnel's origin. */
+const TUNNEL_RE = /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/;
+const MAX_DEVICES = 50;
+const MAX_PEOPLE = 200;
+const OLD_PLUGIN = "This laptop's Engage plugin is too old to share remotely. Update it from Connect.";
 
 const hostOf = (url) => { try { return new URL(String(url)); } catch (e) { return null; } };
 
@@ -66,15 +84,101 @@ function shownUrls(room) {
   return urls;
 }
 
+/**
+ * WHAT THE PROJECT DECLARES (Share demo S3, plugin 1.20.0, owner 2026-10-17).
+ * `.engage/share.json` in the project names the demo page, the mockups page and
+ * a short label for this session; the plugin reports it each round and it wins
+ * over any guess. Only a loopback http address that is certainly this laptop.
+ */
+const DECLARED_URL_MAX = 500;
+const DECLARED_LABEL_MAX = 60;
+function declaredUrl(v) {
+  if (typeof v !== 'string' || !v || v.length > DECLARED_URL_MAX) return '';
+  const u = hostOf(v);
+  if (!u || u.protocol !== 'http:') return '';
+  const h = u.hostname.toLowerCase();
+  const sure = h === 'localhost' || h === '[::1]' || (/^127\./.test(h) && isValidIpv4(h));
+  return sure ? u.toString() : '';
+}
+function normalizeDeclared(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return {};
+  const out = {};
+  const demo = declaredUrl(d.demo);
+  const mockups = declaredUrl(d.mockups);
+  // eslint-disable-next-line no-control-regex
+  const label = typeof d.label === 'string' ? d.label.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, DECLARED_LABEL_MAX).trim() : '';
+  if (demo) out.demo = demo;
+  if (mockups) out.mockups = mockups;
+  if (label) out.label = label;
+  return out;
+}
+const declaredOf = (room) => {
+  const d = room && room.lan && room.lan.Declared;
+  return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+};
+const originOf = (url) => (isLoopbackUrl(url) ? hostOf(url).origin : '');
+
+/**
+ * THE DEMO (S3): the declared demo page, else the newest link Claude posted
+ * with role "demo", else the newest link it posted (before 1.20.0, the only rule).
+ * @returns {string[]} candidates, best first
+ */
+function demoCandidates(room) {
+  const logs = ((room && room.logs) || []).filter((l) => l.By === 'agent' && l.Link);
+  const out = [];
+  const d = declaredOf(room).demo;
+  if (d) out.push(d);
+  for (let i = logs.length - 1; i >= 0; i -= 1) if (logs[i].Role === 'demo') out.push(logs[i].Link);
+  for (let i = logs.length - 1; i >= 0; i -= 1) out.push(logs[i].Link);
+  return out;
+}
+function lanDemoUrl(room) {
+  return demoCandidates(room)[0] || '';
+}
+
 function lanTargets(room) {
-  const urls = shownUrls(room);
+  const d = declaredOf(room);
   const kept = [];
-  for (let i = urls.length - 1; i >= 0 && kept.length < MAX_TARGETS; i -= 1) {
-    if (!isLoopbackUrl(urls[i])) continue;
-    const origin = hostOf(urls[i]).origin;
-    if (!kept.includes(origin)) kept.push(origin);
+  for (const url of [d.demo, d.mockups]) {
+    const origin = url ? originOf(url) : '';
+    if (origin && !kept.includes(origin)) kept.push(origin);
   }
-  return kept.reverse();
+  const first = kept.length;
+  const urls = shownUrls(room);
+  const rest = [];
+  for (let i = urls.length - 1; i >= 0 && first + rest.length < MAX_TARGETS; i -= 1) {
+    const origin = originOf(urls[i]);
+    if (origin && !kept.includes(origin) && !rest.includes(origin)) rest.push(origin);
+  }
+  return [...kept, ...rest.reverse()];
+}
+
+/**
+ * WHICH SERVER IS WHICH (S3 c): origin -> { role, ask }. "demo" is the server
+ * of the declared demo, else of the newest link Claude marked demo; never a
+ * guess. "mockups" is the declared mockups server, any server Claude marked
+ * mockup, and any serving a Choose ask's options (`ask`: the newest such ask).
+ */
+function lanRoles(room) {
+  const r = room || {};
+  const d = declaredOf(r);
+  const logs = (r.logs || []).filter((l) => l.By === 'agent' && l.Link);
+  let demo = d.demo ? originOf(d.demo) : '';
+  for (let i = logs.length - 1; i >= 0 && !demo; i -= 1) if (logs[i].Role === 'demo') demo = originOf(logs[i].Link);
+  const out = {};
+  if (demo) out[demo] = { role: 'demo', ask: null };
+  const mock = (origin, ask = null) => {
+    if (!origin || origin === demo) return;
+    const had = out[origin] || { role: 'mockups', ask: null };
+    out[origin] = { role: 'mockups', ask: ask !== null && (had.ask === null || ask > had.ask) ? ask : had.ask };
+  };
+  if (d.mockups) mock(originOf(d.mockups));
+  for (const l of logs) if (l.Role === 'mockup') mock(originOf(l.Link));
+  for (const a of r.asks || []) {
+    const n = Number(a.AskId);
+    for (const o of a.Options || []) if (o && o.url) mock(originOf(o.url), Number.isInteger(n) && n > 0 ? n : null);
+  }
+  return out;
 }
 
 /**
@@ -99,7 +203,8 @@ function scopeOf(url) {
 function lanScopes(room) {
   const targets = new Set(lanTargets(room));
   const by = {};
-  for (const url of shownUrls(room)) {
+  const d = declaredOf(room);
+  for (const url of [...shownUrls(room), d.demo, d.mockups].filter(Boolean)) {
     if (!isLoopbackUrl(url)) continue;
     const origin = hostOf(url).origin;
     if (!targets.has(origin)) continue;
@@ -115,8 +220,41 @@ function lanScopes(room) {
   return out;
 }
 
+/** The remote block of a report. A plugin before 1.19.0 sends none: it cannot share remotely. */
+function normalizeRemote(remote) {
+  if (remote === undefined || remote === null) {
+    return { value: { RemoteSupported: false, RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {} } };
+  }
+  const m = remote || {};
+  const status = String(m.status || '');
+  if (!STATUSES.includes(status)) return { error: `remote.status must be one of ${STATUSES.join(', ')}` };
+  const address = String(m.address || '');
+  if (address && !TUNNEL_RE.test(address)) return { error: 'remote.address must be a quick tunnel origin' };
+  if (status === 'live' && !address) return { error: 'A live remote report needs its address' };
+  const target = String(m.target || '');
+  if (target && !isLoopbackUrl(target)) return { error: 'remote.target must be a loopback address' };
+  const devices = {};
+  const entries = Object.entries(m.devices && typeof m.devices === 'object' ? m.devices : {});
+  if (entries.length > MAX_PEOPLE) return { error: 'remote.devices lists too many people' };
+  for (const [name, n] of entries) {
+    if (!Number.isInteger(n) || n < 0 || n > MAX_DEVICES) return { error: 'remote.devices must be counts' };
+    const clean = String(name).replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (clean && n > 0) devices[clean] = n;
+  }
+  return { value: {
+    RemoteSupported: true,
+    RemoteStatus: status,
+    RemoteAddress: status === 'off' ? '' : address,
+    RemoteTarget: target ? hostOf(target).origin : '',
+    RemoteError: String(m.error || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+    RemoteDevices: status === 'live' ? devices : {},
+  } };
+}
+
 function normalizeReport(body) {
   const b = body || {};
+  const remote = normalizeRemote(b.remote);
+  if (remote.error) return { error: remote.error };
   const status = String(b.status || '');
   if (!STATUSES.includes(status)) return { error: `status must be one of ${STATUSES.join(', ')}` };
   const key = String(b.key || '');
@@ -130,7 +268,9 @@ function normalizeReport(body) {
   const error = String(b.error || '').replace(/\s+/g, ' ').trim().slice(0, 200);
   const validKey = status === 'off' ? '' : (KEY_RE.test(key) ? key : '');
   const reporter = REPORTER_RE.test(String(b.reporter || '')) ? String(b.reporter) : '';
-  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error, Reporter: reporter } };
+  // 1.20.0+: what .engage/share.json declares. An older plugin sends none: nothing declared.
+  const declared = normalizeDeclared(b.declared);
+  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error, Reporter: reporter, Declared: declared, ...remote.value } };
 }
 
 /**
@@ -160,6 +300,80 @@ function lanStatus(row, now) {
   return 'starting';
 }
 
+/** 'off' | 'starting' | 'live' | 'failed', on the freshness rule lanStatus uses. */
+function remoteStatus(row, now) {
+  if (!row || !row.Wanted || !row.RemoteWanted) return 'off';
+  const fresh = row.ReportedAt && Date.parse(now) - Date.parse(row.ReportedAt) < REPORT_FRESH_MS;
+  if (!fresh) return 'starting';
+  if (row.RemoteSupported === false) return 'failed';
+  if (row.RemoteStatus === 'failed') return 'failed';
+  if (row.RemoteStatus === 'live' && TUNNEL_RE.test(String(row.RemoteAddress || ''))) return 'live';
+  return 'starting';
+}
+
+/**
+ * When this tunnel went live. A new address is a new tunnel, so a new time:
+ * that is how a phone learns its saved link is stale.
+ */
+function remoteLiveSince(before, value, now) {
+  if (!value || value.RemoteStatus !== 'live') return null;
+  const b = before || {};
+  if (b.RemoteStatus === 'live' && b.RemoteLiveSince && b.RemoteAddress === value.RemoteAddress) return b.RemoteLiveSince;
+  return now;
+}
+
+function hashKey(key) {
+  return crypto.createHash('sha256').update(String(key)).digest('base64url');
+}
+
+/** 128 bits; the raw key goes to its phone and nowhere else. */
+function mintRemoteKey() {
+  const key = crypto.randomBytes(16).toString('base64url');
+  return { key, hash: hashKey(key) };
+}
+
+/**
+ * The keys that open the remote gateway now. A key counts only while its
+ * person is in the session, not removed, and on the device it was minted for:
+ * a handover gives the name a new ClientId, which ends the old device's key.
+ */
+function liveRemoteKeys(rkeys, players) {
+  const byName = new Map((players || []).map((p) => [p.PlayerName || p.playerName, p]));
+  return (rkeys || []).filter((k) => {
+    const p = byName.get(k.PlayerName);
+    if (!p || p.Removed || p.RemovedAt) return false;
+    if (p.ClientId && p.ClientId !== k.ClientId) return false;
+    return KEY_HASH_RE.test(String(k.Hash || ''));
+  }).map((k) => ({ hash: k.Hash, player: k.PlayerName }));
+}
+
+/**
+ * The one local address the remote tunnel forwards to: the demo (Share demo
+ * S3: declared, then marked, then the newest link), else the newest shared
+ * target. Only ever one of lanTargets, so remote reaches a subset of Wi-Fi.
+ */
+function remoteTarget(room) {
+  const targets = lanTargets(room);
+  const demo = hostOf(lanDemoUrl(room));
+  if (demo && targets.includes(demo.origin)) return demo.origin;
+  return targets[targets.length - 1] || '';
+}
+
+/** Path, search and hash of the demo's own page: what Open the demo opens. */
+function remotePath(room) {
+  const u = hostOf(lanDemoUrl(room));
+  if (u && isLoopbackUrl(u.toString()) && u.origin === remoteTarget(room)) return `${u.pathname}${u.search}${u.hash}` || '/';
+  return '/';
+}
+
+/** A person's link: the tunnel's origin, a path, their key. '' unless remote is live. */
+function remoteLink(row, pathAndMore, key, now) {
+  if (remoteStatus(row, now) !== 'live') return '';
+  const u = new URL(pathAndMore || '/', row.RemoteAddress);
+  u.searchParams.set('k', key);
+  return u.toString();
+}
+
 const withKey = (lanOrigin, rest, key) => {
   const u = new URL(rest || '/', lanOrigin);
   u.searchParams.set('k', key);
@@ -178,14 +392,22 @@ function lanTranslator(row, now) {
 }
 
 function lanPublicView(room, now) {
+  const wifi = wifiPublicView(room, now);
+  const remote = remoteStatus(room && room.lan, now);
+  if (remote === 'off') return wifi;
+  if (remote === 'live') {
+    // Everyone takes the remote route (owner, 2026-10-16): no Wi-Fi link.
+    return { remote, remoteSince: room.lan.RemoteLiveSince || null, remotePath: remotePath(room) };
+  }
+  return { ...(wifi || {}), remote };
+}
+
+function wifiPublicView(room, now) {
   const t = lanTranslator(room && room.lan, now);
-  const logs = (room && room.logs) || [];
-  for (let i = logs.length - 1; i >= 0; i -= 1) {
-    const l = logs[i];
-    if (l.By === 'agent' && l.Link) {
-      const open = t(l.Link);
-      if (open) return { open };
-    }
+  // The demo first (S3): declared, then marked, then the newest link; the first one shared wins.
+  for (const url of demoCandidates(room)) {
+    const open = t(url);
+    if (open) return { open };
   }
   const first = room && room.lan && (room.lan.Map || [])[0];
   const open = first ? t(first.local) : '';
@@ -200,6 +422,8 @@ function lanPublicView(room, now) {
 function lanHostView(row, now, { withKey: showKey = false, room = null } = {}) {
   const r = row || {};
   const status = lanStatus(r, now);
+  // Which server is which (S3 c), so the host can tell the demo from the mockups.
+  const roles = room ? lanRoles({ ...room, lan: r }) : {};
   return {
     // THE DEMO ITSELF (dev 1215, owner 2026-10-17): the page Claude showed, with its
     // path, the address the phones open (lanPublicView). The map's links are each
@@ -209,17 +433,35 @@ function lanHostView(row, now, { withKey: showKey = false, room = null } = {}) {
     status,
     map: status === 'off' ? [] : (r.Map || []).map((m) => ({
       local: m.local, lan: m.lan, ...(showKey && r.Key ? { link: withKey(m.lan, '/', r.Key) } : {}),
+      role: (roles[m.local] && roles[m.local].role) || null,
+      ask: (roles[m.local] && roles[m.local].ask) || null,
     })),
+    // The session's own name on this laptop, from .engage/share.json (S3 c).
+    label: (r.Declared && typeof r.Declared.label === 'string' && r.Declared.label) || '',
     open: status === 'live' ? Number(r.Open) || 0 : 0,
     error: status === 'failed' ? r.Error || '' : '',
     liveSince: status === 'live' ? r.LiveSince || null : null,
     offerDismissed: Boolean(r.OfferDismissedAt),
     reportedAt: r.ReportedAt || null,
     wantedAt: r.WantedAt || null,
+    remote: remoteHostView(r, now),
   };
+}
+
+/** Never the tunnel's address: the host has nothing to copy (spec §3). */
+function remoteHostView(r, now) {
+  const status = remoteStatus(r, now);
+  const people = status === 'live'
+    ? Object.entries(r.RemoteDevices || {}).map(([name, devices]) => ({ name, devices }))
+      .sort((a, b) => b.devices - a.devices || a.name.localeCompare(b.name))
+    : [];
+  let error = '';
+  if (status === 'failed') error = r.RemoteSupported === false ? OLD_PLUGIN : (r.RemoteError || '');
+  return { wanted: Boolean(r.Wanted && r.RemoteWanted), status, error, people };
 }
 
 module.exports = {
   SK_LAN, REPORT_FRESH_MS, QUIET_AFTER_MS, MAX_TARGETS,
-  isLoopbackUrl, isPrivateLanUrl, lanTargets, scopeOf, lanScopes, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
+  isLoopbackUrl, isPrivateLanUrl, lanTargets, lanRoles, lanDemoUrl, normalizeDeclared, scopeOf, lanScopes, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
+  KEY_HASH_RE, TUNNEL_RE, remoteStatus, remoteLiveSince, hashKey, mintRemoteKey, liveRemoteKeys, remotePath, remoteTarget, remoteLink,
 };

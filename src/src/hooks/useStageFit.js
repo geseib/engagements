@@ -228,6 +228,14 @@ export default function useStageFit(stageRef, deps = []) {
     // One more after paint: web fonts and images land after the first pass
     // and change every measurement taken before them.
     const raf = requestAnimationFrame(run);
+    // And once the web fonts are in: one frame is not always enough (measured
+    // 17 Oct 2026, the Build Room's window at 1366x768 TV: a fit taken on the
+    // fallback font left Claude's status line 32px under the dock). The wall's
+    // canvas (present/PresentStage.jsx) waits on the same promise.
+    let live = true;
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => { if (live) run(); }).catch(() => {});
+    }
     window.addEventListener('resize', run);
     // The dock is an auto grid row: when it takes a second line (Dock.jsx
     // useCrowded, which runs after this) the stage loses height and the fit
@@ -244,6 +252,7 @@ export default function useStageFit(stageRef, deps = []) {
       : null;
     if (ro) ro.observe(dockEl);
     return () => {
+      live = false;
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', run);
       if (ro) ro.disconnect();

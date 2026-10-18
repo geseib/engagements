@@ -15,8 +15,30 @@ function isLoopback(url) {
   try { return LOOPBACK.test(new URL(String(url)).hostname); } catch (e) { return false; }
 }
 
+/**
+ * REMOTE SHARE (owner 2026-10-16): 'off' | 'starting' | 'live' | 'failed', from
+ * the host view's `lan.remote` (build-lan.js remoteHostView). Remote needs the
+ * Wi-Fi share switched on; Stop sharing turns both off.
+ */
+export function remoteState(lan) {
+  const r = lan && lan.wanted && lan.remote;
+  if (!r || !r.wanted) return 'off';
+  return ['starting', 'live', 'failed'].includes(r.status) ? r.status : 'starting';
+}
+
+/** Who opened it remotely, most devices first (the server sorts; kept as sent). */
+export function remotePeople(lan) {
+  return remoteState(lan) === 'live' ? ((lan.remote && lan.remote.people) || []) : [];
+}
+
 export function wifiState(lan, now) {
   const l = lan || {};
+  // Remote live with the Wi-Fi share not (a wired laptop has no Wi-Fi address):
+  // the demo is shared all the same, and the count is the remote one.
+  if (l.wanted && remoteState(l) === 'live' && l.status !== 'live') {
+    const people = remotePeople(l).length;
+    return { state: 'on', label: W.shareOn(people), open: people };
+  }
   if (!l.wanted || l.status === 'off' || !l.status) return { state: 'off', label: W.shareDemo, open: 0 };
   if (l.status === 'failed') return { state: 'failed', label: W.shareFailed, open: 0 };
   if (l.status !== 'live') {
@@ -27,7 +49,7 @@ export function wifiState(lan, now) {
     }
     return { state: 'starting', label: W.shareStarting, open: 0 };
   }
-  const open = Number(l.open) || 0;
+  const open = (Number(l.open) || 0) + remotePeople(l).length;
   const since = l.liveSince ? new Date(now).getTime() - Date.parse(l.liveSince) : 0;
   if (open === 0 && since >= QUIET_AFTER_MS) return { state: 'quiet', label: W.shareQuiet, open: 0 };
   return { state: 'on', label: W.shareOn(open), open };

@@ -9,6 +9,75 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 17 Oct 2026 (fourth push): Claude's posts wait for the host, and room screens show only what the room needs
+
+**Test:** merge of dev `b5a464e0` (and the notes and help commit after it). **Review tag:** `reviewable/2026-10-17-…` (named in the push). Plan: `docs/design/parity/PLAN.md` §2c and §2d.
+
+### New
+
+- **Claude's posts wait in the host's queue** (owner: "have things get to the host queue to release to the room"). Claude's updates, milestones, showings, git checkpoints, its answers to the host's own questions, and its screenshots now arrive in **Waiting for you** as *Claude wants to show the room*, with **Release to the room**, **Keep to myself**, and **Release all** when several wait. Nothing reaches the phones or the room's screens until it is released; a released post takes its place at the time it happened. The Host alert counts them; the host's Timeline marks what the room has not been shown. Mockups appear when their ask opens. *Claude proposed a question* lines never reach the room. Claude's live status (the *Claude is* line, its steps) is never held. The switch: Session › Settings › Claude › **Check Claude's posts before the room sees them** (on by default). Claude learns of it with **plugin 1.21.0**.
+- **Room screens show only what the room needs, large** (owner: "the default option needs to share only the most relevant info to the room… anything on the screen worth having needs to be large type and readable… more verbose on Zoom"). One rule (`src/src/config/roomContent.js`) decides every moment for every room screen size, on one screen and on the room's window alike:
+  - **Call & Answer, a question or lesson up:** on Room, TV and Table the **task leads** at the screen's largest readable size (Room: 40 → 60 px on a 1080 canvas; TV: 40 → 80), the title a small label above it, the category gone; the lesson stays only when the task asks about it. **Call** (a screen share) adds the title as a heading, the category and the lesson. Voting leads with "your answers are on your phone"; results lead with the ideas.
+  - **Build Room:** the ask's prompt and options lead; a long ask **pages** its options (Room 3 at a time, TV 2, Call 3, Table 4) instead of being cut; details and the room's reasons show only on Call. **Claude's status line** is on Stage, Build and History on every size, after an open ask, never dropped.
+  - Measured in Chromium: 192 renders at four sizes × four profiles; nothing scrolls; six long options were cut in 28 of 32 renders before and in none after. Before/after pictures: `docs/design/room-content/`.
+
+### Fixed
+
+- **The laptop's codes card stayed up when an ask opened** while the room's window took it down; it now follows the server.
+- **The stage's fit was taken before the web fonts loaded**, which could leave text 32 px over its box unmarked; it now refits when they arrive.
+- Phones no longer received *Claude proposed a question* lines or mockups for asks still being drafted (the two leaks the previous notes listed).
+
+### What to look at
+
+1. **Update the plugin** from Connect and restart Claude Code; Session › Claude says **1.21.0**.
+2. **The queue.** Ask Claude to post progress and a screenshot. Both wait in **Waiting for you**; a phone and the room's window show nothing new. **Release to the room** one: it appears on the phone's History at the time Claude posted it. **Keep to myself** the other: it never appears. Claude's *Claude is …* line stays live on the Stage throughout.
+3. **The switch.** Turn off *Check Claude's posts before the room sees them*: the next post goes straight to the room.
+4. **A Call & Answer question on Room.** Start a round on the Room size: the task is the big text, the title a small label above it, no category. Switch to **Call**: the title becomes a heading and the lesson shows. Do the same on the room's window (two screens).
+5. **A long Build Room ask.** Open a Choose ask with six long options on Room at 1280×720: *Options 1–3 of 6* with ↑ ↓ on the laptop's Stage; the room's window shows the first three and *and 3 more options on your phone*.
+
+### Known gaps
+
+- The room's window cannot page a long Build Room ask (no server fact carries the page yet); it shows the first page and how many more.
+- The Call & Answer one-screen stage was not measured in a browser (it needs a signed-in host); it reads the same rule as the room's window, which was.
+- Builder screenshots still go straight to the crew board, which the host controls as before.
+- The two-screen laptop console for Build Room still waits for the owner's review of its mockup.
+- Remote share (people off the Wi-Fi) is another session's work, merged here at plugin 1.22.0 with its switch off by default; its own notes and steps come from that work.
+
+## 17 Oct 2026 (third push): Build Room's History marks, a share that opens only the demo, the room's window, and a dock that holds still
+
+**Test:** merge of dev `ad049d6e` (and the notes, help and README commit after it). **Review tag:** `reviewable/2026-10-17-…` (named in the push). Plan: `docs/design/parity/PLAN.md` (§2.8, §2a, §2b, §2.9, §2.9a).
+
+### New
+
+- **History says what the room gave and what reached Claude.** Every idea from the room that was used, and every ask the room saw, decided or not, on the host's History and on every phone's History tab. Each carries one mark: *chosen by the room* or *not chosen*, *sent to Claude as written*, *reworded by the host*, *for Claude, later*, *sent later, in other words* (a decision kept back and then combined), *with the room*, or *closed, nothing sent to Claude*. No names anywhere; a phone marks its own ideas as *yours*. The server now records, at the moment of sending, which idea or ask each thing came from and whether the host changed the words. *Made so far* counts used ideas by the same rule.
+- **The room's window for Build Room.** Session › Settings › **Screens** › **Room's window** opens Stage, Build or History in its own window (on the second display in Chrome). It needs no sign-in, carries no host data and never shows a name; it follows the screen the host picks (2, 3, 4, P, the header tabs) and the codes card, and reports whether it is open and full screen. **New link** (press twice) cuts off every open window. The full two-screen laptop console waits for the owner's review of its mockup (`docs/design/build-room-console/index.html`).
+- **Plugin 1.20.0: each shared server says what it is.** The share panel names servers *Demo*, *Mockups* (or *Mockups · Ask 3*) instead of App 1 and App 2. A project file `.engage/share.json` (`demo`, `mockups`, `label`) names them and wins over any guess; Claude can mark a link it posts as the demo or a mockup. Each session takes its Wi-Fi ports from a block set by its code (`ENGAGE_LAN_PORT` still overrides), every gateway response carries `X-Engage-Session`, the gateway's own pages name the session, and the plugin writes `.engage/share-status.json` listing what is shared.
+- **Two design documents for the owner:** the Build Room console mockup (`docs/design/build-room-console/`) and remote share, security first (`docs/design/build-room-remote-share/DESIGN.md`). Nothing from either is built.
+
+### Fixed
+
+- **Share demo opened a folder of mockups, not the playable demo** (dev game 1215). The host's Open the build, QR and codes card went to each server's root; they now open the page Claude showed, as the phones always did.
+- **The share let the room browse a whole folder.** Plugin 1.19.0 opens a page only inside the folders of the pages Claude linked (a page may still load its own files and API), never shows a folder listing (compressed ones too), and Claude is told to serve only the demo's and the mockups' own folders.
+- **The Stage's bottom row moved under the pointer.** The *Press Space to …* hint appeared on hover and pushed Host and Session sideways; buttons came and went between moments. The Stage now uses the same dock and action bar as Call & Answer: fixed slots, Host and Session last, nothing changes on hover, and an early move (Show results while people are still answering, Next before Claude has finished) asks for a second press in place instead of a dialog.
+- **The way back from the Stage was hidden.** With a count, Host opened a list instead of going home; it now goes to the Host screen in one press and keeps its count as a badge. The header's list on Build and History stays.
+
+### What to look at
+
+1. **Update the dev/test plugin** from the Build Room's **Connect** panel and restart Claude Code; Session › Claude should say **1.20.0** with no out-of-date notice.
+2. **Share demo.** Have Claude show a demo served from a folder that also holds mockups. **Open the build** and the QR open the demo page itself. Remove the page name from the Wi-Fi address: it says *Not part of the shared build*, never a file list. The share panel names the servers *Demo* and *Mockups*. Write `.engage/share.json` with a `demo` link: Open the build follows it within a few seconds.
+3. **History.** Send one idea to Claude, put two ideas to a vote, change the words of the winner before sending, and leave one ask open. On History (host) and a phone's History tab: the sent idea reads *sent to Claude as written*, the vote's two ideas *chosen by the room* and *not chosen*, the decision ends *reworded by the host*, the open ask reads *with the room*, and no name appears. The phone that sent an idea sees *yours* beside it.
+4. **The room's window.** Session › Settings › Screens › **Room's window**: on a second display in Chrome it lands there; click once for full screen; the status says *on, full screen*. Press 2, 3, 4: the window follows. Reload it: same screen. Open it on another computer with the same link: both follow. **New link** twice: the old windows say their link has changed.
+5. **The Stage dock.** Move between moments and hover the dock: nothing moves. At 3 of 4 answered, **Show results** asks for a second press. With something waiting, **← Host** goes home in one press.
+
+### Known gaps
+
+- The two-screen laptop console (B8) is not built: it waits for the owner's review of the mockup and its five questions. Until then the laptop on two screens is the same Host page.
+- On the Stage and the room's window, a long ask with six long options is still cut at 1280×720 (marked, not paged).
+- The window follows the codes card the server clears when an ask opens; the laptop's own codes card does not yet.
+- The dock's stillness is held by tests, not yet measured in a browser on the signed-in page.
+- Phones still receive two things the room's window now hides: a *Claude proposed a question* timeline entry for an ask the room has not seen, and mockups for asks still being drafted.
+- Remote share (people off this Wi-Fi) is designed, not built.
+
 ## 17 Oct 2026 (second push): review #35, the verdict counts and four end-of-session fixes
 
 **Test:** merge of dev `00cc0aee` (and the notes and help commit after it). **Review tag:** `reviewable/2026-10-17-…` (named in the push).

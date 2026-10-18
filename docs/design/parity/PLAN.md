@@ -1,7 +1,21 @@
 # Parity: bringing Trivia, Poll, Survey and Build Room up to the host standards
 
 Written 16 Oct 2026 on `working/parity-plan`, branched from `working/build-room-host-redesign`
-at `3f07c0e4`. **A plan, not code.** Nothing here is built.
+at `3f07c0e4`.
+
+**Status, 17 Oct 2026.** On test at `50c2fe45` (dev `448d260a`), with release notes:
+H1–H5 (History marks), the Share demo fixes (host link, plugin 1.19.0 scopes, 1.20.0
+labels and per-session ports: §2b S1–S3), B1–B7 (the room's window and its server), D1–D2
+(the still dock on C&A's shared parts). The owner ruled on every open question through Q19.
+**Waiting on the owner:** the console mockup and its five questions
+(`docs/design/build-room-console/`, gates B8); (remote share is being built by another session from the design the owner approved on
+16 Oct, `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`; this plan's
+`DESIGN.md` is superseded); three small rulings (the label on
+the share's locked page, a cloned repo's `share.json`, a player's own "why" on the wall).
+**Ready without a ruling:** the two phone leaks the wall work found (an unseen ask named in
+the timeline, mockups of draft asks), paging long asks (B9m), the laptop's codes card
+following the server, D3 on the signed-in page, and the demo QR and Copy carrying a join
+link instead of the share key. **Not started:** B8–B10, Trivia, Poll, Survey (§4).
 
 Inputs: `docs/design/host-standards/README.md` (the standards, and the table this plan
 corrected), `docs/design/two-surface/PLAN.md`, `docs/superpowers/specs/2026-10-15-host-console-design.md`.
@@ -285,6 +299,7 @@ place changes, the table says where it goes; nothing is dropped to fit the share
 | Settings: codes, List names on the room meter, Claude, Crew, Back to the opening, Wrap up, Report, End session | `BuildSessionPanel.jsx:419-489` | unchanged, plus Screens first | the same panel from the Session rail section |
 | History (filters, the ask window, the mockup viewer), the Build screen (latest shot, open the build) | Build / History screens | unchanged | on the wall (read-only); the laptop opens the same views privately from the rail |
 | The report, wrap-up, end | Session panel, wrapped bar | unchanged | Session section; the footer's ended moment |
+| Releasing Claude's posts (§2c): Release to the room, Keep to myself, Release all, the "Check Claude's posts" switch | Host screen's queue (`BuildHeldPosts`), Session › Settings › Claude | unchanged | Rail section "Waiting for you"; the same Session panel |
 
 **How it is held.** A list, `buildroom/capabilities.js`, names every row above with an id.
 Each entry point carries `data-capability="<id>"`. A test renders the page on one screen
@@ -372,21 +387,87 @@ standards §10. **No task touches `template-clean.yaml`; if one seems to, stop a
 
 | # | Task | Files | Tests (write first) |
 |---|---|---|---|
-| B1 | Wall key: minted lazily on `BUILD#STATE` (`WallKey`, 32 random bytes, base64url), returned only on the host read; `rotate` action on `build/wall` | `build-store.js`, `build-room.js` | `tests/build-wall-key.js`: host read carries it; public and agent reads never do; rotate retires the old key |
-| B2 | `wallView` + `askView(…, 'wall')` + the two `build-play/wall` routes ahead of the seat check | `build-store.js`, `build-room.js` | `tests/build-wall-read.js`: no key → 403, wrong key → 403, non-build → 404; a fixture with named players, voters, why names, notes, `claudeNote`, `briefDraft`, `brief.later`, idea authors, LAN key: **none of those strings** appears in `JSON.stringify(body)`; names appear only with `listNames` on; an image id not in `wallView` → 404; no `IdSecret`, no `@` |
-| B3 | `WallScreen/WallCodes/WallProfile/WallRev` + `POST build/wall` + server clears (§2.3) | `build-room.js`, `build-store.js` | `tests/build-wall-screen.js`: host may write, agent key and player may not (404/403); enum junk refused; rev monotonic; ttl kept; opening an ask clears codes; announce sent |
-| B4 | `presenting` / `presentDetail` on the build host read | `build-store.js` (`hostView`), `build-room.js` | extend B2's file: host read carries them; wall and phone reads do not; a viewer row is not counted in `playerCount` |
-| B5 | `safeHref` to `buildroom/links.js`; transitive import test | `buildroom/links.js`, `buildHostApi.js`, `buildScreens.js` | `__tests__/buildWallImports.test.js`: walking imports from `present/build/BuildWall.jsx` reaches no `authFetch`, `hostTicketClient`, `/build/state` |
-| B6 | Split the three screens into `buildroom/screens/` with optional `controls`; lift `doMove` into `useStageMoves`; **with D1 and D2** (the shared dock on `buildControls`, Host in one press); `capabilities.js` and its one-screen half of the test land here, so the refactor is checked against the list before anything moves | `BuildRoomPage.jsx`, `buildroom/screens/{BuildStageScreen,BuildBuildScreen,BuildHistoryScreen}.jsx`, `buildroom/useStageMoves.js` | existing Build Room suites unchanged and green; `__tests__/buildScreensDisplay.test.jsx`: each screen with a `wallView` fixture and no controls renders no `button`/`role=button` and no name |
-| B7 | `BuildWall` + `useBuildWall` + `present/presentStatusReporter.js`; `PresentPage` dispatch on `type=build` | `present/build/*`, `PresentPage.jsx`, `usePresentation.js` | `__tests__/buildWall.test.jsx`: follows `wall.screen`; a `buildChanged` frame refetches and its payload is ignored; stale rev dropped; 403 copy; PRESENT_STATUS sent on fullscreen change; `presentRoute` test still public |
-| B7a | **Mockup** of the two-screen laptop (the shared console with Build Room's panels and rail) and the one-screen Stage dock, in the console's visual system, beside `docs/design/host-console/`; owner's review before B8 | `docs/design/build-room-console/index.html` | the owner's approval, recorded in the plan |
+| B1 | **Built.** `WallKey` minted on the host's first `GET build/state` by a conditional write through `touchState` (ttl kept, no Rev bump); on that read only; `POST build/wall {rotate:true}` mints a new one. API in §2.9a | `build-store.js`, `build-room.js` | `tests/build-wall-key.js` (12): host read carries it; agent, builder, phone and wall reads never do; a racing mint keeps the winner's; rotate retires the old key |
+| B2 | **Built.** `wallView` (allowlist) + `build-play/wall` and `wall/images/{id}` ahead of the seat check; History is `roomHistory`'s asks with the existing `'wall'` audience. Fields in §2.9a | `build-store.js`, `build-room.js` | `tests/build-wall-read.js` (28): 403/404 cases; the fixture's private strings and names absent; names only with `listNames`; unlisted image → 404; no `IdSecret`, no `@` |
+| B3 | **Built.** `WallScreen/WallCodes/WallProfile/WallRev` on `BUILD#STATE`, `POST build/wall` behind `hostOnly()`, cleared by the server on opening an ask (`makeCurrent`, re-ask), back to the opening, and (read-side) on the end | `build-room.js`, `build-store.js` | `tests/build-wall-screen.js` (15): host writes, Claude/builder 403, phone 404; junk 400; rev monotonic; ttl kept; clears; `buildChanged` reaches the `/present` row |
+| B4 | **Built.** `presenting` / `presentDetail` on the host's `GET build/state` only, from `room-counts.js`, failing soft to `0`/`null` | `build-room.js` (`windowStatus`) | in `tests/build-wall-read.js`: host read carries them; agent, phone and wall do not; fails soft; a viewer row is not in `playerCount` |
+| B5 | **Built** (`worktree-agent-ada9445699ced6a3f`): `links.js`, re-exported from `buildHostApi.js`; the walk starts at `buildScreens.js`, `links.js` and every file in `screens/` (`BuildWall.jsx` joins with B7) and also refuses `buildHostApi.js` itself. `safeHref` to `buildroom/links.js`; transitive import test | `buildroom/links.js`, `buildHostApi.js`, `buildScreens.js` | `__tests__/buildWallImports.test.js`: walking imports from `present/build/BuildWall.jsx` reaches no `authFetch`, `hostTicketClient`, `/build/state` |
+| B6 | **Built** (`worktree-agent-ada9445699ced6a3f`): `screens/BuildStageScreen`, `BuildBuildScreen`, `BuildHistoryScreen` (+ `AskStage`, `StageIdle`, `QrZoom`, `Timeline`, `common`, moved unchanged), `useStageMoves.js`, `capabilities.js` with its one-screen test; no controls renders nothing pressable (host-view fixtures; the no-names half waits for B2's `wallView`). Split the three screens into `buildroom/screens/` with optional `controls`; lift `doMove` into `useStageMoves`; **with D1 and D2** (the shared dock on `buildControls`, Host in one press); `capabilities.js` and its one-screen half of the test land here, so the refactor is checked against the list before anything moves | `BuildRoomPage.jsx`, `buildroom/screens/{BuildStageScreen,BuildBuildScreen,BuildHistoryScreen}.jsx`, `buildroom/useStageMoves.js` | existing Build Room suites unchanged and green; `__tests__/buildScreensDisplay.test.jsx`: each screen with a `wallView` fixture and no controls renders no `button`/`role=button` and no name |
+| B7 | **Built** (`worktree-agent-ac42d9e4d6bf6a196`): in `present/buildwall/` (not `present/build/`: `.gitignore` swallows every `build/`), with `wallRoom.js` (the wall read in the screens' shape), History's "and N earlier" fit, Settings › Screens' link to it, and 2/3/4, P, the tabs and Show codes posting `build/wall`. `BuildWall` + `useBuildWall` + `present/presentStatusReporter.js`; `PresentPage` dispatch on `type=build` | `present/build/*`, `PresentPage.jsx`, `usePresentation.js` | `__tests__/buildWall.test.jsx`: follows `wall.screen`; a `buildChanged` frame refetches and its payload is ignored; stale rev dropped; 403 copy; PRESENT_STATUS sent on fullscreen change; `presentRoute` test still public |
+| B7a | **Mockup ready for the owner's review: docs/design/build-room-console/index.html** (five questions for the owner at the foot of its view 4). **Mockup** of the two-screen laptop (the shared console with Build Room's panels and rail) and the one-screen Stage dock, in the console's visual system, beside `docs/design/host-console/`; owner's review before B8 | `docs/design/build-room-console/index.html` | the owner's approval, recorded in the plan |
 | B8 | Laptop two-screen mode **on the shared `HostConsole`** (§2.6), **with every capability of §2.6b reachable**: `ConsoleTop` with Join, Room's window, status and "The room sees" + 2/3/4 → server; `ConsoleRail` with Build Room's sections; Build Room panels in the main area; `ConsoleFooter` + `HostActionBar` on `buildControls`; codes → server; `presentChanged` refetch | `BuildRoomPage.jsx`, `buildroom/panels/*.jsx`, `buildroom/consoleRail.js` (the section mapping), `buildroom/words.js` | `__tests__/buildTwoScreen.test.jsx`: on two screens the page renders `HostConsole`; 2/3/4 post `build/wall`; the footer's labels equal `buildControls`' for each moment fixture (parity with the one-screen dock); one screen unchanged; `__tests__/buildCapabilities.test.jsx`: every id in `capabilities.js` has an entry point on one screen and on two |
-| B9 | Screens group in `BuildSessionPanel`, the chooser, `'build'` added to `TWO_SURFACE_TYPES`; words, help (`config/help/`), release notes | `BuildSessionPanel.jsx`, `config/surfaces.js`, `config/roomScreen.js` (href with type), help | `surfaces.test.js` (build on dev, off on test/prod by default); `buildSessionPanel` Screens test; panel measured at 660/375 |
+| B9 | **Screens group built in part** (with B7): first in Settings, Applies now, the room's window link and status, the size posting `{profile}`, New link (rotate, armed in place); the chooser, `TWO_SURFACE_TYPES`, help and notes still to do. Screens group in `BuildSessionPanel`, the chooser, `'build'` added to `TWO_SURFACE_TYPES`; words, help (`config/help/`), release notes | `BuildSessionPanel.jsx`, `config/surfaces.js`, `config/roomScreen.js` (href with type), help | `surfaces.test.js` (build on dev, off on test/prod by default); `buildSessionPanel` Screens test; panel measured at 660/375 |
 | B9m | **Measure** (standards §5): the wall at 1280×720, 1366×768, 1440×900, 1920×1080 × Room/TV/Call/Table, with long asks (six options of 130–320 chars), a 40-entry History, a tall screenshot. History on the wall shows the newest entries that fit and "and N earlier" (fit lever 3); never scrolls | `buildroom/screens/*`, `BuildRoom.css` | numbers in the commit; `data-fit="miss"` count zero |
 
 Order: H1→H5 (History, §2.8; useful on one screen at once), then B1→B2→B3→B4 (server,
 one deploy), B5→B6 (refactor, no behaviour change, one deploy), B7→B8→B9→B9m. Each arrow is a dev push the owner can look at; B6's push must
 look identical to today.
+
+### 2.9a The wall's API as built (B1–B4, 17 Oct)
+
+What the frontend (B5–B9) builds to. All four ride the existing `build/{proxy+}` and
+`build-play/{proxy+}` events: **resource impact 0**, `template-clean.yaml` untouched.
+
+**`GET /games/{id}/build/state`** (host, signed in): the existing body plus, **for the host
+only** (never Claude's key, a builder's key, a phone or the wall):
+
+| Field | Shape |
+|---|---|
+| `wallKey` | 43-char base64url string (32 bytes). Minted on the first host read; stable until rotated |
+| `wall` | `{ screen: 'stage'\|'build'\|'history', codes: 'none'\|'join'\|'both', profile: 'room'\|'tv'\|'call'\|'table', rev: n }` |
+| `presenting` | integer: `/present` viewer rows on the session (`0` if the read fails) |
+| `presentDetail` | `{ open, fullscreen, visible, statusAt, ageMs }` as C&A's (`room-counts.js presentingDetail`), or `null` if the read fails |
+
+**`POST /games/{id}/build/wall`** (host only) `{ screen?, codes?, profile?, rotate? }`: at
+least one. Each field is one of the enums above; `rotate` is a boolean. Junk → **400**;
+Claude's key or a builder's → **403**; codes other than `none` after the end → **409** (the
+screen and profile may still move after the end). Writes through `touchState` (ttl kept,
+`Rev` +1, `WallRev` +1 on every write, the same value again included) and announces
+`buildChanged {type, gameId, rev}` to every connection, `/present` rows included. Reply:
+`{ wall }`, plus `{ wallKey }` (the new one) when it rotated. A rotate makes every open
+window's next read 403.
+
+**Cleared by the server:** opening an ask (`makeCurrent`: create live, open, open next,
+from ideas, from Later, from points, the revote; and the re-ask) sets `WallCodes = none`
+and `WallRev +1`; back to the opening (`POST build/opening/resume`) sets `WallScreen = stage`
+and `WallRev +1`; an ENDED session **reads** as `codes: 'none'` on every read (the end is
+written by the shared `session-end.js`, which this task did not touch; the stored value is
+left, the read decides).
+
+**`GET /games/{id}/build-play/wall?k=<wallKey>`** (no seat, no sign-in): `k` must equal
+`BUILD#STATE.WallKey`, compared in constant time; missing, wrong, or no key minted yet →
+**403** `{ error, code: 'wall-key' }`; not a build session → **404**. Any other method →
+404. The body (`build-store.js wallView`, an allowlist):
+
+| Field | What it is |
+|---|---|
+| `gameId, title, goal, state, playerCount, rev` | as the phones' read (`goal` is the session's details, which the header shows; added because the projected screens read it) |
+| `players` | `[]`, or the joined names when **List names on the room meter** is on |
+| `current` | the open/results/decided ask as `askView(…, 'public')`; wheel `spinner` and `spins[].by` are `''` unless List names is on (`'host'` stays); option `url`s only if not a laptop address |
+| `history` | `roomHistory`: `{ asks (audience 'wall', with stamps, same url and wheel rule), ideas (used ones, text only), sent }` |
+| `ideaCounts` | `{ total, used }`: every idea; used by History's rule (an idea in a vote the room has not seen is not used) |
+| `log` | the phones' filtered log, less: `crew`, `base`, `help` entries; any entry about an ask the room has not seen; image entries whose picture is not in `images`; and, with List names off, any entry whose text names a player, builder, idea author, voter or spinner. Never `name` (unless List names), `forAgent`, `as`, `held`, `deliveredAt`, `from`; links never a laptop address or keyed |
+| `images` | `{ imageId, caption, kind, askId, label, contentType, createdAt }`: not for an ask the room has not seen; a builder's only if the crew board shows it |
+| `outcome, doing, run, shownPoint` | as the phones' (`shownPoint.from` a builder's wall label unless List names) |
+| `agent` | `{ connected, listening, name }`: Claude's status line on the Stage and Build screen |
+| `lan` | `{ live: true }` when the demo is on this Wi-Fi, `{ state: 'off' }`, or `null`. **Never the link**: it carries the gateway's key |
+| `opening` | `openingView` (phase, steps, current, kinds, readyForDraft, drafted) |
+| `brief` | the agreed brief: `{ forWhom, keep, lines, steps, headline, summary }`. Never `briefDraft`, never `later` |
+| `wallComment` | `{ ideaId, text, at }` while fresh (`WALL_COMMENT_MS`), else `null` |
+| `crew` | `{ enabled: false }`, or the phones' crew read less `repoUrl`, `modes`, `runCrewCode`, `me`, branches, fork URLs, builders' notes, PR links, tests summaries: builders are `Builder 1…n` (stable, so a lane and its early look match) unless List names is on; room comments carry no name |
+| `wall` | `{ screen, codes, profile, rev }` |
+
+Never in it: `seen`, raw `ideas`, `activity`, `points`, `settings`, `plugin`, any email,
+`IdSecret`, the agent key, the wall key.
+
+**`GET /games/{id}/build-play/wall/images/{imageId}?k=<wallKey>`**: the same key check;
+the image bytes (as `build/images`) only if `wallView.images` lists it, else **404**.
+
+**Changed from §2.2 by the code:** `asks` is `history.asks` (H5's `roomHistory` already had
+the `'wall'` audience); `agent` and `goal` were added (the Stage's Claude line and the header
+read them); `lan` never carries a link, so the Build screen's demo QR and the `both` codes
+card cannot show the demo's link on the wall. If the owner wants the demo's QR on the
+projector, the wall would need the keyed link while `codes === 'both'`: an owner's call.
 
 ### 2.10 Owner's checks on dev after B9
 
@@ -444,8 +525,8 @@ there; the console's footer (B8) is the same shared bar.
 
 | # | Task | Files | Tests (first) |
 |---|---|---|---|
-| D1 | `buildControls` (the controls shape from `stageModel`); the Stage's dock becomes the shared `Dock` + `HostActionBar` reading it; the hover hint goes (the shared bar's key cap replaces it); extras into the shared bar's secondary or Session. If the shared dock also moves when its status text changes, fix it there (fixed slots), for every type | `buildroom/buildControls.js` (new), `BuildRoomPage.jsx` (`BuildStage`), shared `components/stage/Dock.jsx`, `components/HostActionBar.jsx` and their CSS if they move | `__tests__/buildControls.test.js`: one primary, at most one secondary, per moment fixture; labels from `words.js`; `arm.inPlace` on the early advances. `__tests__/dockStill.test.jsx`: no element in the dock renders on hover; Host and Session last in every moment |
-| D2 | HOST goes to Host in one press, its count a badge; the Stage's alert pop-up removed; the header tab's list on Build and History stays (Q16, ruled) | `BuildHostAlert.jsx`, `BuildRoomPage.jsx` | `buildRoomPage` case: on the Stage with a count, one click on HOST shows the Host screen |
+| D1 | **Built** (`worktree-agent-ada9445699ced6a3f`): `buildControls.js`; the Stage dock is `Dock` + `HostActionBar` (Space, →, arm in place; Stop and Save the rest in the bar's third slot); the shared Dock keeps the SPACE slot and puts its hint before the buttons; ← is not bound (Build Room has no step back). `buildControls` (the controls shape from `stageModel`); the Stage's dock becomes the shared `Dock` + `HostActionBar` reading it; the hover hint goes (the shared bar's key cap replaces it); extras into the shared bar's secondary or Session. If the shared dock also moves when its status text changes, fix it there (fixed slots), for every type | `buildroom/buildControls.js` (new), `BuildRoomPage.jsx` (`BuildStage`), shared `components/stage/Dock.jsx`, `components/HostActionBar.jsx` and their CSS if they move | `__tests__/buildControls.test.js`: one primary, at most one secondary, per moment fixture; labels from `words.js`; `arm.inPlace` on the early advances. `__tests__/dockStill.test.jsx`: no element in the dock renders on hover; Host and Session last in every moment |
+| D2 | **Built** (`worktree-agent-ada9445699ced6a3f`): HOST reads "← Host", one press home, the count a badge whose slot is kept; `BuildHostAlert` is the header's only. HOST goes to Host in one press, its count a badge; the Stage's alert pop-up removed; the header tab's list on Build and History stays (Q16, ruled) | `BuildHostAlert.jsx`, `BuildRoomPage.jsx` | `buildRoomPage` case: on the Stage with a count, one click on HOST shows the Host screen |
 | D3 | **Measure** in Chromium (standards §5): the x of Host, Session and the main button's right edge across every moment, pointer on and off the dock, four sizes, **for Build Room and C&A both** | a Playwright script beside `docs/handoff/tools/` | the numbers in the commit: zero movement |
 
 Order (owner, 17 Oct): **D1–D3 go with the one-screen/two-screen work**, not before it: D1
@@ -479,7 +560,119 @@ directory listing of the mockups with a `.js` file "that supposedly linked all 4
 |---|---|---|---|
 | S1 | **Built (1.19.0).** **Scope each gateway to the paths Claude linked**: a request outside the demo's and the options' own paths gets 404, and a directory listing is never forwarded | the plugin (`engage-mcp.mjs` gateway); a plugin release (`LATEST_PLUGIN`) | about a day, plus every host updating the plugin (the update dot already asks them to) |
 | S2 | **Built (1.19.0).** **Tell Claude** (the MCP server's instructions) to serve the demo and each mockup from their own folder, never a project root, and never to link a helper page | `engage-mcp.mjs` instructions | an hour; relies on Claude following it, so S1 is the guarantee |
-| S3 | Name the demo: Claude marks one link as **the** demo (`share_demo` or a `demo: true` on a showing), so Open the build never follows a mockup link by accident | MCP tool + `latestBuild` | half a day; a plugin release |
+| S3 | **Built (1.20.0).** (a) The plugin reads `.engage/share.json` each round (loopback http only, 4 KB at most, a broken file declares nothing) and reports it; Engage keeps it on the Wi-Fi row and it wins: Open the build, the QR and the phones go to its `demo` page, the declared servers are shared first and their folders are in scope. (b) `post_update` takes `role: demo or mockup`; the demo is the declared one, else the newest link marked demo, else the newest link. Claude is told to set the role and write the file. (c) The share panel names each server Demo, Mockups, "Mockups · Ask 3" or App N, as "localhost:5173 → :4900"; the gateway's own pages say "Build Room 4821 · label or title". The title comes from a state read Claude made, never from the share loop, because an agent's state read takes Claude's inbox. (d) Ports from `4900 + (code mod 100) × 10`, ten per session (`ENGAGE_LAN_PORT` still overrides, twenty from it); `X-Engage-Session` on every gateway answer; `.engage/share-status.json` lists each server local → Wi-Fi → role, with no key. A 1.19.0 plugin keeps working: it declares nothing and ignores the new `roles` in the answer. **Asked for:** mark every shared server's role, and every session (owner, 17 Oct: "push these as a env var or something else, so that the mockup serving vs the demo share are clearly marked. and if im running multiple sessions from the same server, it is clearly labeled to find"). (a) A project file `.engage/share.json` (`demo`, `mockups`, `label`), editable by the host or Claude at any time, reported by the plugin and winning over any guess: Open the build and the QR always go to `demo`, mockup servers are shared only for option previews. Not an env var: it is fixed at Claude Code's start and the same for every server. (b) Claude's show tool takes `role: demo or mockup` and Claude writes the file when it starts servers. (c) Labels: the share panel names each server ("Demo · localhost:5173 → :4900", "Mockups (Ask 3)") instead of App 1/App 2; the gateway's own pages name the session ("Build Room 1215 · title"). (d) Several sessions on one laptop: a port block per game code (`ENGAGE_LAN_PORT` still overrides; today every session starts at 4900 and their ports interleave, likely why 1215 shared on :4904), `X-Engage-Session` on every gateway response, and `.engage/share-status.json` listing local → Wi-Fi → role per project | plugin (`engage-mcp.mjs`), `build-lan.js`, `BuildWifiShare.jsx` | about a day; plugin 1.20.0 |
+
+## 2c. Release gate (owner, 17 Oct)
+
+Owner, 17 Oct: *"Have thing get to host queue to release to room."* Nothing Claude makes
+for the room reaches the room (the phones, the room's window, the laptop's projected
+Stage, Build and History) until the host releases it from the host's queue. Owner's
+ruling the same day: Claude's live status (the doing line, its helper and steps,
+connected, listening) stays live and is never held.
+
+**Built.**
+- **The setting.** `Settings.reviewAgentPosts` on BUILD#STATE, on by default (like
+  `reviewAgentAsks`), set by the host's `POST build/settings`. Off: posts go straight
+  through as before; what is already held stays held until released.
+- **What is held.** Claude's posts (`progress`, `milestone`, `showing`, `checkpoint`,
+  `answer`, from the host's Claude or a builder's) and the host's Claude's screenshots
+  are written with `Released: false` on the log row (and the image row). No flag means
+  released, so every row written before the gate stays visible. A builder's picture
+  follows the crew board, as before.
+- **Where held rows go.** The host's read and Claude's (`roomHold: 'held'|'kept'` on
+  the entry and the image). Never `publicView`, `roomHistory`, `wallView`, the wall's
+  image route or the phone's image route, and they never drive the room's Open the
+  build (`lanPublicView` reads the room's rows). The host's share link and the Wi-Fi
+  targets may still use them. One filter does it: `roomRowsForRoom`
+  (`build-store.js`), which also drops a picture or entry about an ask the room has not
+  seen, and every "Claude proposed a question" entry (`HostOnly` from now; an older row
+  by its words). A phone cannot send preview feedback on a held showing.
+- **Mockups** (an image on an ask) are never held: they appear on phones and the wall
+  exactly when their ask opens, whatever the setting.
+- **The API.** `POST build/posts {action: 'release'|'keep', ids: [logId…]}`, the host's
+  only (Claude and a builder 403, a phone 404), 50 at a time, all or nothing: every id
+  must be waiting (404 otherwise; 409 for one kept). Release stamps `ReleasedAt` and a
+  screenshot's entry releases its picture; the entry keeps its key, so History shows it
+  at the time it happened. Keep stamps `KeptAt`: private for good.
+- **The host's screen.** Waiting for you lists each held post ("Claude wants to show the
+  room": its words, picture and link) with Release to the room and Keep to myself, and
+  Release all when two or more wait (`BuildHeldPosts.jsx`). The Host alert counts them on
+  one grey line of fixed words ("Claude wants to show 2 things", seen ids `post:<logId>`).
+  Session › Settings › Claude: "Check Claude's posts before the room sees them". The
+  host's Timeline marks "Not shown to the room" / "Kept to yourself". The laptop's
+  projected Stage, Build and History draw `roomSees(room)`, the room's copy. Capability
+  id `release-posts`.
+- **The codes card follows the server.** When the server clears `wall.codes` (an ask
+  opened), the laptop's own codes card comes down too; a read from before the server
+  heard the laptop put them up does not count.
+- **Claude** (plugin **1.21.0**) is told its posts and screenshots reach the room once
+  the host releases them, and a held post's reply says it went to the host's queue.
+
+Tests: `tests/build-release.js` (server), `__tests__/buildRelease.test.jsx` (host screen).
+
+## 2d. What the room sees, and how large (owner, 17 Oct)
+
+> "Remember the experience for 1 and 2 screen destination and the default option needs to
+> share only the most relevant info to the room. For example the call and answer when
+> asked a question or given a lesson the most important thing is the lesson needed t the
+> instructions. But anything on the screen worth having needs to be large type and
+> readable. This can be more verbose on zoom screen the projector but always keep it to
+> just what is needed."
+
+And, the same day: "I do like that Claude's status and activity is kept current on the
+build room stage (whichever screen shown to the room)."
+
+**Built** (`worktree-agent-a1aa9c2da620aa868`). One pure function decides it for every
+screen the room sees: `src/src/config/roomContent.js`, `roomContentFor(moment, profile,
+data)`. It returns each part of the moment with a role (lead, support, kicker, count,
+dropped), a ladder step, what may give way for space (`dropOrder`) and what never may
+(`essential`). The one-screen stage (`GameHostPage` → `QuestionCard`), the room's window
+(`presentModel` → `PresentMoments`) and the Build Room's projected Stage, Build and History
+(`buildroom/roomContentData.js`, the same components on one screen and on the window) all
+read it. Call is the one verbose profile; Room, TV and Table carry only what is needed.
+
+| Moment | Room / TV / Table | Call |
+|---|---|---|
+| Lobby | **Lead:** join (address, code, QR). Session title, count | same |
+| A question or lesson is up (answering, the question put back) | **Lead: the task**, primary step (hero when short), never dropped. Title as a small kicker (not when it repeats the task). The lesson only when the instruction is generic ("adapt this lesson"), as support that may give way. Category dropped. Count | Category kicker, title as a heading, **lead: the task**, the lesson (first to give way), count |
+| Voting | **Lead:** "N answers are on your phone…". The task as one slim line (may give way). Title dropped. Count | + the title |
+| A response on the wall (voting) | **Lead:** the response. "Vote on your …" kicker, the task slim (may give way), count | the task kept |
+| Results | **Lead:** the ideas. The task slim (first to give way). Counts | + the title kicker, the task kept |
+| Responses, Workie's read | **Lead:** the response, the page | same |
+| Feedback | **Lead:** the ask, or the comment put up. The round's title as the reminder (kicker) | same |
+| A question for the room | **Lead:** the question and its options. Kind kicker, count | same |
+| Ended | **Lead:** thanks. Session title | same |
+| Top line | the round (the session title only in the lobby and at the end) | session title and round |
+| Build Room: an ask (live, voting) | **Lead:** the prompt and the option titles (secondary step or larger; a long ask pages). Claude's status (support, essential). Count | + the ask's detail and each option's detail (first to give way) |
+| Build Room: results | as an ask, with the tally | + the room's reasons (first to give way) |
+| Build Room: the wheel | **Lead:** the prompt and the wheel (scales with the fitter). Claude's status | + the detail |
+| Build Room: between asks | **Lead: Claude's status** (headline, the doing line and its duration, the helper and activity lines); the newest picture and the last decision as support | same |
+| Build Room: a talking point, the run list | **Lead:** the point; the run list and its current step (essential). Claude's status | same |
+| Build Room: History, Build | **Lead:** the story (newest that fit, "and N earlier"); the newest screenshot. Claude's status at the top | same |
+| Build Room: codes, crew board, the brief | **Lead:** what the host put up. Claude's status | same |
+
+**Claude's status** is essential on every Build Room moment and profile, on one screen
+and on the room's window, on Stage, Build and History (`screens/ClaudeStatus.jsx`): never
+`data-drop`, the body step or larger, and after an open ask's prompt and options, never in
+their place.
+
+**Never a name, never the Workie Background:** the output is built from a whitelist; the
+question's Background (authoring prompt: "Never shown to players") is never a part, even on
+Call.
+
+**Large and readable:** the lead is the profile's hero or primary step and shrinks only to
+`--fit-min` (`__tests__/roomContentPalette.test.js`). A long Build Room ask **pages** its
+options (`stagePaging.js` `OPTION_PAGE_SIZE`: Room 3, TV 2 or 1 under 900px tall, Call 3
+or 2 at results, Table 4): "Options 1–3 of 6 · page 1 of 2 · ↑ ↓ to page" on the host's
+Stage, the first page and "and 3 more options on your phone" on the room's window (no
+server fact carries an option page; §5 lever 3). Measurements and before/after pictures:
+`docs/design/room-content/README.md`.
+
+**For the owner:** (1) the lesson on Room for a question with its own instruction is
+dropped (the title stays as the kicker); if a set's instructions lean on the lesson, the
+set should leave the instruction generic or this rule changes in one line. (2) The room's
+window cannot page a long ask (no server fact); a `build/wall` option page the host's ↑ ↓
+publishes would let it follow, as `/stage-focus` does for C&A.
 
 ## 3. Build Room's other standards (B10, after two screens)
 
@@ -560,4 +753,5 @@ recommendations, start with H1"). The Recommended column is now the decision.
 | Q16 | **Ruled 17 Oct: keep it on the header tab, never block the Host button.** The Host alert list: keep it on Build and History's header tab (where it opens downward and moves nothing), or drop it everywhere and rely on the Host screen's "Waiting for you"? | **Keep it on the header tab**, drop it only from the Stage dock: the header list was liked; the dock pop-up is the one that blocks the way back | If wrong: one more click to see what waits from Build or History |
 | Q17 | Build Room's loop line: show the ask path (Ask › Collect › Settle › Send to Claude) in the shared strip, or no strip? | **The ask path in the shared strip**: it is the loop a host works through on every ask, and the strip is how every other type says "where am I" | If it confuses: drop the strip for Build Room; the panels already show the path |
 | Q18 | **Ruled 17 Oct: S1 and S2 now (built, plugin 1.19.0).** Share demo exposure (§2b): scope the Wi-Fi gateway to the paths Claude linked (S1), tell Claude to serve only the demo's and mockups' own folders (S2), and let Claude name the one demo link (S3)? | **S1 and S2 now, S3 with the next plugin release**: S1 is the only one that guarantees a participant cannot browse a folder | If S1 is skipped: whatever folder Claude serves stays browsable by everyone in the room |
+| Q19 | **Ruled 17 Oct: all four parts (built, plugin 1.20.0).** S3 as above: a project file plus Claude declaring the role, labels in the panel and on the gateway's pages, a port block per session? | **Yes, all four parts in one plugin release**: the file is the one place a host can correct Claude, and the port block plus labels end the guessing when two rooms run on one laptop | If only (b): Claude's word is the only source, and a wrong guess cannot be corrected without asking Claude |
 | Q12 | Builders' names on the wall's crew board (and the wheel's "Ada spins the wheel", `buildScreens.js:452`): fine, or only with "List names" on? | **Follow "List names"**: one rule for every name on the wall | If wrong: a name on the projector the host did not choose to show |

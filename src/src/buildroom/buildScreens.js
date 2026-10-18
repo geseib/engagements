@@ -10,7 +10,7 @@
  *
  * Pure: no React, no fetch. The page and its tests share these.
  */
-import { safeHref } from './buildHostApi';
+import { safeHref } from './links';
 import { wifiState } from './wifiShare';
 import { W } from './words';
 
@@ -60,10 +60,42 @@ export function queueItems(room) {
     .map((a) => ({ type: 'ask', id: `ask:${a.askId}`, from: a.source === 'agent' ? 'claude' : 'you', at: a.createdAt || '', ask: a }));
   const ideas = (room.ideas || []).filter((i) => i.status === 'new')
     .map((i) => ({ type: 'idea', id: `idea:${i.ideaId}`, from: i.source === 'host' ? 'you' : 'room', at: i.createdAt || '', idea: i }));
+  // THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts waiting to be released to the room.
+  const posts = heldPosts(room)
+    .map((l) => ({ type: 'post', id: `post:${l.logId}`, from: 'claude', at: l.createdAt || '', entry: l }));
   const byAge = (x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
   const claude = asks.filter((x) => x.from === 'claude').sort(byAge);
-  const rest = [...asks.filter((x) => x.from !== 'claude'), ...ideas].sort(byAge);
+  const rest = [...asks.filter((x) => x.from !== 'claude'), ...ideas, ...posts].sort(byAge);
   return [...claude, ...rest];
+}
+
+/** Claude's posts (and screenshots) waiting for the host to release them to the room, oldest first. */
+export function heldPosts(room) {
+  return ((room && room.log) || []).filter((l) => l.roomHold === 'held');
+}
+
+/** The picture a post carries: a screenshot's entry names its image in `detail`. */
+export const postImageId = (entry) => (entry && entry.kind === 'image' ? entry.detail || null : null);
+
+/**
+ * WHAT THE ROOM MAY SEE OF THE HOST'S READ (§2c): the laptop's own Stage,
+ * Build and History are projected, so they draw the room's copy: no post or
+ * screenshot the host has not released, no picture for an ask the room has
+ * not seen. Everything else is the host's read as it is.
+ */
+export function roomSees(room) {
+  if (!room) return room;
+  const log = room.log || [];
+  const images = room.images || [];
+  if (!log.some((l) => l.roomHold) && !images.some((i) => i.roomHold || i.askId)) return room;
+  const unseen = new Set((room.asks || []).filter((a) => ['proposed', 'discarded'].includes(a.status)).map((a) => a.askId));
+  const pics = images.filter((i) => !i.roomHold && !(i.askId && unseen.has(i.askId)));
+  const picIds = new Set(pics.map((i) => i.imageId));
+  return {
+    ...room,
+    log: log.filter((l) => !l.roomHold && (l.kind !== 'image' || picIds.has(l.detail))),
+    images: pics,
+  };
 }
 
 // ── The Host alert (docs/design/build-room-host-alert, owner 2026-10-10) ────
@@ -112,17 +144,21 @@ export function hostAlert(room, local, { demoReady = false } = {}) {
     // One rule: a look is as new as its last version. A new version has a new id, so one the host opened counts again.
     .map((s) => { const at = s.updatedAt || s.createdAt || ''; return { id: `share:${s.shareId}#${at.replace(/\D/g, '').slice(0, 17)}`, at }; })
     .filter((x) => fresh(x.id, x.at)).sort(byAt);
+  // Claude's posts waiting to be released (§2c): grey, fixed words, never the post's own.
+  const posts = heldPosts(room).map((l) => ({ id: `post:${l.logId}`, at: l.createdAt || '' }))
+    .filter((x) => fresh(x.id, x.at)).sort(byAt);
   const ids = (list) => list.map((x) => x.id);
   const lines = [];
   if (questions.length) lines.push({ key: 'question', label: W.alertQuestion(questions.length), go: W.alertOpen, ids: ids(questions), target: { kind: 'ask', id: questions[0].askId } });
   if (mockups.length) lines.push({ key: 'mockups', label: W.alertMockups(mockups.length, mockups[0].a.options.length), go: W.alertSee, ids: ids(mockups), target: { kind: 'ask', id: mockups[0].askId } });
   if (ideas.length) lines.push({ key: 'ideas', label: W.alertIdeas(ideas.length), go: W.alertReview, ids: ids(ideas), target: { kind: 'waiting' } });
   if (looks.length) lines.push({ key: 'looks', label: W.alertLooks(looks.length), go: W.alertReview, ids: ids(looks), target: { kind: 'waiting' } });
+  if (posts.length) lines.push({ key: 'posts', label: W.alertPosts(posts.length), go: W.alertReview, ids: ids(posts), target: { kind: 'waiting' } });
   // SHARE DEMO on the Stage (docs/design/build-room-share-demo D1 B): one grey line, last; the
   // page passes `demoReady` for the Stage only (Build and History carry it on the header chip).
   if (demoReady) lines.push({ key: 'demo', label: W.demoReadyLine, go: W.alertShare, ids: [], target: { kind: 'share' } });
   return {
-    count: questions.length + mockups.length + ideas.length + looks.length + (demoReady ? 1 : 0),
+    count: questions.length + mockups.length + ideas.length + looks.length + posts.length + (demoReady ? 1 : 0),
     amber: questions.length + mockups.length > 0,
     lines,
   };

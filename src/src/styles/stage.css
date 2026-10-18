@@ -594,6 +594,14 @@ a.dock-more{text-decoration:none}
 .btn[disabled]{background:rgba(155,168,190,.18);color:var(--muted);cursor:not-allowed}
 .dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.75;letter-spacing:.07em;
   border:var(--hair) solid var(--rule);border-radius:6px;padding:.2em .5em;font-weight:700;white-space:nowrap}
+/* FIXED SLOTS (Dock.jsx; parity PLAN §2a). With Space off the cap keeps its
+   width, so the main button beside it never slides; it only goes invisible. */
+.dock .kbd[data-off]{visibility:hidden}
+/* SESSION's count (someone asking to take a name) and its lit edge; a type
+   may paint the edge in its own colour. Never the one orange. */
+.dock-more--lit{color:var(--text);border-color:var(--text)}
+.dock-more-n{font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:0}
+.dock-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 /* The SPACE hint used to be hidden in Room and TV — the two profiles where the
    operator is furthest from the machine and most dependent on knowing a key
    exists. That was exactly backwards, and a first-look reviewer caught it. */
@@ -726,6 +734,17 @@ a.dock-more{text-decoration:none}
    whole of it: anything the room can see would be a second thing competing for
    the space that ran out in the first place. */
 .q[data-expandable]{cursor:zoom-in}
+/* WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026; config/roomContent.js,
+   components/QuestionCard RoomLines). While a Call & Answer question is up the
+   LEAD is the task: the primary step (hero when short), a sentence weight and a
+   wider measure, because it is read, not glanced. The title above it is a
+   .kicker on Room, TV and Table, a heading at the secondary step on Call.
+   Pinned by __tests__/roomContentPalette.test.js. */
+.q.q-lead{font-weight:700;line-height:1.12;max-width:min(100%, calc(var(--measure) + 8ch))}
+.q.q-lead.is-primary{font-size:var(--t-primary)}
+.q.q-lead.is-hero{font-size:var(--t-hero);font-weight:800;line-height:1.02;max-width:var(--measure)}
+.q-sub{font-family:var(--font-display);font-weight:700;font-size:var(--t-secondary);
+  line-height:1.1;margin:0;color:var(--text);max-width:var(--measure)}
 /* Detail copy is --text, not --muted. Section 4.3 makes --muted a labelling
    colour; the previous revision then set every explanatory sentence in it. */
 .qdetail{font-size:var(--t-body);color:var(--text);opacity:.82;margin:0;

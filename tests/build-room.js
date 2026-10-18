@@ -388,7 +388,10 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
 
   console.log('\ntimeline, ideas inbox, wrap-up');
   await check('Claude posts progress; a host note never reaches Claude or a phone', async () => {
-    assert.strictEqual((await agentCall('POST', 'log', { kind: 'showing', text: 'Mockups at localhost:5173', link: 'http://localhost:5173' })).status, 201);
+    const showing = await agentCall('POST', 'log', { kind: 'showing', text: 'Mockups at localhost:5173', link: 'http://localhost:5173' });
+    assert.strictEqual(showing.status, 201);
+    // The release gate (§2c, tests/build-release.js): it reaches phones once the host releases it.
+    assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: [showing.body.entry.logId] })).status, 200);
     assert.strictEqual((await agentCall('POST', 'log', { kind: 'decision', text: 'I decided' })).status, 400);
     await hostCall('POST', 'log', { kind: 'note', text: 'Marcus seems bored' });
     const a = await agentCall('GET', 'state');
@@ -614,6 +617,9 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const shown = await agentCall('POST', 'log', { kind: 'showing', text: 'Header B is live', link: 'http://localhost:5173/' });
     assert.strictEqual(shown.status, 201, JSON.stringify(shown.body));
     const logId = shown.body.entry.logId;
+    // Held for the host until released (§2c): no feedback on a preview the room has not seen.
+    assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'good' })).status, 409);
+    assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: [logId] })).status, 200);
     const p = await playCall('GET', 'state', priya);
     assert.ok(p.body.log.some((e) => e.logId === logId && e.kind === 'showing'), 'the phone sees the preview');
     assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'change' })).status, 400, 'a change needs words');
@@ -1359,13 +1365,15 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   console.log('\nWi-Fi share (docs/design/build-room-lan-share/PLAN.md §3)');
   const report = (body) => agentCall('POST', 'share/report', body);
   const LIVE = (over = {}) => ({ status: 'live', key: 'abcdefghijklmnopqrstuv', open: 2, map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }], ...over });
+  // Claude's post, released to the room by the host (the release gate, §2c; tests/build-release.js).
+  const showRoom = async (body) => { const r = await agentCall('POST', 'log', body); assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: [r.body.entry.logId] })).status, 200); };
 
   await check('off by default: the plugin is told not wanted and given no addresses (nothing to open)', async () => {
     seed();
     await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/' });
     const r = await report({ status: 'off' });
     assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual(r.body, { wanted: false, targets: [], scopes: {} });
+    assert.deepStrictEqual(r.body, { wanted: false, targets: [], scopes: {}, roles: {} });
   });
   await check('once the host wants it, the plugin is given the local addresses Claude showed', async () => {
     seed();
@@ -1373,11 +1381,11 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await hostCall('POST', 'share', { on: true });
     const r = await report({ status: 'off' });
     // Claude linked the app's root, so the whole app is in scope (Share demo S1).
-    assert.deepStrictEqual(r.body, { wanted: true, targets: ['http://localhost:5173'], scopes: { 'http://localhost:5173': ['/'] } });
+    assert.deepStrictEqual(r.body, { wanted: true, targets: ['http://localhost:5173'], scopes: { 'http://localhost:5173': ['/'] }, roles: {} });
   });
   await check('off then quickly on: participants are never handed the old key', async () => {
     seed();
-    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await showRoom({ kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
     await hostCall('POST', 'share', { on: true });
     await report(LIVE());
     await hostCall('POST', 'share', { on: false });
@@ -1399,7 +1407,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
     await hostCall('POST', 'share', { on: true });
     const a = await report(LIVE({ reporter: 'copyAAAAAAAAAAAA', open: 1 }));
-    assert.deepStrictEqual(a.body, { wanted: true, targets: ['http://localhost:5173'], scopes: { 'http://localhost:5173': ['/'] } });
+    assert.deepStrictEqual(a.body, { wanted: true, targets: ['http://localhost:5173'], scopes: { 'http://localhost:5173': ['/'] }, roles: {} });
     const b = await report(LIVE({ reporter: 'copyBBBBBBBBBBBB', open: 0, key: 'bbbbbbbbbbbbbbbbbbbbbb', map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4901' }] }));
     assert.deepStrictEqual(b.body, { wanted: false, targets: [], another: true }, 'the second copy closes its gateway');
     const host = (await hostCall('GET', 'state')).body.lan;
@@ -1424,6 +1432,56 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const v = (await playCall('GET', 'state', priya)).body;
     assert.strictEqual(v.lan.open, 'http://192.168.1.20:4900/?k=bbbbbbbbbbbbbbbbbbbbbb');
   });
+  console.log('\nShare demo S3: the declared demo, the role Claude gives a link (plugin 1.20.0)');
+  await check('a declared demo wins: the host, the QR and the phones open its page; it is shared first and in scope; the reply names each role', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'Mockup A', link: 'http://localhost:8080/mockups/a.html' });
+    await hostCall('POST', 'share', { on: true });
+    const declared = { demo: 'http://localhost:5173/demo/index.html', mockups: 'http://localhost:8080/mockups/', label: 'Blue table' };
+    const r = await report({ status: 'off', declared });
+    assert.deepStrictEqual(r.body, {
+      wanted: true,
+      targets: ['http://localhost:5173', 'http://localhost:8080'],
+      scopes: { 'http://localhost:5173': ['/demo/'], 'http://localhost:8080': ['/mockups/'] },
+      roles: { 'http://localhost:5173': 'demo', 'http://localhost:8080': 'mockups' },
+    });
+    await report(LIVE({ declared, map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }, { local: 'http://localhost:8080', lan: 'http://192.168.1.20:4901' }] }));
+    const host = (await hostCall('GET', 'state')).body.lan;
+    assert.strictEqual(host.demo, 'http://192.168.1.20:4900/demo/index.html?k=abcdefghijklmnopqrstuv');
+    assert.deepStrictEqual(host.map.map((m) => [m.local, m.role]), [['http://localhost:5173', 'demo'], ['http://localhost:8080', 'mockups']]);
+    assert.strictEqual(host.label, 'Blue table');
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.lan.open, host.demo);
+    // Claude's copy names the roles too, and never carries the key.
+    const agent = (await agentCall('GET', 'state')).body.lan;
+    assert.deepStrictEqual(agent.map.map((m) => m.role), ['demo', 'mockups']);
+    assert.ok(!JSON.stringify(agent).includes('abcdefghijklmnopqrstuv'));
+  });
+  await check('a plugin too old to declare (1.19.0) clears what a newer one declared, and gets the reply it always did, plus roles it ignores', async () => {
+    seed();
+    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await hostCall('POST', 'share', { on: true });
+    await report({ status: 'off', declared: { demo: 'http://localhost:6000/demo/' } });
+    const r = await report({ status: 'off' });
+    assert.deepStrictEqual(r.body, { wanted: true, targets: ['http://localhost:5173'], scopes: { 'http://localhost:5173': ['/'] }, roles: {} });
+  });
+  await check('Claude marks a link demo or mockup: the host sees the role, and the marked demo beats a newer link', async () => {
+    seed();
+    const posted = await agentCall('POST', 'log', { kind: 'showing', text: 'The demo', link: 'http://localhost:5173/demo/', role: 'demo' });
+    assert.strictEqual(posted.status, 201);
+    assert.strictEqual(posted.body.entry.role, 'demo');
+    await agentCall('POST', 'log', { kind: 'showing', text: 'Mockup B', link: 'http://localhost:8080/m/b.html', role: 'mockup' });
+    await agentCall('POST', 'log', { kind: 'progress', text: 'No link, no role', role: 'demo' });
+    await hostCall('POST', 'share', { on: true });
+    const r = await report({ status: 'off' });
+    assert.deepStrictEqual(r.body.roles, { 'http://localhost:5173': 'demo', 'http://localhost:8080': 'mockups' });
+    await report(LIVE({ map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }, { local: 'http://localhost:8080', lan: 'http://192.168.1.20:4901' }] }));
+    const st = (await hostCall('GET', 'state')).body;
+    // Rows made in one millisecond have no promised order: compare by text.
+    assert.deepStrictEqual(Object.fromEntries(st.log.filter((e) => e.by === 'agent').map((e) => [e.text, e.role])), { 'The demo': 'demo', 'Mockup B': 'mockup', 'No link, no role': null });
+    assert.strictEqual(st.lan.demo, 'http://192.168.1.20:4900/demo/?k=abcdefghijklmnopqrstuv');
+    assert.strictEqual((await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:1/', role: 'hero' })).status, 400);
+  });
+
   await check('a report never takes Claude\'s inbox and never marks Claude as seen', async () => {
     seed();
     await hostCall('POST', 'directions', { text: 'Make the counters bigger' });
@@ -1444,7 +1502,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   });
   await check('live: participants get the Wi-Fi link with the key; off: they get nothing, at once', async () => {
     seed();
-    await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/b' });
+    await showRoom({ kind: 'showing', text: 'The first board', link: 'http://localhost:5173/b' });
     await hostCall('POST', 'share', { on: true });
     await report(LIVE());
     let v = (await playCall('GET', 'state', priya)).body;
@@ -1469,7 +1527,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   });
   await check('a stale report counts as off for participants', async () => {
     seed();
-    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await showRoom({ kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
     await hostCall('POST', 'share', { on: true });
     await report(LIVE());
     const k = key(`GAME#${GAME}`, 'BUILD#LAN');

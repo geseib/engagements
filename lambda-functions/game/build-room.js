@@ -33,6 +33,8 @@ const S = require('./build-store');
 const C = require('./build-crew');
 const LAN = require('./build-lan');
 const { closeSeat } = require('./build-seat');
+// The room's window status for the host's console (PLAN §2.6, B4): C&A's own rule.
+const { presentingCount, presentingDetail } = require('./room-counts');
 // The usage stats (docs/design/usage-stats/SPEC.md §4, §5 E2/E6–E8): asks put
 // to the room, decisions, crew tasks and the kickoff. Counts only; never throws.
 const {
@@ -113,17 +115,33 @@ async function loadPlayers(ctx) {
   return [...names].sort((a, b) => a.localeCompare(b));
 }
 
+/** The PLAYER# rows themselves (not their scores), removed ones included: remote keys check both. */
+async function loadPlayerRows(ctx) {
+  const rows = await queryAll(ctx.pk, 'PLAYER#');
+  return rows.filter((r) => !String(r.SK).includes('#SCORE') && !String(r.SK).includes('#STATE'));
+}
+
+/** The remote keys that open the gateway now (build-lan.js liveRemoteKeys). */
+async function liveRemoteKeys(ctx) {
+  const [rkeys, players] = await Promise.all([queryAll(ctx.pk, 'BUILD#RKEY#'), loadPlayerRows(ctx)]);
+  return LAN.liveRemoteKeys(rkeys, players);
+}
+
 async function sessionState(ctx) {
   const r = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: 'STATE' }, ProjectionExpression: '#s', ExpressionAttributeNames: { '#s': 'State' } }));
   return (r && r.Item && r.Item.State) || null;
 }
 
-/** Bump the room's revision (and anything else on BUILD#STATE) atomically. */
-async function touchState(ctx, { set = {}, add = {} } = {}) {
-  const names = { '#rev': 'Rev', '#ttl': 'ttl' };
-  const values = { ':one': 1, ':ttl': ctx.ttl };
+/**
+ * Bump the room's revision (and anything else on BUILD#STATE) atomically.
+ * `bump: false` writes without moving Rev (nothing the room sees changed);
+ * `condition` is `{expr, names}` for a conditional write (the lazy wall key).
+ */
+async function touchState(ctx, { set = {}, add = {}, bump = true, condition = null } = {}) {
+  const names = { '#ttl': 'ttl', ...(bump ? { '#rev': 'Rev' } : {}), ...((condition && condition.names) || {}) };
+  const values = { ':ttl': ctx.ttl, ...(bump ? { ':one': 1 } : {}) };
   const sets = ['#ttl = :ttl'];
-  const adds = ['#rev :one'];
+  const adds = bump ? ['#rev :one'] : [];
   let i = 0;
   for (const [k, v] of Object.entries(set)) {
     i += 1;
@@ -140,7 +158,8 @@ async function touchState(ctx, { set = {}, add = {} } = {}) {
   const res = await db.send(new UpdateCommand({
     TableName: TABLE(),
     Key: { PK: ctx.pk, SK: S.SK.state },
-    UpdateExpression: `SET ${sets.join(', ')} ADD ${adds.join(', ')}`,
+    UpdateExpression: `SET ${sets.join(', ')}${adds.length ? ` ADD ${adds.join(', ')}` : ''}`,
+    ...(condition ? { ConditionExpression: condition.expr } : {}),
     ExpressionAttributeNames: names,
     ExpressionAttributeValues: values,
     ReturnValues: 'ALL_NEW',
@@ -148,12 +167,88 @@ async function touchState(ctx, { set = {}, add = {} } = {}) {
   return (res && res.Attributes) || {};
 }
 
+/**
+ * THE WALL KEY (PLAN §2.2, B1; owner Q1), minted the first time the host reads
+ * the room. Conditional, so two first reads racing agree on one key: the loser
+ * reads the winner's. No Rev bump and no announce: nothing the room sees moved.
+ */
+async function ensureWallKey(ctx, room) {
+  if (room.state && room.state.WallKey) return room.state.WallKey;
+  try {
+    const st = await touchState(ctx, {
+      set: { WallKey: S.mintWallKey() }, bump: false,
+      condition: { expr: 'attribute_not_exists(#wk)', names: { '#wk': 'WallKey' } },
+    });
+    return st.WallKey;
+  } catch (e) {
+    if (!(e && e.name === 'ConditionalCheckFailedException')) throw e;
+    const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state } }));
+    return (got && got.Item && got.Item.WallKey) || null;
+  }
+}
+
+/**
+ * THE ROOM'S WINDOW, FOR THE HOST (PLAN §2.6, B4): how many /present viewers
+ * are on this session and what the latest one reported (room-counts.js, the
+ * rule C&A's console uses). Fails soft: a status line is never worth a 500.
+ */
+async function windowStatus(ctx) {
+  try {
+    const [presenting, presentDetail] = await Promise.all([
+      presentingCount(db, TABLE(), ctx.gameId),
+      presentingDetail(db, TABLE(), ctx.gameId),
+    ]);
+    return { presenting, presentDetail };
+  } catch (e) {
+    console.error('BUILD ROOM: the window status read failed (continuing)', e);
+    return { presenting: 0, presentDetail: null };
+  }
+}
+
+/**
+ * POST build/wall (PLAN §2.3, B3): the host moves the room's window. Allowed
+ * after the end (the host may still put History up), except putting the codes
+ * up. `rotate` retires the wall key: every open window gets 403 on its next read.
+ */
+async function postWall(ctx, body) {
+  const norm = S.normalizeWall(body);
+  if (norm.error) return fail(400, norm.error);
+  const { set, rotate } = norm.value;
+  const state = await sessionState(ctx);
+  if (state === 'ENDED' && set.WallCodes && set.WallCodes !== 'none') return fail(409, 'This session has ended, so the codes stay down');
+  const wallKey = rotate ? S.mintWallKey() : null;
+  const st = await touchState(ctx, { set: { ...set, ...(wallKey ? { WallKey: wallKey } : {}) }, add: { WallRev: 1 } });
+  await announce(ctx, st.Rev);
+  return reply(200, { wall: S.wallStateOf(st, state), ...(wallKey ? { wallKey } : {}) });
+}
+
+/**
+ * THE WALL READ (PLAN §2.2, B2): GET build-play/wall?k= and
+ * build-play/wall/images/{imageId}?k=. No seat and no sign-in; the key is the
+ * whole check, read off BUILD#STATE before anything else is loaded.
+ */
+async function routeWall(ctx, method, parts, query) {
+  if (method !== 'GET') return fail(404, 'Not found');
+  const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: '#k', ExpressionAttributeNames: { '#k': 'WallKey' } }));
+  if (!S.wallKeyMatches(got && got.Item, query && query.k)) return fail(403, 'This window\'s link has changed. Open the room\'s window again from the laptop.', { code: 'wall-key' });
+  const isImage = parts[1] === 'images' && parts[2] && !parts[3];
+  if (parts.length > 1 && !isImage) return fail(404, 'Not found');
+  const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
+  const view = S.wallView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, now: new Date().toISOString(), crew: C.crewView(room, 'public', null) });
+  if (isImage) {
+    // Only a picture the wall itself lists: a mockup for an ask the room has not seen stays private.
+    if (!view.images.some((i) => i.imageId === parts[2])) return fail(404, 'No such image');
+    return getImage(ctx, parts[2]);
+  }
+  return reply(200, view);
+}
+
 async function announce(ctx, rev) {
   await toAll(db, TABLE(), ctx.gameId, { type: 'buildChanged', gameId: ctx.gameId, rev: rev || 0 });
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten }) {
+async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -167,6 +262,7 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     Text: text,
     ...(detail ? { Detail: detail } : {}),
     ...(link ? { Link: link } : {}),
+    ...(link && linkRole ? { Role: linkRole } : {}),
     By: by,
     ...(askId ? { AskId: askId } : {}),
     ...(forAgent && !held ? { ForAgent: true } : {}),
@@ -186,6 +282,9 @@ async function logEntry(ctx, { kind, text, detail, link, by, askId, forAgent, fo
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
     ...(forAgent ? { ForAgentAs: kind4 } : {}),
     ...(forAgent && claudeNote ? { ClaudeNote: claudeNote } : {}),
+    // THE RELEASE GATE (§2c): Claude's post waits on the host's queue; the host's alone, always.
+    ...(hold ? { Released: false } : {}),
+    ...(hostOnly ? { HostOnly: true } : {}),
     CreatedAt: now,
   };
   const saved = await put(ctx, row);
@@ -318,7 +417,7 @@ async function createAsk(ctx, role, body) {
   };
   await put(ctx, ask);
   if (status === 'live') await makeCurrent(ctx, room, askId, role);
-  else await logEntry(ctx, { kind: 'ask', text: `Claude proposed a question: ${v.prompt}`, by: 'system', askId });
+  else await logEntry(ctx, { kind: 'ask', text: `Claude proposed a question: ${v.prompt}`, by: 'system', askId, hostOnly: true });
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -333,7 +432,8 @@ async function makeCurrent(ctx, room, askId, role) {
       await put(ctx, { ...other, Status: 'results', ClosedAt: now });
     }
   }
-  await touchState(ctx, { set: { CurrentAskId: askId } });
+  // An ask opening takes the codes card down: it yields to the ask (PLAN §2.3; the server clears it, never a client).
+  await touchState(ctx, { set: { CurrentAskId: askId, WallCodes: 'none' }, add: { WallRev: 1 } });
   const ask = findAsk(await loadRoom(ctx), askId);
   await logEntry(ctx, {
     kind: 'ask',
@@ -415,7 +515,8 @@ async function reaskAction(ctx, room, ask, b) {
     ...(fromPoints.length ? { FromPoints: fromPoints } : {}),
   });
   if (ask.FromPoints && ask.FromPoints.length) await rehomePoints(ctx, room, ask, newId, fromPoints, now);
-  await touchState(ctx, { set: { CurrentAskId: newId } });
+  // A new ask opens, as through makeCurrent: the codes card yields to it (PLAN §2.3).
+  await touchState(ctx, { set: { CurrentAskId: newId, WallCodes: 'none' }, add: { WallRev: 1 } });
   await logEntry(ctx, { kind: 'ask', text: `Asked again: ${v.prompt}`, by: 'host', askId: newId });
   // A re-ask is a new ask put to the room (it writes its own live ask, not
   // through makeCurrent), so it is a second question for the stats.
@@ -696,6 +797,52 @@ async function hostResponse(ctx, askId, respId, body) {
   return reply(200, { ask: S.askView(findAsk(after, askId), after, 'host') });
 }
 
+/**
+ * THE RELEASE GATE (§2c): whether Claude's posts and screenshots wait for the
+ * host now. Read off BUILD#STATE (Settings is plain), so a post needs no room load.
+ */
+async function holdsPosts(ctx) {
+  const got = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: S.SK.state }, ProjectionExpression: '#s', ExpressionAttributeNames: { '#s': 'Settings' } }));
+  return S.settingsOf(got && got.Item).reviewAgentPosts;
+}
+
+/**
+ * POST build/posts {action: 'release'|'keep', ids: [logId, …]} (§2c), the
+ * host's only. Every id must be waiting on the queue, or nothing changes.
+ * Release stamps ReleasedAt (the room's History keeps the entry at the time it
+ * happened: its key is untouched); a screenshot's entry releases its picture.
+ * Keep stamps KeptAt: the host's for good, never released after.
+ */
+const POSTS_PER_CALL = 50;
+async function postsAction(ctx, body) {
+  const b = body || {};
+  const action = String(b.action || '');
+  if (!['release', 'keep'].includes(action)) return fail(400, 'action must be release or keep');
+  const ids = Array.isArray(b.ids) ? [...new Set(b.ids.map((x) => String(x || '')).filter(Boolean))] : [];
+  if (!ids.length) return fail(400, 'Say which posts: ids');
+  if (ids.length > POSTS_PER_CALL) return fail(400, `${POSTS_PER_CALL} at a time at most`);
+  const room = await loadRoom(ctx);
+  const entries = ids.map((id) => findLog(room, id));
+  if (entries.some((e) => !e || !S.isHeld(e))) return fail(404, 'That is not a post waiting for you');
+  if (entries.some((e) => !S.awaitingRelease(e))) return fail(409, 'You kept that one to yourself, so it stays private');
+  const now = new Date().toISOString();
+  for (const e of entries) {
+    if (action === 'release') {
+      const { Released, ...rest } = e;
+      await put(ctx, { ...rest, Released: true, ReleasedAt: now });
+      const pic = e.Kind === 'image' ? room.images.find((i) => i.ImageId === e.Detail && S.isHeld(i)) : null;
+      if (pic) { const { Released: r2, ...p2 } = pic; await put(ctx, { ...p2, Released: true, ReleasedAt: now }); }
+    } else {
+      await put(ctx, { ...e, KeptAt: now });
+      const pic = e.Kind === 'image' ? room.images.find((i) => i.ImageId === e.Detail && S.isHeld(i)) : null;
+      if (pic) await put(ctx, { ...pic, KeptAt: now });
+    }
+  }
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, action === 'release' ? { released: ids } : { kept: ids });
+}
+
 async function postLog(ctx, role, body) {
   const b = body || {};
   const kind = String(b.kind || (role === 'agent' ? 'progress' : 'verbal')).toLowerCase();
@@ -719,6 +866,9 @@ async function postLog(ctx, role, body) {
     if (res.busy) return fail(409, DOING_BUSY);
     doingChanged = res.changed;
   }
+  // What a link IS (Share demo S3, plugin 1.20.0): Claude marks its demo and its mockups.
+  const linkRole = role === 'agent' && b.role !== undefined && b.role !== null && b.role !== '' ? String(b.role) : '';
+  if (linkRole && !S.LINK_ROLES.includes(linkRole)) return fail(400, `role must be one of ${S.LINK_ROLES.join(', ')}`);
   if (!text) {
     if (doingPost) {
       if (doingChanged) { const st = await touchState(ctx); await announce(ctx, st.Rev); }
@@ -726,15 +876,20 @@ async function postLog(ctx, role, body) {
     }
     return fail(400, 'Write the update');
   }
+  const link = S.safeUrl(b.link);
   const row = await logEntry(ctx, {
     kind,
     text,
     detail: S.cleanText(b.detail, S.LIMITS.logDetail),
-    link: S.safeUrl(b.link),
+    link,
+    // A role names a link: none without one.
+    linkRole: link ? linkRole : '',
     by: role === 'agent' ? 'agent' : 'host',
     // What the room said can go straight to Claude; a host note never does.
     forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
     as: b.as,
+    // Claude's post waits for the host when the room says so (§2c).
+    hold: role === 'agent' && await holdsPosts(ctx),
   });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
@@ -957,7 +1112,8 @@ async function openingAction(ctx, action, body) {
     // BACK TO THE OPENING (owner, 2026-10-06: Start building was pressed by
     // mistake and "the opening questioning was lost"). Nothing was lost: the
     // brief and its steps stay. Claude is told to pause.
-    await touchState(ctx, { set: { Phase: 'opening' } });
+    // The room frames the build again on the Stage (PLAN §2.3).
+    await touchState(ctx, { set: { Phase: 'opening', WallScreen: 'stage' }, add: { WallRev: 1 } });
     await logEntry(ctx, {
       kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
       text: 'The host has gone back to the opening to frame the build further. Pause building: finish or set aside what you are doing, write no new product code, and wait with wait_for_direction until the host presses Start building again.',
@@ -1172,6 +1328,7 @@ async function postSettings(ctx, body) {
   const settings = { ...S.settingsOf(room.state) };
   if (b.reviewAgentAsks !== undefined) settings.reviewAgentAsks = Boolean(b.reviewAgentAsks);
   if (b.listNames !== undefined) settings.listNames = Boolean(b.listNames);
+  if (b.reviewAgentPosts !== undefined) settings.reviewAgentPosts = Boolean(b.reviewAgentPosts);
   const set = { Settings: settings };
   if (b.agentName !== undefined) set.AgentName = S.cleanText(b.agentName, S.LIMITS.agentName) || 'Claude Code';
   const st = await touchState(ctx, { set });
@@ -1401,9 +1558,13 @@ async function postImage(ctx, role, body) {
     Metadata: { sealed: ctx.orgId ? '1' : '0' },
   }));
   const caption = S.cleanText(b.caption, S.LIMITS.logText);
+  // THE RELEASE GATE (§2c): Claude's screenshot waits for the host. A mockup (on an ask)
+  // follows its ask instead, and a builder's picture follows the crew board.
+  const hold = role === 'agent' && !askId && S.settingsOf(room.state).reviewAgentPosts;
   await put(ctx, {
     SK: sk, ImageId: imageId, ContentType: type, Bytes: buf.length, Caption: caption, Kind: kind,
     ...(askId ? { AskId: askId } : {}), ...(label ? { Label: label } : {}),
+    ...(hold ? { Released: false } : {}),
     By: role === 'builder' ? 'builder' : role === 'agent' ? 'agent' : 'host', CreatedAt: now,
     ...(role === 'builder' ? { Name: ctx.builder } : {}),
   });
@@ -1414,10 +1575,11 @@ async function postImage(ctx, role, body) {
     detail: imageId,
     by: role === 'builder' ? 'builder' : role === 'agent' ? 'agent' : 'host',
     askId,
+    hold,
   });
   const st = await touchState(ctx);
   await announce(ctx, st.Rev);
-  return reply(201, { image: { imageId, contentType: type, bytes: buf.length, kind, askId, label, caption } });
+  return reply(201, { image: { imageId, contentType: type, bytes: buf.length, kind, askId, label, caption, ...(hold ? { held: true } : {}) } });
 }
 
 /** One image's bytes, as the browser wants them. */
@@ -1864,9 +2026,13 @@ async function builderState(ctx) {
   const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
   const me = { playerName: ctx.builder };
   const pub = S.publicView({ gameId: ctx.gameId, meta: ctx.meta, sessionState: state, room, players, me, now: new Date().toISOString() });
+  // The builder's Claude reads its own posts while they wait for the host (§2c); nobody else's.
+  const own = room.logs.filter((l) => S.isHeld(l) && l.By === 'builder' && l.Name === ctx.builder && !l.ForBuilder).map(S.logView)
+    .map(({ forAgent, deliveredAt, as, held, from, ...rest }) => rest);
+  const log = own.length ? [...pub.log, ...own].sort((x, y) => String(x.createdAt || '').localeCompare(String(y.createdAt || ''))) : pub.log;
   return {
     gameId: pub.gameId, title: pub.title, goal: pub.goal, state: pub.state, playerCount: pub.playerCount,
-    log: pub.log, outcome: pub.outcome,
+    log, outcome: pub.outcome,
     points: S.pointsClaudeView(room, { role: 'builder', name: ctx.builder }),
     you: { role: 'builder', name: ctx.builder },
     crew: C.crewView(room, 'builder', me),
@@ -1895,7 +2061,7 @@ async function routeBuilder(ctx, method, parts, body, query) {
     if (!['progress', 'milestone', 'showing', 'checkpoint'].includes(kind)) return fail(400, 'kind must be progress, milestone, showing or checkpoint');
     const text = S.cleanText((body || {}).text, S.LIMITS.logText);
     if (!text) return fail(400, 'Write the update');
-    const row = await logEntry(ctx, { kind, text, detail: S.cleanText(body.detail, S.LIMITS.logDetail), link: S.safeUrl(body.link), by: 'builder', name: ctx.builder });
+    const row = await logEntry(ctx, { kind, text, detail: S.cleanText(body.detail, S.LIMITS.logDetail), link: S.safeUrl(body.link), by: 'builder', name: ctx.builder, hold: await holdsPosts(ctx) });
     if (kind === 'checkpoint') {
       const room = await loadRoom(ctx);
       const bl = findBuilder(room, ctx.builder);
@@ -2056,18 +2222,39 @@ async function updateLan(ctx, set) {
   await db.send(new UpdateCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN }, UpdateExpression: `SET ${sets.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
 }
 
-/** The host's switch: `{on}` turns sharing on or off; `{dismissOffer}` hides the one-time offer. */
+/** Every remote field back to "nothing yet": a switch either way makes the old tunnel dead. */
+const REMOTE_CLEARED = Object.freeze({ RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {}, RemoteLiveSince: null });
+
+/**
+ * The host's switch: `{on}` turns sharing on or off; `{remote}` opens it to
+ * people who are not here too (remote share, owner 2026-10-16), and needs
+ * sharing on; `{dismissOffer}` hides the one-time offer. Remote is off by
+ * default every time sharing is switched, unless the same call asks for it.
+ */
 async function hostShare(ctx, body) {
   const b = body || {};
   const now = new Date().toISOString();
+  const wantsRemote = typeof b.remote === 'boolean';
+  if ((b.on === true || b.remote === true) && (await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
+  if (b.remote === true && b.on !== true) {
+    const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+    if (!(res && res.Item && res.Item.Wanted)) return fail(409, 'Share the demo first');
+  }
   if (b.dismissOffer === true) await updateLan(ctx, { OfferDismissedAt: now });
   if (typeof b.on === 'boolean') {
-    if (b.on && (await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
     // The plugin closes its gateways on a switch either way, so the old key and
     // map are dead: clear them, and the row reads 'starting' until the plugin's
     // next live report brings its new key.
-    await updateLan(ctx, { Wanted: b.on, WantedAt: now, OfferDismissedAt: now, Status: 'off', Key: '', Map: [], Open: 0, Error: '' });
+    await updateLan(ctx, {
+      Wanted: b.on, WantedAt: now, OfferDismissedAt: now, Status: 'off', Key: '', Map: [], Open: 0, Error: '',
+      RemoteWanted: b.on && b.remote === true, ...REMOTE_CLEARED,
+    });
     await logEntry(ctx, { kind: 'note', by: 'host', text: b.on ? 'You shared the build on this Wi-Fi' : 'You stopped sharing the build on this Wi-Fi' });
+  } else if (wantsRemote) {
+    await updateLan(ctx, { RemoteWanted: b.remote, RemoteWantedAt: now, ...REMOTE_CLEARED });
+  }
+  if (wantsRemote && (typeof b.on !== 'boolean' || b.on)) {
+    await logEntry(ctx, { kind: 'note', by: 'host', text: b.remote ? 'You opened the demo to people who are not here' : 'You closed the demo to people who are not here' });
   }
   const room = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
@@ -2088,11 +2275,13 @@ async function shareReport(ctx, body) {
   const v = norm.value;
   // A second plugin copy on this room closes its gateway and writes nothing.
   if (before.Wanted && !LAN.reportOwnsRoom(before, v.Reporter, now)) return reply(200, { wanted: false, targets: [], another: true });
-  const set = { ...v, ReportedAt: now };
+  const set = { ...v, ReportedAt: now, RemoteLiveSince: LAN.remoteLiveSince(before, v, now) };
   if (v.Status === 'live' && before.Status !== 'live') set.LiveSince = now;
   await updateLan(ctx, set);
-  const changed = ['Status', 'Key', 'Open', 'Error'].some((k) => before[k] !== v[k])
-    || !sameMap(before.Map || [], v.Map);
+  const changed = ['Status', 'Key', 'Open', 'Error', 'RemoteStatus', 'RemoteAddress', 'RemoteTarget', 'RemoteSupported'].some((k) => before[k] !== v[k])
+    || JSON.stringify(before.RemoteDevices || {}) !== JSON.stringify(v.RemoteDevices || {})
+    || !sameMap(before.Map || [], v.Map)
+    || JSON.stringify(before.Declared || {}) !== JSON.stringify(v.Declared);
   if (changed) {
     const rev = (await touchState(ctx)).Rev;
     await announce(ctx, rev);
@@ -2103,7 +2292,49 @@ async function shareReport(ctx, body) {
   const targets = room ? LAN.lanTargets(room) : [];
   // What each may show (Share demo S1): the folders of the pages Claude linked. A 1.19.0+ plugin opens nothing else.
   const scopes = room ? LAN.lanScopes(room) : {};
-  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes });
+  // Which shared server is the demo and which the mockups (S3): the 1.20.0 plugin
+  // writes it into .engage/share-status.json. An older plugin ignores it.
+  const roles = {};
+  for (const [origin, r] of Object.entries(room ? LAN.lanRoles(room) : {})) if (targets.includes(origin)) roles[origin] = r.role;
+  // Remote share: the one address the tunnel forwards to (the demo), and the
+  // HASHES of the keys that open it now, never a key. Absent unless remote is
+  // wanted, so the answer is unchanged when it is off. The plugin applies that
+  // address's Wi-Fi scopes to it: remote reaches no more than Wi-Fi.
+  const remoteWanted = Boolean(before.Wanted && before.RemoteWanted) && !ended;
+  // The target from the room's rows (§2c), as the phone's path is: a demo Claude
+  // posted that is still held for the host is not what remote people are sent to.
+  const remote = remoteWanted ? { remoteWanted, remoteTarget: LAN.remoteTarget(S.roomRowsForRoom(room)), remoteKeys: await liveRemoteKeys(ctx) } : {};
+  return reply(200, { wanted: Boolean(before.Wanted) && !ended, targets, scopes, roles, ...remote });
+}
+
+/**
+ * The plugin met a key it has not heard of (minted since its last round):
+ * is it live, and whose? Hashes only, both ways.
+ */
+async function shareRemoteCheck(ctx, body) {
+  const hash = String((body && body.hash) || '');
+  if (!LAN.KEY_HASH_RE.test(hash)) return fail(400, 'hash must be a key hash');
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+  const lan = (res && res.Item) || {};
+  if (!lan.Wanted || !lan.RemoteWanted || (await sessionState(ctx)) === 'ENDED') return reply(200, { ok: false });
+  const hit = (await liveRemoteKeys(ctx)).find((k) => k.hash === hash);
+  return reply(200, hit ? { ok: true, player: hit.player } : { ok: false });
+}
+
+/**
+ * A phone's own way in: the tunnel's origin, a fresh key, and when the tunnel
+ * went live. The phone builds origin + path + ?k= itself and keeps it; every
+ * call ends this person's previous key. Only the hash is stored.
+ */
+async function playRemoteKey(ctx, me, input) {
+  const res = await db.send(new GetCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: LAN.SK_LAN } }));
+  const raw = (res && res.Item) || {};
+  const lan = ctx.orgId && res && res.Item ? await decryptItem(ctx.orgId, 'buildLan', raw) : raw;
+  const now = new Date().toISOString();
+  if (LAN.remoteStatus(lan, now) !== 'live') return fail(409, 'The demo is not open to people outside the room right now', { code: 'not-live' });
+  const { key, hash } = LAN.mintRemoteKey();
+  await put(ctx, { SK: S.SK.rkey(me.playerName), PlayerName: me.playerName, Hash: hash, ClientId: String(input.clientId || '').slice(0, 100), CreatedAt: now });
+  return reply(200, { origin: lan.RemoteAddress, key, since: lan.RemoteLiveSince || null });
 }
 
 // ── Talking points, research and ideas ──────────────────────────────────────
@@ -2689,10 +2920,17 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
     // room_status with kickoff, so the Connect panel's step 4 can turn green.
     // The first time is kept.
     if (role === 'agent' && query && query.kickoff === '1') await markKickedOff(ctx);
-    const { view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
+    const { room, view } = await hostState(ctx, role === 'agent' ? 'agent' : 'host');
     // The role the host's screen would delete a screenshot or an entry in
     // (the owner's delete rule, 2026-10-04): it asks staff for a reason.
-    if (role === 'host') view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+    if (role === 'host') {
+      view.deleteAs = deleteRole(ctx.request, { orgId: ctx.orgId, createdBy: ctx.meta && ctx.meta.CreatedBy });
+      // THE ROOM'S WINDOW (PLAN §2.2-§2.6, B1/B3/B4): the host's alone. Never
+      // Claude's (its key is not the host), never a phone's, never the wall's.
+      view.wallKey = await ensureWallKey(ctx, room);
+      view.wall = S.wallStateOf(room.state, view.state);
+      Object.assign(view, await windowStatus(ctx));
+    }
     return reply(200, view);
   }
   // Claude's cheapest call: nothing but its inbox (the wrapper below attaches
@@ -2719,6 +2957,10 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
 
   // Before the ended check: an ended session still answers the plugin (wanted: false).
   if (a === 'share' && b === 'report' && !c) return role === 'agent' ? shareReport(ctx, body) : fail(403, 'Only Claude Code reports the Wi-Fi share');
+  // Before the ended check too: after the end the host may still put History on the wall.
+  if (a === 'wall' && !b) return hostOnly() || postWall(ctx, body);
+
+  if (a === 'share' && b === 'remote-check' && !c) return role === 'agent' ? shareRemoteCheck(ctx, body) : fail(403, 'Only Claude Code checks a remote key');
 
   const ended = (await sessionState(ctx)) === 'ENDED';
   if (ended && !(a === 'outcome' || (a === 'log' && b))) return fail(409, 'This session has ended');
@@ -2757,6 +2999,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'outcome' && !b) return postOutcome(ctx, role, body);
   if (a === 'images' && !b) return postImage(ctx, role, body);
   if (a === 'images' && b) return hostOnly() || imageAction(ctx, b, body);
+  if (a === 'posts' && !b) return hostOnly() || postsAction(ctx, body);
   if (a === 'settings' && !b) return hostOnly() || postSettings(ctx, body);
   if (a === 'seen' && !b) return hostOnly() || postSeen(ctx, body);
   if (a === 'keys' && !b) return hostOnly() || mintAgentKey(ctx, event, body);
@@ -2818,12 +3061,21 @@ async function routePlayCrew(ctx, me, parts, input) {
 
 async function routePlay(ctx, method, parts, body, query) {
   const [a] = parts;
+  // The room's window: keyed, not seated, so ahead of the seat check (PLAN §2.2).
+  if (a === 'wall') return routeWall(ctx, method, parts, query);
   const input = method === 'GET' ? (query || {}) : (body || {});
   const why = {};
   const me = await playerFrom(ctx, input, why);
   if (!me) return fail(403, 'Join the session first', why.code ? { code: why.code } : undefined);
 
-  if (method === 'GET' && a === 'images' && parts[1]) return getImage(ctx, parts[1]);
+  if (method === 'GET' && a === 'images' && parts[1]) {
+    // Only a picture the room may see (§2c): never a held screenshot, never a mockup for an ask still proposed.
+    // A builder's picture follows the crew board, as before.
+    const room = await loadRoom(ctx);
+    const pic = room.images.find((i) => i.ImageId === parts[1]);
+    if (pic && pic.By !== 'builder' && !S.roomRowsForRoom(room).images.some((i) => i.ImageId === parts[1])) return fail(404, 'No such image');
+    return getImage(ctx, parts[1]);
+  }
   if (a === 'crew' && method === 'POST') return routePlayCrew(ctx, me, parts, input);
   if (method === 'GET' && a === 'state') {
     const [room, players, state] = await Promise.all([loadRoom(ctx), loadPlayers(ctx), sessionState(ctx)]);
@@ -2834,7 +3086,11 @@ async function routePlay(ctx, method, parts, body, query) {
     return reply(200, view);
   }
   if (method !== 'POST') return fail(404, 'Not found');
+  // A phone's doors, and no others (a phone never releases a post, §2c). remote-key:
+  // this person's own way in to the remote share (owner 2026-10-16).
+  if (!['idea', 'respond', 'spin', 'vote', 'remote-key'].includes(a)) return fail(404, 'Not found');
   if ((await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
+  if (a === 'remote-key' && !parts[1]) return playRemoteKey(ctx, me, input);
   const now = new Date().toISOString();
   const room = await loadRoom(ctx);
 
@@ -2846,7 +3102,8 @@ async function routePlay(ctx, method, parts, body, query) {
     // all carry it with no new kind of row.
     let aboutLogId = '';
     if (input.aboutLogId) {
-      const about = room.logs.find((l) => l.LogId === String(input.aboutLogId) && l.Kind === 'showing');
+      // Only a preview the room was shown: a held one is the host's still (§2c).
+      const about = room.logs.find((l) => l.LogId === String(input.aboutLogId) && l.Kind === 'showing' && !S.isHeld(l));
       if (!about) return fail(409, 'That preview is no longer on screen');
       const verdict = { good: 'Looks good', change: 'Needs a change' }[input.verdict];
       if (!verdict) return fail(400, 'Say whether it looks good or needs a change');

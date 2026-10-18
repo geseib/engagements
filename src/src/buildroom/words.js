@@ -431,6 +431,30 @@ export const W = Object.freeze({
   stopSharing: 'Stop sharing',
   keepSharing: 'Keep sharing',
   shareShowOnStage: 'Show on the Stage',
+  // REMOTE SHARE (owner 2026-10-16; docs/design/build-room-remote-share R1-R4).
+  // One switch in the Share demo panel. Never the word "tunnel" on screen.
+  remoteSwitch: 'Also open it to people who are not here',
+  remoteOffBody: 'People who joined from a link, on Zoom or another network, get the same Open the demo button.',
+  remoteOffSmall: "Everyone, here too, then opens it through Cloudflare, who can see it. Each person's button carries their own key. It closes when you turn this off or the session ends.",
+  remoteStarting: 'Starting\u2026 The first time, this laptop downloads a tool from Cloudflare. Remote people see \u201cOpening soon\u201d until it is ready.',
+  remoteLiveHead: 'Demo shared, here and remote',
+  remoteLiveBody: 'On. Remote people open it from their Open the demo button.',
+  remoteLiveSmall: 'Each link belongs to one person. A passed-on link shows up here as their extra device.',
+  remoteFailedHead: "Didn't start.",
+  remoteWifiFine: 'People here on the Wi-Fi are not affected.',
+  remoteOpenedOf: (n, joined) => `${n} opened it \u00b7 ${joined} joined`,
+  remoteDevices: (n) => (n === 1 ? '1 device' : `${n} devices`),
+  remoteMore: (n) => `and ${n} more`,
+  remoteRemove: 'Remove',
+  remoteRemoveSure: (name) => `Remove ${name}?`,
+  remoteSoon: 'Not here? Opening soon.',
+  remoteDidntOpen: 'The host may have stopped sharing, or the app on their laptop is restarting.',
+  // Each shared server by what it is (Share demo S3, plugin 1.20.0): the role
+  // the project declared or Claude gave its link; App N when nothing says.
+  shareServerDemo: 'Demo',
+  shareServerMockups: 'Mockups',
+  shareServerMockupsAsk: (n) => `Mockups · Ask ${n}`,
+  shareServerApp: (n) => `App ${n}`,
   onlyThisLaptop: 'Only this laptop can open it.',
   anyoneOnWifi: 'Anyone on this Wi-Fi',
   /** The Stage's HOST list (option B): one grey line, never a pop-up on the wall. */
@@ -520,6 +544,57 @@ export const W = Object.freeze({
   // Before you start 2026-10-10: the New Build Room page (owner: option A)
   needLine: 'The laptop that runs Claude Code needs Node 18 or later and git.',
   beforeYouStart: 'Before you start',
+  // The Stage dock on the shared bar (parity PLAN §2a, D1-D2, 17 Oct 2026)
+  /** The armed button's own label, as C&A's: "Show results anyway". */
+  armedLabel: (label) => `${label} anyway`,
+  /** The first press of an early Show results; counts handle nobody, as roundWords' armResults does. */
+  armStill: (n, total, kind) => {
+    const doing = kind === 'voting' ? 'voting' : 'answering';
+    if (Number(total) > 0 && Number(n) >= Number(total)) return `Nobody has ${kind === 'voting' ? 'voted' : 'answered'} yet. Press again to show results.`;
+    return `${Number(total) > 0 ? `${n} of ${total}` : n} still ${doing}. Press again to show results.`;
+  },
+  armRunEarly: (k, j) => `Claude hasn't finished ${k}. Press again to send ${j}.`,
+  armStop: 'Press again to stop the list.',
+  /** HOST on the Stage: always home, in one press (D2). */
+  hostBack: '← Host',
+  hostKeys: 'Host screen (1 or P)',
+  hostWaitingSr: (n) => ` ${n} waiting`,
+  sessionKeys: 'Session (\\)',
+  askingSr: ' asking to take a name',
+  // The room's window (parity PLAN §2.4, B7): the wall on the projector, no sign-in, no buttons
+  wallLinkChanged: "This window's link has changed. Open the room's window again from the laptop.",
+  wallNotFound: 'This session has ended or the code is wrong.',
+  wallConnecting: 'Connecting to the room…',
+  wallEnded: 'Session ended',
+  /** History on the wall: the newest entries that fit, then how many are not shown. */
+  wallEarlier: (n) => `and ${n} earlier`,
+  // What the room sees (owner, 17 Oct 2026; config/roomContent.js): a long ask pages its options.
+  optionsNoun: 'Options',
+  moreOptions: (n) => `and ${n} more ${n === 1 ? 'option' : 'options'} on your phone`,
+  claudeNow: 'Claude now',
+  claudeStep: (k, text) => `Step ${k}: ${text}`,
+  // The Screens group in Settings (parity PLAN §2.7, B9 in part)
+  screensGroup: 'Screens',
+  screensScope: 'Applies now',
+  wallOpen: "Room's window ↗",
+  wallOpenHint: 'Opens the room’s own window: the Stage, Build or History you pick here, with nothing to press and no names.',
+  wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History.',
+  wallNewLink: 'New link',
+  wallNewLinkArmed: 'New link anyway',
+  wallNewLinkWhy: 'Every open window stops until it is opened again from here. Press again to make a new link.',
+  wallNewLinkHint: 'Stops every window opened with the old link.',
+  wallNewLinkDone: 'New link made. Open the room’s window again.',
+  // THE RELEASE GATE (owner, 17 Oct 2026, parity PLAN §2c): Claude's posts wait in the queue for the host.
+  postWants: 'Claude wants to show the room',
+  postRelease: 'Release to the room',
+  postKeep: 'Keep to myself',
+  postReleaseAll: (n) => `Release all ${n}`,
+  postsWaiting: (n) => (n === 1 ? '1 post from Claude waits' : `${n} posts from Claude wait`),
+  postNotShown: 'Not shown to the room',
+  postKept: 'Kept to yourself',
+  postsSwitch: "Check Claude's posts before the room sees them",
+  postsNote: "On: Claude's updates and screenshots wait in Waiting for you until you release them.",
+  alertPosts: (n) => (n === 1 ? 'Claude wants to show 1 thing' : `Claude wants to show ${n} things`),
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */
